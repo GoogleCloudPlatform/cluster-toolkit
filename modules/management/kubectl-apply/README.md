@@ -33,17 +33,18 @@ This module simplifies the following functionality:
   source: modules/management/kubectl-apply
   use: [existing-gke-cluster]
   settings:
-    - content: |
-        apiVersion: v1
-        kind: Namespace
-        metadata:
-          name: my-namespace
-    - source: "https://github.com/kubernetes-sigs/jobset/releases/download/v0.6.0/manifests.yaml"
-    - source: $(ghpc_stage("manifests/configmap1.yaml"))
-    - source: $(ghpc_stage("manifests/configmap2.yaml.tftpl"))
-      template_vars: {name: "dev-config", public: "false"}
-    - source: $(ghpc_stage("manifests"))/
-      template_vars: {name: "dev-config", public: "false"}
+    apply_manifests:
+      - content: |
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: my-namespace
+      - source: "https://github.com/kubernetes-sigs/jobset/releases/download/v0.6.0/manifests.yaml"
+      - source: $(ghpc_stage("manifests/configmap1.yaml"))
+      - source: $(ghpc_stage("manifests/configmap2.yaml.tftpl"))
+        template_vars: {name: "dev-config", public: "false"}
+      - source: $(ghpc_stage("manifests"))/
+        template_vars: {name: "dev-config", public: "false"}
 ```
 
 #### Pre-build infrastructure Example
@@ -156,6 +157,22 @@ You can install the `asapd-lite` daemonset for **A4X-Max Bare Metal** ([gke-a4x-
         config_path: $(ghpc_stage("manifests/asapd-lite-installer.yaml"))
 ```
 
+You can create the GKE Multi-Tier Checkpointing (MTC) `CheckpointConfiguration` resource by setting the `checkpoint_configuration` input variable; the module manages one such resource per cluster. The cluster needs `enable_multi_tier_checkpointing: true` and `enable_gcsfuse_csi: true`, and the bucket must have hierarchical namespace enabled and grant `$(gke_cluster.mtc_service_account_member)` object access; see [Multi-Tier Checkpointing](../../../docs/gke-advanced-features.md#4-multi-tier-checkpointing-mtc--highscalecheckpointing). Set `cloud_storage_bucket_name` to the bucket name without the `gs://` prefix. Set `tolerations` (and optionally `node_selector`) so the MTC driver runs on tainted TPU or GPU nodes, and `gcs_fuse_mount_options` to pass Cloud Storage FUSE mount options (`gcsFuseMountOptions`).
+
+```yaml
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      checkpoint_configuration:
+        cloud_storage_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
+        in_memory_volume_size: "50Gi"
+        tolerations:
+        - key: google.com/tpu
+          operator: Exists
+          effect: NoSchedule
+```
+
 > **_NOTE:_**
 >
 > The `project_id` and `region` settings would be inferred from the deployment variables of the same name, but they are included here for clarity.
@@ -190,7 +207,7 @@ The module applies manifests from the `apply_manifests` list in parallel. This c
 
 There is **no guarantee** that the CRD will be applied before the resource that uses it. This can lead to non-deterministic deployment failures with errors like:
 
-```Error: resource [kueue.x-k8s.io/v1beta2/ClusterQueue] isn't valid for cluster```
+`Error: resource [kueue.x-k8s.io/v1beta2/ClusterQueue] isn't valid for cluster`
 
 ##### **Recommended Workaround: Two-Stage Apply**
 
@@ -278,6 +295,7 @@ limitations under the License.
 | <a name="module_configure_kueue"></a> [configure\_kueue](#module\_configure\_kueue) | ./helm_install | n/a |
 | <a name="module_install_asapd_lite"></a> [install\_asapd\_lite](#module\_install\_asapd\_lite) | ./helm_install | n/a |
 | <a name="module_install_cert_manager"></a> [install\_cert\_manager](#module\_install\_cert\_manager) | ./helm_install | n/a |
+| <a name="module_install_checkpoint_configuration"></a> [install\_checkpoint\_configuration](#module\_install\_checkpoint\_configuration) | ./helm_install | n/a |
 | <a name="module_install_gib"></a> [install\_gib](#module\_install\_gib) | ./helm_install | n/a |
 | <a name="module_install_gpu_operator"></a> [install\_gpu\_operator](#module\_install\_gpu\_operator) | ./helm_install | n/a |
 | <a name="module_install_jobset"></a> [install\_jobset](#module\_install\_jobset) | ./helm_install | n/a |
@@ -309,9 +327,11 @@ limitations under the License.
 | <a name="input_apply_manifests"></a> [apply\_manifests](#input\_apply\_manifests) | A list of manifests to apply to the GKE cluster using helm\_install. For more details on the underlying deployment mechanism, see the [helm\_install module](helm\_install/README.md). The `enable` input acts as a FF to apply a manifest or not. By default it is always set to `true`. | <pre>list(object({<br/>    name             = optional(string, null)<br/>    enable           = optional(bool, true)<br/>    content          = optional(string, null)<br/>    source           = optional(string, null)<br/>    template_vars    = optional(map(any), null)<br/>    wait_for_rollout = optional(bool, true)<br/>    namespace        = optional(string, null)<br/>  }))</pre> | `[]` | no |
 | <a name="input_asapd_lite"></a> [asapd\_lite](#input\_asapd\_lite) | Install the asapd-lite daemonset for A4X-Max Bare Metal. | <pre>object({<br/>    install              = optional(bool, false)<br/>    config_path          = optional(string, null)<br/>    config_template_vars = optional(map(any), {})<br/>  })</pre> | `{}` | no |
 | <a name="input_cert_manager"></a> [cert\_manager](#input\_cert\_manager) | Install [cert-manager](https://cert-manager.io/docs/) which manages TLS certificates for Kubernetes. | <pre>object({<br/>    install = optional(bool, false)<br/>    version = optional(string, "v1.17.2")<br/>  })</pre> | `{}` | no |
+| <a name="input_checkpoint_configuration"></a> [checkpoint\_configuration](#input\_checkpoint\_configuration) | Install and configure GKE Multi-Tier Checkpointing (MTC) CheckpointConfiguration Custom Resource. | <pre>object({<br/>    name                      = optional(string, "default")<br/>    cloud_storage_bucket_name = string<br/>    in_memory_volume_size     = optional(string, null)<br/>    node_selector             = optional(map(string), null)<br/>    tolerations = optional(list(object({<br/>      key      = optional(string, null)<br/>      operator = optional(string, null)<br/>      value    = optional(string, null)<br/>      effect   = optional(string, null)<br/>    })), null)<br/>    gcs_fuse_mount_options = optional(list(string), null)<br/>  })</pre> | `null` | no |
 | <a name="input_cluster_ca_certificate"></a> [cluster\_ca\_certificate](#input\_cluster\_ca\_certificate) | The base64 encoded CA certificate of the GKE cluster. Must be base64 encoded; the module internally decodes this value using base64decode(...) before passing it to the providers. | `string` | `null` | no |
 | <a name="input_cluster_endpoint"></a> [cluster\_endpoint](#input\_cluster\_endpoint) | The endpoint of the GKE cluster. | `string` | `null` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the gke cluster resource with format projects/<project\_id>/locations/<region>/clusters/<name>. | `string` | n/a | yes |
+| <a name="input_enable_multi_tier_checkpointing"></a> [enable\_multi\_tier\_checkpointing](#input\_enable\_multi\_tier\_checkpointing) | Enable High Scale Checkpointing (Multi-Tier Checkpointing). This is automatically wired from gke-cluster module if used. | `bool` | `true` | no |
 | <a name="input_enable_pathways_for_tpus"></a> [enable\_pathways\_for\_tpus](#input\_enable\_pathways\_for\_tpus) | Enable Pathways for TPUs. This is automatically wired from gke-cluster module if used. | `bool` | `false` | no |
 | <a name="input_gib"></a> [gib](#input\_gib) | Install the NCCL gIB plugin | <pre>object({<br/>    install = bool<br/>    path    = string<br/>    template_vars = object({<br/>      image   = optional(string, "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib")<br/>      version = string<br/>      node_affinity = optional(any, {<br/>        requiredDuringSchedulingIgnoredDuringExecution = {<br/>          nodeSelectorTerms = [{<br/>            matchExpressions = [{<br/>              key      = "cloud.google.com/gke-gpu",<br/>              operator = "In",<br/>              values   = ["true"]<br/>            }]<br/>          }]<br/>        }<br/>      })<br/>      accelerator_count = number<br/>      max_unavailable   = optional(string, "50%")<br/>    })<br/>  })</pre> | <pre>{<br/>  "install": false,<br/>  "path": "",<br/>  "template_vars": {<br/>    "accelerator_count": 0,<br/>    "version": ""<br/>  }<br/>}</pre> | no |
 | <a name="input_gke_cluster_exists"></a> [gke\_cluster\_exists](#input\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. | `bool` | `false` | no |

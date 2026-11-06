@@ -130,7 +130,7 @@ before Terraform is ever invoked, and surfaces the full ABANDON/DELETE
 guidance directly in the error rather than sending the caller to the README:
 
 ```console
-$ ./ghpc create BLUEPRINT.yaml -o DEPLOYMENT_DIR
+$ ./gcluster create BLUEPRINT.yaml -o DEPLOYMENT_DIR
 Error: a required setting "deletion_policy" is missing from a module "kms_key"
 Hint: "deletion_policy" description: What `terraform destroy` does with the CryptoKey this module created.
 Required -- there is no default. ...
@@ -143,7 +143,7 @@ $ gcloud kms keys versions list --key=KEY --keyring=KEYRING --location=LOCATION 
 NAME                                                                                         STATE
 projects/PROJECT_ID/locations/LOCATION/keyRings/KEYRING/cryptoKeys/KEY/cryptoKeyVersions/1  ENABLED
 
-$ ./ghpc destroy DEPLOYMENT_DIR --auto-approve
+$ ./gcluster destroy DEPLOYMENT_DIR --auto-approve
 ...
 Apply complete! Resources: 0 added, 0 changed, 2 destroyed.
 
@@ -155,7 +155,7 @@ projects/PROJECT_ID/locations/LOCATION/keyRings/KEYRING/cryptoKeys/KEY/cryptoKey
 `deletion_policy = "ABANDON"`, same steps:
 
 ```console
-$ ./ghpc destroy DEPLOYMENT_DIR --auto-approve
+$ ./gcluster destroy DEPLOYMENT_DIR --auto-approve
 ...
 Apply complete! Resources: 0 added, 0 changed, 2 destroyed.
 

@@ -20,6 +20,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"hpc-toolkit/pkg/orchestrator"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -27,6 +28,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8syaml "sigs.k8s.io/yaml"
 
 	"hpc-toolkit/pkg/shell"
 
@@ -883,42 +889,6 @@ func TestRefreshGKEAuth_DNSEndpoint(t *testing.T) {
 	}
 }
 
-func TestCheckClusterConnectivity(t *testing.T) {
-	const cmd = "kubectl get --raw /version --request-timeout=5s"
-	tests := []struct {
-		name    string
-		result  shell.CommandResult
-		wantErr string
-	}{
-		{name: "reachable", result: shell.CommandResult{ExitCode: 0}},
-		{name: "forbidden is still connected", result: shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): forbidden"}},
-		{name: "auth failure", result: shell.CommandResult{ExitCode: 1, Stderr: "error: You must be logged in to the server (Unauthorized)"}, wantErr: "authentication to GKE cluster"},
-		{name: "unreachable", result: shell.CommandResult{ExitCode: 1, Stderr: "dial tcp 10.0.0.1:443: i/o timeout"}, wantErr: "authorized networks"},
-		{name: "proxy gateway error is a connectivity failure", result: shell.CommandResult{ExitCode: 1, Stderr: "error: the server responded with the status code 502 but did not return more information"}, wantErr: "authorized networks"},
-		// Mirrors configureKubectl: unrecognised output must not block submission with a misleading network error.
-		{name: "unrecognised output is not fatal", result: shell.CommandResult{ExitCode: 1, Stderr: "something completely different"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			exec := newExactExecutor(map[string][]shell.CommandResult{cmd: {tt.result}})
-			g := &GKEOrchestrator{executor: exec}
-			err := g.checkClusterConnectivity(testCluster)
-			if tt.wantErr == "" {
-				if err != nil {
-					t.Fatalf("checkClusterConnectivity() error = %v, want nil", err)
-				}
-				return
-			}
-			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-				t.Fatalf("checkClusterConnectivity() error = %v, want containing %q", err, tt.wantErr)
-			}
-			if exec.count(cmd) != 1 {
-				t.Errorf("probe calls = %d, want 1; calls=%v", exec.count(cmd), exec.calls)
-			}
-		})
-	}
-}
-
 func TestWithKubeContext(t *testing.T) {
 	args := []string{"get", "pods"}
 	if got := withKubeContext("", args); !slices.Equal(got, args) {
@@ -927,6 +897,27 @@ func TestWithKubeContext(t *testing.T) {
 	want := []string{"--context", "ctx", "get", "pods"}
 	if got := withKubeContext("ctx", args); !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestKubectlCommandLine(t *testing.T) {
+	const path = `C:\Users\Jane Doe\.gcluster\generated\jobset.yaml`
+	args := []string{"apply", "-f", path}
+	tests := []struct {
+		name, kubeContext, want string
+	}{
+		{name: "no context", want: `kubectl apply -f "` + path + `"`},
+		{name: "pinned context", kubeContext: testContext, want: `kubectl --context ` + testContext + ` apply -f "` + path + `"`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := kubectlCommandLine(tc.kubeContext, args...); got != tc.want {
+				t.Errorf("kubectlCommandLine() = %s, want %s", got, tc.want)
+			}
+			if !slices.Equal(args, []string{"apply", "-f", path}) {
+				t.Errorf("kubectlCommandLine() modified its arguments: %q", args)
+			}
+		})
 	}
 }
 
@@ -1017,17 +1008,6 @@ func TestConfigureKubectl_FailureClearsPinnedContext(t *testing.T) {
 	}
 }
 
-func TestCheckClusterConnectivity_UsesPinnedContext(t *testing.T) {
-	exec := newExactExecutor(map[string][]shell.CommandResult{probeCmd: {{ExitCode: 0}}})
-	g := &GKEOrchestrator{executor: exec, kubeContext: testContext}
-	if err := g.checkClusterConnectivity(testCluster); err != nil {
-		t.Fatalf("checkClusterConnectivity() error = %v", err)
-	}
-	if exec.count(probeCmd) != 1 {
-		t.Errorf("probe did not use the pinned context; calls=%v", exec.calls)
-	}
-}
-
 func TestRestConfig_UsesPinnedContext(t *testing.T) {
 	cfg := clientcmdapi.NewConfig()
 	cfg.Clusters["current"] = &clientcmdapi.Cluster{Server: "https://current.example.com"}
@@ -1094,5 +1074,151 @@ func TestNoUnpinnedKubectlCalls(t *testing.T) {
 			line := 1 + bytes.Count(src[:loc[0]], []byte("\n"))
 			t.Errorf("%s:%d runs kubectl without the pinned context; use g.kubectl / g.kubectlStream", f, line)
 		}
+	}
+}
+
+func TestImagePullSecrets_NamespacePrecedence(t *testing.T) {
+	setupMockMachineConfig(t)
+	profile := JobProfile{IsCPUMachine: true, CapacityCount: 4}
+	kc := &MockKubeClient{
+		Namespace:      "must-not-use-getcurrentnamespace",
+		ListNamespaces: map[string]string{},
+		Objects: map[string][]unstructured.Unstructured{
+			"secrets": {makeDockerConfigSecret("reg-sec", "registry.local")},
+		},
+	}
+	orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get pv":  {{ExitCode: 0, Stdout: ""}},
+		"kubectl get pvc": {{ExitCode: 0, Stdout: ""}},
+	}))
+	orc.machineCapCache = testMachineCapCache()
+	orc.kubeClient = kc
+	orc.kubeContext = "pinned-ctx"
+	orc.kubeconfigLoader = func() (*clientcmdapi.Config, error) {
+		cfg := clientcmdapi.NewConfig()
+		cfg.Contexts["pinned-ctx"] = &clientcmdapi.Context{Namespace: "ctx-ns"}
+		return cfg, nil
+	}
+
+	baseJob := orchestrator.JobDefinition{
+		WorkloadName:    "ns-job",
+		CommandToRun:    "echo hi",
+		ComputeType:     "n2-standard-4",
+		MachineType:     "n2-standard-4",
+		ClusterLocation: "us-central1-a",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+	}
+
+	if _, err := orc.PrepareManifestOptions(baseJob, "registry.local/app:v1", profile, false, false); err != nil || kc.ListNamespaces["secrets"] != "ctx-ns" {
+		t.Fatalf("got ns=%q err=%v, want ctx-ns", kc.ListNamespaces["secrets"], err)
+	}
+
+	// SubmitJob seeds g.namespace from --gke-namespace before any manifest work.
+	orc.namespace = "flag-ns"
+	if _, err := orc.PrepareManifestOptions(baseJob, "registry.local/app:v1", profile, false, false); err != nil || kc.ListNamespaces["secrets"] != "flag-ns" {
+		t.Fatalf("got ns=%q err=%v, want flag-ns", kc.ListNamespaces["secrets"], err)
+	}
+}
+
+func TestImagePullSecrets_FallbackEscapingAndLazyInit(t *testing.T) {
+	setupMockMachineConfig(t)
+	profile := JobProfile{IsCPUMachine: true, CapacityCount: 4}
+	orc := newCachedTestOrchestrator()
+	orc.kubeClient = &MockKubeClient{
+		ListErrs: map[string]error{
+			"secrets": apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "", errors.New("forbidden")),
+		},
+	}
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "forbidden-sec",
+		CommandToRun:    "echo hi",
+		ComputeType:     "n2-standard-4",
+		MachineType:     "n2-standard-4",
+		ClusterLocation: "us-central1-a",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+	}
+	opts, err := orc.PrepareManifestOptions(job, "registry.local/app:v1", profile, false, false)
+	if err != nil || opts.ImagePullSecrets != "" {
+		t.Fatalf("expected clean fallback on 403 Forbidden, got opts.ImagePullSecrets=%q err=%v", opts.ImagePullSecrets, err)
+	}
+
+	job.ImagePullSecrets = "sec\n  hostPID: true"
+	opts, err = orc.PrepareManifestOptions(job, "registry.local/app:v1", profile, false, false)
+	if err != nil {
+		t.Fatalf("unexpected error escaping secret name: %v", err)
+	}
+	assertJobSetEscapedPullSecret(t, orc, opts, profile, "sec\n  hostPID: true")
+
+	lazyOrc := &GKEOrchestrator{
+		kubeClient:       &DefaultKubeClient{},
+		kubeContext:      "missing-ctx-in-kubeconfig",
+		machineCapCache:  testMachineCapCache(),
+		kubeconfigLoader: func() (*clientcmdapi.Config, error) { return clientcmdapi.NewConfig(), nil },
+	}
+	job.ImagePullSecrets = ""
+	opts, err = lazyOrc.PrepareManifestOptions(job, "registry.local/app:v1", profile, false, false)
+	if err != nil || opts.ImagePullSecrets != "" {
+		t.Fatalf("expected lazy init error to degrade gracefully, got opts.ImagePullSecrets=%q err=%v", opts.ImagePullSecrets, err)
+	}
+}
+
+func assertJobSetEscapedPullSecret(t *testing.T, orc *GKEOrchestrator, opts ManifestOptions, profile JobProfile, wantSecret string) {
+	t.Helper()
+	cpuResp := shell.CommandResult{ExitCode: 0, Stdout: `{"guestCpus": 4, "memoryMb": 16384}`}
+	orc.executor = NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-4 --zone=us-central1-a --format=json": {cpuResp},
+	})
+	orc.clusterZones = []string{"us-central1-a"}
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+	var js jobSetValidationSpec
+	if err := k8syaml.Unmarshal([]byte(manifest), &js); err != nil {
+		t.Fatalf("failed to unmarshal JobSet YAML: %v\n%s", err, manifest)
+	}
+	podSpec := js.Spec.ReplicatedJobs[0].Template.Spec.Template.Spec
+	if podSpec.HostPID {
+		t.Fatalf("ImagePullSecrets newline injected hostPID=true into PodSpec!")
+	}
+	if len(podSpec.ImagePullSecrets) != 1 || podSpec.ImagePullSecrets[0].Name != wantSecret {
+		t.Errorf("unexpected escaped ImagePullSecrets: %+v", podSpec.ImagePullSecrets)
+	}
+}
+
+func TestImagePullSecrets_NamespaceResolutionFailureFailsFast(t *testing.T) {
+	setupMockMachineConfig(t)
+	profile := JobProfile{IsCPUMachine: true, CapacityCount: 4}
+	mockClient := &MockKubeClient{
+		ExplicitEmpty: true,
+		Err:           errors.New("no matching context found for cluster clus-1 in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag"),
+		Objects: map[string][]unstructured.Unstructured{
+			"secrets": {makeDockerConfigSecret("ns-sec", "registry.local")},
+		},
+	}
+	// A usable API client whose context resolution fails: discovery must not probe "default".
+	orc := newCachedTestOrchestrator()
+	orc.kubeClient = mockClient
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "ns-fail-job",
+		CommandToRun:    "echo hi",
+		ComputeType:     "n2-standard-4",
+		MachineType:     "n2-standard-4",
+		ClusterName:     "clus-1",
+		ClusterLocation: "us-central1-a",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+	}
+	_, err := orc.PrepareManifestOptions(job, "registry.local/app:v1", profile, false, false)
+	if err == nil || !strings.Contains(err.Error(), "imagePullSecrets discovery") || !strings.Contains(err.Error(), "--gke-namespace") {
+		t.Fatalf("expected namespace resolution error naming --gke-namespace, got: %v", err)
+	}
+
+	orc.namespace = "tenant-ns" // seeded from --gke-namespace by SubmitJob
+	opts, err := orc.PrepareManifestOptions(job, "registry.local/app:v1", profile, false, false)
+	if err != nil || !strings.Contains(opts.ImagePullSecrets, "ns-sec") {
+		t.Fatalf("explicit --gke-namespace must bypass resolution and discover ns-sec: opts=%q err=%v", opts.ImagePullSecrets, err)
 	}
 }

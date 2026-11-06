@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
@@ -601,11 +602,13 @@ func TestValidateRamdiskDir(t *testing.T) {
 	sm := &StorageManager{}
 
 	type testCase struct {
-		name       string
-		ramdiskDir string
-		rawMounts  []string
-		wantErr    bool
-		errSubstr  string
+		name                string
+		ramdiskDir          string
+		rawMounts           []string
+		isPathways          bool
+		hasColocatedSidecar bool
+		wantErr             bool
+		errSubstr           string
 	}
 
 	tests := []testCase{
@@ -637,6 +640,48 @@ func TestValidateRamdiskDir(t *testing.T) {
 			ramdiskDir: "/tmp/ramdisk",
 			rawMounts:  []string{"gs://bucket;/data"},
 		},
+		{
+			name:       "Valid Nested /tmp Path on Pathways - Pass",
+			ramdiskDir: "/tmp/ramdisk",
+			rawMounts:  []string{"gs://bucket;/data"},
+			isPathways: true,
+		},
+		{
+			name:       "Built-in /tmp Mount Conflict on Pathways - Fail",
+			ramdiskDir: "/tmp",
+			isPathways: true,
+			wantErr:    true,
+			errSubstr:  "conflicts with built-in Pathways mount",
+		},
+		{
+			name:                "Built-in Pathways /tmp/sidecar Mount Conflict - Fail",
+			ramdiskDir:          "/tmp/sidecar",
+			isPathways:          true,
+			hasColocatedSidecar: true,
+			wantErr:             true,
+			errSubstr:           "conflicts with built-in Pathways mount",
+		},
+		{
+			name:                "Built-in Pathways /tmp/sidecar Subdir Mount Conflict - Fail",
+			ramdiskDir:          "/tmp/sidecar/shm",
+			isPathways:          true,
+			hasColocatedSidecar: true,
+			wantErr:             true,
+			errSubstr:           "conflicts with built-in Pathways mount",
+		},
+		{
+			name:                "Pathways /tmp/sidecar Without Colocated Sidecar - Pass",
+			ramdiskDir:          "/tmp/sidecar",
+			isPathways:          true,
+			hasColocatedSidecar: false,
+			wantErr:             false,
+		},
+		{
+			name:       "Pathways Sidecar Path on Non-Pathways Job - Pass",
+			ramdiskDir: "/tmp/sidecar",
+			isPathways: false,
+			wantErr:    false,
+		},
 	}
 
 	for _, reserved := range []string{"/dev", "/proc", "/sys", "/etc", "/bin", "/sbin", "/usr", "/lib", "/lib64", "/proc/"} {
@@ -659,7 +704,7 @@ func TestValidateRamdiskDir(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := sm.ValidateRamdiskDir(tt.ramdiskDir, tt.rawMounts)
+			err := sm.ValidateRamdiskDir(tt.ramdiskDir, tt.rawMounts, tt.isPathways, tt.hasColocatedSidecar)
 			if tt.wantErr {
 				if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
 					t.Errorf("expected error containing %q, got %v", tt.errSubstr, err)
@@ -669,6 +714,149 @@ func TestValidateRamdiskDir(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateJobMounts(t *testing.T) {
+	sm := &StorageManager{}
+
+	tests := []struct {
+		name                string
+		mounts              []string
+		isPathways          bool
+		hasColocatedSidecar bool
+		errSubstr           string
+	}{
+		{
+			name:       "Valid Pathways mounts - Pass",
+			mounts:     []string{"gs://bucket-a;/data", "gs://bucket-b;/tmp/checkpoints"},
+			isPathways: true,
+		},
+		{
+			name:   "Non-Pathways job may mount at /tmp",
+			mounts: []string{"gs://bucket;/tmp"},
+		},
+		{
+			name:       "Pathways job rejects /tmp",
+			mounts:     []string{"gs://bucket;/tmp"},
+			isPathways: true,
+			errSubstr:  "conflicts with built-in Pathways mount \"/tmp\"",
+		},
+		{
+			name:       "Pathways job rejects /tmp/ with trailing slash",
+			mounts:     []string{"gs://bucket;/tmp/"},
+			isPathways: true,
+			errSubstr:  "conflicts with built-in Pathways mount \"/tmp\"",
+		},
+		{
+			name:                "Pathways job with sidecar rejects /tmp/sidecar",
+			mounts:              []string{"gs://bucket;/tmp/sidecar"},
+			isPathways:          true,
+			hasColocatedSidecar: true,
+			errSubstr:           "conflicts with built-in Pathways mount \"/tmp/sidecar\"",
+		},
+		{
+			name:                "Pathways job with sidecar rejects /tmp/sidecar/ with trailing slash",
+			mounts:              []string{"gs://bucket;/tmp/sidecar/"},
+			isPathways:          true,
+			hasColocatedSidecar: true,
+			errSubstr:           "conflicts with built-in Pathways mount \"/tmp/sidecar\"",
+		},
+		{
+			name:                "Pathways job with sidecar rejects /tmp/sidecar subpath",
+			mounts:              []string{"gs://bucket;/tmp/sidecar/ipc"},
+			isPathways:          true,
+			hasColocatedSidecar: true,
+			errSubstr:           "conflicts with built-in Pathways mount \"/tmp/sidecar\"",
+		},
+		{
+			name:       "Pathways job without sidecar allows /tmp/sidecar",
+			mounts:     []string{"gs://bucket;/tmp/sidecar"},
+			isPathways: true,
+		},
+		{
+			name:       "Pathways job without sidecar allows /tmp/sidecar subpath",
+			mounts:     []string{"gs://bucket;/tmp/sidecar/ipc"},
+			isPathways: true,
+		},
+		{
+			name:      "Non-Pathways job rejects duplicate destinations",
+			mounts:    []string{"gs://a;/data", "gs://b;/data"},
+			errSubstr: "duplicate volume destination",
+		},
+		{
+			name:       "Pathways job rejects duplicate destinations",
+			mounts:     []string{"gs://a;/data", "gs://b;/data"},
+			isPathways: true,
+			errSubstr:  "duplicate volume destination",
+		},
+		{
+			name:       "Pathways job rejects duplicate sources",
+			mounts:     []string{"gs://same;/data", "gs://same;/tmp/checkpoints"},
+			isPathways: true,
+			errSubstr:  "duplicate volume source",
+		},
+		{
+			name:       "Pathways job rejects reserved system path",
+			mounts:     []string{"gs://bucket;/proc"},
+			isPathways: true,
+			errSubstr:  "reserved system directory",
+		},
+		{
+			name:       "Pathways job rejects invalid mount format",
+			mounts:     []string{"gs://bucket"},
+			isPathways: true,
+			errSubstr:  "Missing destination",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := sm.validateJobMounts(tt.mounts, tt.isPathways, tt.hasColocatedSidecar)
+			if tt.errSubstr == "" {
+				if err != nil {
+					t.Fatalf("validateJobMounts() unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
+				t.Errorf("validateJobMounts() error = %v, want error containing %q", err, tt.errSubstr)
+			}
+		})
+	}
+}
+
+func TestAddVolumeOptions_MTC(t *testing.T) {
+	sm := &StorageManager{}
+
+	t.Run("Standard job adds MTC cache volume to VolumesYAML and VolumeMountsYAML", func(t *testing.T) {
+		opts := ManifestOptions{
+			GKEMTCEnabled:          true,
+			GKEMTCRamdiskDirectory: "/tmp/mtc",
+			IsPathwaysJob:          false,
+		}
+		sm.AddVolumeOptions(&opts, nil)
+		if !strings.Contains(opts.VolumesYAML, multitierCheckpointCSIDriver) {
+			t.Errorf("expected VolumesYAML to contain MTC CSI driver for standard job, got %q", opts.VolumesYAML)
+		}
+		if !strings.Contains(opts.VolumeMountsYAML, "mountPath: /tmp/mtc") {
+			t.Errorf("expected VolumeMountsYAML to contain /tmp/mtc for standard job, got %q", opts.VolumeMountsYAML)
+		}
+	})
+
+	t.Run("Pathways job leaves MTC volumes to the Pathways template", func(t *testing.T) {
+		opts := ManifestOptions{
+			GKEMTCEnabled:          true,
+			GKEMTCRamdiskDirectory: "/tmp/mtc",
+			IsPathwaysJob:          true,
+			Pathways: orchestrator.PathwaysJobDefinition{
+				ColocatedPythonSidecarImage: "gcr.io/pathways/sidecar:latest",
+			},
+		}
+		sm.AddVolumeOptions(&opts, nil)
+		if opts.VolumesYAML != "" || opts.VolumeMountsYAML != "" {
+			t.Errorf("expected no shared volumes for Pathways job, got VolumesYAML=%q VolumeMountsYAML=%q", opts.VolumesYAML, opts.VolumeMountsYAML)
+		}
+	})
 }
 
 func TestProcessMounts_Basic(t *testing.T) {
@@ -1656,8 +1844,7 @@ func TestGCSFuseProfile_ManifestRendering(t *testing.T) {
 
 func renderGCSFuseGateway(t *testing.T, params GCSFusePVPVCTemplateParams) string {
 	t.Helper()
-	var g *GKEOrchestrator
-	tmpl, err := g.parseGKETextTemplate("gcs_fuse_pv_pvc.tmpl")
+	tmpl, err := k8s.ParseTextTemplate("", "gcs_fuse_pv_pvc.tmpl")
 	if err != nil {
 		t.Fatalf("failed to parse template: %v", err)
 	}
@@ -3850,4 +4037,184 @@ func TestVerifyStorageGateways_NoGatewaysIsANoOp(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assertDeleted(t, mock, nil, nil)
+}
+
+func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
+	pvcCmd := func(name, ns string) string {
+		return fmt.Sprintf("kubectl get pvc %s -n %s --ignore-not-found --request-timeout=10s -o %s", name, ns, pvcGCSFuseJSONPath)
+	}
+	pvCmd := func(name string) string {
+		return fmt.Sprintf("kubectl get pv %s --ignore-not-found --request-timeout=10s -o %s", name, pvCSIDriverTemplate)
+	}
+	scCmd := func(name string) string {
+		return fmt.Sprintf("kubectl get storageclass %s --ignore-not-found --request-timeout=10s -o jsonpath={.provisioner}", name)
+	}
+
+	tests := []struct {
+		name          string
+		mount         string
+		namespace     string
+		mockResponses map[string][]shell.CommandResult
+		wantGCSFuse   bool
+		wantCalls     int
+	}{
+		{
+			name:  "static PVC bound to gcsfuse CSI PV enables gke-gcsfuse annotation",
+			mount: "ub-verify-dataset-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("ub-verify-dataset-pvc", "default"): {
+					{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t\t\t"},
+				},
+				pvCmd("ub-verify-dataset-pv"): {
+					{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: true,
+			wantCalls:   2,
+		},
+		{
+			name:      "unbound PVC with built-in gcsfusecsi-training StorageClass in custom namespace",
+			mount:     "profile-pvc;/data;ro",
+			namespace: "team-ns",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("profile-pvc", "team-ns"): {
+					{ExitCode: 0, Stdout: "\tgcsfusecsi-training\t\t"},
+				},
+			},
+			wantGCSFuse: true,
+			wantCalls:   1,
+		},
+		{
+			name:  "dynamically provisioned PVC with storage-provisioner annotation avoids cluster-scoped lookups",
+			mount: "dynamic-gcsfuse-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("dynamic-gcsfuse-pvc", "default"): {
+					{ExitCode: 0, Stdout: "pvc-dyn-123\tcustom-sc\tgcsfuse.csi.storage.gke.io\t"},
+				},
+			},
+			wantGCSFuse: true,
+			wantCalls:   1,
+		},
+		{
+			name:  "PVC with custom StorageClass provisioned by gcsfuse.csi.storage.gke.io",
+			mount: "custom-sc-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("custom-sc-pvc", "default"): {
+					{ExitCode: 0, Stdout: "\tmy-custom-gcsfuse-sc\t\t"},
+				},
+				scCmd("my-custom-gcsfuse-sc"): {
+					{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: true,
+			wantCalls:   2,
+		},
+		{
+			name:        "toolkit gcluster-gcsfuse-* PVC name enables gke-gcsfuse annotation without kubectl lookup",
+			mount:       "gcluster-gcsfuse-mybucket-training-abc123;/data;ro",
+			wantGCSFuse: true,
+			wantCalls:   0,
+		},
+		{
+			name:  "dynamically provisioned non-GCSFuse PVC (Persistent Disk CSI annotation) short-circuits without cluster-scoped lookups",
+			mount: "pd-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("pd-pvc", "default"): {
+					{ExitCode: 0, Stdout: "pvc-12345\tstandard-rwo\tpd.csi.storage.gke.io\t"},
+				},
+			},
+			wantGCSFuse: false,
+			wantCalls:   1,
+		},
+		{
+			name:  "static non-GCSFuse PVC (Persistent Disk CSI without annotation) checks PV and StorageClass",
+			mount: "static-pd-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("static-pd-pvc", "default"): {
+					{ExitCode: 0, Stdout: "pvc-12345\tstandard-rwo\t\t"},
+				},
+				pvCmd("pvc-12345"): {
+					{ExitCode: 0, Stdout: "pd.csi.storage.gke.io"},
+				},
+				scCmd("standard-rwo"): {
+					{ExitCode: 0, Stdout: "pd.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: false,
+			wantCalls:   3,
+		},
+		{
+			name:  "StorageClass named training with non-GCSFuse provisioner leaves GCSFuseEnabled false",
+			mount: "training-sc-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("training-sc-pvc", "default"): {
+					{ExitCode: 0, Stdout: "\ttraining\t\t"},
+				},
+				scCmd("training"): {
+					{ExitCode: 0, Stdout: "pd.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: false,
+			wantCalls:   2,
+		},
+		{
+			name:  "missing PVC leaves GCSFuseEnabled false without failing",
+			mount: "nonexistent-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("nonexistent-pvc", "default"): {
+					{ExitCode: 0, Stdout: ""},
+				},
+			},
+			wantGCSFuse: false,
+			wantCalls:   1,
+		},
+		{
+			name:  "kubectl get pv failure degrades gracefully and falls back to StorageClass check",
+			mount: "rbac-restricted-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("rbac-restricted-pvc", "default"): {
+					{ExitCode: 0, Stdout: "restricted-pv\tcustom-gcsfuse-sc\t\t"},
+				},
+				pvCmd("restricted-pv"): {
+					{ExitCode: 1, Stderr: "Error from server (Forbidden): persistentvolumes \"restricted-pv\" is forbidden"},
+				},
+				scCmd("custom-gcsfuse-sc"): {
+					{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: true,
+			wantCalls:   3,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(tc.mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+			if tc.namespace != "" {
+				orc.namespace = tc.namespace
+			}
+			sm := &StorageManager{orchestrator: orc}
+
+			infos, _, err := sm.ProcessMounts([]string{tc.mount}, orchestrator.JobDefinition{})
+			if err != nil {
+				t.Fatalf("ProcessMounts() unexpected error: %v", err)
+			}
+			if len(infos) != 1 {
+				t.Fatalf("expected 1 MountInfo, got %d", len(infos))
+			}
+			if infos[0].NeedsGCSFuseSidecar != tc.wantGCSFuse {
+				t.Errorf("MountInfo.NeedsGCSFuseSidecar = %v, want %v", infos[0].NeedsGCSFuseSidecar, tc.wantGCSFuse)
+			}
+			if len(mockExec.calls) != tc.wantCalls {
+				t.Errorf("kubectl call count = %d (%v), want %d", len(mockExec.calls), mockExec.calls, tc.wantCalls)
+			}
+
+			opts := &ManifestOptions{}
+			sm.AddVolumeOptions(opts, infos)
+			if opts.GCSFuseEnabled != tc.wantGCSFuse {
+				t.Errorf("ManifestOptions.GCSFuseEnabled = %v, want %v", opts.GCSFuseEnabled, tc.wantGCSFuse)
+			}
+		})
+	}
 }

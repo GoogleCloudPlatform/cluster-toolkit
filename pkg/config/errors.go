@@ -125,11 +125,18 @@ func (e *Errors) Add(err error) *Errors {
 	if err == nil {
 		return e
 	}
-	if multi, ok := err.(*Errors); ok {
+	switch multi := err.(type) {
+	case *Errors:
+		if multi != nil {
+			for _, c := range multi.Errors {
+				e.addDedup(c)
+			}
+		}
+	case Errors:
 		for _, c := range multi.Errors {
 			e.addDedup(c)
 		}
-	} else {
+	default:
 		e.addDedup(err)
 	}
 	return e

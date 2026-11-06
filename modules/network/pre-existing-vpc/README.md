@@ -44,7 +44,7 @@ refer [shared-vpc][shared-vpc-doc]
 
 [cloudnat]: https://cloud.google.com/nat/docs/overview
 [iap]: https://cloud.google.com/iap/docs/using-tcp-forwarding
-[shared-vpc-doc]: ../../../examples/README.md#hpc-slurm-sharedvpcyaml-community-badge-experimental-badge
+[shared-vpc-doc]: ../../../examples/README.md#hpc-slurm-sharedvpcyaml--
 
 ### Use with GKE Cluster
 

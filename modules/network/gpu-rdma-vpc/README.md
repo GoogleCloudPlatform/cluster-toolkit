@@ -24,7 +24,7 @@ created within the network.  This template contains the following values:
 > The `ip_range` should be always be large enough to split into `count`
 > subnetworks and the number of required connections within.
 
-[cft-network]: https://github.com/terraform-google-modules/terraform-google-network/tree/v10.0.0
+[cft-network]: https://github.com/terraform-google-modules/terraform-google-network/tree/v18.3.0
 [cidr]: https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing#CIDR_notation
 
 ### Example
@@ -53,7 +53,7 @@ This snippet uses the gpu-vpc module to create a new VPC network named
     use: [network0]
     settings:
       machine_type: a3-ultragpu-8g
-     additional_networks:
+      additional_networks:
         $(concat(
           [{
             network=null,
@@ -69,7 +69,6 @@ This snippet uses the gpu-vpc module to create a new VPC network named
           }],
           rdma-net.subnetwork_interfaces
         ))
-      ...
 ```
 
 ## License
@@ -105,7 +104,7 @@ limitations under the License.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| <a name="module_vpc"></a> [vpc](#module\_vpc) | terraform-google-modules/network/google | ~> 13.0 |
+| <a name="module_vpc"></a> [vpc](#module\_vpc) | terraform-google-modules/network/google | ~> 18.3 |
 
 ## Resources
 

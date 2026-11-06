@@ -51,12 +51,12 @@ Each runner receives the following attributes:
 
 `ansible-local` runners require Ansible to be installed in the VM before
 running. To support other playbook runners in the Cluster Toolkit, we install
-version 2.11 of `ansible-core` as well as the larger package of collections
-found in `ansible` version 4.10.0.
+`ansible-core` (2.15.x) as well as the larger package of collections
+found in `ansible` version 8.7.0.
 
 If an `ansible-local` runner is found in the list supplied to this module,
 a script to install Ansible will be prepended to the list of runners. This
-behavior can be disabled by setting `var.prepend_ansible_installer` to `false`.
+behavior can be disabled by setting `install_ansible` to `false`.
 This script will do the following at VM startup:
 
 - Install system-wide python3 if not already installed using system package
@@ -82,7 +82,7 @@ binary in the virtual environment. This can be done by adding the following flag
 when calling `ansible-playbook`:
 
 ```shell
--e ansible_python_interpreter=/usr/local/ghpc-venv/bin/activate
+-e ansible_python_interpreter=/usr/local/ghpc-venv/bin/python3
 ```
 
 > **_NOTE:_** ansible-playbook and other ansible command line tools will only be
@@ -192,8 +192,9 @@ sudo bash add-google-cloud-ops-agent-repo.sh --also-install
 sudo service google-cloud-ops-agent start
 ```
 
-As a reminder, this should be in a startup script, which should run on all
-Compute nodes via the `compute_startup_script` on the controller.
+As a reminder, this should be in a `startup-script` module wired to your compute
+nodeset via `use:` (which automatically populates `startup_script` on the
+nodeset).
 
 #### Testing Installation
 
@@ -229,13 +230,7 @@ For official documentation see troubleshooting docs:
     runners:
       # Some modules such as filestore have runners as outputs for convenience:
       - $(homefs.install_nfs_client_runner)
-      # These runners can still be created manually:
-      # - type: shell
-      #   destination: "modules/filestore/scripts/install_nfs_client.sh"
-      #   source: "modules/filestore/scripts/install_nfs_client.sh"
-      - type: ansible-local
-        destination: "modules/filestore/scripts/mount.yaml"
-        source: "modules/filestore/scripts/mount.yaml"
+      - $(homefs.mount_runner)
       - type: data
         source: /tmp/foo.tgz
         destination: /tmp/bar.tgz

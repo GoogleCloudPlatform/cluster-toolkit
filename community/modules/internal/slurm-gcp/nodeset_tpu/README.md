@@ -1,8 +1,6 @@
 # Module: Slurm Nodeset (TPU)
 
-[FAQ](../../../../docs/faq.md) |
-[Troubleshooting](../../../../docs/troubleshooting.md) |
-[Glossary](../../../../docs/glossary.md)
+[Troubleshooting](../../../../../docs/slurm-troubleshooting.md)
 
 <!-- mdformat-toc start --slug=github --no-anchors --maxlevel=6 --minlevel=1 -->
 
@@ -14,13 +12,12 @@
 
 ## Overview
 
-This is a submodule of [slurm_cluster](../../../slurm_cluster/README.md). It
-creates a Slurm TPU nodeset for [slurm_partition](../slurm_partition/README.md).
+This is an internal submodule of [schedmd-slurm-gcp-v6-nodeset-tpu](../../../compute/schedmd-slurm-gcp-v6-nodeset-tpu/README.md). It
+creates a Slurm TPU nodeset for [schedmd-slurm-gcp-v6-partition](../../../compute/schedmd-slurm-gcp-v6-partition/README.md).
 
 ## Module API
 
-For the terraform module API reference, please see
-[README_TF.md](./README_TF.md).
+For the terraform module API reference, please see the [Inputs](#inputs) and [Outputs](#outputs) sections below.
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright (C) SchedMD LLC.

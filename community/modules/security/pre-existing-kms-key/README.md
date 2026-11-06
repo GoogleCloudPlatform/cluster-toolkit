@@ -62,7 +62,7 @@ Key created out of band, then adopted by a blueprint using this module:
 ```console
 $ gcloud kms keys create KEY --keyring=KEYRING --location=LOCATION --purpose=encryption --project=PROJECT_ID
 
-$ ./ghpc deploy DEPLOYMENT_DIR --auto-approve
+$ ./gcluster deploy DEPLOYMENT_DIR --auto-approve
 ...
 Cloud infrastructure in deployment group ... is already applied
 
@@ -70,7 +70,7 @@ $ terraform state list | grep -i kms
 module.imported_key.data.google_kms_crypto_key.this
 module.imported_key.data.google_kms_key_ring.this
 
-$ ./ghpc destroy DEPLOYMENT_DIR --auto-approve
+$ ./gcluster destroy DEPLOYMENT_DIR --auto-approve
 ...
 Cloud infrastructure in deployment group ... is already destroyed
 

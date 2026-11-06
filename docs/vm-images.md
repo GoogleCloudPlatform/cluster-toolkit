@@ -131,7 +131,7 @@ description of our support for Windows images.
   <th>Deployment Type/Scheduler</th>
   <th>Feature</th>
   <th></th>
-  <th>Debian 11</th><th>Rocky Linux 9</th><th>Ubuntu 22.04</th>
+  <th>Debian 12</th><th>Rocky Linux 8 / 9</th><th>Ubuntu 22.04</th>
 </tr>
 <tr>
   <td></td><td></td><td></td><td></td><td></td><td></td>
@@ -142,15 +142,15 @@ description of our support for Windows images.
   <th>Lustre</th>
   <th></th>
   <td></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓ (8)</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Shared filestore</th>
   <th></th>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-filestore.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-filestore.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-filestore.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Startup script</th>
@@ -160,9 +160,9 @@ description of our support for Windows images.
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
 </tr>
 <tr>
+  <th rowspan="3">Slurm</th>
   <th>Lustre</th>
   <th></th>
-  <td></td>
   <td></td>
   <td><a href="../examples/hpc-enterprise-slurm.yaml">✓</a></td>
   <td></td>
@@ -170,15 +170,13 @@ description of our support for Windows images.
 <tr>
   <th>Shared filestore</th>
   <th></th>
-  <td></td>
   <td>✓</td>
   <td><a href="../examples/hpc-slurm.yaml">✓</a></td>
-  <td><a href="../community/examples/hpc-slurm-ubuntu2404.yaml">✓</a></td>
+  <td><a href="../community/examples/hpc-slurm-ubuntu2204.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Startup script</th>
   <th></th>
-  <td></td>
   <td>✓</td>
   <td><a href="../community/examples/hpc-slurm-ramble-gromacs.yaml">✓</a></td>
   <td>✓</td>
@@ -196,7 +194,7 @@ description of our support for Windows images.
   <th>Lustre</th>
   <th></th>
   <td></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓ (8)</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
 </tr>
 <tr>
@@ -223,6 +221,9 @@ description of our support for Windows images.
 </tr>
 </table>
 
+> [!NOTE]
+> Cloud Batch and VM rows are tested on `rocky-linux-8`; Slurm rows use the Rocky Linux 9 Slurm images (`aci-cpu-rocky-linux-9-slurm-*`). The Managed Lustre client installer supports only Rocky Linux 8 and Ubuntu 22.04; on other images it installs nothing, so the Lustre mount fails unless the image already ships the client.
+
 ### Other Images
 
 The Cluster Toolkit strives to provide flexibility wherever possible. It is possible
@@ -240,23 +241,24 @@ SchedMD publishes "Slurm on GCP" public images, which are documented
 and what software is installed on them.
 
 Slurm images are compatible by the minor version releases of the Terraform and
-Packer modules. For example, images built for version 5.8 are compatible with
-all Terraform modules from 5.8.0 but below 5.9.0. The version of the Slurm
-modules used by your copy of the Toolkit in the local filesystem can be
-inspected by looking for the source line in
-`community/modules/compute/schedmd-slurm-gcp-v6-partition/main.tf`.
+Packer modules. The default Slurm image family and vendored Slurm module
+implementation used by your copy of the Toolkit in the local filesystem can be
+inspected in
+`community/modules/scheduler/schedmd-slurm-gcp-v6-controller/variables_controller_instance.tf`
+and `community/modules/internal/slurm-gcp/`.
 
 The latest GitHub release supports
 [these images][slurm-gcp-published-images].
 
+<a name="slurm-on-gcp-custom-images"></a>
 ### Custom Slurm Images
 
 > [!NOTE]
 > Set the `instance_image_custom` to `true` in the blueprint to let terraform
 > know you are aware that you are using a custom image.
 
-See: [ML Slurm](../examples/README.md#ml-slurmyaml-core-badge)
-and [Image Builder](../examples/README.md#image-builderyaml-core-badge)
+See: [ML Slurm](../examples/README.md#ml-slurmyaml-)
+and [Image Builder](../examples/README.md#image-builderyaml-)
 
 > [!WARNING]
 > When building custom images, the Terraform and Packer modules must share the
@@ -282,13 +284,11 @@ These instructions apply to the following modules:
 [batch-job]: ../modules/scheduler/batch-job-template
 [batch-login]: ../modules/scheduler/batch-login-node
 [htcondor-setup]: ../community/modules/scheduler/htcondor-setup
-[hpc-slurm-ubuntu2404.yaml]: ../community/examples/hpc-slurm-ubuntu2404.yaml
 
 [htc-htcondor.yaml]: ../community/examples/htc-htcondor.yaml
 [vm-startup.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-startup.yaml
 [vm-crd.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-crd.yaml
 [vm-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml
 [vm-lustre.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml
-[slurm-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml
 [batch-startup.yaml]: ../tools/validate_configs/os_compatibility_tests/batch-startup.yaml
 [batch-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/batch-filestore.yaml

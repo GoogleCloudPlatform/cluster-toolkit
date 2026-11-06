@@ -15,9 +15,15 @@
 package config
 
 import (
+	"errors"
 	"fmt"
-	"hpc-toolkit/pkg/modulereader"
+	"os"
+	"slices"
 	"strings"
+	"testing/fstest"
+
+	"hpc-toolkit/pkg/modulereader"
+	"hpc-toolkit/pkg/sourcereader"
 
 	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
@@ -571,6 +577,84 @@ func (s *zeroSuite) TestExpandGlobalLabels(c *C) {
 		})
 		c.Check(labelsVal, DeepEquals, expectedLabels)
 	}
+
+	{ // AIAssisted true injects ghpc_ai_assisted label
+		bp := Blueprint{
+			BlueprintName: "tree",
+			Vars:          NewDict(map[string]cty.Value{}),
+			AIAssisted:    true,
+		}
+		bp.expandGlobalLabels()
+		labelsVal := bp.Vars.Get("labels")
+
+		expectedLabels := cty.ObjectVal(map[string]cty.Value{
+			"ghpc_blueprint":   cty.StringVal("tree"),
+			"ghpc_deployment":  GlobalRef("deployment_name").AsValue(),
+			"ghpc_ai_assisted": cty.StringVal("true"),
+		})
+		c.Check(labelsVal, DeepEquals, expectedLabels)
+	}
+
+	{ // AIAssisted true with AddCreatorLabel true
+		bp := Blueprint{
+			BlueprintName:   "tree",
+			Vars:            NewDict(map[string]cty.Value{}),
+			AddCreatorLabel: true,
+			CreatorUsername: "testuser",
+			AIAssisted:      true,
+		}
+		bp.expandGlobalLabels()
+		labelsVal := bp.Vars.Get("labels")
+
+		expectedLabels := cty.ObjectVal(map[string]cty.Value{
+			"ghpc_blueprint":   cty.StringVal("tree"),
+			"ghpc_deployment":  GlobalRef("deployment_name").AsValue(),
+			"ghpc_creator":     cty.StringVal("testuser"),
+			"ghpc_ai_assisted": cty.StringVal("true"),
+		})
+		c.Check(labelsVal, DeepEquals, expectedLabels)
+	}
+
+	{ // AIAssisted true merges with existing user labels and respects user override
+		userLabels := cty.ObjectVal(map[string]cty.Value{
+			"env": cty.StringVal("prod"),
+		})
+		bp := Blueprint{
+			BlueprintName: "tree",
+			Vars: NewDict(map[string]cty.Value{
+				"deployment_name": cty.StringVal("my-cluster"),
+				"labels":          userLabels,
+			}),
+			AIAssisted: true,
+		}
+		bp.expandGlobalLabels()
+		evalVal, err := bp.Eval(bp.Vars.Get("labels"))
+		c.Assert(err, IsNil)
+
+		expectedEval := cty.ObjectVal(map[string]cty.Value{
+			"ghpc_blueprint":   cty.StringVal("tree"),
+			"ghpc_deployment":  cty.StringVal("my-cluster"),
+			"ghpc_ai_assisted": cty.StringVal("true"),
+			"env":              cty.StringVal("prod"),
+		})
+		c.Check(evalVal, DeepEquals, expectedEval)
+
+		overrideLabels := cty.ObjectVal(map[string]cty.Value{
+			"ghpc_ai_assisted": cty.StringVal("false"),
+		})
+		bpOverride := Blueprint{
+			BlueprintName: "tree",
+			Vars: NewDict(map[string]cty.Value{
+				"deployment_name": cty.StringVal("my-cluster"),
+				"labels":          overrideLabels,
+			}),
+			AIAssisted: true,
+		}
+		bpOverride.expandGlobalLabels()
+		evalOverride, err := bpOverride.Eval(bpOverride.Vars.Get("labels"))
+		c.Assert(err, IsNil)
+		c.Check(evalOverride.GetAttr("ghpc_ai_assisted"), DeepEquals, cty.StringVal("false"))
+	}
 }
 
 func (s *zeroSuite) TestCheckInputValueMatchesType_Panic(c *C) {
@@ -869,5 +953,517 @@ func (s *zeroSuite) TestExpandWorkloadPolicy(c *C) {
 		wpMap := bp.Groups[0].Modules[0].Settings.Get("workload_policy").AsValueMap()
 		_, exists := wpMap["accelerator_topology_mode"]
 		c.Check(exists, Equals, false)
+	}
+}
+
+func extractHintError(c *C, err error) HintError {
+	c.Assert(err, NotNil)
+	var hErr HintError
+	c.Assert(errors.As(err, &hErr), Equals, true)
+	return hErr
+}
+
+func reqInput(name, desc string) modulereader.VarInfo {
+	return modulereader.VarInfo{Name: name, Type: cty.String, Description: desc, Required: true}
+}
+
+func (s *zeroSuite) TestValidateModuleInputs_BlueprintUseHints(c *C) {
+	origFS := sourcereader.ModuleFS
+	sourcereader.ModuleFS = nil
+	defer func() { sourcereader.ModuleFS = origFS }()
+
+	// Single provider in earlier group preserves existing entries in Use
+	net := tMod("net").outputs("network_id", "network_self_link").build()
+	psa := tMod("psa").outputs("private_vpc_connection_peering").build()
+	lustre := tMod("lustre").uses("net").inputs(reqInput("private_vpc_connection_peering", "VPC peering connection.")).build()
+	bpSingle := Blueprint{Groups: []Group{{Name: "network", Modules: []Module{net, psa}}, {Name: "storage", Modules: []Module{lustre}}}}
+	hSingle := extractHintError(c, validateModuleInputs(Root.Groups.At(1).Modules.At(0), lustre, bpSingle))
+	c.Check(hSingle.Err.Error(), Equals, `a required setting "private_vpc_connection_peering" is missing from a module "lustre"`)
+	c.Check(hSingle.Hint, Equals, `"private_vpc_connection_peering" description: VPC peering connection. Consider adding module "psa" to the "use" list of module "lustre" (e.g. use: [net, psa]).`)
+
+	// Multiple providers across earlier and same unnamed group (including forward intra-group), multiline description, later group excluded
+	gke1, gke2, gkeLate := tMod("gke1").outputs("cluster_id").build(), tMod("gke2").outputs("cluster_id").build(), tMod("gke_late").outputs("cluster_id").build()
+	pool := tMod("pool").inputs(reqInput("cluster_id", "Cluster identifier.\n")).build()
+	bpMulti := Blueprint{Groups: []Group{{Modules: []Module{gke1}}, {Modules: []Module{pool, gke2}}, {Modules: []Module{gkeLate}}}}
+	hMulti := extractHintError(c, validateModuleInputs(Root.Groups.At(1).Modules.At(0), pool, bpMulti))
+	c.Check(strings.HasPrefix(hMulti.Hint, "\"cluster_id\" description: Cluster identifier.\n"), Equals, true)
+	c.Check(hMulti.Hint, Equals, "\"cluster_id\" description: Cluster identifier.\nConsider adding one of modules [\"gke1\", \"gke2\"] to the \"use\" list of module \"pool\" (e.g. use: [gke1]).")
+
+	// Multiple providers when module already has an entry in Use appends the first candidate in the example
+	poolWithUse := tMod("pool").uses("net").inputs(reqInput("cluster_id", "Cluster identifier.")).build()
+	bpMultiWithUse := Blueprint{Groups: []Group{{Modules: []Module{net, gke1}}, {Modules: []Module{poolWithUse, gke2}}}}
+	hMultiWithUse := extractHintError(c, validateModuleInputs(Root.Groups.At(1).Modules.At(0), poolWithUse, bpMultiWithUse))
+	c.Check(hMultiWithUse.Hint, Equals, `"cluster_id" description: Cluster identifier. Consider adding one of modules ["gke1", "gke2"] to the "use" list of module "pool" (e.g. use: [net, gke1]).`)
+
+	// Multiple missing inputs on one module (generic "name" input gets no use: hint)
+	multiMissing := tMod("multi_missing").inputs(
+		reqInput("network_id", "VPC network ID."),
+		reqInput("private_vpc_connection_peering", "Peering."),
+		reqInput("name", "Instance name."),
+	).build()
+	msg := validateModuleInputs(Root.Groups.At(0).Modules.At(2), multiMissing, Blueprint{Groups: []Group{{Name: "primary", Modules: []Module{net, psa, multiMissing}}}}).Error()
+	c.Check(strings.Contains(msg, `"network_id" description: VPC network ID. Consider adding module "net" to the "use" list of module "multi_missing" (e.g. use: [net]).`), Equals, true)
+	c.Check(strings.Contains(msg, `"private_vpc_connection_peering" description: Peering. Consider adding module "psa" to the "use" list of module "multi_missing" (e.g. use: [psa]).`), Equals, true)
+	c.Check(strings.Contains(msg, `"name" description: Instance name. Consider`), Equals, false)
+
+	// Exclusions: Packer candidate, already-used, self, later group, and malformed modules
+	pkrCand, already, late := tMod("pkr_cand").packer().outputs("special_out").build(), tMod("already").outputs("special_out").build(), tMod("late").outputs("special_out").build()
+	consumer := tMod("consumer").uses("already").outputs("special_out").inputs(reqInput("special_out", "Special")).build()
+	bpExcluded := Blueprint{Groups: []Group{
+		{Name: "g0", Modules: []Module{pkrCand, already, {ID: "empty_src"}, {ID: "empty_src_with_out", Outputs: []modulereader.OutputInfo{{Name: "special_out"}}}, {ID: "bad_src", Source: "./does/not/exist"}, {ID: "bad_kind", Source: "modules/network/vpc", Kind: ModuleKind{kind: "bogus"}}}},
+		{Name: "g1", Modules: []Module{consumer}},
+		{Name: "g2", Modules: []Module{late}},
+	}}
+	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(1).Modules.At(0), consumer, bpExcluded)).Hint, Equals, `"special_out" description: Special`)
+
+	// Standalone consumer outside bp.Groups inspects all groups without panicking
+	standalone := tMod("standalone").inputs(reqInput("special_out", "Special")).build()
+	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), standalone, Blueprint{Groups: []Group{{Modules: []Module{late}}}})).Hint,
+		Equals, `"special_out" description: Special Consider adding module "late" to the "use" list of module "standalone" (e.g. use: [late]).`)
+
+	// Packer consumer only considers strictly earlier groups (never same-group Terraform candidates)
+	inlineNet := tMod("inline_net").outputs("subnetwork_name").build()
+	sameGrpNet := tMod("same_grp_net").outputs("subnetwork_name").build()
+	pkrImg := tMod("pkr_img").packer().inputs(reqInput("subnetwork_name", "Subnet")).build()
+	bpPkr := Blueprint{Groups: []Group{{Name: "net", Modules: []Module{inlineNet}}, {Name: "img", Modules: []Module{sameGrpNet, pkrImg}}}}
+	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(1).Modules.At(1), pkrImg, bpPkr)).Hint,
+		Equals, `"subnetwork_name" description: Subnet Consider adding module "inline_net" to the "use" list of module "pkr_img" (e.g. use: [inline_net]).`)
+	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(1), pkrImg, Blueprint{Groups: []Group{{Name: "img0", Modules: []Module{sameGrpNet, pkrImg}}}})).Hint,
+		Equals, `"subnetwork_name" description: Subnet`)
+}
+
+func (s *zeroSuite) TestValidateModuleInputs_OutputFiltering(c *C) {
+	origFS := sourcereader.ModuleFS
+	sourcereader.ModuleFS = nil
+	defer func() { sourcereader.ModuleFS = origFS }()
+
+	c.Check(IsAutoInjectedGlobal("project_id"), Equals, true)
+	c.Check(IsAutoInjectedGlobal("cluster_id"), Equals, false)
+	c.Check(IsGenericOutputName("capacity_gb"), Equals, true)
+	c.Check(IsGenericOutputName("gcp_service_list"), Equals, true)
+	c.Check(IsGenericOutputName("mode"), Equals, true)
+	c.Check(IsGenericOutputName("self_link"), Equals, true)
+	c.Check(IsGenericOutputName("type"), Equals, true)
+	c.Check(IsGenericOutputName("cluster_id"), Equals, false)
+	c.Check(IsIntegrationInputName("network_storage"), Equals, true)
+	c.Check(IsIntegrationInputName("cluster_id"), Equals, false)
+
+	// Auto-injected globals and generic output names never receive a use: hint
+	excludedNames := []string{
+		"project_id", "deployment_name", "region", "zone", "labels",
+		"capacity_gb", "gcp_service_list", "id", "instance_name", "mode", "name", "self_link", "type",
+	}
+	noisy := tMod("noisy").outputs(excludedNames...).build()
+	for _, name := range excludedNames {
+		consumer := tMod("c_" + ModuleID(name)).inputs(reqInput(name, "desc")).build()
+		bp := Blueprint{Groups: []Group{{Name: "g0", Modules: []Module{noisy, consumer}}}}
+		c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(1), consumer, bp)).Hint, Equals, fmt.Sprintf("%q description: desc", name))
+		c.Check(IsTrueProviderOutput(noisy.InfoOrDie(), name), Equals, false)
+	}
+
+	// Non-root module echoing an input is suppressed
+	echoNodePool := tMod("node_pool").inputs(reqInput("cluster_id", "desc")).outputs("cluster_id").build()
+	c.Check(IsTrueProviderOutput(echoNodePool.InfoOrDie(), "cluster_id"), Equals, false)
+
+	// Root provider (0 required non-global/non-injected inputs) with optional override input IS a true provider
+	rootVpcBuilder := tMod("vpc").
+		inputs(
+			reqInput("project_id", "desc"),
+			reqInput("injected_id", "desc"),
+			modulereader.VarInfo{Name: "subnetwork_name", Type: cty.String},
+			modulereader.VarInfo{Name: "network_storage", Type: cty.String},
+		).
+		outputs("subnetwork_name", "network_storage", "startup_script")
+	rootVpcBuilder.i.Metadata.Ghpc.InjectModuleId = "injected_id"
+	rootVpc := rootVpcBuilder.build()
+
+	c.Check(IsTrueProviderOutput(rootVpc.InfoOrDie(), "subnetwork_name"), Equals, true)
+	c.Check(IsTrueProviderOutput(rootVpc.InfoOrDie(), "network_storage"), Equals, false)
+	c.Check(IsTrueProviderOutput(rootVpc.InfoOrDie(), "startup_script"), Equals, true)
+	c.Check(IsTrueProviderOutput(rootVpc.InfoOrDie(), "nonexistent_output"), Equals, false)
+
+	// All integration inputs: root echo is suppressed, true producer without matching input is included
+	for _, name := range []string{
+		"network_storage", "partitions", "nodeset", "nodeset_dyn", "nodeset_tpu",
+		"login_nodes", "runners", "startup_script", "compute_startup_script", "controller_startup_script",
+	} {
+		echoRoot := tMod("echo_" + ModuleID(name)).inputs(modulereader.VarInfo{Name: name, Type: cty.String}).outputs(name).build()
+		c.Check(IsTrueProviderOutput(echoRoot.InfoOrDie(), name), Equals, false)
+
+		trueProv := tMod("prov_" + ModuleID(name)).inputs(reqInput("other_req", "desc")).outputs(name).build()
+		c.Check(IsTrueProviderOutput(trueProv.InfoOrDie(), name), Equals, true)
+	}
+}
+
+func (s *zeroSuite) TestValidateModuleInputs_EmbeddedUseHints(c *C) {
+	origFS := sourcereader.ModuleFS
+	defer func() { sourcereader.ModuleFS = origFS }()
+
+	// Nil ModuleFS produces plain description only
+	sourcereader.ModuleFS = nil
+	solo := tMod("solo").inputs(reqInput("unique_tok", "desc")).build()
+	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), solo, Blueprint{})).Hint, Equals, `"unique_tok" description: desc`)
+
+	// Synthetic MapFS testing single/multi matches, Terraform vs Packer placement text, and skipping internal, deprecated, packer, and non-TF entries
+	sourcereader.ModuleFS = fstest.MapFS{
+		"modules/README.md":                           &fstest.MapFile{Data: []byte("# root readme")},
+		"modules/testcat/notes.txt":                   &fstest.MapFile{Data: []byte("non-dir entry")},
+		"modules/testcat/prov-a/subdir/nested.txt":    &fstest.MapFile{Data: []byte("nested dir")},
+		"modules/testcat/prov-a/outputs.tf":           &fstest.MapFile{Data: []byte("output \"shared_tok\" { value = \"a\" }\noutput \"unique_tok\" { value = \"u\" }")},
+		"community/modules/testcat/prov-b/outputs.tf": &fstest.MapFile{Data: []byte(`output "shared_tok" { value = "b" }`)},
+		"community/modules/internal/hid/outputs.tf":   &fstest.MapFile{Data: []byte(`output "unique_tok" { value = "h" }`)},
+		"modules/testcat/deprecated/outputs.tf":       &fstest.MapFile{Data: []byte(`output "unique_tok" { value = "d" }`)},
+		"modules/testcat/deprecated/metadata.yaml":    &fstest.MapFile{Data: []byte("ghpc:\n  deprecation_date: \"2026-12-31\"\n")},
+		"modules/testcat/packer-mod/main.pkr.hcl":     &fstest.MapFile{Data: []byte(`variable "x" { type = string }`)},
+		"modules/testcat/packer-mod/outputs.tf":       &fstest.MapFile{Data: []byte(`output "unique_tok" { value = "p" }`)},
+		"modules/testcat/empty-dir/README.md":         &fstest.MapFile{Data: []byte("# not terraform")},
+	}
+
+	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), solo, Blueprint{})).Hint,
+		Equals, `"unique_tok" description: desc Module source "modules/testcat/prov-a" provides this output; add it to an earlier or same deployment group and reference its id in the "use" list of module "solo".`)
+
+	pkrSingle := tMod("pkr_single").packer().inputs(reqInput("unique_tok", "desc")).build()
+	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), pkrSingle, Blueprint{})).Hint,
+		Equals, `"unique_tok" description: desc Module source "modules/testcat/prov-a" provides this output; add it to an earlier deployment group and reference its id in the "use" list of module "pkr_single".`)
+
+	tfMulti := tMod("tf_multi").inputs(reqInput("shared_tok", "desc")).build()
+	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), tfMulti, Blueprint{})).Hint,
+		Equals, `"shared_tok" description: desc Module sources ["community/modules/testcat/prov-b", "modules/testcat/prov-a"] provide this output; add one to an earlier or same deployment group and reference its id in the "use" list of module "tf_multi".`)
+
+	pkrMulti := tMod("pkr_multi").packer().inputs(reqInput("shared_tok", "desc")).build()
+	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), pkrMulti, Blueprint{})).Hint,
+		Equals, `"shared_tok" description: desc Module sources ["community/modules/testcat/prov-b", "modules/testcat/prov-a"] provide this output; add one to an earlier deployment group and reference its id in the "use" list of module "pkr_multi".`)
+
+	// Fallback to embedded catalog when the only in-blueprint provider is in a later group
+	lateProv := tMod("late_prov").outputs("unique_tok").build()
+	bpLateOnly := Blueprint{Groups: []Group{{Name: "early", Modules: []Module{solo}}, {Name: "later", Modules: []Module{lateProv}}}}
+	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), solo, bpLateOnly)).Hint,
+		Equals, `"unique_tok" description: desc Module source "modules/testcat/prov-a" provides this output; add it to an earlier or same deployment group and reference its id in the "use" list of module "solo".`)
+
+	// Self-source exclusion (exact, ./ prefix, backslash, and transformSource-rewritten) vs third-party colliding subpath
+	bpRewritten := Blueprint{ToolkitModulesURL: "https://github.com/my-fork/cluster-toolkit", ToolkitModulesVersion: "v1.0.0"}
+	for _, selfSrc := range []string{"modules/testcat/prov-a", "./modules/testcat/prov-a", `modules\testcat\prov-a`, bpRewritten.transformSource("modules/testcat/prov-a")} {
+		c.Check(findEmbeddedProviders("unique_tok", Module{ID: "self_m", Source: selfSrc}, bpRewritten), HasLen, 0)
+	}
+	c.Check(findEmbeddedProviders("unique_tok", Module{ID: "third_party", Source: "github.com/my-org/custom//modules/testcat/prov-a?ref=main"}, bpRewritten),
+		DeepEquals, []string{"modules/testcat/prov-a"})
+
+	// Real embedded modules
+	sourcereader.ModuleFS = os.DirFS("../..").(sourcereader.BaseFS)
+	lustre := tMod("lustre").inputs(reqInput("private_vpc_connection_peering", "desc")).build()
+	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), lustre, Blueprint{})).Hint,
+		Equals, `"private_vpc_connection_peering" description: desc Module source "modules/network/private-service-access" provides this output; add it to an earlier or same deployment group and reference its id in the "use" list of module "lustre".`)
+
+	pool := tMod("pool").inputs(reqInput("cluster_id", "desc")).build()
+	hCluster := extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), pool, Blueprint{})).Hint
+	c.Check(strings.Contains(hCluster, `"modules/scheduler/gke-cluster"`), Equals, true)
+	c.Check(strings.Contains(hCluster, `"modules/scheduler/pre-existing-gke-cluster"`), Equals, true)
+	c.Check(strings.Contains(hCluster, `add one to an earlier or same deployment group and reference its id in the "use" list of module "pool".`), Equals, true)
+
+	img := tMod("img").packer().inputs(reqInput("subnetwork_name", "desc")).build()
+	hSubnet := extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), img, Blueprint{})).Hint
+	c.Check(strings.Contains(hSubnet, `"modules/network/vpc"`), Equals, true)
+	c.Check(strings.Contains(hSubnet, "add one to an earlier deployment group"), Equals, true)
+	c.Check(strings.Contains(hSubnet, "or same"), Equals, false)
+}
+
+func (s *zeroSuite) TestPrivateServiceAccessHasToBeUsed(c *C) {
+	origFS := sourcereader.ModuleFS
+	sourcereader.ModuleFS = os.DirFS("../..").(sourcereader.BaseFS)
+	defer func() { sourcereader.ModuleFS = origFS }()
+
+	info, err := modulereader.GetModuleInfo("modules/network/private-service-access", TerraformKind.String())
+	c.Assert(err, IsNil)
+	c.Check(info.Metadata.Ghpc.HasToBeUsed, Equals, true)
+
+	baseVars := NewDict(map[string]cty.Value{
+		"deployment_name": cty.StringVal("psa-test"),
+		"project_id":      cty.StringVal("test-project"),
+		"region":          cty.StringVal("us-central1"),
+		"zone":            cty.StringVal("us-central1-a"),
+	})
+	lustreSettings := NewDict(map[string]cty.Value{
+		"name":         cty.StringVal("my-lustre"),
+		"size_gib":     cty.NumberIntVal(18000),
+		"local_mount":  cty.StringVal("/lustre"),
+		"remote_mount": cty.StringVal("lustrefs"),
+	})
+	mkBP := func(mods ...Module) *Blueprint {
+		return &Blueprint{BlueprintName: "psa-test", Vars: baseVars, Groups: []Group{{Name: "primary", Modules: mods}}}
+	}
+	net := Module{ID: "net", Source: "modules/network/vpc"}
+	psa := Module{ID: "psa", Source: "modules/network/private-service-access", Use: ModuleIDs{"net"}}
+
+	// Unwired private-service-access fails validateModulesAreUsed
+	err = mkBP(net, psa).Expand()
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), `module "psa" was not used`), Equals, true)
+
+	// Consumer listed before psa without psa in Use suggests use: [net, psa]
+	err = mkBP(Module{ID: "lustre", Source: "modules/file-system/managed-lustre", Use: ModuleIDs{"net"}, Settings: lustreSettings}, net, psa).Expand()
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), `Consider adding module "psa" to the "use" list of module "lustre" (e.g. use: [net, psa]).`), Equals, true)
+
+	// Applying forward intra-group use: [net, psa] expands cleanly and satisfies HasToBeUsed
+	c.Check(mkBP(Module{ID: "lustre", Source: "modules/file-system/managed-lustre", Use: ModuleIDs{"net", "psa"}, Settings: lustreSettings}, net, psa).Expand(), IsNil)
+}
+
+func (s *zeroSuite) TestModuleInfo(c *C) {
+	origFS := sourcereader.ModuleFS
+	sourcereader.ModuleFS = os.DirFS("../..").(sourcereader.BaseFS)
+	defer func() { sourcereader.ModuleFS = origFS }()
+
+	// Empty Source returns EmptyModuleSource and InfoOrDie panics even when blueprint Outputs are populated
+	for _, m := range []Module{
+		{ID: "empty"},
+		{ID: "empty_with_outputs", Outputs: []modulereader.OutputInfo{{Name: "out1"}}},
+	} {
+		_, err := m.Info()
+		c.Check(errors.Is(err, EmptyModuleSource), Equals, true)
+		mod := m
+		c.Check(func() { mod.InfoOrDie() }, PanicMatches, ".*source.*")
+	}
+
+	// Invalid ModuleKind returns InvalidModuleKind and InfoOrDie panics
+	badKind := Module{ID: "bad", Source: "modules/network/vpc", Kind: ModuleKind{kind: "bogus"}}
+	_, err := badKind.Info()
+	c.Check(errors.Is(err, InvalidModuleKind), Equals, true)
+	c.Check(func() { badKind.InfoOrDie() }, PanicMatches, ".*kind.*")
+
+	// UnknownKind defaults to TerraformKind
+	unk := tMod("unk_kind_mod").outputs("custom_out").build()
+	unk.Kind = UnknownKind
+	miUnk, err := unk.Info()
+	c.Assert(err, IsNil)
+	c.Check(miUnk.Outputs, HasLen, 1)
+
+	// Third-party remote source with colliding //modules/... subpath preserves remote error without hijacking embedded FS
+	colliding := Module{
+		ID:     "custom_vpc",
+		Source: "invalid::github.com/my-org/custom-infra//modules/network/vpc?ref=bad-ref",
+		Kind:   TerraformKind,
+	}
+	_, err = colliding.Info()
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "unsupported module source protocol"), Equals, true)
+	c.Check(strings.Contains(err.Error(), "embedded module"), Equals, false)
+	c.Check(func() { colliding.InfoOrDie() }, PanicMatches, ".*unsupported module source protocol.*")
+}
+
+func (s *zeroSuite) TestErrorsAddFlattening(c *C) {
+	innerVal := Errors{}
+	_ = innerVal.Add(errors.New("err-a")).Add(errors.New("err-b"))
+
+	innerPtr := &Errors{}
+	_ = innerPtr.Add(errors.New("err-b")).Add(errors.New("err-c")) // duplicate err-b should be deduped
+
+	outer := Errors{}
+	_ = outer.Add(nil).
+		Add(innerVal.OrNil()). // value Errors
+		Add(innerPtr).         // pointer *Errors
+		Add(errors.New("err-d"))
+
+	c.Check(outer.Errors, HasLen, 4)
+	for _, sub := range outer.Errors {
+		_, isValErrors := sub.(Errors)
+		_, isPtrErrors := sub.(*Errors)
+		c.Check(isValErrors || isPtrErrors, Equals, false)
+	}
+}
+
+func (s *zeroSuite) TestValidateModuleInputs_ConflictAwareUseHints(c *C) {
+	origFS := sourcereader.ModuleFS
+	sourcereader.ModuleFS = os.DirFS("../..").(sourcereader.BaseFS)
+	defer func() { sourcereader.ModuleFS = origFS }()
+
+	fsMod := Module{ID: "fs", Source: "modules/file-system/filestore", Kind: TerraformKind}
+	pvWithGCS := Module{
+		ID:     "gcs_pv",
+		Source: "modules/file-system/gke-persistent-volume",
+		Kind:   TerraformKind,
+		Use:    ModuleIDs{"gke_cluster"},
+		Settings: NewDict(map[string]cty.Value{
+			"cluster_id":      cty.StringVal("projects/p/locations/us-central1/clusters/c"),
+			"capacity_gib":    cty.NumberIntVal(1000),
+			"labels":          cty.EmptyObjectVal,
+			"gcs_bucket_name": cty.StringVal("my-bucket"),
+		}),
+	}
+	bpWithFilestore := Blueprint{
+		Groups: []Group{{Name: "primary", Modules: []Module{fsMod, pvWithGCS}}},
+	}
+
+	// Blueprint candidate filestore conflicts with gcs_bucket_name; falls back to embedded providers excluding filestore and managed-lustre
+	c.Check(findBlueprintProviders("network_storage", pvWithGCS, bpWithFilestore), HasLen, 0)
+	embeddedForGCS := findEmbeddedProviders("network_storage", pvWithGCS, bpWithFilestore)
+	c.Check(slices.Contains(embeddedForGCS, "modules/file-system/cloud-storage-bucket"), Equals, true)
+	c.Check(slices.Contains(embeddedForGCS, "modules/file-system/pre-existing-network-storage"), Equals, true)
+	c.Check(slices.Contains(embeddedForGCS, "modules/file-system/filestore"), Equals, false)
+	c.Check(slices.Contains(embeddedForGCS, "modules/file-system/managed-lustre"), Equals, false)
+
+	hErr := extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(1), pvWithGCS, bpWithFilestore))
+	c.Check(strings.Contains(hErr.Hint, `"modules/file-system/cloud-storage-bucket"`), Equals, true)
+	c.Check(strings.Contains(hErr.Hint, `"modules/file-system/pre-existing-network-storage"`), Equals, true)
+	c.Check(strings.Contains(hErr.Hint, `"modules/file-system/filestore"`), Equals, false)
+	c.Check(strings.Contains(hErr.Hint, `"modules/file-system/managed-lustre"`), Equals, false)
+	c.Check(strings.Contains(hErr.Hint, `reference its id in the "use" list of module "gcs_pv" (e.g. use: [gke_cluster, <new_module_id>]).`), Equals, true)
+
+	// When no exclusive storage var is set on gke-persistent-volume, filestore and managed-lustre are included
+	pvUnset := Module{
+		ID:     "any_pv",
+		Source: "modules/file-system/gke-persistent-volume",
+		Kind:   TerraformKind,
+	}
+	c.Check(findBlueprintProviders("network_storage", pvUnset, bpWithFilestore), DeepEquals, []string{"fs"})
+	embeddedUnset := findEmbeddedProviders("network_storage", pvUnset, Blueprint{})
+	for _, want := range []string{
+		"modules/file-system/cloud-storage-bucket",
+		"modules/file-system/filestore",
+		"modules/file-system/managed-lustre",
+		"modules/file-system/pre-existing-network-storage",
+	} {
+		c.Check(slices.Contains(embeddedUnset, want), Equals, true)
+	}
+}
+
+func (s *zeroSuite) TestValidateModuleInputs_AppendSafeEmbeddedUseHints(c *C) {
+	origFS := sourcereader.ModuleFS
+	sourcereader.ModuleFS = os.DirFS("../..").(sourcereader.BaseFS)
+	defer func() { sourcereader.ModuleFS = origFS }()
+
+	lustreWithUse := tMod("lustre").uses("net").inputs(reqInput("private_vpc_connection_peering", "desc")).build()
+	c.Check(extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), lustreWithUse, Blueprint{})).Hint,
+		Equals, `"private_vpc_connection_peering" description: desc Module source "modules/network/private-service-access" provides this output; add it to an earlier or same deployment group and reference its id in the "use" list of module "lustre" (e.g. use: [net, <new_module_id>]).`)
+
+	poolWithUse := tMod("pool").uses("net").inputs(reqInput("cluster_id", "desc")).build()
+	hPool := extractHintError(c, validateModuleInputs(Root.Groups.At(0).Modules.At(0), poolWithUse, Blueprint{})).Hint
+	c.Check(strings.Contains(hPool, `reference its id in the "use" list of module "pool" (e.g. use: [net, <new_module_id>]).`), Equals, true)
+}
+
+func (s *zeroSuite) TestExclusiveRuleHelpers(c *C) {
+	c.Check(extractRuleVars([]string{"a", "b"}), DeepEquals, []string{"a", "b"})
+	c.Check(extractRuleVars([]interface{}{"a", 42, "b"}), DeepEquals, []string{"a", "b"})
+	c.Check(extractRuleVars("single"), DeepEquals, []string{"single"})
+	c.Check(extractRuleVars(123), IsNil)
+
+	c.Check(IsValueSet(cty.NilVal), Equals, false)
+	c.Check(IsValueSet(cty.NullVal(cty.String)), Equals, false)
+	c.Check(IsValueSet(cty.UnknownVal(cty.String)), Equals, false)
+	c.Check(IsValueSet(GlobalRef("v").AsValue()), Equals, true)
+	c.Check(IsValueSet(AsProductOfModuleUse(cty.UnknownVal(cty.String), "m")), Equals, true)
+	c.Check(IsValueSet(cty.StringVal("")), Equals, false)
+	c.Check(IsValueSet(cty.StringVal("x")), Equals, true)
+	c.Check(IsValueSet(cty.NumberIntVal(0)), Equals, false)
+	c.Check(IsValueSet(cty.NumberIntVal(5)), Equals, true)
+	c.Check(IsValueSet(cty.False), Equals, false)
+	c.Check(IsValueSet(cty.True), Equals, true)
+	c.Check(IsValueSet(cty.EmptyObjectVal), Equals, false)
+	c.Check(IsValueSet(cty.ObjectVal(map[string]cty.Value{
+		"type": cty.NullVal(cty.String),
+		"name": cty.NullVal(cty.String),
+	})), Equals, false)
+	c.Check(IsValueSet(cty.ObjectVal(map[string]cty.Value{
+		"type": cty.StringVal("COMPACT"),
+		"name": cty.NullVal(cty.String),
+	})), Equals, true)
+	c.Check(IsValueSet(cty.ObjectVal(map[string]cty.Value{"k": cty.True})), Equals, true)
+	c.Check(IsValueSet(cty.EmptyTupleVal), Equals, false)
+	c.Check(IsValueSet(cty.TupleVal([]cty.Value{cty.StringVal("x")})), Equals, true)
+
+	bp := Blueprint{Vars: NewDict(map[string]cty.Value{
+		"from_vars": cty.StringVal("val"),
+		"empty_var": cty.StringVal(""),
+		"null_var":  cty.NullVal(cty.String),
+		"var_img": cty.ObjectVal(map[string]cty.Value{
+			"name":   cty.StringVal("var-custom-img"),
+			"family": cty.StringVal(""),
+		}),
+	})}
+	mod := Module{Settings: NewDict(map[string]cty.Value{
+		"ref_non_empty": GlobalRef("from_vars").AsValue(),
+		"ref_empty":     GlobalRef("empty_var").AsValue(),
+		"ref_null":      GlobalRef("null_var").AsValue(),
+		"ref_undef":     GlobalRef("undefined_var").AsValue(),
+		"ref_mod":       ModuleRef("data_bucket", "gcs_bucket_name").AsValue(),
+		"ref_use":       AsProductOfModuleUse(ModuleRef("data_bucket", "gcs_bucket_name").AsValue(), "data_bucket"),
+		"instance_image": cty.ObjectVal(map[string]cty.Value{
+			"name":   cty.StringVal("my-custom-img"),
+			"family": cty.NullVal(cty.String),
+		}),
+		"map_image": cty.MapVal(map[string]cty.Value{
+			"name": cty.StringVal("map-custom-img"),
+		}),
+		"ref_img": GlobalRef("var_img").AsValue(),
+		"placement_policy": cty.ObjectVal(map[string]cty.Value{
+			"type": cty.NullVal(cty.String),
+			"name": cty.NullVal(cty.String),
+		}),
+	})}
+	c.Check(isConsumerSettingSet(mod, bp, "from_vars"), Equals, true)
+	c.Check(isConsumerSettingSet(mod, bp, "ref_non_empty"), Equals, true)
+	c.Check(isConsumerSettingSet(mod, bp, "ref_empty"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "ref_null"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "ref_undef"), Equals, true)
+	c.Check(isConsumerSettingSet(mod, bp, "ref_mod"), Equals, true)
+	c.Check(isConsumerSettingSet(mod, bp, "ref_use"), Equals, true)
+	c.Check(isConsumerSettingSet(mod, bp, "missing"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, ""), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "instance_image.name"), Equals, true)
+	c.Check(isConsumerSettingSet(mod, bp, "instance_image.family"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "instance_image.nonexistent"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "map_image.name"), Equals, true)
+	c.Check(isConsumerSettingSet(mod, bp, "map_image.missing"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "ref_img.name"), Equals, true)
+	c.Check(isConsumerSettingSet(mod, bp, "ref_img.family"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "var_img.name"), Equals, true)
+	c.Check(isConsumerSettingSet(mod, bp, "var_img.family"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "ref_mod.sub"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "placement_policy"), Equals, false)
+	c.Check(violatesConsumerExclusiveRules(modulereader.ModuleInfo{}, Module{ID: "bad"}, bp), Equals, false)
+
+	rule := modulereader.ValidationRule{
+		Validator: "exclusive",
+		Inputs:    map[string]interface{}{"vars": []string{"filestore_id", "lustre_id", "gcs_bucket_name"}},
+	}
+	consumerInputs := map[string]bool{
+		"filestore_id":    true,
+		"lustre_id":       true,
+		"gcs_bucket_name": true,
+		"network_storage": true,
+	}
+	// Candidate outputting two exclusive variables when none are currently set violates exclusivity (0 + 2 > 1).
+	c.Check(ruleViolatesExclusive(rule, Module{}, bp, consumerInputs, map[string]bool{
+		"filestore_id": true,
+		"lustre_id":    true,
+	}), Equals, true)
+	// Candidate outputting only the same exclusive variable that is already set does not violate exclusivity (1 + 0 <= 1).
+	modWithGCS := Module{Settings: NewDict(map[string]cty.Value{"gcs_bucket_name": cty.StringVal("my-bucket")})}
+	c.Check(ruleViolatesExclusive(rule, modWithGCS, bp, consumerInputs, map[string]bool{
+		"gcs_bucket_name": true,
+		"network_storage": true,
+	}), Equals, false)
+}
+
+func (s *zeroSuite) TestProducerModulesHaveToBeUsed(c *C) {
+	origFS := sourcereader.ModuleFS
+	sourcereader.ModuleFS = os.DirFS("../..").(sourcereader.BaseFS)
+	defer func() { sourcereader.ModuleFS = origFS }()
+
+	for _, modPath := range []string{
+		"modules/compute/resource-policy",
+		"modules/network/multivpc",
+		"modules/file-system/netapp-storage-pool",
+		"community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic",
+	} {
+		info, err := modulereader.GetModuleInfo(modPath, TerraformKind.String())
+		c.Assert(err, IsNil)
+		c.Check(info.Metadata.Ghpc.HasToBeUsed, Equals, true)
+
+		bp := Blueprint{
+			Groups: []Group{{Name: "primary", Modules: []Module{{ID: "unwired", Source: modPath, Kind: TerraformKind}}}},
+		}
+		err = validateModulesAreUsed(bp)
+		c.Assert(err, NotNil)
+		c.Check(strings.Contains(err.Error(), `module "unwired" was not used`), Equals, true)
 	}
 }

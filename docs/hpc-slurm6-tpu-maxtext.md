@@ -28,7 +28,7 @@ Once the startup script has completed, connect to the login node.
 Use the following command to ssh into the login node from cloud shell:
 
 ```bash
-gcloud compute ssh slurm6tpuv-login-v6tpu-001 --zone us-central2-b --project <project-id>
+gcloud compute ssh slurm6tpuv-slurm-login-001 --zone us-central2-b --project <project-id>
 ```
 
 You may be prompted to set up SSH. If so follow the prompts and if asked for a
@@ -36,7 +36,9 @@ password, just hit `[enter]` leaving the input blank.
 
 ## Run maxtext script
 
-Create maxtext directory in home directory and run maxtext script.
+Before submitting the job, edit `/opt/apps/scripts/tpu-test/run_maxtext.sh` and replace the four placeholders (`<RUN_NAME>`, `<STORAGE_BUCKET>`, `<ATTENTION>`, and `<STEPS>`) in the `python3 MaxText/train.py` command.
+
+Then create a `maxtext` directory in your home directory and submit `run_maxtext.sh`:
 
 ```bash
 mkdir maxtext && cd maxtext

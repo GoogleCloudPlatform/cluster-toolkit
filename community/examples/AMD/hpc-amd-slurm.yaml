@@ -20,6 +20,21 @@ vars:
   deployment_name: amd-v6
   region: us-east4
   zone: us-east4-c
+  # Optional overrides (defaults shown)
+  # Machine type of the VM that builds the Spack/OpenFOAM software stack.
+  spack_builder_machine_type: c2d-standard-16
+  # Machine type for the lowcost partition.
+  lowcost_machine_type: c2d-standard-4
+  # Maximum number of dynamically provisioned nodes in the lowcost partition.
+  lowcost_node_count_dynamic_max: 10
+  # Machine type for the compute partition.
+  compute_machine_type: c2d-standard-112
+  # Maximum number of dynamically provisioned nodes in the compute partition.
+  compute_node_count_dynamic_max: 50
+  # Machine type for the login node (needs at least 8 physical cores to run the OpenFOAM test).
+  login_machine_type: c2d-standard-16
+  # Machine type for the controller node.
+  controller_machine_type: c2d-standard-4
 
 deployment_groups:
 - group: primary
@@ -163,7 +178,7 @@ deployment_groups:
     use: [network, swfs, spack-startup]
     settings:
       name_prefix: spack-builder
-      machine_type: c2d-standard-16
+      machine_type: $(vars.spack_builder_machine_type)
       instance_image:
         # these images must match the images used by Slurm modules below because
         # we are building OpenMPI with PMI support in libraries contained in
@@ -176,8 +191,8 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      machine_type: c2d-standard-4
-      node_count_dynamic_max: 10
+      machine_type: $(vars.lowcost_machine_type)
+      node_count_dynamic_max: $(vars.lowcost_node_count_dynamic_max)
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
 
@@ -191,8 +206,8 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      machine_type: c2d-standard-112
-      node_count_dynamic_max: 50
+      machine_type: $(vars.compute_machine_type)
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
 
@@ -210,7 +225,7 @@ deployment_groups:
     use: [network]
     settings:
       # need at least 8 physical cores to run OpenFOAM test
-      machine_type: c2d-standard-16
+      machine_type: $(vars.login_machine_type)
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -222,6 +237,6 @@ deployment_groups:
     - compute_partition
     - slurm_login
     settings:
-      machine_type: c2d-standard-4
+      machine_type: $(vars.controller_machine_type)
       login_startup_script: $(slurm_startup.startup_script)
       login_startup_scripts_timeout: 21600

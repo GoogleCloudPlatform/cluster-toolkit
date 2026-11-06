@@ -37,6 +37,12 @@ Connecting services which use a service networking PSA connection:
   - source: modules/network/private-service-access
     id: ps_connect
     use: [network]
+
+  - source: modules/file-system/filestore
+    id: homefs
+    use: [network, ps_connect]
+    settings:
+      local_mount: /home
 ```
 
 Connecting [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes/docs/discover/overview) for using it as a shared filesystem:
@@ -52,6 +58,16 @@ Connecting [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes
       prefix_length: 24
       service_name: "netapp.servicenetworking.goog"
       deletion_policy: "ABANDON"
+
+  - source: modules/file-system/netapp-storage-pool
+    id: storage_pool
+    use: [network, ps_connect]
+
+  - source: modules/file-system/netapp-volume
+    id: shared_volume
+    use: [storage_pool]
+    settings:
+      volume_name: shared-volume
 ```
 
 ## License

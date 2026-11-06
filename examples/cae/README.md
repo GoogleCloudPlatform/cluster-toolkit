@@ -155,7 +155,7 @@ storage intact and b) you can build software before you deploy your cluster.
    through Slurm.
 
    - Follow
-     [the instructions](../README.md#hpc-slurm-chromedesktopyaml--)
+     [the instructions](../../community/modules/remote-desktop/chrome-remote-desktop/README.md)
      for setting up the Remote Desktop.
 
 ## Teardown Instructions
@@ -200,7 +200,7 @@ Depending on the software you want to use, different installation paths may be r
 
   As this installation process only needs to be done once and at the same time may require time,
   we recommend to do this installation in a separate deployment group before you bring up the cluster.
-  The `software_installation' stage is meant to accommodate this. You can for example bring up
+  The `software_installation` stage is meant to accommodate this. You can for example bring up
   a dedicated VM
 
   ``` {.yaml}
@@ -232,8 +232,8 @@ Depending on the software you want to use, different installation paths may be r
   to install all dependencies for a particular version of the software, including compiling
   the software or its dependencies from source.
 
-  Please also see the [OpenFOAM](../../docs/tutorials/openfoam/spack-openfoam.md) example
-  for how this can be used to install the OpenFOAM software.
+  Please also see the [GROMACS](../../docs/tutorials/gromacs/spack-gromacs.md) example
+  for how this can be used to install scientific software using Spack.
 
   Once that is completed, the software will persist on the NFS Filestore share for as long as you
   do not destroy the `setup` stage.
