@@ -590,6 +590,7 @@ func TestInspectCluster_KueueLessK8s(t *testing.T) {
 		{"metadata":{"name":"ctrl-0","labels":{"node.kubernetes.io/instance-type":"n2-standard-8"}},"status":{"conditions":[{"type":"Ready","status":"True"}]}}
 	]}`
 	responses := map[string][]shell.CommandResult{
+		"kubectl get --raw /version":                            {{ExitCode: 0, Stdout: "{}"}},
 		"kubectl get --raw /apis/kueue.x-k8s.io":                {{ExitCode: 1, Stderr: `Error from server (NotFound): the server could not find the requested resource`}},
 		"kubectl get nodes -o wide":                             {{ExitCode: 0, Stdout: "tpu-0 Ready\ntpu-1 Ready\nctrl-0 Ready"}},
 		"kubectl get nodes -o json":                             {{ExitCode: 0, Stdout: k8sNodesJSON}},
@@ -632,6 +633,26 @@ func TestInspectCluster_KueueLessK8s(t *testing.T) {
 		t.Fatalf("failed to read inspect log: %v", err)
 	}
 	assertK8sInspectOutput(t, string(contentBytes))
+
+	// TypeK8s mode must stay non-GKE even when an explicit ProjectID is supplied.
+	mockExecWithProj := NewMockExecutor(responses)
+	orc.SetExecutor(mockExecWithProj)
+	orc.mode = orchestrator.TypeK8s
+	projLogPath := filepath.Join(t.TempDir(), "k8s-with-project.log")
+	if err := orc.InspectCluster(orchestrator.InspectOptions{
+		ClusterName:  "k8s-cluster",
+		ProjectID:    "explicit-project",
+		WorkloadName: "my-k8s-job",
+		OutputPath:   projLogPath,
+	}); err != nil {
+		t.Fatalf("InspectCluster(TypeK8s with ProjectID) failed: %v", err)
+	}
+	assertK8sInspectCallsClean(t, mockExecWithProj)
+	projBytes, err := os.ReadFile(projLogPath)
+	if err != nil {
+		t.Fatalf("failed to read inspect log: %v", err)
+	}
+	assertK8sInspectOutput(t, string(projBytes))
 }
 
 func assertK8sInspectCallsClean(t *testing.T, mockExec *MockExecutor) {
@@ -801,8 +822,8 @@ func TestConfigureK8sContextAndKueueFailOpen(t *testing.T) {
 				Contexts:       map[string]*clientcmdapi.Context{"cur-ctx": {Cluster: "c1"}},
 			}, nil
 		}
-		if err := orc.configureK8sContext(""); err != nil || orc.kubeContext != "cur-ctx" {
-			t.Fatalf("configureK8sContext(\"\") = (%q, %v), want (cur-ctx, nil)", orc.kubeContext, err)
+		if err := orc.configureK8sKubectl(""); err != nil || orc.kubeContext != "cur-ctx" {
+			t.Fatalf("configureK8sKubectl(\"\") = (%q, %v), want (cur-ctx, nil)", orc.kubeContext, err)
 		}
 	})
 
@@ -810,15 +831,15 @@ func TestConfigureK8sContextAndKueueFailOpen(t *testing.T) {
 		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
 		orc.kubeconfigLoader = func() (*clientcmdapi.Config, error) { return &clientcmdapi.Config{}, nil }
 		orc.kubeContext = "pinned-ctx"
-		if err := orc.configureK8sContext("missing"); err == nil || !strings.Contains(err.Error(), "missing") || orc.kubeContext != "" {
+		if err := orc.configureK8sKubectl("missing"); err == nil || !strings.Contains(err.Error(), "missing") || orc.kubeContext != "" {
 			t.Fatalf("expected missing-cluster error and cleared kubeContext, got (%q, %v)", orc.kubeContext, err)
 		}
 
 		orc.kubeContext = "pinned-ctx"
-		if err := orc.configureK8sContext("pinned-ctx"); err != nil || orc.kubeContext != "pinned-ctx" {
+		if err := orc.configureK8sKubectl("pinned-ctx"); err != nil || orc.kubeContext != "pinned-ctx" {
 			t.Fatalf("expected matching pinned context reuse, got (%q, %v)", orc.kubeContext, err)
 		}
-		if err := orc.configureK8sContext(""); err != nil || orc.kubeContext != "pinned-ctx" {
+		if err := orc.configureK8sKubectl(""); err != nil || orc.kubeContext != "pinned-ctx" {
 			t.Fatalf("expected empty cluster to reuse pinned context, got (%q, %v)", orc.kubeContext, err)
 		}
 	})
@@ -828,7 +849,7 @@ func TestConfigureK8sContextAndKueueFailOpen(t *testing.T) {
 			"kubectl get --raw /apis/kueue.x-k8s.io --request-timeout=10s": {{ExitCode: 1, Stderr: "Unable to connect to the server: timeout"}},
 		}))
 		orc.kubeconfigLoader = func() (*clientcmdapi.Config, error) { return nil, os.ErrPermission }
-		if err := orc.configureK8sContext("k8s-c"); err == nil || !strings.Contains(err.Error(), "failed to load kubeconfig") {
+		if err := orc.configureK8sKubectl("k8s-c"); err == nil || !strings.Contains(err.Error(), "failed to load kubeconfig") {
 			t.Fatalf("expected kubeconfig load error to propagate, got %v", err)
 		}
 		if !orc.hasKueueInstalled() {

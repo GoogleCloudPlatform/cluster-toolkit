@@ -180,6 +180,7 @@ type DefaultKubeClient struct {
 type DefaultExecutor struct{}
 
 type GKEOrchestrator struct {
+	mode                        orchestrator.Type
 	executor                    Executor
 	projectID                   string
 	clusterZones                []string
@@ -209,7 +210,10 @@ type GKEOrchestrator struct {
 	// client-go loading rules (KUBECONFIG env or ~/.kube/config).
 	kubeconfigLoader k8s.KubeconfigLoader
 	// kubeContext is the context set by configureKubectl; all kubectl and dynamic-client calls use it.
-	kubeContext string
+	kubeContext      string
+	dynClientManaged bool
+	dynClientContext string
+	k8sCluster       string
 	// inspectedPVCs caches per-submit PVC metadata inspected during ValidateClusterMounts.
 	inspectedPVCs  map[string]pvcInspectResult
 	nfsAuthChecked bool
@@ -669,11 +673,12 @@ type JobSetStatus struct {
 }
 
 type jobSetInfo struct {
-	terminalState string
-	suspended     bool
-	firstJob      string
-	expectedPods  int
-	queried       bool
+	terminalState   string
+	suspended       bool
+	firstJob        string
+	expectedPods    int
+	expectedStreams int
+	queried         bool
 }
 
 func (info jobSetInfo) terminal() bool {
@@ -1025,3 +1030,11 @@ const (
 	probeInvalid                   // empty/blank context name refused before running kubectl
 	probeUnknown
 )
+
+type kubectlServerVersion struct {
+	GitVersion string `json:"gitVersion"`
+}
+
+type kubectlVersionOutput struct {
+	ServerVersion *kubectlServerVersion `json:"serverVersion"`
+}

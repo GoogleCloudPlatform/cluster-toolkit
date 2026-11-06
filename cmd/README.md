@@ -223,7 +223,7 @@ gcluster cluster <list|describe|info|volume> [flags]
 
 ## gcluster job
 
-`gcluster job` submits, monitors, and manages batch and distributed workloads on GKE clusters (`submit`, `list`, `logs`, `cancel`, `config`, `inspect`, `gke-template-extract`). For detailed usage, see [`docs/gcluster_job_guide.md`](../docs/gcluster_job_guide.md).
+`gcluster job` submits batch and distributed workloads on GKE clusters (`submit`, `gke-template-extract`), monitors or manages workloads across GKE and Kubernetes clusters (`list`, `logs`, `cancel`, `inspect`), and manages saved CLI defaults (`config`). For detailed usage, see [`docs/gcluster_job_guide.md`](../docs/gcluster_job_guide.md).
 
 ### Usage - job
 
@@ -238,7 +238,7 @@ gcluster job <submit|list|logs|cancel|config|inspect|gke-template-extract> [flag
 * `gcluster job list`: Lists jobs (`--status`, `--name-contains`).
 * `gcluster job logs`: Streams pod logs.
 * `gcluster job cancel`: Cancels workloads.
-* `gcluster job config`: Manages defaults.
+* `gcluster job config`: Manages saved defaults (`set`, `unset`, `show`).
 * `gcluster job gke-template-extract`: Extracts customizable K8s templates.
 
 ## gcluster telemetry

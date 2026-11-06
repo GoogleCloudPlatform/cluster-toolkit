@@ -17,12 +17,15 @@ package gke
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 )
@@ -1776,4 +1779,195 @@ func TestCheckAndInstallKueue_SharedClusterForbidden(t *testing.T) {
 	if rolloutCalls != 1 {
 		t.Errorf("kubectl rollout status calls = %d, want 1", rolloutCalls)
 	}
+}
+
+func TestAirGapAndSafeReinstall_DownloadBeforeDelete(t *testing.T) {
+	t.Run("downloadManifests_fast_fails_when_air_gapped", func(t *testing.T) {
+		t.Setenv(shell.AirGappedEnvVar, "true")
+		httpCalls := 0
+		orc := &GKEOrchestrator{
+			httpClient: &mockHTTPClient{
+				getFunc: func(string) (*http.Response, error) {
+					httpCalls++
+					return nil, errors.New("unexpected network call")
+				},
+			},
+		}
+		_, err := orc.downloadManifests("https://github.com/kubernetes-sigs/kueue/releases/download/v0.15.2/manifests.yaml")
+		if err == nil || !strings.Contains(err.Error(), shell.AirGappedEnvVar) {
+			t.Fatalf("downloadManifests(air-gapped) error = %v, want %s fast-fail", err, shell.AirGappedEnvVar)
+		}
+		if httpCalls != 0 {
+			t.Fatalf("downloadManifests(air-gapped) HTTP calls = %d, want 0", httpCalls)
+		}
+	})
+
+	t.Run("reinstall_aborts_before_delete_on_air_gap_or_download_failure", func(t *testing.T) {
+		assertReinstallAbortsBeforeDelete(t)
+		assertAirGapFastFailBeforeRBAC(t)
+	})
+
+	t.Run("reinstall_downloads_before_delete_and_logs_target_version", func(t *testing.T) {
+		assertHappyPathKueueReinstallOrder(t)
+	})
+}
+
+func assertReinstallAbortsBeforeDelete(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	origPrompt := shell.PromptYesNo
+	t.Cleanup(func() { shell.PromptYesNo = origPrompt })
+	shell.PromptYesNo = func(string) bool { return true }
+
+	deleteCalled := false
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			if strings.Contains(name+" "+strings.Join(args, " "), "delete") {
+				deleteCalled = true
+			}
+			return shell.CommandResult{ExitCode: 0}
+		},
+	}
+	orc := &GKEOrchestrator{
+		kubeContext: "k8s-ctx",
+		executor:    mock,
+		httpClient: &mockHTTPClient{
+			getFunc: func(string) (*http.Response, error) {
+				return nil, errors.New("github unreachable")
+			},
+		},
+	}
+	if err := orc.handleKueueReinstallation("v0.15.2", "incomplete"); err == nil || !strings.Contains(err.Error(), "github unreachable") {
+		t.Fatalf("handleKueueReinstallation(download error) = %v, want github unreachable", err)
+	}
+	if deleteCalled {
+		t.Fatal("DeleteAllKueueResources ran before manifest download succeeded")
+	}
+
+	orc.httpClient = &mockHTTPClient{
+		getFunc: func(string) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader("<html>proxy error</html>")),
+			}, nil
+		},
+	}
+	if err := orc.handleKueueReinstallation("v0.15.2", "incomplete"); err == nil || !strings.Contains(err.Error(), "failed to decode YAML document") {
+		t.Fatalf("handleKueueReinstallation(non-manifest body) = %v, want YAML decode error", err)
+	}
+	if deleteCalled {
+		t.Fatal("DeleteAllKueueResources ran despite non-manifest HTTP response")
+	}
+
+	t.Setenv(shell.AirGappedEnvVar, "true")
+	promptCalled := false
+	shell.PromptYesNo = func(string) bool { promptCalled = true; return true }
+	if err := orc.handleKueueReinstallation("v0.15.2", "incomplete"); err == nil || !strings.Contains(err.Error(), shell.AirGappedEnvVar) {
+		t.Fatalf("handleKueueReinstallation(air-gapped) = %v, want %s error", err, shell.AirGappedEnvVar)
+	}
+	if promptCalled || deleteCalled {
+		t.Fatalf("air-gapped reinstall prompted=%v deleted=%v, want both false", promptCalled, deleteCalled)
+	}
+}
+
+func assertAirGapFastFailBeforeRBAC(t *testing.T) {
+	t.Helper()
+	canICalled := false
+	airGapOrc := &GKEOrchestrator{
+		kubeContext: "gke-ctx",
+		kubeClient:  &MockKubeClient{},
+		executor: &mockExecutor{
+			executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+				full := name + " " + strings.Join(args, " ")
+				if strings.Contains(full, "auth can-i") {
+					canICalled = true
+				}
+				if strings.Contains(full, "get deployment") {
+					return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (NotFound): deployments.apps \"kueue-controller-manager\" not found"}
+				}
+				if strings.Contains(full, "get") {
+					return shell.CommandResult{ExitCode: 0, Stdout: ""}
+				}
+				return shell.CommandResult{ExitCode: 0, Stdout: "yes"}
+			},
+		},
+	}
+	if err := airGapOrc.installJobSetOnFreshCluster(); err == nil || !strings.Contains(err.Error(), shell.AirGappedEnvVar) {
+		t.Fatalf("installJobSetOnFreshCluster(air-gapped) = %v, want %s error", err, shell.AirGappedEnvVar)
+	}
+	if err := airGapOrc.CheckAndInstallKueue("v0.15.2", "clus", "us-central1"); err == nil || !strings.Contains(err.Error(), shell.AirGappedEnvVar) {
+		t.Fatalf("CheckAndInstallKueue(air-gapped) = %v, want %s error", err, shell.AirGappedEnvVar)
+	}
+	if canICalled {
+		t.Fatal("kubectl auth can-i must not run when GCLUSTER_AIR_GAPPED=true blocks installation")
+	}
+}
+
+func assertHappyPathKueueReinstallOrder(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	origPrompt := shell.PromptYesNo
+	t.Cleanup(func() { shell.PromptYesNo = origPrompt })
+	shell.PromptYesNo = func(string) bool { return true }
+
+	var events []string
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			full := name + " " + strings.Join(args, " ")
+			if name == "kubectl" && !strings.HasPrefix(strings.Join(args, " "), "--context gke-ctx ") {
+				t.Errorf("unpinned kubectl call in handleKueueReinstallation: %q", full)
+			}
+			recordKueueReinstallEvent(full, &events)
+			return mockKueueReinstallReadResult(full)
+		},
+	}
+	orc := &GKEOrchestrator{
+		kubeContext: "gke-ctx",
+		executor:    mock,
+		httpClient: &mockHTTPClient{
+			getFunc: func(string) (*http.Response, error) {
+				events = append(events, "download")
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(strings.NewReader("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: kueue-system\n")),
+				}, nil
+			},
+		},
+	}
+	snapLogs, restoreLogs := logging.CaptureForTesting()
+	defer restoreLogs()
+	if err := orc.handleKueueReinstallation("v0.15.2", "incomplete"); err != nil {
+		t.Fatalf("handleKueueReinstallation(happy path) error = %v", err)
+	}
+	wantOrder := []string{"download", "delete", "apply"}
+	if len(events) < 3 || !slices.Equal(events[:3], wantOrder) {
+		t.Fatalf("reinstall event order = %v, want prefix %v", events, wantOrder)
+	}
+	infoOut, _ := snapLogs()
+	if !strings.Contains(infoOut, "Installing Kueue version v0.15.2...") {
+		t.Errorf("info logs missing target version message; got:\n%s", infoOut)
+	}
+}
+
+func recordKueueReinstallEvent(full string, events *[]string) {
+	if strings.Contains(full, "delete crd") {
+		*events = append(*events, "delete")
+	}
+	if strings.Contains(full, "apply -f") && strings.HasSuffix(full, "kueue.yaml") {
+		*events = append(*events, "apply")
+	}
+}
+
+func mockKueueReinstallReadResult(full string) shell.CommandResult {
+	if strings.Contains(full, "get deployment") {
+		return shell.CommandResult{ExitCode: 0, Stdout: `{"spec":{"template":{"spec":{"containers":[{"image":"registry.k8s.io/kueue/kueue:v0.15.2"}]}}}}`}
+	}
+	if strings.Contains(full, "get endpointslice") {
+		return shell.CommandResult{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}
+	}
+	return shell.CommandResult{ExitCode: 0}
 }

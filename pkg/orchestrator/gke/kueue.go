@@ -397,6 +397,9 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 		if g.checkDynamicSlicingViaGKE() {
 			return fmt.Errorf("automatic Kueue installation/modification blocked: cluster %s is set up for Dynamic-Slicing (found 'PROVISION_ONLY' in node pool placementPolicy). Automatic installation or modification of Kueue could conflict with custom topology configurations. Please install Kueue and required CRDs manually", clusterName)
 		}
+		if shell.IsKnownAirGapped() {
+			return fmt.Errorf("cannot automatically re-install Kueue (%s) when %s is enabled; pre-install Kueue %s manually on the cluster", reinstallReason, shell.AirGappedEnvVar, version)
+		}
 
 		if err := g.checkKueueInstallPermissions(version); err != nil {
 			return err
@@ -426,9 +429,22 @@ func (g *GKEOrchestrator) evaluateKueueReinstall(crdInstalled, depInstalled bool
 }
 
 func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason string) error {
+	if shell.IsKnownAirGapped() {
+		return fmt.Errorf("cannot automatically re-install Kueue (%s) when %s is enabled; pre-install Kueue %s manually on the cluster", reason, shell.AirGappedEnvVar, targetVersion)
+	}
 	promptMsg := fmt.Sprintf("%s\nKueue requires re-installation using %s.\nWARNING: This deletes all queued and suspended workloads in this cluster before proceeding.\nReplying 'no' will cause an immediate exit and you will have to do the re-installation manually. Proceed?", reason, targetVersion)
 	if !shell.PromptYesNo(promptMsg) {
 		return fmt.Errorf("user declined to re-install Kueue")
+	}
+
+	kueueManifestsURL := fmt.Sprintf("https://github.com/kubernetes-sigs/kueue/releases/download/%s/manifests.yaml", targetVersion)
+	manifestBytes, err := g.downloadManifests(kueueManifestsURL)
+	if err != nil {
+		return err
+	}
+	cleanedManifests, err := g.cleanAndProcessManifests(manifestBytes, nil)
+	if err != nil {
+		return err
 	}
 
 	logging.Info("Proceeding with clean re-installation of Kueue...")
@@ -436,32 +452,14 @@ func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason
 		return fmt.Errorf("failed to delete Kueue resources: %w", err)
 	}
 
-	return g.installKueue(targetVersion)
-}
-
-func (g *GKEOrchestrator) installKueue(version string) error {
-	logging.Info("Installing Kueue version %s...", version)
-	kueueManifestsURL := fmt.Sprintf("https://github.com/kubernetes-sigs/kueue/releases/download/%s/manifests.yaml", version)
-	manifestBytes, err := g.downloadManifests(kueueManifestsURL)
-	if err != nil {
-		return err
-	}
-
-	cleanedManifests, err := g.cleanAndProcessManifests(manifestBytes, nil)
-	if err != nil {
-		return err
-	}
-
+	logging.Info("Installing Kueue version %s...", targetVersion)
 	if err := g.applyManifests(cleanedManifests, "kueue.yaml", ""); err != nil {
 		return err
 	}
-
 	logging.Info("Kueue components applied successfully.")
-
 	if err := g.waitForKueueWebhook(); err != nil {
 		return err
 	}
-
 	return g.installKueueResources(defaultClusterQueue, defaultLocalQueue)
 }
 

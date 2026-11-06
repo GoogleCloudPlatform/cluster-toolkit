@@ -20,116 +20,104 @@ import (
 	"testing"
 )
 
-type mockJobOrchestrator struct {
-	inspectOpts   orchestrator.InspectOptions
-	inspectErr    error
-	inspectCalled bool
-}
-
-func (m *mockJobOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
-	return location, nil
-}
-
-func (m *mockJobOrchestrator) SubmitJob(job orchestrator.JobDefinition) error { return nil }
-func (m *mockJobOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrator.JobStatus, error) {
-	return nil, nil
-}
-func (m *mockJobOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions) error {
-	return nil
-}
-func (m *mockJobOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions) (string, error) {
-	return "", nil
-}
-func (m *mockJobOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error {
-	m.inspectCalled = true
-	m.inspectOpts = opts
-	return m.inspectErr
-}
-
 func TestInspectCmd_Success(t *testing.T) {
-	oldFactory := gkeOrchestratorFactory
-	defer func() { gkeOrchestratorFactory = oldFactory }()
-
-	mockOrc := &mockJobOrchestrator{}
+	setupSubmitTestEnv(t)
+	var gotOpts orchestrator.InspectOptions
+	inspectCalled := false
+	mockOrc := &mockOrchestrator{
+		inspectClusterFunc: func(opts orchestrator.InspectOptions) error {
+			inspectCalled = true
+			gotOpts = opts
+			return nil
+		},
+	}
 	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 		return mockOrc
 	}
 
-	// We need to set them so that PersistentPreRunE passes.
-	clusterName = "test-cluster"
-	location = "us-central1-a"
-	projectID = "test-project"
-	inspectWorkloadName = ""
-	inspectOutputPath = ""
-	inspectShow = false
-	defer func() {
-		clusterName = ""
-		location = ""
-		projectID = ""
-		inspectWorkloadName = ""
-		inspectOutputPath = ""
-		inspectShow = false
-	}()
-
-	_, err := executeCommand(JobCmd, "inspect", "--name", "test-workload", "--show", "--output", "/tmp/custom.log")
+	_, err := executeCommand(JobCmd,
+		"inspect",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--name", "test-workload",
+		"--show",
+		"--output", "/tmp/custom.log",
+	)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("executeCommand(inspect) error = %v, want nil", err)
 	}
-
-	if !mockOrc.inspectCalled {
-		t.Errorf("expected InspectCluster to be called")
+	if !inspectCalled {
+		t.Fatalf("InspectCluster called = false, want true")
 	}
-	if mockOrc.inspectOpts.ClusterName != "test-cluster" {
-		t.Errorf("expected ClusterName to be 'test-cluster', got %q", mockOrc.inspectOpts.ClusterName)
+	wantOpts := orchestrator.InspectOptions{
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "test-project",
+		WorkloadName:    "test-workload",
+		OutputPath:      "/tmp/custom.log",
+		Show:            true,
 	}
-	if mockOrc.inspectOpts.ClusterLocation != "us-central1-a" {
-		t.Errorf("expected ClusterLocation to be 'us-central1-a', got %q", mockOrc.inspectOpts.ClusterLocation)
-	}
-	if mockOrc.inspectOpts.ProjectID != "test-project" {
-		t.Errorf("expected ProjectID to be 'test-project', got %q", mockOrc.inspectOpts.ProjectID)
-	}
-	if mockOrc.inspectOpts.WorkloadName != "test-workload" {
-		t.Errorf("expected WorkloadName to be 'test-workload', got %q", mockOrc.inspectOpts.WorkloadName)
-	}
-	if mockOrc.inspectOpts.OutputPath != "/tmp/custom.log" {
-		t.Errorf("expected OutputPath to be '/tmp/custom.log', got %q", mockOrc.inspectOpts.OutputPath)
-	}
-	if !mockOrc.inspectOpts.Show {
-		t.Errorf("expected Show to be true")
+	if gotOpts != wantOpts {
+		t.Errorf("InspectOptions = %+v, want %+v", gotOpts, wantOpts)
 	}
 }
 
 func TestInspectCmd_NameShorthand(t *testing.T) {
-	oldFactory := gkeOrchestratorFactory
-	defer func() { gkeOrchestratorFactory = oldFactory }()
+	t.Run("gke_flags", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		var gotOpts orchestrator.InspectOptions
+		inspectCalled := false
+		mockOrc := &mockOrchestrator{
+			inspectClusterFunc: func(opts orchestrator.InspectOptions) error {
+				inspectCalled = true
+				gotOpts = opts
+				return nil
+			},
+		}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
 
-	mockOrc := &mockJobOrchestrator{}
-	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+		if _, err := executeCommand(JobCmd,
+			"inspect",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+			"-n", "short-workload",
+			"-s",
+		); err != nil {
+			t.Fatalf("unexpected error using -n shorthand: %v", err)
+		}
+		if !inspectCalled || gotOpts.WorkloadName != "short-workload" || !gotOpts.Show {
+			t.Fatalf("InspectOptions = %+v (called=%v), want WorkloadName=short-workload Show=true", gotOpts, inspectCalled)
+		}
+	})
 
-	clusterName, location, projectID = "test-cluster", "us-central1-a", "test-project"
-	inspectWorkloadName, inspectOutputPath, inspectShow, inspectFilter = "", "", false, ""
-	defer func() {
-		clusterName, location, projectID = "", "", ""
-		inspectWorkloadName, inspectOutputPath, inspectShow, inspectFilter = "", "", false, ""
-	}()
+	t.Run("type_k8s_context", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		kcPath := writeTestKubeconfigFile(t, "admin@onprem-k8s", "onprem-k8s", "https://10.128.0.68:6443")
+		t.Setenv("KUBECONFIG", kcPath)
 
-	if _, err := executeCommand(JobCmd, "inspect", "-n", "short-workload", "-s"); err != nil {
-		t.Fatalf("unexpected error using -n shorthand: %v", err)
-	}
-	if !mockOrc.inspectCalled || mockOrc.inspectOpts.WorkloadName != "short-workload" || !mockOrc.inspectOpts.Show {
-		t.Fatalf("InspectOptions = %+v (called=%v), want WorkloadName=short-workload Show=true", mockOrc.inspectOpts, mockOrc.inspectCalled)
-	}
+		var gotOpts orchestrator.InspectOptions
+		inspectCalled := false
+		mockOrc := &mockOrchestrator{
+			inspectClusterFunc: func(opts orchestrator.InspectOptions) error {
+				inspectCalled = true
+				gotOpts = opts
+				return nil
+			},
+		}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+
+		if _, err := executeCommand(JobCmd, "inspect", "-n", "short-k8s-workload", "-s"); err != nil {
+			t.Fatalf("unexpected error using -n shorthand in TypeK8s mode: %v", err)
+		}
+		if !inspectCalled || gotOpts.ClusterName != "onprem-k8s" || gotOpts.WorkloadName != "short-k8s-workload" || !gotOpts.Show {
+			t.Fatalf("InspectOptions = %+v (called=%v), want ClusterName=onprem-k8s WorkloadName=short-k8s-workload Show=true", gotOpts, inspectCalled)
+		}
+	})
 }
 
 func TestInspectCmd_SPS(t *testing.T) {
-	oldFactory := gkeOrchestratorFactory
-	defer func() { gkeOrchestratorFactory = oldFactory }()
-	clusterName, location, projectID = "test-cluster", "us-central1-a", "test-project"
-	defer func() {
-		clusterName, location, projectID = "", "", ""
-		inspectWorkloadName, inspectOutputPath, inspectShow, inspectFilter = "", "", false, ""
-	}()
-
 	tests := []struct {
 		name       string
 		args       []string
@@ -137,22 +125,31 @@ func TestInspectCmd_SPS(t *testing.T) {
 		wantShow   bool
 		wantErr    string
 	}{
-		{name: "passes --filter=pathways-sps", args: []string{"--name", "sps-v6e", "--filter", "pathways-sps"}},
-		{name: "passes --filter=pathways-sps with --output and --show", args: []string{"--name", "sps-v6e", "--filter=pathways-sps", "--output", "/tmp/x.log", "--show"}, wantOutput: "/tmp/x.log", wantShow: true},
-		{name: "needs --name", args: []string{"--filter=pathways-sps"}, wantErr: "--filter=pathways-sps requires --name"},
-		{name: "rejects unknown filter", args: []string{"--name", "sps-v6e", "--filter=unknown"}, wantErr: "invalid value for --filter: unknown. Allowed values are: pathways-sps"},
+		{name: "filter_pathways_sps", args: []string{"--name", "sps-v6e", "--filter", "pathways-sps"}},
+		{name: "filter_pathways_sps_with_output_and_show", args: []string{"--name", "sps-v6e", "--filter=pathways-sps", "--output", "/tmp/x.log", "--show"}, wantOutput: "/tmp/x.log", wantShow: true},
+		{name: "requires_name_flag", args: []string{"--filter=pathways-sps"}, wantErr: "--filter=pathways-sps requires --name"},
+		{name: "rejects_unknown_filter", args: []string{"--name", "sps-v6e", "--filter=unknown"}, wantErr: "invalid value for --filter: unknown. Allowed values are: pathways-sps"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			inspectWorkloadName, inspectOutputPath, inspectShow, inspectFilter = "", "", false, ""
-			mockOrc := &mockJobOrchestrator{}
+			setupSubmitTestEnv(t)
+			var gotOpts orchestrator.InspectOptions
+			inspectCalled := false
+			mockOrc := &mockOrchestrator{
+				inspectClusterFunc: func(opts orchestrator.InspectOptions) error {
+					inspectCalled = true
+					gotOpts = opts
+					return nil
+				},
+			}
 			gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
-			_, err := executeCommand(JobCmd, append([]string{"inspect"}, tc.args...)...)
+			baseArgs := []string{"inspect", "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "test-project"}
+			_, err := executeCommand(JobCmd, append(baseArgs, tc.args...)...)
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("got err = %v, want %q", err, tc.wantErr)
 				}
-				if mockOrc.inspectCalled {
+				if inspectCalled {
 					t.Errorf("InspectCluster called, want the flag error first")
 				}
 				return
@@ -160,10 +157,10 @@ func TestInspectCmd_SPS(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if mockOrc.inspectOpts.Filter != "pathways-sps" || mockOrc.inspectOpts.WorkloadName != "sps-v6e" ||
-				mockOrc.inspectOpts.OutputPath != tc.wantOutput || mockOrc.inspectOpts.Show != tc.wantShow {
+			if gotOpts.Filter != "pathways-sps" || gotOpts.WorkloadName != "sps-v6e" ||
+				gotOpts.OutputPath != tc.wantOutput || gotOpts.Show != tc.wantShow {
 				t.Errorf("InspectOptions = %+v, want Filter=pathways-sps WorkloadName=sps-v6e OutputPath=%q Show=%v",
-					mockOrc.inspectOpts, tc.wantOutput, tc.wantShow)
+					gotOpts, tc.wantOutput, tc.wantShow)
 			}
 		})
 	}

@@ -15,6 +15,8 @@
 package logging
 
 import (
+	"strings"
+	"sync"
 	"testing"
 )
 
@@ -78,4 +80,31 @@ func TestFatal(t *testing.T) {
 	if hookErr == nil || hookErr.Error() != "fatal error 404" {
 		t.Errorf("expected hook error message 'fatal error 404', got %v", hookErr)
 	}
+}
+
+func TestCaptureForTesting_RaceSafe(t *testing.T) {
+	snapshot, restore := CaptureForTesting()
+	defer restore()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			Info("info-%d", id)
+			Warn("warn-%d", id)
+			Error("err-%d", id)
+			_, _ = snapshot()
+		}(i)
+	}
+	wg.Wait()
+
+	infoOut, errOut := snapshot()
+	if !strings.Contains(infoOut, "info-0") {
+		t.Errorf("CaptureForTesting() infoOut = %q, want substring %q", infoOut, "info-0")
+	}
+	if !strings.Contains(errOut, "WARNING: warn-0") || !strings.Contains(errOut, "err-0") {
+		t.Errorf("CaptureForTesting() errOut = %q, want warn-0 and err-0", errOut)
+	}
+	restore()
 }

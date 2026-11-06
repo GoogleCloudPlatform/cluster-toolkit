@@ -31,6 +31,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	_ = os.Unsetenv("GCLUSTER_REFRESH_CREDENTIALS")
 	// Mock store globally for tests to skip prerequisite checks by default.
 	// Tests that need to verify prerequisite checks can override it.
 	store = &MockPrereqStore{
@@ -358,8 +359,21 @@ func resetJobFlags() {
 
 func setupSubmitTestEnv(t *testing.T) {
 	t.Helper()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "empty-kubeconfig"))
+	t.Setenv("DOCKER_CONFIG", t.TempDir())
+	t.Setenv("GCLUSTER_ORCHESTRATOR", "")
+	t.Setenv("GCLUSTER_AIR_GAPPED", "")
+	t.Setenv("GCLUSTER_REFRESH_CREDENTIALS", "")
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
 	resetJobFlags()
+
+	oldStore := store
+	t.Cleanup(func() { store = oldStore })
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
 
 	oldFactory := gkeOrchestratorFactory
 	t.Cleanup(func() {
@@ -379,15 +393,53 @@ func setupSubmitTestEnv(t *testing.T) {
 
 type mockOrchestrator struct {
 	orchestrator.JobOrchestrator
-	initializeFunc func(string, string, string) (string, error)
-	SubmittedJob   orchestrator.JobDefinition
+	initializeFunc     func(string, string, string) (string, error)
+	listJobsFunc       func(orchestrator.ListOptions) ([]orchestrator.JobStatus, error)
+	getJobLogsFunc     func(string, orchestrator.LogsOptions) (string, error)
+	cancelJobFunc      func(string, orchestrator.CancelOptions) error
+	inspectClusterFunc func(orchestrator.InspectOptions) error
+	InitClusterName    string
+	InitLocation       string
+	InitProjectID      string
+	SubmittedJob       orchestrator.JobDefinition
 }
 
 func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
+	m.InitClusterName = clusterName
+	m.InitLocation = location
+	m.InitProjectID = projectID
 	if m.initializeFunc != nil {
 		return m.initializeFunc(clusterName, location, projectID)
 	}
 	return location, nil
+}
+
+func (m *mockOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrator.JobStatus, error) {
+	if m.listJobsFunc != nil {
+		return m.listJobsFunc(opts)
+	}
+	return nil, nil
+}
+
+func (m *mockOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions) (string, error) {
+	if m.getJobLogsFunc != nil {
+		return m.getJobLogsFunc(name, opts)
+	}
+	return "", nil
+}
+
+func (m *mockOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions) error {
+	if m.cancelJobFunc != nil {
+		return m.cancelJobFunc(name, opts)
+	}
+	return nil
+}
+
+func (m *mockOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error {
+	if m.inspectClusterFunc != nil {
+		return m.inspectClusterFunc(opts)
+	}
+	return nil
 }
 
 func (m *mockOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {

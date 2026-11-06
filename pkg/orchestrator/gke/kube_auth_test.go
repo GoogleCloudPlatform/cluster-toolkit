@@ -22,15 +22,19 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/k8s"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -514,34 +518,46 @@ func TestClassifyProbeFailure(t *testing.T) {
 	}{
 		{"Unable to connect to the server: dial tcp 203.0.113.10:443: i/o timeout", probeConnectivity},
 		{"Unable to connect to the server: context deadline exceeded", probeConnectivity},
-		{"Unable to connect to the server: dial tcp 203.0.113.10:443: connect: connection refused", probeConnectivity},
+		{"The connection to the server 203.0.113.10:443 was refused - did you specify the right host or port?", probeConnectivity},
+		{"connect: connection refused", probeConnectivity},
 		{"Unable to connect to the server: dial tcp: lookup gke-abc.gke.goog: no such host", probeConnectivity},
 		{"Unable to connect to the server: net/http: TLS handshake timeout", probeConnectivity},
 		{"Unable to connect to the server: tls: failed to verify certificate: x509: certificate signed by unknown authority", probeConnectivity},
-		{"error: the server responded with the status code 431 but did not return more information", probeConnectivity},
+		{"Error from server: the server responded with the status code 431 but did not return more information", probeConnectivity},
 		{"Request Header Fields Too Large", probeConnectivity},
-		// Forward proxies answer for unreachable upstreams with gateway errors rather than a raw dial failure.
-		{"error: the server responded with the status code 502 but did not return more information", probeConnectivity},
-		{"Error from server (BadGateway): Bad Gateway", probeConnectivity},
-		{"error: the server responded with the status code 503 but did not return more information", probeConnectivity},
-		{"Error from server (ServiceUnavailable): Service Unavailable", probeConnectivity},
-		{"error: the server responded with the status code 504 but did not return more information", probeConnectivity},
-		{"Error from server (Timeout): Gateway Timeout", probeConnectivity},
+		// Forward proxies and gateways answer for unreachable upstreams with HTTP 502/503/504 errors rather than a raw dial failure.
+		{"Error from server (InternalError): an error on the server (\"<html><body>502 Bad Gateway</body></html>\") has prevented the request from succeeding", probeConnectivity},
+		{"Error from server (ServiceUnavailable): the server is currently unable to handle the request", probeConnectivity},
+		{"upstream service unavailable", probeConnectivity},
+		{"Error from server (Timeout): the server was unable to return a response in the time allotted, but may still be processing the request", probeConnectivity},
+		{"upstream gateway timeout", probeConnectivity},
+		// Realistic multi-marker kubectl 401/exec outputs plus isolated single-marker cases so each probeAuthMarkers entry is pinned.
 		{"error: You must be logged in to the server (Unauthorized)", probeAuth},
 		{"error: You must be logged in to the server (the server has asked for the client to provide credentials)", probeAuth},
 		{"Unable to connect to the server: getting credentials: exec: executable gke-gcloud-auth-plugin not found", probeAuth},
 		{"Unable to connect to the server: getting credentials: exec: executable gke-gcloud-auth-plugin failed with exit code 1", probeAuth},
-		{"could not get token: oauth2: cannot fetch token: 400 Bad Request", probeAuth},
+		{"Error from server: unauthorized", probeAuth},
+		{"error: You must be logged in to the server", probeAuth},
+		{"the server has asked for the client to provide credentials", probeAuth},
+		{"getting credentials: exec: executable kubelogin failed with exit code 1", probeAuth},
+		{"exec: executable gke-gcloud-auth-plugin failed with exit code 1", probeAuth},
+		{"oauth2: cannot fetch token: 400 Bad Request", probeAuth},
+		{"could not get token from provider", probeAuth},
+		{"google: could not find default credentials (application default credentials)", probeAuth},
+		{"oauth2/google: status code 400: reauthentication required", probeAuth},
 		{"Error from server (Forbidden): forbidden: User cannot get path \"/version\"", probeForbidden},
 		// GKE's DNS endpoint returns HTTP 403 when external traffic is disabled, IAM denies clusters.connect, or VPC-SC blocks access.
 		{"Error from server (Forbidden): control_plane_endpoints_config.dns_endpoint_config.allow_external_traffic is disabled, external access via DNS endpoint is not allowed", probeConnectivity},
 		{"Error from server (Forbidden): Permission 'container.googleapis.com/clusters.connect' denied on resource '//container.googleapis.com/projects/p/locations/l/clusters/c'", probeConnectivity},
-		{"Error from server (Forbidden): Request is prohibited by organization's policy. vpcServiceControlsUniqueIdentifier: abc123", probeConnectivity},
-		// A forward proxy refusing the CONNECT is a connectivity problem, not an apiserver RBAC rejection.
-		{"Unable to connect to the server: proxyconnect tcp: dial tcp 203.0.113.10:443: proxy returned status 403 Forbidden", probeConnectivity},
+		{"Error from server (Forbidden): Request is prohibited by organization's policy", probeConnectivity},
+		{"Error from server (Forbidden): vpcServiceControlsUniqueIdentifier: abc123", probeConnectivity},
+		// Forward proxy HTTP CONNECT rejection and TCP proxy dial failure are connectivity problems, not apiserver RBAC rejections.
+		{"Unable to connect to the server: Forbidden", probeConnectivity},
+		{"Unable to connect to the server: proxyconnect tcp: dial tcp 192.0.2.1:8080: i/o timeout", probeConnectivity},
 		// Incidental substrings must not be misread as connectivity failures.
 		{"mock error: unexpected command: kubectl --context c get --raw /version --request-timeout=5s", probeUnknown},
 		{"Error from server (NotFound): pods \"worker-431-tls\" not found", probeUnknown},
+		{"Error from server: admission webhook was refused", probeUnknown},
 		{"something completely different", probeUnknown},
 		{"", probeUnknown},
 	}
@@ -1459,7 +1475,7 @@ func identKubectlCmdArgIndex(call *ast.CallExpr) int {
 
 func isAllowedKubeAuthWrapper(funcName string) bool {
 	switch funcName {
-	case "kubectl", "kubectlWithTimeout", "kubectlIn", "kubectlStream":
+	case "kubectl", "kubectlWithTimeout", "kubectlIn", "kubectlStream", "probeGKEServerVersion":
 		return true
 	default:
 		return false
@@ -1614,6 +1630,11 @@ func f() {
 			relPath: "gke/kube_auth.go",
 			src: `package gke
 func kubectl(args ...string) { g.executor.ExecuteCommand("kubectl", k8s.WithContext(g.kubeContext, args)...) }
+func probeGKEServerVersion() {
+	runner(t, "kubectl", k8s.WithContext(ctx, args)...)
+	runner(t, "kubectl", "version")
+	runner(t, "kubectl", k8s.WithContext("", args)...)
+}
 func restoreNamespaceContext() {
 	g.executor.ExecuteCommand("kubectl", "config", "set-context", ctx, "--namespace=ns")
 	g.executor.ExecuteCommand("kubectl", "config", "set-context", "--current", "--namespace=ns")
@@ -1623,7 +1644,9 @@ func probeContext() { g.executor.ExecuteCommand("kubectl", k8s.WithContext(ctx, 
 			wantSubstrs: []string{
 				"gke/kube_auth.go:5 runs kubectl without the pinned context",
 				"gke/kube_auth.go:6 runs kubectl without the pinned context",
-				"gke/kube_auth.go:8 runs kubectl without the pinned context",
+				"gke/kube_auth.go:10 runs kubectl without the pinned context",
+				"gke/kube_auth.go:11 runs kubectl without the pinned context",
+				"gke/kube_auth.go:13 runs kubectl without the pinned context",
 			},
 		},
 		{
@@ -1967,6 +1990,527 @@ func TestRestoreNamespaceContext(t *testing.T) {
 	}
 }
 
+func TestTypeK8s_ZeroGCloudAcrossLifecycle(t *testing.T) {
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters["local-k8s"] = &clientcmdapi.Cluster{Server: "https://10.128.0.68:6443"}
+	cfg.Contexts["k8s-ctx"] = &clientcmdapi.Context{Cluster: "local-k8s", Namespace: "ml-ns"}
+	cfg.CurrentContext = "k8s-ctx"
+
+	rawOrc, err := orchestrator.NewJobOrchestrator(orchestrator.Detection{
+		Type:        orchestrator.TypeK8s,
+		KubeContext: "k8s-ctx",
+		ClusterName: "local-k8s",
+	})
+	if err != nil {
+		t.Fatalf("NewJobOrchestrator(TypeK8s) error = %v", err)
+	}
+	orc := rawOrc.(*GKEOrchestrator)
+	orc.kubeconfigLoader = staticLoader(cfg)
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl": {{ExitCode: 0, Stdout: ""}},
+	})
+	orc.SetExecutor(mockExec)
+
+	submitErr := orc.SubmitJob(orchestrator.JobDefinition{
+		WorkloadName: "blocked-job",
+		ImageName:    "busybox:latest",
+		CommandToRun: "echo hi",
+	})
+	wantSubmitErr := orchestrator.UnsupportedK8sSubmitError().Error()
+	if submitErr == nil || submitErr.Error() != wantSubmitErr {
+		t.Fatalf("SubmitJob(TypeK8s) error = %v, want %q", submitErr, wantSubmitErr)
+	}
+	if len(mockExec.calls) != 0 {
+		t.Fatalf("SubmitJob(TypeK8s) calls = %v, want 0 subprocess calls", mockExec.calls)
+	}
+
+	if loc, err := orc.Initialize("local-k8s", "", ""); err != nil || loc != "" {
+		t.Fatalf("Initialize(TypeK8s) = (%q, %v), want ('', nil)", loc, err)
+	}
+	if err := orc.configureKubectl("local-k8s", "", ""); err != nil || orc.kubeContext != "k8s-ctx" {
+		t.Fatalf("configureKubectl(TypeK8s) = (%v, %q), want (nil, \"k8s-ctx\")", err, orc.kubeContext)
+	}
+	outPath := filepath.Join(t.TempDir(), "inspect.log")
+	if err := orc.InspectCluster(orchestrator.InspectOptions{ClusterName: "local-k8s", OutputPath: outPath}); err != nil {
+		t.Fatalf("InspectCluster(TypeK8s) error = %v", err)
+	}
+	assertTypeK8sInspectClean(t, mockExec, outPath)
+	mockExec.assertAllKubectlPinned(t, "k8s-ctx")
+
+	assertInspectSanitizesClusterFilename(t, orc)
+}
+
+func assertTypeK8sInspectClean(t *testing.T, mockExec *MockExecutor, outPath string) {
+	t.Helper()
+	for _, call := range mockExec.calls {
+		if strings.HasPrefix(call, "gcloud") {
+			t.Errorf("unexpected gcloud invocation in TypeK8s mode: %q", call)
+		}
+		if strings.Contains(call, "local-k8s-metadata") || strings.Contains(call, "local-k8s-resources") {
+			t.Errorf("TypeK8s InspectCluster queried GKE-only blueprint ConfigMap: %q", call)
+		}
+	}
+	if len(mockExec.calls) == 0 {
+		t.Fatalf("expected kubectl diagnostic commands during InspectCluster")
+	}
+	inspectBytes, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", outPath, err)
+	}
+	if strings.Contains(string(inspectBytes), "console.cloud.google.com") {
+		t.Errorf("TypeK8s InspectCluster output must not emit broken Google Cloud Console URLs")
+	}
+}
+
+func assertInspectSanitizesClusterFilename(t *testing.T, orc *GKEOrchestrator) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+	const eksARN = "arn:aws:eks:us-west-2:123456789012:cluster/prod-ml"
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters[eksARN] = &clientcmdapi.Cluster{Server: "https://10.128.0.68:6443"}
+	cfg.Contexts[eksARN] = &clientcmdapi.Context{Cluster: eksARN, Namespace: "ml-ns"}
+	orc.kubeconfigLoader = staticLoader(cfg)
+	orc.kubeContext = eksARN
+	orc.k8sCluster = eksARN
+	orc.SetExecutor(NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl": {{ExitCode: 0, Stdout: ""}},
+	}))
+
+	if err := orc.InspectCluster(orchestrator.InspectOptions{ClusterName: eksARN}); err != nil {
+		t.Fatalf("InspectCluster(EKS ARN default output) error = %v", err)
+	}
+	matches, err := filepath.Glob(filepath.Join(tmpDir, "gcluster-inspect-arn-aws-eks-us-west-2-123456789012-cluster-prod-ml-*.log"))
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("sanitized inspect output matches = %v (err=%v), want 1 file", matches, err)
+	}
+	for _, degenerate := range []string{"", "../..", ":::", "___"} {
+		if got := sanitizeInspectFileSegment(degenerate); got != "cluster" {
+			t.Errorf("sanitizeInspectFileSegment(%q) = %q, want \"cluster\"", degenerate, got)
+		}
+	}
+}
+
+func TestTypeK8s_ConfigureKubectlUnseeded(t *testing.T) {
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters["local-k8s"] = &clientcmdapi.Cluster{Server: "https://10.128.0.68:6443"}
+	cfg.Contexts["k8s-ctx"] = &clientcmdapi.Context{Cluster: "local-k8s", Namespace: "ml-ns"}
+	cfg.CurrentContext = "k8s-ctx"
+
+	orcUnseeded := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcUnseeded.mode = orchestrator.TypeK8s
+	orcUnseeded.kubeconfigLoader = staticLoader(cfg)
+	if err := orcUnseeded.configureKubectl("local-k8s", "", ""); err != nil || orcUnseeded.kubeContext != "k8s-ctx" {
+		t.Errorf("configureKubectl(unseeded TypeK8s) = (%v, %q), want (nil, \"k8s-ctx\")", err, orcUnseeded.kubeContext)
+	}
+
+	orcMissing := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcMissing.mode = orchestrator.TypeK8s
+	orcMissing.kubeconfigLoader = staticLoader(cfg)
+	if err := orcMissing.configureKubectl("unknown-cluster", "", ""); err == nil || !strings.Contains(err.Error(), "was not found") {
+		t.Errorf("configureKubectl(unknown-cluster) = %v, want context not found error", err)
+	}
+
+	orcEmpty := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcEmpty.mode = orchestrator.TypeK8s
+	orcEmpty.kubeconfigLoader = staticLoader(clientcmdapi.NewConfig())
+	if err := orcEmpty.configureKubectl("", "", ""); err == nil || !strings.Contains(err.Error(), "no current-context configured") {
+		t.Errorf("configureKubectl(empty kubeconfig) = %v, want no current-context configured error", err)
+	}
+
+	danglingCfg := clientcmdapi.NewConfig()
+	danglingCfg.CurrentContext = "deleted-ctx"
+	orcDangling := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcDangling.mode = orchestrator.TypeK8s
+	orcDangling.kubeconfigLoader = staticLoader(danglingCfg)
+	if err := orcDangling.configureKubectl("", "", ""); err == nil || !strings.Contains(err.Error(), `"deleted-ctx"`) || !strings.Contains(err.Error(), "was not found") {
+		t.Errorf("configureKubectl(dangling current-context) = %v, want error naming \"deleted-ctx\"", err)
+	}
+
+	orcBadLoader := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcBadLoader.mode = orchestrator.TypeK8s
+	orcBadLoader.kubeconfigLoader = func() (*clientcmdapi.Config, error) { return nil, errors.New("load fault") }
+	if err := orcBadLoader.configureKubectl("local-k8s", "", ""); err == nil || !strings.Contains(err.Error(), "load fault") {
+		t.Errorf("configureKubectl(bad loader) = %v, want load fault error", err)
+	}
+}
+
+func TestTypeK8s_ConfigureKubectlReResolutionSyncsDynamicClient(t *testing.T) {
+	var hitsA, hitsB atomic.Int32
+	emptyListBody := `{"apiVersion":"jobset.x-k8s.io/v1alpha2","kind":"JobSetList","items":[]}`
+	srvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hitsA.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(emptyListBody))
+	}))
+	t.Cleanup(srvA.Close)
+	srvB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hitsB.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(emptyListBody))
+	}))
+	t.Cleanup(srvB.Close)
+
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters["cluster-a"] = &clientcmdapi.Cluster{Server: srvA.URL}
+	cfg.Clusters["cluster-b"] = &clientcmdapi.Cluster{Server: srvB.URL}
+	cfg.Contexts["ctx-a"] = &clientcmdapi.Context{Cluster: "cluster-a", Namespace: "ns-a"}
+	cfg.Contexts["ctx-b"] = &clientcmdapi.Context{Cluster: "cluster-b", Namespace: "ns-b"}
+
+	rawOrc, err := orchestrator.NewJobOrchestrator(orchestrator.Detection{
+		Type:        orchestrator.TypeK8s,
+		KubeContext: "ctx-a",
+		ClusterName: "cluster-a",
+	})
+	if err != nil {
+		t.Fatalf("NewJobOrchestrator error = %v", err)
+	}
+	orc := rawOrc.(*GKEOrchestrator)
+	orc.kubeconfigLoader = staticLoader(cfg)
+
+	if _, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: "cluster-a"}); err != nil {
+		t.Fatalf("ListJobs(cluster-a) error = %v", err)
+	}
+	if hitsA.Load() != 1 || hitsB.Load() != 0 {
+		t.Fatalf("hits after cluster-a = (%d, %d), want (1, 0)", hitsA.Load(), hitsB.Load())
+	}
+
+	if err := orc.configureKubectl("cluster-b", "", ""); err != nil || orc.kubeContext != "ctx-b" {
+		t.Fatalf("configureKubectl(cluster-b) = (%v, %q), want (nil, ctx-b)", err, orc.kubeContext)
+	}
+	kc := orc.usableKubeClient()
+	if kc == nil {
+		t.Fatal("usableKubeClient() after context switch = nil, want DefaultKubeClient bound to ctx-b")
+	}
+	if _, err := kc.ListJobSets("ns-b", ""); err != nil {
+		t.Fatalf("usableKubeClient().ListJobSets(ns-b) error = %v", err)
+	}
+	if hitsA.Load() != 1 || hitsB.Load() != 1 {
+		t.Fatalf("hits after cluster-b usableKubeClient = (%d, %d), want (1, 1)", hitsA.Load(), hitsB.Load())
+	}
+	assertUnseededClusterAndErrorInvalidation(t, cfg)
+	assertInjectedDynamicClientPreserved(t, orc)
+}
+
+func assertUnseededClusterAndErrorInvalidation(t *testing.T, cfg *clientcmdapi.Config) {
+	t.Helper()
+	cfgWithCurrent := cfg.DeepCopy()
+	cfgWithCurrent.CurrentContext = "ctx-a"
+
+	rawOrc, err := orchestrator.NewJobOrchestrator(orchestrator.Detection{
+		Type:        orchestrator.TypeK8s,
+		KubeContext: "ctx-a",
+	})
+	if err != nil {
+		t.Fatalf("NewJobOrchestrator(empty ClusterName) error = %v", err)
+	}
+	orc := rawOrc.(*GKEOrchestrator)
+	orc.kubeconfigLoader = staticLoader(cfgWithCurrent)
+
+	if err := orc.configureKubectl("cluster-b", "", ""); err != nil || orc.kubeContext != "ctx-b" || orc.k8sCluster != "cluster-b" {
+		t.Fatalf("configureKubectl(cluster-b with empty initial k8sCluster) = (%v, %q, %q), want (nil, ctx-b, cluster-b)", err, orc.kubeContext, orc.k8sCluster)
+	}
+	if orc.usableKubeClient() == nil {
+		t.Fatal("usableKubeClient() after cluster-b resolution = nil, want initialized client")
+	}
+
+	if err := orc.configureKubectl("unknown-cluster", "", ""); err == nil {
+		t.Fatal("configureKubectl(unknown-cluster) = nil, want error")
+	}
+	if orc.kubeContext != "" || orc.k8sCluster != "" {
+		t.Fatalf("after failed configureKubectl: kubeContext=%q k8sCluster=%q, want both empty", orc.kubeContext, orc.k8sCluster)
+	}
+	if kc := orc.usableKubeClient(); kc != nil {
+		t.Fatalf("usableKubeClient() after failed configureKubectl = %v, want nil (must not fall back to CurrentContext)", kc)
+	}
+}
+
+func assertInjectedDynamicClientPreserved(t *testing.T, orc *GKEOrchestrator) {
+	t.Helper()
+	// SetDynamicClient marks dynClient unmanaged so test doubles survive context switches.
+	injected := &mockDynamicClient{}
+	orc.SetDynamicClient(injected)
+	if err := orc.configureKubectl("cluster-a", "", ""); err != nil {
+		t.Fatalf("configureKubectl(cluster-a) with injected client error = %v", err)
+	}
+	gotDyn, err := orc.getDynamicClient()
+	if err != nil || gotDyn != injected {
+		t.Fatalf("getDynamicClient() with injected client = (%v, %v), want (%v, nil)", gotDyn, err, injected)
+	}
+}
+
+func TestTypeK8s_LogsAllPodsHintsAndBatchedStreamScaling(t *testing.T) {
+	twelvePods := strings.Repeat("workload-container sidecar-a sidecar-b\n", 12)
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get pods": {
+			{ExitCode: 0, Stdout: twelvePods},
+			{ExitCode: 0, Stdout: twelvePods},
+			{ExitCode: 0, Stdout: twelvePods},
+			{ExitCode: 0, Stdout: twelvePods},
+		},
+		"kubectl get jobsets": {
+			{ExitCode: 0, Stdout: "\tFalse\tmain-job\n12 1\n"},
+			{ExitCode: 0, Stdout: "\tFalse\tmain-job\n12 1\n"},
+			{ExitCode: 0, Stdout: "\tFalse\tmain-job\n12 1\n"},
+			{ExitCode: 0, Stdout: "\tFalse\tmain-job\n12 1\n"},
+		},
+		"kubectl logs": {
+			{ExitCode: 0, Stdout: "rank-0 log line\n"},
+			{ExitCode: 0, Stdout: "rank-0 log line\n"},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = orchestrator.TypeK8s
+	orc.kubeContext = "k8s ctx"
+	orc.k8sCluster = "local-k8s"
+	orc.kubeClient = &MockKubeClient{Namespace: "ml-ns"}
+
+	falseVal := false
+	_, err := orc.GetJobLogs("big-job", orchestrator.LogsOptions{ClusterName: "local-k8s", MainOnly: &falseVal})
+	wantSnapCmd := `kubectl --context "k8s ctx" logs -n ml-ns -l jobset.sigs.k8s.io/jobset-name=big-job --all-containers --prefix --max-log-requests=36 --tail=-1`
+	if err == nil || strings.Contains(err.Error(), "console.cloud.google.com") || !strings.Contains(err.Error(), `"big-job"`) || !strings.Contains(err.Error(), wantSnapCmd) {
+		t.Fatalf("GetJobLogs(MainOnly=false, Follow=false) = %v, want %q without Cloud Console URL", err, wantSnapCmd)
+	}
+
+	_, err = orc.GetJobLogs("big-job", orchestrator.LogsOptions{ClusterName: "local-k8s", MainOnly: &falseVal, Follow: true})
+	wantFollowCmd := `kubectl --context "k8s ctx" logs -n ml-ns -l jobset.sigs.k8s.io/jobset-name=big-job --all-containers --prefix -f --max-log-requests=36 --tail=-1`
+	if err == nil || strings.Contains(err.Error(), "console.cloud.google.com") || !strings.Contains(err.Error(), wantFollowCmd) {
+		t.Fatalf("GetJobLogs(MainOnly=false, Follow=true) = %v, want %q", err, wantFollowCmd)
+	}
+
+	assertTypeK8sDefaultLogsInfoOutput(t, orc, wantSnapCmd, wantFollowCmd)
+	assertMainOnlyDefaultSixPodsAndGKEConsoleHints(t)
+	assertTypeK8sBatchedSlowStartStreamScaling(t)
+	mockExec.assertAllKubectlPinned(t, "k8s ctx")
+}
+
+func assertMainOnlyDefaultSixPodsAndGKEConsoleHints(t *testing.T) {
+	t.Helper()
+	sixPods := strings.Repeat("workload-container\n", 6)
+	elevenPods := strings.Repeat("workload-container\n", 11)
+	exec6 := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get pods":    {{ExitCode: 0, Stdout: sixPods}},
+		"kubectl get jobsets": {{ExitCode: 0, Stdout: "\tFalse\tmain-job\n6 1\tworkload-container\n"}},
+		"kubectl logs":        {{ExitCode: 0, Stdout: "ok\n"}},
+	})
+	orc6 := newTestGKEOrchestrator(exec6)
+	orc6.mode = orchestrator.TypeK8s
+	orc6.kubeContext = "k8s-ctx"
+	orc6.k8sCluster = "local-k8s"
+	orc6.kubeClient = &MockKubeClient{Namespace: "ml-ns"}
+	snap6, restore6 := logging.CaptureForTesting()
+	_, err := orc6.GetJobLogs("six-pod-job", orchestrator.LogsOptions{ClusterName: "local-k8s"})
+	info6, _ := snap6()
+	restore6()
+	if err != nil || !strings.Contains(info6, "--main-only=false") {
+		t.Fatalf("6-pod MainOnly=nil GetJobLogs = (%v, %q), want --main-only=false hint", err, info6)
+	}
+
+	exec11 := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get --raw /version": {{ExitCode: 0, Stdout: `{"gitVersion":"v1.32.2-gke.1182000"}`}},
+		"kubectl get pods":           {{ExitCode: 0, Stdout: elevenPods}},
+		"kubectl get jobsets":        {{ExitCode: 0, Stdout: "\tFalse\tmain-job\n11 1\tworkload-container\n"}},
+		"kubectl logs":               {{ExitCode: 0, Stdout: "ok\n"}},
+	})
+	orcGKE := newTestGKEOrchestrator(exec11)
+	orcGKE.mode = orchestrator.TypeGKE
+	orcGKE.clusterDesc = testClusterDesc(false, true)
+	orcGKE.kubeconfigLoader = staticLoader(kubeconfigWith("https://"+testPublicIP, []byte(testCAPEM), gkeExec(), testContext))
+	orcGKE.kubeClient = &MockKubeClient{Namespace: "ml-ns"}
+	snapGKE, restoreGKE := logging.CaptureForTesting()
+	_, err = orcGKE.GetJobLogs("eleven-pod-job", orchestrator.LogsOptions{
+		ClusterName:     testCluster,
+		ClusterLocation: testLocation,
+		ProjectID:       testProject,
+	})
+	infoGKE, _ := snapGKE()
+	restoreGKE()
+	if err != nil || !strings.Contains(infoGKE, "console.cloud.google.com") {
+		t.Fatalf("11-pod GKE MainOnly=nil GetJobLogs = (%v, %q), want Cloud Console URL hint", err, infoGKE)
+	}
+}
+
+func assertTypeK8sDefaultLogsInfoOutput(t *testing.T, orc *GKEOrchestrator, wantSnapCmd, wantFollowCmd string) {
+	t.Helper()
+	snapLogs, restoreLogs := logging.CaptureForTesting()
+	defer restoreLogs()
+	if _, err := orc.GetJobLogs("big-job", orchestrator.LogsOptions{ClusterName: "local-k8s"}); err != nil {
+		t.Fatalf("GetJobLogs(MainOnly=nil, Follow=false) error = %v", err)
+	}
+	if _, err := orc.GetJobLogs("big-job", orchestrator.LogsOptions{ClusterName: "local-k8s", Follow: true}); err != nil {
+		t.Fatalf("GetJobLogs(MainOnly=nil, Follow=true) error = %v", err)
+	}
+	infoOut, _ := snapLogs()
+	for _, want := range []string{wantSnapCmd, wantFollowCmd} {
+		if !strings.Contains(infoOut, want) {
+			t.Errorf("captured info logs missing %q; got:\n%s", want, infoOut)
+		}
+	}
+	if strings.Contains(infoOut, "console.cloud.google.com") {
+		t.Errorf("captured info logs contained Cloud Console URL:\n%s", infoOut)
+	}
+}
+
+func assertTypeK8sBatchedSlowStartStreamScaling(t *testing.T) {
+	t.Helper()
+	// Verify both JobSet container counting and live-pod ceiling fallback when only 2 of 12 pods are scheduled.
+	if streams := scaleExpectedStreams(2, 6, 12, 0); streams != 36 {
+		t.Errorf("scaleExpectedStreams(2, 6, 12, 0) = %d, want 36", streams)
+	}
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get pods": {
+			{ExitCode: 0, Stdout: "c1 c2 c3\nc1 c2 c3\n"},
+		},
+		"kubectl get jobsets": {
+			{ExitCode: 0, Stdout: "\tFalse\tpathways-head\n1 1\tc1 c2\n1 11\tc1 c2 c3\n"},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = orchestrator.TypeK8s
+	orc.kubeContext = "k8s-ctx"
+	orc.k8sCluster = "local-k8s"
+	orc.kubeClient = &MockKubeClient{Namespace: "ml-ns"}
+
+	falseVal := false
+	_, err := orc.GetJobLogs("batched-job", orchestrator.LogsOptions{ClusterName: "local-k8s", MainOnly: &falseVal, Follow: true})
+	want := "kubectl --context k8s-ctx logs -n ml-ns -l jobset.sigs.k8s.io/jobset-name=batched-job --all-containers --prefix -f --max-log-requests=35 --tail=-1"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("GetJobLogs(batched slow-start) = %v, want %q", err, want)
+	}
+}
+
+func TestTypeK8s_CancelJobPinsContextAndZeroGCloud(t *testing.T) {
+	var deletedPath atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodDelete {
+			deletedPath.Store(r.URL.Path)
+			_, _ = w.Write([]byte(`{"apiVersion":"v1","kind":"Status","status":"Success"}`))
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/jobsets/job-1") {
+			_, _ = w.Write([]byte(`{"apiVersion":"jobset.x-k8s.io/v1alpha2","kind":"JobSet","metadata":{"name":"job-1","namespace":"ml-ns"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"apiVersion":"v1","kind":"List","items":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters["local-k8s"] = &clientcmdapi.Cluster{Server: srv.URL}
+	cfg.Contexts["k8s-ctx"] = &clientcmdapi.Context{Cluster: "local-k8s", Namespace: "ml-ns"}
+
+	rawOrc, err := orchestrator.NewJobOrchestrator(orchestrator.Detection{
+		Type:        orchestrator.TypeK8s,
+		KubeContext: "k8s-ctx",
+		ClusterName: "local-k8s",
+	})
+	if err != nil {
+		t.Fatalf("NewJobOrchestrator error = %v", err)
+	}
+	orc := rawOrc.(*GKEOrchestrator)
+	orc.kubeconfigLoader = staticLoader(cfg)
+	mockExec := NewMockExecutor(nil)
+	orc.SetExecutor(mockExec)
+
+	if err := orc.CancelJob("job-1", orchestrator.CancelOptions{ClusterName: "local-k8s"}); err != nil {
+		t.Fatalf("CancelJob(TypeK8s) error = %v, want nil", err)
+	}
+	if got, _ := deletedPath.Load().(string); got != "/apis/jobset.x-k8s.io/v1alpha2/namespaces/ml-ns/jobsets/job-1" {
+		t.Errorf("DELETE path = %q, want /apis/jobset.x-k8s.io/v1alpha2/namespaces/ml-ns/jobsets/job-1", got)
+	}
+	if len(mockExec.calls) != 0 {
+		t.Errorf("CancelJob(TypeK8s) unexpected subprocesses = %v, want 0", mockExec.calls)
+	}
+}
+
+func TestTypeK8s_InspectClusterFailsFastOnUnreachableOrUnauthorizedContext(t *testing.T) {
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters["local-k8s"] = &clientcmdapi.Cluster{Server: "https://10.128.0.68:6443"}
+	cfg.Contexts["k8s-ctx"] = &clientcmdapi.Context{Cluster: "local-k8s", Namespace: "ml-ns"}
+
+	for _, tc := range []struct {
+		name       string
+		stderr     string
+		wantSubstr string
+	}{
+		{
+			name:       "unreachable_endpoint",
+			stderr:     "Unable to connect to the server: dial tcp 10.128.0.68:6443: i/o timeout",
+			wantSubstr: "unreachable",
+		},
+		{
+			name:       "connection_refused_kubectl_rewrite",
+			stderr:     "The connection to the server 127.0.0.1:6443 was refused - did you specify the right host or port?",
+			wantSubstr: "unreachable",
+		},
+		{
+			name:       "service_unavailable_503",
+			stderr:     "Error from server (ServiceUnavailable): the server is currently unable to handle the request",
+			wantSubstr: "unreachable",
+		},
+		{
+			name:       "expired_credentials",
+			stderr:     "error: You must be logged in to the server (Unauthorized)",
+			wantSubstr: "authentication to Kubernetes context",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+				"kubectl get --raw /version": {{ExitCode: 1, Stderr: tc.stderr}},
+			})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.mode = orchestrator.TypeK8s
+			orc.kubeconfigLoader = staticLoader(cfg)
+			orc.kubeContext = "k8s-ctx"
+			orc.k8sCluster = "local-k8s"
+			outPath := filepath.Join(t.TempDir(), "must-not-exist.log")
+
+			err := orc.InspectCluster(orchestrator.InspectOptions{ClusterName: "local-k8s", OutputPath: outPath})
+			if err == nil || !strings.Contains(err.Error(), tc.wantSubstr) {
+				t.Fatalf("InspectCluster(%s) = %v, want error containing %q", tc.name, err, tc.wantSubstr)
+			}
+			if _, statErr := os.Stat(outPath); !os.IsNotExist(statErr) {
+				t.Errorf("InspectCluster(%s) created %s despite pre-flight failure", tc.name, outPath)
+			}
+			if len(mockExec.calls) != 1 {
+				t.Errorf("InspectCluster(%s) subprocess calls = %v, want single /version probe", tc.name, mockExec.calls)
+			}
+		})
+	}
+}
+
+func TestDetectGKE_IncompleteContextSelfHealing(t *testing.T) {
+	cfg := clientcmdapi.NewConfig()
+	cfg.Contexts["half-written-ctx"] = &clientcmdapi.Context{Cluster: "missing-cluster", AuthInfo: "missing-user"}
+	cfg.Clusters["empty-server-clus"] = &clientcmdapi.Cluster{Server: "   "}
+	cfg.AuthInfos["valid-user"] = &clientcmdapi.AuthInfo{Token: "tok"}
+	cfg.Contexts["empty-server-ctx"] = &clientcmdapi.Context{Cluster: "empty-server-clus", AuthInfo: "valid-user"}
+	cfg.CurrentContext = "half-written-ctx"
+
+	runnerCalls := 0
+	runner := func(_ time.Duration, _ string, _ ...string) shell.CommandResult {
+		runnerCalls++
+		return shell.CommandResult{ExitCode: 1}
+	}
+
+	if det, ok := detectGKE(orchestrator.ProbeInput{Config: cfg, Runner: runner}); ok || runnerCalls != 0 {
+		t.Fatalf("detectGKE(incomplete context without GKE flags) = (%+v, %v), runnerCalls=%d, want (_, false, 0)", det, ok, runnerCalls)
+	}
+	for _, ctxName := range []string{"half-written-ctx", "empty-server-ctx"} {
+		det, ok := detectGKE(orchestrator.ProbeInput{
+			Config:      cfg,
+			ClusterName: ctxName,
+			Location:    "us-central1-a",
+			ProjectID:   "my-proj",
+			Runner:      runner,
+		})
+		if !ok || det.Type != orchestrator.TypeGKE || det.KubeContext != ctxName || runnerCalls != 0 {
+			t.Fatalf("detectGKE(%s with GKE flags) = (%+v, %v), runnerCalls=%d, want (TypeGKE, %s, true, 0)", ctxName, det, ok, runnerCalls, ctxName)
+		}
+	}
+}
 func TestImagePullSecrets_NamespacePrecedence(t *testing.T) {
 	setupMockMachineConfig(t)
 	profile := JobProfile{IsCPUMachine: true, CapacityCount: 4}

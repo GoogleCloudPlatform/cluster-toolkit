@@ -143,9 +143,15 @@ func (m *MockExecutor) ExecuteCommandStream(name string, args ...string) error {
 }
 
 func (m *MockExecutor) stripContext(name string, args []string) []string {
-	if name == "kubectl" && len(args) > 2 && args[0] == "--context" {
+	if name != "kubectl" {
+		return args
+	}
+	if len(args) > 2 && args[0] == "--context" {
 		m.contexts = append(m.contexts, args[1])
 		return args[2:]
+	}
+	if len(args) == 0 || args[0] != "config" {
+		m.contexts = append(m.contexts, "")
 	}
 	return args
 }
@@ -2788,7 +2794,7 @@ func TestResolveLogsSelector_MainOnlyTargetsMainReplicatedJob(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			orc := newTestGKEOrchestrator(NewMockExecutor(nil))
 
-			selector, mainOnly := orc.resolveLogsSelector("pw-job", &trueVal, 1, tt.firstJob, "")
+			selector, mainOnly := orc.resolveLogsSelector("pw-job", &trueVal, 1, tt.firstJob)
 			if !mainOnly {
 				t.Fatalf("resolveLogsSelector() mainOnly = false, want true")
 			}
@@ -3848,6 +3854,37 @@ func TestJobSetInfoJSONPath(t *testing.T) {
 				},
 			},
 			want: jobSetInfo{firstJob: "trainer", expectedPods: 8},
+		},
+		{
+			name: "heterogeneous replicatedJobs count init and app container streams",
+			obj: map[string]any{
+				"spec": map[string]any{
+					"replicatedJobs": []any{
+						map[string]any{
+							"name":     "pathways-head",
+							"replicas": 1,
+							"template": map[string]any{"spec": map[string]any{
+								"parallelism": 1,
+								"template": map[string]any{"spec": map[string]any{
+									"containers": []any{map[string]any{"name": "proxy"}, map[string]any{"name": "rm"}},
+								}},
+							}},
+						},
+						map[string]any{
+							"name":     "worker",
+							"replicas": 2,
+							"template": map[string]any{"spec": map[string]any{
+								"parallelism": 4,
+								"template": map[string]any{"spec": map[string]any{
+									"initContainers": []any{map[string]any{"name": "sidecar"}},
+									"containers":     []any{map[string]any{"name": "worker"}, map[string]any{"name": "metrics"}},
+								}},
+							}},
+						},
+					},
+				},
+			},
+			want: jobSetInfo{firstJob: "pathways-head", expectedPods: 9, expectedStreams: 26},
 		},
 	}
 	for _, tt := range tests {
