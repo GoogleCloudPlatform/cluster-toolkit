@@ -53,3 +53,19 @@ ghpc:
       dependent: enable_slurm_auth
       dependent_value: true
     error_message: "DEPRECATION NOTICE: Legacy MUNGE-based authentication is end-of-support and no longer maintained in Cluster Toolkit; the option to use MUNGE will be completely removed soon. Please migrate your blueprint to Slurm Native Authentication. See docs/slurm-native-auth-migration-guide.md for migration steps."
+  - validator: range
+    inputs:
+      vars: [cloud_parameters.max_array_size]
+      min: 0
+      max: 4000001
+    error_message: "In cloud_parameters, max_array_size must be an integer between 0 and 4000001 (Slurm's maximum MaxArraySize)."
+  - validator: range
+    inputs:
+      vars: [cloud_parameters.max_job_count]
+      min: 1
+    error_message: "In cloud_parameters, max_job_count must be a positive integer."
+  - validator: range
+    inputs:
+      vars: [cloud_parameters.min_job_age]
+      min: 2
+    error_message: "In cloud_parameters, min_job_age must be an integer >= 2 seconds (Slurm's minimum MinJobAge)."

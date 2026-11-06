@@ -168,7 +168,7 @@ SuspendRate=0
 SuspendTimeout=300
 SlurmdTimeout=300
 UnkillableStepTimeout=300
-TreeWidth=128
+TreeWidth=16
 TopologyParam=SwitchAsNodeRank"""),
         (TstCfg(
             install_dir="ukulele",
@@ -197,7 +197,7 @@ SuspendRate=0
 SuspendTimeout=300
 SlurmdTimeout=300
 UnkillableStepTimeout=300
-TreeWidth=128
+TreeWidth=16
 TopologyParam=SwitchAsNodeRank"""),
         (TstCfg(
             install_dir="ukulele",
@@ -258,41 +258,50 @@ SuspendRate=0
 SuspendTimeout=300
 SlurmdTimeout=300
 UnkillableStepTimeout=300
-TreeWidth=128
+TreeWidth=16
 TopologyParam=SwitchAsNodeRank"""),
     ])
 @pytest.mark.parametrize(
     "version",
-    ["24.11", "25.05", "25.11"]
+    ["24.11", "25.05", "25.11", "26.05"]
 )
 @mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
 def test_conflines(mock_slurm_version, version, cfg, want):
     mock_slurm_version.return_value = version
+    expected = (
+        want.replace(
+            "SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend",
+            "SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend,enable_async_reply",
+        )
+        if util.slurm_version_gte(version, "25.11")
+        else want
+    )
     lkp = util.Lookup(cfg)
     lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
-    assert conf.conflines(lkp) == want
+    assert conf.conflines(lkp) == expected
 
     cfg.cloud_parameters = NSDict(cfg.cloud_parameters)
     lkp = util.Lookup(cfg)
     lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
-    assert conf.conflines(lkp) == want
+    assert conf.conflines(lkp) == expected
 
 
 @pytest.mark.parametrize(
-    "version,expect_async",
+    "version,enable_async_reply,expect_async",
     [
-        ("24.11", False),
-        ("25.05", False),
-        ("25.11", True),
+        ("24.11", True, False),
+        ("25.05", True, False),
+        ("25.11", True, True),
+        ("25.11", False, False),
+        ("26.05", True, True),
+        ("26.05", False, False),
     ]
 )
 @mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
-def test_conflines_async_reply(mock_slurm_version, version, expect_async):
+def test_conflines_async_reply(mock_slurm_version, version, enable_async_reply, expect_async):
     cfg = TstCfg(
         install_dir="ukulele",
-        experimental={
-            "enable_async_reply": True,
-        },
+        enable_async_reply=enable_async_reply,
     )
     mock_slurm_version.return_value = version
     lkp = util.Lookup(cfg)
@@ -301,11 +310,9 @@ def test_conflines_async_reply(mock_slurm_version, version, expect_async):
     res = conf.conflines(lkp)
     if expect_async:
         assert "enable_async_reply" in res
-        # Validate exact expected output structure for 25.11 with async reply
         assert "SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend,enable_async_reply" in res
     else:
         assert "enable_async_reply" not in res
-        # Validate exact expected output structure for older versions without async reply
         assert "SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend" in res
 
 @pytest.mark.parametrize(
@@ -314,6 +321,7 @@ def test_conflines_async_reply(mock_slurm_version, version, expect_async):
         ("24.11", False),
         ("25.05", False),
         ("25.11", True),
+        ("26.05", True),
     ]
 )
 @mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
@@ -329,7 +337,7 @@ def test_conflines_expedited_requeue(mock_slurm_version, version, expect_feature
     res = conf.conflines(lkp)
     if expect_feature:
         assert "enable_expedited_requeue" in res
-        assert "SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend,enable_expedited_requeue" in res
+        assert "SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend,enable_async_reply,enable_expedited_requeue" in res
     else:
         assert "enable_expedited_requeue" not in res
         assert "SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend" in res
@@ -382,6 +390,29 @@ def test_conflines_enable_openmetrics(mock_slurm_version, version, expect_featur
         assert "MetricsType=metrics/openmetrics" in res
     else:
         assert "MetricsType=metrics/openmetrics" not in res
+
+
+@pytest.mark.parametrize("version", ["25.05", "25.11", "26.05"])
+@pytest.mark.parametrize("as_nsdict", [False, True])
+@mock.patch('util.Lookup.slurm_version', new_callable=mock.PropertyMock)
+def test_conflines_job_limits(mock_slurm_version, as_nsdict, version):
+    mock_slurm_version.return_value = version
+    limits = {"MaxArraySize": 10001, "MaxJobCount": 500000, "MinJobAge": 60}
+
+    # Unset: Slurm defaults are kept, nothing is written.
+    lkp = util.Lookup(TstCfg(install_dir="ukulele"))
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
+    res = conf.conflines(lkp).splitlines()
+    for key in limits:
+        assert not any(line.startswith(f"{key}=") for line in res)
+
+    params = {"max_array_size": 10001, "max_job_count": 500000, "min_job_age": 60}
+    cfg = TstCfg(install_dir="ukulele", cloud_parameters=NSDict(params) if as_nsdict else params)
+    lkp = util.Lookup(cfg)
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
+    res = conf.conflines(lkp).splitlines()
+    for key, value in limits.items():
+        assert f"{key}={value}" in res
 
 
 @pytest.mark.parametrize(
@@ -481,6 +512,30 @@ def test_install_slurm_conf_no_load_balancer(mock_chown, mock_gethostbyname, tmp
     content = conf_file.read_text()
     assert "SlurmctldHost=controller-0(5.6.7.8)" in content
 
+
+def test_gen_topology_prebuckets_instances_once_across_nodesets():
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={
+            "ns1": TstNodeset("ns1", node_count_static=1, node_count_dynamic_max=1),
+            "ns2": TstNodeset("ns2", node_count_static=0, node_count_dynamic_max=2),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    inst1 = mock.Mock(name="c-ns1-0", resource_status=mock.Mock(physical_host="/rack0/host0"))
+    inst1.name = "c-ns1-0"
+    inst2 = mock.Mock(name="c-ns2-1", resource_status=mock.Mock(physical_host="/rack1/host1"))
+    inst2.name = "c-ns2-1"
+    lkp.instances = mock.Mock(return_value={"c-ns1-0": inst1, "c-ns2-1": inst2})
+
+    builder = conf.gen_topology(lkp)
+
+    # lkp.instances() is queried once and bucketed in O(N), not scanned per nodeset
+    lkp.instances.assert_called_once()
+    assert set(builder.summary.physical_host.keys()) == {"c-ns1-0", "c-ns2-1"}
+    assert set(builder.summary.down_nodes) == {"c-ns1-1", "c-ns2-0"}
+
+
 @mock.patch("util.Lookup.slurm_version", new_callable=mock.PropertyMock)
 def test_v2605_generator_tpu_vs_cpu(mock_slurm_version, tmp_path):
     import yaml
@@ -520,7 +575,7 @@ def test_v2605_generator_tpu_vs_cpu(mock_slurm_version, tmp_path):
     assert "GresTypes=tpu" not in cpu_conflines
     assert "JobSubmitPlugins=tpu" not in cpu_conflines
     assert "CliFilterPlugins=tpu" not in cpu_conflines
-    assert "enable_async_reply" not in cpu_conflines
+    assert "enable_async_reply" in cpu_conflines
 
     # 2. TPU cluster on 26.05 -> Includes GresTypes=tpu, JobSubmitPlugins=tpu, CliFilterPlugins=tpu, gres, and topology
     ns_v6e_static = TstNodeset(
@@ -571,6 +626,18 @@ def test_v2605_generator_tpu_vs_cpu(mock_slurm_version, tmp_path):
     assert "JobSubmitPlugins=tpu" in tpu_conflines
     assert "CliFilterPlugins=tpu" in tpu_conflines
     assert "enable_async_reply" in tpu_conflines
+
+    # Explicit opt-out (enable_async_reply=False) is honored even on 26.05 TPU clusters
+    cfg_tpu_optout = TstCfg(
+        install_dir="ukulele",
+        enable_async_reply=False,
+        nodeset={"v6es": ns_v6e_static},
+    )
+    lkp_tpu_optout = util.Lookup(cfg_tpu_optout)
+    lkp_tpu_optout.template_info = mock.Mock(return_value=_mk_tpl("ct6e-standard-4t"))
+    tpu_optout_conflines = conf.get_generator(lkp_tpu_optout).conflines()
+    assert "GresTypes=tpu" in tpu_optout_conflines
+    assert "enable_async_reply" not in tpu_optout_conflines
 
     cloud_conf = gen_tpu.make_cloud_conf()
     assert "Gres=tpu:v6e:4" in cloud_conf

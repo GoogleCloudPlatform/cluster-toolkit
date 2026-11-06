@@ -75,6 +75,7 @@ locals {
     task_epilog_scripts            = [for k, v in google_storage_bucket_object.task_epilog_scripts : k]
     cloud_parameters               = var.cloud_parameters
     experimental                   = var.experimental
+    enable_async_reply             = var.enable_async_reply
     enable_expedited_requeue       = var.enable_expedited_requeue
     enable_health_check_start_only = var.enable_health_check_start_only
     enable_openmetrics             = var.enable_openmetrics
