@@ -642,6 +642,12 @@ func TestModuleServicesForSourceRelativeLocalDir(t *testing.T) {
 }
 
 func TestScanBlueprintsInUntrackedBundleInsideGitRepo(t *testing.T) {
+	for _, kv := range os.Environ() {
+		if k, _, ok := strings.Cut(kv, "="); ok && strings.HasPrefix(k, "GIT_") {
+			t.Setenv(k, "")
+			_ = os.Unsetenv(k)
+		}
+	}
 	parentGitRepo := t.TempDir()
 	if err := exec.Command("git", "init", parentGitRepo).Run(); err != nil {
 		t.Skipf("git init unavailable: %v", err)

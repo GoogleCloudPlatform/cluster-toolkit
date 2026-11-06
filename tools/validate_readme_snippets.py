@@ -795,7 +795,7 @@ def validate_markdown_links_and_cli(non_ignored: set[str] | None = None) -> list
             if not file_part:
                 abs_target = abs_path
             elif file_part.startswith("/"):
-                errors.append(f"{rel_path}: broken relative file link '{target}' (use relative path instead of leading '/')")
+                errors.append(f"{rel_path}: root-relative link '{target}' is not portable; use a path relative to this file")
                 continue
             else:
                 abs_target = os.path.normpath(os.path.join(os.path.dirname(abs_path), file_part))
