@@ -1116,12 +1116,15 @@ func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string, machineTy
 	return strings.TrimSpace(output), nil
 }
 
-func (g *GKEOrchestrator) resolveBuildTargetNamespace(job orchestrator.JobDefinition) (string, error) {
-	if ns := strings.TrimSpace(job.GKENamespace); ns != "" {
-		g.namespace = ns
+func (g *GKEOrchestrator) resolveBuildTargetNamespace(explicitNS, clusterName, location, projectID string, dryRun bool) (string, error) {
+	if ns := strings.TrimSpace(explicitNS); ns != "" {
+		return ns, nil
 	}
-	ns, err := g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	ns, err := g.getCurrentNamespace(clusterName, location, projectID)
 	if err != nil {
+		if dryRun {
+			return "default", nil
+		}
 		return "", fmt.Errorf("failed to resolve target namespace for image build: %w", err)
 	}
 	return ns, nil
@@ -1134,7 +1137,7 @@ func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (s
 	if job.DryRunManifest != "" {
 		if job.BaseImage != "" {
 			logging.Info("[Dry Run] Skipping Crane build, generating predicted URI...")
-			targetNS, err := g.resolveBuildTargetNamespace(job)
+			targetNS, err := g.resolveBuildTargetNamespace(job.GKENamespace, job.ClusterName, job.ClusterLocation, job.ProjectID, true)
 			if err != nil {
 				return "", err
 			}
@@ -1149,7 +1152,7 @@ func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (s
 	if job.BaseImage != "" {
 		logging.Info("Building container image using Crane (Go implementation) on top of %s...", job.BaseImage)
 
-		targetNS, err := g.resolveBuildTargetNamespace(job)
+		targetNS, err := g.resolveBuildTargetNamespace(job.GKENamespace, job.ClusterName, job.ClusterLocation, job.ProjectID, false)
 		if err != nil {
 			return "", err
 		}

@@ -67,6 +67,23 @@ func TestEnsureBuildPrerequisites_ExplicitGARSkipsGKEAuthPluginAndPreservesCache
 	if !saved.KubectlInstalled || !saved.GKEGCloudAuthPluginInstalled {
 		t.Fatalf("expected project switch to preserve unexpired KubectlInstalled and GKEGCloudAuthPluginInstalled, got %+v", saved)
 	}
+
+	expired := resetProjectScopedPrereqState(PrereqState{
+		GCloudSDKInstalled:           true,
+		GCloudAuthenticated:          true,
+		ADCConfigured:                true,
+		KubectlInstalled:             true,
+		GKEGCloudAuthPluginInstalled: true,
+		ArtifactRegistryAPIEnabled:   true,
+		LastCheckedProjectID:         "gar-build-proj",
+		LastCheckedTimestamp:         time.Now().Add(-2 * stateFreshness),
+	}, "gar-build-proj")
+	if !expired.GCloudSDKInstalled || !expired.KubectlInstalled || !expired.GKEGCloudAuthPluginInstalled {
+		t.Fatalf("expected TTL expiry to preserve installed CLI binary flags, got %+v", expired)
+	}
+	if expired.GCloudAuthenticated || expired.ADCConfigured || expired.ArtifactRegistryAPIEnabled {
+		t.Fatalf("expected TTL expiry to force re-verification of auth and API flags, got %+v", expired)
+	}
 }
 
 func TestEnsureBuildPrerequisites_CrossProjectGARPermissionDeniedProceeds(t *testing.T) {

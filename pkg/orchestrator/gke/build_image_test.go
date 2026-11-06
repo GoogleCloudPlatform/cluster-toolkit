@@ -35,7 +35,7 @@ type recordingNamespaceKubeClient struct {
 
 func (r *recordingNamespaceKubeClient) GetCurrentNamespace(cluster, location, project string) (string, error) {
 	if r.forbidCalls {
-		r.t.Fatalf("GetCurrentNamespace must not be invoked for prebuilt --image jobs")
+		r.t.Fatalf("GetCurrentNamespace must not be invoked")
 	}
 	r.gotCluster = cluster
 	r.gotLocation = location
@@ -57,10 +57,10 @@ func TestBuildContainerImage_NamespacePrecedenceAndPrebuiltHermeticity(t *testin
 		}
 	})
 
-	t.Run("job.GKENamespace takes precedence over g.namespace and kubeconfig on dry-run URI prediction", func(t *testing.T) {
+	t.Run("job.GKENamespace takes precedence without mutating g.namespace", func(t *testing.T) {
 		t.Setenv("GCLUSTER_IMAGE_REPO", "")
 		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
-		orc.namespace = "stale-orch-ns"
+		orc.namespace = "unchanged-orch-ns"
 		orc.kubeClient = &recordingNamespaceKubeClient{t: t, forbidCalls: true}
 
 		got, err := orc.BuildContainerImage(orchestrator.JobDefinition{
@@ -72,9 +72,12 @@ func TestBuildContainerImage_NamespacePrecedenceAndPrebuiltHermeticity(t *testin
 		if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/gcluster/explicit-flag-ns/train-v5p:") {
 			t.Fatalf("BuildContainerImage(explicit GKENamespace) = (%q, %v)", got, err)
 		}
+		if orc.namespace != "unchanged-orch-ns" {
+			t.Fatalf("BuildContainerImage mutated orc.namespace = %q, want unchanged-orch-ns", orc.namespace)
+		}
 	})
 
-	t.Run("delegates cluster/location/project to GetCurrentNamespace and propagates kubeconfig errors", func(t *testing.T) {
+	t.Run("dry-run falls back to default offline while live build fails fast on broken kubeconfig", func(t *testing.T) {
 		t.Setenv("GCLUSTER_IMAGE_REPO", "")
 		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
 		spy := &recordingNamespaceKubeClient{t: t, ns: "ctx-ns"}
@@ -94,16 +97,31 @@ func TestBuildContainerImage_NamespacePrecedenceAndPrebuiltHermeticity(t *testin
 		if spy.gotCluster != "clus-a" || spy.gotLocation != "us-central1-a" || spy.gotProject != "proj-a" {
 			t.Fatalf("GetCurrentNamespace args = (%q, %q, %q), want (clus-a, us-central1-a, proj-a)", spy.gotCluster, spy.gotLocation, spy.gotProject)
 		}
-
-		orcBroken := newTestGKEOrchestrator(NewMockExecutor(nil))
-		orcBroken.kubeClient = &recordingNamespaceKubeClient{t: t, err: errors.New("broken kubeconfig")}
-		_, err = orcBroken.BuildContainerImage(orchestrator.JobDefinition{
-			WorkloadName:   "train-v5p",
-			BaseImage:      "10.128.0.68:5000/ml/jax:v5p",
-			DryRunManifest: "/tmp/dry-run.yaml",
-		})
-		if err == nil || !strings.Contains(err.Error(), "broken kubeconfig") {
-			t.Fatalf("expected broken kubeconfig error to propagate instead of silently falling back to default, got: %v", err)
-		}
 	})
+}
+
+func TestBuildContainerImage_OfflineDryRunFallbackAndLiveError(t *testing.T) {
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
+
+	orcDryOffline := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcDryOffline.kubeClient = &recordingNamespaceKubeClient{t: t, err: errors.New("no kubeconfig")}
+	got, err := orcDryOffline.BuildContainerImage(orchestrator.JobDefinition{
+		WorkloadName:   "train-v5p",
+		BaseImage:      "10.128.0.68:5000/ml/jax:v5p",
+		DryRunManifest: "/tmp/dry-run.yaml",
+	})
+	if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/gcluster/default/train-v5p:") {
+		t.Fatalf("BuildContainerImage(dry-run offline fallback) = (%q, %v), want default namespace URI", got, err)
+	}
+
+	orcLiveBroken := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcLiveBroken.kubeClient = &recordingNamespaceKubeClient{t: t, err: errors.New("broken kubeconfig")}
+	_, err = orcLiveBroken.BuildContainerImage(orchestrator.JobDefinition{
+		WorkloadName: "train-v5p",
+		BaseImage:    "10.128.0.68:5000/ml/jax:v5p",
+		BuildContext: t.TempDir(),
+	})
+	if err == nil || !strings.Contains(err.Error(), "broken kubeconfig") {
+		t.Fatalf("expected live Crane build to fail fast on broken kubeconfig, got: %v", err)
+	}
 }

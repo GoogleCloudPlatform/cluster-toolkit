@@ -302,7 +302,7 @@ func BuildContainerImageFromBaseImage(
 		return "", fmt.Errorf("failed to parse base image reference %q: %w", baseImage, err)
 	}
 
-	// Validate destination configuration and OCI reference syntax before pulling the base image or walking the build context.
+	// Fail fast on invalid destination configuration or reference syntax.
 	preflightName, err := GenerateImageName(project, location, namespace, workloadName, baseImage, "preflight0000")
 	if err != nil {
 		return "", err

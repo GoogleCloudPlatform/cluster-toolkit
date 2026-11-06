@@ -61,16 +61,6 @@ func checkArtifactRegistryAPI(projectID string, state *PrereqState, missing *[]m
 	}
 }
 
-func resolveBuildTargetRegistry(projectID, location string) (imagebuilder.DestinationRepo, error) {
-	dest, err := imagebuilder.ResolveDestinationRepo(projectID, location, baseImage, os.Getenv("GCLUSTER_IMAGE_REPO"))
-	// Direct callers of ensureBuildPrerequisites may pass project+location before GCLUSTER_IMAGE_REPO is set.
-	if errors.Is(err, imagebuilder.ErrMissingImageRepo) && projectID != "" && location != "" {
-		host := shell.ExtractRegion(location) + "-docker.pkg.dev"
-		return imagebuilder.DestinationRepo{RegistryHost: host, GARProject: projectID, IsGAR: true}, nil
-	}
-	return dest, err
-}
-
 func ensureGARBuildAuthPrerequisites(cmd *cobra.Command, state *PrereqState) error {
 	if err := ensureGCloudSDKInstalled(); err != nil {
 		return err
@@ -102,13 +92,13 @@ func ensureBuildPrerequisites(cmd *cobra.Command, projectID string, location str
 		return nil
 	}
 
-	dest, err := resolveBuildTargetRegistry(projectID, location)
+	dest, err := imagebuilder.ResolveDestinationRepo(projectID, location, baseImage, os.Getenv("GCLUSTER_IMAGE_REPO"))
 	if err != nil {
 		return err
 	}
 
 	if !dest.IsGAR {
-		if err := imagebuilder.InspectTargetRegistry(dest.RegistryHost); err != nil {
+		if err := (&imagebuilder.RegistryInspector{}).InspectTargetRegistry(dest.RegistryHost); err != nil {
 			return err
 		}
 		logging.Info("Prerequisites checked successfully.")
@@ -123,20 +113,20 @@ func ensureBuildPrerequisites(cmd *cobra.Command, projectID string, location str
 }
 
 func resetProjectScopedPrereqState(state PrereqState, effectiveProject string) PrereqState {
-	if time.Since(state.LastCheckedTimestamp) > stateFreshness {
-		return PrereqState{}
+	if !isStateStale(state, effectiveProject) {
+		return state
 	}
-	if state.LastCheckedProjectID != effectiveProject {
-		return PrereqState{
-			GCloudSDKInstalled:           state.GCloudSDKInstalled,
-			GCloudAuthenticated:          state.GCloudAuthenticated,
-			ADCConfigured:                state.ADCConfigured,
-			KubectlInstalled:             state.KubectlInstalled,
-			GKEGCloudAuthPluginInstalled: state.GKEGCloudAuthPluginInstalled,
-			LastCheckedTimestamp:         state.LastCheckedTimestamp,
-		}
+	preserved := PrereqState{
+		GCloudSDKInstalled:           state.GCloudSDKInstalled,
+		KubectlInstalled:             state.KubectlInstalled,
+		GKEGCloudAuthPluginInstalled: state.GKEGCloudAuthPluginInstalled,
 	}
-	return state
+	if time.Since(state.LastCheckedTimestamp) <= stateFreshness {
+		preserved.GCloudAuthenticated = state.GCloudAuthenticated
+		preserved.ADCConfigured = state.ADCConfigured
+		preserved.LastCheckedTimestamp = state.LastCheckedTimestamp
+	}
+	return preserved
 }
 
 func ensureGARBuildPrerequisites(cmd *cobra.Command, effectiveProject, registry string) error {

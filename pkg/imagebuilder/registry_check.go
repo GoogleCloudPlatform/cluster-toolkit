@@ -37,11 +37,6 @@ type RegistryInspector struct {
 	Keychain  authn.Keychain
 }
 
-// InspectTargetRegistry verifies that registryAuthority responds to a bounded 2s GET /v2/ ping and has Docker keychain credentials when required.
-func InspectTargetRegistry(registryAuthority string) error {
-	return (&RegistryInspector{}).InspectTargetRegistry(registryAuthority)
-}
-
 // InspectTargetRegistry verifies that a non-GAR OCI registry responds to a 2s GET /v2/ ping and has credentials when required.
 func (r *RegistryInspector) InspectTargetRegistry(registryAuthority string) error {
 	authority, err := NormalizeRegistryHost(registryAuthority)
@@ -115,7 +110,7 @@ func (r *RegistryInspector) verifyRegistryCredentials(authority string, allowIns
 		return fmt.Errorf("failed to obtain Docker credentials for %q: %w", authority, err)
 	}
 	if cfg == nil || *cfg == (authn.AuthConfig{}) {
-		return fmt.Errorf("container registry %q requires authentication (HTTP 401 on /v2/) and no credentials were found in Docker config; run 'docker login %s' first", authority, authority)
+		return fmt.Errorf("container registry %q requires authentication (HTTP 401 on /v2/) and no credentials were found in Docker config; run 'docker login %s' or 'crane auth login %s' first", authority, authority, authority)
 	}
 	return nil
 }
