@@ -53,6 +53,11 @@ class _FakeRepo(unittest.TestCase):
         _write(os.path.join(self.root, "examples", "sub", "README.md"), "# sub\n")
         _write(os.path.join(self.root, "examples", ".DS_Store"), "junk")
         _write(os.path.join(self.root, "community", "examples", "c.yaml"), "blueprint_name: c\n")
+        self.script = os.path.join(self.root, "examples", "sub", "build.sh")
+        _write(self.script, "#!/bin/bash\n")
+        os.chmod(self.script, 0o755)
+        _write(os.path.join(self.root, "pkg", "config", "config.go"),
+               'latestToolkitVersion = "v1.107.0"\n')
         self.binary = os.path.join(self._tmp.name, "gcluster")
         _write(self.binary, b"\x7fELF fake gcluster binary")
 
@@ -103,10 +108,9 @@ class TestGoVersion(_FakeRepo):
         self.assertEqual(bw.go_version(self.root), "1.26")
 
     def test_reads_toolkit_version(self):
-        self.assertIsNone(bw.toolkit_version(self.root))
-        _write(os.path.join(self.root, "pkg", "config", "config.go"),
-               'const (\n\tlatestToolkitVersion     = "v1.107.0"\n)\n')
         self.assertEqual(bw.toolkit_version(self.root), "1.107.0")
+        os.remove(os.path.join(self.root, "pkg", "config", "config.go"))
+        self.assertIsNone(bw.toolkit_version(self.root))
 
 
 class TestBuildWheel(_FakeRepo):
@@ -133,6 +137,25 @@ class TestBuildWheel(_FakeRepo):
     def test_entries_are_marked_unix(self):
         with zipfile.ZipFile(self.build()) as z:
             self.assertEqual({i.create_system for i in z.infolist()}, {3})
+
+    def test_executable_examples_keep_exec_bit(self):
+        share = f"{WHEEL_NAME}-1.107.0.data/data/share/cluster-toolkit/examples"
+        with zipfile.ZipFile(self.build()) as z:
+            mode = lambda n: (z.getinfo(f"{share}/{n}").external_attr >> 16) & 0o777
+            self.assertEqual(mode("sub/build.sh"), 0o755)
+            self.assertEqual(mode("hpc-slurm.yaml"), 0o644)
+
+    def test_only_git_tracked_examples_in_a_git_checkout(self):
+        git = lambda *a: subprocess.run(["git", "-C", self.root, *a], check=True,
+                                        capture_output=True)
+        try:
+            git("init", "-q")
+        except (OSError, subprocess.CalledProcessError):
+            self.skipTest("git not available")
+        git("add", "examples/hpc-slurm.yaml")
+        with zipfile.ZipFile(self.build()) as z:
+            names = [n for n in z.namelist() if "/share/cluster-toolkit/" in n]
+        self.assertEqual([n.rsplit("/", 1)[1] for n in names], ["hpc-slurm.yaml"])
 
     def test_windows_binary_is_exe(self):
         with zipfile.ZipFile(self.build("windows_amd64")) as z:
@@ -193,6 +216,10 @@ class TestMain(_FakeRepo):
         self.assertEqual(rc, 0)
         self.assertEqual(len(os.listdir(self.out)), 3)
         self.assertTrue(any("macosx_12_0_x86_64" in f for f in os.listdir(self.out)))
+
+    def test_unreadable_version_is_an_error(self):
+        os.remove(os.path.join(self.root, "pkg", "config", "config.go"))
+        self.assertEqual(self.run_main(f"linux_amd64={self.binary}"), 1)
 
     def test_version_must_match_gcluster_version(self):
         _write(os.path.join(self.root, "pkg", "config", "config.go"),
