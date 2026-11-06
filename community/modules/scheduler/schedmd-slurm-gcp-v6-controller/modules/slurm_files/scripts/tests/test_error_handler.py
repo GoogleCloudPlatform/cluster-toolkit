@@ -23,10 +23,34 @@ class TestErrorHandler:
         ("RESOURCE_EXHAUSTED", "Resource exhausted", Action.REQUEUE),
         ("RATE_LIMIT_EXCEEDED", "rateLimitExceeded", Action.REQUEUE),
         
-        # Message fallback match -> REQUEUE
+        # Message fallback match -> REQUEUE (including HTTP 503 stockout message text)
         ("random_code", "we do not have sufficient capacity for this instance type", Action.REQUEUE),
+        (
+            "The zone 'projects/p/zones/us-central1-a' does not have enough resources available to fulfill the request.",
+            "The zone 'projects/p/zones/us-central1-a' does not have enough resources available to fulfill the request.",
+            Action.REQUEUE,
+        ),
+        ("zoneResourcePoolExhausted: stockout", "does not have enough resources available", Action.REQUEUE),
 
-        # Non-capacity errors -> IGNORE
+        # Transient backend / internal errors -> REQUEUE (including '+'-joined multi-error LROs)
+        ("INTERNAL_ERROR", "Internal error. Please try again or contact Google Support.", Action.REQUEUE),
+        ("Internal Server Error", "HTTP 500 failure", Action.REQUEUE),
+        ("Backend Error", "backendError: Backend Error", Action.REQUEUE),
+        ("backendError: Transient RPC failure", "Transient RPC failure", Action.REQUEUE),
+        ("backendError+internalError: Service error", "Transient RPC failure", Action.REQUEUE),
+        ("SERVICE_UNAVAILABLE", "The service is currently unavailable.", Action.REQUEUE),
+        ("UNAVAILABLE", "Transient RPC unavailable.", Action.REQUEUE),
+        ("UNAVAILABLE+UNAVAILABLE", "Transient RPC unavailable.", Action.REQUEUE),
+        ("BACKEND_ERROR+INTERNAL_ERROR", "Transient backend fault.", Action.REQUEUE),
+
+        # Transient local ephemeral port exhaustion -> REQUEUE (never mark nodes DOWN)
+        ("OSError", "[Errno 99] Cannot assign requested address", Action.REQUEUE),
+        ("EADDRNOTAVAIL", "TransportError: Cannot assign requested address", Action.REQUEUE),
+
+        # Non-capacity errors -> IGNORE (including permanent *_UNAVAILABLE codes & mixed permanent+transient LROs)
+        ("RESOURCE_UNAVAILABLE", "The requested resource is permanently unavailable", Action.IGNORE),
+        ("INVALID_FIELD_VALUE+UNAVAILABLE", "Invalid field value", Action.IGNORE),
+        ("invalidParameter+backendError: Bad request", "Invalid field value", Action.IGNORE),
         ("invalidParameter", "Invalid value for field 'resource.networkInterfaces[0].network'", Action.IGNORE),
         ("notFound", "The resource 'projects/.../machineTypes/a3-highgpu-8g' was not found", Action.IGNORE),
         ("permissionDenied", "Required 'compute.instances.create' permission for 'projects/abc'", Action.IGNORE),

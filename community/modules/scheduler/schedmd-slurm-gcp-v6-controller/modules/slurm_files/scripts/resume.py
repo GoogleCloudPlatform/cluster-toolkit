@@ -54,7 +54,7 @@ PLACEMENT_MAX_CNT = 1500
 # Placement group needs to be the same for an entire bulk_insert hence
 # if placement is used the actual BULK_INSERT_LIMIT will be
 # max([1000, PLACEMENT_MAX_CNT])
-BULK_INSERT_LIMIT = 5000
+BULK_INSERT_LIMIT = 1000
 
 # https://cloud.google.com/compute/docs/instance-groups#types_of_managed_instance_groups
 ZONAL_MIG_SIZE_LIMIT = 1000
@@ -167,7 +167,8 @@ def dws_flex_duration(dws_flex: NSDict, job_id: Optional[int]) -> int:
 
 def create_instances_request(nodes: List[str], placement_group: Optional[str], excl_job_id: Optional[int], is_job_request: bool):
     """Call regionInstances.bulkInsert to create instances"""
-    assert 0 < len(nodes) <= BULK_INSERT_LIMIT
+    max_batch = max(BULK_INSERT_LIMIT, PLACEMENT_MAX_CNT) if placement_group else BULK_INSERT_LIMIT
+    assert 0 < len(nodes) <= max_batch
 
     # model here indicates any node that can be used to describe the rest
     model = next(iter(nodes))
@@ -207,9 +208,21 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
         method_args = {"region": lookup().node_region(model)}
 
         # The 'zones' parameter acts as an allow-list, implicitly denying any zones not included.
+        # Compact placement policies are single-zone in GCE and fail HTTP 400 with targetShape=ANY/BALANCED.
+        inst_props = (
+            nodeset.get("instance_properties")
+            if isinstance(nodeset, dict)
+            else getattr(nodeset, "instance_properties", None)
+        )
+        user_policies = (inst_props or {}).get("resourcePolicies")
+        has_compact_policy = bool(
+            placement_group
+            or (body["instanceProperties"].get("resourcePolicies") and not user_policies)
+        )
+        target_shape = "ANY_SINGLE_ZONE" if has_compact_policy else nodeset.zone_target_shape
         body["locationPolicy"] = dict(
             zones = [ { "zone": f"zones/{z}" } for z in zone_allow ],
-            targetShape = nodeset.zone_target_shape,
+            targetShape = target_shape,
         )
     
     req = api_method(
@@ -243,6 +256,59 @@ class BulkChunk:
         return f"{self.prefix}:{self.chunk_idx}"
     
 
+def _requires_exclusive_job_group(
+    job: ResumeJobData, job_nodes_in_resume: set[str], lkp: util.Lookup
+) -> bool:
+    """Return True if a job must be provisioned in its own per-job BulkChunk.
+
+    Multi-node jobs (>1 node) require per-job grouping for atomic minCount=count
+    fulfillment and job-scoped placement policies. Single-node jobs on standard
+    non-exclusive BulkInsert nodesets can safely coalesce into groups[None]
+    (minCount=1), turning thousands of singleton bulkInsert(count=1) calls for
+    job arrays into a few batched bulkInsert calls while handle_resume_failure
+    still maps any failed nodes back to their individual jobs via resume_data.
+    """
+    if len(job.nodes_alloc) > 1:
+        return True
+    part = (lkp.cfg.partitions or {}).get(job.partition)
+    if part:
+        excl = (
+            part.get("enable_job_exclusive", False)
+            if isinstance(part, dict)
+            else getattr(part, "enable_job_exclusive", False)
+        )
+        if excl:
+            return True
+    model = next(iter(job_nodes_in_resume))
+    if (
+        lkp.is_tpu_node(model)
+        or lkp.is_flex_node(model)
+        or lkp.is_node_mig(model)
+    ):
+        return True
+    ns = lkp.node_nodeset(model)
+    if ns:
+        topo = (
+            ns.get("accelerator_topology")
+            if isinstance(ns, dict)
+            else getattr(ns, "accelerator_topology", None)
+        )
+        if topo:
+            return True
+        dws_flex = (
+            ns.get("dws_flex")
+            if isinstance(ns, dict)
+            else getattr(ns, "dws_flex", None)
+        )
+        if dws_flex:
+            enabled = dws_flex.get("enabled", False) if isinstance(dws_flex, dict) else getattr(dws_flex, "enabled", False)
+            use_bi = dws_flex.get("use_bulk_insert", False) if isinstance(dws_flex, dict) else getattr(dws_flex, "use_bulk_insert", False)
+            use_dur = dws_flex.get("use_job_duration", False) if isinstance(dws_flex, dict) else getattr(dws_flex, "use_job_duration", False)
+            if enabled and use_bi and use_dur:
+                return True
+    return False
+
+
 def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: util.Lookup):
     """group nodes by nodeset, placement_group, exclusive_job_id if any"""
     if resume_data is None: # all nodes will be considered jobless
@@ -250,6 +316,7 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
         
     nodes_set = set(nodes) # turn into set to simplify intersection
     non_excl = nodes_set.copy()
+    coalesced_single_nodes: set[str] = set()
     groups : Dict[Optional[int], List[PlacementAndNodes]] = {} # excl_job_id|none -> PlacementAndNodes
 
     # expand all job nodelists (both exclusive and non-exclusive)
@@ -259,6 +326,13 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
         # in the new bulkInsert, causing duplicate provisioning and blocking minCount atomic requests.
         job_nodes_in_resume = set(job.nodes_alloc) & non_excl
         if not job_nodes_in_resume:
+            continue
+        if not _requires_exclusive_job_group(job, job_nodes_in_resume, lkp):
+            # Keep coalesced 1-node jobs out of create_placements(..., excl_job_id=None)
+            # so enable_placement=True nodesets do not bind unrelated single-node jobs
+            # into a shared 150-VM COLLOCATED placement policy.
+            coalesced_single_nodes.update(job_nodes_in_resume)
+            non_excl.difference_update(job_nodes_in_resume)
             continue
 
         groups[job.job_id] = []
@@ -272,9 +346,21 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
                 ))
         non_excl.difference_update(job_nodes_in_resume)
 
-    groups[None] = create_placements(sorted(non_excl), excl_job_id=None, lkp=lkp)
+    jobless_placements = create_placements(sorted(non_excl), excl_job_id=None, lkp=lkp)
+    if coalesced_single_nodes:
+        coalesced_by_ns = collections.defaultdict(list)
+        for node in sorted(coalesced_single_nodes):
+            coalesced_by_ns[lkp.node_nodeset_name(node)].append(node)
+        for pn in jobless_placements:
+            if pn.placement is None and pn.nodes:
+                ns_name = lkp.node_nodeset_name(pn.nodes[0])
+                if ns_name in coalesced_by_ns:
+                    pn.nodes = sorted(set(pn.nodes) | set(coalesced_by_ns.pop(ns_name)))
+        for ns_nodes in coalesced_by_ns.values():
+            jobless_placements.append(PlacementAndNodes(placement=None, nodes=ns_nodes))
+    groups[None] = jobless_placements
 
-    def chunk_nodes(nodes: List[str]):
+    def chunk_nodes(nodes: List[str], placement: Optional[str] = None):
         if not nodes:
             return []
         
@@ -293,7 +379,7 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
             # batching internally. Keep in a single chunk to preserve atomic multi-shard rollback.
             return [nodes]
         else:
-            chunk_size = BULK_INSERT_LIMIT
+            chunk_size = max(BULK_INSERT_LIMIT, PLACEMENT_MAX_CNT) if placement else BULK_INSERT_LIMIT
 
         return chunked(nodes, n=chunk_size)
     
@@ -308,7 +394,7 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
 
         for job_id, placements in groups.items()
         for pn in placements if pn.nodes
-        for i, nodes_chunk in enumerate(chunk_nodes(pn.nodes))
+        for i, nodes_chunk in enumerate(chunk_nodes(pn.nodes, pn.placement))
     ]
     return {chunk.name: chunk for chunk in chunks}
 
@@ -635,6 +721,13 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             err_details = getattr(exc, "error_details", None)
             if err_details:
                 if isinstance(err_details, list):
+                    reasons = [
+                        str(err["reason"])
+                        for err in err_details
+                        if isinstance(err, dict) and err.get("reason")
+                    ]
+                    if reasons:
+                        reason = f"{'+'.join(reasons)}: {reason}"
                     details = "; ".join(
                         err.get("message", str(err)) if isinstance(err, dict) else str(err)
                         for err in err_details
@@ -653,29 +746,53 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             log.debug(
                 f"new bulkInsert operation started: group={group} nodes={group_nodes} name={name} operationGroupId={gid}"
             )
-    # wait for all bulkInserts to complete and log any errors
-    bulk_operations = {group: wait_for_operation(op) for group, op in started.items()}
+    # wait for all bulkInserts to complete in parallel and log any errors
+    bulk_operations = (
+        dict(zip(started.keys(), map_with_futures(wait_for_operation, started.values())))
+        if started
+        else {}
+    )
 
     for group, op in bulk_operations.items():
-        _handle_bulk_insert_op(op, grouped_nodes[group].nodes, resume_data)
-        
+        if isinstance(op, Exception):
+            log.error(f"Failed waiting on bulkInsert operation for {group}: {op}")
+            _, admin_comment = error_handler.classify_gcp_error(str(op), str(op))
+            handle_resume_failure(
+                grouped_nodes[group].nodes,
+                f"GCP Operation Poll Error: {op}",
+                resume_data,
+                error_handler.Action.REQUEUE,
+                admin_comment,
+            )
+            continue
+        try:
+            _handle_bulk_insert_op(op, grouped_nodes[group].nodes, resume_data)
+        except Exception:
+            log.exception(f"Unexpected error handling bulkInsert operation for {group}")
+
 
 def _get_failed_zonal_instance_inserts(bulk_op: Any, zone: str, lkp: util.Lookup) -> list[Any]:
-    group_id = bulk_op["operationGroupId"]
-    user = bulk_op["user"]
-    started = bulk_op["startTime"]
-    ended = bulk_op["endTime"]
-   
-    fltr = f'(user eq "{user}") AND (operationType eq "insert") AND (creationTimestamp > "{started}") AND (creationTimestamp < "{ended}")'
+    group_id = bulk_op.get("operationGroupId")
+    if not group_id:
+        return []
+    # GCE list filters forbid mixing legacy regex `eq` with AIP-160 `>=`/`<=` comparisons
+    # (which raises HTTP 400 Invalid list filter expression). Filter directly on the
+    # bulkInsert's operationGroupId using pure AIP-160 `=` operators.
+    fltr = f'(operationGroupId = "{group_id}") AND (operationType = "insert")'
     act = lkp.compute.zoneOperations()
-    req = act.list(project=lkp.project, zone=zone, filter=fltr)
     ops = []
-    while req is not None:
-        result = util.ensure_execute(req)
-        for op in result.get("items", []):
-            if op.get("operationGroupId") == group_id and "error" in op:
-                ops.append(op)
-        req = act.list_next(req, result)
+    try:
+        req = act.list(project=lkp.project, zone=zone, filter=fltr)
+        while req is not None:
+            result = util.ensure_execute(req)
+            for op in result.get("items", []):
+                if op.get("operationGroupId") == group_id and "error" in op:
+                    ops.append(op)
+            req = act.list_next(req, result)
+    except Exception:
+        log.exception(
+            f"Failed listing zonal insert operations in {zone} for operationGroupId={group_id}"
+        )
     return ops
 
 
@@ -700,15 +817,16 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
     """
     assert op["operationType"] == "bulkInsert" and op["status"] == "DONE", f"unexpected op: {op}"
 
-    group_id = op["operationGroupId"]
+    group_id = op.get("operationGroupId", "unknown")
     if "error" in op:
-        error = op["error"]["errors"][0]
+        errs = op["error"].get("errors") or [{"code": "UNKNOWN"}]
         log.error(
-            f"bulkInsert operation error: {error['code']} name={op['name']} operationGroupId={group_id} nodes={to_hostlist(nodes)}"
+            f"bulkInsert operation error: {errs[0].get('code', 'UNKNOWN')} name={op['name']} operationGroupId={group_id} nodes={to_hostlist(nodes)}"
         )
     
     created = 0
-    for status in op["instancesBulkInsertOperationMetadata"]["perLocationStatus"].values():
+    per_loc = op.get("instancesBulkInsertOperationMetadata", {}).get("perLocationStatus", {})
+    for status in per_loc.values():
         created += status.get("createdVmCount", 0)
     if created == len(nodes):
         log.info(f"created {len(nodes)} instances: nodes={to_hostlist(nodes)}")
@@ -717,6 +835,7 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
     # TODO: don't gather insert-operations per bulkInsert request, instead aggregate it
     #  across all bulkInserts (goes one level above this function) 
     failed = _get_failed_instance_inserts(op, util.lookup())
+    accounted_nodes: set[str] = set()
     
     # Multiple errors are possible, group by all of them (joined string codes)
     by_error_inserts = util.groupby_unsorted(
@@ -726,6 +845,7 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
     for code, failed_ops in by_error_inserts:
         failed_ops = list(failed_ops)
         failed_nodes = [trim_self_link(op["targetLink"]) for op in failed_ops]
+        accounted_nodes.update(failed_nodes)
         hostlist = util.to_hostlist(failed_nodes)
         log.error(
             f"{len(failed_nodes)} instances failed to start: {code} ({hostlist}) operationGroupId={group_id}"
@@ -741,6 +861,20 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
         log.error(
             f"errors from insert for node '{failed_nodes[0]}' ({failed_ops[0]['name']}): {msg}"
         )
+
+    # When created == 0 (e.g. VM_MIN_COUNT_NOT_REACHED atomic chunk rollback or regional
+    # bulkInsert failure with 0 child zonal insert ops), zero VMs exist in GCE; clear any
+    # remaining nodes so rolled-back/uncreated nodes never stay stranded in POWERING_UP (#).
+    if "error" in op and created == 0:
+        unaccounted = [n for n in nodes if n not in accounted_nodes]
+        if unaccounted:
+            errs = op["error"].get("errors") or [{"code": "UNKNOWN", "message": str(op["error"])}]
+            code = "+".join(err.get("code", "UNKNOWN") for err in errs)
+            msg = "; ".join(
+                f"{err.get('code', 'UNKNOWN')}: {err.get('message', 'no message')}" for err in errs
+            )
+            action, admin_comment = error_handler.classify_gcp_error(code, msg)
+            handle_resume_failure(unaccounted, f"GCP Error: {msg}", resume_data, action, admin_comment)
 
 
 def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[ResumeData]) -> None:
@@ -796,6 +930,7 @@ def handle_resume_failure(nodes: List[str], reason: str, resume_data: Optional[R
                 return str(val.get("number", "0"))
             return str(val) if val else "0"
 
+        target_job_ids = {str(job.job_id) for job in jobs_to_requeue}
         pending_jobs = set()
         parent_job_ids = {}
         
@@ -805,11 +940,13 @@ def handle_resume_failure(nodes: List[str], reason: str, resume_data: Optional[R
             if not remaining_ids:
                 break
 
+            squeue_bin = Path(lookup().scontrol).with_name("squeue")
             for ids_chunk in util.chunked(remaining_ids, 1000):
                 try:
-                    res = run(f"{lookup().scontrol} show job {','.join(ids_chunk)} --json", check=False)
+                    # Slurm 26.05 scontrol show job rejects comma-separated job IDs; squeue -j accepts them natively.
+                    res = run(f"{squeue_bin} -j {','.join(ids_chunk)} --json", check=False)
                     if not (res and res.stdout): 
-                        raise RuntimeError(f"scontrol show job returned empty output. (code={getattr(res, 'returncode', 'None')}, stderr={getattr(res, 'stderr', 'None')})")
+                        raise RuntimeError(f"squeue -j returned empty output. (code={getattr(res, 'returncode', 'None')}, stderr={getattr(res, 'stderr', 'None')})")
                         
                     data = json.loads(res.stdout)
                     for job_dict in data.get("jobs", []):
@@ -817,6 +954,8 @@ def handle_resume_failure(nodes: List[str], reason: str, resume_data: Optional[R
                         # Unlike sbatch, interactive srun jobs fail immediately and won't be in PENDING state
                         if "PENDING" in state:
                             job_id = extract_json_id(job_dict.get("job_id"))
+                            if job_id not in target_job_ids:
+                                continue
                             pending_jobs.add(job_id)
                             parent_id = job_id
                             arr_id = extract_json_id(job_dict.get("array_job_id"))
@@ -830,7 +969,7 @@ def handle_resume_failure(nodes: List[str], reason: str, resume_data: Optional[R
                 except Exception as e:
                     log.debug(f"Failed to query job states: {e}")
 
-            if len(pending_jobs) == len(jobs_to_requeue):
+            if len(pending_jobs) == len(target_job_ids):
                 break
             time.sleep(1)
 
@@ -843,7 +982,9 @@ def handle_resume_failure(nodes: List[str], reason: str, resume_data: Optional[R
             if job_id not in pending_jobs:
                 continue
 
-            # Use parent job ID (array/het) as seed value so grouped jobs generate identical random backoffs
+            # Use parent job ID (if array/het) as seed so all tasks of the same array
+            # share identical StartTime batching and wake together in one bulkInsert wave
+            # instead of triggering per-task individual GCE API calls.
             seed_val = parent_job_ids.get(job_id, job_id)
             random_generator = random.Random(seed_val)
 
