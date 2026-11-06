@@ -45,7 +45,7 @@ const (
 // spsInstanceRef turns a JobSet name or endpoint into the instance name and the endpoint the proxy connects to.
 func spsInstanceRef(ref string) (name, endpoint string) {
 	ref = strings.TrimPrefix(strings.TrimSpace(ref), "grpc://")
-	if i := strings.Index(ref, "-pathways-head"); i > 0 {
+	if i := strings.Index(ref, "-pathways-head-0-0"); i > 0 {
 		endpoint = ref
 		if !strings.Contains(ref, ":") {
 			endpoint += ":29001"
@@ -102,32 +102,12 @@ func parseSPSClientTargetHead(name string, pod *spsPodSpecView, inst *spsInstanc
 			if inst.ServerImage == "" {
 				inst.ServerImage = c.Image
 			}
-			parseSPSClientTargetRMArgs(c.Args, inst)
+			inst.InstanceType, inst.InstanceCount, inst.GCSLocation = parsePathwaysRMArgs(c.Args)
 		case c.Name == "pathways-proxy" || strings.HasPrefix(c.Name, "workload-container") || c.Name == "user-workload":
 			return fmt.Errorf("JobSet %q is not an SPS instance: its pathways-head runs %s, so it is a regular or headless Pathways job", name, c.Name)
 		}
 	}
 	return nil
-}
-
-func parseSPSClientTargetRMArgs(args []string, inst *spsInstance) {
-	for i := 0; i < len(args); i++ {
-		key, value, ok := strings.Cut(args[i], "=")
-		if !ok && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-			value = args[i+1]
-			i++
-		} else if !ok {
-			continue
-		}
-		switch strings.TrimLeft(key, "-") {
-		case "gcs_scratch_location":
-			inst.GCSLocation = value
-		case "instance_type":
-			inst.InstanceType = value
-		case "instance_count":
-			inst.InstanceCount, _ = strconv.Atoi(value)
-		}
-	}
 }
 
 func parseSPSClientTargetWorker(pod *spsPodSpecView, replicas int, inst *spsInstance) bool {
@@ -150,11 +130,10 @@ func parseSPSClientTargetWorker(pod *spsPodSpecView, replicas int, inst *spsInst
 }
 
 func spsVirtualSlices(instanceType string, n int) string {
-	parts := make([]string, n)
-	for i := range parts {
-		parts[i] = instanceType
+	if n <= 0 {
+		return ""
 	}
-	return strings.Join(parts, ",")
+	return strings.Join(slices.Repeat([]string{instanceType}, n), ",")
 }
 
 func (g *GKEOrchestrator) readSPSInstance(ref, ns string) (spsInstance, error) {
@@ -261,7 +240,7 @@ func resolveSPSClientPathways(p orchestrator.PathwaysJobDefinition, inst spsInst
 func (g *GKEOrchestrator) buildSPSClientManifestOptions(job orchestrator.JobDefinition, p orchestrator.PathwaysJobDefinition, fullImageName string) (ManifestOptions, error) {
 	job.IsPathwaysJob = true
 	job.Pathways = p
-	pullSecrets, err := g.resolveImagePullSecrets(job, fullImageName)
+	pullSecrets, err := g.resolveImagePullSecrets(job, fullImageName, "")
 	if err != nil {
 		return ManifestOptions{}, err
 	}
@@ -290,7 +269,6 @@ func (g *GKEOrchestrator) buildSPSClientManifestOptions(job orchestrator.JobDefi
 		ServiceAccountName:            job.ServiceAccountName,
 		ImagePullSecrets:              indentYaml(g.generateImagePullSecrets(pullSecrets), 16),
 		PodFailurePolicy:              indentYaml(pfpStr, 12),
-		Verbose:                       job.Verbose,
 		MLDiagnosticsEnabled:          job.MLDiagnosticsEnabled,
 		IsPathwaysJob:                 true,
 		Pathways:                      p,
@@ -397,7 +375,7 @@ func (g *GKEOrchestrator) runSPSWorkloadLocally(job orchestrator.JobDefinition, 
 	if err != nil {
 		return err
 	}
-	port, stop, err := g.startPortForward(pod, ns)
+	port, stop, err := g.startPortForward(pod, ns, sigCh)
 	if err != nil {
 		return err
 	}
@@ -454,7 +432,7 @@ func (g *GKEOrchestrator) readySPSProxyPod(ns, selector string) (string, error) 
 
 var portForwardRe = regexp.MustCompile(`(?:127\.0\.0\.1|\[::1\]):(\d+)`)
 
-func (g *GKEOrchestrator) startPortForward(pod, ns string) (int, func(), error) {
+func (g *GKEOrchestrator) startPortForward(pod, ns string, sigCh <-chan os.Signal) (int, func(), error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	args := withKubeContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf(":%d", spsProxyPort)})
 	cmd := exec.CommandContext(ctx, "kubectl", args...)
@@ -486,6 +464,11 @@ func (g *GKEOrchestrator) startPortForward(pod, ns string) (int, func(), error) 
 		restartArgs := withKubeContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf("%d:%d", port, spsProxyPort)})
 		go keepPortForwardAlive(ctx, cmd, pipeDone, restartArgs, done)
 		return port, func() { cancel(); <-done }, nil
+	case <-sigCh:
+		cancel()
+		<-pipeDone
+		_ = cmd.Wait()
+		return 0, nil, fmt.Errorf("interrupted while starting port-forward to %s", pod)
 	case <-time.After(30 * time.Second):
 		cancel()
 		<-pipeDone
@@ -524,6 +507,9 @@ func keepPortForwardAlive(ctx context.Context, cmd *exec.Cmd, pipeDone <-chan st
 		}
 		cmd = exec.CommandContext(ctx, "kubectl", args...)
 		if err := cmd.Start(); err != nil {
+			if ctx.Err() == nil {
+				logging.Warn("failed to restart kubectl port-forward: %v", err)
+			}
 			return
 		}
 	}
@@ -560,7 +546,7 @@ func runLocalCommand(command string, port int, env map[string]string, sigCh <-ch
 
 func (g *GKEOrchestrator) deleteSPSClient(name, ns string) {
 	logging.Info("Deleting SPS client %s...", name)
-	if res := g.kubectl("delete", "jobset", name, "-n", ns, "--ignore-not-found", "--wait=false"); res.ExitCode != 0 {
+	if res := g.kubectl("delete", "jobset", name, "-n", ns, "--ignore-not-found", "--wait=false", kubectlReadTimeout); res.ExitCode != 0 {
 		logging.Warn("failed to delete SPS client %s: %s", name, strings.TrimSpace(res.Stderr))
 	}
 }

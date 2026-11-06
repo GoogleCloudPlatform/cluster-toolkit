@@ -296,6 +296,9 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 			TtlSecondsAfterFinished: 3600,
 			CommandToRun:            "python3 train.py",
 			RawMounts:               []string{"gs://my-bucket;/mnt/data;rw"},
+			ImagePullSecrets:        "my-reg-secret",
+			RestartOnExitCodes:      []int{42, 43},
+			MLDiagnosticsEnabled:    true,
 			Pathways: orchestrator.PathwaysJobDefinition{
 				RunSPSWorkload: "sps-j6080103",
 			},
@@ -310,6 +313,9 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 				"mountPath: /mnt/data",
 				"driver: gcsfuse.csi.storage.gke.io",
 				"bucketName: my-bucket",
+				"name: my-reg-secret",
+				"podFailurePolicy:",
+				`managed-mldiagnostics-gke: "true"`,
 			},
 			nil,
 		)
@@ -349,22 +355,30 @@ func TestReadForwardedPort(t *testing.T) {
 }
 
 func TestReadSPSInstance_RejectsNonRunningHeadPod(t *testing.T) {
-	orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
-		"kubectl get jobset": {{ExitCode: 0, Stdout: testSPSJobSetJSON}},
-		"kubectl get pods":   {{ExitCode: 0, Stdout: "Pending"}},
-	}))
-	_, err := orc.readSPSInstance("sps-j6080103", "default")
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get jobset sps-j6080103 -n custom-ns -o json --request-timeout=10s": {{ExitCode: 0, Stdout: testSPSJobSetJSON}},
+		"kubectl get pods -n custom-ns -l jobset.sigs.k8s.io/jobset-name=sps-j6080103,jobset.sigs.k8s.io/replicatedjob-name=pathways-head -o jsonpath={.items[*].status.phase} --request-timeout=10s": {
+			{ExitCode: 0, Stdout: "Pending"},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	_, err := orc.readSPSInstance("sps-j6080103", "custom-ns")
 	if err == nil || !strings.Contains(err.Error(), `SPS instance "sps-j6080103" has no running pathways-head pod`) {
 		t.Errorf("got err = %v, want no running pathways-head pod error", err)
+	}
+	if len(mockExec.calls) != 2 {
+		t.Errorf("kubectl calls = %d, want 2", len(mockExec.calls))
 	}
 }
 
 func TestRunSPSWorkload_Validation(t *testing.T) {
 	baseResponses := func() map[string][]shell.CommandResult {
 		return map[string][]shell.CommandResult{
-			"gcloud container clusters get-credentials": {{ExitCode: 0}},
-			"kubectl get jobset":                        {{ExitCode: 0, Stdout: testSPSJobSetJSON}},
-			"kubectl get pods":                          {{ExitCode: 0, Stdout: "Running"}},
+			"gcloud container clusters get-credentials":                                {{ExitCode: 0}},
+			"kubectl get jobset sps-j6080103 -n default -o json --request-timeout=10s": {{ExitCode: 0, Stdout: testSPSJobSetJSON}},
+			"kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=sps-j6080103,jobset.sigs.k8s.io/replicatedjob-name=pathways-head -o jsonpath={.items[*].status.phase} --request-timeout=10s": {
+				{ExitCode: 0, Stdout: "Running"},
+			},
 		}
 	}
 
@@ -402,13 +416,15 @@ func TestRunSPSWorkload_Validation(t *testing.T) {
 }
 
 func TestReadySPSProxyPod(t *testing.T) {
+	const listCmd = `kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=sps-client -o jsonpath={range .items[*]}{.metadata.name}{" "}{.status.phase}{"\n"}{end} --request-timeout=10s`
+
 	t.Run("returns empty until Running pod logs IFRT proxy server started", func(t *testing.T) {
 		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
-			"kubectl get pods": {
+			listCmd: {
 				{ExitCode: 0, Stdout: "proxy-pod-0 Running\n"},
 				{ExitCode: 0, Stdout: "proxy-pod-0 Running\n"},
 			},
-			"kubectl logs": {
+			"kubectl logs -n default proxy-pod-0 -c pathways-proxy --request-timeout=10s": {
 				{ExitCode: 0, Stdout: "starting up...\n"},
 				{ExitCode: 0, Stdout: "I1105 IFRT proxy server started on 29000\n"},
 			},
@@ -425,14 +441,99 @@ func TestReadySPSProxyPod(t *testing.T) {
 
 	t.Run("fails fast when proxy pod enters Failed", func(t *testing.T) {
 		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
-			"kubectl get pods": {{ExitCode: 0, Stdout: "proxy-pod-0 Failed\n"}},
-			"kubectl logs":     {{ExitCode: 0, Stderr: "F1105 invalid flag --bad_arg\n"}},
+			listCmd: {{ExitCode: 0, Stdout: "proxy-pod-0 Failed\n"}},
+			"kubectl logs -n default proxy-pod-0 -c pathways-proxy --tail=50 --request-timeout=10s": {
+				{ExitCode: 0, Stderr: "F1105 invalid flag --bad_arg\n"},
+			},
 		}))
 		_, err := orc.readySPSProxyPod("default", "jobset.sigs.k8s.io/jobset-name=sps-client")
 		if err == nil || !strings.Contains(err.Error(), "SPS proxy pod proxy-pod-0 exited (Failed)") || !strings.Contains(err.Error(), "invalid flag --bad_arg") {
 			t.Errorf("got err = %v, want Failed proxy pod error with logs", err)
 		}
 	})
+}
+
+func TestValidateSPSClientManifest(t *testing.T) {
+	const endpoint = "sps-j6080103-pathways-head-0-0.sps-j6080103:29001"
+
+	t.Run("rejects worker replicatedJob from stale custom template", func(t *testing.T) {
+		manifest := `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+spec:
+  replicatedJobs:
+  - name: pathways-head
+    template:
+      spec:
+        template:
+          spec:
+            containers:
+            - name: pathways-proxy
+              args: ["--resource_manager_address=` + endpoint + `"]
+  - name: worker
+    template:
+      spec:
+        template:
+          spec:
+            containers:
+            - name: pathways-worker
+`
+		err := validateSPSClientManifest(manifest, endpoint)
+		if err == nil || !strings.Contains(err.Error(), "has a worker replicatedJob") {
+			t.Fatalf("validateSPSClientManifest() error = %v, want worker replicatedJob error", err)
+		}
+	})
+
+	t.Run("rejects pathways-rm container in pathways-head", func(t *testing.T) {
+		manifest := `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+spec:
+  replicatedJobs:
+  - name: pathways-head
+    template:
+      spec:
+        template:
+          spec:
+            containers:
+            - name: pathways-rm
+            - name: pathways-proxy
+              args: ["--resource_manager_address=` + endpoint + `"]
+`
+		err := validateSPSClientManifest(manifest, endpoint)
+		if err == nil || !strings.Contains(err.Error(), `runs container "pathways-rm"`) {
+			t.Fatalf("validateSPSClientManifest() error = %v, want pathways-rm error", err)
+		}
+	})
+
+	t.Run("rejects pathways-proxy not targeting endpoint", func(t *testing.T) {
+		manifest := `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+spec:
+  replicatedJobs:
+  - name: pathways-head
+    template:
+      spec:
+        template:
+          spec:
+            containers:
+            - name: pathways-proxy
+              args: ["--resource_manager_address=$(PATHWAYS_HEAD):29001"]
+`
+		err := validateSPSClientManifest(manifest, endpoint)
+		if err == nil || !strings.Contains(err.Error(), "does not target") {
+			t.Fatalf("validateSPSClientManifest() error = %v, want endpoint mismatch error", err)
+		}
+	})
+}
+
+func TestDeleteSPSClient_PassesTimeout(t *testing.T) {
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl delete jobset sps-client -n custom-ns --ignore-not-found --wait=false --request-timeout=10s": {{ExitCode: 0}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.deleteSPSClient("sps-client", "custom-ns")
+	if len(mockExec.calls) != 1 {
+		t.Fatalf("deleteSPSClient calls = %d, want 1", len(mockExec.calls))
+	}
 }
 
 func TestResolveSPSClientPathways(t *testing.T) {

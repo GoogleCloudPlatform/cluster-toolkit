@@ -539,7 +539,9 @@ func activeWorkloadImages(job orchestrator.JobDefinition, fullImageName, telemet
 		if pw.Headless || pw.DeploySPS {
 			raw = nil
 		}
-		raw = append(raw, pw.ServerImage, pw.WorkerImage, pw.ColocatedPythonSidecarImage)
+		if pw.RunSPSWorkload == "" {
+			raw = append(raw, pw.ServerImage, pw.WorkerImage, pw.ColocatedPythonSidecarImage)
+		}
 		if !pw.DeploySPS {
 			raw = append(raw, pw.ProxyServerImage)
 		}

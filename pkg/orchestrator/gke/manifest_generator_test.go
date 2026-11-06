@@ -5318,7 +5318,7 @@ func TestCustomTemplateValidation_PathwaysTelemetry(t *testing.T) {
 		{
 			name: "leaked tpu-workload-name onto pathways-head",
 			mutate: func(src string) string {
-				return strings.Replace(src, `kueue.x-k8s.io/safe-to-forcefully-delete: "true"`, "kueue.x-k8s.io/safe-to-forcefully-delete: \"true\"\n            labels:\n              tpu-workload-name: {{.WorkloadName}}", 1)
+				return strings.Replace(src, "gcluster.google.com/workload: {{.WorkloadName}}", "gcluster.google.com/workload: {{.WorkloadName}}\n              tpu-workload-name: {{.WorkloadName}}", 1)
 			},
 			want: "pathways-head",
 		},

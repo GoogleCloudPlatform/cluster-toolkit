@@ -396,6 +396,7 @@ func setupSubmitTestEnv(t *testing.T) {
 	gkeNapProvisioning = ""
 	gkeNapReservation = ""
 	envVars = nil
+	volumeStr = nil
 	pathwaysProxyEnv = nil
 	pathwaysServerEnv = nil
 	pathwaysWorkerEnv = nil
@@ -2076,6 +2077,7 @@ func TestSubmitCmd_RunSPSWorkload_Validation(t *testing.T) {
 
 	t.Run("rejects mount in terminal mode without image", func(t *testing.T) {
 		setupSubmitTestEnv(t)
+		t.Cleanup(func() { volumeStr = nil })
 		_, err := executeCommand(JobCmd,
 			"submit",
 			"--pathways",
@@ -2089,6 +2091,24 @@ func TestSubmitCmd_RunSPSWorkload_Validation(t *testing.T) {
 		)
 		if err == nil || !strings.Contains(err.Error(), "--mount requires --image or --base-image when used with --pathways-run-sps-workload") {
 			t.Errorf("got err = %v, want --mount requires --image error", err)
+		}
+	})
+
+	t.Run("rejects compute-type and server flags with pathways-run-sps-workload", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-run-sps-workload", "sps-v5p",
+			"--compute-type", "ct6e-standard-4t",
+			"--name", "sps-client",
+			"--command", "python3 train.py",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err == nil || !strings.Contains(err.Error(), "--pathways-run-sps-workload connects to an existing SPS instance and cannot be used with --compute-type") {
+			t.Errorf("got err = %v, want unsupported --compute-type error", err)
 		}
 	})
 }

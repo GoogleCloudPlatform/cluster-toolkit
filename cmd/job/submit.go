@@ -399,7 +399,7 @@ func validateWorkloadNameLength(name string, isPathways bool) error {
 
 func validatePathwaysFlags(cmd *cobra.Command) error {
 	if isPathwaysJob {
-		if err := validateSPSModeFlags(); err != nil {
+		if err := validateSPSModeFlags(cmd); err != nil {
 			return err
 		}
 		if pathways.GCSLocation == "" && pathways.RunSPSWorkload == "" {
@@ -419,12 +419,38 @@ func validatePathwaysFlags(cmd *cobra.Command) error {
 	return nil
 }
 
-func validateSPSModeFlags() error {
+var unsupportedRunSPSWorkloadFlags = []string{
+	"compute-type",
+	"num-nodes",
+	"topology",
+	"gpus",
+	"pathways-server-image",
+	"pathways-worker-image",
+	"pathways-colocated-python-sidecar-image",
+	"pathways-server-args",
+	"pathways-worker-args",
+	"pathways-server-env",
+	"pathways-worker-env",
+	"pathways-elastic-slices",
+	"pathways-max-slice-restarts",
+	"gke-mtc-enabled",
+	"ml-diagnostics-image",
+	"ml-diagnostics-telemetry-port",
+}
+
+func validateSPSModeFlags(cmd *cobra.Command) error {
 	if pathways.RunSPSWorkload != "" && (pathways.DeploySPS || pathways.Headless) {
 		return fmt.Errorf("--pathways-run-sps-workload cannot be used with --pathways-deploy-sps or --pathways-headless")
 	}
 	if isSPSTerminalRun() && len(volumeStr) > 0 {
 		return fmt.Errorf("--mount requires --image or --base-image when used with --pathways-run-sps-workload")
+	}
+	if pathways.RunSPSWorkload != "" && cmd != nil {
+		for _, name := range unsupportedRunSPSWorkloadFlags {
+			if f := cmd.Flags().Lookup(name); f != nil && f.Changed {
+				return fmt.Errorf("--pathways-run-sps-workload connects to an existing SPS instance and cannot be used with --%s", name)
+			}
+		}
 	}
 	return validateDeploySPSFlags()
 }
