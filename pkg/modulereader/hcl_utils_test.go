@@ -16,9 +16,15 @@ package modulereader
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/function"
+	"github.com/zclconf/go-cty/cty/function/stdlib"
 	. "gopkg.in/check.v1"
 )
 
@@ -93,6 +99,81 @@ func TestReplaceTokens(t *testing.T) {
 
 			if !got.Equals(tc.want) {
 				t.Errorf("\nwant: %#v\ngot: %#v", tc.want, got)
+			}
+		})
+	}
+}
+
+func extractVariableValidationCondition(t *testing.T, varsFile, varName string) hclsyntax.Expression {
+	t.Helper()
+	f, diags := hclparse.NewParser().ParseHCLFile(varsFile)
+	if diags.HasErrors() {
+		t.Fatalf("failed to parse %s: %v", varsFile, diags)
+	}
+	body, ok := f.Body.(*hclsyntax.Body)
+	if !ok {
+		t.Fatalf("expected *hclsyntax.Body, got %T", f.Body)
+	}
+	for _, blk := range body.Blocks {
+		if blk.Type != "variable" || len(blk.Labels) != 1 || blk.Labels[0] != varName {
+			continue
+		}
+		for _, sub := range blk.Body.Blocks {
+			if sub.Type == "validation" {
+				attr, ok := sub.Body.Attributes["condition"]
+				if !ok {
+					t.Fatalf("validation block in variable %s does not have a 'condition' attribute", varName)
+				}
+				return attr.Expr
+			}
+		}
+	}
+
+	t.Fatalf("could not find validation.condition for variable %s in %s", varName, varsFile)
+	return nil
+}
+
+func TestVMInstanceReservationNameValidationHCL(t *testing.T) {
+	varsFile := filepath.Join("..", "..", "modules", "compute", "vm-instance", "variables.tf")
+	condExpr := extractVariableValidationCondition(t, varsFile, "reservation_name")
+
+	cases := []struct {
+		name  string
+		value string
+		valid bool
+	}{
+		{"empty_string", "", true},
+		{"local_standard_reservation", "reservation-20260928-214515", true},
+		{"local_dense_block_reservation", "reservation-20261008-231448/reservationBlocks/reservation-20261008-231448-block-0001", true},
+		{"local_subblock", "reservation-20261008-231448/reservationBlocks/reservation-20261008-231448-block-0001/reservationSubBlocks/reservation-20261008-231448-subblock-0001", true},
+		{"shared_standard", "projects/hcs-ext-tvc/reservations/reservation-20260928-214515", true},
+		{"shared_block", "projects/hcs-ext-tvc/reservations/reservation-20261008-231448/reservationBlocks/reservation-20261008-231448-block-0001", true},
+		{"shared_subblock", "projects/hcs-ext-tvc/reservations/reservation-20261008-231448/reservationBlocks/reservation-20261008-231448-block-0001/reservationSubBlocks/subblock-0001", true},
+		{"invalid_subblock_without_block", "reservation-20261008-231448/reservationSubBlocks/subblock-0001", false},
+		{"invalid_trailing_slash", "reservation-20261008-231448/reservationBlocks/", false},
+		{"invalid_uppercase", "Reservation-20261008/reservationBlocks/block-0001", false},
+		{"invalid_extra_segment", "reservation-20261008-231448/reservationBlocks/block-0001/reservationSubBlocks/sub-0001/extra", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			evalCtx := &hcl.EvalContext{
+				Variables: map[string]cty.Value{
+					"var": cty.ObjectVal(map[string]cty.Value{
+						"reservation_name": cty.StringVal(tc.value),
+					}),
+				},
+				Functions: map[string]function.Function{
+					"length":   stdlib.LengthFunc,
+					"regexall": stdlib.RegexAllFunc,
+				},
+			}
+			val, diags := condExpr.Value(evalCtx)
+			if diags.HasErrors() {
+				t.Fatalf("HCL evaluation error for %q: %v", tc.value, diags)
+			}
+			if val.True() != tc.valid {
+				t.Errorf("reservation_name=%q: got valid=%v, want %v", tc.value, val.True(), tc.valid)
 			}
 		})
 	}
