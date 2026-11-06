@@ -162,6 +162,7 @@ locals {
 
   install_kueue                    = try(var.kueue.install, false)
   install_cert_manager             = try(var.cert_manager.install, false)
+  install_k8s_aibom                = try(var.k8s_aibom.install, false)
   install_jobset                   = try(var.jobset.install, false)
   install_gpu_operator             = try(var.gpu_operator.install, false)
   install_nvidia_dra_driver        = try(var.nvidia_dra_driver.install, false)
@@ -350,6 +351,51 @@ module "install_cert_manager" {
   create_namespace = true
   set_values       = [{ name = "installCRDs", value = "true", type = "auto" }]
   depends_on       = [var.gke_cluster_exists, module.configure_kueue, module.install_jobset]
+}
+
+# k8s-aibom ships two charts from the same release: the CRD chart first, so
+# CRD changes are ordinary Helm upgrades, then the controller chart, which
+# pins its image by digest. Namespaces are opted in by label by the
+# platform admin; the module installs the controller only.
+module "install_k8s_aibom_crds" {
+  source           = "./helm_install"
+  count            = local.install_k8s_aibom ? 1 : 0
+  timeout          = 600
+  release_name     = "k8s-aibom-crds"
+  chart_repository = "oci://ghcr.io/googlecloudplatform/charts"
+  chart_name       = "k8s-aibom-crds"
+  chart_version    = var.k8s_aibom.version
+  namespace        = "k8s-aibom-system"
+  create_namespace = true
+  depends_on       = [var.gke_cluster_exists]
+}
+
+module "install_k8s_aibom" {
+  source           = "./helm_install"
+  count            = local.install_k8s_aibom ? 1 : 0
+  timeout          = 600
+  release_name     = "k8s-aibom"
+  chart_repository = "oci://ghcr.io/googlecloudplatform/charts"
+  chart_name       = "k8s-aibom"
+  chart_version    = var.k8s_aibom.version
+  namespace        = "k8s-aibom-system"
+  create_namespace = false
+  values_yaml = compact([
+    file("${path.module}/k8s-aibom/k8s-aibom-helm-values.yaml"),
+    var.k8s_aibom.controller_cpu != null || var.k8s_aibom.controller_memory != null ? yamlencode({
+      resources = {
+        requests = merge(
+          var.k8s_aibom.controller_cpu != null ? { cpu = var.k8s_aibom.controller_cpu } : {},
+          var.k8s_aibom.controller_memory != null ? { memory = var.k8s_aibom.controller_memory } : {}
+        )
+        limits = merge(
+          var.k8s_aibom.controller_cpu != null ? { cpu = var.k8s_aibom.controller_cpu } : {},
+          var.k8s_aibom.controller_memory != null ? { memory = var.k8s_aibom.controller_memory } : {}
+        )
+      }
+    }) : ""
+  ])
+  depends_on = [var.gke_cluster_exists, module.install_k8s_aibom_crds]
 }
 
 module "install_nvidia_dra_driver" {

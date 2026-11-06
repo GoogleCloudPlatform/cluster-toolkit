@@ -129,6 +129,17 @@ You can specify a particular kueue version that you would like to use using the 
         install: true
 ```
 
+You can also install [k8s-aibom](https://github.com/GoogleCloudPlatform/k8s-aibom) by setting the `k8s_aibom` input variable. It records an AI bill of materials (a CycloneDX document per inference or training workload: models, runtime, images, signatures) for namespaces that carry the `aibom.k8saibom.dev/enabled=true` label. The module installs the controller only; opt namespaces in afterwards with `kubectl label namespace <name> aibom.k8saibom.dev/enabled=true`, and read the inventory with `kubectl get aibom -A`. The controller is unprivileged and reads the Kubernetes API only.
+
+```yaml
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      k8s_aibom:
+        install: true
+```
+
 You can also install the `gib` plugin by setting the `gib` input variable.
 The `path` field accepts a template file. You will need to provide variables for the template using `template_vars` field and can also specify a particular gib version that you would like to use using the `version` flag. You can find the list of supported machine types for the `gib` plugin [here](https://docs.cloud.google.com/ai-hypercomputer/docs/nccl/overview).
 
@@ -299,6 +310,8 @@ limitations under the License.
 | <a name="module_install_gib"></a> [install\_gib](#module\_install\_gib) | ./helm_install | n/a |
 | <a name="module_install_gpu_operator"></a> [install\_gpu\_operator](#module\_install\_gpu\_operator) | ./helm_install | n/a |
 | <a name="module_install_jobset"></a> [install\_jobset](#module\_install\_jobset) | ./helm_install | n/a |
+| <a name="module_install_k8s_aibom"></a> [install\_k8s\_aibom](#module\_install\_k8s\_aibom) | ./helm_install | n/a |
+| <a name="module_install_k8s_aibom_crds"></a> [install\_k8s\_aibom\_crds](#module\_install\_k8s\_aibom\_crds) | ./helm_install | n/a |
 | <a name="module_install_kueue"></a> [install\_kueue](#module\_install\_kueue) | ./helm_install | n/a |
 | <a name="module_install_nvidia_dra_driver"></a> [install\_nvidia\_dra\_driver](#module\_install\_nvidia\_dra\_driver) | ./helm_install | n/a |
 | <a name="module_install_slice_controller"></a> [install\_slice\_controller](#module\_install\_slice\_controller) | ./helm_install | n/a |
@@ -337,6 +350,7 @@ limitations under the License.
 | <a name="input_gke_cluster_exists"></a> [gke\_cluster\_exists](#input\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. | `bool` | `false` | no |
 | <a name="input_gpu_operator"></a> [gpu\_operator](#input\_gpu\_operator) | Install [GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) which uses the [Kubernetes operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) to automate the management of all NVIDIA software components needed to provision GPU. | <pre>object({<br/>    install = optional(bool, false)<br/>    version = optional(string, "v25.3.0")<br/>  })</pre> | `{}` | no |
 | <a name="input_jobset"></a> [jobset](#input\_jobset) | Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit. | <pre>object({<br/>    install           = optional(bool, false)<br/>    version           = optional(string, "0.12.0")<br/>    controller_cpu    = optional(string, null)<br/>    controller_memory = optional(string, null)<br/>  })</pre> | `{}` | no |
+| <a name="input_k8s_aibom"></a> [k8s\_aibom](#input\_k8s\_aibom) | Install [k8s-aibom](https://github.com/GoogleCloudPlatform/k8s-aibom), which records an AI bill of materials (CycloneDX) for inference and training workloads in namespaces labeled `aibom.k8saibom.dev/enabled=true`. Unprivileged; reads the Kubernetes API only. | <pre>object({<br/>    install           = optional(bool, false)<br/>    version           = optional(string, "1.6.2")<br/>    controller_cpu    = optional(string, null)<br/>    controller_memory = optional(string, null)<br/>  })</pre> | `{}` | no |
 | <a name="input_kueue"></a> [kueue](#input\_kueue) | Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config\_path to be applied right after kueue installation. If a template file provided, its variables can be set to config\_template\_vars. | <pre>object({<br/>    # ATTENTION: If you update the KUEUE's default version below, please also update the corresponding<br/>    # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go (note the 'v' prefix there)<br/>    # and keep kueue/kueue-manager-config.yaml in sync with the chart's default managerConfig.controllerManagerConfigYaml.<br/>    version                         = optional(string, "0.19.6")<br/>    install                         = optional(bool, false)<br/>    config_path                     = optional(string, null)<br/>    config_template_vars            = optional(map(any), null)<br/>    enable_pathways_for_tpus        = optional(bool, false)<br/>    enable_dynamic_slicing_for_tpus = optional(bool, false)<br/>    accelerator_topology_mode       = optional(string, null)<br/>    machine_type                    = optional(string, null)<br/>    controller_cpu                  = optional(string, null)<br/>    controller_memory               = optional(string, null)<br/>    controller_replicas             = optional(number, null)<br/>    slice_controller_cpu_request    = optional(string, "8000m")<br/>    slice_controller_memory_request = optional(string, "16Gi")<br/>    slice_controller_cpu_limit      = optional(string, "12000m")<br/>    slice_controller_memory_limit   = optional(string, "32Gi")<br/>    # Optional Kueue waitForPodsReady settings. On Kueue >= 0.19.0 with Pathways<br/>    # enabled, defaults to timeout = "30m" and recovery_timeout = "0s".<br/>    wait_for_pods_ready = optional(object({<br/>      timeout          = optional(string)<br/>      recovery_timeout = optional(string)<br/>      block_admission  = optional(bool)<br/>    }), null)<br/>  })</pre> | `{}` | no |
 | <a name="input_module_id"></a> [module\_id](#input\_module\_id) | The ID of the module as defined in the blueprint. Injected by ghpc. | `string` | `"kubectl-apply"` | no |
 | <a name="input_nvidia_dra_driver"></a> [nvidia\_dra\_driver](#input\_nvidia\_dra\_driver) | Installs [Nvidia DRA driver](https://github.com/NVIDIA/k8s-dra-driver-gpu) which supports Dynamic Resource Allocation for NVIDIA GPUs in Kubernetes | <pre>object({<br/>    install          = optional(bool, false)<br/>    version          = optional(string, "v25.3.0")<br/>    accelerator_type = optional(string, "nvidia-gb200")<br/>  })</pre> | `{}` | no |
