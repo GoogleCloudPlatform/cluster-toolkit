@@ -286,6 +286,12 @@ variable "startup_script" {
   default     = null
 }
 
+variable "startup_script_path" {
+  description = "The GCS bucket or bucket path (e.g. 'gs://bucket-name', 'gs://bucket-name/path', or 'bucket-name') to use for startup scripts. If provided, the module will not create a new GCS bucket for startup scripts."
+  type        = string
+  default     = null
+}
+
 variable "guest_accelerator" {
   description = "List of the type and count of accelerator cards attached to the instance."
   type = list(object({
