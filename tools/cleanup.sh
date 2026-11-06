@@ -17,6 +17,10 @@
 
 # Associative array for resource names to exclude from deletion
 declare -A EXCLUSION_MAP
+# Associative array for active Cloud Build 6-character prefixes
+declare -A ACTIVE_BUILD_PREFIXES
+# Associative array for protected deployment names (from ghpc_deployment labels)
+declare -A PROTECTED_DEPLOYMENTS
 ERROR_COUNT=0
 
 # To store IPs of protected instances, used to find and protect matching Address resources
@@ -59,6 +63,11 @@ load_exclusions() {
 		local line="$1"
 		local trimmed_line
 		trimmed_line=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+		# Normalize gs://bucket-name or gs://bucket-name/... entries to bucket-name
+		if [[ "$trimmed_line" == gs://* ]]; then
+			trimmed_line="${trimmed_line#gs://}"
+			trimmed_line="${trimmed_line%%/*}"
+		fi
 		if [[ -n "$trimmed_line" ]] && [[ "$trimmed_line" != \#* ]] && [[ -z "${EXCLUSION_MAP[${trimmed_line}]:-}" ]]; then
 			EXCLUSION_MAP["${trimmed_line}"]=1
 			((line_count++))
@@ -82,29 +91,36 @@ load_exclusions() {
 		log "ERROR" "No valid exclusion entries were loaded from $EXCLUSION_FILE. Exiting to prevent accidental deletion of resources."
 		exit 1
 	else
+		# Always protect the bucket that hosts the exclusion file itself
+		local exclusion_bucket
+		exclusion_bucket=$(echo "$EXCLUSION_FILE" | sed -E 's|^gs://([^/]+).*|\1|')
+		if [[ -n "$exclusion_bucket" && "$exclusion_bucket" != "$EXCLUSION_FILE" ]]; then
+			EXCLUSION_MAP["${exclusion_bucket}"]=1
+		fi
 		log "INFO" "Loaded ${#EXCLUSION_MAP[@]} unique resource names to exclude from deletion."
 	fi
 }
 
 populate_active_build_exclusions() {
-	log "INFO" "Fetching active Cloud Build builds to protect their service accounts..."
+	log "INFO" "Fetching active Cloud Build builds to protect their resources..."
+	ACTIVE_BUILD_PREFIXES=()
 
-	# --- Protect service accounts tied to ongoing Cloud Build builds ---
+	# --- Protect resources tied to ongoing Cloud Build builds ---
 	local ongoing_builds
 	local build_id
 	local prefix
 
 	if ! ongoing_builds=$(gcloud builds list --project="$PROJECT_ID" --filter="status=(QUEUED,WORKING)" --format="value(id)" 2>/dev/null); then
-		log "WARNING" "Failed to list ongoing Cloud Build builds. Service accounts for in-flight builds may not be protected."
+		log "WARNING" "Failed to list ongoing Cloud Build builds. Resources for in-flight builds may not be protected."
 	elif [[ -z "$ongoing_builds" ]]; then
 		log "INFO" "No ongoing Cloud Build builds found."
 	else
 		while IFS= read -r build_id; do
 			[[ -z "$build_id" ]] && continue
 			prefix="${build_id:0:6}"
-			if [[ -n "$prefix" && -z "${EXCLUSION_MAP[${prefix}]:-}" ]]; then
-				log "INFO" "Protecting service accounts matching active Cloud Build prefix: ${prefix} (build ${build_id})"
-				EXCLUSION_MAP["${prefix}"]=1
+			if [[ -n "$prefix" && -z "${ACTIVE_BUILD_PREFIXES[${prefix}]:-}" ]]; then
+				log "INFO" "Protecting resources matching active Cloud Build prefix: ${prefix} (build ${build_id})"
+				ACTIVE_BUILD_PREFIXES["${prefix}"]=1
 			fi
 		done <<<"$ongoing_builds"
 	fi
@@ -121,6 +137,13 @@ is_excluded() {
 	# Check if the resource name is in the exclusion map
 	if [[ -n "${EXCLUSION_MAP[${resource_name}]:-}" ]]; then
 		log "SKIP" "$resource_name is in the exclusion map."
+		return 0 # Excluded
+	fi
+
+	# Check if the resource belongs to a protected deployment
+	local deployment
+	if deployment=$(_get_deployment_from_labels "$labels_str") && [[ -n "${PROTECTED_DEPLOYMENTS[${deployment}]:-}" ]]; then
+		log "SKIP" "$resource_name is protected because its deployment '$deployment' is protected."
 		return 0 # Excluded
 	fi
 
@@ -242,6 +265,31 @@ _protect_network_resources() {
 	fi
 }
 
+# Helper function to extract ghpc_deployment from a resource's labels (key1=val1;key2=val2)
+_get_deployment_from_labels() {
+	local pair
+	local -a label_pairs
+	IFS=';' read -ra label_pairs <<<"${1:-}"
+	for pair in "${label_pairs[@]}"; do
+		if [[ "${pair%%=*}" == "ghpc_deployment" && -n "${pair#*=}" ]]; then
+			echo "${pair#*=}"
+			return 0
+		fi
+	done
+	return 1
+}
+
+# Helper function to protect the deployment name from a resource's labels (key1=val1;key2=val2)
+_protect_deployment_from_labels() {
+	local deployment
+	if deployment=$(_get_deployment_from_labels "${1:-}"); then
+		if [[ -z "${PROTECTED_DEPLOYMENTS[${deployment}]:-}" ]]; then
+			log "INFO" "Protecting deployment '${deployment}' (from label ghpc_deployment=${deployment})"
+			PROTECTED_DEPLOYMENTS["${deployment}"]=1
+		fi
+	fi
+}
+
 # Populates EXCLUSION_MAP and other protection arrays based on resources
 # that should not be deleted (e.g., resources in excluded GKE clusters,
 # instances with exemption labels, and their dependencies).
@@ -278,6 +326,7 @@ populate_protected_resources() {
 
 			log "INFO" "Protecting GKE Cluster ${cluster_name} and its sub-resources..."
 			EXCLUSION_MAP["${cluster_name}"]=1 # Add cluster itself to exclusion map
+			_protect_deployment_from_labels "$labels_str"
 
 			local node_pools_data
 			if ! node_pools_data=$(gcloud container node-pools list --cluster="${cluster_name}" --location="${location}" --project="${PROJECT_ID}" --format="value(name)"); then
@@ -387,6 +436,7 @@ populate_protected_resources() {
 					log "INFO" "Protecting Instance: ${inst_name} in ${zone}"
 					EXCLUSION_MAP["${inst_name}"]=1
 				fi
+				_protect_deployment_from_labels "$labels_str"
 				INSTANCES_TO_PROTECT["${inst_name}"]="${zone}"
 			fi
 		done <<<"$instances_data"
@@ -482,6 +532,7 @@ populate_protected_resources() {
 						log "INFO" "Protecting TPU VM '${tpu_name}' in ${tpu_zone} by adding to exclusion map."
 						EXCLUSION_MAP["${tpu_name}"]=1
 					fi
+					_protect_deployment_from_labels "$tpu_labels"
 					if [[ -n "$tpu_zone" ]]; then
 						TPUS_TO_PROTECT["${tpu_name}"]="${tpu_zone}"
 					else
@@ -594,20 +645,15 @@ populate_protected_resources() {
 		while IFS=$'\t' read -r name location create_time; do
 			[[ -z "$name" ]] && continue
 
-			# Fetch label correctly
-			local label_value
-			label_value=$(gcloud lustre instances describe "$name" \
+			# Fetch labels correctly
+			local labels_str
+			labels_str=$(gcloud lustre instances describe "$name" \
 				--project="$PROJECT_ID" \
 				--location="$location" \
-				--format="value(labels.time-to-live)" 2>/dev/null)
-
-			local labels_str=""
-			if [[ -n "$label_value" ]]; then
-				labels_str="time-to-live=$label_value"
-			fi
+				--format="value(labels.map())" 2>/dev/null)
 
 			local protect=false
-			if is_excluded "$name" "$labels_str"; then
+			if is_excluded "$name" "${labels_str:-}"; then
 				protect=true
 			elif is_newer "$create_time"; then
 				protect=true
@@ -618,6 +664,7 @@ populate_protected_resources() {
 				log "INFO" "Managed Lustre instance ${name} in ${location} is PROTECTED."
 				# Add to EXCLUSION_MAP to prevent deletion of the Lustre instance itself
 				EXCLUSION_MAP["${name}"]=1
+				_protect_deployment_from_labels "${labels_str:-}"
 
 				local network_uri
 				network_uri=$(gcloud lustre instances describe "$name" \
@@ -633,6 +680,31 @@ populate_protected_resources() {
 				fi
 			fi
 		done <<<"$lustre_data"
+	fi
+
+	# Part 9: Protect deployments associated with EXCLUDED or NEW Storage Buckets.
+	log "INFO" "Checking for Storage Buckets to protect..."
+	local buckets_protect_data bkt_name bkt_create_time bkt_labels
+	if ! buckets_protect_data=$(gcloud storage buckets list --project="$PROJECT_ID" \
+		--format="value(name,creation_time,labels.map())"); then
+		log "WARNING" "Failed to list Storage Buckets for protection check."
+	elif [[ -n "$buckets_protect_data" ]]; then
+		while IFS=$'\t' read -r bkt_name bkt_create_time bkt_labels; do
+			[[ -z "$bkt_name" ]] && continue
+			bkt_name="${bkt_name#gs://}"
+			bkt_name="${bkt_name%/}"
+			local protect=false
+			if is_excluded "$bkt_name" "${bkt_labels:-}"; then
+				protect=true
+			elif is_newer "$bkt_create_time"; then
+				protect=true
+				log "INFO" "Storage Bucket ${bkt_name} (created: $bkt_create_time) is protected because it was created after cutoff time."
+			fi
+			if [[ "$protect" == "true" ]]; then
+				EXCLUSION_MAP["${bkt_name}"]=1
+				_protect_deployment_from_labels "${bkt_labels:-}"
+			fi
+		done <<<"$buckets_protect_data"
 	fi
 
 	log "INFO" "Finished identifying resources to protect."
@@ -892,6 +964,7 @@ process_service_accounts() {
 
 		# 2. Check if any protected resource name (keys of EXCLUSION_MAP) is a substring of the email
 		if [[ "$protected" == "false" ]]; then
+			local protected_name
 			for protected_name in "${!EXCLUSION_MAP[@]}"; do
 				if [[ "$email" == *"$protected_name"* ]]; then
 					protected=true
@@ -901,7 +974,31 @@ process_service_accounts() {
 			done
 		fi
 
-		# 3. If not protected, delete it
+		# 3. Check if username contains any active Cloud Build prefix
+		if [[ "$protected" == "false" ]]; then
+			local build_prefix
+			for build_prefix in "${!ACTIVE_BUILD_PREFIXES[@]}"; do
+				if [[ "$username" == *"$build_prefix"* ]]; then
+					protected=true
+					log "DEBUG" "Service Account $email is protected because it matches active Cloud Build prefix: $build_prefix"
+					break
+				fi
+			done
+		fi
+
+		# 4. Check if username matches a protected deployment
+		if [[ "$protected" == "false" ]]; then
+			local deployment
+			for deployment in "${!PROTECTED_DEPLOYMENTS[@]}"; do
+				if [[ "$username" == "$deployment" || "$username" == "${deployment}-"* ]]; then
+					protected=true
+					log "DEBUG" "Service Account $email is protected because it belongs to protected deployment: $deployment"
+					break
+				fi
+			done
+		fi
+
+		# 5. If not protected, delete it
 		if [[ "$protected" == "false" ]]; then
 			execute_delete "Service Account" "$email" "" \
 				gcloud iam service-accounts delete "$email" --project="$PROJECT_ID" --quiet
@@ -1100,22 +1197,17 @@ process_lustre_instances() {
 
 		log "DEBUG" "Processing Lustre: $name ($location)"
 
-		# Fetch label properly using describe
-		local label_value
-		label_value=$(gcloud lustre instances describe "$name" \
+		# Fetch labels properly using describe
+		local labels_str
+		labels_str=$(gcloud lustre instances describe "$name" \
 			--project="$PROJECT_ID" \
 			--location="$location" \
-			--format="value(labels.time-to-live)" 2>/dev/null)
+			--format="value(labels.map())" 2>/dev/null)
 
-		local labels_str=""
-		if [[ -n "$label_value" ]]; then
-			labels_str="time-to-live=$label_value"
-		fi
+		log "DEBUG" "Lustre $name labels: '${labels_str:-}'"
 
-		log "DEBUG" "Lustre $name labels: '$labels_str'"
-
-		#  Check exclusion by name OR label
-		if is_excluded "$name" "$labels_str"; then
+		# Check exclusion by name OR label
+		if is_excluded "$name" "${labels_str:-}"; then
 			log "SKIP" "Lustre $name is excluded by name or label."
 
 			# Fetch network using describe (SAFE METHOD)
@@ -1145,6 +1237,96 @@ process_lustre_instances() {
 	done <<<"$lustre_list"
 
 	log "INFO" "Finished processing Managed Lustre Instances. $count instances actioned."
+}
+
+process_storage_buckets() {
+	log "INFO" "--- Processing: Storage Buckets ---"
+	local buckets_data name location creation_time labels_str protected build_prefix deployment delete_err cache_ids cache_id
+	if ! buckets_data=$(gcloud storage buckets list --project="$PROJECT_ID" \
+		--filter="creation_time < '$CUTOFF_TIME'" \
+		--sort-by=name \
+		--format="value(name,location,creation_time,labels.map())"); then
+		log "ERROR" "Failed to list Storage Buckets."
+		((ERROR_COUNT++)) || true
+		return 0
+	fi
+
+	if [[ -z "$buckets_data" ]]; then
+		log "INFO" "No Storage Buckets found matching criteria (older than $CUTOFF_TIME)."
+		return 0
+	fi
+
+	local count=0
+	while IFS=$'\t' read -r name location creation_time labels_str; do
+		[[ -z "$name" ]] && continue
+		name="${name#gs://}"
+		name="${name%/}"
+
+		# 1. Safety filter: Never delete Google-managed buckets, and only delete buckets carrying Cluster Toolkit labels
+		if [[ "${labels_str:-}" == *"goog-managed-by="* || "${labels_str:-}" == *"goog-cloudbuild-location="* ]]; then
+			log "SKIP" "Storage Bucket $name is Google-managed (${labels_str}). Skipping."
+			continue
+		fi
+		if [[ "${labels_str:-}" != *"ghpc_deployment="* && "${labels_str:-}" != *"ghpc_module="* && "${labels_str:-}" != *"slurm_cluster_name="* ]]; then
+			log "SKIP" "Storage Bucket $name does not carry Cluster Toolkit labels. Skipping."
+			continue
+		fi
+
+		# 2. Cutoff time check (defense-in-depth on top of --filter)
+		if is_newer "$creation_time"; then
+			log "SKIP" "Storage Bucket $name (created: $creation_time) was created after cutoff time."
+			continue
+		fi
+
+		# 3. Direct exclusion map check & 'time-to-live' label check
+		if is_excluded "$name" "${labels_str:-}"; then
+			continue
+		fi
+
+		# 4. Check if bucket's ghpc_deployment label is in PROTECTED_DEPLOYMENTS
+		deployment=$(_get_deployment_from_labels "${labels_str:-}") || true
+		if [[ -n "$deployment" && -n "${PROTECTED_DEPLOYMENTS[${deployment}]:-}" ]]; then
+			log "SKIP" "Storage Bucket $name is protected because its deployment '$deployment' is protected."
+			continue
+		fi
+
+		# 5. Check if bucket name or deployment matches any active Cloud Build prefix
+		protected=false
+		for build_prefix in "${!ACTIVE_BUILD_PREFIXES[@]}"; do
+			if [[ "$name" == *"$build_prefix"* || "${deployment:-}" == *"$build_prefix"* ]]; then
+				protected=true
+				log "SKIP" "Storage Bucket $name matches active Cloud Build prefix: $build_prefix"
+				break
+			fi
+		done
+
+		if [[ "$protected" == "false" ]]; then
+			if [[ "$DRY_RUN" == "true" ]]; then
+				log "DRY-RUN" "Would delete Storage Bucket: $name ($location)"
+				log "DRY-RUN" "Command: gcloud storage rm --recursive gs://$name --project=$PROJECT_ID --quiet"
+				((count++)) || true
+			else
+				log "EXECUTE" "Deleting Storage Bucket: $name ($location)"
+				if delete_err=$(gcloud storage rm --recursive "gs://$name" --project="$PROJECT_ID" --quiet 2>&1); then
+					log "SUCCESS" "Successfully deleted Storage Bucket: $name"
+					((count++)) || true
+				elif [[ "${delete_err,,}" == *"anywhere cache"* || "${delete_err,,}" == *"anywhere_cache"* || "${delete_err,,}" == *"retention"* || "${delete_err,,}" == *"hold"* ]]; then
+					if cache_ids=$(gcloud storage buckets anywhere-caches list "gs://$name" --project="$PROJECT_ID" --format="value(id)" 2>/dev/null) && [[ -n "$cache_ids" ]]; then
+						while IFS= read -r cache_id; do
+							[[ -z "$cache_id" ]] && continue
+							log "INFO" "Disabling Anywhere Cache '${name}/${cache_id##*/}' on Storage Bucket $name for next cleanup cycle..."
+							gcloud storage buckets anywhere-caches disable "${name}/${cache_id##*/}" --project="$PROJECT_ID" --quiet >/dev/null 2>&1 || true
+						done <<<"$cache_ids"
+					fi
+					log "WARNING" "Skipping Storage Bucket $name (blocked by Anywhere Cache or retention lock; will retry on next scheduled run): ${delete_err}"
+				else
+					log "ERROR" "Failed to delete Storage Bucket: $name (${delete_err})"
+					((ERROR_COUNT++)) || true
+				fi
+			fi
+		fi
+	done <<<"$buckets_data"
+	log "INFO" "Finished processing Storage Buckets. $count buckets actioned."
 }
 
 process_subnetworks() {
@@ -1275,6 +1457,7 @@ main() {
 
 	check_dependencies
 	load_exclusions
+	populate_active_build_exclusions
 	populate_protected_resources
 	log_protected_network_uris # Log the protected network URIs for debugging
 	log_exclusion_map          # Log the final exclusion map for debugging
@@ -1327,6 +1510,10 @@ main() {
 	populate_active_build_exclusions
 	process_service_accounts
 	process_iam_deleted_members
+
+	# --- Phase 6: Storage Buckets Cleanup ---
+	log "INFO" "--- PHASE 6: Deleting Storage Buckets ---"
+	process_storage_buckets
 
 	log "INFO" "CLEANUP RUN FINISHED for project: $PROJECT_ID"
 
