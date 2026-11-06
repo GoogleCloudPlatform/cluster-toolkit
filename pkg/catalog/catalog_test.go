@@ -18,6 +18,7 @@ import (
 	"hpc-toolkit/pkg/sourcereader"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -229,7 +230,7 @@ func verifyAllDeploymentFilesPaired(t *testing.T, root string, blueprints []Blue
 	tracked := gitTrackedFiles(root, roots...)
 	for _, relRoot := range roots {
 		_ = filepath.WalkDir(filepath.Join(root, relRoot), func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), "-deployment.yaml") || !isTracked(root, path, tracked) {
+			if err != nil || d.IsDir() || !isDeploymentFileName(d.Name()) || !isTracked(root, path, tracked) {
 				return err
 			}
 			rel, _ := filepath.Rel(root, path)
@@ -542,8 +543,8 @@ func verifyLLMsMatrixRows(t *testing.T, llmsTxt string, blueprints []BlueprintEn
 		rowCount++
 		verifySingleMatrixRow(t, line, byPath)
 	}
-	if rowCount != 21 {
-		t.Errorf("verifyLLMsMatrixRows found %d rows, want 21", rowCount)
+	if rowCount != 22 {
+		t.Errorf("verifyLLMsMatrixRows found %d rows, want 22", rowCount)
 	}
 }
 
@@ -710,5 +711,64 @@ func TestInferAcceleratorsAndWorkloads(t *testing.T) {
 				t.Errorf("%s has non-canonical workload %q", bp.Path, w)
 			}
 		}
+	}
+}
+
+func TestScanBlueprintsInUntrackedBundleInsideGitRepo(t *testing.T) {
+	for _, kv := range os.Environ() {
+		if k, _, ok := strings.Cut(kv, "="); ok && strings.HasPrefix(k, "GIT_") {
+			t.Setenv(k, "")
+			_ = os.Unsetenv(k)
+		}
+	}
+	parentGitRepo := t.TempDir()
+	if err := exec.Command("git", "init", parentGitRepo).Run(); err != nil {
+		t.Skipf("git init unavailable: %v", err)
+	}
+	bundleDir := filepath.Join(parentGitRepo, "gcluster-bundle")
+	examplesDir := filepath.Join(bundleDir, "examples")
+	if err := os.MkdirAll(examplesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bpYAML1 := "blueprint_name: bundle-test-1\ndeployment_groups:\n- group: primary\n  modules:\n  - id: network\n    source: modules/network/vpc\n"
+	bpYAML2 := "blueprint_name: bundle-test-2\ndeployment_groups:\n- group: primary\n  modules:\n  - id: network\n    source: modules/network/vpc\n"
+	bp1Path := filepath.Join(examplesDir, "bundle-test-1.yaml")
+	bp2Path := filepath.Join(examplesDir, "bundle-test-2.yaml")
+	if err := os.WriteFile(bp1Path, []byte(bpYAML1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bp2Path, []byte(bpYAML2), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := ScanBlueprints(bundleDir, nil)
+	if err != nil {
+		t.Fatalf("ScanBlueprints failed on untracked bundle inside git repo: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("ScanBlueprints in untracked bundle inside git repo returned %d entries, want 2: %v", len(entries), entries)
+	}
+
+	// Track only one file in the parent git repo and ensure both bundle blueprints are still discovered.
+	if err := exec.Command("git", "-C", parentGitRepo, "add", bp1Path).Run(); err != nil {
+		t.Fatalf("git add failed: %v", err)
+	}
+	entriesPartial, err := ScanBlueprints(bundleDir, nil)
+	if err != nil {
+		t.Fatalf("ScanBlueprints failed on partially tracked bundle inside git repo: %v", err)
+	}
+	if len(entriesPartial) != 2 {
+		t.Errorf("ScanBlueprints in partially tracked bundle inside git repo returned %d entries, want 2: %v", len(entriesPartial), entriesPartial)
+	}
+}
+
+func TestSameDirResolvesRelativeSymlinkCwd(t *testing.T) {
+	realDir := t.TempDir()
+	linkDir := filepath.Join(t.TempDir(), "symlink-repo")
+	if err := os.Symlink(realDir, linkDir); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	t.Chdir(linkDir)
+	if !sameDir(".", realDir) {
+		t.Errorf("sameDir(\".\", %q) = false from symlinked cwd %q, want true", realDir, linkDir)
 	}
 }

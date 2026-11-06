@@ -75,7 +75,7 @@ placement [guide][guide-link] and [api][api-link] documentation.
 Use the following settings for compact placement:
 
 ```yaml
-  ...
+  # ...
   settings:
     instance_count: 4
     machine_type: c2-standard-60
@@ -89,7 +89,7 @@ compactness is not obtainable, you can enforce this with the [`max_distance`
 setting](https://cloud.google.com/compute/docs/instances/use-compact-placement-policies):
 
 ```yaml
-  ...
+  # ...
   settings:
     instance_count: 4
     machine_type: c2-standard-60
@@ -101,7 +101,7 @@ setting](https://cloud.google.com/compute/docs/instances/use-compact-placement-p
 Use the following settings for spread placement:
 
 ```yaml
-  ...
+  # ...
   settings:
     instance_count: 4
     machine_type: n2-standard-4

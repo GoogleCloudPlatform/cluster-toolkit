@@ -62,6 +62,12 @@ Connecting [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes
   - source: modules/file-system/netapp-storage-pool
     id: storage_pool
     use: [network, ps_connect]
+
+  - source: modules/file-system/netapp-volume
+    id: shared_volume
+    use: [storage_pool]
+    settings:
+      volume_name: shared-volume
 ```
 
 ## License

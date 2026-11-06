@@ -92,7 +92,7 @@ allowed_read_only_commands:
      (such as `compute_enable_spot_vm: true`, `debug_enable_spot_vm: true`,
      `h3_enable_spot_vm: true`, `compute_node_count_dynamic_max: 2`) in
      `deployment.yaml`—keep the blueprint's default machine types (never downgrade
-     `c2-standard-60` to `e2-standard-2`, which fails `gvnic_enabled` validation)
+     `c2-standard-60` to `e2-standard-2` unless the user explicitly requests that machine type)
      and never remove partitions or storage modules unprompted.
    - Do **not** add, remove, rename or restructure `deployment_groups[].modules[]`
      entries for value overrides.
@@ -114,8 +114,9 @@ allowed_read_only_commands:
    blueprint you are fixing lacks `ai_assisted: true`, add it). If `./gcluster` reports `field ai_assisted not found in type config.DeploymentSettings`, the binary is older than this field: run `make` and retry instead of removing `ai_assisted`.
 5. **Validate with gcluster, fix the blueprint, never the output.**
    `./gcluster expand` and `./gcluster create` are the validation step. Once
-   `./gcluster create` or `./gcluster expand` succeeds, **stop immediately**—do
-   not run `terraform init` or `terraform validate` afterwards. If they or
+   `./gcluster create` or `./gcluster expand` succeeds, validation is complete—**do
+   not run `terraform` afterwards**; if the user also asked to deploy, proceed
+   directly to the confirmation gate in rule 6. If they or
    `./gcluster deploy` fail, fix the blueprint YAML or `deployment.yaml` and re-run
    `./gcluster`. Never bypass validators via CLI flags (`-l IGNORE`,
    `--validation-level IGNORE`, `--skip-validators`), environment variables
@@ -123,9 +124,13 @@ allowed_read_only_commands:
    `skip: true` under `validators:`), **even if the user explicitly asks to skip a
    validator by name**—refuse the bypass, explain that skipping
    `test_machine_type_in_zone` still fails with a 404 Compute API error during
-   module expansion (for Slurm `machine_configs` lookup) or deployment when the
+   module expansion (for `machine_configs` lookup) or deployment when the
    machine type does not exist in that zone, and ask
-   the user for a supported zone or machine type. Never edit
+   the user for a supported zone or machine type. **Sole exception:** the
+   offline command in "3. Validate" (`GHPC_MOCK_MACHINE_CONFIG` +
+   `--skip-validators`), used only when there are no GCP credentials or
+   `project_id` is a placeholder—never to get past a validator that failed
+   against a real project. Never edit
    generated files under `<deployment_name>/` (`main.tf`, `variables.tf`,
    `terraform.tfvars`, `defaults.auto.pkrvars.hcl`, `.ghpc/`) and never run
    `terraform` in any form — not `init`, `validate`, `plan`, `apply`, `destroy`,
@@ -273,7 +278,11 @@ Rules the agent must respect:
   asks for a different accelerator or machine series (e.g. `a3-highgpu-8g` on
   `gke-a4.yaml`), do **not** copy that blueprint and change `machine_type` —
   instead, use `./gcluster explain` to switch to the matching blueprint in
-  `examples/` (e.g. `examples/gke-a3-highgpu/gke-a3-highgpu.yaml`). Multi-shape
+  `examples/` (e.g. `examples/gke-a3-highgpu/gke-a3-highgpu.yaml`). If no
+  blueprint matches both the requested hardware and this blueprint's specialized
+  features (e.g. inference gateway, DWS Flex Start queued provisioning, GCSFuse +
+  Local SSD), stop and inform the user; do not silently drop those features and
+  do not copy the blueprint to swap `machine_type`. Multi-shape
   families (`gke-h4d`, `gke-tpu-*`, `gke-g4*`, all CPU blueprints) expose
   `compute_machine_type` with an `# Allowed:` comment listing valid shapes.
 - **Three override states & GKE `SPECIFIC_RESERVATION`.** `""` means "empty

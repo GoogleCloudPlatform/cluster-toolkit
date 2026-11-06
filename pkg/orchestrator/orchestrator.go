@@ -25,6 +25,7 @@ type PathwaysJobDefinition struct {
 	// Pathways specific configurations
 	Headless         bool   // Default: false
 	DeploySPS        bool   // Default: false
+	RunSPSWorkload   string // SPS instance (JobSet name or endpoint) to run the workload on
 	GCSLocation      string // Required for Pathways jobs.
 	ElasticSlices    int    // Default: 0
 	MaxSliceRestarts int    // Default: 0 (4000 for ElasticSlices > 0 or Headless; 1000000 for DeploySPS)
@@ -105,6 +106,11 @@ type JobDefinition struct {
 	GKEMTCRamdiskDirectory string
 
 	MLDiagnosticsEnabled bool
+	MLDiagnosticsImage   string
+	// MLDiagnosticsImageSpecified reports that MLDiagnosticsImage was given explicitly, possibly empty; an explicit
+	// empty value ignores GCLUSTER_TELEMETRY_IMAGE (GKE then uses the managed webhook).
+	MLDiagnosticsImageSpecified bool
+	MLDiagnosticsTelemetryPort  int
 
 	GkeCustomTemplatesPath string
 

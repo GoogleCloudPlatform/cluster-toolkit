@@ -6,8 +6,23 @@ gcluster.google.com/workload: {{.WorkloadName}}
 {{- if .KueueQueueName }}
 kueue.x-k8s.io/queue-name: {{.KueueQueueName}}
 {{- end }}
-{{- if .MLDiagnosticsEnabled }}
+{{- if and .MLDiagnosticsEnabled (not .TelemetryCollectorImage) }}
 managed-mldiagnostics-gke: "true"
+{{- end }}
+{{- end -}}
+
+{{- define "telemetry_sidecar" -}}
+- name: ai-telemetry-collector
+  image: {{.TelemetryCollectorImage}}
+  imagePullPolicy: IfNotPresent
+  restartPolicy: Always
+  ports:
+  - containerPort: {{.TelemetryCollectorPort}}
+    name: tpu-metrics
+{{- if ne .TelemetryCollectorPort 8889 }}
+  args:
+  - --config=/etc/ai-telemetry-collector/config.yaml
+  - {{ printf "--set=exporters.prometheus.endpoint=0.0.0.0:%d" .TelemetryCollectorPort }}
 {{- end }}
 {{- end -}}
 
@@ -48,6 +63,9 @@ tolerations:
 metadata:
   labels:
     gcluster.google.com/workload: {{.WorkloadName}}
+{{- if .TelemetryCollectorImage }}
+    tpu-workload-name: {{.WorkloadName}}
+{{- end }}
 {{- if or .TopologyAnnotation .GCSFuseEnabled }}
   annotations:
 {{- if .TopologyAnnotation }}
@@ -73,6 +91,10 @@ spec:
 {{reindent 2 (StructuralData .SchedulingGates)}}
 {{- end }}
   restartPolicy: Never
+{{- if .TelemetryCollectorImage }}
+  initContainers:
+{{(StructuralData (.RenderBlock "telemetry_sidecar" 2))}}
+{{- end }}
   containers:
   {{- range .Containers }}
   - name: {{ .Name }}

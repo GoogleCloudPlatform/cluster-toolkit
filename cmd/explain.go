@@ -316,7 +316,22 @@ func findExplainRepoRoot() string {
 	if err != nil {
 		return "."
 	}
-	dir := cwd
+	if root := walkUpForExplainRoot(cwd); root != "" {
+		return root
+	}
+	if exe, err := os.Executable(); err == nil {
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = resolved
+		}
+		if root := walkUpForExplainRoot(filepath.Dir(exe)); root != "" {
+			return root
+		}
+	}
+	return cwd
+}
+
+func walkUpForExplainRoot(startDir string) string {
+	dir := startDir
 	for {
 		if isExplainRepoRoot(dir) {
 			return dir
@@ -327,23 +342,29 @@ func findExplainRepoRoot() string {
 		}
 		dir = parent
 	}
-	return cwd
+	return ""
 }
 
 func isExplainRepoRoot(dir string) bool {
-	if filepath.Base(dir) == "community" && hasExamplesAndModules(filepath.Dir(dir)) {
+	if filepath.Base(dir) == "community" && looksLikeToolkitRoot(filepath.Dir(dir)) {
 		return false
 	}
-	return hasExamplesAndModules(dir)
+	return looksLikeToolkitRoot(dir)
 }
 
-func hasExamplesAndModules(dir string) bool {
-	for _, sub := range []string{"examples", "modules"} {
-		if info, err := os.Stat(filepath.Join(dir, sub)); err != nil || !info.IsDir() {
-			return false
+func looksLikeToolkitRoot(dir string) bool {
+	if info, err := os.Stat(filepath.Join(dir, "examples")); err != nil || !info.IsDir() {
+		return false
+	}
+	for _, sub := range []string{"modules", filepath.Join("community", "examples")} {
+		if info, err := os.Stat(filepath.Join(dir, sub)); err == nil && info.IsDir() {
+			return true
 		}
 	}
-	return true
+	if info, err := os.Stat(filepath.Join(dir, "gcluster")); err == nil && !info.IsDir() {
+		return true
+	}
+	return false
 }
 
 type embeddedModEntry struct {
@@ -411,6 +432,11 @@ func listTopLevelEmbeddedModules(bfs sourcereader.BaseFS) []embeddedModEntry {
 		result = append(result, scanEmbeddedModuleRoot(bfs, root)...)
 	}
 	sort.Slice(result, func(i, j int) bool {
+		ci := strings.HasPrefix(result[i].Path, "community/")
+		cj := strings.HasPrefix(result[j].Path, "community/")
+		if ci != cj {
+			return !ci
+		}
 		return result[i].Path < result[j].Path
 	})
 	if len(result) > 0 {
@@ -555,7 +581,7 @@ func extractBlueprintStorageTags(bp catalog.BlueprintEntry) []string {
 func printExplainIndexText(w io.Writer, res ExplainIndexResult) {
 	writef(w, "Available Blueprints (%d):\n", len(res.Blueprints))
 	if len(res.Blueprints) == 0 {
-		writeln(w, "  (no Cluster Toolkit checkout found from current directory; blueprints are read from examples/ in a repo checkout)")
+		writeln(w, "  (no Cluster Toolkit checkout or gcluster_bundle found from current directory; blueprints are read from examples/ in a repo checkout or release bundle)")
 	} else {
 		for _, bp := range res.Blueprints {
 			printBlueprintSummaryLine(w, bp)
@@ -679,13 +705,16 @@ func isBlueprintCandidateYAML(name string) bool {
 }
 
 func isDeploymentYAMLName(base string) bool {
-	return strings.HasSuffix(base, "-deployment.yaml") || base == "deployment.yaml"
+	return strings.HasSuffix(base, "-deployment.yaml") || strings.HasSuffix(base, "_deployment.yaml") || base == "deployment.yaml"
 }
 
 func findSiblingBlueprintForDeployment(deplPath string) string {
 	dir := filepath.Dir(deplPath)
 	base := filepath.Base(deplPath)
 	stem := strings.TrimSuffix(base, "-deployment.yaml")
+	if stem == base {
+		stem = strings.TrimSuffix(base, "_deployment.yaml")
+	}
 	if stem != base {
 		for _, candName := range []string{stem + "-blueprint.yaml", stem + ".yaml"} {
 			cand := filepath.Join(dir, candName)
@@ -869,13 +898,22 @@ func discoverCompanionDeploymentFile(bpPath, blueprintName string) string {
 	base := filepath.Base(bpPath)
 	stem := strings.TrimSuffix(strings.TrimSuffix(base, ".yaml"), ".yml")
 
-	candidates := []string{filepath.Join(dir, stem+"-deployment.yaml")}
+	candidates := []string{
+		filepath.Join(dir, stem+"-deployment.yaml"),
+		filepath.Join(dir, stem+"_deployment.yaml"),
+	}
 	if blueprintName != "" {
-		candidates = append(candidates, filepath.Join(dir, blueprintName+"-deployment.yaml"))
+		candidates = append(candidates,
+			filepath.Join(dir, blueprintName+"-deployment.yaml"),
+			filepath.Join(dir, blueprintName+"_deployment.yaml"),
+		)
 	}
 	for _, suffix := range []string{"-blueprint", "-advanced", "-infra", "-experiment"} {
 		if trimmed := strings.TrimSuffix(stem, suffix); trimmed != stem {
-			candidates = append(candidates, filepath.Join(dir, trimmed+"-deployment.yaml"))
+			candidates = append(candidates,
+				filepath.Join(dir, trimmed+"-deployment.yaml"),
+				filepath.Join(dir, trimmed+"_deployment.yaml"),
+			)
 		}
 	}
 	candidates = append(candidates, filepath.Join(dir, "deployment.yaml"))

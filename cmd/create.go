@@ -215,18 +215,17 @@ func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.Yam
 		}
 	}
 
-	applyAgentEnvAttribution(cmd, &bp)
-
 	// Expand the blueprint
 	checkErr(bp.Expand(), ctx)
 	validateMaybeDie(bp, *ctx)
+	applyAgentEnvAttribution(cmd, &bp)
 
 	return bp, ctx
 }
 
 // applyAgentEnvAttribution persists ai_assisted: true into deployment artifacts
-// written by create/deploy when invoked inside a coding agent environment, while
-// keeping gcluster expand pure with respect to its input YAML files.
+// and telemetry for create/deploy when invoked inside a coding agent environment,
+// after blueprint expansion so shell environment variables do not mutate vars.labels.
 func applyAgentEnvAttribution(cmd *cobra.Command, bp *config.Blueprint) {
 	if cmd != nil && cmd.Name() != "expand" && telemetry.IsAgentEnv() {
 		bp.AIAssisted = true

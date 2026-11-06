@@ -103,6 +103,9 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err := g.validateSubmitLocalPreflight(sm, job); err != nil {
 		return err
 	}
+	if job.Pathways.RunSPSWorkload != "" {
+		return g.runSPSWorkload(job)
+	}
 
 	if err := g.initializeJobSubmission(&job); err != nil {
 		return err
@@ -120,10 +123,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err != nil {
 		return err
 	}
-	if err := g.validateJobConflicts(job); err != nil {
-		return err
-	}
-	if err := g.validateMTCConfig(&job); err != nil {
+	if err := g.pinTelemetryAndValidate(&job); err != nil {
 		return err
 	}
 
@@ -136,13 +136,8 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 
-	if job.DryRunManifest == "" {
-		g.printConsoleLinks(job)
-		if job.AwaitJobCompletion {
-			if err := g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout); err != nil {
-				return err
-			}
-		}
+	if err := g.finishJobSubmission(job); err != nil {
+		return err
 	}
 	logging.Info("gcluster job submit workflow completed.")
 
@@ -158,13 +153,42 @@ func workloadTemplateName(job orchestrator.JobDefinition) string {
 	return k8s.JobSetTemplate
 }
 
-// validateSubmitLocalPreflight runs the checks that need no cluster access or image build: mount syntax and
-// custom template parsing.
+// pinTelemetryAndValidate runs the cheap name-conflict check, then resolves the ML Diagnostics collector before
+// the image build, so a missing TPU node image cache or an RBAC denial fails fast and PrepareManifestOptions sees
+// the resolved image as explicit, and finally validates the MTC configuration.
+func (g *GKEOrchestrator) pinTelemetryAndValidate(job *orchestrator.JobDefinition) error {
+	if err := g.validateJobConflicts(*job); err != nil {
+		return err
+	}
+	telemetryImg, _, err := g.resolveTelemetryCollector(*job)
+	if err != nil {
+		return err
+	}
+	job.MLDiagnosticsImage = telemetryImg
+	return g.validateMTCConfig(job)
+}
+
+// validateSubmitLocalPreflight runs the checks that need no cluster access or image build: mount syntax,
+// ML Diagnostics flags, and custom template parsing.
 func (g *GKEOrchestrator) validateSubmitLocalPreflight(sm *StorageManager, job orchestrator.JobDefinition) error {
 	if err := sm.validateJobMounts(job.RawMounts, job.IsPathwaysJob, job.Pathways.ColocatedPythonSidecarImage != ""); err != nil {
 		return err
 	}
+	if err := g.validateTelemetryFlags(job); err != nil {
+		return err
+	}
 	return k8s.ValidateCustomWorkloadTemplates(g.gkeCustomTemplatesPath, workloadTemplateName(job))
+}
+
+func (g *GKEOrchestrator) finishJobSubmission(job orchestrator.JobDefinition) error {
+	if job.DryRunManifest != "" {
+		return nil
+	}
+	g.printConsoleLinks(job)
+	if job.AwaitJobCompletion {
+		return g.awaitJobCompletion(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, job.Timeout)
+	}
+	return nil
 }
 
 // ListJobs retrieves a list of jobs in the GKE cluster.
