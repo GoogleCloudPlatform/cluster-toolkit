@@ -12,52 +12,49 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package orchestrator
+package shell
 
 import (
 	"sync"
 	"testing"
 )
 
-func TestEnvironment_IsKnownAirGappedAndDefaultOverride(t *testing.T) {
-	t.Parallel()
+func TestAirGappedPrecedenceAndConcurrency(t *testing.T) {
+	t.Cleanup(func() { SetDefaultAirGappedState(false) })
+	SetDefaultAirGappedState(false)
 
 	for _, truthy := range []string{"1", "true", "TRUE", " yes "} {
 		val := truthy
-		env := &Environment{Getenv: func(k string) string {
+		if !IsAirGappedEnv(func(k string) string {
 			if k == AirGappedEnvVar {
 				return val
 			}
 			return ""
-		}}
-		if !env.IsKnownAirGapped() {
-			t.Errorf("IsKnownAirGapped(%q) = false, want true", val)
+		}) {
+			t.Errorf("IsAirGappedEnv(%q) = false, want true", val)
 		}
 	}
 
-	overrideVal := ""
-	envDef := &Environment{Getenv: func(k string) string {
-		if k == AirGappedEnvVar {
-			return overrideVal
-		}
-		return ""
-	}}
-	if envDef.IsKnownAirGapped() {
-		t.Fatalf("expected fresh Environment not to report IsKnownAirGapped")
+	t.Setenv(AirGappedEnvVar, "")
+	if IsKnownAirGapped() {
+		t.Fatalf("expected unset %s with defaultAirGap=false to return false", AirGappedEnvVar)
 	}
-	envDef.SetDefaultAirGapped()
-	if !envDef.IsKnownAirGapped() {
+
+	SetDefaultAirGapped()
+	if !IsKnownAirGapped() {
 		t.Fatalf("expected SetDefaultAirGapped() to turn on IsKnownAirGapped()")
 	}
+
 	for _, falsy := range []string{"0", "false", "FALSE", "no"} {
-		overrideVal = falsy
-		if envDef.IsKnownAirGapped() {
-			t.Errorf("expected explicit GCLUSTER_AIR_GAPPED=%q to override SetDefaultAirGapped()", falsy)
+		t.Setenv(AirGappedEnvVar, falsy)
+		if IsKnownAirGapped() {
+			t.Errorf("expected explicit %s=%q to override SetDefaultAirGapped()", AirGappedEnvVar, falsy)
 		}
 	}
-	overrideVal = ""
-	envDef.SetDefaultAirGappedState(false)
-	if envDef.IsKnownAirGapped() {
+
+	t.Setenv(AirGappedEnvVar, "")
+	SetDefaultAirGappedState(false)
+	if IsKnownAirGapped() {
 		t.Fatalf("expected SetDefaultAirGappedState(false) to clear default air-gap state")
 	}
 
@@ -66,8 +63,8 @@ func TestEnvironment_IsKnownAirGappedAndDefaultOverride(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			envDef.SetDefaultAirGappedState(idx%2 == 0)
-			_ = envDef.IsKnownAirGapped()
+			SetDefaultAirGappedState(idx%2 == 0)
+			_ = IsKnownAirGapped()
 		}(i)
 	}
 	wg.Wait()

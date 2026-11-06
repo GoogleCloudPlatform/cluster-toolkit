@@ -19,12 +19,12 @@ package telemetry
 import (
 	"encoding/json"
 	"hpc-toolkit/pkg/logging"
-	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 	"time"
 )
 
 func (c *Collector) Execute(exitCode int, err error) {
-	if orchestrator.IsKnownAirGapped() {
+	if shell.IsKnownAirGapped() {
 		return
 	}
 	c.CollectMetrics(exitCode, err)

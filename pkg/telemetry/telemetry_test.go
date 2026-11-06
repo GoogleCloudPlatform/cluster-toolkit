@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 
 	"github.com/spf13/cobra"
 )
@@ -89,8 +89,8 @@ func TestBuildPayload(t *testing.T) {
 }
 
 func TestExecute(t *testing.T) {
-	t.Setenv(orchestrator.AirGappedEnvVar, "")
-	orchestrator.SetDefaultAirGappedState(false)
+	t.Setenv(shell.AirGappedEnvVar, "")
+	shell.SetDefaultAirGappedState(false)
 
 	// Save the original transport and restore it after tests run
 	// to prevent Flush() from triggering real external network requests
@@ -119,7 +119,7 @@ func TestExecute_AirGappedSkipsClearcut(t *testing.T) {
 	origTransport := http.DefaultTransport
 	t.Cleanup(func() {
 		http.DefaultTransport = origTransport
-		orchestrator.SetDefaultAirGappedState(false)
+		shell.SetDefaultAirGappedState(false)
 	})
 
 	var calls atomic.Int32
@@ -132,21 +132,21 @@ func TestExecute_AirGappedSkipsClearcut(t *testing.T) {
 
 	cmd := &cobra.Command{Use: "test-airgapped"}
 
-	t.Setenv(orchestrator.AirGappedEnvVar, "true")
-	orchestrator.SetDefaultAirGappedState(false)
+	t.Setenv(shell.AirGappedEnvVar, "true")
+	shell.SetDefaultAirGappedState(false)
 	NewCollector(cmd, nil, SOURCE).Execute(0, nil)
 	if got := calls.Load(); got != 0 {
 		t.Fatalf("expected 0 Clearcut HTTP calls when GCLUSTER_AIR_GAPPED=true, got %d", got)
 	}
 
-	t.Setenv(orchestrator.AirGappedEnvVar, "")
-	orchestrator.SetDefaultAirGappedState(true)
+	t.Setenv(shell.AirGappedEnvVar, "")
+	shell.SetDefaultAirGappedState(true)
 	NewCollector(cmd, nil, SOURCE).Execute(0, nil)
 	if got := calls.Load(); got != 0 {
 		t.Fatalf("expected 0 Clearcut HTTP calls when SetDefaultAirGapped is active, got %d", got)
 	}
 
-	t.Setenv(orchestrator.AirGappedEnvVar, "false")
+	t.Setenv(shell.AirGappedEnvVar, "false")
 	NewCollector(cmd, nil, SOURCE).Execute(0, nil)
 	if got := calls.Load(); got != 1 {
 		t.Fatalf("expected 1 Clearcut HTTP call when GCLUSTER_AIR_GAPPED=false overrides default, got %d", got)

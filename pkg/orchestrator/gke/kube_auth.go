@@ -121,8 +121,8 @@ func findKubeContext(cfg *clientcmdapi.Config, clusterName, location, projectID 
 		if kubeCtx, ok := cfg.Contexts[expected]; ok && kubeCtx != nil {
 			return expected, kubeCtx, true
 		}
-		if parts := strings.Split(location, "-"); len(parts) == 3 {
-			regExpected := gkeContextName(projectID, parts[0]+"-"+parts[1], clusterName)
+		if region := shell.ExtractRegion(location); region != location {
+			regExpected := gkeContextName(projectID, region, clusterName)
 			if kubeCtx, ok := cfg.Contexts[regExpected]; ok && kubeCtx != nil {
 				return regExpected, kubeCtx, true
 			}

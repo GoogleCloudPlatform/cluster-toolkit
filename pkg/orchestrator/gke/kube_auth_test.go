@@ -1100,8 +1100,8 @@ func TestKubectlIn_RefusesEmptyContextAndPinsNonEmpty(t *testing.T) {
 	orc := newTestGKEOrchestrator(exec)
 
 	res := orc.kubectlIn("   ", "get", "pods")
-	if res.ExitCode == 0 || len(exec.calls) != 0 {
-		t.Fatalf("kubectlIn(empty) = %+v (calls=%v), want failure with 0 subprocesses", res, exec.calls)
+	if res.ExitCode == 0 || len(exec.calls) != 0 || !strings.Contains(res.Stderr, "refusing to run kubectl without an explicit --context") {
+		t.Fatalf("kubectlIn(empty) = %+v (calls=%v), want explicit --context error with 0 subprocesses", res, exec.calls)
 	}
 
 	res = orc.kubectlIn("pinned-ctx", "get", "pods")
