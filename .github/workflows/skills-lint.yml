@@ -31,6 +31,9 @@ on:
     - "skills/**"
     - "tools/run_eval.py"
     - "tools/tests/test_run_eval.py"
+    - "tools/tests/test_diff_scan.py"
+    - "tools/tests/test_breaking_check_scripts.py"
+    - ".github/scripts/breaking_check_*.py"
     - ".github/workflows/skills-lint.yml"
     - ".pre-commit-config.yaml"
     - "Makefile"
@@ -42,6 +45,9 @@ on:
     - "skills/**"
     - "tools/run_eval.py"
     - "tools/tests/test_run_eval.py"
+    - "tools/tests/test_diff_scan.py"
+    - "tools/tests/test_breaking_check_scripts.py"
+    - ".github/scripts/breaking_check_*.py"
     - ".github/workflows/skills-lint.yml"
     - ".pre-commit-config.yaml"
     - "Makefile"
@@ -72,6 +78,11 @@ jobs:
 
     - name: Run Skills Test Runner Unit Tests
       run: python3 tools/tests/test_run_eval.py
+
+    - name: Run release-breaking check unit tests
+      run: |
+        python3 tools/tests/test_diff_scan.py
+        python3 tools/tests/test_breaking_check_scripts.py
 
     - name: Run Skills Lint and Deterministic Evaluation
       run: python3 tools/run_eval.py --all

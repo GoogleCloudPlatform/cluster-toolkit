@@ -43,10 +43,16 @@ Pay close attention to the following specifics:
    * The PR description should clearly explain the purpose of the change and the problem it solves.
    * It should mention how the changes were tested.
 
-7. **Structure:**
+7. **Release Impact (existing clusters):**
+   * A change is release-breaking if someone who already has a cluster cannot upgrade it just by taking the new version and running `gcluster deploy` again with the same blueprint: the deploy errors, something they have is replaced or destroyed, their cluster starts behaving differently, a setting is silently ignored, or they must do manual steps first. It only has to affect some users. Example blueprints count because users deploy them directly.
+   * When a PR changes `modules/`, `community/modules/`, `examples/`, `community/examples/`, `pkg/` or `cmd/`, say in your summary whether you think it is release-breaking and why (name the file and attribute and what happens on redeploy). Follow `skills/release-breaking-check/SKILL.md`.
+   * If it looks breaking, check that the PR carries the `release-breaking-changes` label and that the **Upgrade steps** and **Redeploy impact** sections of the description are filled in. Flag it if not.
+   * Do not flag purely additive changes (new optional setting with a safe default, new module, new example), label/version-only edits, or fixes to something that never worked.
+
+8. **Structure:**
    * Confirm adherence to the project structure (e.g., core vs. community).
 
-8. **Temporal Context:**
+9. **Temporal Context:**
    * The current year is 2026.
    * When reviewing copyright headers, acknowledge that 2026 is the correct current year.
    * Do not suggest changing "2026" to "2025" or any other year.
