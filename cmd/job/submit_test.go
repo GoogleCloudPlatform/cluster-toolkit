@@ -382,11 +382,9 @@ func resetJobFlags() {
 	nodeConstraint = make(map[string]string)
 	cpuAffinityStr = ""
 	restartOnExitCodes = nil
-	volumeStr = nil
 	imagePullSecrets = ""
 	serviceAccountName = ""
 	topology = ""
-	gkeCustomTemplatesPath = ""
 	gkeScheduler = ""
 	platform = "linux/amd64"
 	awaitJobCompletion = false
@@ -415,6 +413,7 @@ func resetJobFlags() {
 }
 
 func setupSubmitTestEnv(t *testing.T) {
+	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
 	resetJobFlags()
 
 	oldFactory := gkeOrchestratorFactory
