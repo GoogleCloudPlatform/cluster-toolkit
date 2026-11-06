@@ -1,0 +1,110 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+name: 'Cloud Docs Drift Check'
+
+# yamllint disable-line rule:truthy
+on:
+  pull_request:
+    types:
+    - opened
+    - edited
+    - reopened
+    - synchronize
+    branches:
+    - main
+    - develop
+    - release-candidate-*
+    - hotfix-*
+    paths:
+    - "examples/**"
+    - "community/examples/**"
+    - "cmd/**"
+    - "tools/validate_cloud_docs.py"
+    - "tools/tests/test_validate_cloud_docs.py"
+    - ".github/workflows/cloud-docs-drift.yml"
+  schedule:
+  - cron: "0 8 * * 1"  # Weekly on Mondays at 08:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-cloud-docs-reminder:
+    name: Cloud Docs PR Reminder
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Set up Python
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      with:
+        python-version: '3.12'
+        check-latest: true
+
+    - name: Install Dependencies
+      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install 'pyyaml>=6.0.1'
+
+    - name: Run Cloud Docs Validator Unit Tests
+      run: python3 tools/tests/test_validate_cloud_docs.py
+
+    - name: Check PR for Cloud Docs Impact
+      env:
+        BASE_REF: "origin/${{ github.base_ref }}"
+        PR_BODY: ${{ github.event.pull_request.body }}
+      run: |
+        python3 tools/validate_cloud_docs.py --check-pr --fail-on-impact --base-ref "$BASE_REF"
+
+  live-cloud-docs-drift:
+    name: Live Cloud Docs Drift Check
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.repository == 'GoogleCloudPlatform/cluster-toolkit'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      with:
+        persist-credentials: false
+
+    - name: Set up Python
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      with:
+        python-version: '3.12'
+        check-latest: true
+
+    - name: Install Dependencies
+      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install 'pyyaml>=6.0.1'
+
+    - name: Run Cloud Docs Validator Unit Tests
+      run: python3 tools/tests/test_validate_cloud_docs.py
+
+    - name: Validate Live cloud.google.com Pages Against Repo
+      if: ${{ !cancelled() }}
+      run: python3 tools/validate_cloud_docs.py --check-live

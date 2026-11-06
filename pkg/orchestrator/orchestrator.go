@@ -92,6 +92,10 @@ type JobDefinition struct {
 	GKENAPProvisioning    string
 	GKENAPReservation     string
 
+	// ImagePullSecretsSpecified reports that ImagePullSecrets was given explicitly, possibly empty, and must be
+	// used as is instead of discovering secrets.
+	ImagePullSecretsSpecified bool
+
 	// Pathways-specific fields
 	IsPathwaysJob bool
 	Pathways      PathwaysJobDefinition // Embedded struct for Pathways-specific args
@@ -152,6 +156,7 @@ type InspectOptions struct {
 	WorkloadName    string
 	OutputPath      string
 	Show            bool
+	Filter          string // component filter (e.g., "pathways-sps")
 }
 
 // JobOrchestrator defines the interface to interact with job orchestrators like GKE.

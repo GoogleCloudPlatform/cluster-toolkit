@@ -1,0 +1,220 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# GKE inference benchmark: DiffusionGemma 26B-A4B served with vLLM on a Spot
+# G4 node pool, benchmarked with `vllm bench serve`. See README.md for the
+# deploy command, the variables and the three-stage workflow.
+
+blueprint_name: gke-inference-benchmark-g4-diffusiongemma
+
+vars:
+  # The following variables should be over-written in deployment.yaml.
+  # Your GCP Project ID
+  project_id:
+
+  # This should be unique across all of your Cluster Toolkit Deployments.
+  deployment_name: g4-diffusiongemma
+
+  # The GCP Region used for this deployment.
+  region:
+
+  # The GCP Zone used for this deployment (Spot capacity is zonal).
+  zone:
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # The following line must be updated for this example to work.
+  authorized_cidr:
+
+  # g4-standard-48 = 1x NVIDIA RTX PRO 6000 (96 GB).
+  # See allowed values here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
+  machine_type: g4-standard-48
+
+  # Number of GPUs in the VM. Can be found here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
+  num_gpus: 1
+
+  # The number of nodes to be created. One node is enough for this benchmark.
+  static_node_count: 1
+
+  # Consumption model: Spot VMs (preemptible). Set to false for on-demand.
+  spot: true
+  auto_repair: true
+
+  # Hugging Face token for the gated model; pass it with --vars hf_token=$HF_TOKEN
+  # (see README.md for the plaintext state caveat and the kubectl alternative).
+  hf_token: ""
+
+  # Existing Cloud Storage bucket (name only) and prefix for the model weights;
+  # leave model_bucket empty to use a Hyperdisk volume instead (see README.md).
+  model_bucket: ""
+  model_path: models/diffusiongemma-26B-A4B-it
+
+  # Set to false to only deploy the vLLM server (no benchmark Job).
+  run_benchmark: true
+
+  # Benchmark workload; part of the Job name, so change them with
+  # `gcluster deploy -w` (see README.md). bench_run_id repeats a workload.
+  bench_input_len: 1024
+  bench_output_len: 1024
+  bench_num_prompts: 64
+  bench_max_concurrency: 8
+  bench_run_id: ""
+
+  system_node_pool_disk_size_gb: 100
+  version_prefix: "1.35."
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: gke-g4-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-0
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.0.0/18
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-sub-0
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: node_pool_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  # Used by the pods (Workload Identity) to read and populate the model bucket.
+  - id: workload_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - storage.bucketViewer
+      - artifactregistry.reader
+
+  - id: g4-cluster
+    source: modules/scheduler/gke-cluster
+    use: [gke-g4-net-0, workload_service_account]
+    settings:
+      # Single-zone system node pool: one GPU node does not need more.
+      system_node_pool_machine_type: "n2d-standard-8"
+      system_node_pool_zones: [$(vars.zone)]
+      system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
+      system_node_pool_taints: []
+      enable_dcgm_monitoring: true
+      enable_gcsfuse_csi: true
+      enable_filestore_csi: true
+      enable_managed_lustre_csi: true # Enable Managed Lustre for the cluster
+      enable_dataplane_v2: true
+      enable_private_endpoint: false # Allows access from authorized public IPs
+      configure_workload_identity_sa: true
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command.
+        display_name: "kubectl-access-network"
+      # Cluster versions cannot be updated through the toolkit after creation
+      # Please manage cluster version from the Google Cloud Console directly
+      version_prefix: $(vars.version_prefix)
+      release_channel: REGULAR
+      maintenance_exclusions:
+      - name: no-minor-or-node-upgrades-indefinite
+        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+        exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
+    outputs: [instructions]
+
+  - id: g4-spot-pool
+    source: modules/compute/gke-node-pool
+    use: [g4-cluster, node_pool_service_account]
+    settings:
+      machine_type: $(vars.machine_type)
+      auto_upgrade: true
+      zones: [$(vars.zone)]
+      static_node_count: $(vars.static_node_count)
+      spot: $(vars.spot)
+      auto_repair: $(vars.auto_repair)
+      guest_accelerator:
+      - type: nvidia-rtx-pro-6000
+        count: $(vars.num_gpus)
+    outputs: [instructions]
+
+  # Hugging Face token Secret (`hf-secret`, key hf_api_token).
+  - id: hf-secret
+    source: modules/security/kubernetes-secret
+    use: [g4-cluster]
+    settings:
+      # Endpoint and CA come from g4-cluster via `use`; null keeps the module's
+      # data source count known at plan time.
+      cluster_id: null
+      secret_name: hf-secret
+      data:
+        hf_api_token: '$(vars.hf_token != null ? vars.hf_token : "")'
+
+  # Three stages: stage weights to Cloud Storage, serve, benchmark (README.md).
+  - id: diffusiongemma-vllm
+    source: modules/management/kubectl-apply
+    use: [g4-cluster]
+    settings:
+      jobset:
+        install: true
+      apply_manifests:
+      - name: diffusiongemma-stage-weights
+        enable: '$(vars.model_bucket != null && vars.model_bucket != "")'
+        source: $(ghpc_stage("manifests/stage-weights.yaml.tftpl"))
+        template_vars:
+          hf_secret_name: $(hf-secret.secret_name)
+          model_bucket: '$(vars.model_bucket != null ? vars.model_bucket : "")'
+          model_path: '$(vars.model_path != null ? vars.model_path : "")'
+        wait_for_rollout: false
+      - name: diffusiongemma-vllm-serve
+        source: $(ghpc_stage("manifests/vllm-serve.yaml.tftpl"))
+        template_vars:
+          hf_secret_name: $(hf-secret.secret_name)
+          model_bucket: '$(vars.model_bucket != null ? vars.model_bucket : "")'
+          model_path: '$(vars.model_path != null ? vars.model_path : "")'
+        # Loading the weights takes 5-25 minutes; do not block the deploy.
+        wait_for_rollout: false
+      - name: diffusiongemma-vllm-bench
+        enable: $(vars.run_benchmark)
+        source: $(ghpc_stage("manifests/vllm-bench.yaml.tftpl"))
+        template_vars:
+          hf_secret_name: $(hf-secret.secret_name)
+          bench_input_len: $(vars.bench_input_len)
+          bench_output_len: $(vars.bench_output_len)
+          bench_num_prompts: $(vars.bench_num_prompts)
+          bench_max_concurrency: $(vars.bench_max_concurrency)
+          bench_run_id: '$(vars.bench_run_id != null ? vars.bench_run_id : "")'
+        wait_for_rollout: false

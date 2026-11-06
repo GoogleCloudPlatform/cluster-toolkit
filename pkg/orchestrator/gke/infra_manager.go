@@ -31,6 +31,7 @@ import (
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"gopkg.in/yaml.v2"
@@ -166,7 +167,7 @@ func (g *GKEOrchestrator) checkResourceExists(kind, name, namespace string) (exi
 		return strings.TrimSpace(res.Stdout) != "", false, nil
 	}
 	err = fmt.Errorf("kubectl get %s %s failed: %s", kind, name, strings.TrimSpace(res.Stderr+"\n"+res.Stdout))
-	if isForbiddenError(err) {
+	if k8s.IsForbiddenError(err) {
 		logging.Warn("Insufficient RBAC permissions to read %s %s (403 Forbidden). Assuming it exists.", kind, name)
 		return true, true, nil
 	}
@@ -238,7 +239,7 @@ func (g *GKEOrchestrator) installJobSetCRD(jobSetManifestsURL string) error {
 	if err != nil {
 		return err
 	}
-	if err := g.applyManifestFile(manifestPath); err != nil {
+	if err := g.applyManifestFile(manifestPath, ""); err != nil {
 		return fmt.Errorf("%w\nJobSet may now be partly installed, and later runs of gcluster will not modify it. To finish the installation, run:\n  %s",
 			err, kubectlCommandLine(g.kubeContext, "apply", "-f", manifestPath))
 	}
@@ -365,7 +366,7 @@ func (g *GKEOrchestrator) checkServiceEndpointsReady(namespace, service string) 
 	res := g.kubectl("get", "endpointslice", "-l", "kubernetes.io/service-name="+service, "-n", namespace, "-o", "json", kubectlReadTimeout)
 	if res.ExitCode != 0 {
 		err = fmt.Errorf("%w: %s", errEndpointsUnreadable, strings.TrimSpace(res.Stderr+"\n"+res.Stdout))
-		if isForbiddenError(err) {
+		if k8s.IsForbiddenError(err) {
 			logging.Warn("Insufficient RBAC permissions to read %s endpoints in %s (403 Forbidden). Skipping endpoint readiness check.", service, namespace)
 			return true, true, nil
 		}
@@ -622,14 +623,16 @@ func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interf
 	}
 }
 
-// applyManifests saves manifests under ~/.gcluster/generated and applies them.
-func (g *GKEOrchestrator) applyManifests(manifests []byte, filename string) error {
+// applyManifests saves manifests under ~/.gcluster/generated and applies them. A non-empty namespace is passed
+// as `kubectl apply -n`, so objects that declare no metadata.namespace land in the target namespace; add-on
+// manifests that are cluster-scoped or declare their own namespace pass "".
+func (g *GKEOrchestrator) applyManifests(manifests []byte, filename, namespace string) error {
 	logging.Info("Applying manifests for %s...", filename)
 	filePath, err := writeGeneratedManifest(manifests, filename)
 	if err != nil {
 		return err
 	}
-	return g.applyManifestFile(filePath)
+	return g.applyManifestFile(filePath, namespace)
 }
 
 // writeGeneratedManifest saves manifests as ~/.gcluster/generated/<filename> and returns the file's path.
@@ -652,10 +655,18 @@ func writeGeneratedManifest(manifests []byte, filename string) (string, error) {
 	return filePath, nil
 }
 
-func (g *GKEOrchestrator) applyManifestFile(filePath string) error {
-	res := g.kubectl("apply", "-f", filePath)
+func (g *GKEOrchestrator) applyManifestFile(filePath, namespace string) error {
+	args := []string{"apply"}
+	if namespace != "" {
+		args = append(args, "-n", namespace)
+	}
+	res := g.kubectl(append(args, "-f", filePath)...)
 	if res.ExitCode != 0 {
-		return fmt.Errorf("kubectl apply failed with exit code %d: %s\n%s", res.ExitCode, res.Stderr, res.Stdout)
+		out := strings.TrimSpace(strings.TrimSpace(res.Stderr) + "\n" + strings.TrimSpace(res.Stdout))
+		if namespace != "" {
+			return fmt.Errorf("kubectl apply in namespace %q failed with exit code %d: %s", namespace, res.ExitCode, out)
+		}
+		return fmt.Errorf("kubectl apply failed with exit code %d: %s", res.ExitCode, out)
 	}
 	logging.Info("Manifests applied successfully.")
 	return nil
@@ -772,7 +783,7 @@ func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, p
 		return nil
 	case apierrors.IsNotFound(err):
 		return fmt.Errorf("target namespace %q does not exist on GKE cluster %q. Please create the namespace first (e.g., 'kubectl create namespace %s')", ns, clusterName, ns)
-	case isForbiddenError(err):
+	case k8s.IsForbiddenError(err):
 		logging.Warn("Insufficient RBAC permissions to verify existence of namespace %q on cluster %q (403 Forbidden). Proceeding with job submission...", ns, clusterName)
 		return nil
 	default:
@@ -899,14 +910,6 @@ func (g *GKEOrchestrator) ensureLocalQueueExists(localQueue, ns string, discover
 	return g.createDefaultQueues(localQueue, ns)
 }
 
-// isForbiddenError returns true if the error indicates a 403 Forbidden RBAC permission error.
-func isForbiddenError(err error) bool {
-	if err == nil {
-		return false
-	}
-	return apierrors.IsForbidden(err) || strings.Contains(strings.ToLower(err.Error()), "forbidden")
-}
-
 func (g *GKEOrchestrator) verifyCheckpointConfigurationCR(job *orchestrator.JobDefinition, docRemediationMsg string) error {
 	client, err := g.getDynamicClient()
 	if err != nil {
@@ -921,7 +924,7 @@ func (g *GKEOrchestrator) verifyCheckpointConfigurationCR(job *orchestrator.JobD
 		if apierrors.IsNotFound(err) {
 			return fmt.Errorf("the CheckpointConfiguration CustomResourceDefinition (CRD) is not registered on the cluster. %s: %w", docRemediationMsg, err)
 		}
-		if isForbiddenError(err) {
+		if k8s.IsForbiddenError(err) {
 			logging.Warn("Insufficient RBAC permissions to verify CheckpointConfiguration resources (403 Forbidden). Assuming CheckpointConfiguration is configured in shared cluster and proceeding with job submission.")
 			return nil
 		}
@@ -1131,7 +1134,7 @@ func waitForMTCDaemonSetReady(client dynamic.Interface, crName, uid string, canS
 
 		var lastErr error
 		switch {
-		case isForbiddenError(err):
+		case k8s.IsForbiddenError(err):
 			logging.Warn("Insufficient RBAC permissions to verify MTC driver DaemonSet %s/%s (403 Forbidden). Proceeding with job submission.", mtcDriverNamespace, dsName)
 			return nil
 		case apierrors.IsNotFound(err):

@@ -87,6 +87,68 @@ blueprints:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network, homefs, swfs, low_cost_partition, compute_partition, slurm_login]
     settings: [login_startup_script, login_startup_scripts_timeout, machine_type]
+- path: community/examples/agentgateway-gke/agentgateway-gke.yaml
+  deployment_path: community/examples/agentgateway-gke/agentgateway-gke-deployment.yaml
+  blueprint_name: agentgateway-gke
+  scheduler: gke
+  description: "This blueprint deploys a private generative AI gateway powered by agentgateway on a regional, CPU-only GKE Standard cluster."
+  required_services: [aiplatform.googleapis.com, compute.googleapis.com, container.googleapis.com, iam.googleapis.com]
+  vars:
+    agentgateway_version: v1.7.0
+    anthropic_secret_name: ""
+    authorized_cidr: YOUR_IP/32
+    deployment_name: agw-demo
+    gke_version_prefix: "1.35."
+    namespace: agentgateway-system
+    openai_secret_name: ""
+    project_id: YOUR_PROJECT
+    region: us-central1
+    vertex_location: global
+    vertex_model: gemini-2.5-flash
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings: [ips_per_nat, secondary_ranges_list, subnetworks]
+  - id: node_sa
+    source: modules/project/service-account
+    settings: [grant_xpn_roles, name, project_roles]
+  - id: proxy_sa
+    source: modules/project/service-account
+    settings: [grant_xpn_roles, name, project_roles]
+  - id: proxy_wi
+    source: modules/project/workload_identity_binding
+    settings: [k8s_service_account_name, namespace, service_account_email]
+  - id: vertex_permissions
+    source: community/modules/project/aiplatform-predict-iam
+    settings: [service_account_email]
+  - id: cluster
+    source: modules/scheduler/gke-cluster
+    use: [network]
+    settings: [enable_dcgm_monitoring, enable_gateway_api, enable_inference_gateway, enable_private_endpoint, enable_private_nodes, gcp_public_cidrs_access_enabled, master_authorized_networks, release_channel, service_account_email, system_node_pool_disk_size_gb, system_node_pool_disk_type, system_node_pool_machine_type, system_node_pool_node_count, system_node_pool_taints, version_prefix]
+  - id: load_balancer_firewall
+    source: modules/network/firewall-rules
+    use: [network]
+    settings: [ingress_rules]
+  - id: gateway_api_ready
+    source: modules/management/kubectl-apply
+    use: [cluster]
+    settings: [apply_manifests]
+  - id: agentgateway_crds
+    source: community/modules/management/direct-helm-install
+    use: [cluster]
+    settings: [chart_name, chart_version, dependencies, namespace, release_name]
+  - id: agentgateway_controller
+    source: community/modules/management/direct-helm-install
+    use: [cluster]
+    settings: [atomic, chart_name, chart_version, dependencies, namespace, release_name, timeout, values_yaml]
+  - id: gateway_configuration
+    source: modules/management/kubectl-apply
+    use: [cluster]
+    settings: [apply_manifests]
+  - id: internal_ingress
+    source: modules/management/kubectl-apply
+    use: [cluster]
+    settings: [apply_manifests]
 - path: community/examples/alphaevolve/alpha-evolve-experiment.yaml
   deployment_path: community/examples/alphaevolve/alpha-evolve-deployment.yaml
   blueprint_name: alpha-evolve-platform
@@ -715,6 +777,61 @@ blueprints:
   - id: gcloud_commands
     source: community/modules/scripts/gcloud
     settings: [commands]
+- path: community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml
+  deployment_path: community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/deployment.yaml
+  blueprint_name: gke-inference-benchmark-g4-diffusiongemma
+  scheduler: gke
+  description: "This benchmark provisions a GKE cluster with a single-zone Spot G4 node pool (g4-standard-48, 1x NVIDIA RTX PRO 6000), serves google/diffusiongemma-26B-A4B-it with vLLM and runs a vllm bench serve throughput and latency benchmark..."
+  machine_types: [g4-standard-48]
+  required_services: [compute.googleapis.com, container.googleapis.com, iam.googleapis.com]
+  vars:
+    authorized_cidr: null
+    auto_repair: true
+    bench_input_len: 1024
+    bench_max_concurrency: 8
+    bench_num_prompts: 64
+    bench_output_len: 1024
+    bench_run_id: ""
+    deployment_name: g4-diffusiongemma
+    hf_token: ""
+    machine_type: g4-standard-48
+    model_bucket: ""
+    model_path: models/diffusiongemma-26B-A4B-it
+    num_gpus: 1
+    project_id: null
+    region: us-central1
+    run_benchmark: true
+    spot: true
+    static_node_count: 1
+    system_node_pool_disk_size_gb: 100
+    version_prefix: "1.35."
+    zone: us-central1-b
+  modules:
+  - id: gke-g4-net-0
+    source: modules/network/vpc
+    settings: [firewall_rules, network_name, secondary_ranges_list, subnetworks]
+  - id: node_pool_service_account
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: workload_service_account
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: g4-cluster
+    source: modules/scheduler/gke-cluster
+    use: [gke-g4-net-0, workload_service_account]
+    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_dcgm_monitoring, enable_filestore_csi, enable_gcsfuse_csi, enable_managed_lustre_csi, enable_private_endpoint, maintenance_exclusions, master_authorized_networks, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, system_node_pool_zones, version_prefix]
+  - id: g4-spot-pool
+    source: modules/compute/gke-node-pool
+    use: [g4-cluster, node_pool_service_account]
+    settings: [auto_repair, auto_upgrade, guest_accelerator, machine_type, spot, static_node_count, zones]
+  - id: hf-secret
+    source: modules/security/kubernetes-secret
+    use: [g4-cluster]
+    settings: [cluster_id, data, secret_name]
+  - id: diffusiongemma-vllm
+    source: modules/management/kubectl-apply
+    use: [g4-cluster]
+    settings: [apply_manifests, jobset]
 - path: community/examples/hpc-build-slurm-image.yaml
   blueprint_name: hpc-build-slurm-image
   scheduler: slurm
@@ -818,7 +935,7 @@ blueprints:
   required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
     authorized_ssh_ranges: []
-    build_slurm_from_git_ref: 6.12.3
+    build_slurm_from_git_ref: 6.13.2
     built_instance_image:
       family: slurm-rocky9-eda
       project: $(vars.project_id)
@@ -1896,6 +2013,70 @@ blueprints:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network, debug_partition, compute_partition, homefs, slurm_login, kms_key_iam]
     settings: [enable_controller_public_ips]
+- path: community/examples/remote-desktop/hpc-slurm-remote-desktop.yaml
+  blueprint_name: hpc-slurm-remote-desktop
+  scheduler: slurm
+  description: "These blueprints deploy browser-based Linux desktops alongside a Slurm cluster, using the novnc-runtime and novnc-desktop modules. Users reach an XFCE session over noVNC in a browser, with sessions created per user from their OS Login..."
+  machine_types: [n2-standard-4, n2-standard-8]
+  required_services: [compute.googleapis.com, iam.googleapis.com, storage.googleapis.com]
+  vars:
+    compute_machine_type: n2-standard-4
+    compute_startup_scripts_timeout: 1800
+    controller_machine_type: e2-standard-4
+    controller_startup_scripts_timeout: 1800
+    deployment_name: hpc-slurm-remote-desktop
+    enable_slurm_auth: true
+    homefs_name: "$(\"${vars.deployment_name}-homefs\")"
+    login_machine_type: n2-standard-4
+    login_startup_scripts_timeout: 1800
+    project_id: null
+    region: us-central1
+    shared_root: /shared
+    sharedfs_name: "$(\"${vars.deployment_name}-sharedfs\")"
+    slurm_cluster_name: slurmdesktop
+    slurm_image:
+      family: slurm-gcp-6-12-hpc-rocky-linux-9
+      project: schedmd-slurm-public
+    viz_machine_type: n2-standard-8
+    zone: us-central1-a
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings: [network_name, subnetwork_name]
+  - id: homefs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    settings: [local_mounts, metadata, name]
+  - id: sharedfs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    settings: [local_mounts, metadata, name]
+  - id: compute-nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, homefs, sharedfs]
+    settings: [advanced_machine_features, allow_automatic_updates, instance_image, machine_type, node_count_dynamic_max, node_count_static, on_host_maintenance]
+  - id: compute-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute-nodeset]
+    settings: [exclusive, is_default, partition_name]
+  - id: login-desktop-runtime
+    source: community/modules/remote-desktop/novnc-runtime
+    settings: [slurm_auth_mode, vnc_backend]
+  - id: login-desktop-startup
+    source: modules/scripts/startup-script
+    settings: [runners]
+  - id: slurm-login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings: [allow_automatic_updates, enable_login_public_ips, instance_image, machine_type]
+  - id: slurm-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, homefs, sharedfs, slurm-login, compute-partition]
+    settings: [allow_automatic_updates, compute_startup_scripts_timeout, controller_startup_scripts_timeout, enable_controller_public_ips, enable_slurm_auth, instance_image, login_network_storage, login_startup_script, login_startup_scripts_timeout, machine_type, slurm_cluster_name]
+  - id: viz-desktop
+    source: community/modules/remote-desktop/novnc-desktop
+    use: [network, homefs, sharedfs]
+    settings: [enable_public_ips, instance_image, machine_type, vnc_backend]
 - path: community/examples/slurm-gke/slurm-gke.yaml
   blueprint_name: slurm-gke
   scheduler: slurm-on-gke (slinky)
@@ -6564,6 +6745,8 @@ module_wiring:
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -6604,6 +6787,11 @@ module_wiring:
     - modules/network/pre-existing-subnetwork
     - modules/network/pre-existing-vpc
     - modules/network/vpc
+  community/modules/project/aiplatform-predict-iam:
+    required_services: [aiplatform.googleapis.com, iam.googleapis.com]
+    required_inputs: [service_account_email]
+    recommended_use:
+    - modules/project/service-account
   community/modules/project/pre-existing-project:
     required_services: [cloudresourcemanager.googleapis.com]
   community/modules/project/project-metadata:
@@ -6628,6 +6816,9 @@ module_wiring:
     - community/modules/pubsub/bigquery-sub
   community/modules/remote-desktop/chrome-remote-desktop:
     required_inputs: [install_nvidia_driver]
+  community/modules/remote-desktop/novnc-desktop:
+    required_services: [compute.googleapis.com, storage.googleapis.com]
+  community/modules/remote-desktop/novnc-runtime: {}
   community/modules/scheduler/htcondor-access-point:
     required_services: [compute.googleapis.com, storage.googleapis.com]
     required_inputs: [access_point_service_account_email, central_manager_ips, htcondor_bucket_name, instance_image]
@@ -6719,6 +6910,8 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
     - modules/compute/vm-instance
@@ -6730,6 +6923,8 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
     - community/modules/scripts/ramble-execute
@@ -6748,6 +6943,8 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
     - modules/compute/vm-instance
@@ -6760,6 +6957,8 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
     - community/modules/scripts/ramble-execute
@@ -6840,6 +7039,8 @@ module_wiring:
     - community/modules/container/apptainer-runtime
     - community/modules/files/fsi-montecarlo-on-batch
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -6867,6 +7068,8 @@ module_wiring:
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -6913,6 +7116,8 @@ module_wiring:
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -6945,6 +7150,8 @@ module_wiring:
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -6970,6 +7177,8 @@ module_wiring:
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -6990,6 +7199,8 @@ module_wiring:
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -7110,6 +7321,7 @@ module_wiring:
     - community/modules/file-system/nfs-server
     - community/modules/network/int-app-lb
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
     - community/modules/scheduler/htcondor-access-point
     - community/modules/scheduler/htcondor-central-manager
     - community/modules/scheduler/htcondor-setup
@@ -7137,6 +7349,7 @@ module_wiring:
     required_inputs: [name, project_roles]
     consumed_by:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    - community/modules/project/aiplatform-predict-iam
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
     - modules/compute/gke-node-pool
@@ -7197,6 +7410,8 @@ module_wiring:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
     - community/modules/remote-desktop/chrome-remote-desktop
+    - community/modules/remote-desktop/novnc-desktop
+    - community/modules/remote-desktop/novnc-runtime
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
     - modules/compute/vm-instance
