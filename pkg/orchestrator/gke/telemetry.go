@@ -24,11 +24,17 @@ import (
 	"hpc-toolkit/pkg/orchestrator/k8s"
 )
 
-// isGKE reports whether the submission targets a GKE cluster (a project is known) rather than a plain Kubernetes endpoint.
-// The CLI always requires a project, so only programmatic callers reach the non-GKE branch today.
-// TODO: derive this from the detected target platform once platform detection lands, instead of the project.
+// isGKE reports whether the orchestrator targets GKE rather than a generic Kubernetes endpoint.
 func (g *GKEOrchestrator) isGKE(job orchestrator.JobDefinition) bool {
-	return strings.TrimSpace(g.projectID) != "" || strings.TrimSpace(job.ProjectID) != ""
+	switch g.mode {
+	case orchestrator.TypeGKE:
+		return true
+	case orchestrator.TypeK8s:
+		return false
+	default:
+		// Programmatic callers constructing GKEOrchestrator directly leave mode unset.
+		return strings.TrimSpace(g.projectID) != "" || strings.TrimSpace(job.ProjectID) != ""
+	}
 }
 
 // ambientTelemetryImage returns GCLUSTER_TELEMETRY_IMAGE unless --ml-diagnostics-image was given explicitly

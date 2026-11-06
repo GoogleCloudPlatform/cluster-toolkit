@@ -95,13 +95,15 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 		orc:    g,
 	}
 
-	// --- 1. Local Setup ---
-	writer.runAndLog("Local Setup: gcloud version", "gcloud", "version")
-	writer.runAndLog("Local Setup: Active gcloud configuration", "gcloud", "config", "list")
+	if g.mode != orchestrator.TypeK8s {
+		// --- 1. Local Setup ---
+		writer.runAndLog("Local Setup: gcloud version", "gcloud", "version")
+		writer.runAndLog("Local Setup: Active gcloud configuration", "gcloud", "config", "list")
 
-	// --- 2. GKE Infrastructure ---
-	writer.runAndLog("GKE: Cluster Details", "gcloud", "container", "clusters", "describe", opts.ClusterName, "--location", opts.ClusterLocation, "--project", opts.ProjectID, "--format=yaml")
-	writer.runAndLog("GKE: Node Pool Details", "gcloud", "container", "node-pools", "list", "--cluster", opts.ClusterName, "--location", opts.ClusterLocation, "--project", opts.ProjectID)
+		// --- 2. GKE Infrastructure ---
+		writer.runAndLog("GKE: Cluster Details", "gcloud", "container", "clusters", "describe", opts.ClusterName, "--location", opts.ClusterLocation, "--project", opts.ProjectID, "--format=yaml")
+		writer.runAndLog("GKE: Node Pool Details", "gcloud", "container", "node-pools", "list", "--cluster", opts.ClusterName, "--location", opts.ClusterLocation, "--project", opts.ProjectID)
+	}
 
 	// ConfigMaps (graceful handle if not present)
 	metadataCM := fmt.Sprintf("%s-metadata", opts.ClusterName)
@@ -139,8 +141,10 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 
 	g.inspectWorkload(writer, opts.WorkloadName, targetNamespace)
 
-	// --- 7. Console Links ---
-	logConsoleLinks(outputTarget, opts, targetNamespace)
+	if g.mode != orchestrator.TypeK8s {
+		// --- 7. Console Links ---
+		logConsoleLinks(outputTarget, opts, targetNamespace)
+	}
 
 	logging.Info("Cluster inspection report saved to %s", filePath)
 	return nil

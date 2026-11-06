@@ -795,6 +795,9 @@ func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, p
 // handling regional fallback if necessary.
 func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
 	g.projectID = projectID
+	if g.mode == orchestrator.TypeK8s {
+		return location, nil
+	}
 
 	logging.Info("Fetching GKE cluster metadata for '%s'...", clusterName)
 	res := g.executor.ExecuteCommandWithTimeout(shell.DefaultCloudAPITimeout, "gcloud", "container", "clusters", "describe", clusterName,
@@ -902,6 +905,9 @@ func (g *GKEOrchestrator) ensureLocalQueueExists(localQueue, ns string, discover
 		if availableQueues := g.listLocalQueues(ns); len(availableQueues) > 0 {
 			availableStr = fmt.Sprintf(" Available LocalQueues in namespace '%s': %s.", ns, strings.Join(availableQueues, ", "))
 		}
+	}
+	if g.mode == orchestrator.TypeK8s {
+		return fmt.Errorf("LocalQueue '%s' does not exist in namespace '%s'.%s Automatic ClusterQueue capacity creation requires GKE node-pool metadata; create a LocalQueue in namespace '%s' or specify an existing queue with --queue", localQueue, ns, availableStr, ns)
 	}
 	promptMsg := fmt.Sprintf("LocalQueue '%s' does not exist in namespace '%s'.%s Do you want gcluster to create default Kueue resources (ClusterQueue and LocalQueue) with calculated cluster capacity?", localQueue, ns, availableStr)
 	if !shell.PromptYesNo(promptMsg) {

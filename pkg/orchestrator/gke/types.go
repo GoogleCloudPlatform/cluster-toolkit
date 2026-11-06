@@ -179,6 +179,7 @@ type DefaultKubeClient struct {
 type DefaultExecutor struct{}
 
 type GKEOrchestrator struct {
+	mode                        orchestrator.Type
 	executor                    Executor
 	projectID                   string
 	clusterZones                []string

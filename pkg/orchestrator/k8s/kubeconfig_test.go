@@ -83,6 +83,23 @@ func TestResolveCurrentContext(t *testing.T) {
 	}
 }
 
+func TestResolveContext(t *testing.T) {
+	t.Parallel()
+	cfg := clientcmdapi.NewConfig()
+	cfg.Contexts["prod-ctx"] = &clientcmdapi.Context{Cluster: "prod-cluster"}
+	cfg.CurrentContext = "prod-ctx"
+
+	if name, _, clusterName, ok := ResolveContext(cfg, ""); !ok || name != "prod-ctx" || clusterName != "prod-cluster" {
+		t.Fatalf("ResolveContext('') = (%q, %q, %v)", name, clusterName, ok)
+	}
+	if name, _, clusterName, ok := ResolveContext(cfg, "prod-cluster"); !ok || name != "prod-ctx" || clusterName != "prod-cluster" {
+		t.Fatalf("ResolveContext(prod-cluster) = (%q, %q, %v)", name, clusterName, ok)
+	}
+	if _, _, _, ok := ResolveContext(cfg, "nonexistent"); ok {
+		t.Errorf("expected explicit nonexistent cluster to return false")
+	}
+}
+
 func TestExecPluginBaseName(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -107,6 +124,51 @@ func TestExecPluginBaseName(t *testing.T) {
 	}
 	if got := ExecPluginBaseName(nil); got != "" {
 		t.Errorf("ExecPluginBaseName(nil) = %q, want empty", got)
+	}
+}
+
+func TestClusterServerHostname(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		server string
+		want   string
+	}{
+		{server: "https://API.K8S.Example.COM:6443/", want: "api.k8s.example.com"},
+		{server: "my-cluster.us-central1.gke.goog:443", want: "my-cluster.us-central1.gke.goog"},
+		{server: "https://[fd12:3456::1]:6443", want: "fd12:3456::1"},
+		{server: "https://10.128.0.68:6443", want: "10.128.0.68"},
+		{server: "://invalid", want: ""},
+		{server: "", want: ""},
+	}
+	for _, tc := range tests {
+		if got := ClusterServerHostname(&clientcmdapi.Cluster{Server: tc.server}); got != tc.want {
+			t.Errorf("ClusterServerHostname(%q) = %q, want %q", tc.server, got, tc.want)
+		}
+	}
+	if got := ClusterServerHostname(nil); got != "" {
+		t.Errorf("ClusterServerHostname(nil) = %q, want empty", got)
+	}
+}
+
+func TestHasClientCertificateAuth(t *testing.T) {
+	t.Parallel()
+	if !HasClientCertificateAuth(&clientcmdapi.AuthInfo{ClientCertificateData: []byte("cert-pem")}) {
+		t.Errorf("expected ClientCertificateData-only auth to return true")
+	}
+	if !HasClientCertificateAuth(&clientcmdapi.AuthInfo{ClientCertificate: "/etc/kubernetes/admin.crt"}) {
+		t.Errorf("expected ClientCertificate file auth to return true")
+	}
+	if HasClientCertificateAuth(&clientcmdapi.AuthInfo{Token: "static-bearer-token"}) {
+		t.Errorf("expected bearer-token auth to return false")
+	}
+	if HasClientCertificateAuth(&clientcmdapi.AuthInfo{
+		ClientCertificateData: []byte("cert"),
+		Exec:                  &clientcmdapi.ExecConfig{Command: "plugin"},
+	}) {
+		t.Errorf("expected mixed cert+exec auth to return false")
+	}
+	if HasClientCertificateAuth(nil) {
+		t.Errorf("expected nil AuthInfo to return false")
 	}
 }
 

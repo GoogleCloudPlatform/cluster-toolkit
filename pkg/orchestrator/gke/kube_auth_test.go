@@ -31,6 +31,7 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8syaml "sigs.k8s.io/yaml"
@@ -1146,6 +1147,181 @@ func TestDefaultKubeClient_GetCurrentNamespaceErrors(t *testing.T) {
 	}
 }
 
+func TestTypeK8s_ZeroGCloudAcrossLifecycle(t *testing.T) {
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters["local-k8s"] = &clientcmdapi.Cluster{Server: "https://10.128.0.68:6443"}
+	cfg.Contexts["k8s-ctx"] = &clientcmdapi.Context{Cluster: "local-k8s", Namespace: "ml-ns"}
+	cfg.CurrentContext = "k8s-ctx"
+
+	rawOrc, err := orchestrator.NewJobOrchestrator(orchestrator.Detection{
+		Type:        orchestrator.TypeK8s,
+		KubeContext: "k8s-ctx",
+		ClusterName: "local-k8s",
+	})
+	if err != nil {
+		t.Fatalf("NewJobOrchestrator(TypeK8s) error = %v", err)
+	}
+	orc := rawOrc.(*GKEOrchestrator)
+	orc.kubeconfigLoader = staticLoader(cfg)
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl": {{ExitCode: 0, Stdout: ""}},
+	})
+	orc.SetExecutor(mockExec)
+
+	if loc, err := orc.Initialize("local-k8s", "", ""); err != nil || loc != "" {
+		t.Fatalf("Initialize(TypeK8s) = (%q, %v), want ('', nil)", loc, err)
+	}
+	if err := orc.configureKubectl("local-k8s", "", ""); err != nil || orc.kubeContext != "k8s-ctx" {
+		t.Fatalf("configureKubectl(TypeK8s) err=%v kubeContext=%q", err, orc.kubeContext)
+	}
+	outPath := filepath.Join(t.TempDir(), "inspect.log")
+	if err := orc.InspectCluster(orchestrator.InspectOptions{ClusterName: "local-k8s", OutputPath: outPath}); err != nil {
+		t.Fatalf("InspectCluster(TypeK8s) error = %v", err)
+	}
+	for _, call := range mockExec.calls {
+		if strings.HasPrefix(call, "gcloud") {
+			t.Errorf("unexpected gcloud invocation in TypeK8s mode: %q", call)
+		}
+	}
+	if len(mockExec.calls) == 0 {
+		t.Fatalf("expected kubectl diagnostic commands during InspectCluster")
+	}
+	inspectBytes, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", outPath, err)
+	}
+	if strings.Contains(string(inspectBytes), "console.cloud.google.com") {
+		t.Errorf("TypeK8s InspectCluster output must not emit broken Google Cloud Console URLs")
+	}
+	mockExec.assertAllKubectlPinned(t, "k8s-ctx")
+}
+
+func TestTypeK8s_ConfigureKubectlUnseeded(t *testing.T) {
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters["local-k8s"] = &clientcmdapi.Cluster{Server: "https://10.128.0.68:6443"}
+	cfg.Contexts["k8s-ctx"] = &clientcmdapi.Context{Cluster: "local-k8s", Namespace: "ml-ns"}
+	cfg.CurrentContext = "k8s-ctx"
+
+	orcUnseeded := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcUnseeded.mode = orchestrator.TypeK8s
+	orcUnseeded.kubeconfigLoader = staticLoader(cfg)
+	if err := orcUnseeded.configureKubectl("local-k8s", "", ""); err != nil || orcUnseeded.kubeContext != "k8s-ctx" {
+		t.Fatalf("configureKubectl(unseeded TypeK8s) = (%v, %q), want (nil, k8s-ctx)", err, orcUnseeded.kubeContext)
+	}
+
+	orcMissing := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcMissing.mode = orchestrator.TypeK8s
+	orcMissing.kubeconfigLoader = staticLoader(cfg)
+	if err := orcMissing.configureKubectl("unknown-cluster", "", ""); err == nil || !strings.Contains(err.Error(), "was not found") {
+		t.Fatalf("configureKubectl(unknown-cluster) = %v, want context not found error", err)
+	}
+
+	orcEmpty := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcEmpty.mode = orchestrator.TypeK8s
+	orcEmpty.kubeconfigLoader = staticLoader(clientcmdapi.NewConfig())
+	if err := orcEmpty.configureKubectl("", "", ""); err == nil || !strings.Contains(err.Error(), "no current-context configured") {
+		t.Fatalf("configureKubectl(empty kubeconfig) = %v, want no current-context configured error", err)
+	}
+
+	orcBadLoader := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcBadLoader.mode = orchestrator.TypeK8s
+	orcBadLoader.kubeconfigLoader = func() (*clientcmdapi.Config, error) { return nil, errors.New("load fault") }
+	if err := orcBadLoader.configureKubectl("local-k8s", "", ""); err == nil || !strings.Contains(err.Error(), "load fault") {
+		t.Fatalf("configureKubectl(bad loader) = %v, want load fault error", err)
+	}
+}
+
+func TestTypeK8s_LogsAndConflictHintsOmitCloudConsole(t *testing.T) {
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get pods": {
+			{ExitCode: 0, Stdout: "workload-container\nworkload-container\n"},
+		},
+		"kubectl get jobsets": {
+			{ExitCode: 0, Stdout: "\tFalse\tmain-job\n128 1\n"},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = orchestrator.TypeK8s
+	orc.kubeContext = "k8s-ctx"
+	orc.kubeClient = &MockKubeClient{Namespace: "ml-ns"}
+	orc.dynClient = &mockDynamicClient{
+		listFunc: func(context.Context, metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+			return &unstructured.UnstructuredList{
+				Items: []unstructured.Unstructured{{
+					Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": "dup-job", "namespace": "ml-ns", "uid": "uid-1"},
+						"spec":     map[string]interface{}{"suspend": true},
+					},
+				}},
+			}, nil
+		},
+	}
+
+	falseVal := false
+	_, err := orc.GetJobLogs("big-job", orchestrator.LogsOptions{
+		ClusterName: "local-k8s",
+		MainOnly:    &falseVal,
+	})
+	if err == nil || strings.Contains(err.Error(), "console.cloud.google.com") || !strings.Contains(err.Error(), "kubectl --context k8s-ctx logs -n ml-ns") {
+		t.Fatalf("TypeK8s GetJobLogs(>maxLogRequests) = %v, want pinned kubectl --context k8s-ctx logs -n ml-ns hint without Cloud Console URL", err)
+	}
+
+	err = orc.validateJobConflicts(orchestrator.JobDefinition{WorkloadName: "dup-job", ClusterName: "local-k8s", GKENamespace: "ml-ns"})
+	if err == nil || strings.Contains(err.Error(), "--location") || !strings.Contains(err.Error(), "gcluster job cancel dup-job --cluster local-k8s --gke-namespace ml-ns") {
+		t.Fatalf("TypeK8s validateJobConflicts() = %v, want cancel command with --cluster local-k8s --gke-namespace ml-ns", err)
+	}
+
+	err = orc.validateJobConflicts(orchestrator.JobDefinition{WorkloadName: "dup-job", ClusterName: "local-k8s", GKENamespace: "default"})
+	if err == nil || strings.Contains(err.Error(), "--gke-namespace") || !strings.Contains(err.Error(), "gcluster job cancel dup-job --cluster local-k8s") {
+		t.Fatalf("TypeK8s validateJobConflicts(default ns) = %v, want --cluster local-k8s without --gke-namespace", err)
+	}
+
+	orc.namespace = ""
+	err = orc.validateJobConflicts(orchestrator.JobDefinition{WorkloadName: "dup-job", ClusterName: "local-k8s"})
+	if err == nil || !strings.Contains(err.Error(), "gcluster job cancel dup-job --cluster local-k8s --gke-namespace ml-ns") {
+		t.Fatalf("TypeK8s validateJobConflicts(implicit kubeconfig ns) = %v, want --cluster local-k8s --gke-namespace ml-ns", err)
+	}
+
+	mockExec.assertAllKubectlPinned(t, "k8s-ctx")
+}
+
+func TestTypeK8s_QueueGuardAndCompletionStatus(t *testing.T) {
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get localqueue": {
+			{ExitCode: 1, Stderr: "Error from server (NotFound): localqueues.kueue.x-k8s.io \"missing-q\" not found"},
+			{ExitCode: 0, Stdout: "team-q\n"},
+		},
+		"kubectl wait": {
+			{ExitCode: 0, Stdout: "workload.kueue.x-k8s.io/wl-1 condition met"},
+			{ExitCode: 0, Stdout: "workload.kueue.x-k8s.io/wl-1 condition met"},
+		},
+		"kubectl get jobset ": {
+			{ExitCode: 0, Stdout: `{"status":{"conditions":[{"type":"Failed","status":"True"}]}}`},
+			{ExitCode: 0, Stdout: `{"status":{"conditions":[{"type":"Completed","status":"True"}]}}`},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = orchestrator.TypeK8s
+	orc.kubeContext = "k8s-ctx"
+	orc.kubeClient = &MockKubeClient{Namespace: "ml-ns", Workloads: []string{"wl-1"}}
+	orc.dynClient = &mockDynamicClient{}
+
+	err := orc.ensureLocalQueueExists("missing-q", "ml-ns", false, true)
+	if err == nil || !strings.Contains(err.Error(), "Automatic ClusterQueue capacity creation requires GKE node-pool metadata") {
+		t.Fatalf("TypeK8s ensureLocalQueueExists() = %v, want fast-fail 0-capacity guard", err)
+	}
+
+	err = orc.awaitJobCompletion("failed-job", "local-k8s", "", "", "10s")
+	if err == nil || strings.Contains(err.Error(), "console.cloud.google.com") {
+		t.Fatalf("TypeK8s awaitJobCompletion(Failed) = %v, want terminal failure without Cloud Console URL", err)
+	}
+	if err := orc.awaitJobCompletion("done-job", "local-k8s", "", "", "10s"); err != nil {
+		t.Fatalf("TypeK8s awaitJobCompletion(Completed) = %v, want nil", err)
+	}
+
+	mockExec.assertAllKubectlPinned(t, "k8s-ctx")
+}
 func TestImagePullSecrets_NamespacePrecedence(t *testing.T) {
 	setupMockMachineConfig(t)
 	profile := JobProfile{IsCPUMachine: true, CapacityCount: 4}

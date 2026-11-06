@@ -348,7 +348,12 @@ func resetFlagSetState(fs *pflag.FlagSet) {
 }
 
 func setupSubmitTestEnv(t *testing.T) {
+	t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "empty-kubeconfig"))
+	t.Setenv("DOCKER_CONFIG", t.TempDir())
+	t.Setenv("GCLUSTER_ORCHESTRATOR", "")
+	t.Setenv("GCLUSTER_AIR_GAPPED", "")
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
 	resetFlagSetState(SubmitCmd.Flags())
 	resetFlagSetState(JobCmd.PersistentFlags())
 	imageName = ""
@@ -418,15 +423,29 @@ func setupSubmitTestEnv(t *testing.T) {
 
 type mockOrchestrator struct {
 	orchestrator.JobOrchestrator
-	initializeFunc func(string, string, string) (string, error)
-	SubmittedJob   orchestrator.JobDefinition
+	initializeFunc  func(string, string, string) (string, error)
+	listJobsFunc    func(orchestrator.ListOptions) ([]orchestrator.JobStatus, error)
+	InitClusterName string
+	InitLocation    string
+	InitProjectID   string
+	SubmittedJob    orchestrator.JobDefinition
 }
 
 func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
+	m.InitClusterName = clusterName
+	m.InitLocation = location
+	m.InitProjectID = projectID
 	if m.initializeFunc != nil {
 		return m.initializeFunc(clusterName, location, projectID)
 	}
 	return location, nil
+}
+
+func (m *mockOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrator.JobStatus, error) {
+	if m.listJobsFunc != nil {
+		return m.listJobsFunc(opts)
+	}
+	return nil, nil
 }
 
 func (m *mockOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {

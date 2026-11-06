@@ -254,10 +254,10 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 	// Pods appear in batches (and after the leader with InOrder startup), so size decisions on the spec.
 	jsInfo = g.ensureJobSetInfo(foundNamespace, name, jsInfo)
 	podCount = max(podCount, jsInfo.expectedPods)
-	consoleURL := getCloudConsoleLogsURL(opts.ProjectID, opts.ClusterLocation, opts.ClusterName, foundNamespace, name)
-	selector, mainOnly := g.resolveLogsSelector(name, opts.MainOnly, podCount, jsInfo.firstJob, consoleURL)
+	consoleURL := g.logsConsoleURL(opts.ProjectID, opts.ClusterLocation, opts.ClusterName, foundNamespace, name)
+	selector, mainOnly := g.resolveLogsSelector(name, foundNamespace, opts.MainOnly, podCount, jsInfo.firstJob, consoleURL)
 	if podCount > maxLogRequests && !mainOnly {
-		return "", fmt.Errorf("job '%s' has %d pods matching logs query, which exceeds the max fetch limit (%d). Please view logs directly in the Google Cloud Console:\n%s", name, podCount, maxLogRequests, consoleURL)
+		return "", g.maxLogRequestsError(name, foundNamespace, selector, podCount, consoleURL)
 	}
 
 	allContainers := !mainOnly
@@ -438,14 +438,19 @@ func (g *GKEOrchestrator) getJobPodStreams(ns, selector string) (int, int, error
 // resolveLogsSelector returns the pod selector and whether logs are main-only. Main-only selects rank-0 of the
 // first replicated job: job-index and job-completion-index alone are per replicated job and would also match
 // e.g. a Pathways worker-0-0.
-func (g *GKEOrchestrator) resolveLogsSelector(name string, optsMainOnly *bool, podCount int, firstJob, consoleURL string) (string, bool) {
+func (g *GKEOrchestrator) resolveLogsSelector(name, namespace string, optsMainOnly *bool, podCount int, firstJob, consoleURL string) (string, bool) {
 	selector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name)
 	mainOnly := podCount > 5
 	if optsMainOnly != nil {
 		mainOnly = *optsMainOnly
 	} else if mainOnly {
 		if podCount > maxLogRequests {
-			logging.Info("Job has %d pods (> %d). Defaulting to --main-only logs. To view logs from all pods, use the Google Cloud Console:\n%s", podCount, maxLogRequests, consoleURL)
+			if consoleURL != "" {
+				logging.Info("Job has %d pods (> %d). Defaulting to --main-only logs. To view logs from all pods, use the Google Cloud Console:\n%s", podCount, maxLogRequests, consoleURL)
+			} else {
+				cmdLine := kubectlCommandLine(g.kubeContext, "logs", "-n", namespace, "-l", selector, fmt.Sprintf("--max-log-requests=%d", podCount))
+				logging.Info("Job has %d pods (> %d). Defaulting to --main-only logs. To view logs from all pods, run '%s'.", podCount, maxLogRequests, cmdLine)
+			}
 		} else {
 			logging.Info("Job has %d pods (> 5). Defaulting to --main-only logs. To fetch logs from all pods, run with --main-only=false.", podCount)
 		}
@@ -502,25 +507,31 @@ severity>=DEFAULT`, projectID, location, clusterName, namespace, podNamePrefix)
 }
 
 func (g *GKEOrchestrator) printConsoleLinks(job orchestrator.JobDefinition) {
-	jobName := job.WorkloadName + "-main-job-0"
-	if job.IsPathwaysJob {
-		jobName = job.WorkloadName + "-pathways-head-0"
+	if g.mode != orchestrator.TypeK8s {
+		jobName := job.WorkloadName + "-main-job-0"
+		if job.IsPathwaysJob {
+			jobName = job.WorkloadName + "-pathways-head-0"
+		}
+
+		ns, err := g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
+		if err != nil {
+			// Non-critical path (printing informational links).
+			// Fallback to 'default' to avoid failing the command output if namespace cannot be determined.
+			ns = "default"
+		}
+
+		gkeLink := fmt.Sprintf("https://console.cloud.google.com/kubernetes/job/%s/%s/%s/%s/details?project=%s",
+			job.ClusterLocation, job.ClusterName, ns, jobName, job.ProjectID)
+
+		logging.Info("Follow your workload details here: %s", gkeLink)
+
+		logsLink := getCloudConsoleLogsURL(job.ProjectID, job.ClusterLocation, job.ClusterName, ns, jobName)
+		logging.Info("View your workload logs in real-time here: %s or use gcluster job logs [job-name] to view logs using kubectl", logsLink)
+	} else {
+		flags := g.k8sJobCLIFlags(job.GKENamespace, job.ClusterName, job.ClusterLocation, job.ProjectID)
+		logging.Info("Follow your workload details using: gcluster job inspect --name %s%s", job.WorkloadName, flags)
+		logging.Info("View your workload logs in real-time using: gcluster job logs %s%s", job.WorkloadName, flags)
 	}
-
-	ns, err := g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
-	if err != nil {
-		// Non-critical path (printing informational links).
-		// Fallback to 'default' to avoid failing the command output if namespace cannot be determined.
-		ns = "default"
-	}
-
-	gkeLink := fmt.Sprintf("https://console.cloud.google.com/kubernetes/job/%s/%s/%s/%s/details?project=%s",
-		job.ClusterLocation, job.ClusterName, ns, jobName, job.ProjectID)
-
-	logging.Info("Follow your workload details here: %s", gkeLink)
-
-	logsLink := getCloudConsoleLogsURL(job.ProjectID, job.ClusterLocation, job.ClusterName, ns, jobName)
-	logging.Info("View your workload logs in real-time here: %s or use gcluster job logs [job-name] to view logs using kubectl", logsLink)
 	if job.Pathways.DeploySPS {
 		logging.Info("SPS instance %s submitted. Endpoint: %s", job.WorkloadName, fmt.Sprintf(spsEndpointFormat, job.WorkloadName))
 	}
@@ -535,6 +546,10 @@ func (g *GKEOrchestrator) validateJobConflicts(job orchestrator.JobDefinition) e
 		return err
 	}
 	if status != "" {
+		if g.mode == orchestrator.TypeK8s {
+			flags := g.k8sJobCLIFlags(job.GKENamespace, job.ClusterName, job.ClusterLocation, job.ProjectID)
+			return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s%s' or resubmit this workload with a different name using '--name'", job.WorkloadName, status, job.WorkloadName, flags)
+		}
 		return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using 'gcluster job cancel %s --cluster %s --location %s --project %s' or resubmit this workload with a different name using '--name'", job.WorkloadName, status, job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID)
 	}
 	return nil
@@ -1559,15 +1574,19 @@ func (g *GKEOrchestrator) awaitJobCompletion(workloadName, clusterName, clusterL
 		return fmt.Errorf("failed to get current namespace: %w", err)
 	}
 
-	jobConsoleLink := fmt.Sprintf("https://console.cloud.google.com/kubernetes/workload/gke/%s/%s/details/%s?project=%s",
-		clusterLocation, clusterName, workloadName, projectID)
+	var jobConsoleLink string
+	if g.mode != orchestrator.TypeK8s {
+		jobConsoleLink = fmt.Sprintf("https://console.cloud.google.com/kubernetes/workload/gke/%s/%s/details/%s?project=%s",
+			clusterLocation, clusterName, workloadName, projectID)
+	}
 
 	targetWorkloadName, err := g.findTargetWorkload(ns, workloadName, 60*time.Second)
 	if err != nil {
 		return err
 	}
 
-	err = g.waitWorkloadFinished(targetWorkloadName, ns, timeout, jobConsoleLink, workloadName)
+	k8sFlags := k8sCLIFlags(clusterName, ns)
+	err = g.waitWorkloadFinished(targetWorkloadName, ns, timeout, jobConsoleLink, workloadName, k8sFlags)
 	if err != nil {
 		return err
 	}
@@ -1580,11 +1599,19 @@ func (g *GKEOrchestrator) awaitJobCompletion(workloadName, clusterName, clusterL
 	}
 
 	if status != "Completed" {
-		logging.Error("Job '%s' finished with status '%s'. Check details in the Cloud Console: %s", workloadName, status, jobConsoleLink)
+		if jobConsoleLink != "" {
+			logging.Error("Job '%s' finished with status '%s'. Check details in the Cloud Console: %s", workloadName, status, jobConsoleLink)
+		} else {
+			logging.Error("Job '%s' finished with status '%s'. Check details using 'gcluster job inspect --name %s%s'", workloadName, status, workloadName, k8sFlags)
+		}
 		return fmt.Errorf("job completed unsuccessfully with status: %s", status)
 	}
 
-	logging.Info("Job '%s' completed successfully. View details in the Cloud Console: %s", workloadName, jobConsoleLink)
+	if jobConsoleLink != "" {
+		logging.Info("Job '%s' completed successfully. View details in the Cloud Console: %s", workloadName, jobConsoleLink)
+	} else {
+		logging.Info("Job '%s' completed successfully. View logs using 'gcluster job logs %s%s'", workloadName, workloadName, k8sFlags)
+	}
 	return nil
 }
 
@@ -1719,7 +1746,7 @@ func (g *GKEOrchestrator) checkJobSetWarningEvents(ns, workloadName string) stri
 	return ""
 }
 
-func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, jobConsoleLink, workloadName string) error {
+func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, jobConsoleLink, workloadName, k8sFlags string) error {
 	logging.Info("Waiting for Kueue workload '%s' to be Finished...", targetWorkloadName)
 	waitRes := g.kubectl("wait", "--for=condition=Finished",
 		"workload", targetWorkloadName, "-n", ns, "--timeout="+timeout)
@@ -1732,7 +1759,11 @@ func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, 
 			warnSuffix = fmt.Sprintf("\nJobSet warning events:\n%s", warnEvents)
 		}
 		if strings.Contains(waitRes.Stderr, "timed out waiting") || strings.Contains(waitRes.Stdout, "timed out waiting") {
-			logging.Error("Timed out waiting for job '%s' to finish. Check its status in the Cloud Console: %s", workloadName, jobConsoleLink)
+			if jobConsoleLink != "" {
+				logging.Error("Timed out waiting for job '%s' to finish. Check its status in the Cloud Console: %s", workloadName, jobConsoleLink)
+			} else {
+				logging.Error("Timed out waiting for job '%s' to finish. Check its status using 'gcluster job inspect --name %s%s'", workloadName, workloadName, k8sFlags)
+			}
 			return fmt.Errorf("job timed out%s", warnSuffix)
 		}
 		return fmt.Errorf("error waiting for job completion: %s\n%s%s", waitRes.Stderr, waitRes.Stdout, warnSuffix)

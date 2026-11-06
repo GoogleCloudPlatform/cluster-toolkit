@@ -2787,7 +2787,7 @@ func TestResolveLogsSelector_MainOnlyTargetsMainReplicatedJob(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			orc := newTestGKEOrchestrator(NewMockExecutor(nil))
 
-			selector, mainOnly := orc.resolveLogsSelector("pw-job", &trueVal, 1, tt.firstJob, "")
+			selector, mainOnly := orc.resolveLogsSelector("pw-job", "default", &trueVal, 1, tt.firstJob, "")
 			if !mainOnly {
 				t.Fatalf("resolveLogsSelector() mainOnly = false, want true")
 			}
