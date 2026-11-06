@@ -2003,14 +2003,13 @@ func (d *DefaultExecutor) ExecuteCommandStream(name string, args ...string) erro
 
 // GetCurrentNamespace resolves the target Kubernetes namespace from kubeconfig for the specified cluster.
 func (d *DefaultKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
-	config, err := defaultKubeconfigLoader()
+	config, err := k8s.DefaultKubeconfigLoader()
 	if err != nil {
 		return "", fmt.Errorf("failed to load kubeconfig: %w. You can explicitly specify the namespace using the --gke-namespace flag", err)
 	}
 
-	// Standard GKE context naming convention first, then the legacy fallback
-	// for contexts users renamed to the bare cluster name.
-	_, kubeCtx, ok := findKubeContext(config, clusterName, location, projectID)
+	// Standard GKE context naming convention first, then bare cluster name or current-context fallback.
+	_, kubeCtx, _, ok := resolveGKEContext(config, clusterName, location, projectID)
 	if !ok {
 		return "", fmt.Errorf("no matching context found for cluster %s in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag", clusterName)
 	}

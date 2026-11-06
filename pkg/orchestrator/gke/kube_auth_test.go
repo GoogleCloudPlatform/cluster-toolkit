@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -118,7 +119,7 @@ func gkeExec() *clientcmdapi.ExecConfig {
 	return &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin"}
 }
 
-func staticLoader(cfg *clientcmdapi.Config) kubeconfigLoader {
+func staticLoader(cfg *clientcmdapi.Config) k8s.KubeconfigLoader {
 	return func() (*clientcmdapi.Config, error) { return cfg, nil }
 }
 
@@ -891,11 +892,11 @@ func TestRefreshGKEAuth_DNSEndpoint(t *testing.T) {
 
 func TestWithKubeContext(t *testing.T) {
 	args := []string{"get", "pods"}
-	if got := withKubeContext("", args); !slices.Equal(got, args) {
+	if got := k8s.WithContext("", args); !slices.Equal(got, args) {
 		t.Errorf("empty context: got %v, want %v", got, args)
 	}
 	want := []string{"--context", "ctx", "get", "pods"}
-	if got := withKubeContext("ctx", args); !slices.Equal(got, want) {
+	if got := k8s.WithContext("ctx", args); !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
@@ -1054,26 +1055,79 @@ func TestGetCurrentNamespace_PrefersPinnedContext(t *testing.T) {
 	}
 }
 
-// Guards against new kubectl calls that bypass the pinned context, whatever the executor variable is called.
+// Guards against new kubectl calls that bypass the pinned context, whatever the executor variable is called,
+// and ensures kubectlIn is never invoked with an empty context literal.
 func TestNoUnpinnedKubectlCalls(t *testing.T) {
 	unpinned := regexp.MustCompile(`\.ExecuteCommand(?:Stream|WithTimeout\([^,]+,)?\s*\(?\s*"kubectl"`)
-	files, err := filepath.Glob("*.go")
-	if err != nil {
-		t.Fatal(err)
+	emptyKubectlIn := regexp.MustCompile(`\.kubectlIn\(\s*""`)
+
+	var files []string
+	for _, pattern := range []string{"*.go", "../*.go", "../k8s/*.go"} {
+		matched, err := filepath.Glob(pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, matched...)
 	}
 	for _, f := range files {
-		// kube_auth.go pins its own probe and edits kubeconfig via `kubectl config`.
-		if strings.HasSuffix(f, "_test.go") || f == "kube_auth.go" {
+		base := filepath.Base(f)
+		if strings.HasSuffix(base, "_test.go") {
 			continue
 		}
 		src, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)
 		}
+		if loc := emptyKubectlIn.FindIndex(src); loc != nil {
+			line := 1 + bytes.Count(src[:loc[0]], []byte("\n"))
+			t.Errorf("%s:%d calls kubectlIn with an empty context", f, line)
+		}
+		// kube_auth.go implements kubectl/kubectlIn/version probing and edits kubeconfig via `kubectl config`.
+		if base == "kube_auth.go" {
+			continue
+		}
 		if loc := unpinned.FindIndex(src); loc != nil {
 			line := 1 + bytes.Count(src[:loc[0]], []byte("\n"))
-			t.Errorf("%s:%d runs kubectl without the pinned context; use g.kubectl / g.kubectlStream", f, line)
+			t.Errorf("%s:%d runs kubectl without the pinned context; use g.kubectl / g.kubectlIn / g.kubectlStream", f, line)
 		}
+	}
+}
+
+func TestKubectlIn_RefusesEmptyContextAndPinsNonEmpty(t *testing.T) {
+	exec := newExactExecutor(map[string][]shell.CommandResult{
+		"kubectl --context pinned-ctx get pods": {{ExitCode: 0, Stdout: "ok"}},
+	})
+	orc := newTestGKEOrchestrator(exec)
+
+	res := orc.kubectlIn("   ", "get", "pods")
+	if res.ExitCode == 0 || len(exec.calls) != 0 {
+		t.Fatalf("kubectlIn(empty) = %+v (calls=%v), want failure with 0 subprocesses", res, exec.calls)
+	}
+
+	res = orc.kubectlIn("pinned-ctx", "get", "pods")
+	if res.ExitCode != 0 || len(exec.calls) != 1 || exec.calls[0] != "kubectl --context pinned-ctx get pods" {
+		t.Fatalf("kubectlIn(pinned-ctx) = %+v (calls=%v)", res, exec.calls)
+	}
+}
+
+func TestResolveGKEContext_ZonalFallbackAndCurrentContext(t *testing.T) {
+	cfg := clientcmdapi.NewConfig()
+	cfg.Contexts["gke_my-proj_us-central1_reg-clus"] = &clientcmdapi.Context{Cluster: "reg-clus", Namespace: "reg-ns"}
+	cfg.Contexts["active-ctx"] = &clientcmdapi.Context{Cluster: "active-clus", Namespace: "active-ns"}
+	cfg.CurrentContext = "active-ctx"
+
+	ctxName, kubeCtx, clus, ok := resolveGKEContext(cfg, "reg-clus", "us-central1-b", "my-proj")
+	if !ok || ctxName != "gke_my-proj_us-central1_reg-clus" || kubeCtx.Namespace != "reg-ns" || clus != "reg-clus" {
+		t.Fatalf("resolveGKEContext(zonal->regional) = (%q, %+v, %q, %v)", ctxName, kubeCtx, clus, ok)
+	}
+
+	ctxName, kubeCtx, clus, ok = resolveGKEContext(cfg, "", "", "")
+	if !ok || ctxName != "active-ctx" || kubeCtx.Namespace != "active-ns" || clus != "active-clus" {
+		t.Fatalf("resolveGKEContext(current-context) = (%q, %+v, %q, %v)", ctxName, kubeCtx, clus, ok)
+	}
+
+	if _, _, _, ok := resolveGKEContext(cfg, "missing-clus", "us-central1", "my-proj"); ok {
+		t.Fatalf("expected missing explicit cluster not to fall back to current-context")
 	}
 }
 
