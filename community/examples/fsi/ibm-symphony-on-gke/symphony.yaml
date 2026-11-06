@@ -42,7 +42,7 @@ vars:
   symphony_install_dir: /opt/ibm/spectrumcomputing
   admin_password_secret: $(vars.deployment_name)-admin-password
   gke_node_machine_type: c2-standard-16
-  gke_min_node_count: 3
+  gke_min_node_count: 1
   gke_max_node_count: 100
 
 deployment_groups:

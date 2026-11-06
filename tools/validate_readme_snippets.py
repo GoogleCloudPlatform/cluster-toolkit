@@ -374,7 +374,7 @@ ILLUSTRATIVE_SOURCES = (
 
 
 def _strip_yaml_elision_lines(block: str) -> str:
-    """Strips blockquote prefixes, common indentation, and standalone '...' placeholder lines from a YAML snippet."""
+    """Strips blockquote prefixes and common indentation from a YAML snippet."""
     lines = block.splitlines()
     if lines and all(
         not line.strip() or line.lstrip().startswith(">") for line in lines
@@ -382,10 +382,7 @@ def _strip_yaml_elision_lines(block: str) -> str:
         lines = [re.sub(r"^\s*>\s?", "", line) for line in lines]
     # Dedent instead of rewriting indented '---' lines: a list-item fence's separator lands at
     # column 0, while '---' nested inside a block scalar keeps its indentation and stays content.
-    lines = textwrap.dedent("\n".join(lines)).splitlines()
-    return "\n".join(
-        line for line in lines if not re.match(r"^\s*\.\.\.(?:\s+#.*|\s*)$", line)
-    )
+    return textwrap.dedent("\n".join(lines))
 
 
 def validate_yaml_block(
@@ -736,6 +733,7 @@ def validate_markdown_links_and_cli(non_ignored: set[str] | None = None) -> list
             errors.append(f"{rel_path}: contains legacy './ghpc' CLI reference (use './gcluster')")
 
         no_fences = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+        no_fences = re.sub(r"\[`([^`\n\]]+)`\]", r"[\1]", no_fences)
         no_code = re.sub(r"`[^`\n]+`", "", no_fences)
 
         ref_defs: set[str] = set()
@@ -787,7 +785,8 @@ def validate_markdown_links_and_cli(non_ignored: set[str] | None = None) -> list
             if not file_part:
                 abs_target = abs_path
             elif file_part.startswith("/"):
-                abs_target = os.path.join(REPO_ROOT, file_part.lstrip("/"))
+                errors.append(f"{rel_path}: broken relative file link '{target}' (use relative path instead of leading '/')")
+                continue
             else:
                 abs_target = os.path.normpath(os.path.join(os.path.dirname(abs_path), file_part))
 

@@ -24,7 +24,7 @@ Please follow the initial instructions for:
 - Installing Cluster Toolkit [dependencies][tkdeps] (Go, Terraform, Packer)
 - Installing the Cluster [Toolkit][tkinstall]
 
-From the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository, enable the required GCP APIs, build `./gcluster` (if not already built), and verify that your release is 1.37.0 or later:
+From the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository, enable the required GCP APIs and build `./gcluster` (if not already built):
 
 ```shell
 gcloud services enable \
@@ -118,13 +118,12 @@ Obtain values for `tcpx_kernel_login`, `tcpx_kernel_password` and `keyserver_ubu
 
 > [!IMPORTANT]
 > If you have ***not*** received a VM reservation from Google Cloud staff, then
-> skip this step and proceed to [manual reservation creation](#manual-creation-of-reservation).
+> skip this step and proceed to [manual reservation creation](#manual-creation-of-reservation) or [Using Spot VM or DWS Flex](#using-spot-vm-or-dws-flex).
 
 Set the deployment variable `a3_reservation_name` to the reservation name provided by Google.
 
 ```yaml
-  # a3_reservation_name must be specified; if Google staff have provided you
-  # with a reservation name, use it. Otherwise supply user-created reservation.
+  # Specify a3_reservation_name when using a reservation (leave empty "" when using Spot VMs or DWS Flex):
   a3_reservation_name: reservation-name-provided-by-google
 ```
 
@@ -146,13 +145,12 @@ gcloud compute reservations create ${A3_RESERVATION_NAME} \
     --log-http
 ```
 
-This reservation be must be specified when creating VMs with matching parameters
+This reservation must be specified when creating VMs with matching parameters
 (e.g. a3-highgpu-8g VM in configured zone). Ensure that the reservation name in the
 deployment file matches the name of the user-created reservation.
 
 ```yaml
-  # a3_reservation_name must be specified; if Google staff have provided you
-  # with a reservation name, use it. Otherwise supply user-created reservation.
+  # Specify a3_reservation_name when using a reservation (leave empty "" when using Spot VMs or DWS Flex):
   a3_reservation_name: 
 ```
 
@@ -232,10 +230,10 @@ This blueprint includes a Slurm "Prolog" and "Epilog" script that will run
 before and after every job running on more than 1 a3-highgpu-8g compute node.
 The Prolog will perform the following actions:
 
-- Install the NCCL plugin into /var/lib of the host
+- Install the NCCL plugin into `/var/lib/tcpx` of the host
 - Run the RxDM service
   - This is a long-lived service that runs alongside the job
-  - Mounts `/var/lib/nvidia/lib64` into `/usr/lib/nvidia/lib64` of the container
+  - Mounts `/var/lib/tcpx/lib64` and `/usr/local/nvidia/lib64` into the container
   - Mount `/opt/tcpdirect_benchmark/` from the host into the container so that a
   textproto file defining the mapping from GPU to NIC is available. This file
   is present in the images that is used in this solution.
@@ -254,8 +252,9 @@ The Epilog will
 ## Jobs using the RxDM / TCPx
 
 Jobs that are running across multiple a3-highgpu-8g VMs will benefit from using
-the RxDM and the NCCL plugin. An example containerized job is located at
-`/opt/apps/scripts/run-nccl-tests.sh`. In addition to setting standard NCCL
+the RxDM and the NCCL plugin. Example containerized job scripts are provided in
+[`nccl-tests/run-nccl-tests.sh`](nccl-tests/run-nccl-tests.sh) and
+[`nccl-tests/run-topological-nccl-tests.sh`](nccl-tests/run-topological-nccl-tests.sh). In addition to setting standard NCCL
 configuration values, a job must:
 
 - Set `NCCL_GPUDIRECTTCPX_UNIX_CLIENT_PREFIX` to `${UDS_PATH}`

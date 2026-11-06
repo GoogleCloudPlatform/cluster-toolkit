@@ -461,3 +461,35 @@ func (s *MySuite) TestExplainTelemetryTargetModes(c *C) {
 		c.Check(gotTarget, Equals, tc.wantTarget)
 	}
 }
+
+func (s *MySuite) TestFindExplainRepoRootSupportsReleaseBundleSubdir(c *C) {
+	bundleRoot := c.MkDir()
+	subDir := filepath.Join(bundleRoot, "examples", "gke-a4")
+	c.Assert(os.MkdirAll(subDir, 0o755), IsNil)
+	c.Assert(os.MkdirAll(filepath.Join(bundleRoot, "community", "examples"), 0o755), IsNil)
+
+	origWD, err := os.Getwd()
+	c.Assert(err, IsNil)
+	defer func() { _ = os.Chdir(origWD) }()
+
+	c.Assert(os.Chdir(subDir), IsNil)
+	gotRoot := findExplainRepoRoot()
+	evalGot, err := filepath.EvalSymlinks(gotRoot)
+	c.Assert(err, IsNil)
+	evalWant, err := filepath.EvalSymlinks(bundleRoot)
+	c.Assert(err, IsNil)
+	c.Check(evalGot, Equals, evalWant)
+
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	indexOut, err := runExplainForTest()
+	c.Assert(err, IsNil)
+	coreIdx := strings.Index(indexOut, "examples/hpc-slurm.yaml")
+	commIdx := strings.Index(indexOut, "community/examples/")
+	c.Check(coreIdx > 0 && commIdx > coreIdx, Equals, true)
+
+	symOut, err := runExplainForTest("community/examples/fsi/ibm-symphony-on-gke/symphony.yaml")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(symOut, "Companion Deployment File: community/examples/fsi/ibm-symphony-on-gke/symphony_deployment.yaml"), Equals, true)
+}

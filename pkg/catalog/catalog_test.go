@@ -18,6 +18,7 @@ import (
 	"hpc-toolkit/pkg/sourcereader"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -229,7 +230,7 @@ func verifyAllDeploymentFilesPaired(t *testing.T, root string, blueprints []Blue
 	tracked := gitTrackedFiles(root, roots...)
 	for _, relRoot := range roots {
 		_ = filepath.WalkDir(filepath.Join(root, relRoot), func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), "-deployment.yaml") || !isTracked(root, path, tracked) {
+			if err != nil || d.IsDir() || !isDeploymentFileName(d.Name()) || !isTracked(root, path, tracked) {
 				return err
 			}
 			rel, _ := filepath.Rel(root, path)
@@ -542,8 +543,8 @@ func verifyLLMsMatrixRows(t *testing.T, llmsTxt string, blueprints []BlueprintEn
 		rowCount++
 		verifySingleMatrixRow(t, line, byPath)
 	}
-	if rowCount != 21 {
-		t.Errorf("verifyLLMsMatrixRows found %d rows, want 21", rowCount)
+	if rowCount != 22 {
+		t.Errorf("verifyLLMsMatrixRows found %d rows, want 22", rowCount)
 	}
 }
 
@@ -637,5 +638,28 @@ func TestModuleServicesForSourceRelativeLocalDir(t *testing.T) {
 	}
 	if svcs := moduleServicesForSource("", "bp", "./cwd-mod"); !slices.Contains(svcs, "cwd.googleapis.com") {
 		t.Errorf("expected cwd.googleapis.com from cwd-relative module, got %v", svcs)
+	}
+}
+
+func TestScanBlueprintsInUntrackedBundleInsideGitRepo(t *testing.T) {
+	parentGitRepo := t.TempDir()
+	if err := exec.Command("git", "init", parentGitRepo).Run(); err != nil {
+		t.Skipf("git init unavailable: %v", err)
+	}
+	bundleDir := filepath.Join(parentGitRepo, "gcluster-bundle")
+	examplesDir := filepath.Join(bundleDir, "examples")
+	if err := os.MkdirAll(examplesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bpYAML := "blueprint_name: bundle-test\ndeployment_groups:\n- group: primary\n  modules:\n  - id: network\n    source: modules/network/vpc\n"
+	if err := os.WriteFile(filepath.Join(examplesDir, "bundle-test.yaml"), []byte(bpYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := ScanBlueprints(bundleDir, nil)
+	if err != nil {
+		t.Fatalf("ScanBlueprints failed on untracked bundle inside git repo: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Path != "examples/bundle-test.yaml" {
+		t.Errorf("ScanBlueprints in untracked bundle inside git repo returned %v, want [examples/bundle-test.yaml]", entries)
 	}
 }

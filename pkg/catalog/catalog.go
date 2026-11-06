@@ -156,6 +156,11 @@ func ScanBlueprints(repoRoot string, readmeDescs map[string]string) ([]Blueprint
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
+		ci := strings.HasPrefix(entries[i].Path, "community/")
+		cj := strings.HasPrefix(entries[j].Path, "community/")
+		if ci != cj {
+			return !ci
+		}
 		return entries[i].Path < entries[j].Path
 	})
 	return entries, nil
@@ -191,6 +196,9 @@ func gitTrackedFiles(repoRoot string, roots ...string) map[string]bool {
 			set[p] = true
 		}
 	}
+	if len(set) == 0 {
+		return nil
+	}
 	return set
 }
 
@@ -206,8 +214,7 @@ func isCandidateBlueprintFile(path string) bool {
 	if !strings.HasSuffix(path, ".yaml") {
 		return false
 	}
-	base := filepath.Base(path)
-	return !strings.HasSuffix(base, "-deployment.yaml") && base != "deployment.yaml"
+	return !isDeploymentFileName(filepath.Base(path))
 }
 
 func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string, tracked map[string]bool) (BlueprintEntry, bool) {
@@ -391,7 +398,7 @@ func trackedDeploymentFiles(repoRoot, dir string, tracked map[string]bool) []str
 }
 
 func isDeploymentFileName(name string) bool {
-	return name == "deployment.yaml" || strings.HasSuffix(name, "-deployment.yaml")
+	return name == "deployment.yaml" || strings.HasSuffix(name, "-deployment.yaml") || strings.HasSuffix(name, "_deployment.yaml")
 }
 
 // isExampleSubfolder reports whether dir is strictly below examples/ or
@@ -407,17 +414,22 @@ func isExampleSubfolder(repoRoot, dir string) bool {
 
 // matchDeploymentFile selects the deployment file for a blueprint from the
 // candidates (basenames) in the same directory using three deterministic steps:
-//  1. exact match: <stem>-deployment.yaml or <blueprint_name>-deployment.yaml
-//  2. longest prefix match: <prefix>-deployment.yaml where <stem> starts with
-//     "<prefix>-" or <prefix> starts with "<stem>-"
+//  1. exact match: <stem>-deployment.yaml, <stem>_deployment.yaml, or <blueprint_name>[-_]deployment.yaml
+//  2. longest prefix match: <prefix>[-_]deployment.yaml where <stem> starts with
+//     "<prefix>-" / "<prefix>_" or <prefix> starts with "<stem>-" / "<stem>_"
 //  3. single-file fallback: the only candidate when dir is an examples subfolder
 func matchDeploymentFile(baseName, blueprintName string, candidates []string, inSubfolder bool) string {
 	if len(candidates) == 0 {
 		return ""
 	}
 	stem := strings.TrimSuffix(baseName, ".yaml")
-	for _, exact := range []string{stem + "-deployment.yaml", blueprintName + "-deployment.yaml"} {
-		if exact != "-deployment.yaml" && slices.Contains(candidates, exact) {
+	for _, exact := range []string{
+		stem + "-deployment.yaml",
+		stem + "_deployment.yaml",
+		blueprintName + "-deployment.yaml",
+		blueprintName + "_deployment.yaml",
+	} {
+		if exact != "-deployment.yaml" && exact != "_deployment.yaml" && slices.Contains(candidates, exact) {
 			return exact
 		}
 	}
@@ -434,10 +446,13 @@ func longestPrefixDeployment(stem string, candidates []string) string {
 	best, bestLen := "", 0
 	for _, cand := range candidates {
 		prefix := strings.TrimSuffix(cand, "-deployment.yaml")
+		if prefix == cand {
+			prefix = strings.TrimSuffix(cand, "_deployment.yaml")
+		}
 		if prefix == cand || prefix == "" {
 			continue
 		}
-		if (strings.HasPrefix(stem, prefix+"-") || strings.HasPrefix(prefix, stem+"-")) && len(prefix) > bestLen {
+		if (strings.HasPrefix(stem, prefix+"-") || strings.HasPrefix(stem, prefix+"_") || strings.HasPrefix(prefix, stem+"-") || strings.HasPrefix(prefix, stem+"_")) && len(prefix) > bestLen {
 			best, bestLen = cand, len(prefix)
 		}
 	}
