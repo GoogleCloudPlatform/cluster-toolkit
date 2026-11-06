@@ -7234,11 +7234,6 @@ module_wiring:
     required_inputs: [dns_name, zone_name]
   modules/network/firewall-rules:
     required_services: [compute.googleapis.com]
-    required_inputs: [subnetwork_self_link]
-    recommended_use:
-    - modules/network/pre-existing-subnetwork
-    - modules/network/pre-existing-vpc
-    - modules/network/vpc
   modules/network/global-static-ip:
     required_services: [compute.googleapis.com]
     required_inputs: [ip_names]
@@ -7272,7 +7267,6 @@ module_wiring:
     - community/modules/scheduler/htcondor-setup
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    - modules/network/firewall-rules
     - modules/packer/custom-image
     - modules/scheduler/gke-cluster
   modules/network/pre-existing-vpc:
