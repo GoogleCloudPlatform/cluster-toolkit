@@ -5226,6 +5226,24 @@ spec:
 `,
 			wantSub: "tpu-workload-name",
 		},
+		{
+			name: "collector as a plain init container without restartPolicy",
+			baseOvr: `{{- define "telemetry_sidecar" -}}
+- name: ai-telemetry-collector
+  image: {{.TelemetryCollectorImage}}
+{{- end -}}
+`,
+			wantSub: "restartPolicy: Always",
+		},
+		{
+			name: "stale workload_labels keeps the managed webhook label",
+			baseOvr: `{{- define "workload_labels" -}}
+gcluster.google.com/workload: {{.WorkloadName}}
+managed-mldiagnostics-gke: "true"
+{{- end -}}
+`,
+			wantSub: "managed-mldiagnostics-gke",
+		},
 	}
 
 	for _, tc := range cases {
@@ -5311,6 +5329,20 @@ func TestCustomTemplateValidation_PathwaysTelemetry(t *testing.T) {
 				return strings.Replace(src, "  - name: worker", "  - name: renamed-worker", 1)
 			},
 			want: "no worker replicatedJob",
+		},
+		{
+			name: "stale workload_labels keeps the managed webhook label on the JobSet",
+			mutate: func(src string) string {
+				return strings.Replace(src, `{{(StructuralData (.RenderBlock "workload_labels" 4))}}`, "    gcluster.google.com/workload: {{.WorkloadName}}\n    managed-mldiagnostics-gke: \"true\"", 1)
+			},
+			want: "managed-mldiagnostics-gke",
+		},
+		{
+			name: "telemetry port already declared by pathways-worker",
+			mutate: func(src string) string {
+				return strings.Replace(src, "- containerPort: 8471", "- containerPort: 8471\n              - containerPort: 8889", 1)
+			},
+			want: `declared by container "pathways-worker"`,
 		},
 		{
 			name: "ai-telemetry-collector placed in regular containers instead of initContainers",

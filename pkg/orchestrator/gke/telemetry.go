@@ -25,6 +25,8 @@ import (
 )
 
 // isGKE reports whether the submission targets a GKE cluster (a project is known) rather than a plain Kubernetes endpoint.
+// The CLI always requires a project, so only programmatic callers reach the non-GKE branch today.
+// TODO: derive this from the detected target platform once platform detection lands, instead of the project.
 func (g *GKEOrchestrator) isGKE(job orchestrator.JobDefinition) bool {
 	return strings.TrimSpace(g.projectID) != "" || strings.TrimSpace(job.ProjectID) != ""
 }
@@ -63,7 +65,7 @@ func (g *GKEOrchestrator) telemetrySidecarTrigger(job orchestrator.JobDefinition
 // validateTelemetryFlags is the pure (no cluster access) preflight for the ML Diagnostics options.
 func (g *GKEOrchestrator) validateTelemetryFlags(job orchestrator.JobDefinition) error {
 	if !job.MLDiagnosticsEnabled {
-		if strings.TrimSpace(job.MLDiagnosticsImage) != "" || job.MLDiagnosticsTelemetryPort != 0 {
+		if strings.TrimSpace(job.MLDiagnosticsImage) != "" || job.MLDiagnosticsImageSpecified || job.MLDiagnosticsTelemetryPort != 0 {
 			return fmt.Errorf("--ml-diagnostics-image and --ml-diagnostics-telemetry-port require --enable-ml-diagnostics")
 		}
 		return nil

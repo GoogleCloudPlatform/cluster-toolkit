@@ -569,6 +569,14 @@ func validatePodFailureExitCodesRule(contextPrefix string, idx int, req *batchv1
 }
 
 func forEachWorkloadJobSpec(manifestContent string, visit func(kind, jobName string, pfp *batchv1.PodFailurePolicy, tmpl *corev1.PodTemplateSpec) error) error {
+	return forEachWorkloadObject(manifestContent, func(kind, jobName string, _ map[string]string, pfp *batchv1.PodFailurePolicy, tmpl *corev1.PodTemplateSpec) error {
+		return visit(kind, jobName, pfp, tmpl)
+	})
+}
+
+// forEachWorkloadObject is forEachWorkloadJobSpec plus the JobSet/Job object's own metadata.labels, for checks
+// that concern the workload object rather than its pod template.
+func forEachWorkloadObject(manifestContent string, visit func(kind, jobName string, objectLabels map[string]string, pfp *batchv1.PodFailurePolicy, tmpl *corev1.PodTemplateSpec) error) error {
 	docs, err := splitYAMLDocuments(manifestContent)
 	if err != nil {
 		return err
@@ -587,7 +595,7 @@ func forEachWorkloadJobSpec(manifestContent string, visit func(kind, jobName str
 			}
 			for i := range jsDoc.Spec.ReplicatedJobs {
 				rj := &jsDoc.Spec.ReplicatedJobs[i]
-				if err := visit("JobSet", rj.Name, rj.Template.Spec.PodFailurePolicy, &rj.Template.Spec.Template); err != nil {
+				if err := visit("JobSet", rj.Name, jsDoc.Labels, rj.Template.Spec.PodFailurePolicy, &rj.Template.Spec.Template); err != nil {
 					return err
 				}
 			}
@@ -596,7 +604,7 @@ func forEachWorkloadJobSpec(manifestContent string, visit func(kind, jobName str
 			if err := k8syaml.Unmarshal([]byte(doc), &jDoc); err != nil {
 				return fmt.Errorf("failed to parse Job manifest spec: %w", err)
 			}
-			if err := visit("Job", "", jDoc.Spec.PodFailurePolicy, &jDoc.Spec.Template); err != nil {
+			if err := visit("Job", "", jDoc.Labels, jDoc.Spec.PodFailurePolicy, &jDoc.Spec.Template); err != nil {
 				return err
 			}
 		}
@@ -877,12 +885,15 @@ func validateWorkloadTelemetryManifest(manifestContent, collectorImage, workload
 		return nil
 	}
 	hint := fmt.Sprintf(workloadTemplateExtractHintFmt, tmplName)
-	return forEachWorkloadJobSpec(manifestContent, func(kind, jobName string, _ *batchv1.PodFailurePolicy, tmpl *corev1.PodTemplateSpec) error {
+	return forEachWorkloadObject(manifestContent, func(kind, jobName string, objectLabels map[string]string, _ *batchv1.PodFailurePolicy, tmpl *corev1.PodTemplateSpec) error {
 		prefix := "Job pod template"
 		if kind == "JobSet" {
 			prefix = fmt.Sprintf("replicatedJob %q", jobName)
 		}
-		return k8s.ValidatePodTelemetry(prefix, hint, workloadName, tmpl.Spec.InitContainers, tmpl.Labels)
+		if err := k8s.ValidateNoManagedWebhookLabel(kind, hint, objectLabels); err != nil {
+			return err
+		}
+		return k8s.ValidatePodTelemetry(prefix, hint, workloadName, tmpl.Spec, tmpl.Labels)
 	})
 }
 
@@ -892,6 +903,11 @@ func validatePathwaysTelemetryManifest(jobSet, collectorImage, workloadName stri
 	}
 	workerTmpl, headTmpl, err := extractPathwaysPodTemplates(jobSet)
 	if err != nil {
+		return err
+	}
+	if err := forEachWorkloadObject(jobSet, func(kind, _ string, objectLabels map[string]string, _ *batchv1.PodFailurePolicy, _ *corev1.PodTemplateSpec) error {
+		return k8s.ValidateNoManagedWebhookLabel(kind, pathwaysTemplateExtractHint, objectLabels)
+	}); err != nil {
 		return err
 	}
 	if headTmpl != nil {
@@ -905,7 +921,7 @@ func validatePathwaysTelemetryManifest(jobSet, collectorImage, workloadName stri
 	if workerTmpl == nil {
 		return fmt.Errorf("ML Diagnostics sidecar is enabled but the Pathways manifest has no worker replicatedJob. %s", pathwaysTemplateExtractHint)
 	}
-	return k8s.ValidatePodTelemetry("Pathways worker pod template", pathwaysTemplateExtractHint, workloadName, workerTmpl.Spec.InitContainers, workerTmpl.Labels)
+	return k8s.ValidatePodTelemetry("Pathways worker pod template", pathwaysTemplateExtractHint, workloadName, workerTmpl.Spec, workerTmpl.Labels)
 }
 
 // withCoordinatorEnv sets default MASTER_ADDR and WORKERS_0_HOSTNAME pointing to the rank-0 pod.

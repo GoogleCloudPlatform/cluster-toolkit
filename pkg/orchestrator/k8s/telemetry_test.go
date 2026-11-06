@@ -52,8 +52,18 @@ func TestValidateTelemetryPortAndEnvImage(t *testing.T) {
 			t.Errorf("ValidateTelemetryPort(%d) = %v, want range error", port, err)
 		}
 	}
-	if err := ValidateTelemetryPort(DefaultTelemetryCollectorPort); err != nil {
-		t.Errorf("ValidateTelemetryPort(%d) = %v, want nil", DefaultTelemetryCollectorPort, err)
+	for _, port := range []int{DefaultTelemetryCollectorPort, 9095, 8430, 8439} {
+		if err := ValidateTelemetryPort(port); err != nil {
+			t.Errorf("ValidateTelemetryPort(%d) = %v, want nil", port, err)
+		}
+	}
+	for _, port := range []int{8431, 8435, 8438} {
+		if err := ValidateTelemetryPort(port); err == nil || !strings.Contains(err.Error(), "libtpu runtime metrics") {
+			t.Errorf("ValidateTelemetryPort(%d) = %v, want libtpu port error", port, err)
+		}
+	}
+	if err := ValidateTelemetryPort(telemetryCollectorHealthPort); err == nil || !strings.Contains(err.Error(), "health-check") {
+		t.Errorf("ValidateTelemetryPort(%d) = %v, want health port error", telemetryCollectorHealthPort, err)
 	}
 	t.Setenv(TelemetryImageEnvVar, "  reg.local/env-collector:v1  ")
 	if got := TelemetryImageFromEnv(); got != "reg.local/env-collector:v1" {
@@ -148,14 +158,46 @@ func TestTelemetryDefaultsAndPodValidation(t *testing.T) {
 		t.Errorf("expected user override to win, got %+v", override)
 	}
 
-	inits := []corev1.Container{{Name: TelemetryCollectorContainerName}}
-	if err := ValidatePodTelemetry("pod", "hint", "job-1", inits, map[string]string{TPUWorkloadNameLabel: "job-1"}); err != nil {
-		t.Errorf("unexpected ValidatePodTelemetry error: %v", err)
+}
+
+func TestValidatePodTelemetry(t *testing.T) {
+	t.Parallel()
+	always := corev1.ContainerRestartPolicyAlways
+	okLabels := map[string]string{TPUWorkloadNameLabel: "job-1"}
+	sidecar := corev1.Container{Name: TelemetryCollectorContainerName, RestartPolicy: &always, Ports: []corev1.ContainerPort{{ContainerPort: 8889}}}
+	for _, tc := range []struct {
+		name    string
+		pod     corev1.PodSpec
+		labels  map[string]string
+		wantErr string
+	}{
+		{name: "native sidecar and label", pod: corev1.PodSpec{InitContainers: []corev1.Container{sidecar}}, labels: okLabels},
+		{name: "no init containers", pod: corev1.PodSpec{}, labels: okLabels, wantErr: "missing native sidecar"},
+		{name: "plain init container without restartPolicy", pod: corev1.PodSpec{InitContainers: []corev1.Container{{Name: TelemetryCollectorContainerName}}}, labels: okLabels, wantErr: "restartPolicy: Always"},
+		{name: "label mismatch", pod: corev1.PodSpec{InitContainers: []corev1.Container{sidecar}}, labels: map[string]string{TPUWorkloadNameLabel: "other"}, wantErr: TPUWorkloadNameLabel},
+		{name: "metrics port declared by workload container", pod: corev1.PodSpec{InitContainers: []corev1.Container{sidecar}, Containers: []corev1.Container{{Name: "pathways-worker", Ports: []corev1.ContainerPort{{ContainerPort: 8889}}}}}, labels: okLabels, wantErr: `declared by container "pathways-worker"`},
+		{name: "metrics port declared by another init container", pod: corev1.PodSpec{InitContainers: []corev1.Container{{Name: "colocated-python-sidecar", Ports: []corev1.ContainerPort{{ContainerPort: 8889}}}, sidecar}}, labels: okLabels, wantErr: `declared by container "colocated-python-sidecar"`},
+		{name: "other ports do not clash", pod: corev1.PodSpec{InitContainers: []corev1.Container{sidecar}, Containers: []corev1.Container{{Name: "w", Ports: []corev1.ContainerPort{{ContainerPort: 8080}}}}}, labels: okLabels},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidatePodTelemetry("pod", "hint", "job-1", tc.pod, tc.labels)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("ValidatePodTelemetry() = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) || !strings.Contains(err.Error(), "hint") {
+				t.Fatalf("ValidatePodTelemetry() = %v, want substring %q plus the hint", err, tc.wantErr)
+			}
+		})
 	}
-	if err := ValidatePodTelemetry("pod", "hint", "job-1", nil, map[string]string{TPUWorkloadNameLabel: "job-1"}); err == nil {
-		t.Error("expected missing sidecar error")
+	if err := ValidateNoManagedWebhookLabel("JobSet", "hint", map[string]string{ManagedMLDiagnosticsLabel: "true"}); err == nil || !strings.Contains(err.Error(), ManagedMLDiagnosticsLabel) {
+		t.Errorf("ValidateNoManagedWebhookLabel(true) = %v, want label error", err)
 	}
-	if err := ValidatePodTelemetry("pod", "hint", "job-1", inits, map[string]string{TPUWorkloadNameLabel: "other"}); err == nil || !strings.Contains(err.Error(), TPUWorkloadNameLabel) {
-		t.Errorf("expected label mismatch error, got: %v", err)
+	for _, labels := range []map[string]string{nil, {ManagedMLDiagnosticsLabel: "false"}, {"other": "true"}} {
+		if err := ValidateNoManagedWebhookLabel("JobSet", "hint", labels); err != nil {
+			t.Errorf("ValidateNoManagedWebhookLabel(%v) = %v, want nil", labels, err)
+		}
 	}
 }

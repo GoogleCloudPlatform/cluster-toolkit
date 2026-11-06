@@ -406,6 +406,7 @@ func TestValidateTelemetryFlags(t *testing.T) {
 		{name: "disabled without options", job: orchestrator.JobDefinition{}},
 		{name: "disabled with image", job: orchestrator.JobDefinition{MLDiagnosticsImage: "registry.local/col:v1"}, wantErr: "require --enable-ml-diagnostics"},
 		{name: "disabled with port", job: orchestrator.JobDefinition{MLDiagnosticsTelemetryPort: 9095}, wantErr: "require --enable-ml-diagnostics"},
+		{name: "disabled with explicit empty image", job: orchestrator.JobDefinition{MLDiagnosticsImageSpecified: true}, wantErr: "require --enable-ml-diagnostics"},
 		{name: "enabled with default port", job: orchestrator.JobDefinition{MLDiagnosticsEnabled: true}},
 		{name: "enabled with port out of range", job: orchestrator.JobDefinition{MLDiagnosticsEnabled: true, MLDiagnosticsImage: "registry.local/col:v1", MLDiagnosticsTelemetryPort: 70000}, wantErr: "between 1 and 65535"},
 		{name: "enabled with negative port", job: orchestrator.JobDefinition{MLDiagnosticsEnabled: true, MLDiagnosticsImage: "registry.local/col:v1", MLDiagnosticsTelemetryPort: -1}, wantErr: "between 1 and 65535"},

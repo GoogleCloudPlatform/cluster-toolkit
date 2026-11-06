@@ -698,8 +698,9 @@ type jobSetTemplateData struct {
 }
 
 type jobSetValidationSpec struct {
-	metav1.TypeMeta `json:",inline"`
-	Spec            struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata"`
+	Spec              struct {
 		ReplicatedJobs []struct {
 			Name     string                  `json:"name"`
 			Template batchv1.JobTemplateSpec `json:"template"`
