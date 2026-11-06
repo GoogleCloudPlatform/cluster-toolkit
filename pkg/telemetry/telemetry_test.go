@@ -97,22 +97,23 @@ func TestExecute(t *testing.T) {
 	origTransport := http.DefaultTransport
 	defer func() { http.DefaultTransport = origTransport }()
 
+	var calls atomic.Int32
 	http.DefaultTransport = &telemetryMockTransport{
 		roundTripFunc: func(req *http.Request) (*http.Response, error) {
-			// Mock a successful 200 OK response from Clearcut
+			calls.Add(1)
 			return &http.Response{
 				StatusCode: http.StatusOK,
+				Body:       http.NoBody,
 			}, nil
 		},
 	}
 
-	// Setup dummy cobra command and collector
 	cmd := &cobra.Command{Use: "test-execute"}
 	c := NewCollector(cmd, nil, SOURCE)
-
-	// Trigger Execute. Since Execute doesn't return anything, we verify
-	// it functions without panicking or failing.
 	c.Execute(0, nil)
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("expected 1 Clearcut HTTP call when not air-gapped, got %d", got)
+	}
 }
 
 func TestExecute_AirGappedSkipsClearcut(t *testing.T) {

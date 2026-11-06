@@ -1131,6 +1131,21 @@ func TestResolveGKEContext_ZonalFallbackAndCurrentContext(t *testing.T) {
 	}
 }
 
+func TestDefaultKubeClient_GetCurrentNamespaceErrors(t *testing.T) {
+	emptyKubeconfig := filepath.Join(t.TempDir(), "empty-kubeconfig")
+	if err := os.WriteFile(emptyKubeconfig, []byte("apiVersion: v1\nkind: Config\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("KUBECONFIG", emptyKubeconfig)
+	kc := &DefaultKubeClient{}
+	if _, err := kc.GetCurrentNamespace("", "", ""); err == nil || !strings.Contains(err.Error(), "no current-context set in kubeconfig") {
+		t.Fatalf("GetCurrentNamespace('') = %v, want no current-context set message", err)
+	}
+	if _, err := kc.GetCurrentNamespace("missing-clus", "us-central1", "my-proj"); err == nil || !strings.Contains(err.Error(), `cluster "missing-clus"`) {
+		t.Fatalf("GetCurrentNamespace(missing-clus) = %v, want quoted cluster error", err)
+	}
+}
+
 func TestImagePullSecrets_NamespacePrecedence(t *testing.T) {
 	setupMockMachineConfig(t)
 	profile := JobProfile{IsCPUMachine: true, CapacityCount: 4}
