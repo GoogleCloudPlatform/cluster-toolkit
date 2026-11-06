@@ -138,8 +138,8 @@ distinct Google Cloud regions (`us-central1`, `us-east4`, and `us-west1`).
     inactivity ($0 idle compute cost).
   - `SchedulerParameters = batch_sched_delay=1,bf_continue,defer`: Debounces
     backfill locks and optimizes scheduler throughput.
-  - `TreeWidth = 65533`: Flat communication hierarchy preventing intermediate
-    fanout hops and RPC packet drops in cloud networks.
+  - `TreeWidth = 16`: Bounded `slurmd` fan-out hierarchy (`16 -> 256 -> 4,096`)
+    preventing controller socket exhaustion during multi-thousand-node launches.
 
 - **Regional Node Features & Geographic Constraints**:
   - Each regional nodeset is labeled with a corresponding Slurm node feature:
@@ -211,7 +211,7 @@ up to 800 dynamic nodes (**51,200 to 102,400 Cores**) across 4 zones in
   `zone_target_shape: ANY` for dynamic zonal failover.
 - **Full Slurm Scale Tunings**: Configured with identical scale parameters
   (`ResumeRate=300`, `ResumeTimeout=900`, `SuspendTimeout=600`,
-  `SuspendTime=300`, `TreeWidth=65533`,
+  `SuspendTime=300`, `TreeWidth=16`,
   `SchedulerParameters=batch_sched_delay=1,bf_continue,defer`) to eliminate the
   5-minute timeout cliff on single-region infrastructure.
 - **Shared Storage**: Standard Cloud Filestore instance mounted at `/home`.
@@ -359,7 +359,7 @@ nodes. You can adapt it in two ways:
 | **`SuspendTimeout`** | **`600 sec`** *(10-minute graceful cooldown)* | **`600 sec`** *(10-minute graceful cooldown)* |
 | **`SuspendTime`** | **`300 sec`** *(5-minute idle decommissioning)* | **`300 sec`** *(5-minute idle decommissioning)* |
 | **`SchedulerParameters`** | **`batch_sched_delay=1, bf_continue, defer`** | **`batch_sched_delay=1, bf_continue, defer`** |
-| **`TreeWidth`** | **`65533`** *(Flat RPC hierarchy)* | **`65533`** *(Flat RPC hierarchy)* |
+| **`TreeWidth`** | **`16`** *(Bounded `slurmd` RPC fan-out)* | **`16`** *(Bounded `slurmd` RPC fan-out)* |
 
 ---
 

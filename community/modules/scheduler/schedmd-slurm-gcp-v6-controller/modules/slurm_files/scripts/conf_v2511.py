@@ -26,9 +26,8 @@ class SlurmConfigGeneratorV2511(SlurmConfigGenerator):
         
         slurmctld_params = []
         
-        # Add experimental enable_async_reply feature if requested
-        experimental = self.lkp.cfg.experimental or {}
-        enable_async_reply = experimental.get("enable_async_reply", False)
+        # Enable async RPC reply queue by default on Slurm 25.11+
+        enable_async_reply = self.lkp.cfg.get("enable_async_reply", True)
         if enable_async_reply:
             slurmctld_params.append("enable_async_reply")
             

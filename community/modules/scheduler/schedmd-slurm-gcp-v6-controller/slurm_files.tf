@@ -173,6 +173,7 @@ module "slurm_files" {
   cgroup_conf_tpl                = var.cgroup_conf_tpl
   cloud_parameters               = var.cloud_parameters
   experimental                   = var.experimental
+  enable_async_reply             = var.enable_async_reply
   enable_expedited_requeue       = var.enable_expedited_requeue
   enable_health_check_start_only = var.enable_health_check_start_only
   cloudsql_secret = try(
