@@ -686,12 +686,16 @@ func TestScanBlueprintsInUntrackedBundleInsideGitRepo(t *testing.T) {
 	if len(entriesPartial) != 2 {
 		t.Errorf("ScanBlueprints in partially tracked bundle inside git repo returned %d entries, want 2: %v", len(entriesPartial), entriesPartial)
 	}
+}
 
+func TestSameDirResolvesRelativeSymlinkCwd(t *testing.T) {
+	realDir := t.TempDir()
 	linkDir := filepath.Join(t.TempDir(), "symlink-repo")
-	if err := os.Symlink(parentGitRepo, linkDir); err == nil {
-		t.Chdir(linkDir)
-		if !sameDir(".", parentGitRepo) {
-			t.Errorf("sameDir(\".\", %q) = false from symlinked cwd %q, want true", parentGitRepo, linkDir)
-		}
+	if err := os.Symlink(realDir, linkDir); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	t.Chdir(linkDir)
+	if !sameDir(".", realDir) {
+		t.Errorf("sameDir(\".\", %q) = false from symlinked cwd %q, want true", realDir, linkDir)
 	}
 }
