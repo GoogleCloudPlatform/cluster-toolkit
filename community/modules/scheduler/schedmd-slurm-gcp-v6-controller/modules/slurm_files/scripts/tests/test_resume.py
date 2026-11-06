@@ -1381,3 +1381,566 @@ def test_mig_flex_tpu_resume(mocker):
     mock_handle_failure.assert_called_once()
     assert mock_handle_failure.call_args[0][0] == ["c-tpustatic-2", "c-tpustatic-3"]
     assert mock_handle_failure.call_args[0][3] == error_handler.Action.REQUEUE
+
+
+def test_group_nodes_bulk_batches_single_node_array_jobs_and_preserves_multinode_atomic():
+    """Single-node jobs on non-exclusive BulkInsert partitions coalesce per nodeset WITHOUT
+    allocating shared COLLOCATED placement policies (even when enable_placement=True),
+    while multi-node jobs retain per-job atomic chunks and job-scoped placement."""
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={
+            "n": TstNodeset(
+                nodeset_name="n",
+                region="us-central1",
+                enable_placement=True,
+                node_count_dynamic_max=3000,
+                instance_template="projects/p/global/instanceTemplates/tpl-cpu",
+            ),
+            "m": TstNodeset(
+                nodeset_name="m",
+                region="us-east4",
+                enable_placement=True,
+                node_count_dynamic_max=100,
+                instance_template="projects/p/global/instanceTemplates/tpl-cpu",
+            ),
+        },
+        partitions={
+            "compute": TstPartition(
+                partition_name="compute",
+                partition_nodeset=["n", "m"],
+                enable_job_exclusive=False,
+            )
+        },
+    )
+    lkp = util.Lookup(cfg)
+    lkp.template_info = unittest.mock.Mock(
+        return_value=unittest.mock.Mock(
+            machine_type=unittest.mock.Mock(
+                name="c2d-standard-2", family="c2d", guest_cpus=2, memory_mb=8192, accelerators=[]
+            ),
+            gpu=None,
+        )
+    )
+
+    array_jobs = [
+        ResumeJobData(job_id=100 + i, partition="compute", nodes_alloc=[f"c-n-{i}"])
+        for i in range(5)
+    ] + [
+        ResumeJobData(job_id=200 + i, partition="compute", nodes_alloc=[f"c-m-{i}"])
+        for i in range(2)
+    ]
+    multinode_job = ResumeJobData(
+        job_id=999, partition="compute", nodes_alloc=["c-n-10", "c-n-11"]
+    )
+    resume_nodes = [f"c-n-{i}" for i in range(5)] + ["c-m-0", "c-m-1", "c-n-10", "c-n-11"]
+
+    with unittest.mock.patch("resume.valid_placement_node", return_value=True), \
+         unittest.mock.patch("resume.create_placement_request") as mock_place_req, \
+         unittest.mock.patch("resume.ensure_execute", return_value={"name": "op-pg"}), \
+         unittest.mock.patch("resume.wait_for_operation", return_value={"name": "op-pg"}):
+        mock_place_req.return_value = unittest.mock.MagicMock()
+        got = resume.group_nodes_bulk(
+            resume_nodes, ResumeData(jobs=array_jobs + [multinode_job]), lkp
+        )
+
+    # Only the 2-node job (999) creates a placement policy; coalesced 1-node array jobs do NOT!
+    assert mock_place_req.call_count == 1
+    assert mock_place_req.call_args.args[0] == "c-slurmgcp-managed-n-999-0"
+
+    assert got == {
+        "c-n:0": BulkChunk(
+            nodes=["c-n-0", "c-n-1", "c-n-2", "c-n-3", "c-n-4"],
+            prefix="c-n",
+            chunk_idx=0,
+            excl_job_id=None,
+            placement_group=None,
+            is_job_request=False,
+        ),
+        "c-m:0": BulkChunk(
+            nodes=["c-m-0", "c-m-1"],
+            prefix="c-m",
+            chunk_idx=0,
+            excl_job_id=None,
+            placement_group=None,
+            is_job_request=False,
+        ),
+        "c-n:job999:c-slurmgcp-managed-n-999-0:0": BulkChunk(
+            nodes=["c-n-10", "c-n-11"],
+            prefix="c-n",
+            chunk_idx=0,
+            excl_job_id=999,
+            placement_group="c-slurmgcp-managed-n-999-0",
+            is_job_request=True,
+        ),
+    }
+
+
+def test_bulk_insert_limit_1000_chunks_non_placement_and_preserves_1500_placement():
+    """BULK_INSERT_LIMIT=1000 splits 2,500 non-placement nodes into 1000+1000+500 chunks while
+    keeping 1,200 placement-grouped nodes in a single atomic bulkInsert chunk."""
+    assert resume.BULK_INSERT_LIMIT == 1000
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={
+            "n": TstNodeset(nodeset_name="n", enable_placement=False, node_count_dynamic_max=3000),
+            "p": TstNodeset(nodeset_name="p", enable_placement=True, node_count_dynamic_max=2000),
+        },
+        partitions={
+            "compute": TstPartition(partition_name="compute", partition_nodeset=["n", "p"]),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    non_pg_nodes = [f"c-n-{i}" for i in range(2500)]
+    pg_nodes = [f"c-p-{i}" for i in range(1200)]
+
+    def fake_create_placements(nodes, excl_job_id, lkp):
+        if excl_job_id == 77:
+            return [PlacementAndNodes("c-slurmgcp-managed-p-77-0", list(nodes))]
+        return [PlacementAndNodes(None, list(nodes))] if nodes else []
+
+    with unittest.mock.patch("resume.create_placements", side_effect=fake_create_placements):
+        got = resume.group_nodes_bulk(
+            non_pg_nodes + pg_nodes,
+            ResumeData(
+                jobs=[ResumeJobData(job_id=77, partition="compute", nodes_alloc=pg_nodes)]
+            ),
+            lkp,
+        )
+
+    assert [len(got[f"c-n:{i}"].nodes) for i in range(3)] == [1000, 1000, 500]
+    assert len(got["c-p:job77:c-slurmgcp-managed-p-77-0:0"].nodes) == 1200
+
+
+def test_create_instances_request_coerces_target_shape_for_placement():
+    """Compact placement policies in regional bulkInsert must coerce targetShape to ANY_SINGLE_ZONE,
+    while non-placement requests preserve nodeset.zone_target_shape (e.g. ANY)."""
+    from typing import Any, cast
+
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        project="testproj",
+        nodeset={
+            "n": cast(
+                Any,
+                util.NSDict(
+                    nodeset_name="n",
+                    region="us-central1",
+                    subnetwork="projects/testproj/regions/us-central1/subnetworks/default",
+                    zone_policy_allow=["us-central1-a", "us-central1-b"],
+                    zone_target_shape="ANY",
+                    enable_placement=True,
+                    dws_flex=util.NSDict(enabled=False, use_bulk_insert=False),
+                    instance_template="projects/testproj/global/instanceTemplates/tpl-1",
+                ),
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    lkp.template_info = unittest.mock.Mock(return_value=util.NSDict(disks=[]))
+    mock_compute = unittest.mock.MagicMock()
+
+    with unittest.mock.patch("resume.lookup", return_value=lkp), \
+         unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock, return_value=mock_compute), \
+         unittest.mock.patch("resume.log_api_request"):
+        resume.create_instances_request(
+            ["c-n-0", "c-n-1"],
+            placement_group="projects/testproj/regions/us-central1/resourcePolicies/pg-1",
+            excl_job_id=42,
+            is_job_request=True,
+        )
+        pg_body = mock_compute.regionInstances().bulkInsert.call_args.kwargs["body"]
+        assert pg_body["locationPolicy"]["targetShape"] == "ANY_SINGLE_ZONE"
+
+        mock_compute.regionInstances().bulkInsert.reset_mock()
+        resume.create_instances_request(
+            ["c-n-0", "c-n-1"],
+            placement_group=None,
+            excl_job_id=None,
+            is_job_request=False,
+        )
+        nopg_body = mock_compute.regionInstances().bulkInsert.call_args.kwargs["body"]
+        assert nopg_body["locationPolicy"]["targetShape"] == "ANY"
+
+        # User-supplied resourcePolicies (e.g. VM maintenance schedule) without compact placement preserve ANY
+        cfg.nodeset["n"]["instance_properties"] = {  # type: ignore[index]
+            "resourcePolicies": ["projects/testproj/regions/us-central1/resourcePolicies/sched-1"]
+        }
+        mock_compute.regionInstances().bulkInsert.reset_mock()
+        resume.create_instances_request(
+            ["c-n-0", "c-n-1"],
+            placement_group=None,
+            excl_job_id=None,
+            is_job_request=False,
+        )
+        user_pol_body = mock_compute.regionInstances().bulkInsert.call_args.kwargs["body"]
+        assert user_pol_body["locationPolicy"]["targetShape"] == "ANY"
+
+
+def test_handle_resume_failure_batches_multi_task_array_backoff_via_squeue():
+    """Verifies handle_resume_failure queries comma-separated job IDs via squeue -j --json
+    (compatible with Slurm 26.05) and assigns identical StartTime backoff across array tasks."""
+    import json
+    cfg = TstCfg(slurm_cluster_name="c", slurm_bin_dir="/usr/local/bin")
+    lkp = util.Lookup(cfg)
+    resume_data = ResumeData(
+        jobs=[
+            ResumeJobData(job_id=18579, partition="compute", nodes_alloc=["c-n-0"]),
+            ResumeJobData(job_id=18586, partition="compute", nodes_alloc=["c-n-1"]),
+        ]
+    )
+    squeue_payload = json.dumps({
+        "jobs": [
+            {
+                "job_id": 18579,
+                "job_state": ["PENDING"],
+                "array_job_id": {"set": True, "infinite": False, "number": 18439},
+                "het_job_id": {"set": True, "infinite": False, "number": 0},
+            },
+            {
+                "job_id": 18586,
+                "job_state": ["PENDING"],
+                "array_job_id": {"set": True, "infinite": False, "number": 18439},
+                "het_job_id": {"set": True, "infinite": False, "number": 0},
+            },
+        ]
+    })
+
+    def fake_run(cmd, **kwargs):
+        res = unittest.mock.MagicMock()
+        res.returncode = 0
+        res.stdout = squeue_payload if "squeue -j" in cmd else ""
+        res.stderr = ""
+        return res
+
+    with unittest.mock.patch("resume.lookup", return_value=lkp), \
+         unittest.mock.patch("resume.run", side_effect=fake_run) as mock_run:
+        resume.handle_resume_failure(
+            ["c-n-0", "c-n-1"],
+            "ZONE_RESOURCE_POOL_EXHAUSTED",
+            resume_data,
+            error_handler.Action.REQUEUE,
+            "Stockout in zone",
+        )
+
+    cmds = [c.args[0] for c in mock_run.call_args_list]
+    assert any("/usr/local/bin/squeue -j 18579,18586 --json" in c for c in cmds)
+    assert not any("scontrol show job" in c for c in cmds)
+    backoff_cmds = [c for c in cmds if "StartTime=" in c]
+    assert len(backoff_cmds) == 1
+    assert "JobId=18579,18586 StartTime=" in backoff_cmds[0]
+
+
+def test_handle_resume_failure_filters_expanded_array_siblings():
+    """When squeue -j <master_id>,<standalone_id> --json expands unallocated sibling array tasks,
+    handle_resume_failure filters to target_job_ids so standalone jobs are never skipped."""
+    import json
+
+    cfg = TstCfg(slurm_cluster_name="c", slurm_bin_dir="/usr/local/bin")
+    lkp = util.Lookup(cfg)
+    resume_data = ResumeData(
+        jobs=[
+            ResumeJobData(job_id=18948, partition="compute", nodes_alloc=["c-n-0"]),
+            ResumeJobData(job_id=19000, partition="compute", nodes_alloc=["c-n-1"]),
+        ]
+    )
+    # 18948 is the array master ID; squeue -j expands unallocated tasks 18949 & 18950 too
+    squeue_payload = json.dumps({
+        "jobs": [
+            {
+                "job_id": 18948,
+                "job_state": ["PENDING"],
+                "array_job_id": {"set": True, "infinite": False, "number": 18948},
+                "het_job_id": {"set": True, "infinite": False, "number": 0},
+            },
+            {
+                "job_id": 18949,
+                "job_state": ["PENDING"],
+                "array_job_id": {"set": True, "infinite": False, "number": 18948},
+                "het_job_id": {"set": True, "infinite": False, "number": 0},
+            },
+            {
+                "job_id": 19000,
+                "job_state": ["PENDING"],
+                "array_job_id": {"set": False, "infinite": False, "number": 0},
+                "het_job_id": {"set": True, "infinite": False, "number": 0},
+            },
+        ]
+    })
+
+    def fake_run(cmd, **kwargs):
+        res = unittest.mock.MagicMock()
+        res.returncode = 0
+        res.stdout = squeue_payload if "squeue -j" in cmd else ""
+        res.stderr = ""
+        return res
+
+    with unittest.mock.patch("resume.lookup", return_value=lkp), \
+         unittest.mock.patch("resume.run", side_effect=fake_run) as mock_run:
+        resume.handle_resume_failure(
+            ["c-n-0", "c-n-1"],
+            "ZONE_RESOURCE_POOL_EXHAUSTED",
+            resume_data,
+            error_handler.Action.REQUEUE,
+            "Stockout in zone",
+        )
+
+    backoff_cmds = [c.args[0] for c in mock_run.call_args_list if "StartTime=" in c.args[0]]
+    assert len(backoff_cmds) == 2
+    assert any("JobId=18948 " in c for c in backoff_cmds)
+    assert any("JobId=19000 " in c for c in backoff_cmds)
+
+
+def test_handle_bulk_insert_op_vm_min_count_rollback_clears_all_nodes():
+    op = {
+        "name": "op-bulk-1",
+        "operationType": "bulkInsert",
+        "status": "DONE",
+        "operationGroupId": "gid-1",
+        "error": {
+            "errors": [
+                {
+                    "code": "VM_MIN_COUNT_NOT_REACHED",
+                    "message": "Requested minimum count of 4 VMs could not be created.",
+                }
+            ]
+        },
+        "instancesBulkInsertOperationMetadata": {
+            "perLocationStatus": {
+                "zones/us-central1-a": {"targetVmCount": 4, "createdVmCount": 0}
+            }
+        },
+    }
+    zonal_failed = [
+        {
+            "name": "op-ins-2",
+            "targetLink": "https://www.googleapis.com/compute/v1/projects/p/zones/us-central1-a/instances/c-n-2",
+            "error": {"errors": [{"code": "INTERNAL_ERROR", "message": "backend fault"}]},
+        }
+    ]
+    nodes = ["c-n-0", "c-n-1", "c-n-2", "c-n-3"]
+    with unittest.mock.patch("resume._get_failed_instance_inserts", return_value=zonal_failed), \
+         unittest.mock.patch("resume.util.lookup"), \
+         unittest.mock.patch("resume.handle_resume_failure") as mock_fail:
+        resume._handle_bulk_insert_op(op, nodes, None)
+
+    failed_all = set()
+    for call in mock_fail.call_args_list:
+        failed_all.update(call.args[0])
+    assert failed_all == {"c-n-0", "c-n-1", "c-n-2", "c-n-3"}
+
+
+def test_resume_nodes_coalesces_shared_mig_chunks_and_preserves_excl_job_id():
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        provisioning_engine="MIG",
+        nodeset={
+            "n1": TstNodeset(nodeset_name="n1", node_count_static=2, provisioning_engine="MIG"),
+            "n2": TstNodeset(nodeset_name="n2", node_count_static=2, provisioning_engine="MIG"),
+            "ex": TstNodeset(nodeset_name="ex", node_count_static=2, provisioning_engine="MIG"),
+        },
+        partitions={
+            "shared": TstPartition(partition_name="shared", partition_nodeset=["n1", "n2"], enable_job_exclusive=False),
+            "excl": TstPartition(partition_name="excl", partition_nodeset=["ex"], enable_job_exclusive=True),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    resume_data = ResumeData(
+        jobs=[ResumeJobData(job_id=777, partition="excl", nodes_alloc=["c-ex-0", "c-ex-1"])]
+    )
+    with unittest.mock.patch("resume.lookup", return_value=lkp), \
+         unittest.mock.patch("resume.resume_mig_nodes") as mock_mig:
+        resume.resume_nodes(["c-n1-0", "c-n2-0", "c-ex-0", "c-ex-1"], resume_data)
+
+    assert mock_mig.call_count == 2
+    assert mock_mig.call_args_list[0].args == (["c-n1-0", "c-n2-0"], None, lkp, resume_data)
+    assert mock_mig.call_args_list[1].args == (["c-ex-0", "c-ex-1"], 777, lkp, resume_data)
+
+
+@unittest.mock.patch("suspend.suspend_mig_nodes")
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("resume.wait_for_operation")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_lro_backend_error_classifies_as_requeue(
+    mock_compute_prop, mock_wait, mock_handle_failure, mock_suspend
+):
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        provisioning_engine="MIG",
+        nodeset={
+            "n": TstNodeset(
+                nodeset_name="n",
+                node_count_static=2,
+                provisioning_engine="MIG",
+                instance_template="projects/p/global/instanceTemplates/t1",
+            )
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {"managedInstances": []}
+    mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
+        "instanceTemplate": "projects/p/global/instanceTemplates/t1"
+    }
+    mock_wait.return_value = {
+        "name": "op-err",
+        "status": "DONE",
+        "error": {"errors": [{"code": "BACKEND_ERROR", "message": "Transient failure"}]},
+    }
+    with unittest.mock.patch("resume.ensure_execute", return_value={"name": "op-err", "selfLink": "op/err"}):
+        resume.resume_mig_nodes(["c-n-0", "c-n-1"], None, lkp, None)
+
+    mock_handle_failure.assert_called_once()
+    assert mock_handle_failure.call_args.args[3] == error_handler.Action.REQUEUE
+
+
+def test_get_failed_zonal_instance_inserts_uses_aip160_operation_group_filter():
+    cfg = TstCfg(slurm_cluster_name="c", project="proj-1")
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_zops = mock_compute.zoneOperations.return_value
+    mock_zops.list.return_value = unittest.mock.MagicMock()
+    mock_zops.list_next.return_value = None
+
+    failed_op = {
+        "name": "op-1",
+        "operationGroupId": "gid-123",
+        "targetLink": "https://www.googleapis.com/compute/v1/projects/proj-1/zones/us-central1-f/instances/c-n-1",
+        "error": {"errors": [{"code": "ZONE_RESOURCE_POOL_EXHAUSTED"}]},
+    }
+    ok_op = {"name": "op-2", "operationGroupId": "gid-123"}
+
+    with unittest.mock.patch.object(
+        util.Lookup, "compute", new_callable=unittest.mock.PropertyMock, return_value=mock_compute
+    ), unittest.mock.patch("util.ensure_execute", return_value={"items": [failed_op, ok_op]}):
+        bulk_op = {
+            "operationGroupId": "gid-123",
+            "user": "sa@developer.gserviceaccount.com",
+            "startTime": "2026-11-05T12:06:28.523-08:00",
+            "endTime": "2026-11-05T12:12:07.818-08:00",
+        }
+        res = resume._get_failed_zonal_instance_inserts(bulk_op, "us-central1-f", lkp)
+
+    assert res == [failed_op]
+    called_filter = mock_zops.list.call_args.kwargs["filter"]
+    assert " eq " not in called_filter
+    assert called_filter == '(operationGroupId = "gid-123") AND (operationType = "insert")'
+
+
+@unittest.mock.patch("suspend.suspend_mig_nodes")
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_multishard_parallel_pending_ops_isolates_errors(
+    mock_compute_prop, mock_handle_failure, mock_suspend
+):
+    """Verifies multi-MIG shared resume submits all shards first, awaits all LROs before clearing
+    MIG caches, cleans up terminal LRO errors, and defers cleanup on unobserved poll timeouts."""
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        provisioning_engine="MIG",
+        nodeset={
+            "n1": TstNodeset(nodeset_name="n1", node_count_static=2, provisioning_engine="MIG"),
+            "n2": TstNodeset(nodeset_name="n2", node_count_static=2, provisioning_engine="MIG"),
+            "n3": TstNodeset(nodeset_name="n3", node_count_static=2, provisioning_engine="MIG"),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {"managedInstances": []}
+
+    events: list[str] = []
+    orig_get_mig_instances = lkp.get_mig_instances
+
+    def tracked_cache_clear():
+        events.append("cache_clear")
+        orig_get_mig_instances.cache_clear()
+
+    wrapped_get_mig = unittest.mock.MagicMock(side_effect=orig_get_mig_instances)
+    wrapped_get_mig.cache_clear = tracked_cache_clear
+    lkp.get_mig_instances = wrapped_get_mig  # type: ignore[method-assign]
+
+    def fake_wait(op):
+        name = op["name"]
+        events.append(f"wait:{name}")
+        if name == "op-n2":
+            return {
+                "name": name,
+                "status": "DONE",
+                "error": {"errors": [{"code": "BACKEND_ERROR", "message": "Transient fault"}]},
+            }
+        if name == "op-n3":
+            raise TimeoutError("poll timeout")
+        return {"name": name, "status": "DONE"}
+
+    ops_seq = [
+        {"name": "op-n1", "selfLink": "op/n1"},
+        {"name": "op-n2", "selfLink": "op/n2"},
+        {"name": "op-n3", "selfLink": "op/n3"},
+    ]
+    with unittest.mock.patch("resume.ensure_execute", side_effect=ops_seq), \
+         unittest.mock.patch("resume.wait_for_operation", side_effect=fake_wait):
+        resume.resume_mig_nodes(["c-n1-0", "c-n2-0", "c-n3-0"], None, lkp, None)
+
+    wait_indices = [i for i, e in enumerate(events) if e.startswith("wait:")]
+    assert len(wait_indices) == 3
+    post_wait_clears = [i for i, e in enumerate(events) if e == "cache_clear" and i > max(wait_indices)]
+    assert post_wait_clears, f"Expected cache_clear after all wait_for_operation calls; got {events}"
+
+    mock_suspend.assert_called_once_with(["c-n2-0"], lkp)
+    assert mock_handle_failure.call_count == 2
+    failed_by_nodes = {tuple(c.args[0]): c.args[3] for c in mock_handle_failure.call_args_list}
+    assert failed_by_nodes == {
+        ("c-n2-0",): error_handler.Action.REQUEUE,
+        ("c-n3-0",): error_handler.Action.REQUEUE,
+    }
+
+
+def test_resume_nodes_parallel_bulk_insert_poll_exception_requeues_failed_chunk_only():
+    """Verifies that if polling one bulkInsert operation raises an exception, resume_nodes
+    requeues that chunk's nodes while still processing completed bulkInsert chunks."""
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={
+            "n1": TstNodeset(nodeset_name="n1", enable_placement=False, node_count_dynamic_max=2),
+            "n2": TstNodeset(nodeset_name="n2", enable_placement=False, node_count_dynamic_max=2),
+        },
+        partitions={
+            "compute": TstPartition(partition_name="compute", partition_nodeset=["n1", "n2"]),
+        },
+    )
+    lkp = util.Lookup(cfg)
+
+    def fake_wait(op):
+        if op["name"] == "op-1":
+            raise TimeoutError("poll timeout")
+        return {
+            "name": "op-2",
+            "operationType": "bulkInsert",
+            "status": "DONE",
+            "operationGroupId": "gid-2",
+            "instancesBulkInsertOperationMetadata": {
+                "perLocationStatus": {"zones/us-central1-a": {"createdVmCount": 1}}
+            },
+        }
+
+    with unittest.mock.patch("resume.lookup", return_value=lkp), \
+         unittest.mock.patch("resume.create_instances_request", side_effect=["req-1", "req-2"]), \
+         unittest.mock.patch(
+             "resume.ensure_execute",
+             side_effect=[
+                 {"name": "op-1", "operationGroupId": "gid-1"},
+                 {"name": "op-2", "operationGroupId": "gid-2"},
+             ],
+         ), \
+         unittest.mock.patch("resume.wait_for_operation", side_effect=fake_wait), \
+         unittest.mock.patch("resume.handle_resume_failure") as mock_fail, \
+         unittest.mock.patch("resume._handle_bulk_insert_op") as mock_handle_op:
+        resume.resume_nodes(["c-n1-0", "c-n2-0"], ResumeData(jobs=[]))
+
+    mock_fail.assert_called_once()
+    assert mock_fail.call_args.args[0] == ["c-n1-0"]
+    assert mock_fail.call_args.args[3] == error_handler.Action.REQUEUE
+    mock_handle_op.assert_called_once()
+    assert mock_handle_op.call_args.args[1] == ["c-n2-0"]

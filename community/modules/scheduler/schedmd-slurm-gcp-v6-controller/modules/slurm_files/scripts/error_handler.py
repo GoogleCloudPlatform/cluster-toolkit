@@ -32,9 +32,60 @@ def classify_gcp_error(error_code: str, error_message: str) -> tuple[Action, str
         return Action.REQUEUE, f"GCP Quota Exceeded: {error_message}"
         
     # 2. Capacity Errors -> Transient, require REQUEUE
-    capacity_codes = ["zone_resource_pool_exhausted", "vm_min_count_not_reached", "insufficient_resource_capacity", "rate_limit_exceeded", "resource_exhausted"]
-    if any(code in code_lower for code in capacity_codes) or "sufficient capacity" in msg_lower:
+    capacity_codes = [
+        "zone_resource_pool_exhausted",
+        "zoneresourcepoolexhausted",
+        "vm_min_count_not_reached",
+        "insufficient_resource_capacity",
+        "insufficientcapacity",
+        "insufficient_capacity",
+        "rate_limit_exceeded",
+        "ratelimitexceeded",
+        "resource_exhausted",
+    ]
+    if (
+        any(code in code_lower or code in msg_lower for code in capacity_codes)
+        or "sufficient capacity" in msg_lower
+        or "does not have enough resources available" in msg_lower
+    ):
         return Action.REQUEUE, f"GCP Capacity Exhausted: {error_message}"
-        
-    # 3. Default fallback
+
+    # 3. Transient GCP Backend / Internal Errors -> REQUEUE instead of leaving nodes DOWN.
+    # Match exact error codes (including '+'-joined multi-error LROs and 'reason: msg' prefixes)
+    # so permanent codes like RESOURCE_UNAVAILABLE stay Action.IGNORE.
+    transient_backend_codes = {
+        "internal_error",
+        "internal error",
+        "internalerror",
+        "internal server error",
+        "backend_error",
+        "backend error",
+        "backenderror",
+        "service_unavailable",
+        "service unavailable",
+        "serviceunavailable",
+        "unavailable",
+    }
+    code_prefix = code_lower.split(":", 1)[0]
+    code_parts = [part.strip() for part in code_prefix.split("+") if part.strip()]
+    if (
+        (code_parts and all(part in transient_backend_codes for part in code_parts))
+        or any(
+            code in msg_lower
+            for code in (
+                "backenderror",
+                "internal error",
+                "internal server error",
+                "service unavailable",
+            )
+        )
+    ):
+        return Action.REQUEUE, f"GCP Transient Backend Error: {error_message}"
+
+    # 4. Transient local socket / metadata port exhaustion -> REQUEUE instead of marking nodes DOWN
+    transient_socket_tokens = ("cannot assign requested address", "eaddrnotavail", "errno 99")
+    if any(tok in code_lower or tok in msg_lower for tok in transient_socket_tokens):
+        return Action.REQUEUE, f"Transient Local Socket Exhaustion: {error_message}"
+
+    # 5. Default fallback
     return Action.IGNORE, f"GCP Error [{error_code}]: {error_message}"
