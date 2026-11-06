@@ -26,9 +26,9 @@ from ..models import (
     Filesystem,
     FilesystemImpl,
     FILESYSTEM_IMPL_INFO,
-    MountPoint,
     FilesystemExport,
 )
+from ..cluster_manager import cmek
 from ..cluster_manager import filesystem as cm_fs
 from ..views.asyncview import BackendAsyncView
 from ..forms import FilesystemImportForm
@@ -162,11 +162,10 @@ class FilesystemDestroyView(SuperUserRequiredMixin, generic.DetailView):
         context = super().get_context_data(**kwargs)
         fs = get_object_or_404(Filesystem, pk=self.kwargs["pk"])
         exports = fs.exports.all()
-        mounts = MountPoint.objects.filter(
-            export__in=list(exports.values_list("id", flat=True))
-        ).filter(cluster__cloud_state__in=["cm", "m", "dm"])
 
-        context["mounts"] = mounts
+        context["mounts"] = fs.active_mounts()
+        context["workbench_mounts"] = fs.active_workbench_mounts()
+        context["in_use"] = fs.in_use()
         context["exports"] = exports
         context["navtab"] = "fs"
         return context
@@ -221,6 +220,12 @@ class FilesystemImportUpdateView(SuperUserRequiredMixin, UpdateView):
     template_name = "filesystem/import_update.html"
     form_class = FilesystemImportForm
 
+    def get_queryset(self):
+        # Only imported filesystems: this form must not rewrite the record of
+        # one OFE deployed, such as a Filestore (404 instead).
+        return super().get_queryset().filter(
+            impl_type=FilesystemImpl.IMPORTED)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["navtab"] = "fs"
@@ -271,11 +276,25 @@ class FilesystemTFLogView(StreamingFileView):
 class BackendDestroyFilesystem(BackendAsyncView):
     """A view to make async call to destroy a filesystem"""
 
+    refused = False
+
     @sync_to_async
     def get_orm(self, fs_id):
         fs = Filesystem.objects.get(pk=fs_id)
-        fs.cloud_state = "dm"
-        fs.save()
+        if fs.in_use():
+            names = sorted(
+                {m.cluster.name for m in fs.active_mounts()}
+                | {m.workbench.name for m in fs.active_workbench_mounts()})
+            self.refused = True
+            messages.add_message(
+                self.request,
+                messages.ERROR,
+                "Cannot destroy - Filesystem is still mounted by: "
+                f"{', '.join(names)} (see below)",
+            )
+        else:
+            fs.cloud_state = "dm"
+            fs.save()
         return (fs,)
 
     def cmd(self, unused_task_id, unused_token, fs):
@@ -291,6 +310,9 @@ class BackendDestroyFilesystem(BackendAsyncView):
         await self.test_user_is_cluster_admin(request.user)
 
         args = await self.get_orm(pk)
+        if self.refused:
+            return HttpResponseRedirect(
+                reverse("fs-detail", kwargs={"pk": pk}))
         await self.create_task("Destroy Filesystem", *args)
         return HttpResponseRedirect(reverse("fs-detail", kwargs={"pk": pk}))
 
@@ -304,9 +326,46 @@ class BackendCreateFilesystem(BackendAsyncView):
         return (fs,)
 
     def cmd(self, unused_task_id, unused_token, fs):
+        # The encryption fields live on the GCPFilestoreFilesystem row, a
+        # separate instance Django caches on fs.
+        filestore = None
+        if FilesystemImpl(fs.impl_type) == FilesystemImpl.GCPFILESTORE:
+            filestore = fs.gcpfilestorefilesystem
+        # Refused before the reset below: a revoked Filestore that is still
+        # deployed must keep its cloud_state, and with it its Destroy button.
+        try:
+            cmek.assert_not_revoked(filestore)
+        except cmek.CmekConfigError as err:
+            fs.status_message = str(err)
+            fs.save(update_fields=["status_message"])
+            raise
+        # Taken before the reset below, which would make a deployed Filestore
+        # look new to the blueprint generator: cmek.is_frozen() reads this
+        # snapshot. The generator works on the child row, so it is set there
+        # too.
+        # pylint: disable=protected-access
+        deployed = cmek.is_frozen(fs)
+        previous_state = fs.cloud_state
         fs.cloud_state = "nm"
         fs.save()
-        cm_fs.create_filesystem(fs)
+        fs._cmek_deployed = deployed
+        if filestore is not None:
+            # pylint: disable-next=protected-access
+            filestore._cmek_deployed = deployed
+            # Stored too, so a Filestore deployed before the flag existed
+            # stays frozen once this flow has left it "nm".
+            cmek.record_deployed(filestore)
+        try:
+            cm_fs.create_filesystem(fs)
+        except Exception as err:
+            # Nothing was generated, so the record goes back to the state it
+            # had: one that was never deployed can be created again, and one
+            # that is deployed keeps its Destroy button. The page says why
+            # (a key ring that could not be checked, a settings error).
+            fs.cloud_state = previous_state
+            fs.status_message = f"Could not generate the blueprint: {err}"
+            fs.save(update_fields=["cloud_state", "status_message"])
+            raise
 
     async def get(self, request, pk):
         """this will invoke the background tasks and return immediately"""
@@ -329,7 +388,24 @@ class BackendUpdateFilesystem(BackendAsyncView):
         return (fs,)
 
     def cmd(self, unused_task_id, unused_token, fs):
-        cm_fs.update_filesystem(fs)
+        # Nothing is reset here, so the record keeps its cloud_state either
+        # way; the page says why the blueprint was not regenerated, as it
+        # does for create.
+        filestore = None
+        if FilesystemImpl(fs.impl_type) == FilesystemImpl.GCPFILESTORE:
+            filestore = fs.gcpfilestorefilesystem
+        try:
+            cmek.assert_not_revoked(filestore)
+        except cmek.CmekConfigError as err:
+            fs.status_message = str(err)
+            fs.save(update_fields=["status_message"])
+            raise
+        try:
+            cm_fs.update_filesystem(fs)
+        except Exception as err:
+            fs.status_message = f"Could not generate the blueprint: {err}"
+            fs.save(update_fields=["status_message"])
+            raise
 
     async def get(self, request, pk):
         """this will invoke the background tasks and return immediately"""

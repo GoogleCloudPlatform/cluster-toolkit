@@ -96,11 +96,21 @@ A GCP project is required with the following APIs enabled:
  Cloud Filestore API
  Cloud Billing API
  Vertex AI API
+ Cloud Key Management Service (KMS) API
 ```
 
-If these are not enabled, the deployment script will ask to enable them for
-you. It's not possible to complete a deployment without these APIs, so the
-script will abort if not selected.
+An interactive deployment checks these and asks to enable any that are
+missing. It's not possible to complete a deployment without these APIs, so the
+script will abort if not selected. A deployment with `--config` lists the
+enabled APIs and enables only those that are missing, without asking; it makes
+no change when all of them are already enabled.
+
+Listing the enabled APIs needs the `serviceusage.services.list` permission (for
+example from the Service Usage Viewer role). Enabling a missing API also needs
+`serviceusage.services.enable` (for example from the
+`roles/serviceusage.serviceUsageAdmin` role). If an API is missing, either a
+project owner enables it before the deployment, or the deploying user is
+granted that permission.
 
 ##### GCP user
 
@@ -121,6 +131,8 @@ required roles are:
  Delete Service Accounts
  Service Account User
  Project IAM Admin
+ Service Usage Viewer
+ Service Usage Admin (only while an API still has to be enabled)
 ```
 
 If required, an even stricter, or least-privilege custom role can be created -
@@ -471,6 +483,64 @@ Please see the [application installation guide](Applications.md).
 ## Workbench Management
 
 Please see the [Workbench Admin Guide](WorkbenchAdmin.md).
+
+## Upgrading an existing TKFE
+
+To move a running TKFE to a newer version:
+
+1. Back up the database before changing anything.
+1. Enable the Cloud Key Management Service (KMS) API on the project, and on any
+   separate project that holds encryption keys, with
+   `gcloud services enable cloudkms.googleapis.com --project=<PROJECT_ID>`.
+   This needs the `serviceusage.services.enable` permission (for example from
+   the `roles/serviceusage.serviceUsageAdmin` role).
+1. On the server, check the installed Terraform with `terraform version`. It
+   must be 1.12.2 or later, which the Cluster Toolkit modules (including the
+   encryption modules) require. The version pinned in the startup script only
+   applies to newly deployed servers. If it is older, upgrade it from the
+   HashiCorp repository the startup script configured, for example with
+   `sudo dnf install -y terraform-1.12.2-1`, or with
+   `sudo dnf upgrade -y terraform` if that package is not available, then run
+   `terraform version` again to confirm.
+1. Update the TKFE code on the server, under
+   `/opt/gcluster/cluster-toolkit/community/front-end/ofe`, by whatever means
+   you normally use.
+1. Open a shell as the `gcluster` user, which owns the installation, with
+   `sudo su - gcluster`, and run this step and the next two in it. Activate the
+   Python environment with `source /opt/gcluster/django-env/bin/activate` and
+   change to the TKFE directory with
+   `cd /opt/gcluster/cluster-toolkit/community/front-end/ofe`.
+1. If `infrastructure_files/gcs_bucket/webserver/django_requirements.txt`
+   changed, run
+   `pip install --require-hashes -r infrastructure_files/gcs_bucket/webserver/django_requirements.txt`
+   first. If the dependency list in `requirements.txt` (in the same TKFE
+   directory) changed, run
+   `pip install --require-hashes -r requirements.txt`.
+1. Change to the `website` directory with `cd website`, then run
+   `python manage.py makemigrations ghpcfe` and then
+   `python manage.py migrate`. Database migrations are not shipped with TKFE;
+   they are generated on the server from the current models. If static files
+   changed, also run `python manage.py collectstatic`.
+
+   If the database comes from a build that predates the renaming of the
+   encryption key-ring fields (with the columns `cmek_keychain` and
+   `cmek_key_project`), `makemigrations ghpcfe` asks six questions of the form
+   "Was image.cmek_keychain renamed to image.cmek_key_ring_name (a CharField)?
+   [y/N]", one for each of `cmek_keychain` -> `cmek_key_ring_name` and
+   `cmek_key_project` -> `cmek_key_project_id` on the image, cluster and
+   Filestore models. Answer `y` to all six. Never use `--noinput`, which
+   silently drops the stored values, and do not run it with a closed standard
+   input, which makes it crash. A fresh install, or an upgrade from a release
+   that never had these columns, is unaffected.
+1. Leave the `gcluster` shell and restart the Django application, which runs
+   under supervisord as the `gcluster-uvicorn-background` program, with
+   `sudo supervisorctl restart 'gcluster-uvicorn-background:*'`. The
+   `gcluster` systemd service only runs the nginx front end; it does not need
+   restarting unless the nginx configuration changed.
+1. On the client machine, run
+   `script/service_account.sh update <PROJECT_ID> <SERVICE_ACCOUNT>` to add
+   any roles that were added to the credential's service account since it was
+   created (for example `cloudkms.admin`).
 
 ## Teardown Process
 

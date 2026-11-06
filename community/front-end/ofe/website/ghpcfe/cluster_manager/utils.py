@@ -15,6 +15,7 @@
 """Commonly used utility routines"""
 
 import copy
+import glob
 import json
 import logging
 import os
@@ -63,6 +64,69 @@ def load_config(config_file=g_baseDir / "configuration.yaml", access_key=None):
         return cfg
 
     return g_config
+
+
+def config_file_path():
+    """Path of the server configuration file `load_config` reads."""
+    return g_baseDir / "configuration.yaml"
+
+
+def invalidate_config_cache(config_file=None):
+    """Re-read the server configuration into the cached document.
+
+    Two properties of `load_config` shape this. It returns the module
+    global itself rather than a copy, so anything holding the result --
+    a running `ClusterInfo`, for one -- aliases this dict; and it merges
+    the file in rather than replacing it, so a key that has since been
+    deleted from the file would survive as a stale value.
+
+    The cache is therefore refreshed in place: keys absent from the new
+    document are dropped, then `load_config` repopulates the rest, which
+    also reapplies its own `baseDir` conversion and access-key handling
+    instead of duplicating them here. Emptying the dict outright would be
+    wrong, because every alias would briefly see no configuration at all.
+    A missing file leaves the cache alone and merely marks it unloaded,
+    so a caller cannot destroy a working configuration by pointing this
+    at a path that does not exist.
+    """
+    path = Path(config_file or config_file_path())
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            fresh = (yaml.safe_load(handle) or {}).get("config") or {}
+    except OSError:
+        g_config["loaded"] = False
+        return
+    # baseDir is derived from the source location, never from the file.
+    for stale in set(g_config) - set(fresh) - {"baseDir", "loaded"}:
+        del g_config[stale]
+    g_config["loaded"] = False
+    load_config(config_file=path)
+
+
+def update_config_file(mutate, config_file=None):
+    """Apply `mutate` to the `config` mapping of the server config file.
+
+    `mutate` receives the parsed `config` mapping and edits it in place.
+    The file is rewritten through a temporary file in the same directory
+    and then renamed, so a crash mid-write cannot leave the running
+    server with a truncated configuration it can no longer parse. The
+    memoised copy is dropped afterwards, since a caller that changed the
+    file and kept serving the previous document would be worse than not
+    having written at all.
+    """
+    config_file = Path(config_file or config_file_path())
+    with config_file.open("r", encoding="utf-8") as handle:
+        document = yaml.safe_load(handle) or {}
+    section = document.setdefault("config", {})
+    mutate(section)
+
+    tmp_path = config_file.with_suffix(config_file.suffix + ".tmp")
+    with tmp_path.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(document, handle, default_flow_style=False,
+                       sort_keys=False)
+    os.replace(tmp_path, config_file)
+    invalidate_config_cache()
+    return document
 
 
 def _parse_tfvars(filename):
@@ -191,12 +255,40 @@ def rsync_dir(
         raise
 
 
+def terraform_may_have_applied(terraform_dir):
+    """Whether Terraform may have created anything from a group directory.
+
+    `ghpc create` writes each group's directory before any `terraform init`,
+    so a run that failed in between leaves a directory nothing was applied
+    from (or no directory at all), and a plain `terraform destroy` there only
+    fails. OFE's blueprints set no Terraform backend, so state is local:
+    `init` creates `.terraform` and `apply` writes `terraform.tfstate` (and
+    its backup).
+    """
+    return (os.path.isdir(os.path.join(terraform_dir, ".terraform"))
+            or bool(glob.glob(os.path.join(terraform_dir, "*.tfstate*"))))
+
+
 def run_terraform(target_dir, command, arguments=None, extra_env=None):
 
     arguments = arguments if arguments else []
     extra_env = extra_env if extra_env else {}
 
+    # never let terraform fall back to an interactive prompt for a
+    # missing variable. This helper runs unattended inside a backend async
+    # task with no one to answer stdin, so a missing required variable
+    # (e.g. from an upstream failure that skipped writing tfvars) hangs
+    # the subprocess forever holding the state lock, instead of failing
+    # fast with a normal "no value for required variable" error.
+    #
+    # only the subcommands that actually evaluate variables accept
+    # an `-input` flag. Read-only commands (`validate`, `output`, ...) reject
+    # it outright ("flag provided but not defined: -input") and fail. Use an
+    # allowlist of the variable-evaluating writers rather than a denylist, so
+    # a future read-only subcommand is not silently broken again.
     cmdline = ["terraform", command, "-no-color"]
+    if command in ("init", "plan", "apply", "destroy", "refresh", "import"):
+        cmdline.append("-input=false")
     cmdline.extend(arguments)
     if command in ["apply", "destroy"]:
         cmdline.append("-auto-approve")
@@ -256,6 +348,7 @@ def run_terraform(target_dir, command, arguments=None, extra_env=None):
                 env=new_env,
                 stdout=log_out,
                 stderr=log_err,
+                stdin=subprocess.DEVNULL,
                 check=True,
             )
 

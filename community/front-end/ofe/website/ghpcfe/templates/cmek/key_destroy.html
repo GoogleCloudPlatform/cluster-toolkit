@@ -1,0 +1,97 @@
+{% extends "base_generic.html" %}
+
+{% comment %}
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ Confirmation for revoking a key. Follows cluster/check_destroy.html: name what
+ breaks before asking, and only ever act on POST.
+{% endcomment %}
+
+{% block content %}
+<h2>Schedule encryption key for destruction</h2>
+
+<form method="post" style="max-width:56rem;">
+  {% csrf_token %}
+  {# the key this page was rendered for; a POST naming another is refused #}
+  <input type="hidden" name="path" value="{{ key_path }}">
+
+  <div class="alert alert-danger">
+    <p>
+      <strong>WARNING:</strong> this schedules every live version of
+      <strong>{{ key_name }}</strong>
+      (<code style="word-break:break-all;">{{ key_path }}</code>) for
+      destruction. It is how a key is
+      revoked, and it is meant to break what the key protects.
+    </p>
+    <ul>
+      <li>
+        {{ resource_kind }}
+        <a href="{% url resource_route resource_pk %}">{{ resource_name }}</a>
+        will no longer be usable.
+      </li>
+      <li>
+        Once Cloud KMS completes the destruction, data encrypted with this key
+        is permanently unreadable.
+      </li>
+      <li>
+        The key name can never be reused, even after destruction &mdash; Cloud
+        KMS keeps it for ever.
+      </li>
+    </ul>
+    <hr>
+    <p class="mb-0">
+      Cloud KMS holds the versions in <code>DESTROY_SCHEDULED</code> for
+      {% if destroy_window %}{{ destroy_window }}, this key's scheduled
+      destruction period,{% else %}the key's scheduled destruction period
+      (30 days by default for a key OFE creates),{% endif %} before the
+      material goes. That window is the only chance to undo this, and only
+      from the
+      <a href="{{ key_url }}" target="_blank" rel="noopener">Cloud Console</a>.
+    </p>
+    {% if is_cluster %}
+    <hr>
+    <p class="mb-0">
+      OFE cannot restore the key. Destroying the cluster afterwards skips
+      Terraform's refresh, which would otherwise fail reading the cluster's
+      Slurm bucket objects encrypted with this key. If that teardown still
+      fails, an administrator must remove those Slurm bucket objects before
+      the cluster can be deleted.
+    </p>
+    {% endif %}
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <tr><th scope="row" style="width:12rem;">Key</th><td>{{ key_name }}</td></tr>
+      <tr><th scope="row">Key ring</th><td>{{ key_ring_name }}</td></tr>
+      <tr>
+        <th scope="row">Full key path</th>
+        <td><code style="font-size:.78rem; word-break:break-all;">{{ key_path }}</code></td>
+      </tr>
+      <tr>
+        <th scope="row">Used by</th>
+        <td>
+          {{ resource_kind }}
+          <a href="{% url resource_route resource_pk %}">{{ resource_name }}</a>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <p>Are you sure you want to continue?</p>
+  <input type="submit" value="Schedule for destruction" class="btn btn-danger">
+  <a href="{% url 'cmek-keys' %}" class="btn btn-outline-secondary">Cancel</a>
+</form>
+{% endblock %}

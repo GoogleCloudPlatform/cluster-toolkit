@@ -26,6 +26,7 @@ import logging
 import subprocess
 import os
 import re
+import time
 
 from django.template import engines as template_engines
 from django.utils import timezone
@@ -34,12 +35,17 @@ from website.settings import SITE_NAME
 
 from . import c2
 from . import cloud_info
+from . import cmek
 from . import utils
 
 from .. import grafana
 from ..models import Cluster, ApplicationInstallationLocation, ComputeInstance, ContainerRegistry
 
 logger = logging.getLogger(__name__)
+
+# Why a cluster whose destroy failed (cloud_state "dm") is not started again.
+TEARDOWN_UNFINISHED = ("A teardown of this cluster was started and did not "
+                       "finish. Destroy it again to finish.")
 
 
 class ClusterInfo:
@@ -91,42 +97,84 @@ class ClusterInfo:
         #self.update()
 
     def update(self):
+        # Covers start and reconfigure: a revoked key is final, so the
+        # blueprint is not regenerated, let alone applied. Destroy still works.
+        cmek.assert_not_revoked(self.cluster)
+        # A reconfigure enters here with the cluster still running; a start
+        # has already recorded it (start_cluster).
+        cmek.record_deployed(self.cluster)
         self._prepare_ghpc_yaml()
         self._prepare_bootstrap_gcs()
 
     def start_cluster(self, credentials):
+        # The record was loaded when the start was queued: a key revoked
+        # since then is refused here, and not written back by the reset.
+        cmek.keep_flags_current(self.cluster)
+        # Checked before the reset below too, so a refused start leaves the
+        # cluster's status and cloud_state as they were.
+        try:
+            cmek.assert_not_revoked(self.cluster)
+        except cmek.CmekConfigError as err:
+            self.cluster.status_message = f"Start failed: {err}"
+            self.cluster.save(update_fields=["status_message"])
+            raise
+        # A failed destroy leaves "dm": part of the cluster may be gone, so
+        # starting it again would apply over a half-removed deployment.
+        if self.cluster.cloud_state == "dm":
+            self.cluster.status_message = TEARDOWN_UNFINISHED
+            self.cluster.save(update_fields=["status_message"])
+            raise RuntimeError(TEARDOWN_UNFINISHED)
+
+        # Taken before the reset below, which would make a deployed cluster
+        # look new to update(): cmek.is_frozen() reads this snapshot.
+        # pylint: disable-next=protected-access
+        self.cluster._cmek_deployed = cmek.is_frozen(self.cluster)
+        # Stored too, so a cluster deployed before the flag existed stays
+        # frozen when this start fails and leaves it "e"/"nm".
+        cmek.record_deployed(self.cluster)
         self.cluster.cloud_state = "nm"
         self.cluster.status = "c"
         self.cluster.save()
 
         self._create_cluster_dir()
         self._set_credentials(credentials)
-        self.update()
 
         try:
+            # Inside the try: a failure to generate the blueprint (for example
+            # its key) must mark the cluster failed like any later step.
+            self.update()
             self._run_ghpc()
             self._initialize_terraform()
             self._apply_terraform()
 
             dash = grafana.create_cluster_dashboard(self.cluster)
             self.cluster.grafana_dashboard_url = dash.get("url", "")
+            self.cluster.status_message = ""  # clear any stale failure reason
+            cmek.keep_flags_current(self.cluster)
             self.cluster.save()
 
         # Not a lot we can do if terraform fails, it's on the admin user to
         # investigate and fix the errors shown in the log
-        except Exception:  # pylint: disable=broad-except
+        except Exception as err:  # pylint: disable=broad-except
             self.cluster.status = "e"
             self.cluster.cloud_state = "nm"
+            self.cluster.status_message = f"Start failed: {err}"
+            cmek.keep_flags_current(self.cluster)
             self.cluster.save()
             raise
 
     def reconfigure_cluster(self):
+        # The caller has already regenerated the blueprint through update(),
+        # which refuses a revoked key; checked again so nothing applies one.
+        cmek.assert_not_revoked(self.cluster)
         try:
             self._run_ghpc()
             self._initialize_terraform()
             self._apply_terraform()
             self.cluster.status = "r"
             self.cluster.cloud_state = "m"
+            self.cluster.status_message = ""  # clear any stale failure reason
+            cmek.keep_flags_current(self.cluster)
             self.cluster.save()
 
         # Not a lot we can do if terraform fails, it's on the admin user to
@@ -134,6 +182,7 @@ class ClusterInfo:
         except Exception:  # pylint: disable=broad-except
             self.cluster.status = "e"
             self.cluster.cloud_state = "nm"
+            cmek.keep_flags_current(self.cluster)
             self.cluster.save()
             raise
 
@@ -244,6 +293,10 @@ class ClusterInfo:
                 "repo_username": registry.repo_username,
                 "repo_password": registry.repo_password,
                 "use_upstream_credentials": registry.use_upstream_credentials,
+                "cluster": self.cluster,
+                "cmek": bool(self._cmek_use_refs()),
+                # the credential secret's replica must sit in the key's location
+                "cmek_location": self.cluster.cloud_region,
             }
 
             # logger.info(f"Registry Context: {json.dumps(context, indent=2)}")
@@ -266,14 +319,15 @@ class ClusterInfo:
             disk_range = list(range(part.additional_disk_count))
             exclusive = 'True' if part.enable_placement or not part.enable_node_reuse else 'False'
             # The nodeset module defaults on_host_maintenance to TERMINATE, which
-            # GCP rejects for non-preemptible e2 instances. Emit MIGRATE for e2
-            # partitions instead. GPU nodes must keep TERMINATE (GPUs cannot
-            # live-migrate). The partition form (forms.py ClusterPartitionForm.clean)
-            # already refuses enable_placement for e2, so MIGRATE here can never
-            # silently deactivate a placement group.
+            # GCP rejects for non-preemptible instances of machine families that
+            # only support live migration (e.g. e2). Emit MIGRATE for those
+            # families. GPU nodes must keep TERMINATE (GPUs cannot live-migrate),
+            # and these families are not offered placement, so MIGRATE is safe
+            # here. Review the family list against GCP's per-family maintenance
+            # policy support if it is broadened.
             machine_family = part.machine_type.split("-")[0]
             use_migrate_maintenance = (
-                machine_family == "e2" and part.GPU_per_node == 0
+                machine_family in ("e2", "n1") and part.GPU_per_node == 0
             )
             context = {
                 'part': part,
@@ -284,6 +338,7 @@ class ClusterInfo:
                 'exclusive': exclusive,
                 'use_migrate_maintenance': use_migrate_maintenance,
                 "startup_bucket": self.config["server"]["gcs_bucket"],
+                "cmek": bool(self._cmek_use_refs()),
             }
             rendered_yaml = template.render(context)
             indented_yaml = self.indent_text(rendered_yaml, 1)   # Same here
@@ -297,7 +352,9 @@ class ClusterInfo:
             return "", []
         template = self.env.get_template('blueprint/cloudsql_config.yaml.j2')
         context = {
-            'cluster_id': self.cluster.cloud_id
+            'cluster_id': self.cluster.cloud_id,
+            'cluster': self.cluster,
+            'cmek': bool(self._cmek_use_refs()),
         }
         rendered_yaml = template.render(context)
         indented_yaml = self.indent_text(rendered_yaml, 1)  # Adjust indent as necessary
@@ -309,10 +366,78 @@ class ClusterInfo:
         use_lines = [f"{indent}- {item}" for item in use_list]
         return "\n".join(use_lines)
 
+    def _cmek_modules_yaml(self):
+        """The kms-key / kms-key-iam blocks for this cluster, or "".
+
+        Rendered once at the top of the blueprint. Consumers reach the key by
+        `use: [cmek_key_iam]`, which is what the IAM module's output aliases are
+        for, so nothing here writes an encryption input by hand.
+        """
+        settings = cmek.CmekSettings.from_config(self.config)
+        chosen = cmek.resource_settings(self.cluster, settings)
+        # Store the effective choice, not the box as typed: enforcement may
+        # have overridden it, and once deployed the stored value is what
+        # stands (is_frozen), and what the keys page lists.
+        if not chosen:
+            self._cmek_in_use = False
+            if self.cluster.cmek_enabled:
+                self.cluster.cmek_enabled = False
+                self.cluster.save(update_fields=["cmek_enabled"])
+            return ""
+        if not chosen["key_name"]:
+            # named after the cloud id, which is assigned at creation: two OFE
+            # installs sharing a project must not collide on a local pk
+            chosen["key_name"] = cmek.derive_key_name(
+                "cluster", self.cluster.cloud_id or str(self.cluster.id))
+        self._cmek_in_use = True
+        # Record what was deployed, so the detail page reports this key
+        # rather than recomputing it from settings that may since have
+        # changed. The derived name is not otherwise stored anywhere.
+        deployed = cmek.resolve_created_key(chosen, settings, self.cluster.project_id)
+        location = self.cluster.cloud_zone or self.cluster.cloud_region
+        self.cluster.cmek_enabled = True
+        self.cluster.cmek_key_name = deployed["key_name"]
+        self.cluster.cmek_key_ring_name = deployed["key_ring_name"]
+        self.cluster.cmek_key_project_id = deployed["key_project_id"]
+        self.cluster.save(update_fields=[
+            "cmek_enabled", "cmek_key_name", "cmek_key_ring_name",
+            "cmek_key_project_id"])
+        ring_exists = cmek.ring_already_exists(
+            self.cluster.cloud_credential.detail, deployed, location)
+        # The key is also passed to Cloud SQL and Artifact Registry when this
+        # cluster uses them (their blueprints `use` cmek_key_iam), so their
+        # service agents need access to it as well as compute and storage.
+        extra_agents = []
+        if getattr(self.cluster, "use_cloudsql", False):
+            extra_agents.append("cloudsql")
+        if getattr(self.cluster, "use_containers", False):
+            extra_agents.append("artifactregistry")
+            # a registry with upstream credentials keeps its password in a
+            # Secret Manager secret, which is encrypted with the same key
+            if any(r.use_upstream_credentials for r in
+                   self.cluster.container_registry_relations.exclude(
+                       status="d")):
+                extra_agents.append("secretmanager")
+        return cmek.key_modules_yaml(
+            service="cluster",
+            project_id=self.cluster.project_id,
+            location=location,
+            settings=settings,
+            ring_exists=ring_exists,
+            extra_service_agents=extra_agents,
+            **chosen,
+        )
+
+    def _cmek_use_refs(self):
+        """`cmek_key_iam` when this cluster is encrypted, for a use: list."""
+        return [cmek.KEY_IAM_MODULE_ID] if getattr(
+            self, "_cmek_in_use", False) else []
+
     def _prepare_ghpc_yaml(self):
         try:
             yaml_file = self.cluster_dir / "cluster.yaml"
             project_id = json.loads(self.cluster.cloud_credential.detail)["project_id"]
+            cmek_modules_yaml = self._cmek_modules_yaml()
             filesystems_yaml, filesystems_refs = self._prepare_ghpc_filesystems()
             partitions_yaml, partitions_refs = self._prepare_ghpc_partitions(filesystems_refs)
             artifact_registry_yaml, use_containers = self._prepare_ghpc_artifact_registry()
@@ -320,7 +445,10 @@ class ClusterInfo:
 
             # Use a template to generate the final YAML configuration
             template = self.env.get_template('blueprint/cluster_config.yaml.j2')
-            controller_uses_refs = ["hpc_network"] + partitions_refs + filesystems_refs + cloudsql_refs
+            cmek_refs = self._cmek_use_refs()
+            controller_uses_refs = (["hpc_network"] + partitions_refs
+                                    + filesystems_refs + cloudsql_refs
+                                    + cmek_refs)
             context = {
                 "project_id": project_id,
                 "site_name": SITE_NAME,
@@ -329,8 +457,12 @@ class ClusterInfo:
                 "artifact_registry_yaml": artifact_registry_yaml,
                 "cloudsql_yaml": cloudsql_yaml,
                 "cluster": self.cluster,
+                "cmek_modules_yaml": cmek_modules_yaml,
                 "controller_uses": self._yaml_refs_to_uses(controller_uses_refs, indent_level=2),
-                "login_uses": self._yaml_refs_to_uses(filesystems_refs, indent_level=2),
+                # The login module has no network_storage input, so a filesystem
+                # in its use: list would match nothing; only the key is wired.
+                "login_uses": self._yaml_refs_to_uses(
+                    cmek_refs, indent_level=2),
                 "controller_sa": "sa",
                 "startup_bucket": self.config["server"]["gcs_bucket"],
             }
@@ -357,6 +489,9 @@ class ClusterInfo:
 
         except Exception as e:
             logger.exception(f"Exception happened creating blueprint for cluster {self.cluster.name} - {e}")
+            # Re-raised so the caller stops: carrying on would deploy whatever
+            # cluster.yaml an earlier run left behind, or none at all.
+            raise
 
     def _prepare_bootstrap_gcs(self):
         template_dir = (
@@ -655,6 +790,11 @@ class ClusterInfo:
             "GOOGLE_APPLICATION_CREDENTIALS": self._get_credentials_file()
         }
         try:
+            # Stored before the apply runs, not after it succeeds: a failed
+            # apply can already have created encrypted (or unencrypted)
+            # disks and buckets, so the choice stays fixed whatever state a
+            # failed start or reconfigure leaves the record in.
+            cmek.record_apply_started(self.cluster)
             logger.info("Invoking Terraform Apply")
             utils.run_terraform(terraform_dir, "apply", extra_env=extra_env)
 
@@ -684,6 +824,7 @@ class ClusterInfo:
                 # can be surfaced instead of spinning on "initialising".
                 self.cluster.status = "i"
                 self.cluster.initialization_started = timezone.now()
+                cmek.keep_flags_current(self.cluster)
                 self.cluster.save()
 
                 # Filters for Management Nodes (Controller)
@@ -739,6 +880,7 @@ class ClusterInfo:
                 # Set up Spack Install location
                 self._configure_spack_install_loc()
 
+                cmek.keep_flags_current(self.cluster)
                 self.cluster.save()
 
         except subprocess.CalledProcessError as err:
@@ -760,9 +902,40 @@ class ClusterInfo:
             logger.info("Invoking Terraform destroy")
             self.cluster.status = "t"
             self.cluster.cloud_state = "dm"
+            cmek.keep_flags_current(self.cluster)
             self.cluster.save()
 
-            utils.run_terraform(terraform_dir, "destroy", extra_env=extra_env)
+            # A refresh reads every resource back first, and the Slurm bucket
+            # objects encrypted with a revoked key can no longer be read
+            # (KEY_DESTROY_SCHEDULED), so the destroy would fail before it
+            # removed anything. Destroy from the recorded state instead.
+            arguments = ["-refresh=false"] if self.cluster.cmek_revoked else []
+            try:
+                # A start that failed before `terraform init` (in ghpc
+                # create, or generating the blueprint) applied nothing, and a
+                # destroy in that directory would fail on every retry. Only
+                # the clean-up below is needed.
+                if utils.terraform_may_have_applied(terraform_dir):
+                    utils.run_terraform(terraform_dir, "destroy",
+                                        arguments=arguments,
+                                        extra_env=extra_env)
+                else:
+                    logger.info("Nothing was applied from %s, so there is "
+                                "nothing for Terraform to destroy",
+                                terraform_dir)
+            except Exception as err:
+                # Leave "terminating" so the admin sees why and can retry.
+                # Part of the cluster may already be gone, so it stays "dm":
+                # it can be destroyed again, but not started (start_cluster).
+                self.cluster.status = "e"
+                self.cluster.status_message = (
+                    "Teardown failed: "
+                    f"{self._destroy_error_text(err, terraform_dir)}")
+                self.cluster.save(update_fields=[
+                    "status", "cloud_state", "status_message"])
+                if not isinstance(err, subprocess.CalledProcessError):
+                    logger.error("Terraform destroy failed", exc_info=err)
+                raise
 
             # Dynamic compute nodes are created directly via the GCP API by
             # slurm-gcp at job-schedule time, so they are not in Terraform state
@@ -778,9 +951,14 @@ class ClusterInfo:
                 registry.save(update_fields=["status"])
                 registry_count += 1
 
-            controller_sa = self.cluster.controller_node.service_account
-
-            self.cluster.controller_node.delete()
+            # A cluster whose start_cluster() failed before recording its
+            # controller has no controller_node; tearing it down must not
+            # crash on that or the status/cleanup below is skipped
+            # and the cluster stays stuck in "t".
+            controller_sa = None
+            if self.cluster.controller_node is not None:
+                controller_sa = self.cluster.controller_node.service_account
+                self.cluster.controller_node.delete()
             self.cluster.login_nodes.all().delete()
             # Refresh so our python object gets the SET_NULL's from the above
             # deletes
@@ -788,6 +966,8 @@ class ClusterInfo:
 
             self.cluster.status = "d"
             self.cluster.cloud_state = "xm"
+            self.cluster.status_message = ""  # clear any earlier failed destroy
+            cmek.keep_flags_current(self.cluster)
             self.cluster.save()
 
             c2.delete_cluster_subscription(self.cluster.id, controller_sa)
@@ -800,6 +980,29 @@ class ClusterInfo:
             if err.stderr:
                 logger.info("TF stderr:\n%s\n", err.stderr.decode("utf-8"))
             raise
+
+    @staticmethod
+    def _destroy_error_text(err, terraform_dir, limit=300):
+        """A one-line reason for a failed destroy, for the cluster's page.
+
+        run_terraform() sends terraform's output to log files, so the
+        exception itself only says that the command failed; the first
+        "Error:" line terraform wrote says why. Terraform draws its
+        diagnostics in a box ("╷", "│ Error: ...", "╵"), so the box
+        characters are stripped before the line is matched.
+        """
+        text = str(err)
+        if isinstance(err, subprocess.CalledProcessError):
+            try:
+                log = terraform_dir / "terraform_destroy_log.stderr"
+                for line in log.read_text(errors="replace").splitlines():
+                    line = line.lstrip("│╷╵ \t").strip()
+                    if line.startswith("Error:"):
+                        text = line
+                        break
+            except OSError:
+                pass
+        return text if len(text) <= limit else text[:limit - 3] + "..."
 
     def _sweep_orphaned_compute_nodes(self):
         """Delete any leftover compute instances still labelled for this cluster.
@@ -896,6 +1099,7 @@ class ClusterInfo:
                 fs_export=spack_mp.export, path=partial_path
             )
             self.cluster.spack_install.save()
+        cmek.keep_flags_current(self.cluster)
         self.cluster.save()
 
     def get_app_install_loc(self, install_path):

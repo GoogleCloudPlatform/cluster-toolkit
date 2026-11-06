@@ -61,7 +61,15 @@ window.onload=function(event) {
       {{ object.get_cloud_state_display }}
     </p>
 
+    {% if object.status_message %}
+    <div class="alert alert-warning" role="alert">
+      <b>Details:</b> {{ object.status_message }}
+    </div>
+    {% endif %}
+
     <hr>
+    {% include "cmek/_detail.html" %}
+
     <p style="text-decoration: underline; font-size: large;">Exports</p>
     <div class="table-responsive">
     <table class="table align-middle">

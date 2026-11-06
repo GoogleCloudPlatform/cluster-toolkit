@@ -59,7 +59,14 @@ script/service_account.sh create <PROJECT_ID> <SERVICE_ACCOUNT_NAME>
 script/service_account.sh credential <PROJECT_ID> <ACCOUNT_NAME> <PATH_TO_KEY_FILE>
 ```
 
-The script also has options to *list*, *check* and *delete* - see the
+To bring an account made by an earlier version up to date (this adds any
+missing required roles, such as `cloudkms.admin`, and never removes one):
+
+```bash
+script/service_account.sh update <PROJECT_ID> <ACCOUNT_NAME>
+```
+
+The script also has options to *list*, *check*, *update* and *delete* - see the
 built-in help for instructions:
 
 ```bash
@@ -122,6 +129,7 @@ for roleid in aiplatform.admin \
               iam.serviceAccountUser \
               notebooks.admin \
               resourcemanager.projectIamAdmin \
+              cloudkms.admin \
               monitoring.viewer \
               pubsub.admin \
               cloudsql.admin \
@@ -145,6 +153,26 @@ Once complete, the service account key json text should be copied from
 
 The credential can now be used to create network, storage and compute resources
 from the TKFE.
+
+`cloudkms.admin` is what lets TKFE create a customer-managed encryption key for
+each encrypted resource, grant the Google service agents access to it, and
+schedule a key's versions for destruction when an administrator revokes it.
+Omit it and any resource created with encryption enabled fails at apply.
+Revoking a key is permanent in TKFE: a resource whose key was revoked can only
+be destroyed. Destroying a revoked cluster uses a teardown that skips the
+Terraform refresh; if it still fails, an administrator must first remove the
+cluster's encrypted objects from its Slurm bucket.
+`cloudkms.admin` contains no encrypt or decrypt permission, so TKFE does not
+decrypt data in normal operation. This is not a hard barrier: the role can
+change the IAM policy on keys, and the same service account also holds
+`resourcemanager.projectIamAdmin`, so it could grant itself a decrypt role.
+Operators who need that guarantee must enforce it with organisation policy or
+IAM conditions.
+
+If keys are kept in a separate key project, the credential's service account
+also needs `roles/cloudkms.admin` on that key project, and the Cloud Key
+Management Service (KMS) API must be enabled there. `service_account.sh` only
+grants roles on the deployment project.
 
 The roles can be changed to give finer control as outlined in the next section.
 
@@ -222,6 +250,8 @@ roles.  The complete list of required permissions is as follows:
  resourcemanager.projects.get
  resourcemanager.projects.getIamPolicy
  resourcemanager.projects.setIamPolicy
+ serviceusage.services.enable (only needed when an API is missing)
+ serviceusage.services.list
  storage.buckets.create
  storage.buckets.delete
  storage.buckets.get
@@ -264,4 +294,5 @@ service account created within it, as covered above), needs the following APIs:
  Cloud Filestore API
  Cloud Billing API
  Vertex AI API
+ Cloud Key Management Service (KMS) API
 ```

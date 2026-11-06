@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ forms.py """
+import dataclasses
+import json
 import logging
+import re
 
 from django import forms
 from django.contrib.auth.forms import (
@@ -28,6 +31,8 @@ from crispy_forms.layout import Layout, Field, Submit, Div, Hidden
 from crispy_forms.bootstrap import InlineCheckboxes
 
 from .cluster_manager import cloud_info
+from .cluster_manager import cmek
+from .cluster_manager import utils
 from .cluster_manager import validate_credential
 from .views.view_utils import RegistryDataHelper
 
@@ -104,7 +109,271 @@ class CredentialForm(forms.ModelForm):
             raise ValidationError("Credential cannot be validated.")
 
 
-class ClusterForm(forms.ModelForm):
+# The encryption panel, shared by every resource form that offers it.
+#
+# The fields are model fields (models.CmekResourceMixin), so a form only has to
+# list them and call the two hooks below. Declared once because the one thing
+# that went wrong before was a field present on the model but missing from a
+# form.
+CMEK_PANEL_FIELDS = (
+    "cmek_enabled",
+    "cmek_key_name",
+    "cmek_key_project_id",
+    "cmek_key_ring_name",
+    "cmek_deletion_policy",
+    "cmek_protection_level",
+    "cmek_rotation_period",
+    "cmek_encryption_service_account",
+)
+
+CMEK_PANEL_WIDGETS = {
+    "cmek_enabled": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    "cmek_key_name": forms.TextInput(
+        attrs={"class": "form-control", "placeholder": "e.g. research-a-key"}),
+    "cmek_key_project_id": forms.TextInput(attrs={"class": "form-control"}),
+    "cmek_key_ring_name": forms.TextInput(attrs={"class": "form-control"}),
+    "cmek_deletion_policy": forms.Select(attrs={"class": "form-control"}),
+    "cmek_protection_level": forms.Select(attrs={"class": "form-control"}),
+    "cmek_rotation_period": forms.TextInput(
+        attrs={"class": "form-control", "placeholder": "7776000s"}),
+    "cmek_encryption_service_account": forms.TextInput(attrs={
+        "class": "form-control",
+        "placeholder": "name@project.iam.gserviceaccount.com",
+    }),
+}
+
+
+class CmekPanelMixin:
+    """Wires the encryption panel into a resource form."""
+
+    def setup_cmek_panel(self, settings=None, location=None):
+        """Gate the panel on enforcement and populate the key picker."""
+        # Kept for the key-name uniqueness check in clean_cmek_panel, which
+        # needs the resource's location to build the full key path.
+        self._cmek_location = location
+        self._cmek_config_error = None
+
+        instance = getattr(self, "instance", None)
+        self._cmek_frozen = cmek.is_frozen(instance)
+        if settings is None:
+            try:
+                settings = cmek.CmekSettings.from_config(utils.load_config())
+            except cmek.CmekConfigError as err:
+                # Invalid stored settings must not break every resource form.
+                # A deployed resource needs none of them to show its stored
+                # choice; any other is refused at clean_cmek_panel, which
+                # names the page that fixes it.
+                if not self._cmek_frozen:
+                    self._cmek_config_error = str(err)
+        self.cmek_settings = settings
+
+        if self._cmek_frozen:
+            # A deployed resource keeps the encryption it was deployed with,
+            # whatever enforcement says now: shown, but not editable. Django
+            # ignores a disabled field's POST value and uses the initial one.
+            for name in CMEK_PANEL_FIELDS:
+                if name in self.fields:
+                    self.fields[name].disabled = True
+                    self.initial[name] = getattr(
+                        instance, name, self.initial.get(name))
+            if "cmek_enabled" in self.fields:
+                self.fields["cmek_enabled"].help_text = (
+                    "Encryption is fixed once a resource is deployed.")
+            self._set_cmek_choices()
+            return
+
+        if self._cmek_config_error or not self.cmek_settings.offered:
+            # enforcement: disabled -- no key is ever emitted, so offering the
+            # controls would be a lie. Unreadable settings cannot say what to
+            # offer either.
+            for name in CMEK_PANEL_FIELDS:
+                self.fields.pop(name, None)
+            return
+
+        if "cmek_enabled" in self.fields and self.cmek_settings.required:
+            # A resource cannot opt out of a deployment that requires CMEK.
+            field = self.fields["cmek_enabled"]
+            field.initial = True
+            # A ModelForm built with an instance takes its starting value from
+            # the instance (the model default is False), and that wins over
+            # field.initial, so the locked toggle would render off.
+            self.initial["cmek_enabled"] = True
+            field.disabled = True
+            field.help_text = (
+                "This deployment requires a customer-managed encryption key, "
+                "so encryption cannot be turned off here."
+            )
+
+        self._set_cmek_choices()
+        if "cmek_deletion_policy" in self.fields \
+                and not self.initial.get("cmek_deletion_policy"):
+            self.initial["cmek_deletion_policy"] = \
+                cmek.DELETION_POLICY_ABANDON
+
+    def _set_cmek_choices(self):
+        """Label the protection-level and tear-down choices."""
+        if "cmek_protection_level" in self.fields:
+            self.fields["cmek_protection_level"].choices = [
+                ("", "Use the module default (SOFTWARE)"),
+            ] + [(p, p) for p in cmek.PROTECTION_LEVELS]
+        if "cmek_deletion_policy" in self.fields:
+            # kms-key has no default, so name the one OFE will send, and lead
+            # with the value the module receives: an operator choosing a
+            # tear-down policy needs to know whether they picked DELETE or
+            # ABANDON, not only what the words mean. ABANDON is listed first
+            # because it is the default, and the one that cannot destroy data.
+            self.fields["cmek_deletion_policy"].choices = [
+                (cmek.DELETION_POLICY_ABANDON,
+                 "ABANDON — leave the key in place when this resource is "
+                 "torn down"),
+                (cmek.DELETION_POLICY_DELETE,
+                 "DELETE — destroy the key when this resource is torn down; "
+                 "anything still encrypted with it becomes unreadable"),
+            ]
+
+    def clean_cmek_panel(self, cleaned):
+        """Validate the panel, and clear it when encryption is off."""
+        if getattr(self, "_cmek_config_error", None):
+            raise forms.ValidationError(
+                "This deployment's encryption settings are invalid "
+                f"({self._cmek_config_error}). An administrator must correct "
+                "them on the Encryption settings page before resources can be "
+                "saved.")
+        if not getattr(self, "cmek_settings", None) \
+                or getattr(self, "_cmek_frozen", False) \
+                or not self.cmek_settings.offered:
+            # a deployed resource's panel is disabled, so cleaned already
+            # holds the stored values, and they stand
+            return cleaned
+
+        enabled = bool(cleaned.get("cmek_enabled"))
+        if self.cmek_settings.required:
+            enabled = True
+            cleaned["cmek_enabled"] = True
+
+        if not enabled:
+            # Nothing below applies, and leaving stale values on the record
+            # would make the detail page claim an encryption that is not there.
+            for name in CMEK_PANEL_FIELDS:
+                if name == "cmek_enabled":
+                    continue
+                if name in cleaned:
+                    cleaned[name] = ""
+            return cleaned
+
+        if not cleaned.get("cmek_deletion_policy"):
+            cleaned["cmek_deletion_policy"] = cmek.DELETION_POLICY_ABANDON
+        for field, label in (("cmek_key_name", "key name"),
+                             ("cmek_key_ring_name", "key ring")):
+            value = (cleaned.get(field) or "").strip()
+            if value and not cmek.KMS_NAME_RE.fullmatch(value):
+                self.add_error(field, (
+                    f"A Cloud KMS {label} may use letters, digits, hyphen "
+                    "and underscore only, up to 63 characters, and can "
+                    "never be changed once created."))
+        project = (cleaned.get("cmek_key_project_id") or "").strip()
+        if project:
+            try:
+                cleaned["cmek_key_project_id"] = cmek.assert_project_id(
+                    project, what="key project")
+            except cmek.CmekConfigError as err:
+                self.add_error("cmek_key_project_id", str(err))
+
+        for field, check in (
+                ("cmek_protection_level", cmek.assert_protection_level),
+                ("cmek_rotation_period", cmek.assert_rotation_period)):
+            try:
+                cleaned[field] = check(cleaned.get(field))
+            except cmek.CmekConfigError as err:
+                self.add_error(field, str(err))
+
+        self._reject_a_key_another_resource_uses(cleaned)
+
+        account = (cleaned.get("cmek_encryption_service_account") or "").strip()
+        if account:
+            try:
+                cleaned["cmek_encryption_service_account"] = \
+                    cmek.assert_service_account_email(account)
+            except cmek.CmekConfigError as err:
+                self.add_error("cmek_encryption_service_account", str(err))
+        return cleaned
+
+    def _cmek_credential_project(self, cleaned):
+        """The project of the credential this resource deploys with, or "".
+
+        From the submission on create, where the instance has no credential
+        yet; from the instance on update, where the field may be disabled.
+        """
+        credential = (cleaned.get("cloud_credential")
+                      or getattr(getattr(self, "instance", None),
+                                 "cloud_credential", None))
+        try:
+            return json.loads(getattr(credential, "detail", "") or "{}").get(
+                "project_id", "") or ""
+        except ValueError:
+            return ""
+
+    def _reject_a_key_another_resource_uses(self, cleaned):
+        """Refuse a key name a live resource already has.
+
+        kms-key-iam's service agents are project-scoped, so two resources on
+        one key share a single (member, role) grant that either one's teardown
+        destroys, taking the other's access with it. Each resource
+        therefore gets its own key. The derived default name cannot collide,
+        but a name typed in here can, so it is checked before anything is
+        deployed rather than discovered at teardown.
+
+        The location must come from this submission's cleaned data, not
+        self._cmek_location: that was captured from self.instance at __init__,
+        which on every Create form is a blank, unsaved instance with no
+        cloud_zone/cloud_region set yet -- the operator is choosing it in this
+        same submission. Reading only self._cmek_location made this check a
+        silent no-op on every create, which is exactly where a duplicate name
+        first gets typed. self._cmek_location remains a fallback for a form
+        that omits both fields.
+
+        The project is resolved by cmek.resolve_created_key, the same function
+        the deploy uses, so a blank key project falls back to the credential's
+        project here exactly as it does in the blueprint. Every other resource
+        is resolved the same way, so one not yet deployed, whose project and
+        key ring are still blank, is compared by where its key will live.
+        """
+        name = (cleaned.get("cmek_key_name") or "").strip()
+        if not name:
+            # left to OFE, which derives a name unique to this resource
+            return
+        # Resolve ring and project exactly as the deploy will, including its
+        # fallback to the credential's project when neither this resource nor
+        # the deployment settings name one -- the default. Resolving it any
+        # other way let this check pass a key name the deploy then shared.
+        resolved = cmek.resolve_created_key(
+            {"key_name": name,
+             "key_ring_name": cleaned.get("cmek_key_ring_name"),
+             "key_project_id": cleaned.get("cmek_key_project_id")},
+            self.cmek_settings, self._cmek_credential_project(cleaned))
+        ring = resolved["key_ring_name"]
+        project = resolved["key_project_id"]
+        location = cmek.normalize_location(
+            cleaned.get("cloud_zone") or cleaned.get("cloud_region")
+            or self._cmek_location or "")
+        if not (ring and project and location):
+            # not enough to build a path with, so nothing to compare against
+            return
+        path = cmek.full_key_path(project, location, ring, name)
+        # a plain Form (the render tests) has no instance; on create the
+        # instance has no pk, so it excludes nothing, which is correct
+        sharers = cmek.resources_sharing_key(
+            path, exclude=getattr(self, "instance", None),
+            settings=self.cmek_settings)
+        if sharers:
+            self.add_error("cmek_key_name", (
+                f"{', '.join(sharers)} already uses this key. Each resource "
+                "needs its own: tearing either one down would revoke the "
+                "other's access to a shared key. Leave the name blank to let "
+                "OFE choose one."))
+
+
+class ClusterForm(CmekPanelMixin, forms.ModelForm):
     """Custom form for Cluster model implementing option filtering"""
 
     def _get_creds(self, kwargs):
@@ -118,8 +387,11 @@ class ClusterForm(forms.ModelForm):
         return creds
 
     def __init__(self, *args, **kwargs):
-
         super().__init__(*args, **kwargs)
+
+        self.setup_cmek_panel(
+            location=(getattr(self.instance, "cloud_zone", None)
+                      or getattr(self.instance, "cloud_region", None)))
 
         # Set default for new creations to True (Native Auth)
         if not self.instance.id:
@@ -156,10 +428,16 @@ class ClusterForm(forms.ModelForm):
             # Define a list of field names you want to set as readonly
             fields_to_make_readonly = ['cloud_credential', 'name', 'subnet', 'cloud_region', 'cloud_zone']
 
-            # Loop through the fields and set the 'readonly' attribute
+            # Loop through the fields and set the 'readonly' attribute.
+            # disabled makes Django keep the instance's value whatever a
+            # POST sends; readonly alone only stops the browser editing it.
             for field_name in fields_to_make_readonly:
                 self.fields[field_name].widget = forms.TextInput(attrs={'class': 'form-control'})
                 self.fields[field_name].widget.attrs['readonly'] = True
+                self.fields[field_name].disabled = True
+
+    def clean(self):
+        return self.clean_cmek_panel(super().clean())
 
     class Meta:
         model = Cluster
@@ -185,9 +463,10 @@ class ClusterForm(forms.ModelForm):
             "use_bigquery",
             "use_containers",
             "enable_slurm_auth",
-        )
+        ) + CMEK_PANEL_FIELDS
 
         widgets = {
+            **CMEK_PANEL_WIDGETS,
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "cloud_credential": forms.Select(
                 attrs={"class": "form-control"}
@@ -1077,7 +1356,69 @@ class FilesystemImportForm(forms.ModelForm):
         ]
 
 
-class FilestoreForm(forms.ModelForm):
+# per-tier capacity rules, keyed by the model's stored tier code
+# (see GCPFilestoreFilesystem.FILESTORE_TIER). "step" is the required
+# capacity increment in GiB (None = any 1 GiB step allowed). Values are from
+# Google's Filestore service-tiers documentation. Without this the form only
+# enforced a single hard-coded HTML min=2660, which both blocked the real
+# ENTERPRISE minimum (1024) and permitted values GCP rejects at apply time
+# (e.g. 2660 is not a multiple of 256 GiB).
+# Per-tier capacity limits, in GiB, from Filestore's own service tiers doc.
+# HIGH_SCALE_SSD is the legacy API name for the *high-scale* zonal band, not
+# zonal in general: GCP enforces a 10 TiB floor in 2.5 TiB steps for it and
+# rejects anything smaller at apply time with "capacity must be at least
+# 10240 GiB". (Zonal's 1 TiB / 256 GiB band is the separate ZONAL tier, which
+# OFE does not offer.) This previously read min 1024 / step 256, so OFE
+# accepted capacities the API always refused.
+FILESTORE_CAPACITY_RULES = {
+    "bh": {"min": 1024, "max": 65433, "step": None},     # BASIC_HDD
+    "bs": {"min": 2560, "max": 65433, "step": None},     # BASIC_SSD
+    "hs": {"min": 10240, "max": 102400, "step": 2560},   # HIGH_SCALE_SSD
+    "en": {"min": 1024, "max": 10240, "step": 256},      # ENTERPRISE
+}
+
+
+# Filestore tiers that support CMEK, as OFE tier codes: "hs" is
+# HIGH_SCALE_SSD and "en" is ENTERPRISE. The filestore module enforces this
+# with a Terraform precondition (modules/file-system/filestore/main.tf), but
+# only at apply time -- by then the resource is saved and the operator has sat
+# through an init and a plan to be told the tier and the key are incompatible.
+# The basic tiers genuinely cannot do CMEK, so this is checked on the form.
+CMEK_CAPABLE_FILESTORE_TIERS = ("hs", "en")
+
+
+def filestore_cmek_tier_error(tier, cmek_enabled):
+    """Why this tier cannot carry a customer-managed key, or None."""
+    if not cmek_enabled or not tier:
+        return None
+    if tier in CMEK_CAPABLE_FILESTORE_TIERS:
+        return None
+    label = dict(GCPFilestoreFilesystem.FILESTORE_TIER).get(tier, tier)
+    allowed = ", ".join(
+        dict(GCPFilestoreFilesystem.FILESTORE_TIER)[t]
+        for t in CMEK_CAPABLE_FILESTORE_TIERS)
+    return (f"{label} Filestore does not support customer-managed encryption "
+            f"keys. Choose {allowed}, or turn encryption off.")
+
+
+def filestore_capacity_error(tier, capacity):
+    """Return a human-readable error string if `capacity` (GiB) is invalid
+    for the Filestore `tier` (a FILESTORE_TIER code), else None."""
+    rules = FILESTORE_CAPACITY_RULES.get(tier)
+    if capacity is None or rules is None:
+        return None
+    label = dict(GCPFilestoreFilesystem.FILESTORE_TIER).get(tier, tier)
+    if capacity < rules["min"]:
+        return f"{label} Filestore requires at least {rules['min']} GiB."
+    if capacity > rules["max"]:
+        return f"{label} Filestore allows at most {rules['max']} GiB."
+    if rules["step"] and capacity % rules["step"] != 0:
+        return (f"{label} Filestore capacity must be a multiple of "
+                f"{rules['step']} GiB.")
+    return None
+
+
+class FilestoreForm(CmekPanelMixin, forms.ModelForm):
     """Custom form for GCP Filestoremodel implementing option filtering"""
 
     share_name = forms.CharField(
@@ -1105,7 +1446,6 @@ class FilestoreForm(forms.ModelForm):
         return creds
 
     def __init__(self, *args, **kwargs):
-
         zone_choices = None
         if "zone_choices" in kwargs:
             zone_choices = kwargs.pop("zone_choices")
@@ -1126,12 +1466,35 @@ class FilestoreForm(forms.ModelForm):
             # widget's field in the template via javascript
             self.fields["cloud_zone"].widget.choices = zone_choices
 
-        if "n" not in self.instance.cloud_state:
+        self.setup_cmek_panel(
+            location=getattr(self.instance, "cloud_zone", None))
+
+        # Deployed, or deployed once with its key: the key's location
+        # follows the zone, so neither can change any more.
+        if "n" not in self.instance.cloud_state \
+                or getattr(self.instance, "cmek_applied", False) is True:
             # Need to disable certain widgets
             self.fields["vpc"].disabled = True
             self.fields["cloud_zone"].disabled = True
             self.fields["share_name"].disabled = True
             self.fields["performance_tier"].disabled = True
+
+
+    def clean(self):
+        # reject capacities GCP will refuse at apply time, per tier.
+        cleaned = super().clean()
+        error = filestore_capacity_error(
+            cleaned.get("performance_tier"), cleaned.get("capacity"))
+        if error:
+            self.add_error("capacity", error)
+        # after the panel, so a deployment that forces encryption on is judged
+        # on the encryption it will actually get rather than the box submitted
+        cleaned = self.clean_cmek_panel(cleaned)
+        error = filestore_cmek_tier_error(
+            cleaned.get("performance_tier"), cleaned.get("cmek_enabled"))
+        if error:
+            self.add_error("performance_tier", error)
+        return cleaned
 
     class Meta:
         model = GCPFilestoreFilesystem
@@ -1143,15 +1506,19 @@ class FilestoreForm(forms.ModelForm):
             "cloud_credential",
             "capacity",
             "performance_tier",
-        )
+        ) + CMEK_PANEL_FIELDS
 
         widgets = {
+            **CMEK_PANEL_WIDGETS,
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "cloud_credential": forms.Select(
                 attrs={"class": "form-control", "disabled": True}
             ),
             "vpc": forms.Select(attrs={"class": "form-control"}),
-            "capacity": forms.NumberInput(attrs={"min": 2660, "default": 2660}),
+            # 1024 is the smallest valid tier minimum (ENTERPRISE /
+            # BASIC_HDD / HIGH_SCALE_SSD); precise per-tier limits and the
+            # 256 GiB increment are enforced in clean().
+            "capacity": forms.NumberInput(attrs={"min": 1024, "default": 1024}),
             "share_name": forms.TextInput(attrs={"class": "form-control"}),
             "cloud_zone": forms.Select(attrs={"class": "form-control"}),
         }
@@ -1205,7 +1572,7 @@ class StartupScriptForm(forms.ModelForm):
             "content": forms.ClearableFileInput(attrs={"class": "form-control"}),
         }
 
-class ImageForm(forms.ModelForm):
+class ImageForm(CmekPanelMixin, forms.ModelForm):
     """Custom form for Image model"""
 
     class Meta:
@@ -1222,10 +1589,11 @@ class ImageForm(forms.ModelForm):
             "startup_script",
             "enable_os_login",
             "block_project_ssh_keys",
-            "authorised_users"
-        )
+            "authorised_users",
+        ) + CMEK_PANEL_FIELDS
 
         widgets = {
+            **CMEK_PANEL_WIDGETS,
             "cloud_credential": forms.Select(attrs={"class": "form-control"}),
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "family": forms.TextInput(attrs={"class": "form-control"}),
@@ -1243,6 +1611,12 @@ class ImageForm(forms.ModelForm):
         user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
         self.fields["startup_script"].queryset = self.get_startup_scripts(user)
+        self.setup_cmek_panel(
+            location=(getattr(self.instance, "cloud_zone", None)
+                      or getattr(self.instance, "cloud_region", None)))
+
+    def clean(self):
+        return self.clean_cmek_panel(super().clean())
 
     def get_startup_scripts(self, user):
         # Retrieve startup scripts owned by the user
@@ -1405,3 +1779,60 @@ class PullContainerForm(forms.Form):
             "placeholder": "Repo password (if required)"
         })
     )
+
+class CmekSettingsForm(forms.Form):
+    """The deployment-wide encryption defaults.
+
+    Three settings, not the twelve the previous implementation had: everything
+    else is now either a per-resource choice or a kms-key default, and a control
+    that duplicates a module default is a control that can disagree with it.
+    """
+
+    enforcement = forms.ChoiceField(
+        choices=[
+            (cmek.ENFORCEMENT_REQUIRED,
+             "Required — every new resource must use a customer-managed key"),
+            (cmek.ENFORCEMENT_PREFERRED,
+             "Preferred — offered on each resource, off unless the user "
+             "turns it on"),
+            (cmek.ENFORCEMENT_DISABLED,
+             "Disabled — the encryption panel is not shown at all"),
+        ],
+        widget=forms.Select(attrs={"class": "form-control"}),
+        help_text=(
+            "Whether a resource may be created without a customer-managed key. "
+            "Applies to resources created from now on."
+        ),
+    )
+    key_project_id = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+        help_text=(
+            "Project the keys OFE creates are placed in. Leave empty to use "
+            "each resource's own project."
+        ),
+    )
+    key_ring_name = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+        help_text=(
+            "Cloud KMS key ring the keys OFE creates are placed in. Permanent: "
+            "a key ring can never be renamed, reused or deleted."
+        ),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        try:
+            self.settings = cmek.CmekSettings.from_config({"cmek": {
+                "enforcement": cleaned.get("enforcement"),
+                "key_project_id": (cleaned.get("key_project_id") or "").strip(),
+                "key_ring_name": (cleaned.get("key_ring_name") or "").strip(),
+            }})
+        except cmek.CmekConfigError as err:
+            # Validated by the same code that reads the file, so the form cannot
+            # accept something the engine would later reject.
+            field = next((name for name in ("key_ring_name", "key_project_id")
+                          if f"cmek.{name}" in str(err)), None)
+            self.add_error(field, str(err))
+        return cleaned

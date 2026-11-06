@@ -28,6 +28,10 @@ from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, RegexValidator, MaxLengthValidator
 from django.db import models
+
+# Only the choice vocabularies; cmek.py imports nothing from Django, so
+# there is no import cycle here.
+from .cluster_manager import cmek
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from rest_framework.authtoken.models import Token
@@ -190,7 +194,7 @@ class User(AbstractUser):
             extra_data = SocialAccount.objects.get(user=self.id).extra_data
             json_data = json.dumps(extra_data)
             data = json.loads(json_data)
-            url = data["picture"]
+            url = data.get("picture", url)
         return url
 
     def has_viewer_role(self):
@@ -302,6 +306,17 @@ class CloudResource(models.Model):
         blank=True,
         null=True,
     )
+    # a human-readable reason for the current (usually failed) state,
+    # surfaced on the resource's detail page. Populated when a
+    # create/start step fails with an actionable cause (e.g. a service Cloud
+    # KMS Autokey does not support needing an approved exception) so the user
+    # sees why, instead of only an empty terraform log.
+    status_message = models.TextField(
+        blank=True,
+        default="",
+        help_text="Human-readable detail about the current state (e.g. why "
+                  "the last operation failed).",
+    )
 
     @property
     def project_id(self):
@@ -405,6 +420,123 @@ class FilesystemImpl(models.IntegerChoices):
     IMPORTED = 2, "Imported Filesystem"
 
 
+class CmekResourceMixin(models.Model):
+    """Encryption choice for a resource that can carry a customer-managed key.
+
+    A mixin rather than fields on CloudResource: networks, credentials and
+    Workbench are cloud resources too, and none of them takes a key. Blank means
+    "use the deployment default", so the superuser-only settings page stays
+    meaningful without a second copy of every setting here.
+
+    The values are read by cluster_manager.cmek, which turns them into kms-key
+    and kms-key-iam blocks. Every resource gets its own key: kms-key-iam's
+    service agents are project-scoped, so a key shared between two resources
+    would share one grant that either could destroy. Nothing here talks to
+    Cloud KMS.
+
+    Two flags fix the choice for good. cmek_applied is set once an apply with
+    this choice has succeeded, so a later failed start or reconfigure, which
+    puts the record back to "not managed", cannot reopen it. cmek_revoked is
+    set when an administrator revokes the key, and stops the resource being
+    started, changed or re-applied. cluster_manager.cmek.is_frozen reads both.
+    """
+
+    class Meta:
+        abstract = True
+
+    cmek_enabled = models.BooleanField(
+        default=False,
+        help_text=(
+            "Encrypt this resource with a customer-managed encryption key "
+            "(CMEK) instead of Google-managed encryption."
+        ),
+    )
+    cmek_key_name = models.CharField(
+        max_length=63,
+        blank=True,
+        default="",
+        help_text=(
+            "Name of the key to create. Permanent: Cloud KMS never reuses a "
+            "CryptoKey name. Blank lets OFE derive one from this resource."
+        ),
+    )
+    cmek_key_project_id = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text=(
+            "Project the key is created in. Blank uses the deployment default, "
+            "then this resource's own project."
+        ),
+    )
+    cmek_key_ring_name = models.CharField(
+        max_length=63,
+        blank=True,
+        default="",
+        help_text=(
+            "Cloud KMS key ring the key is created in. Permanent: a key ring "
+            "can never be deleted. Blank uses the deployment default."
+        ),
+    )
+    cmek_deletion_policy = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        choices=[(p, p) for p in cmek.DELETION_POLICIES],
+        help_text=(
+            "What tearing this resource down does to a key OFE created for it. "
+            "DELETE destroys the key versions, so anything still encrypted "
+            "with them becomes permanently unreadable; ABANDON leaves the key "
+            "in place. kms-key requires a value, so blank means ABANDON."
+        ),
+    )
+    cmek_protection_level = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        choices=[(p, p) for p in cmek.PROTECTION_LEVELS],
+        help_text=(
+            "Protection level for the key's versions. Chosen at creation and "
+            "effectively immutable afterwards: changing it needs a new key. "
+            "Blank leaves the kms-key module's own default (SOFTWARE)."
+        ),
+    )
+    cmek_rotation_period = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text=(
+            "How often the key rotates, as whole seconds ending in s, at least "
+            "86400s. Rotation cannot be disabled. Blank leaves the kms-key "
+            "module's own default (7776000s, 90 days)."
+        ),
+    )
+    cmek_encryption_service_account = models.CharField(
+        max_length=320,
+        blank=True,
+        default="",
+        help_text=(
+            "Bare service-account email that encrypts, when it is not the "
+            "service agent. kms-key-iam adds the serviceAccount: prefix "
+            "itself and rejects a value that already carries one."
+        ),
+    )
+    cmek_applied = models.BooleanField(
+        default=False,
+        help_text=(
+            "An apply with this encryption choice has succeeded: the choice "
+            "is then fixed."
+        ),
+    )
+    cmek_revoked = models.BooleanField(
+        default=False,
+        help_text=(
+            "An administrator revoked the key; the resource can no longer be "
+            "changed or re-applied."
+        ),
+    )
+
+
 class Filesystem(CloudResource):
     """Model representing a file system in the cloud"""
 
@@ -458,6 +590,21 @@ class Filesystem(CloudResource):
 
     def __str__(self):
         return self.name
+
+    def active_mounts(self):
+        """Cluster mounts that still depend on this filesystem."""
+        return MountPoint.objects.filter(
+            export__filesystem=self
+        ).exclude(cluster__cloud_state="xm")
+
+    def active_workbench_mounts(self):
+        return WorkbenchMountPoint.objects.filter(
+            export__filesystem=self
+        ).exclude(workbench__cloud_state="xm")
+
+    def in_use(self):
+        return (self.active_mounts().exists()
+                or self.active_workbench_mounts().exists())
 
 
 class FilesystemExport(models.Model):
@@ -586,7 +733,7 @@ class StartupScript(models.Model):
         help_text="Select other users authorised to use this startup script",
     )
         
-class Image(CloudResource):
+class Image(CmekResourceMixin, CloudResource):
     """Model representing a custom node image."""
 
     name = models.CharField(
@@ -660,7 +807,7 @@ class Image(CloudResource):
     def __str__(self):
         return self.name
 
-class Cluster(CloudResource):
+class Cluster(CmekResourceMixin, CloudResource):
     """Model representing a cluster"""
 
     name = models.CharField(
@@ -822,7 +969,7 @@ class Cluster(CloudResource):
         default=False,
         help_text=(
             "Enable containers for this cluster? Artifact Registry can be configured to store your containers."
-        ),        
+        ),
     )
     enable_slurm_auth = models.BooleanField(
         default=True,
@@ -1790,7 +1937,7 @@ class C2Callback(models.Model):
     callback = CallbackField()
 
 
-class GCPFilestoreFilesystem(Filesystem):
+class GCPFilestoreFilesystem(CmekResourceMixin, Filesystem):
     """Managed GCP filestore-based filesystem"""
 
     FILESTORE_TIER = (
@@ -1801,7 +1948,12 @@ class GCPFilestoreFilesystem(Filesystem):
     )
     capacity = models.PositiveIntegerField(
         validators=[MinValueValidator(1024)],
-        help_text="Capacity (in GB) of the filesystem (min of 2660)",
+        help_text=(
+            "Capacity (in GiB) of the filesystem. Minimum and increment "
+            "depend on the performance tier: ENTERPRISE min 1024 GiB in "
+            "256 GiB steps, HIGH_SCALE_SSD min 10240 GiB in 2560 GiB steps, "
+            "BASIC_HDD min 1024 GiB, BASIC_SSD min 2560 GiB."
+        ),
         default=1024,
     )
 
