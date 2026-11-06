@@ -124,6 +124,10 @@ locals {
   target_system_node_pool_zones = var.system_node_pool_machine_type != null ? toset([]) : local.candidate_zones
   cpu_np_machine_type           = "n4-standard-64"
   cpu_np_candidate_zones        = var.enable_pathways_for_tpus ? local.candidate_zones : toset([])
+  cpu_np_available_zones = sort([
+    for z, data in data.google_compute_machine_types.available_cpu_np_machines :
+    z if length(data.machine_types) > 0
+  ])
 }
 
 data "google_compute_machine_types" "available_system_machines" {
@@ -131,6 +135,13 @@ data "google_compute_machine_types" "available_system_machines" {
   project  = var.project_id
   zone     = each.value
   filter   = "name = \"n4-standard-4\""
+}
+
+data "google_compute_machine_types" "available_cpu_np_machines" {
+  for_each = local.cpu_np_candidate_zones
+  project  = var.project_id
+  zone     = each.value
+  filter   = "name = \"${local.cpu_np_machine_type}\""
 }
 
 data "google_container_engine_versions" "version_prefix_filter" {
