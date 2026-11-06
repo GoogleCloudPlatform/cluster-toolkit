@@ -434,7 +434,7 @@ var portForwardRe = regexp.MustCompile(`(?:127\.0\.0\.1|\[::1\]):(\d+)`)
 
 func (g *GKEOrchestrator) startPortForward(pod, ns string, sigCh <-chan os.Signal) (int, func(), error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	args := withKubeContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf(":%d", spsProxyPort)})
+	args := k8s.WithContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf(":%d", spsProxyPort)})
 	cmd := exec.CommandContext(ctx, "kubectl", args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -461,7 +461,7 @@ func (g *GKEOrchestrator) startPortForward(pod, ns string, sigCh <-chan os.Signa
 			return 0, nil, fmt.Errorf("port-forward to %s did not become ready: %s", pod, strings.TrimSpace(errOut.String()))
 		}
 		done := make(chan struct{})
-		restartArgs := withKubeContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf("%d:%d", port, spsProxyPort)})
+		restartArgs := k8s.WithContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf("%d:%d", port, spsProxyPort)})
 		go keepPortForwardAlive(ctx, cmd, pipeDone, restartArgs, done)
 		return port, func() { cancel(); <-done }, nil
 	case <-sigCh:
