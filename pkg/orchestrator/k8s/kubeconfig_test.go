@@ -38,6 +38,10 @@ func TestFindContextByCluster(t *testing.T) {
 	if name, _, ok := FindContextByCluster(cfg, "shared-cluster"); !ok || name != "alpha-ctx" {
 		t.Errorf("sorted cluster-entry fallback = (%q, %v), want (alpha-ctx, true)", name, ok)
 	}
+	cfg.CurrentContext = "zeta-ctx"
+	if name, _, ok := FindContextByCluster(cfg, "shared-cluster"); !ok || name != "zeta-ctx" {
+		t.Errorf("active current-context matching cluster should win over alphabetical fallback: got (%q, %v), want (zeta-ctx, true)", name, ok)
+	}
 	if _, _, ok := FindContextByCluster(cfg, "missing"); ok {
 		t.Errorf("expected missing cluster to return false")
 	}
@@ -52,6 +56,10 @@ func TestFindContextByCluster(t *testing.T) {
 func TestResolveCurrentContext(t *testing.T) {
 	t.Parallel()
 	cfg := clientcmdapi.NewConfig()
+	if _, _, _, ok := ResolveCurrentContext(cfg); ok {
+		t.Errorf("expected empty CurrentContext to return false")
+	}
+
 	cfg.Contexts["prod-ctx"] = &clientcmdapi.Context{Cluster: "prod-cluster"}
 	cfg.CurrentContext = "prod-ctx"
 
@@ -75,6 +83,23 @@ func TestResolveCurrentContext(t *testing.T) {
 	}
 }
 
+func TestResolveContext(t *testing.T) {
+	t.Parallel()
+	cfg := clientcmdapi.NewConfig()
+	cfg.Contexts["prod-ctx"] = &clientcmdapi.Context{Cluster: "prod-cluster"}
+	cfg.CurrentContext = "prod-ctx"
+
+	if name, _, clusterName, ok := ResolveContext(cfg, ""); !ok || name != "prod-ctx" || clusterName != "prod-cluster" {
+		t.Fatalf("ResolveContext('') = (%q, %q, %v)", name, clusterName, ok)
+	}
+	if name, _, clusterName, ok := ResolveContext(cfg, "prod-cluster"); !ok || name != "prod-ctx" || clusterName != "prod-cluster" {
+		t.Fatalf("ResolveContext(prod-cluster) = (%q, %q, %v)", name, clusterName, ok)
+	}
+	if _, _, _, ok := ResolveContext(cfg, "nonexistent"); ok {
+		t.Errorf("expected explicit nonexistent cluster to return false")
+	}
+}
+
 func TestExecPluginBaseName(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -86,6 +111,8 @@ func TestExecPluginBaseName(t *testing.T) {
 		{name: "Windows backslash and uppercase .EXE", cmd: `C:\Program Files\Auth\Custom-Auth-Plugin.EXE`, want: "custom-auth-plugin"},
 		{name: "bare binary name", cmd: "kubelogin", want: "kubelogin"},
 		{name: "empty command", cmd: "   ", want: ""},
+		{name: "dot command", cmd: ".", want: ""},
+		{name: "root slash command", cmd: "/", want: ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
