@@ -399,7 +399,12 @@ def validate_yaml_block(
         docs = list(yaml.safe_load_all(cleaned_block))
     except (yaml.YAMLError, ValueError) as exc:
         first_line = str(exc).splitlines()[0]
-        errors.append(f"{rel_path}: invalid YAML syntax in snippet: {first_line}")
+        hint = (
+            " (use '# ...' for elided lines)"
+            if re.search(r"(?m)^\s*\.\.\.\s*$", cleaned_block)
+            else ""
+        )
+        errors.append(f"{rel_path}: invalid YAML syntax in snippet: {first_line}{hint}")
         return errors
 
     mods: list[dict] = []
@@ -625,7 +630,12 @@ def validate_module_readme_snippets(non_ignored: set[str] | None = None) -> list
                     list(yaml.safe_load_all(cleaned_block))
                 except (yaml.YAMLError, ValueError) as exc:
                     first_line = str(exc).splitlines()[0]
-                    errors.append(f"{snippet_loc}: invalid YAML syntax in snippet: {first_line}")
+                    hint = (
+                        " (use '# ...' for elided lines)"
+                        if re.search(r"(?m)^\s*\.\.\.\s*$", cleaned_block)
+                        else ""
+                    )
+                    errors.append(f"{snippet_loc}: invalid YAML syntax in snippet: {first_line}{hint}")
 
     os_compat_blueprints = [
         p

@@ -185,6 +185,10 @@ func scanBlueprintDir(repoRoot, absRoot string, readmeDescs map[string]string, t
 }
 
 func gitTrackedFiles(repoRoot string, roots ...string) map[string]bool {
+	top, err := exec.Command("git", "-C", repoRoot, "rev-parse", "--show-toplevel").Output()
+	if err != nil || !sameDir(strings.TrimSpace(string(top)), repoRoot) {
+		return nil
+	}
 	args := append([]string{"-C", repoRoot, "ls-files", "-z", "--"}, roots...)
 	out, err := exec.Command("git", args...).Output()
 	if err != nil {
@@ -200,6 +204,17 @@ func gitTrackedFiles(repoRoot string, roots ...string) map[string]bool {
 		return nil
 	}
 	return set
+}
+
+func sameDir(a, b string) bool {
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	if errA != nil || errB != nil {
+		return false
+	}
+	aa, errA := filepath.Abs(ra)
+	ab, errB := filepath.Abs(rb)
+	return errA == nil && errB == nil && aa == ab
 }
 
 func isTracked(repoRoot, absPath string, tracked map[string]bool) bool {

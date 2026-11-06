@@ -233,7 +233,7 @@ The Prolog will perform the following actions:
 - Install the NCCL plugin into `/var/lib/tcpx` of the host
 - Run the RxDM service
   - This is a long-lived service that runs alongside the job
-  - Mounts `/var/lib/tcpx/lib64` and `/usr/local/nvidia/lib64` into the container
+  - Mounts `/var/lib/nvidia/lib64` from the host into `/usr/local/nvidia/lib64` of the container
   - Mount `/opt/tcpdirect_benchmark/` from the host into the container so that a
   textproto file defining the mapping from GPU to NIC is available. This file
   is present in the images that is used in this solution.

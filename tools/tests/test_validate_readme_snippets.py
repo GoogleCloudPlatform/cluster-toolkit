@@ -168,6 +168,7 @@ class TestValidateReadmeSnippets(unittest.TestCase):
         errs = vrs.validate_yaml_block(raw, "test.md", {})
         self.assertEqual(len(errs), 1)
         self.assertIn("invalid YAML syntax in snippet", errs[0])
+        self.assertIn("use '# ...' for elided lines", errs[0])
 
     def test_backticked_and_leading_slash_links_rejected(self):
         with tempfile.TemporaryDirectory() as tmpdir:

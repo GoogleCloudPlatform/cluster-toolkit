@@ -651,15 +651,33 @@ func TestScanBlueprintsInUntrackedBundleInsideGitRepo(t *testing.T) {
 	if err := os.MkdirAll(examplesDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	bpYAML := "blueprint_name: bundle-test\ndeployment_groups:\n- group: primary\n  modules:\n  - id: network\n    source: modules/network/vpc\n"
-	if err := os.WriteFile(filepath.Join(examplesDir, "bundle-test.yaml"), []byte(bpYAML), 0o644); err != nil {
+	bpYAML1 := "blueprint_name: bundle-test-1\ndeployment_groups:\n- group: primary\n  modules:\n  - id: network\n    source: modules/network/vpc\n"
+	bpYAML2 := "blueprint_name: bundle-test-2\ndeployment_groups:\n- group: primary\n  modules:\n  - id: network\n    source: modules/network/vpc\n"
+	bp1Path := filepath.Join(examplesDir, "bundle-test-1.yaml")
+	bp2Path := filepath.Join(examplesDir, "bundle-test-2.yaml")
+	if err := os.WriteFile(bp1Path, []byte(bpYAML1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bp2Path, []byte(bpYAML2), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	entries, err := ScanBlueprints(bundleDir, nil)
 	if err != nil {
 		t.Fatalf("ScanBlueprints failed on untracked bundle inside git repo: %v", err)
 	}
-	if len(entries) != 1 || entries[0].Path != "examples/bundle-test.yaml" {
-		t.Errorf("ScanBlueprints in untracked bundle inside git repo returned %v, want [examples/bundle-test.yaml]", entries)
+	if len(entries) != 2 {
+		t.Errorf("ScanBlueprints in untracked bundle inside git repo returned %d entries, want 2: %v", len(entries), entries)
+	}
+
+	// Track only one file in the parent git repo and ensure both bundle blueprints are still discovered.
+	if err := exec.Command("git", "-C", parentGitRepo, "add", bp1Path).Run(); err != nil {
+		t.Fatalf("git add failed: %v", err)
+	}
+	entriesPartial, err := ScanBlueprints(bundleDir, nil)
+	if err != nil {
+		t.Fatalf("ScanBlueprints failed on partially tracked bundle inside git repo: %v", err)
+	}
+	if len(entriesPartial) != 2 {
+		t.Errorf("ScanBlueprints in partially tracked bundle inside git repo returned %d entries, want 2: %v", len(entriesPartial), entriesPartial)
 	}
 }

@@ -345,13 +345,13 @@ func walkUpForExplainRoot(startDir string) string {
 }
 
 func isExplainRepoRoot(dir string) bool {
-	if filepath.Base(dir) == "community" && hasExamplesAndModules(filepath.Dir(dir)) {
+	if filepath.Base(dir) == "community" && looksLikeToolkitRoot(filepath.Dir(dir)) {
 		return false
 	}
-	return hasExamplesAndModules(dir)
+	return looksLikeToolkitRoot(dir)
 }
 
-func hasExamplesAndModules(dir string) bool {
+func looksLikeToolkitRoot(dir string) bool {
 	if info, err := os.Stat(filepath.Join(dir, "examples")); err != nil || !info.IsDir() {
 		return false
 	}
