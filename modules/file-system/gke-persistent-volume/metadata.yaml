@@ -16,3 +16,26 @@
 spec:
   requirements:
     services: []
+ghpc:
+  validators:
+  - validator: exclusive
+    inputs:
+      vars: [filestore_id, lustre_id, gcs_bucket_name]
+      min_set: 1
+    error_message: "Exactly one of filestore_id, lustre_id, or gcs_bucket_name must be provided."
+  - validator: regex
+    inputs:
+      vars: [filestore_id]
+      pattern: "^projects/[^/]+/locations/[^/]+/instances/[^/]+$"
+    error_message: "filestore_id must be in the format projects/{project}/locations/{location}/instances/{name}."
+  - validator: regex
+    inputs:
+      vars: [lustre_id]
+      pattern: "^projects/[^/]+/locations/[^/]+/instances/[^/]+$"
+    error_message: "lustre_id must be in the format projects/{project}/locations/{location}/instances/{name}."
+  - validator: allowed_enum
+    inputs:
+      vars: [gcsfuse_storage_class_name]
+      allowed: ["gcsfusecsi-training", "gcsfusecsi-serving", "gcsfusecsi-checkpointing"]
+      allow_null: true
+    error_message: "gcsfuse_storage_class_name must be one of gcsfusecsi-training, gcsfusecsi-serving, gcsfusecsi-checkpointing."

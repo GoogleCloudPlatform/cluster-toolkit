@@ -58,14 +58,24 @@ def dict_to_conf(conf, delim=" ") -> str:
         f"{k}={v}" for k, v in map(filter_conf, conf.items()) if v is not None
     )
 
+def cloud_param(lkp: util.Lookup, key: str, default: Any) -> Any:
+    """
+    Returns the value of the key in cloud_parameters if it exists and is not None,
+    otherwise returns supplied default.
+    We can't rely on the `dict.get` method because the value could be `None` as
+    well as empty NSDict, depending on type of the `cfg.cloud_parameters`.
+    TODO: Simplify once NSDict is removed from the codebase.
+    """
+    params = lkp.cfg.cloud_parameters
+    if not params or key not in params or params[key] is None:
+        return default
+    return params[key]
+
 def topology_plugin(lkp: util.Lookup) -> str:
     """
     Returns configured topology plugin, defaults to `topology/tree`.
     """
-    cp, key = lkp.cfg.cloud_parameters, "topology_plugin"
-    if key not in cp or cp[key] is None:
-        return TOPOLOGY_TREE
-    return cp[key]
+    return cloud_param(lkp, "topology_plugin", TOPOLOGY_TREE)
 
 class SlurmConfigGenerator:
     """Base Slurm configuration generator. Represents Slurm 25.05 baseline."""
@@ -101,18 +111,8 @@ class SlurmConfigGenerator:
         return TOPOLOGY_TREE
 
     def get_conf_options(self) -> dict:
-        params = self.lkp.cfg.cloud_parameters
         def get(key, default):
-            """
-            Returns the value of the key in params if it exists and is not None,
-            otherwise returns supplied default.
-            We can't rely on the `dict.get` method because the value could be `None` as
-            well as empty NSDict, depending on type of the `cfg.cloud_parameters`.
-            TODO: Simplify once NSDict is removed from the codebase.
-            """
-            if key not in params or params[key] is None:
-                return default
-            return params[key]
+            return cloud_param(self.lkp, key, default)
 
         no_comma_params = get("no_comma_params", False)
 
@@ -254,9 +254,15 @@ class SlurmConfigGenerator:
             map(defmempercpu, partition.partition_nodeset), default=MIN_MEM_PER_CPU
         )
 
+        regular = partition.partition_nodeset
+        if cloud_param(self.lkp, "skip_nodeset_lines", False):
+            regular = filter(None, (
+                self.lkp.nodelist(self.lkp.cfg.nodeset[n])
+                for n in partition.partition_nodeset
+            ))
         nodesets = list(
             chain(
-                partition.partition_nodeset,
+                regular,
                 partition.partition_nodeset_dyn,
                 partition.partition_nodeset_tpu,
             )
@@ -389,15 +395,11 @@ def nodeset_lines(nodeset, lkp: util.Lookup) -> str:
     }
     nodelist = lkp.nodelist(nodeset)
 
-    return "\n".join(
-        map(
-            dict_to_conf,
-            [
-                {"NodeName": nodelist, "State": "CLOUD", **node_conf},
-                {"NodeSet": nodeset.nodeset_name, "Nodes": nodelist},
-            ],
-        )
-    )
+    lines = [{"NodeName": nodelist, "State": "CLOUD", **node_conf}]
+    # Every Slurm client parses these, thousands of NodeSet lines add ~20 s to each squeue.
+    if not cloud_param(lkp, "skip_nodeset_lines", False):
+        lines.append({"NodeSet": nodeset.nodeset_name, "Nodes": nodelist})
+    return "\n".join(map(dict_to_conf, lines))
 
 
 def nodeset_tpu_lines(nodeset, lkp: util.Lookup) -> str:
@@ -849,11 +851,21 @@ def _make_physical_path(physical_host: str) -> List[str]:
     short_path = parts[:2]
     return [_SLURM_TOPO_ROOT, *short_path]
 
+def _default_switch(nodeset: NSDict, lkp: util.Lookup) -> str:
+    """Leaf switch for nodes without a physicalHost."""
+    # topology/tree builds an O(switches^3) table in slurmctld and every slurmd on start,
+    # one switch per nodeset takes minutes with thousands of nodesets.
+    if cloud_param(lkp, "topology_region_switches", False) and not nodeset.accelerator_topology:
+        region = util.parse_self_link(nodeset.subnetwork or "").region
+        if region:
+            return f"region_{region}"
+    return f"ns_{nodeset.nodeset_name}"
+
 def add_nodeset_topology(
     nodeset: NSDict, bldr: TopologyBuilder|Any, lkp: util.Lookup
 ) -> None:
     up_nodes = set()
-    default_path = [_SLURM_TOPO_ROOT,  f"ns_{nodeset.nodeset_name}"]
+    default_path = [_SLURM_TOPO_ROOT, _default_switch(nodeset, lkp)]
 
     for inst in lkp.instances().values():
         try:

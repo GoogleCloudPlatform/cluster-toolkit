@@ -142,13 +142,16 @@ In the other direction the cloud nodes have to reach the controller: set "onprem
 
 ### Create the deployment
 
+Ensure the parent directory for `output_dir` (`/share`) exists and is writable before generating the deployment:
+
 ```shell
+mkdir -p /share
 gcluster create my-hybrid.yaml
 ```
 
 ### Deploy cloud resources
 This will create the network, the scripts needed to customize the image and the instances templates that the compute nodes will be spawned from.
-It will also generate some files in the output dir that we will be using later.
+It will also generate the hybrid configuration files in `output_dir` (`/share/slurm6-hybrid-files`).
 
 ```shell
 gcluster deploy slurm6-hybrid
@@ -162,7 +165,7 @@ gcluster deploy --only cluster slurm6-hybrid
 
 ### [VPN setup](./vpn.md)
 In this document an example on how to setup a site vpn between your network and the google network we just created is shown, check with your network administrator if that is the desired way to proceed.
-Normally all the enterprise routers have a ipsec vpn solution, which is what is being explained in the document.
+Normally all the enterprise routers have a ipsec vpn solution, which is what is being explained in the document. Complete the VPN setup and verify cloud nodes can NFS-mount `key_export_dir` (via `slurm_key_mount`) before resuming cloud compute nodes, as cloud nodes mount `key_export_dir` at boot to fetch the Munge/Slurm keys.
 
 ### Create the configurations
 Execute the install_hybrid script, this will generate a tar file that we will need in the next step.

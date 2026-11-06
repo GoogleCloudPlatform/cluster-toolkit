@@ -16,6 +16,7 @@ package job
 
 import (
 	"hpc-toolkit/pkg/orchestrator"
+	"strings"
 	"testing"
 )
 
@@ -95,5 +96,53 @@ func TestInspectCmd_Success(t *testing.T) {
 	}
 	if !mockOrc.inspectOpts.Show {
 		t.Errorf("expected Show to be true")
+	}
+}
+
+func TestInspectCmd_SPS(t *testing.T) {
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+	clusterName, location, projectID = "test-cluster", "us-central1-a", "test-project"
+	defer func() {
+		clusterName, location, projectID = "", "", ""
+		inspectWorkloadName, inspectOutputPath, inspectShow, inspectFilter = "", "", false, ""
+	}()
+
+	tests := []struct {
+		name       string
+		args       []string
+		wantOutput string
+		wantShow   bool
+		wantErr    string
+	}{
+		{name: "passes --filter=pathways-sps", args: []string{"--name", "sps-v6e", "--filter", "pathways-sps"}},
+		{name: "passes --filter=pathways-sps with --output and --show", args: []string{"--name", "sps-v6e", "--filter=pathways-sps", "--output", "/tmp/x.log", "--show"}, wantOutput: "/tmp/x.log", wantShow: true},
+		{name: "needs --name", args: []string{"--filter=pathways-sps"}, wantErr: "--filter=pathways-sps requires --name"},
+		{name: "rejects unknown filter", args: []string{"--name", "sps-v6e", "--filter=unknown"}, wantErr: "invalid value for --filter: unknown. Allowed values are: pathways-sps"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			inspectWorkloadName, inspectOutputPath, inspectShow, inspectFilter = "", "", false, ""
+			mockOrc := &mockJobOrchestrator{}
+			gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+			_, err := executeCommand(JobCmd, append([]string{"inspect"}, tc.args...)...)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("got err = %v, want %q", err, tc.wantErr)
+				}
+				if mockOrc.inspectCalled {
+					t.Errorf("InspectCluster called, want the flag error first")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if mockOrc.inspectOpts.Filter != "pathways-sps" || mockOrc.inspectOpts.WorkloadName != "sps-v6e" ||
+				mockOrc.inspectOpts.OutputPath != tc.wantOutput || mockOrc.inspectOpts.Show != tc.wantShow {
+				t.Errorf("InspectOptions = %+v, want Filter=pathways-sps WorkloadName=sps-v6e OutputPath=%q Show=%v",
+					mockOrc.inspectOpts, tc.wantOutput, tc.wantShow)
+			}
+		})
 	}
 }

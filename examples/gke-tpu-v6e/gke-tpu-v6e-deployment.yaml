@@ -83,4 +83,4 @@ vars:
   ## No variables needed; comment out Option 1 and leave the rest commented.
 
 ## --- Optional overrides (defaults shown) ---
-  # system_node_pool_machine_type: n2-standard-8
+  # system_node_pool_machine_type: n2d-standard-8

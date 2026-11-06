@@ -27,10 +27,10 @@ terraform {
   }
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:netapp-storage-pool/v1.107.0"
+    module_name = "blueprints/terraform/hpc-toolkit:netapp-storage-pool/v1.108.0"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:netapp-storage-pool/v1.107.0"
+    module_name = "blueprints/terraform/hpc-toolkit:netapp-storage-pool/v1.108.0"
   }
 
   required_version = ">= 1.12.2"

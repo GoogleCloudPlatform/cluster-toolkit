@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -224,25 +225,65 @@ Please select an option [d,a,s,c]: `)
 	}
 }
 
-// PromptYesNo prompts the user with a yes/no question.
-// It returns true if the user answers 'y' or 'yes' or just presses Enter.
+// PromptYesNo prompts the user with a yes/no question and reads one line from standard input.
+// It returns true for 'y', 'yes' or an empty line (Enter) and false for 'n' or 'no'. It also
+// returns false, without exiting, if standard input ends or fails before a valid answer.
 var PromptYesNo = func(prompt string) bool {
-	reader := bufio.NewReader(os.Stdin)
+	return promptYesNo(os.Stdin, prompt)
+}
+
+func promptYesNo(in io.Reader, prompt string) bool {
 	for {
 		fmt.Printf("%s [Y/n]: ", prompt)
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			logging.Fatal("%v", err)
+		line, err := readLine(in)
+		if err != nil && !errors.Is(err, io.EOF) {
+			fmt.Println()
+			logging.Warn("Could not read standard input (%v); answering 'no'.", err)
+			return false
 		}
-		response = strings.ToLower(strings.TrimSpace(response))
-		if response == "" || response == "y" || response == "yes" {
+		// Windows PowerShell can prepend a UTF-8 byte-order mark, which TrimSpace keeps.
+		switch strings.ToLower(strings.TrimSpace(strings.TrimPrefix(line, "\uFEFF"))) {
+		case "y", "yes":
 			return true
+		case "n", "no":
+			return false
+		case "":
+			if err == nil {
+				return true
+			}
 		}
-		if response == "n" || response == "no" {
+		if err != nil {
+			fmt.Println()
+			logging.Warn("No answer on standard input (it is closed or ended); answering 'no'.")
 			return false
 		}
 		fmt.Println("Invalid input. Please enter 'Y' or 'n'.")
 	}
+}
+
+// readLine reads from r up to and including the next '\n' and returns the line without it.
+// It reads one byte at a time so input after the line stays unread for later prompts. The
+// error is nil only if a '\n' was read.
+func readLine(r io.Reader) (string, error) {
+	var line []byte
+	b := make([]byte, 1)
+	for i := 0; i < 100; {
+		n, err := r.Read(b)
+		if n == 1 {
+			i = 0 // reset retry counter on successful read
+			if b[0] == '\n' {
+				return string(line), nil
+			}
+			line = append(line, b[0])
+		}
+		if err != nil {
+			return string(line), err
+		}
+		if n == 0 {
+			i++
+		}
+	}
+	return string(line), io.ErrNoProgress
 }
 
 // ExtractRegion extracts the region from a location (region or zone).

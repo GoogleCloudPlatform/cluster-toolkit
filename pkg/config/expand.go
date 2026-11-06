@@ -17,7 +17,9 @@ package config
 import (
 	"errors"
 	"fmt"
+	"path"
 	"regexp"
+	"slices"
 	"strings"
 
 	"hpc-toolkit/pkg/logging"
@@ -27,16 +29,66 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/convert"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 )
 
 const (
 	blueprintLabel        = "ghpc_blueprint"
 	deploymentLabel       = "ghpc_deployment"
-	GoogleProviderVersion = ">= 6.9.0, <= 8.6.0"
+	aiAssistedLabel       = "ghpc_ai_assisted"
+	GoogleProviderVersion = ">= 6.9.0, <= 8.8.0"
 )
 
 var validLabelValueRegex = regexp.MustCompile("[^a-z0-9_-]")
+
+var autoInjectedGlobals = map[string]bool{
+	"project_id":      true,
+	"deployment_name": true,
+	"region":          true,
+	"zone":            true,
+	"labels":          true,
+}
+
+var genericOutputNames = map[string]bool{
+	"capacity_gb":      true,
+	"gcp_service_list": true,
+	"id":               true,
+	"instance_name":    true,
+	"mode":             true,
+	"name":             true,
+	"self_link":        true,
+	"type":             true,
+}
+
+var integrationInputNames = map[string]bool{
+	"network_storage":           true,
+	"partitions":                true,
+	"nodeset":                   true,
+	"nodeset_dyn":               true,
+	"nodeset_tpu":               true,
+	"login_nodes":               true,
+	"runners":                   true,
+	"startup_script":            true,
+	"compute_startup_script":    true,
+	"controller_startup_script": true,
+}
+
+// IsAutoInjectedGlobal reports whether name is a top-level deployment variable
+// automatically injected into modules by gcluster.
+func IsAutoInjectedGlobal(name string) bool {
+	return autoInjectedGlobals[name]
+}
+
+// IsGenericOutputName reports whether name is too generic for name-based
+// output-to-input module wiring suggestions.
+func IsGenericOutputName(name string) bool {
+	return genericOutputNames[name]
+}
+
+// IsIntegrationInputName reports whether name is a common optional module
+// integration input wired via `use:` in Cluster Toolkit blueprints.
+func IsIntegrationInputName(name string) bool {
+	return integrationInputNames[name]
+}
 
 func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 	mi := m.InfoOrDie()
@@ -49,7 +101,7 @@ func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 				errs.At(ip,
 					HintError{
 						Err:  fmt.Errorf("a required setting %q is missing from a module %q", input.Name, m.ID),
-						Hint: fmt.Sprintf("%q description: %s", input.Name, input.Description)})
+						Hint: buildMissingInputHint(input, m, bp)})
 			}
 			continue
 		}
@@ -57,6 +109,362 @@ func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 		errs.At(ip, checkInputValueMatchesType(m.Settings.Get(input.Name), input, bp))
 	}
 	return errs.OrNil()
+}
+
+func buildMissingInputHint(input modulereader.VarInfo, m Module, bp Blueprint) string {
+	base := fmt.Sprintf("%q description: %s", input.Name, input.Description)
+	useHint := missingInputUseHint(input.Name, m, bp)
+	if useHint == "" {
+		return base
+	}
+	if strings.HasSuffix(base, "\n") {
+		return base + useHint
+	}
+	return base + " " + useHint
+}
+
+func missingInputUseHint(inputName string, m Module, bp Blueprint) string {
+	if autoInjectedGlobals[inputName] || genericOutputNames[inputName] {
+		return ""
+	}
+	if candIDs := findBlueprintProviders(inputName, m, bp); len(candIDs) > 0 {
+		return formatBlueprintProvidersHint(candIDs, m)
+	}
+	if sources := findEmbeddedProviders(inputName, m, bp); len(sources) > 0 {
+		return formatEmbeddedProvidersHint(sources, m)
+	}
+	return ""
+}
+
+// IsTrueProviderOutput reports whether outputName is a non-generic, non-global
+// output of info that originates from the module rather than echoing an input
+// (allowing root providers with no required non-global inputs to expose
+// optional name-override outputs).
+func IsTrueProviderOutput(info modulereader.ModuleInfo, outputName string) bool {
+	if autoInjectedGlobals[outputName] || genericOutputNames[outputName] {
+		return false
+	}
+	if !slices.ContainsFunc(info.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == outputName }) {
+		return false
+	}
+	allInputs, hasRequiredNonGlobalInputs := analyzeModuleInputs(info)
+	if !allInputs[outputName] {
+		return true
+	}
+	return !hasRequiredNonGlobalInputs && !integrationInputNames[outputName]
+}
+
+func analyzeModuleInputs(info modulereader.ModuleInfo) (map[string]bool, bool) {
+	allInputs := make(map[string]bool, len(info.Inputs))
+	injectedID := info.Metadata.Ghpc.InjectModuleId
+	hasRequiredNonGlobal := false
+	for _, in := range info.Inputs {
+		allInputs[in.Name] = true
+		if in.Required && !autoInjectedGlobals[in.Name] && in.Name != injectedID {
+			hasRequiredNonGlobal = true
+		}
+	}
+	return allInputs, hasRequiredNonGlobal
+}
+
+func findBlueprintProviders(inputName string, m Module, bp Blueprint) []string {
+	var candidates []string
+	seen := make(map[ModuleID]bool)
+	for _, g := range eligibleCandidateGroups(bp, m) {
+		for _, cand := range g.Modules {
+			if seen[cand.ID] || !isBlueprintCandidateProvider(cand, m, inputName, bp) {
+				continue
+			}
+			seen[cand.ID] = true
+			candidates = append(candidates, string(cand.ID))
+		}
+	}
+	return candidates
+}
+
+func eligibleCandidateGroups(bp Blueprint, m Module) []Group {
+	idx := slices.IndexFunc(bp.Groups, func(g Group) bool { return g.ModuleIndex(m.ID) != -1 })
+	if idx < 0 {
+		return bp.Groups
+	}
+	if m.Kind == PackerKind {
+		return bp.Groups[:idx]
+	}
+	return bp.Groups[:idx+1]
+}
+
+func isBlueprintCandidateProvider(cand Module, consumer Module, inputName string, bp Blueprint) bool {
+	if cand.ID == "" || cand.ID == consumer.ID || cand.Kind == PackerKind {
+		return false
+	}
+	if slices.Contains(consumer.Use, cand.ID) {
+		return false
+	}
+	candInfo, err := cand.Info()
+	if err != nil {
+		return false
+	}
+	return IsTrueProviderOutput(candInfo, inputName) && !violatesConsumerExclusiveRules(candInfo, consumer, bp)
+}
+
+func violatesConsumerExclusiveRules(candInfo modulereader.ModuleInfo, consumer Module, bp Blueprint) bool {
+	consumerInfo, err := consumer.Info()
+	if err != nil || len(consumerInfo.Metadata.Ghpc.Validators) == 0 {
+		return false
+	}
+	consumerInputs := make(map[string]bool, len(consumerInfo.Inputs))
+	for _, in := range consumerInfo.Inputs {
+		if in.Name != "labels" {
+			consumerInputs[in.Name] = true
+		}
+	}
+	candOutputs := make(map[string]bool, len(candInfo.Outputs))
+	for _, out := range candInfo.Outputs {
+		candOutputs[out.Name] = true
+	}
+	for _, rule := range consumerInfo.Metadata.Ghpc.Validators {
+		if rule.Validator == "exclusive" && ruleViolatesExclusive(rule, consumer, bp, consumerInputs, candOutputs) {
+			return true
+		}
+	}
+	return false
+}
+
+func ruleViolatesExclusive(rule modulereader.ValidationRule, consumer Module, bp Blueprint, consumerInputs, candOutputs map[string]bool) bool {
+	alreadySetCount := 0
+	newlyInjectedCount := 0
+	for _, varName := range extractRuleVars(rule.Inputs["vars"]) {
+		if isConsumerSettingSet(consumer, bp, varName) {
+			alreadySetCount++
+		} else if consumerInputs[varName] && candOutputs[varName] {
+			newlyInjectedCount++
+		}
+	}
+	return newlyInjectedCount > 0 && (alreadySetCount+newlyInjectedCount) > 1
+}
+
+func extractRuleVars(v interface{}) []string {
+	switch vv := v.(type) {
+	case []string:
+		return vv
+	case []interface{}:
+		out := make([]string, 0, len(vv))
+		for _, e := range vv {
+			if s, ok := e.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	case string:
+		return []string{vv}
+	default:
+		return nil
+	}
+}
+
+func isConsumerSettingSet(consumer Module, bp Blueprint, varName string) bool {
+	val, found := getNestedSetting(consumer.Settings, bp, varName)
+	if !found {
+		val, found = getNestedSetting(bp.Vars, bp, varName)
+	}
+	if !found || val == cty.NilVal {
+		return false
+	}
+	if evaled, err := bp.Eval(val); err == nil {
+		val = evaled
+	}
+	return IsValueSet(val)
+}
+
+func getNestedSetting(d Dict, bp Blueprint, path string) (cty.Value, bool) {
+	if path == "" {
+		return cty.NilVal, false
+	}
+	parts := strings.Split(path, ".")
+	if !d.Has(parts[0]) {
+		return cty.NilVal, false
+	}
+	curr := d.Get(parts[0])
+	for _, part := range parts[1:] {
+		next, ok := stepNestedSetting(curr, bp, part)
+		if !ok {
+			return cty.NilVal, false
+		}
+		curr = next
+	}
+	return curr, true
+}
+
+func stepNestedSetting(curr cty.Value, bp Blueprint, key string) (cty.Value, bool) {
+	if evaled, err := bp.Eval(curr); err == nil {
+		curr = evaled
+	}
+	if curr == cty.NilVal || !curr.IsKnown() || curr.IsNull() {
+		return cty.NilVal, false
+	}
+	curr, _ = curr.Unmark()
+	if curr.Type().IsObjectType() && curr.Type().HasAttribute(key) {
+		return curr.GetAttr(key), true
+	}
+	if curr.Type().IsMapType() && curr.HasIndex(cty.StringVal(key)).True() {
+		return curr.Index(cty.StringVal(key)), true
+	}
+	return cty.NilVal, false
+}
+
+// IsValueSet reports whether a cty.Value is considered set (non-null, known or an
+// expression/use reference, and non-empty). For object types, at least one attribute
+// must recursively be set.
+func IsValueSet(val cty.Value) bool {
+	if val == cty.NilVal || val.IsNull() {
+		return false
+	}
+	if !val.IsKnown() {
+		_, isExpr := IsExpressionValue(val)
+		return isExpr || len(IsProductOfModuleUse(val)) > 0
+	}
+	val, _ = val.Unmark()
+	switch val.Type() {
+	case cty.String:
+		return val.AsString() != ""
+	case cty.Number:
+		return val.AsBigFloat().Sign() > 0
+	case cty.Bool:
+		return val.True()
+	default:
+		if val.Type().IsObjectType() {
+			for attr := range val.Type().AttributeTypes() {
+				if IsValueSet(val.GetAttr(attr)) {
+					return true
+				}
+			}
+			return false
+		}
+		return val.LengthInt() > 0
+	}
+}
+
+func formatBlueprintProvidersHint(candIDs []string, m Module) string {
+	if len(candIDs) == 1 {
+		return fmt.Sprintf(
+			"Consider adding module %q to the \"use\" list of module %q (e.g. use: %s).",
+			candIDs[0], m.ID, formatUseListExample(m.Use, candIDs[0]))
+	}
+	return fmt.Sprintf(
+		"Consider adding one of modules %s to the \"use\" list of module %q (e.g. use: %s).",
+		formatQuotedList(candIDs), m.ID, formatUseListExample(m.Use, candIDs[0]))
+}
+
+func formatUseListExample(existing ModuleIDs, addID string) string {
+	parts := make([]string, 0, len(existing)+1)
+	for _, id := range existing {
+		parts = append(parts, string(id))
+	}
+	parts = append(parts, addID)
+	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+func formatQuotedList(items []string) string {
+	quoted := make([]string, len(items))
+	for i, item := range items {
+		quoted[i] = fmt.Sprintf("%q", item)
+	}
+	return "[" + strings.Join(quoted, ", ") + "]"
+}
+
+func findEmbeddedProviders(inputName string, consumer Module, bp Blueprint) []string {
+	if sourcereader.ModuleFS == nil {
+		return nil
+	}
+	var matches []string
+	for _, root := range []string{"modules", "community/modules"} {
+		catEntries, err := sourcereader.ModuleFS.ReadDir(root)
+		if err != nil {
+			continue
+		}
+		for _, catDir := range catEntries {
+			if !catDir.IsDir() || catDir.Name() == "internal" {
+				continue
+			}
+			catPath := path.Join(root, catDir.Name())
+			matches = append(matches, scanEmbeddedCategoryProviders(catPath, inputName, consumer, bp)...)
+		}
+	}
+	slices.Sort(matches)
+	return matches
+}
+
+func scanEmbeddedCategoryProviders(catPath string, inputName string, consumer Module, bp Blueprint) []string {
+	modEntries, err := sourcereader.ModuleFS.ReadDir(catPath)
+	if err != nil {
+		return nil
+	}
+	var matches []string
+	for _, modDir := range modEntries {
+		if !modDir.IsDir() {
+			continue
+		}
+		modPath := path.Join(catPath, modDir.Name())
+		if isEmbeddedProviderCandidate(modPath, inputName, consumer, bp) {
+			matches = append(matches, modPath)
+		}
+	}
+	return matches
+}
+
+func isEmbeddedProviderCandidate(modPath string, inputName string, consumer Module, bp Blueprint) bool {
+	if isSameModuleSource(consumer.Source, modPath, bp) || !isEmbeddedTerraformModule(modPath) {
+		return false
+	}
+	info, err := modulereader.GetModuleInfo(modPath, TerraformKind.String())
+	if err != nil || info.Metadata.Ghpc.DeprecationDate != "" {
+		return false
+	}
+	return IsTrueProviderOutput(info, inputName) && !violatesConsumerExclusiveRules(info, consumer, bp)
+}
+
+func isEmbeddedTerraformModule(modPath string) bool {
+	files, err := sourcereader.ModuleFS.ReadDir(modPath)
+	if err != nil {
+		return false
+	}
+	hasTF := false
+	for _, f := range files {
+		if f.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(f.Name(), ".pkr.hcl") {
+			return false
+		}
+		if strings.HasSuffix(f.Name(), ".tf") {
+			hasTF = true
+		}
+	}
+	return hasTF
+}
+
+func isSameModuleSource(consumerSource string, modPath string, bp Blueprint) bool {
+	clean := strings.TrimPrefix(sourcereader.ToSlash(consumerSource), "./")
+	return clean == modPath || clean == strings.TrimPrefix(sourcereader.ToSlash(bp.transformSource(modPath)), "./")
+}
+
+func formatEmbeddedProvidersHint(sources []string, m Module) string {
+	groupPlacement := "an earlier or same deployment group"
+	if m.Kind == PackerKind {
+		groupPlacement = "an earlier deployment group"
+	}
+	useSuffix := ""
+	if len(m.Use) > 0 {
+		useSuffix = fmt.Sprintf(" (e.g. use: %s)", formatUseListExample(m.Use, "<new_module_id>"))
+	}
+	if len(sources) == 1 {
+		return fmt.Sprintf(
+			"Module source %q provides this output; add it to %s and reference its id in the \"use\" list of module %q%s.",
+			sources[0], groupPlacement, m.ID, useSuffix)
+	}
+	return fmt.Sprintf(
+		"Module sources %s provide this output; add one to %s and reference its id in the \"use\" list of module %q%s.",
+		formatQuotedList(sources), groupPlacement, m.ID, useSuffix)
 }
 
 func attemptEvalModuleInput(val cty.Value, bp Blueprint) (cty.Value, bool) {
@@ -133,6 +541,9 @@ func (bp *Blueprint) expandGroups() error {
 	bp.addKindToModules()
 	bp.substituteModuleSources()
 	if err := checkModulesAndGroups(*bp); err != nil {
+		return err
+	}
+	if err := bp.resolveReservationSubblocks(); err != nil {
 		return err
 	}
 
@@ -351,6 +762,9 @@ func (bp *Blueprint) expandGlobalLabels() {
 			creator = creator[:63]
 		}
 		defaultsMap["ghpc_creator"] = cty.StringVal(creator)
+	}
+	if bp.AIAssisted {
+		defaultsMap[aiAssistedLabel] = cty.StringVal("true")
 	}
 	defaults := cty.ObjectVal(defaultsMap)
 
