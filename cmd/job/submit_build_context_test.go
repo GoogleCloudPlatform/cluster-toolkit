@@ -27,6 +27,7 @@ import (
 func setupBuildContextEnv(t *testing.T) {
 	t.Helper()
 	setupSubmitTestEnv(t)
+	t.Setenv("DOCKER_CONFIG", t.TempDir())
 	t.Setenv("GCLUSTER_INSECURE_REGISTRY", "")
 	t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
 	t.Cleanup(func() {

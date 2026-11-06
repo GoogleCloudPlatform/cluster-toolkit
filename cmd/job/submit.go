@@ -553,8 +553,8 @@ func missingGARRepoError(ctx context.Context, projectID, location string) error 
 			projPrint, regPrint, reposStr, projPrint, regPrint, suggestions[0])
 	}
 	return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. "+
-		"Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo).\n\n"+
-		"To see available repositories manually, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --filter=\"format=DOCKER\" --format=\"value(name.basename())\"",
+		"For Artifact Registry, set the repository name (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo); for another OCI registry, set <registry-host>/<repository> (e.g., export GCLUSTER_IMAGE_REPO=harbor.example.com/ml-team).\n\n"+
+		"To see available Artifact Registry repositories manually, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --filter=\"format=DOCKER\" --format=\"value(name.basename())\"",
 		projPrint, regPrint)
 }
 

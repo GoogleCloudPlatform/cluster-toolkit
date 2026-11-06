@@ -1116,17 +1116,15 @@ func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string, machineTy
 	return strings.TrimSpace(output), nil
 }
 
-func (g *GKEOrchestrator) resolveBuildNamespace(job orchestrator.JobDefinition) string {
+func (g *GKEOrchestrator) resolveBuildTargetNamespace(job orchestrator.JobDefinition) (string, error) {
 	if ns := strings.TrimSpace(job.GKENamespace); ns != "" {
-		return ns
+		g.namespace = ns
 	}
-	if ns := strings.TrimSpace(g.namespace); ns != "" {
-		return ns
+	ns, err := g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve target namespace for image build: %w", err)
 	}
-	if resolvedNS, err := g.getCurrentNamespace(job.ClusterName, job.ClusterLocation, job.ProjectID); err == nil && resolvedNS != "" {
-		return resolvedNS
-	}
-	return "default"
+	return ns, nil
 }
 
 func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (string, error) {
@@ -1136,7 +1134,11 @@ func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (s
 	if job.DryRunManifest != "" {
 		if job.BaseImage != "" {
 			logging.Info("[Dry Run] Skipping Crane build, generating predicted URI...")
-			return imagebuilder.GenerateImageName(job.ProjectID, job.ClusterLocation, g.resolveBuildNamespace(job), job.WorkloadName, job.BaseImage, "")
+			targetNS, err := g.resolveBuildTargetNamespace(job)
+			if err != nil {
+				return "", err
+			}
+			return imagebuilder.GenerateImageName(job.ProjectID, job.ClusterLocation, targetNS, job.WorkloadName, job.BaseImage, "")
 		}
 		if job.ImageName != "" {
 			logging.Info("[Dry Run] Using pre-existing container image: %s", job.ImageName)
@@ -1146,6 +1148,11 @@ func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (s
 
 	if job.BaseImage != "" {
 		logging.Info("Building container image using Crane (Go implementation) on top of %s...", job.BaseImage)
+
+		targetNS, err := g.resolveBuildTargetNamespace(job)
+		if err != nil {
+			return "", err
+		}
 
 		ignorePatterns := []string{
 			".git", ".terraform", ".ghpc", ".ansible", "vendor", "bin", "pkg", "node_modules", "*.log", "tmp/", ".DS_Store", "__pycache__",
@@ -1159,7 +1166,7 @@ func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (s
 		fullImageName, err := imagebuilder.BuildContainerImageFromBaseImage(
 			job.ProjectID,
 			job.ClusterLocation,
-			g.resolveBuildNamespace(job),
+			targetNS,
 			job.WorkloadName,
 			job.BaseImage,
 			job.BuildContext,

@@ -47,6 +47,11 @@ func checkArtifactRegistryAPI(projectID string, state *PrereqState, missing *[]m
 	}
 
 	if strings.TrimSpace(apiResult.Stdout) != "ENABLED" {
+		if apiResult.ExitCode != 0 && isPermissionDeniedError(apiResult.Stderr, projectID) {
+			logging.Warn("Could not verify Artifact Registry API state in project %q due to restricted IAM permissions; proceeding anyway.", projectID)
+			state.ArtifactRegistryAPIEnabled = true
+			return
+		}
 		*missing = append(*missing, missingPrereq{
 			name:     "Artifact Registry API",
 			commands: []string{fmt.Sprintf("gcloud services enable artifactregistry.googleapis.com --project %s --quiet", projectID)},
@@ -56,31 +61,14 @@ func checkArtifactRegistryAPI(projectID string, state *PrereqState, missing *[]m
 	}
 }
 
-// checkDockerCredentials verifies Docker uses gcloud credentials for the Artifact Registry host a Crane build pushes to.
-func checkDockerCredentials(registry string, missing *[]missingPrereq) {
-	if !isDockerCredsConfigured(registry) {
-		*missing = append(*missing, missingPrereq{
-			name:     "Docker Credentials",
-			commands: []string{fmt.Sprintf("gcloud auth configure-docker %s --quiet", registry)},
-		})
-	}
-}
-
 func resolveBuildTargetRegistry(projectID, location string) (imagebuilder.DestinationRepo, error) {
 	dest, err := imagebuilder.ResolveDestinationRepo(projectID, location, baseImage, os.Getenv("GCLUSTER_IMAGE_REPO"))
-	// Direct callers of ensureBuildPrerequisites (such as unit tests) may pass project+location before GCLUSTER_IMAGE_REPO is set.
+	// Direct callers of ensureBuildPrerequisites may pass project+location before GCLUSTER_IMAGE_REPO is set.
 	if errors.Is(err, imagebuilder.ErrMissingImageRepo) && projectID != "" && location != "" {
 		host := shell.ExtractRegion(location) + "-docker.pkg.dev"
 		return imagebuilder.DestinationRepo{RegistryHost: host, GARProject: projectID, IsGAR: true}, nil
 	}
 	return dest, err
-}
-
-func hasPassedGARAuthPrerequisites(state PrereqState, projectID string) bool {
-	if isStateStale(state, projectID) {
-		return false
-	}
-	return state.GCloudSDKInstalled && state.GCloudAuthenticated && state.ADCConfigured
 }
 
 func ensureGARBuildAuthPrerequisites(cmd *cobra.Command, state *PrereqState) error {
@@ -134,6 +122,23 @@ func ensureBuildPrerequisites(cmd *cobra.Command, projectID string, location str
 	return ensureGARBuildPrerequisites(cmd, effectiveProject, dest.RegistryHost)
 }
 
+func resetProjectScopedPrereqState(state PrereqState, effectiveProject string) PrereqState {
+	if time.Since(state.LastCheckedTimestamp) > stateFreshness {
+		return PrereqState{}
+	}
+	if state.LastCheckedProjectID != effectiveProject {
+		return PrereqState{
+			GCloudSDKInstalled:           state.GCloudSDKInstalled,
+			GCloudAuthenticated:          state.GCloudAuthenticated,
+			ADCConfigured:                state.ADCConfigured,
+			KubectlInstalled:             state.KubectlInstalled,
+			GKEGCloudAuthPluginInstalled: state.GKEGCloudAuthPluginInstalled,
+			LastCheckedTimestamp:         state.LastCheckedTimestamp,
+		}
+	}
+	return state
+}
+
 func ensureGARBuildPrerequisites(cmd *cobra.Command, effectiveProject, registry string) error {
 	state := store.Load()
 
@@ -144,10 +149,8 @@ func ensureGARBuildPrerequisites(cmd *cobra.Command, effectiveProject, registry 
 		return nil
 	}
 
-	if !hasPassedGARAuthPrerequisites(state, effectiveProject) {
-		if isStateStale(state, effectiveProject) {
-			state = PrereqState{KubectlInstalled: state.KubectlInstalled}
-		}
+	state = resetProjectScopedPrereqState(state, effectiveProject)
+	if !state.GCloudSDKInstalled || !state.GCloudAuthenticated || !state.ADCConfigured {
 		if err := ensureGARBuildAuthPrerequisites(cmd, &state); err != nil {
 			return err
 		}
@@ -155,7 +158,12 @@ func ensureGARBuildPrerequisites(cmd *cobra.Command, effectiveProject, registry 
 
 	var missing []missingPrereq
 	checkArtifactRegistryAPI(effectiveProject, &state, &missing)
-	checkDockerCredentials(registry, &missing)
+	if !isDockerCredsConfigured(registry) {
+		missing = append(missing, missingPrereq{
+			name:     "Docker Credentials",
+			commands: []string{fmt.Sprintf("gcloud auth configure-docker %s --quiet", registry)},
+		})
+	}
 
 	if len(missing) > 0 {
 		printMissingPrereqs(cmd, missing)

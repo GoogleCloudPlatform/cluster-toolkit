@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -36,10 +35,6 @@ type RegistryInspector struct {
 	Getenv    func(string) string
 	Transport http.RoundTripper
 	Keychain  authn.Keychain
-
-	mu             sync.Mutex
-	stdClient      *http.Client
-	insecureClient *http.Client
 }
 
 // InspectTargetRegistry verifies that registryAuthority responds to a bounded 2s GET /v2/ ping and has Docker keychain credentials when required.
@@ -61,9 +56,7 @@ func (r *RegistryInspector) InspectTargetRegistry(registryAuthority string) erro
 		schemes = append(schemes, "http")
 	}
 
-	r.mu.Lock()
-	client := r.pooledClient(insecureEnv)
-	r.mu.Unlock()
+	client := r.httpClient(insecureEnv)
 
 	var errs []string
 	for _, scheme := range schemes {
@@ -99,8 +92,8 @@ func pingRegistryV2(client *http.Client, scheme, authority string) (int, error) 
 	if err != nil {
 		return 0, err
 	}
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
-	_ = resp.Body.Close()
 	return resp.StatusCode, nil
 }
 
@@ -141,26 +134,15 @@ func (r *RegistryInspector) keychain() authn.Keychain {
 	return defaultKeychain
 }
 
-// pooledClient returns a cached *http.Client honoring http.ProxyFromEnvironment; caller must hold r.mu.
-func (r *RegistryInspector) pooledClient(skipVerifyTLS bool) *http.Client {
+func (r *RegistryInspector) httpClient(skipVerifyTLS bool) *http.Client {
+	tr := r.Transport
+	if tr == nil {
+		tr = http.DefaultTransport
+	}
 	if skipVerifyTLS {
-		if r.insecureClient == nil {
-			base := http.DefaultTransport
-			if r.Transport != nil {
-				base = r.Transport
-			}
-			r.insecureClient = &http.Client{Transport: cloneTransportWithInsecureTLS(base)}
-		}
-		return r.insecureClient
+		tr = cloneTransportWithInsecureTLS(tr)
 	}
-	if r.stdClient == nil {
-		tr := r.Transport
-		if tr == nil {
-			tr = http.DefaultTransport
-		}
-		r.stdClient = &http.Client{Transport: tr}
-	}
-	return r.stdClient
+	return &http.Client{Transport: tr}
 }
 
 func cloneTransportWithInsecureTLS(rt http.RoundTripper) http.RoundTripper {

@@ -955,3 +955,43 @@ func TestBuildContainerImageFromBaseImage_InvalidImageRepoFailsBeforePull(t *tes
 		t.Fatalf("expected destination reference validation to fail before cranePull was invoked")
 	}
 }
+
+func TestBuildContainerImageFromBaseImage_PullAndPushErrors(t *testing.T) {
+	t.Run("cranePull failure bubbles up with base image reference", func(t *testing.T) {
+		t.Setenv("GCLUSTER_IMAGE_REPO", "")
+		origPull := cranePull
+		t.Cleanup(func() { cranePull = origPull })
+		cranePull = func(string, ...crane.Option) (v1.Image, error) {
+			return nil, errors.New("simulated registry pull error")
+		}
+
+		_, err := BuildContainerImageFromBaseImage("", "", "default", "job", "10.128.0.68:5000/jax:v5p", t.TempDir(), "linux/amd64", nil)
+		if err == nil || !strings.Contains(err.Error(), "simulated registry pull error") {
+			t.Fatalf("expected pull error propagation, got: %v", err)
+		}
+	})
+
+	t.Run("cranePush failure bubbles up with destination image reference", func(t *testing.T) {
+		t.Setenv("GCLUSTER_IMAGE_REPO", "")
+		origPull, origPush := cranePull, cranePush
+		t.Cleanup(func() {
+			cranePull = origPull
+			cranePush = origPush
+		})
+		cranePull = func(string, ...crane.Option) (v1.Image, error) {
+			return empty.Image, nil
+		}
+		cranePush = func(v1.Image, string, ...crane.Option) error {
+			return errors.New("simulated registry push error")
+		}
+
+		ctxDir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(ctxDir, "app.py"), []byte("print(1)\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := BuildContainerImageFromBaseImage("", "", "default", "job", "10.128.0.68:5000/jax:v5p", ctxDir, "linux/amd64", nil)
+		if err == nil || !strings.Contains(err.Error(), "simulated registry push error") {
+			t.Fatalf("expected push error propagation, got: %v", err)
+		}
+	})
+}

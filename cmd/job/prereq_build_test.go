@@ -30,7 +30,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestEnsureBuildPrerequisites_ExplicitGARSkipsGKEAuthPlugin(t *testing.T) {
+func TestEnsureBuildPrerequisites_ExplicitGARSkipsGKEAuthPluginAndPreservesCache(t *testing.T) {
 	setupSubmitTestEnv(t)
 	executed := stubPrereqCommands(t)
 	origExec := shell.ExecuteCommandWithTimeout
@@ -42,6 +42,17 @@ func TestEnsureBuildPrerequisites_ExplicitGARSkipsGKEAuthPlugin(t *testing.T) {
 		return origExec(timeout, name, args...)
 	}
 
+	// Pre-populate unexpired GKE tool states for cluster-proj; switching to gar-build-proj must preserve them.
+	store.Save(PrereqState{
+		GCloudSDKInstalled:           true,
+		GCloudAuthenticated:          true,
+		ADCConfigured:                true,
+		KubectlInstalled:             true,
+		GKEGCloudAuthPluginInstalled: true,
+		LastCheckedProjectID:         "cluster-proj",
+		LastCheckedTimestamp:         time.Now(),
+	})
+
 	t.Setenv("GCLUSTER_IMAGE_REPO", "us-west4-docker.pkg.dev/gar-build-proj/custom-repo")
 	writeDockerConfig(t, "us-west4-docker.pkg.dev")
 
@@ -51,6 +62,30 @@ func TestEnsureBuildPrerequisites_ExplicitGARSkipsGKEAuthPlugin(t *testing.T) {
 	}
 	if !ranArtifactRegistryCheck(*executed) {
 		t.Errorf("expected Artifact Registry API check against gar-build-proj, executed = %v", *executed)
+	}
+	saved := store.Load()
+	if !saved.KubectlInstalled || !saved.GKEGCloudAuthPluginInstalled {
+		t.Fatalf("expected project switch to preserve unexpired KubectlInstalled and GKEGCloudAuthPluginInstalled, got %+v", saved)
+	}
+}
+
+func TestEnsureBuildPrerequisites_CrossProjectGARPermissionDeniedProceeds(t *testing.T) {
+	setupSubmitTestEnv(t)
+	_ = stubPrereqCommands(t)
+	origExec := shell.ExecuteCommandWithTimeout
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		if name == "gcloud" && len(args) > 1 && args[0] == "services" && args[1] == "list" {
+			return shell.CommandResult{ExitCode: 1, Stderr: "ERROR: (gcloud.services.list) PERMISSION_DENIED: Permission denied to list services"}
+		}
+		return origExec(timeout, name, args...)
+	}
+
+	t.Setenv("GCLUSTER_IMAGE_REPO", "us-west4-docker.pkg.dev/shared-host-proj/team-repo")
+	writeDockerConfig(t, "us-west4-docker.pkg.dev")
+
+	cmd := &cobra.Command{}
+	if err := ensureBuildPrerequisites(cmd, "", ""); err != nil {
+		t.Fatalf("expected cross-project GAR PERMISSION_DENIED on services.list to warn and proceed, got: %v", err)
 	}
 }
 

@@ -22,20 +22,31 @@ import (
 	"hpc-toolkit/pkg/orchestrator"
 )
 
-type panicOnNamespaceKubeClient struct {
+type recordingNamespaceKubeClient struct {
 	KubeClient
-	t *testing.T
+	t           *testing.T
+	forbidCalls bool
+	ns          string
+	err         error
+	gotCluster  string
+	gotLocation string
+	gotProject  string
 }
 
-func (p *panicOnNamespaceKubeClient) GetCurrentNamespace(_, _, _ string) (string, error) {
-	p.t.Fatalf("GetCurrentNamespace must not be invoked for prebuilt --image jobs")
-	return "", nil
+func (r *recordingNamespaceKubeClient) GetCurrentNamespace(cluster, location, project string) (string, error) {
+	if r.forbidCalls {
+		r.t.Fatalf("GetCurrentNamespace must not be invoked for prebuilt --image jobs")
+	}
+	r.gotCluster = cluster
+	r.gotLocation = location
+	r.gotProject = project
+	return r.ns, r.err
 }
 
 func TestBuildContainerImage_NamespacePrecedenceAndPrebuiltHermeticity(t *testing.T) {
 	t.Run("prebuilt ImageName never touches kubeconfig namespace resolution", func(t *testing.T) {
 		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
-		orc.kubeClient = &panicOnNamespaceKubeClient{t: t}
+		orc.kubeClient = &recordingNamespaceKubeClient{t: t, forbidCalls: true}
 
 		got, err := orc.BuildContainerImage(orchestrator.JobDefinition{
 			WorkloadName: "prebuilt-job",
@@ -50,7 +61,7 @@ func TestBuildContainerImage_NamespacePrecedenceAndPrebuiltHermeticity(t *testin
 		t.Setenv("GCLUSTER_IMAGE_REPO", "")
 		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
 		orc.namespace = "stale-orch-ns"
-		orc.kubeClient = &MockKubeClient{Namespace: "kubeconfig-ns"}
+		orc.kubeClient = &recordingNamespaceKubeClient{t: t, forbidCalls: true}
 
 		got, err := orc.BuildContainerImage(orchestrator.JobDefinition{
 			WorkloadName:   "train-v5p",
@@ -63,29 +74,36 @@ func TestBuildContainerImage_NamespacePrecedenceAndPrebuiltHermeticity(t *testin
 		}
 	})
 
-	t.Run("falls back to kubeconfig namespace then default when unset", func(t *testing.T) {
+	t.Run("delegates cluster/location/project to GetCurrentNamespace and propagates kubeconfig errors", func(t *testing.T) {
 		t.Setenv("GCLUSTER_IMAGE_REPO", "")
 		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
-		orc.kubeClient = &MockKubeClient{Namespace: "ctx-ns"}
+		spy := &recordingNamespaceKubeClient{t: t, ns: "ctx-ns"}
+		orc.kubeClient = spy
 
 		got, err := orc.BuildContainerImage(orchestrator.JobDefinition{
-			WorkloadName:   "train-v5p",
-			BaseImage:      "10.128.0.68:5000/ml/jax:v5p",
-			DryRunManifest: "/tmp/dry-run.yaml",
+			WorkloadName:    "train-v5p",
+			ClusterName:     "clus-a",
+			ClusterLocation: "us-central1-a",
+			ProjectID:       "proj-a",
+			BaseImage:       "10.128.0.68:5000/ml/jax:v5p",
+			DryRunManifest:  "/tmp/dry-run.yaml",
 		})
 		if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/gcluster/ctx-ns/train-v5p:") {
 			t.Fatalf("BuildContainerImage(ctx-ns) = (%q, %v)", got, err)
 		}
+		if spy.gotCluster != "clus-a" || spy.gotLocation != "us-central1-a" || spy.gotProject != "proj-a" {
+			t.Fatalf("GetCurrentNamespace args = (%q, %q, %q), want (clus-a, us-central1-a, proj-a)", spy.gotCluster, spy.gotLocation, spy.gotProject)
+		}
 
-		orcFallback := newTestGKEOrchestrator(NewMockExecutor(nil))
-		orcFallback.kubeClient = &MockKubeClient{ExplicitEmpty: true, Err: errors.New("no kubeconfig")}
-		got, err = orcFallback.BuildContainerImage(orchestrator.JobDefinition{
+		orcBroken := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orcBroken.kubeClient = &recordingNamespaceKubeClient{t: t, err: errors.New("broken kubeconfig")}
+		_, err = orcBroken.BuildContainerImage(orchestrator.JobDefinition{
 			WorkloadName:   "train-v5p",
 			BaseImage:      "10.128.0.68:5000/ml/jax:v5p",
 			DryRunManifest: "/tmp/dry-run.yaml",
 		})
-		if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/gcluster/default/train-v5p:") {
-			t.Fatalf("BuildContainerImage(default fallback) = (%q, %v)", got, err)
+		if err == nil || !strings.Contains(err.Error(), "broken kubeconfig") {
+			t.Fatalf("expected broken kubeconfig error to propagate instead of silently falling back to default, got: %v", err)
 		}
 	})
 }

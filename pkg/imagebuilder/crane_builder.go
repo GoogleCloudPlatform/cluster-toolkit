@@ -405,6 +405,9 @@ func appendLayerAndWorkdir(baseImg v1.Image, tempTarballPath string, setDefaultW
 	if err != nil {
 		return nil, fmt.Errorf("failed to inspect image config for WORKDIR update: %w", err)
 	}
+	if cf == nil {
+		return nil, fmt.Errorf("failed to inspect image config for WORKDIR update: config file is nil")
+	}
 	cfg := cf.Config.DeepCopy()
 	cfg.WorkingDir = defaultContainerWorkdir
 	updatedImg, err := mutate.Config(newImg, *cfg)
@@ -585,6 +588,7 @@ func buildTarHeader(entryPath, relPath, tarPrefix string, d fs.DirEntry) (*tar.H
 		if linkTarget, err = os.Readlink(entryPath); err != nil {
 			return nil, nil, "", fmt.Errorf("failed to read link for %q: %w", entryPath, err)
 		}
+		linkTarget = strings.ReplaceAll(linkTarget, `\`, "/")
 	}
 	header, err := tar.FileInfoHeader(info, linkTarget)
 	if err != nil {
