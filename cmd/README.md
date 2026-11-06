@@ -235,7 +235,11 @@ gcluster job <submit|list|logs|cancel|config|inspect|gke-template-extract> [flag
 
 * `gcluster job submit`: Builds/stages workloads and submits GKE JobSet or Pathways jobs (supports `--image` / `--base-image` + `--build-context`, `--image-pull-secret` with automatic `dockerconfigjson` secret discovery, and Pathways flags including `--pathways`, `--pathways-headless`, `--pathways-deploy-sps`, and `--pathways-max-slice-restarts`).
 * `gcluster job inspect --name <job> [--show] [--filter=pathways-sps]`: Inspects job or Shared Pathways Service (`pathways-sps`) status, events, and Kubernetes resources.
-* `gcluster job list`, `logs`, `cancel`, `config`, `gke-template-extract`: Lists jobs (`--status`, `--name-contains`), streams pod logs, cancels workloads, manages defaults, or extracts customizable K8s templates.
+* `gcluster job list`: Lists jobs (`--status`, `--name-contains`).
+* `gcluster job logs`: Streams pod logs.
+* `gcluster job cancel`: Cancels workloads.
+* `gcluster job config`: Manages defaults.
+* `gcluster job gke-template-extract`: Extracts customizable K8s templates.
 
 ## gcluster telemetry
 

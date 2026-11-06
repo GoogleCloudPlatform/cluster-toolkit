@@ -396,12 +396,14 @@ def validate_yaml_block(
     errors: list[str] = []
     cleaned_block = _strip_yaml_elision_lines(block)
     try:
+        if re.search(r"(?m)^\s*\.\.\.(?:\s+#.*|\s*)$", cleaned_block):
+            raise ValueError("bare '...' ellipsis line")
         docs = list(yaml.safe_load_all(cleaned_block))
     except (yaml.YAMLError, ValueError) as exc:
         first_line = str(exc).splitlines()[0]
         hint = (
             " (use '# ...' for elided lines)"
-            if re.search(r"(?m)^\s*\.\.\.\s*$", cleaned_block)
+            if re.search(r"(?m)^\s*\.\.\.(?:\s+#.*|\s*)$", cleaned_block)
             else ""
         )
         errors.append(f"{rel_path}: invalid YAML syntax in snippet: {first_line}{hint}")
@@ -627,12 +629,14 @@ def validate_module_readme_snippets(non_ignored: set[str] | None = None) -> list
             elif lang in ("yaml", "yml"):
                 cleaned_block = _strip_yaml_elision_lines(block)
                 try:
+                    if re.search(r"(?m)^\s*\.\.\.(?:\s+#.*|\s*)$", cleaned_block):
+                        raise ValueError("bare '...' ellipsis line")
                     list(yaml.safe_load_all(cleaned_block))
                 except (yaml.YAMLError, ValueError) as exc:
                     first_line = str(exc).splitlines()[0]
                     hint = (
                         " (use '# ...' for elided lines)"
-                        if re.search(r"(?m)^\s*\.\.\.\s*$", cleaned_block)
+                        if re.search(r"(?m)^\s*\.\.\.(?:\s+#.*|\s*)$", cleaned_block)
                         else ""
                     )
                     errors.append(f"{snippet_loc}: invalid YAML syntax in snippet: {first_line}{hint}")

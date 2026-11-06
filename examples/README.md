@@ -2419,7 +2419,7 @@ default in the [modules](../modules/README.md) folder.
 To learn more about how to refer to a module in a blueprint file, please consult the
 [modules README file.](../modules/README.md)
 
-On local and embedded `terraform` modules, the optional `reconfigure_ignores` field (`map[string][]string`, keyed by `<resource_type>` or `<resource_type>.<resource_name>`) generates a Terraform `override.tf.json` file that merges the listed attribute names into the target resource's `lifecycle.ignore_changes` list (this operation is additive and cannot remove `ignore_changes` entries already defined by the module; `"all"` is not supported).
+For local and embedded `terraform` modules, the optional `reconfigure_ignores` field (`map[string][]string`, keyed by `<resource_type>` or `<resource_type>.<resource_name>`) generates a Terraform `override.tf.json` file that merges the listed attribute names into the target resource's `lifecycle.ignore_changes` list (this operation is additive and cannot remove `ignore_changes` entries already defined by the module; `"all"` is not supported).
 
 ## Variables, expressions, and functions
 

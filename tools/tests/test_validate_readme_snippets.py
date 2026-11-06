@@ -160,15 +160,15 @@ class TestValidateReadmeSnippets(unittest.TestCase):
         self.assertEqual(docs[0]["vars"]["project_id"], "test")
 
     def test_uncommented_yaml_ellipsis_is_rejected(self):
-        raw = (
-            "  ...\n"
-            "  - id: script\n"
-            "    source: modules/scripts/startup-script\n"
-        )
-        errs = vrs.validate_yaml_block(raw, "test.md", {})
-        self.assertEqual(len(errs), 1)
-        self.assertIn("invalid YAML syntax in snippet", errs[0])
-        self.assertIn("use '# ...' for elided lines", errs[0])
+        for raw in (
+            "  ...\n  - id: script\n    source: modules/scripts/startup-script\n",
+            "  - id: script\n    source: modules/scripts/startup-script\n  ...\n",
+            "  - id: script\n    source: modules/scripts/startup-script\n  ... # more modules\n",
+        ):
+            errs = vrs.validate_yaml_block(raw, "test.md", {})
+            self.assertEqual(len(errs), 1)
+            self.assertIn("invalid YAML syntax in snippet", errs[0])
+            self.assertIn("use '# ...' for elided lines", errs[0])
 
     def test_backticked_and_leading_slash_links_rejected(self):
         with tempfile.TemporaryDirectory() as tmpdir:

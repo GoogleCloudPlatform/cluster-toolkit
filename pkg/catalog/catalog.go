@@ -207,14 +207,14 @@ func gitTrackedFiles(repoRoot string, roots ...string) map[string]bool {
 }
 
 func sameDir(a, b string) bool {
-	ra, errA := filepath.EvalSymlinks(a)
-	rb, errB := filepath.EvalSymlinks(b)
+	aa, errA := filepath.Abs(a)
+	ab, errB := filepath.Abs(b)
 	if errA != nil || errB != nil {
 		return false
 	}
-	aa, errA := filepath.Abs(ra)
-	ab, errB := filepath.Abs(rb)
-	return errA == nil && errB == nil && aa == ab
+	ra, errA := filepath.EvalSymlinks(aa)
+	rb, errB := filepath.EvalSymlinks(ab)
+	return errA == nil && errB == nil && ra == rb
 }
 
 func isTracked(repoRoot, absPath string, tracked map[string]bool) bool {
