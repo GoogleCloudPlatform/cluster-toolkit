@@ -107,6 +107,18 @@ steps:
               value: "$$TRIAGE_INVOKER_SA"
             - name: TRIAGE_CLOUD_RUN_URL
               value: "$$TRIAGE_CLOUD_RUN_URL"
+            - name: MACHINE_TYPE
+              value: "c3-standard-88"
+            - name: NUM_NODES
+              value: "1"
+            - name: MIN_NODES
+              value: "1"
+            - name: INSTANCE_PREFIX
+              value: "gkehd"
+            - name: OPTIONS_GCS_PATH
+              value: "gs://hpc-ctk1357/c3options.txt"
+            - name: ENABLE_SPOT_FALLBACK
+              value: "true"
             command: ["/bin/bash", "-c"]
             args:
             - |
@@ -128,13 +140,21 @@ steps:
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
+              source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              if [ -z "\$${ZONE:-}" ]; then
+                echo "ERROR: No available zone found." >&2
+                exit 1
+              fi
+              REGION="\$${ZONE%-*}"
+              echo "Selected zone: \$$ZONE (region: \$$REGION)"
+
               # adding vm to act as remote node
               echo '  - id: remote-node'                     >> \$$SG_EXAMPLE
               echo '    source: modules/compute/vm-instance' >> \$$SG_EXAMPLE
               echo '    use: [network]'                      >> \$$SG_EXAMPLE
               echo '    settings:'                           >> \$$SG_EXAMPLE
-              echo '      machine_type: n2d-standard-2'       >> \$$SG_EXAMPLE
-              echo '      zone: europe-west1-b'              >> \$$SG_EXAMPLE
+              echo '      machine_type: n2d-standard-2'      >> \$$SG_EXAMPLE
+              echo '      zone: \$(vars.zone)'               >> \$$SG_EXAMPLE
 
               IP=\$(curl ifconfig.me)
               sed -i "s|.*authorized_cidr:.*|  authorized_cidr: \$$IP/32|" \$$SG_EXAMPLE
@@ -143,6 +163,7 @@ steps:
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
                 --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
                 --extra-vars="@tools/cloud-build/daily-tests/tests/gke-managed-hyperdisk.yml" \
+                --extra-vars="region=\$${REGION} zone=\$${ZONE}" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
                 --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
