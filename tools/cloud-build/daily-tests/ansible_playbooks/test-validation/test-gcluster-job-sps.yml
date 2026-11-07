@@ -22,6 +22,8 @@
     - custom_vars.gcs_bucket is defined
     - custom_vars.tpu_type is defined
     - custom_vars.num_slices is defined
+    - custom_vars.expected_tpu_count is defined
+    - custom_vars.workload_image is defined
 
 - name: Get cluster credentials for GCluster SPS operations
   delegate_to: localhost
@@ -30,7 +32,16 @@
 - name: Set SPS test local facts
   ansible.builtin.set_fact:
     sps_job_name: "sps-{{ build | default('test') }}"
+    sps_client_job_name: "sps-cli-{{ build | default('test') }}"
+    sps_terminal_job_name: "sps-pdb-{{ build | default('test') }}"
     sps_dry_run_file: "/tmp/{{ deployment_name }}-sps-dry-run.yaml"
+    sps_client_dry_run_file: "/tmp/{{ deployment_name }}-sps-client-dry-run.yaml"
+    sps_terminal_dry_run_file: "/tmp/{{ deployment_name }}-sps-terminal-dry-run.yaml"
+    sps_pdb_script_file: "/tmp/{{ deployment_name }}-sps-pdb-test.py"
+    sps_client_command: >-
+      pip install -U jax jaxlib &&
+      for i in $(seq 1 60); do python -c 'import socket; socket.create_connection(("127.0.0.1", 29000), timeout=1).close()' 2>/dev/null && break; sleep 1; done &&
+      python -c 'import jax; dc = jax.device_count(); print("JAX Device count:", dc); assert dc == {{ custom_vars.expected_tpu_count }}, f"Expected {{ custom_vars.expected_tpu_count }} devices, got {dc}"; a = jax.random.normal(jax.random.PRNGKey(0), (2, 2)); print("SPS In-Cluster JAX TPU Result:", a, flush=True)'
 
 - name: Check if ML Diagnostics GCS bucket exists
   delegate_to: localhost
@@ -130,7 +141,8 @@
     fail_msg: "SPS instance dry-run manifest did not match expected --pathways-deploy-sps specification"
 
 # ==========================================
-# WORKFLOW 2: Deploy SPS Instance (--pathways-deploy-sps) and Inspect (--filter pathways-sps)
+# WORKFLOW 2: Deploy SPS Instance (--pathways-deploy-sps), Inspect (--filter pathways-sps),
+# and Run SPS Workloads (--pathways-run-sps-workload in PDB Terminal & In-Cluster CLI Modes)
 # ==========================================
 
 - name: Build GCluster SPS Deploy command arguments
@@ -164,7 +176,7 @@
     argv: "{{ sps_submit_argv }}"
   changed_when: false
 
-- name: Block to verify SPS readiness and inspect --filter pathways-sps
+- name: Block to verify SPS readiness, inspect --filter pathways-sps, and execute --pathways-run-sps-workload
   block:
   - name: Wait for SPS JobSet resource creation
     delegate_to: localhost
@@ -223,10 +235,305 @@
       - sps_inspect_output.stdout is search("Slices:.*ready")
       fail_msg: "SPS inspect output did not match expected summary: {{ sps_inspect_output.stdout }}"
 
+  # ==========================================
+  # WORKFLOW 3A: --pathways-run-sps-workload Dry-Run Checks (In-Cluster & Terminal Modes)
+  # ==========================================
+
+  - name: Execute GCluster SPS In-Cluster Workload Dry-Run
+    delegate_to: localhost
+    ansible.builtin.command:
+      argv:
+      - "{{ workspace }}/gcluster"
+      - job
+      - submit
+      - --pathways
+      - --pathways-run-sps-workload
+      - "{{ sps_job_name }}"
+      - --name
+      - "{{ sps_client_job_name }}"
+      - --num-slices
+      - "{{ custom_vars.num_slices | string }}"
+      - --image
+      - "{{ custom_vars.workload_image }}"
+      - --command
+      - "{{ sps_client_command }}"
+      - --pathways-proxy-env
+      - TEST_PROXY_VAR=proxy_val
+      - --env
+      - TEST_WORKLOAD_VAR=workload_val
+      - --project
+      - "{{ custom_vars.project }}"
+      - --location
+      - "{{ region }}"
+      - --cluster
+      - "{{ deployment_name }}"
+      - --dry-run-out
+      - "{{ sps_client_dry_run_file }}"
+    changed_when: false
+
+  - name: Read generated SPS In-Cluster Workload Dry-Run manifest
+    delegate_to: localhost
+    ansible.builtin.slurp:
+      src: "{{ sps_client_dry_run_file }}"
+    register: sps_client_dry_run_content
+
+  - name: Parse SPS In-Cluster Workload Dry-Run manifest
+    ansible.builtin.set_fact:
+      sps_client_dry_run_yaml: "{{ sps_client_dry_run_content.content | b64decode | from_yaml }}"
+
+  - name: Validate SPS In-Cluster Workload Dry-Run manifest structure
+    ansible.builtin.assert:
+      that:
+      - sps_client_dry_run_yaml.kind == "JobSet"
+      - sps_client_dry_run_yaml.spec.replicatedJobs | map(attribute='name') | list == ['pathways-head']
+      - >
+        sps_client_dry_run_yaml.spec.replicatedJobs
+        | selectattr('name', 'equalto', 'pathways-head') | map(attribute='template.spec.template.spec.initContainers') | flatten
+        | selectattr('name', 'equalto', 'pathways-proxy') | map(attribute='env') | flatten
+        | selectattr('name', 'equalto', 'TEST_PROXY_VAR') | selectattr('value', 'equalto', 'proxy_val') | list | length > 0
+      - >
+        sps_client_dry_run_yaml.spec.replicatedJobs
+        | selectattr('name', 'equalto', 'pathways-head') | map(attribute='template.spec.template.spec.containers') | flatten
+        | selectattr('name', 'equalto', 'workload-container') | map(attribute='env') | flatten
+        | selectattr('name', 'equalto', 'TEST_WORKLOAD_VAR') | selectattr('value', 'equalto', 'workload_val') | list | length > 0
+      fail_msg: "SPS in-cluster client dry-run manifest did not match expected specification"
+
+  - name: Execute GCluster SPS Terminal Mode Dry-Run
+    delegate_to: localhost
+    ansible.builtin.command:
+      argv:
+      - "{{ workspace }}/gcluster"
+      - job
+      - submit
+      - --pathways
+      - --pathways-run-sps-workload
+      - "{{ sps_job_name }}"
+      - --name
+      - "{{ sps_terminal_job_name }}"
+      - --num-slices
+      - "{{ custom_vars.num_slices | string }}"
+      - --command
+      - "python3 -c 'print(1)'"
+      - --project
+      - "{{ custom_vars.project }}"
+      - --location
+      - "{{ region }}"
+      - --cluster
+      - "{{ deployment_name }}"
+      - --dry-run-out
+      - "{{ sps_terminal_dry_run_file }}"
+    changed_when: false
+
+  - name: Read generated SPS Terminal Mode Dry-Run manifest
+    delegate_to: localhost
+    ansible.builtin.slurp:
+      src: "{{ sps_terminal_dry_run_file }}"
+    register: sps_terminal_dry_run_content
+
+  - name: Parse SPS Terminal Mode Dry-Run manifest
+    ansible.builtin.set_fact:
+      sps_terminal_dry_run_yaml: "{{ sps_terminal_dry_run_content.content | b64decode | from_yaml }}"
+
+  - name: Validate SPS Terminal Mode Dry-Run manifest structure (proxy-only pod)
+    ansible.builtin.assert:
+      that:
+      - sps_terminal_dry_run_yaml.kind == "JobSet"
+      - sps_terminal_dry_run_yaml.spec.replicatedJobs | map(attribute='name') | list == ['pathways-head']
+      - >
+        sps_terminal_dry_run_yaml.spec.replicatedJobs
+        | selectattr('name', 'equalto', 'pathways-head') | map(attribute='template.spec.template.spec.containers') | flatten
+        | map(attribute='name') | list == ['pathways-proxy']
+      fail_msg: "SPS terminal mode dry-run manifest did not match expected proxy-only specification"
+
+  # ==========================================
+  # WORKFLOW 3B: Live Terminal / PDB Execution (--pathways-run-sps-workload without --image)
+  # ==========================================
+
+  - name: Write local interactive pdb test script for SPS Terminal Mode
+    delegate_to: localhost
+    ansible.builtin.copy:
+      dest: "{{ sps_pdb_script_file }}"
+      mode: "0755"
+      content: |
+        import io
+        import os
+        import pdb
+        import socket
+        import sys
+        import time
+        import urllib.parse
+
+        def check_proxy(retries=25):
+            target = os.environ["JAX_BACKEND_TARGET"]
+            u = urllib.parse.urlparse(target)
+            last_err = None
+            for _ in range(retries):
+                try:
+                    with socket.create_connection((u.hostname, u.port), timeout=2):
+                        return f"PROXY_ALIVE:{u.hostname}:{u.port}"
+                except OSError as e:
+                    last_err = e
+                    time.sleep(0.2)
+            raise last_err
+
+        assert os.environ.get("JAX_PLATFORMS") == "proxy", f"Unexpected JAX_PLATFORMS: {os.environ.get('JAX_PLATFORMS')}"
+        assert os.environ.get("TEST_TERMINAL_VAR") == "terminal_val", f"Missing TEST_TERMINAL_VAR: {os.environ.get('TEST_TERMINAL_VAR')}"
+
+        pdb_commands = io.StringIO(
+            "w\n"
+            "p status_before\n"
+            "n\n"
+            "p check_proxy()\n"
+            "c\n"
+        )
+
+        status_before = check_proxy()
+        pdb.Pdb(stdin=pdb_commands, stdout=sys.stdout).set_trace()
+        step_var = "stepped_past_breakpoint"
+        status_after = check_proxy()
+        print("PDB_SESSION_COMPLETE:", os.environ["JAX_PLATFORMS"], step_var, status_after, flush=True)
+
+  - name: Execute SPS Terminal / PDB Mode workload against running SPS instance
+    delegate_to: localhost
+    ansible.builtin.command:
+      argv:
+      - "{{ workspace }}/gcluster"
+      - job
+      - submit
+      - --pathways
+      - --pathways-run-sps-workload
+      - "{{ sps_job_name }}"
+      - --name
+      - "{{ sps_terminal_job_name }}"
+      - --num-slices
+      - "{{ custom_vars.num_slices | string }}"
+      - --service-account
+      - "{{ custom_vars.k8s_service_account }}"
+      - --env
+      - TEST_TERMINAL_VAR=terminal_val
+      - --command
+      - "python3 {{ sps_pdb_script_file }}"
+      - --project
+      - "{{ custom_vars.project }}"
+      - --location
+      - "{{ region }}"
+      - --cluster
+      - "{{ deployment_name }}"
+    register: sps_terminal_output
+    changed_when: false
+
+  - name: Assert SPS Terminal / PDB Mode connected to port-forwarded proxy and completed pdb session
+    ansible.builtin.assert:
+      that:
+      - "'(Pdb)' in sps_terminal_output.stdout"
+      - "'PDB_SESSION_COMPLETE: proxy stepped_past_breakpoint PROXY_ALIVE:127.0.0.1:' in sps_terminal_output.stdout"
+      fail_msg: "SPS terminal / pdb mode did not produce expected output: {{ sps_terminal_output.stdout }} {{ sps_terminal_output.stderr }}"
+
+  - name: Verify temporary SPS proxy JobSet was automatically cleaned up after terminal session
+    delegate_to: localhost
+    ansible.builtin.command: kubectl get jobset "{{ sps_terminal_job_name }}"
+    register: sps_terminal_cleanup_check
+    until: sps_terminal_cleanup_check.rc != 0
+    retries: 12
+    delay: 5
+    failed_when: sps_terminal_cleanup_check.rc == 0
+    changed_when: false
+
+  - name: Wait for temporary SPS proxy pod termination to free SPS slice
+    delegate_to: localhost
+    ansible.builtin.command: >
+      kubectl wait --for=delete pod
+      -l jobset.sigs.k8s.io/jobset-name={{ sps_terminal_job_name }}
+      --timeout=120s
+    failed_when: false
+    changed_when: false
+
+  # ==========================================
+  # WORKFLOW 3C: Live In-Cluster CLI Mode (--pathways-run-sps-workload with --image)
+  # ==========================================
+
+  - name: Submit in-cluster SPS client workload JobSet against running SPS instance
+    delegate_to: localhost
+    ansible.builtin.command:
+      argv:
+      - "{{ workspace }}/gcluster"
+      - job
+      - submit
+      - --pathways
+      - --pathways-run-sps-workload
+      - "{{ sps_job_name }}"
+      - --name
+      - "{{ sps_client_job_name }}"
+      - --num-slices
+      - "{{ custom_vars.num_slices | string }}"
+      - --image
+      - "{{ custom_vars.workload_image }}"
+      - --service-account
+      - "{{ custom_vars.k8s_service_account }}"
+      - --command
+      - "{{ sps_client_command }}"
+      - --project
+      - "{{ custom_vars.project }}"
+      - --location
+      - "{{ region }}"
+      - --cluster
+      - "{{ deployment_name }}"
+    changed_when: false
+
+  - name: Wait for in-cluster SPS client JobSet creation
+    delegate_to: localhost
+    ansible.builtin.command: kubectl get jobset "{{ sps_client_job_name }}"
+    register: sps_client_jobset_check
+    until: sps_client_jobset_check.rc == 0
+    retries: 12
+    delay: 5
+    changed_when: false
+
+  - name: Wait for in-cluster SPS client pod to initialize
+    delegate_to: localhost
+    ansible.builtin.command: >
+      kubectl wait --for=condition=Initialized pod
+      -l jobset.sigs.k8s.io/jobset-name={{ sps_client_job_name }}
+      --timeout=600s
+    register: sps_client_init_result
+    until: sps_client_init_result.rc == 0
+    retries: 20
+    delay: 5
+    changed_when: false
+
+  - name: Wait for in-cluster SPS client workload-container to start running or terminate
+    delegate_to: localhost
+    ansible.builtin.shell: >
+      kubectl get pod -l jobset.sigs.k8s.io/jobset-name={{ sps_client_job_name }},jobset.sigs.k8s.io/replicatedjob-name=pathways-head
+      -o jsonpath='{.items[*].status.containerStatuses[?(@.name=="workload-container")].state}'
+      | grep -E "running|terminated"
+    register: sps_client_workload_state
+    until: sps_client_workload_state.rc == 0
+    retries: 60
+    delay: 5
+    changed_when: false
+
+  - name: Stream in-cluster SPS client workload logs for JAX TPU execution result
+    delegate_to: localhost
+    ansible.builtin.shell:
+      cmd: |
+        timeout 600 {{ workspace }}/gcluster job logs "{{ sps_client_job_name }}" -f --cluster {{ deployment_name }} --location {{ region }} --project {{ custom_vars.project }} --main-only | grep -m 1 "SPS In-Cluster JAX TPU Result"
+    register: sps_client_streaming_logs
+    until: sps_client_streaming_logs.rc == 0
+    retries: 10
+    delay: 2
+    changed_when: false
+
+  - name: Assert in-cluster SPS client JAX TPU computation succeeded
+    ansible.builtin.assert:
+      that:
+      - sps_client_streaming_logs.stdout is search("SPS In-Cluster JAX TPU Result:")
+      fail_msg: "Failed to find expected JAX output in in-cluster SPS client logs: {{ sps_client_streaming_logs.stdout }}"
+
   rescue:
   - name: "FAILURE: SPS test failed. Gathering GCluster SPS diagnostic inspection."
     ansible.builtin.debug:
-      msg: "SPS deployment or inspection failed. Commencing diagnostics."
+      msg: "SPS deployment, inspection, or workload execution failed. Commencing diagnostics."
 
   - name: Run GCluster SPS inspection on failure
     delegate_to: localhost
@@ -245,6 +552,21 @@
   - name: Print GCluster SPS inspection report on failure
     ansible.builtin.debug:
       msg: "{{ sps_failure_inspect.stdout_lines | default('No SPS diagnostic report generated') }}"
+
+  - name: Get in-cluster SPS client workload logs on failure
+    delegate_to: localhost
+    ansible.builtin.command: >
+      {{ workspace }}/gcluster job logs "{{ sps_client_job_name }}"
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ custom_vars.project }}
+    register: sps_client_failure_logs
+    changed_when: false
+    ignore_errors: true
+
+  - name: Print in-cluster SPS client workload logs on failure
+    ansible.builtin.debug:
+      msg: "{{ sps_client_failure_logs.stdout | default('No SPS client logs found') }}"
 
   - name: Run GCluster full cluster inspection on failure
     delegate_to: localhost
@@ -268,6 +590,25 @@
       msg: "Integration test failed to verify GCluster Shared Pathways Service (SPS) workflow."
 
   always:
+  - name: Clean up in-cluster SPS client workload
+    delegate_to: localhost
+    ansible.builtin.command: >
+      {{ workspace }}/gcluster job cancel "{{ sps_client_job_name }}"
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ custom_vars.project }}
+    ignore_errors: true
+
+  - name: Clean up terminal SPS proxy workload
+    when: sps_terminal_cleanup_check is not defined or sps_terminal_cleanup_check.rc == 0
+    delegate_to: localhost
+    ansible.builtin.command: >
+      {{ workspace }}/gcluster job cancel "{{ sps_terminal_job_name }}"
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ custom_vars.project }}
+    ignore_errors: true
+
   - name: Clean up SPS instance
     delegate_to: localhost
     ansible.builtin.command: >
