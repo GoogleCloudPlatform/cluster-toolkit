@@ -31,11 +31,14 @@ import (
 
 // VarInfo stores information about a module input variables
 type VarInfo struct {
-	Name        string
-	Type        cty.Type
-	Description string
-	Default     interface{}
-	Required    bool
+	Name          string
+	Type          cty.Type
+	Description   string
+	Default       interface{}
+	Required      bool
+	Deprecated    bool
+	DeprecatedMsg string
+	Validations   []string
 }
 
 // OutputInfo stores information about module output values

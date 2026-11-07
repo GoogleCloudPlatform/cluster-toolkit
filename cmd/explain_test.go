@@ -511,3 +511,64 @@ func (s *MySuite) TestExplainUnderscoreCompanion(c *C) {
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(symOut, "Companion Deployment File: community/examples/fsi/ibm-symphony-on-gke/symphony_deployment.yaml"), Equals, true)
 }
+
+func (s *MySuite) TestExplainModuleDeprecatedAndValidations(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	npOut, err := runExplainForTest("modules/compute/gke-node-pool")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(npOut, "Deprecated Settings (4 - do NOT use):"), Equals, true)
+	c.Check(strings.Contains(npOut, "Use `placement_policy` instead"), Equals, true)
+	c.Check(strings.Contains(npOut, "use autoscaling_total_max_nodes"), Equals, true)
+
+	explainFlags.format = "json"
+	npJSONOut, err := runExplainForTest("modules/compute/gke-node-pool")
+	explainFlags.format = "text"
+	c.Assert(err, IsNil)
+	var npRes ExplainModuleResult
+	c.Assert(json.Unmarshal([]byte(npJSONOut), &npRes), IsNil)
+	c.Check(len(npRes.DeprecatedInputs), Equals, 4)
+	for _, opt := range npRes.OptionalInputs {
+		c.Check(opt.Name == "compact_placement", Equals, false)
+	}
+
+	gsOut, err := runExplainForTest("modules/file-system/gke-storage")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(gsOut, `(string, default: "WaitForFirstConsumer")`), Equals, true)
+	c.Check(strings.Contains(gsOut, `[Validation: Allowed string values for var.storage_type are`), Equals, true)
+
+	kaOut, err := runExplainForTest("modules/management/kubectl-apply")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(kaOut, "object({cloud_storage_bucket_name=string, gcs_fuse_mount_options=list, in_memory_volume_size=string, name=string, node_selector=map, tolerations=list})"), Equals, true)
+}
+
+func (s *MySuite) TestExplainBlueprintGlobalVsBlueprintVars(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	bpOut, err := runExplainForTest("examples/gke-a4/gke-a4.yaml")
+	c.Assert(err, IsNil)
+	globalIdx := strings.Index(bpOut, "Global Variables:")
+	bpVarIdx := strings.Index(bpOut, "Blueprint Variables:")
+	c.Check(globalIdx > 0 && bpVarIdx > globalIdx, Equals, true)
+
+	explainFlags.format = "json"
+	bpJSONOut, err := runExplainForTest("examples/gke-a4/gke-a4.yaml")
+	explainFlags.format = "text"
+	c.Assert(err, IsNil)
+	var bpRes ExplainBlueprintResult
+	c.Assert(json.Unmarshal([]byte(bpJSONOut), &bpRes), IsNil)
+	foundGlobal := false
+	foundNonGlobal := false
+	for _, v := range bpRes.Variables {
+		if v.Name == "project_id" && v.Global {
+			foundGlobal = true
+		}
+		if v.Name == "static_node_count" && !v.Global {
+			foundNonGlobal = true
+		}
+	}
+	c.Check(foundGlobal, Equals, true)
+	c.Check(foundNonGlobal, Equals, true)
+}
