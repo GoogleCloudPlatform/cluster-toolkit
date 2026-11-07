@@ -17,6 +17,7 @@ If you use `--build-context` to build images on-the-fly, you must set:
 
 * `GCLUSTER_REFRESH_CREDENTIALS`: Set to `1` to make every `gcluster job` command re-run `gcloud container clusters get-credentials` instead of reusing an existing, verified `kubeconfig` context for the cluster. See [Cluster connectivity and kubeconfig reuse](#101-cluster-connectivity-and-kubeconfig-reuse) for when this is useful.
 * `GCLUSTER_TELEMETRY_IMAGE`: Container image URI for the ML Diagnostics collector native sidecar on Kubernetes 1.29+ TPU workloads when `--enable-ml-diagnostics` is passed without `--ml-diagnostics-image` (switches GKE jobs from the managed webhook to native sidecar injection). Pass `--ml-diagnostics-image=""` to ignore it for one submission.
+* `GCLUSTER_AIR_GAPPED`: Set to `true` in disconnected/air-gapped environments to skip CLI telemetry uploads.
 
 > [!NOTE]
 > ### Automated Prerequisite Checks Overview

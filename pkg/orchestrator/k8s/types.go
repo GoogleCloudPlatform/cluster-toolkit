@@ -18,7 +18,11 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
+
+// KubeconfigLoader loads the merged client-go kubeconfig; injectable for hermetic tests.
+type KubeconfigLoader func() (*clientcmdapi.Config, error)
 
 // NodeGVR identifies core/v1 Node resources for dynamic Kubernetes queries.
 var NodeGVR = schema.GroupVersionResource{
