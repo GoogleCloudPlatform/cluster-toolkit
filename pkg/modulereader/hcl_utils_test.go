@@ -97,3 +97,48 @@ func TestReplaceTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestParseFileVarMetaValidationsAndDeprecations(t *testing.T) {
+	src := []byte(`
+variable "deprecated_null" {
+  type    = string
+  default = null
+  validation {
+    condition     = var.deprecated_null == null
+    error_message = "The 'deprecated_null' variable has been deprecated. Use 'replacement' instead."
+  }
+}
+
+variable "deprecated_desc" {
+  description = "DEPRECATED: use new_var instead."
+  type        = bool
+  default     = false
+}
+
+variable "storage_type" {
+  description = "Storage type to configure."
+  type        = string
+  validation {
+    condition     = contains(["GCSFuse", "Lustre"], var.storage_type)
+    error_message = "Allowed values are GCSFuse or Lustre."
+  }
+}
+`)
+	meta := make(map[string]hclVarMeta)
+	parseFileVarMeta(src, "variables.tf", meta)
+
+	if !meta["deprecated_null"].deprecated || meta["deprecated_null"].deprecatedMsg == "" {
+		t.Fatalf("expected deprecated_null to be marked deprecated, got %+v", meta["deprecated_null"])
+	}
+	if len(meta["deprecated_null"].validations) != 0 {
+		t.Fatalf("expected deprecated_null validations to be empty, got %+v", meta["deprecated_null"].validations)
+	}
+	if meta["storage_type"].deprecated || len(meta["storage_type"].validations) != 1 {
+		t.Fatalf("expected storage_type to have 1 validation and not be deprecated, got %+v", meta["storage_type"])
+	}
+
+	descMeta := applyDescriptionDeprecation("DEPRECATED: use new_var instead.", hclVarMeta{})
+	if !descMeta.deprecated || descMeta.deprecatedMsg != "DEPRECATED: use new_var instead." {
+		t.Fatalf("expected deprecated_desc to be marked deprecated from description, got %+v", descMeta)
+	}
+}
