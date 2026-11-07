@@ -642,3 +642,19 @@ func TestResolveTelemetryCollector_PartialTPUInputs(t *testing.T) {
 		}
 	}
 }
+
+func TestIsGKE_UsesDetectedPlatformMode(t *testing.T) {
+	t.Parallel()
+	withProject := orchestrator.JobDefinition{ProjectID: "ar-build-proj"}
+	withoutProject := orchestrator.JobDefinition{}
+
+	k8sOrc := &GKEOrchestrator{mode: orchestrator.TypeK8s, projectID: "ar-build-proj"}
+	if k8sOrc.isGKE(withProject) {
+		t.Errorf("TypeK8s orchestrator must report isGKE=false even when ProjectID is supplied for GAR builds")
+	}
+
+	gkeOrc := &GKEOrchestrator{mode: orchestrator.TypeGKE}
+	if !gkeOrc.isGKE(withoutProject) {
+		t.Errorf("TypeGKE orchestrator must report isGKE=true even when ProjectID is empty")
+	}
+}

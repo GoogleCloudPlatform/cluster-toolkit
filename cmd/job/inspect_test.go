@@ -16,6 +16,7 @@ package job
 
 import (
 	"hpc-toolkit/pkg/orchestrator"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -47,6 +48,8 @@ func (m *mockJobOrchestrator) InspectCluster(opts orchestrator.InspectOptions) e
 }
 
 func TestInspectCmd_Success(t *testing.T) {
+	t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "empty-kubeconfig"))
+	t.Setenv("GCLUSTER_ORCHESTRATOR", "")
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 
@@ -100,6 +103,8 @@ func TestInspectCmd_Success(t *testing.T) {
 }
 
 func TestInspectCmd_SPS(t *testing.T) {
+	t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "empty-kubeconfig"))
+	t.Setenv("GCLUSTER_ORCHESTRATOR", "")
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()
 	clusterName, location, projectID = "test-cluster", "us-central1-a", "test-project"
