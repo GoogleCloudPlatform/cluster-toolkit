@@ -316,6 +316,83 @@ check_lustre_quota() {
 		return 1
 	fi
 }
+
+declare -A NETAPP_QUOTA_CACHE
+check_netapp_quota() {
+	local region=$1
+	local required_capacity=${REQUIRED_NETAPP_GB:-0}
+	local service_level=${REQUIRED_NETAPP_SERVICE_LEVEL:-"FLEX"}
+	service_level="${service_level^^}"
+
+	if [[ "$required_capacity" -le 0 ]]; then
+		return 0
+	fi
+
+	if [[ -n "${NETAPP_QUOTA_CACHE[$region]:-}" ]]; then
+		return "${NETAPP_QUOTA_CACHE[$region]}"
+	fi
+
+	local quota_id
+	case "${service_level}" in
+	"FLEX")
+		quota_id="FlexStoragePoolCapacityGiBPerRegion"
+		;;
+	"STANDARD")
+		quota_id="StandardStoragePoolCapacityGiBPerRegion"
+		;;
+	"PREMIUM" | "EXTREME")
+		quota_id="StoragePoolCapacityGiBPerRegion"
+		;;
+	*)
+		echo "WARN: Unknown NetApp service level '${service_level}'. Falling back to FlexStoragePoolCapacityGiBPerRegion."
+		quota_id="FlexStoragePoolCapacityGiBPerRegion"
+		service_level="FLEX"
+		;;
+	esac
+
+	local limit
+	limit=$(gcloud beta quotas info list --service=netapp.googleapis.com --project="${PROJECT_ID}" \
+		--filter="quotaId=${quota_id}" --format="json" 2>/dev/null |
+		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select(((.applicableLocations? // []) | index($region) != null) or ((.dimensions?.region? // "") == $region)) | .details?.value? | select(. != null) | tonumber] | max' 2>/dev/null)
+
+	if [[ "${limit}" == "-1" ]]; then
+		NETAPP_QUOTA_CACHE[$region]=0
+		return 0
+	fi
+
+	if [[ -z "$limit" || "$limit" == "null" ]]; then
+		echo "WARN: Could not fetch NetApp quota limit (${quota_id}) for $region. Failing-open and assuming capacity exists."
+		NETAPP_QUOTA_CACHE[$region]=0
+		return 0
+	fi
+
+	if [[ "$limit" == "0" ]]; then
+		echo "INFO: NetApp quota limit (${quota_id}) for $region is explicitly 0. Skipping zone."
+		NETAPP_QUOTA_CACHE[$region]=1
+		return 1
+	fi
+
+	local usage
+	usage=$(gcloud netapp storage-pools list --location="-" --project="${PROJECT_ID}" --format="json" 2>/dev/null |
+		jq -r --arg region "$region" --arg level "$service_level" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | select(if ($level == "PREMIUM" or $level == "EXTREME") then (.serviceLevel == "PREMIUM" or .serviceLevel == "EXTREME") else .serviceLevel == $level end) | .capacityGib | select(. != null) | tonumber] | add // 0' 2>/dev/null)
+
+	if ! limit=$(printf "%.0f" "${limit}" 2>/dev/null); then limit=0; fi
+	if ! usage=$(printf "%.0f" "${usage}" 2>/dev/null); then usage=0; fi
+
+	if [[ ! "${limit}" =~ ^[0-9]+$ ]]; then limit=0; fi
+	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
+
+	local remaining=$((limit - usage))
+	if [[ "$remaining" -ge "$required_capacity" ]]; then
+		NETAPP_QUOTA_CACHE[$region]=0
+		return 0
+	else
+		echo "INFO: Insufficient NetApp quota (${service_level}/${quota_id}) in $region (Limit: $limit, Usage: $usage, Required: $required_capacity)."
+		NETAPP_QUOTA_CACHE[$region]=1
+		return 1
+	fi
+}
+
 declare -A CPU_QUOTA_CACHE
 check_cpu_quota() {
 	local region=$1
@@ -401,6 +478,15 @@ if [[ "${CHECK_LUSTRE:-false}" == "true" ]]; then
 	fi
 fi
 
+NETAPP_ZONES=""
+if [[ "${CHECK_NETAPP:-false}" == "true" ]]; then
+	echo "INFO: Fetching available NetApp Volumes zones..."
+	if ! NETAPP_ZONES=$(gcloud netapp locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>&1); then
+		echo "ERROR: Failed to fetch available NetApp locations: ${NETAPP_ZONES}" >&2
+		exit 1
+	fi
+fi
+
 for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 	echo "INFO: Trying provisioning model: ${PROVISIONING_MODEL}"
 
@@ -440,6 +526,17 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 			fi
 			if ! check_lustre_quota "${ZONE}"; then
 				echo "INFO: Skipping ${ZONE} - Lustre quota check failed in zone ${ZONE}."
+				continue
+			fi
+		fi
+
+		if [[ "${CHECK_NETAPP:-false}" == "true" ]]; then
+			if ! echo "${NETAPP_ZONES}" | grep -x -E -q "${ZONE}|${REGION}"; then
+				echo "INFO: Skipping ${ZONE} - NetApp Volumes not available in this zone or region."
+				continue
+			fi
+			if ! check_netapp_quota "${REGION}"; then
+				echo "INFO: Skipping ${ZONE} - NetApp quota check failed in region ${REGION}."
 				continue
 			fi
 		fi

@@ -118,6 +118,12 @@ steps:
               value: "gs://hpc-ctk1357/hpcoptions.txt"
             - name: ENABLE_SPOT_FALLBACK
               value: "true"
+            - name: CHECK_NETAPP
+              value: "true"
+            - name: REQUIRED_NETAPP_GB
+              value: "6144"
+            - name: REQUIRED_NETAPP_SERVICE_LEVEL
+              value: "FLEX"
             command: ["/bin/bash", "-c"]
             args:
             - |
