@@ -38,7 +38,7 @@
     sps_client_command: >-
       pip install -U jax jaxlib &&
       for i in $(seq 1 60); do python -c 'import socket; socket.create_connection(("127.0.0.1", 29000), timeout=1).close()' 2>/dev/null && break; sleep 1; done &&
-      python -c 'import os, jax; assert os.environ.get("TEST_WORKLOAD_VAR") == "workload_val"; dc = jax.device_count(); print("JAX Device count:", dc); assert dc == {{ custom_vars.expected_tpu_count }}, f"Expected {{ custom_vars.expected_tpu_count }} devices, got {dc}"; a = jax.random.normal(jax.random.PRNGKey(0), (2, 2)); print("SPS In-Cluster JAX TPU Result:", a, flush=True)'
+      python -c 'import os, jax; assert os.environ.get("TEST_WORKLOAD_VAR") == "workload_val"; dc = jax.device_count(); print("JAX Device count:", dc); assert dc == {{ custom_vars.expected_tpu_count }}, f"Expected {{ custom_vars.expected_tpu_count }} devices, got {dc}"; a = jax.random.normal(jax.random.PRNGKey(0), (2, 2)); print("SPS In-Cluster JAX TPU Result:", a.tolist(), flush=True)'
 
 - name: Check if ML Diagnostics GCS bucket exists
   delegate_to: localhost
@@ -115,8 +115,7 @@
     delegate_to: localhost
     ansible.builtin.shell: |
       set -eo pipefail
-      HEAD_POD=$(kubectl get pod -l jobset.sigs.k8s.io/jobset-name={{ sps_job_name }},jobset.sigs.k8s.io/replicatedjob-name=pathways-head -o jsonpath='{.items[0].metadata.name}')
-      kubectl logs "${HEAD_POD}" -c pathways-rm | grep -E "[0-9]+/[0-9]+ Pathways Slices Now Ready"
+      kubectl logs -l jobset.sigs.k8s.io/jobset-name={{ sps_job_name }},jobset.sigs.k8s.io/replicatedjob-name=pathways-head -c pathways-rm | grep -E "[0-9]+/[0-9]+ Pathways Slices Now Ready"
     args:
       executable: /bin/bash
     register: sps_rm_ready
@@ -216,10 +215,12 @@
     delegate_to: localhost
     ansible.builtin.command: kubectl get jobset "{{ sps_terminal_job_name }}"
     register: sps_terminal_cleanup_check
-    until: sps_terminal_cleanup_check.rc != 0
+    until:
+    - sps_terminal_cleanup_check.rc != 0
+    - "'not found' in sps_terminal_cleanup_check.stderr"
     retries: 12
     delay: 5
-    failed_when: sps_terminal_cleanup_check.rc == 0
+    failed_when: "'not found' not in sps_terminal_cleanup_check.stderr"
     changed_when: false
 
   - name: Wait for temporary SPS proxy pod termination to free SPS slice
@@ -281,13 +282,15 @@
 
   - name: Stream in-cluster SPS client workload logs for JAX TPU execution result
     delegate_to: localhost
-    ansible.builtin.shell:
-      cmd: |
-        timeout 600 {{ workspace }}/gcluster job logs "{{ sps_client_job_name }}" -f --cluster {{ deployment_name }} --location {{ region }} --project {{ custom_vars.project }} --main-only | grep -m 1 "SPS In-Cluster JAX TPU Result"
+    ansible.builtin.shell: |
+      set -o pipefail
+      timeout 180 {{ workspace }}/gcluster job logs "{{ sps_client_job_name }}" -f --cluster {{ deployment_name }} --location {{ region }} --project {{ custom_vars.project }} --main-only | grep -m 1 "SPS In-Cluster JAX TPU Result"
+    args:
+      executable: /bin/bash
     register: sps_client_streaming_logs
     until: sps_client_streaming_logs.rc == 0
-    retries: 10
-    delay: 2
+    retries: 3
+    delay: 5
     changed_when: false
 
   - name: Assert in-cluster SPS client JAX TPU computation succeeded
