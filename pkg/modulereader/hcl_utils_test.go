@@ -15,7 +15,10 @@
 package modulereader
 
 import (
+	"hpc-toolkit/pkg/sourcereader"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/zclconf/go-cty/cty"
@@ -154,5 +157,73 @@ func TestApplyVarMetaClonesInputs(t *testing.T) {
 	}
 	if !enriched.Inputs[0].Deprecated || enriched.Inputs[0].DeprecatedMsg != "DEPRECATED: use new_flag instead." {
 		t.Fatalf("expected enriched input to be marked deprecated, got %+v", enriched.Inputs[0])
+	}
+}
+
+func TestApplyVarMetaReadsLocalSources(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"variables.tf": `
+variable "legacy" {
+  type    = string
+  default = null
+  validation {
+    condition     = var.legacy == null
+    error_message = "legacy is deprecated; use modern."
+  }
+}
+variable "size" {
+  type    = number
+  default = 1
+  validation {
+    condition     = var.size > 0
+    error_message = "size must be positive (got ${var.size})."
+  }
+}
+`,
+		"variables.pkr.hcl": `
+variable "old_scopes" {
+  type    = list(string)
+  default = null
+  validation {
+    condition     = var.old_scopes == null
+    error_message = "old_scopes is deprecated; use scopes."
+  }
+}
+`,
+		"broken.tf": "variable {",
+		"README.md": "not a variable file",
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mi := ApplyVarMeta(dir, ModuleInfo{Inputs: []VarInfo{{Name: "legacy"}, {Name: "size"}, {Name: "old_scopes"}}})
+	if !mi.Inputs[0].Deprecated || mi.Inputs[0].DeprecatedMsg != "legacy is deprecated; use modern." {
+		t.Fatalf("expected legacy deprecated via validation, got %+v", mi.Inputs[0])
+	}
+	if mi.Inputs[1].Deprecated || len(mi.Inputs[1].Validations) != 1 || !strings.Contains(mi.Inputs[1].Validations[0], "${var.size}") {
+		t.Fatalf("expected size to keep its raw interpolated validation message, got %+v", mi.Inputs[1])
+	}
+	if !mi.Inputs[2].Deprecated {
+		t.Fatalf("expected old_scopes from .pkr.hcl to be deprecated, got %+v", mi.Inputs[2])
+	}
+}
+
+func TestApplyVarMetaReadsEmbeddedSources(t *testing.T) {
+	oldFS := sourcereader.ModuleFS
+	defer func() { sourcereader.ModuleFS = oldFS }()
+	sourcereader.ModuleFS = testModuleFS
+
+	for _, src := range []string{"modules/test_role/test_module", "modules/imaginarium/zebra"} {
+		emb := ApplyVarMeta(src, ModuleInfo{Inputs: []VarInfo{{Name: "test_variable", Description: "This is just a test"}}})
+		if emb.Inputs[0].Deprecated || len(emb.Inputs[0].Validations) != 0 {
+			t.Fatalf("%s: expected no metadata for test_variable, got %+v", src, emb.Inputs[0])
+		}
+	}
+	if got := extractHCLVarMeta("modules/does-not-exist"); got != nil {
+		t.Fatalf("expected nil metadata for a missing embedded module, got %+v", got)
 	}
 }
