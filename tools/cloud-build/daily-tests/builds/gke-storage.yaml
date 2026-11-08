@@ -113,6 +113,24 @@ steps:
               value: "$PROJECT_ID"
             - name: BUILD_ID
               value: "$BUILD_ID"
+            - name: MACHINE_TYPE
+              value: "c3d-standard-8"
+            - name: NUM_NODES
+              value: "1"
+            - name: MIN_NODES
+              value: "1"
+            - name: INSTANCE_PREFIX
+              value: "gkest"
+            - name: OPTIONS_GCS_PATH
+              value: "gs://hpc-ctk1357/gkestorageoptions.txt"
+            - name: ENABLE_SPOT_FALLBACK
+              value: "true"
+            - name: CHECK_FILESTORE
+              value: "true"
+            - name: REQUIRED_FILESTORE_GB
+              value: "2560"
+            - name: REQUIRED_FILESTORE_TIER
+              value: "BASIC_SSD"
             command: ["/bin/bash", "-c"]
             args:
             - |
@@ -135,38 +153,41 @@ steps:
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
+              source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              if [ -z "\$${ZONE:-}" ]; then
+                echo "ERROR: No available zone found." >&2
+                exit 1
+              fi
+              REGION="\$${ZONE%-*}"
+              echo "Selected zone: \$$ZONE (region: \$$REGION)"
 
               # adding vm to act as remote node
               echo '  - id: remote-node'                     >> \$$SG_EXAMPLE
               echo '    source: modules/compute/vm-instance' >> \$$SG_EXAMPLE
               echo '    use: [network1]'                     >> \$$SG_EXAMPLE
               echo '    settings:'                           >> \$$SG_EXAMPLE
-              echo '      machine_type: n2d-standard-2'       >> \$$SG_EXAMPLE
-              echo '      zone: us-central1-b'               >> \$$SG_EXAMPLE
+              echo '      machine_type: n2d-standard-2'      >> \$$SG_EXAMPLE
+              echo '      zone: \$(vars.zone)'               >> \$$SG_EXAMPLE
 
-              echo "Checking if required storage pools exist..."
-              if ! gcloud compute storage-pools describe test-pool-balanced --project=$PROJECT_ID --zone=us-central1-b >/dev/null 2>&1; then
-                echo "ERROR: Storage pool 'test-pool-balanced' does not exist in us-central1-b."
-                echo "Please create it by running the following command:"
-                echo "gcloud compute storage-pools create test-pool-balanced"
-                echo "    --project=$PROJECT_ID"
-                echo "    --zone=us-central1-b"
-                echo "    --provisioned-capacity=10240GB"
-                echo "    --provisioned-iops=10000"
-                echo "    --provisioned-throughput=1024"
-                echo "    --storage-pool-type=hyperdisk-balanced"
-                exit 1
+              echo "Checking if required storage pools exist in \$$ZONE..."
+              if ! gcloud compute storage-pools describe test-pool-balanced --project=$PROJECT_ID --zone=\$$ZONE >/dev/null 2>&1; then
+                echo "Storage pool 'test-pool-balanced' does not exist in \$$ZONE. Creating it..."
+                gcloud compute storage-pools create test-pool-balanced \
+                  --project=$PROJECT_ID \
+                  --zone=\$$ZONE \
+                  --provisioned-capacity=10240GB \
+                  --provisioned-iops=10000 \
+                  --provisioned-throughput=1024 \
+                  --storage-pool-type=hyperdisk-balanced
               fi
-              if ! gcloud compute storage-pools describe test-pool-throughput --project=$PROJECT_ID --zone=us-central1-b >/dev/null 2>&1; then
-                echo "ERROR: Storage pool 'test-pool-throughput' does not exist in us-central1-b."
-                echo "Please create it by running the following command:"
-                echo "gcloud compute storage-pools create test-pool-throughput"
-                echo "    --project=$PROJECT_ID"
-                echo "    --zone=us-central1-b"
-                echo "    --provisioned-capacity=28672GB"
-                echo "    --provisioned-throughput=500"
-                echo "    --storage-pool-type=hyperdisk-throughput"
-                exit 1
+              if ! gcloud compute storage-pools describe test-pool-throughput --project=$PROJECT_ID --zone=\$$ZONE >/dev/null 2>&1; then
+                echo "Storage pool 'test-pool-throughput' does not exist in \$$ZONE. Creating it..."
+                gcloud compute storage-pools create test-pool-throughput \
+                  --project=$PROJECT_ID \
+                  --zone=\$$ZONE \
+                  --provisioned-capacity=28672GB \
+                  --provisioned-throughput=500 \
+                  --storage-pool-type=hyperdisk-throughput
               fi
 
               bash tools/add_ttl_label.sh "\$$SG_EXAMPLE"
@@ -176,6 +197,7 @@ steps:
                 --extra-vars="hyperdisk_balanced_pool=test-pool-balanced hyperdisk_throughput_pool=test-pool-throughput" --extra-vars="test_prefix=${_TEST_PREFIX}" --extra-vars="use_fixed_vpc=true" \
                 --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
                 --extra-vars="@tools/cloud-build/daily-tests/tests/gke-storage.yml" \
+                --extra-vars="region=\$${REGION} zone=\$${ZONE}" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
                 --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
