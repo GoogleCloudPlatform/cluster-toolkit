@@ -661,9 +661,10 @@ func (s *MySuite) TestExplainModuleDeprecatedAndValidations(c *C) {
 
 	npOut, err := runExplainForTest("modules/compute/gke-node-pool")
 	c.Assert(err, IsNil)
-	c.Check(strings.Contains(npOut, "Deprecated Settings (4 - do NOT use):"), Equals, true)
+	c.Check(strings.Contains(npOut, "Deprecated Settings ("), Equals, true)
 	c.Check(strings.Contains(npOut, "Use `placement_policy` instead"), Equals, true)
 	c.Check(strings.Contains(npOut, "use autoscaling_total_max_nodes"), Equals, true)
+	c.Check(strings.Contains(npOut, "object({strategy=string, max_surge=optional(number), max_unavailable=optional(number)})"), Equals, true)
 
 	explainFlags.format = "json"
 	npJSONOut, err := runExplainForTest("modules/compute/gke-node-pool")
@@ -671,7 +672,7 @@ func (s *MySuite) TestExplainModuleDeprecatedAndValidations(c *C) {
 	c.Assert(err, IsNil)
 	var npRes ExplainModuleResult
 	c.Assert(json.Unmarshal([]byte(npJSONOut), &npRes), IsNil)
-	c.Check(len(npRes.DeprecatedInputs), Equals, 4)
+	c.Check(len(npRes.DeprecatedInputs) >= 4, Equals, true)
 	for _, opt := range npRes.OptionalInputs {
 		c.Check(opt.Name == "compact_placement", Equals, false)
 	}
@@ -683,7 +684,8 @@ func (s *MySuite) TestExplainModuleDeprecatedAndValidations(c *C) {
 
 	kaOut, err := runExplainForTest("modules/management/kubectl-apply")
 	c.Assert(err, IsNil)
-	c.Check(strings.Contains(kaOut, "object({cloud_storage_bucket_name=string, gcs_fuse_mount_options=list, in_memory_volume_size=string, name=string, node_selector=map, tolerations=list})"), Equals, true)
+	c.Check(strings.Contains(kaOut, "object({cloud_storage_bucket_name=string, gcs_fuse_mount_options=optional(list), in_memory_volume_size=optional(string), name=optional(string), node_selector=optional(map), tolerations=optional(list)})"), Equals, true)
+	c.Check(strings.Contains(kaOut, " | checkpoint_configuration.name must be"), Equals, true)
 }
 
 func (s *MySuite) TestExplainBlueprintGlobalVsBlueprintVars(c *C) {

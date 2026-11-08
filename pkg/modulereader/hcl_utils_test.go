@@ -104,41 +104,55 @@ variable "deprecated_null" {
   type    = string
   default = null
   validation {
-    condition     = var.deprecated_null == null
+    condition     = null == var.deprecated_null
     error_message = "The 'deprecated_null' variable has been deprecated. Use 'replacement' instead."
   }
 }
 
-variable "deprecated_desc" {
-  description = "DEPRECATED: use new_var instead."
-  type        = bool
-  default     = false
+variable "deprecated_len" {
+  type    = list(string)
+  default = []
+  validation {
+    condition     = length(var.deprecated_len) == 0
+    error_message = <<-EOD
+      deprecated_len is deprecated.
+      Use new_list instead.
+    EOD
+  }
 }
 
-variable "storage_type" {
-  description = "Storage type to configure."
-  type        = string
+variable "compound_not_deprecated" {
+  type    = string
+  default = null
   validation {
-    condition     = contains(["GCSFuse", "Lustre"], var.storage_type)
-    error_message = "Allowed values are GCSFuse or Lustre."
+    condition     = var.compound_not_deprecated == null || var.compound_not_deprecated != ""
+    error_message = "compound_not_deprecated must not be empty when set."
   }
 }
 `)
 	meta := make(map[string]hclVarMeta)
 	parseFileVarMeta(src, "variables.tf", meta)
 
-	if !meta["deprecated_null"].deprecated || meta["deprecated_null"].deprecatedMsg == "" {
-		t.Fatalf("expected deprecated_null to be marked deprecated, got %+v", meta["deprecated_null"])
+	if !meta["deprecated_null"].deprecated || len(meta["deprecated_null"].validations) != 0 {
+		t.Fatalf("expected deprecated_null to be deprecated with 0 validations, got %+v", meta["deprecated_null"])
 	}
-	if len(meta["deprecated_null"].validations) != 0 {
-		t.Fatalf("expected deprecated_null validations to be empty, got %+v", meta["deprecated_null"].validations)
+	if !meta["deprecated_len"].deprecated || meta["deprecated_len"].deprecatedMsg != "deprecated_len is deprecated. Use new_list instead." {
+		t.Fatalf("expected deprecated_len heredoc message to normalize cleanly, got %+v", meta["deprecated_len"])
 	}
-	if meta["storage_type"].deprecated || len(meta["storage_type"].validations) != 1 {
-		t.Fatalf("expected storage_type to have 1 validation and not be deprecated, got %+v", meta["storage_type"])
+	if meta["compound_not_deprecated"].deprecated || len(meta["compound_not_deprecated"].validations) != 1 {
+		t.Fatalf("expected compound_not_deprecated to have 1 validation and not be deprecated, got %+v", meta["compound_not_deprecated"])
 	}
+}
 
-	descMeta := applyDescriptionDeprecation("DEPRECATED: use new_var instead.", hclVarMeta{})
-	if !descMeta.deprecated || descMeta.deprecatedMsg != "DEPRECATED: use new_var instead." {
-		t.Fatalf("expected deprecated_desc to be marked deprecated from description, got %+v", descMeta)
+func TestApplyVarMetaClonesInputs(t *testing.T) {
+	orig := ModuleInfo{
+		Inputs: []VarInfo{{Name: "legacy_flag", Description: "DEPRECATED: use new_flag instead."}},
+	}
+	enriched := ApplyVarMeta("nonexistent-source", orig)
+	if orig.Inputs[0].Deprecated {
+		t.Fatalf("expected ApplyVarMeta not to mutate original Inputs slice")
+	}
+	if !enriched.Inputs[0].Deprecated || enriched.Inputs[0].DeprecatedMsg != "DEPRECATED: use new_flag instead." {
+		t.Fatalf("expected enriched input to be marked deprecated, got %+v", enriched.Inputs[0])
 	}
 }

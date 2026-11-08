@@ -100,7 +100,6 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 		return ModuleInfo{}, fmt.Errorf("source is not a terraform module: %s", source)
 	}
 
-	varMeta := extractHCLVarMeta(source)
 	ret := ModuleInfo{}
 	var vars []VarInfo
 	var outs []OutputInfo
@@ -109,16 +108,12 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 		if err != nil {
 			return ModuleInfo{}, fmt.Errorf("failed to parse type of variable %q: %w", v.Name, err)
 		}
-		meta := applyDescriptionDeprecation(v.Description, varMeta[v.Name])
 		vInfo := VarInfo{
-			Name:          v.Name,
-			Type:          ty,
-			Description:   v.Description,
-			Default:       v.Default,
-			Required:      v.Required,
-			Deprecated:    meta.deprecated,
-			DeprecatedMsg: meta.deprecatedMsg,
-			Validations:   meta.validations,
+			Name:        v.Name,
+			Type:        ty,
+			Description: v.Description,
+			Default:     v.Default,
+			Required:    v.Required,
 		}
 		vars = append(vars, vInfo)
 	}
@@ -138,6 +133,27 @@ type hclVarMeta struct {
 	deprecated    bool
 	deprecatedMsg string
 	validations   []string
+}
+
+// ApplyVarMeta returns a copy of mi with Deprecated, DeprecatedMsg, and
+// Validations populated from the module's variable blocks. Only `gcluster
+// explain` consumes these fields, keeping the extra HCL parse off the
+// GetModuleInfo path used by create/expand/deploy and catalog-wide scans.
+func ApplyVarMeta(source string, mi ModuleInfo) ModuleInfo {
+	varMeta := extractHCLVarMeta(source)
+	inputs := slices.Clone(mi.Inputs)
+	for i := range inputs {
+		meta := applyDescriptionDeprecation(inputs[i].Description, varMeta[inputs[i].Name])
+		inputs[i].Deprecated = meta.deprecated
+		inputs[i].DeprecatedMsg = meta.deprecatedMsg
+		inputs[i].Validations = meta.validations
+	}
+	mi.Inputs = inputs
+	return mi
+}
+
+func isVarFile(name string) bool {
+	return strings.HasSuffix(name, ".tf") || strings.HasSuffix(name, ".pkr.hcl")
 }
 
 func applyDescriptionDeprecation(desc string, meta hclVarMeta) hclVarMeta {
@@ -182,7 +198,7 @@ func readEmbeddedTFFiles(dir string) []namedTFFile {
 	}
 	var out []namedTFFile
 	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".tf") {
+		if !e.IsDir() && isVarFile(e.Name()) {
 			p := path.Join(dir, e.Name())
 			if b, err := sourcereader.ModuleFS.ReadFile(p); err == nil {
 				out = append(out, namedTFFile{name: e.Name(), data: b})
@@ -200,7 +216,7 @@ func readLocalTFFiles(dir string) []namedTFFile {
 	}
 	var out []namedTFFile
 	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".tf") {
+		if !e.IsDir() && isVarFile(e.Name()) {
 			p := filepath.Join(dir, e.Name())
 			if b, err := os.ReadFile(p); err == nil {
 				out = append(out, namedTFFile{name: e.Name(), data: b})
@@ -265,7 +281,7 @@ func extractValidationErrorMessage(src []byte, attr *hclsyntax.Attribute) string
 	if attr == nil || attr.Expr == nil {
 		return ""
 	}
-	if val, diags := attr.Expr.Value(nil); !diags.HasErrors() && val.Type() == cty.String {
+	if val, diags := attr.Expr.Value(nil); !diags.HasErrors() && val.Type() == cty.String && val.IsKnown() && !val.IsNull() {
 		return strings.Join(strings.Fields(val.AsString()), " ")
 	}
 	raw := strings.Trim(extractAttrSource(src, attr), `"`)

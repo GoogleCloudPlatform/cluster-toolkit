@@ -977,22 +977,15 @@ func orderBlueprintVarKeys(merged map[string]cty.Value) []string {
 
 func inspectCtyVariable(name string, v cty.Value) ExplainVariable {
 	var ev ExplainVariable
-	switch {
-	case isExprValue(v):
-		expr, _ := config.IsExpressionValue(v)
+	if expr, isExpr := config.IsExpressionValue(v); isExpr {
 		ev = inspectExpressionVariable(name, expr)
-	case !v.IsKnown() || v.IsNull():
+	} else if !v.IsKnown() || v.IsNull() {
 		ev = ExplainVariable{Name: name, Type: inferPlaceholderType(name), Required: true}
-	default:
+	} else {
 		ev = inspectKnownCtyVariable(name, v)
 	}
 	ev.Global = config.IsAutoInjectedGlobal(name)
 	return ev
-}
-
-func isExprValue(v cty.Value) bool {
-	_, ok := config.IsExpressionValue(v)
-	return ok
 }
 
 func inspectExpressionVariable(name string, expr config.Expression) ExplainVariable {
@@ -1134,6 +1127,7 @@ func buildExplainModule(modPath, kind string) (ExplainModuleResult, error) {
 	if err != nil {
 		return ExplainModuleResult{}, fmt.Errorf("failed to inspect module %s: %w", modPath, err)
 	}
+	mi = modulereader.ApplyVarMeta(modPath, mi)
 
 	apis := nonEmptyStrings(mi.Metadata.Spec.Requirements.Services)
 	sort.Strings(apis)
@@ -1211,7 +1205,7 @@ func partitionModuleInputs(mi modulereader.ModuleInfo, useProvidedInputs map[str
 	var optInputs []ExplainModuleInput
 	var depInputs []ExplainModuleInput
 	for _, in := range mi.Inputs {
-		if in.Deprecated {
+		if in.Deprecated && !in.Required {
 			depInputs = append(depInputs, ExplainModuleInput{
 				Name:        in.Name,
 				Type:        formatCtyType(in.Type),
@@ -1259,7 +1253,7 @@ func classifyTargetModuleInputs(targetInfo modulereader.ModuleInfo) (map[string]
 	targetReqInputs := make(map[string]bool)
 	injectedID := targetInfo.Metadata.Ghpc.InjectModuleId
 	for _, in := range targetInfo.Inputs {
-		if in.Deprecated {
+		if in.Deprecated && !in.Required {
 			continue
 		}
 		targetInputs[in.Name] = true
@@ -1574,7 +1568,7 @@ func sampleValueForInput(name, typ string) string {
 		return v
 	}
 	switch {
-	case strings.HasPrefix(typ, "list"):
+	case strings.HasPrefix(typ, "list"), strings.HasPrefix(typ, "set"):
 		return "[]"
 	case strings.HasPrefix(typ, "map"), strings.HasPrefix(typ, "object"):
 		return "{}"
@@ -1594,8 +1588,10 @@ func formatCtyType(t cty.Type) string {
 		return "number"
 	case t == cty.Bool:
 		return "bool"
-	case t.IsListType() || t.IsSetType():
+	case t.IsListType():
 		return formatCollectionType("list", t.ElementType())
+	case t.IsSetType():
+		return formatCollectionType("set", t.ElementType())
 	case t.IsTupleType():
 		return "list"
 	case t.IsMapType():
@@ -1624,7 +1620,14 @@ func formatCtyObjectType(t cty.Type) string {
 	for k := range attrs {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	// Required attributes first so the maxAttrs cut never hides them.
+	sort.Slice(keys, func(i, j int) bool {
+		oi, oj := t.AttributeOptional(keys[i]), t.AttributeOptional(keys[j])
+		if oi != oj {
+			return !oi
+		}
+		return keys[i] < keys[j]
+	})
 	const maxAttrs = 6
 	parts := make([]string, 0, min(len(keys), maxAttrs)+1)
 	for i, k := range keys {
@@ -1632,7 +1635,11 @@ func formatCtyObjectType(t cty.Type) string {
 			parts = append(parts, "...")
 			break
 		}
-		parts = append(parts, fmt.Sprintf("%s=%s", k, formatCtyScalarOrKind(attrs[k])))
+		attr := formatCtyScalarOrKind(attrs[k])
+		if t.AttributeOptional(k) {
+			attr = "optional(" + attr + ")"
+		}
+		parts = append(parts, fmt.Sprintf("%s=%s", k, attr))
 	}
 	return fmt.Sprintf("object({%s})", strings.Join(parts, ", "))
 }
@@ -1647,7 +1654,9 @@ func formatCtyScalarOrKind(t cty.Type) string {
 		return "number"
 	case t == cty.Bool:
 		return "bool"
-	case t.IsListType() || t.IsSetType() || t.IsTupleType():
+	case t.IsSetType():
+		return "set"
+	case t.IsListType() || t.IsTupleType():
 		return "list"
 	case t.IsMapType():
 		return "map"
@@ -1731,10 +1740,17 @@ func printOptionalModuleInputs(w io.Writer, optInputs []ExplainModuleInput) {
 	for _, in := range optInputs {
 		typeMeta := in.Type
 		if in.Default != "" {
-			typeMeta = fmt.Sprintf("%s, default: %s", in.Type, in.Default)
+			typeMeta = fmt.Sprintf("%s, default: %s", in.Type, truncateForText(in.Default, 60))
 		}
 		writef(w, "  - %-28s (%s) %s%s\n", in.Name, typeMeta, in.Description, formatValidationSuffix(in.Validations))
 	}
+}
+
+func truncateForText(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }
 
 func printDeprecatedModuleInputs(w io.Writer, depInputs []ExplainModuleInput) {
@@ -1755,7 +1771,7 @@ func formatValidationSuffix(validations []string) string {
 	if len(validations) == 0 {
 		return ""
 	}
-	return fmt.Sprintf(" [Validation: %s]", strings.Join(validations, "; "))
+	return fmt.Sprintf(" [Validation: %s]", strings.Join(validations, " | "))
 }
 
 type normalizedSpec struct {
@@ -2304,6 +2320,7 @@ func buildMissingModuleSnippetForBlueprint(modSource string, bp catalog.Blueprin
 	if err != nil {
 		return fmt.Sprintf("# could not inspect %s: %v", modSource, err)
 	}
+	mi = modulereader.ApplyVarMeta(modSource, mi)
 
 	upstreamGroups, useProvided := findUpstreamCandidateGroups(modSource, mi)
 	prereqBlocks, useIDs := resolveBlueprintUpstreamBlocks(bp, upstreamGroups)
