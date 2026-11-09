@@ -342,20 +342,11 @@ func (g *GKEOrchestrator) fetchLogsWithRetry(ns, jobsetName, selector string, al
 		return res, fmt.Errorf("failed to get logs: %s\n%s", res.Stderr, res.Stdout)
 	}
 
-	var details []string
-	schedMsg := g.checkUnscheduledPods(ns, jobsetName)
-	if schedMsg != "" {
-		details = append(details, fmt.Sprintf("unscheduled pods:\n%s", schedMsg))
+	if schedMsg := g.checkUnscheduledPods(ns, jobsetName); schedMsg != "" {
+		return res, fmt.Errorf("timed out waiting for job to start; unscheduled pods:\n%s\nlatest error: %s\n%s", schedMsg, res.Stderr, res.Stdout)
 	}
-	warnEvents := g.checkJobSetOnlyWarningEvents(ns, jobsetName)
-	if schedMsg == "" {
-		warnEvents = joinNonEmpty(warnEvents, g.checkJobPodWarningEvents(ns, jobsetName))
-	}
-	if warnEvents != "" {
-		details = append(details, fmt.Sprintf("JobSet reported warning events:\n%s", warnEvents))
-	}
-	if len(details) > 0 {
-		return res, fmt.Errorf("timed out waiting for job to start; %s\nlatest error: %s\n%s", strings.Join(details, "\n"), res.Stderr, res.Stdout)
+	if warnEvents := g.checkJobSetWarningEvents(ns, jobsetName); warnEvents != "" {
+		return res, fmt.Errorf("timed out waiting for job to start; JobSet reported warning events:\n%s\nlatest error: %s\n%s", warnEvents, res.Stderr, res.Stdout)
 	}
 	return res, fmt.Errorf("timed out waiting for job to start; latest error: %s\n%s", res.Stderr, res.Stdout)
 }
@@ -1821,48 +1812,30 @@ func (g *GKEOrchestrator) findTargetWorkload(ns, workloadName string, timeout ti
 }
 
 func (g *GKEOrchestrator) checkJobSetWarningEvents(ns, workloadName string) string {
-	return joinNonEmpty(g.checkJobSetOnlyWarningEvents(ns, workloadName), g.checkJobPodWarningEvents(ns, workloadName))
-}
-
-func (g *GKEOrchestrator) checkJobSetOnlyWarningEvents(ns, workloadName string) string {
 	if workloadName == "" {
 		return ""
 	}
+	var events []string
 	res := g.kubectl("get", "events", "-n", ns,
 		fmt.Sprintf("--field-selector=involvedObject.name=%s,involvedObject.kind=JobSet,type=Warning", workloadName),
 		"--request-timeout=10s",
 		"--no-headers")
-	if res.ExitCode != 0 {
-		return ""
-	}
-	return strings.TrimSpace(res.Stdout)
-}
-
-func joinNonEmpty(parts ...string) string {
-	var out []string
-	for _, p := range parts {
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return strings.Join(out, "\n")
-}
-
-func (g *GKEOrchestrator) checkJobPodWarningEvents(ns, workloadName string) string {
-	if workloadName == "" {
-		return ""
+	if res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != "" {
+		events = append(events, strings.TrimSpace(res.Stdout))
 	}
 	podsRes := g.kubectl("get", "pods", "-n", ns, "-l", "jobset.sigs.k8s.io/jobset-name="+workloadName, "-o", "name")
-	if podsRes.ExitCode != 0 || strings.TrimSpace(podsRes.Stdout) == "" {
-		return ""
-	}
-	jobPods := make(map[string]bool)
-	for _, line := range strings.Split(strings.TrimSpace(podsRes.Stdout), "\n") {
-		if name := strings.TrimSpace(line); name != "" {
-			jobPods[name] = true
+	if podsRes.ExitCode == 0 {
+		jobPods := make(map[string]bool)
+		for _, line := range strings.Split(strings.TrimSpace(podsRes.Stdout), "\n") {
+			if name := strings.TrimSpace(line); name != "" {
+				jobPods[name] = true
+			}
+		}
+		if podEvents := g.checkPodWarningEvents(ns, jobPods); podEvents != "" {
+			events = append(events, podEvents)
 		}
 	}
-	return g.checkPodWarningEvents(ns, jobPods)
+	return strings.Join(events, "\n")
 }
 
 func (g *GKEOrchestrator) checkPodWarningEvents(ns string, jobPods map[string]bool) string {
