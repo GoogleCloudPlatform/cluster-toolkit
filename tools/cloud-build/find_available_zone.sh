@@ -355,18 +355,21 @@ check_netapp_quota() {
 		--filter="quotaId=${quota_id}" --format="json" 2>/dev/null |
 		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select(((.applicableLocations? // []) | index($region) != null) or ((.dimensions?.region? // "") == $region)) | .details?.value? | select(. != null) | tonumber] | max' 2>/dev/null)
 
-	if [[ "${limit}" == "-1" ]]; then
-		NETAPP_QUOTA_CACHE[$region]=0
-		return 0
-	fi
-
 	if [[ -z "$limit" || "$limit" == "null" ]]; then
 		echo "WARN: Could not fetch NetApp quota limit (${quota_id}) for $region. Failing-open and assuming capacity exists."
 		NETAPP_QUOTA_CACHE[$region]=0
 		return 0
 	fi
 
-	if [[ "$limit" == "0" ]]; then
+	limit=$(jq -n --arg v "${limit}" '($v | tonumber? | floor) // 0' 2>/dev/null)
+	if [[ ! "${limit}" =~ ^-?[0-9]+$ ]]; then limit=0; fi
+
+	if [[ "${limit}" -lt 0 ]]; then
+		NETAPP_QUOTA_CACHE[$region]=0
+		return 0
+	fi
+
+	if [[ "${limit}" -eq 0 ]]; then
 		echo "INFO: NetApp quota limit (${quota_id}) for $region is explicitly 0. Skipping zone."
 		NETAPP_QUOTA_CACHE[$region]=1
 		return 1
@@ -374,12 +377,8 @@ check_netapp_quota() {
 
 	local usage
 	usage=$(gcloud netapp storage-pools list --location="-" --project="${PROJECT_ID}" --format="json" 2>/dev/null |
-		jq -r --arg region "$region" --arg level "$service_level" '[.[]? | select((.name | split("/")[3]) as $loc | $loc == $region or ($loc | startswith($region + "-"))) | select(if ($level == "PREMIUM" or $level == "EXTREME") then (.serviceLevel == "PREMIUM" or .serviceLevel == "EXTREME") else .serviceLevel == $level end) | .capacityGib | select(. != null) | tonumber] | add // 0' 2>/dev/null)
+		jq -r --arg region "$region" --arg level "$service_level" '([.[]? | select((.name? // "" | split("/")[3]? // "") as $loc | ($loc | length > 0) and ($loc == $region or ($loc | startswith($region + "-")))) | ((.serviceLevel? // "") | ascii_upcase) as $sl | select(if ($level == "PREMIUM" or $level == "EXTREME") then ($sl == "PREMIUM" or $sl == "EXTREME") else $sl == $level end) | .capacityGib | select(. != null) | tonumber] | add // 0) | floor' 2>/dev/null)
 
-	if ! limit=$(printf "%.0f" "${limit}" 2>/dev/null); then limit=0; fi
-	if ! usage=$(printf "%.0f" "${usage}" 2>/dev/null); then usage=0; fi
-
-	if [[ ! "${limit}" =~ ^[0-9]+$ ]]; then limit=0; fi
 	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
 
 	local remaining=$((limit - usage))
