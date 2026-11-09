@@ -45,7 +45,7 @@ locals {
   instance_ip_address      = local.create_instance ? google_sql_database_instance.instance[0].private_ip_address : data.google_sql_database_instance.existing[0].private_ip_address
   server_ip                = var.use_psc_connection ? google_compute_address.psc[0].address : local.instance_ip_address
 
-  password_secret_accessors = toset(concat(var.password_secret_accessors, var.service_account_iam_email))
+  password_secret_accessors = var.create_password_user ? toset(concat(var.password_secret_accessors, var.service_account_iam_email)) : toset([])
 }
 
 resource "random_id" "resource_name_suffix" {
@@ -57,6 +57,8 @@ resource "random_id" "resource_name_suffix" {
 # Never stored in state or plan. Only the first value reaches the secret, and
 # the user is set from the secret, so the two cannot diverge.
 ephemeral "random_password" "password" {
+  count = var.create_password_user ? 1 : 0
+
   length  = 24
   special = false
 }
@@ -110,7 +112,7 @@ resource "google_sql_database_instance" "instance" {
     }
 
     dynamic "database_flags" {
-      for_each = var.database_flags
+      for_each = merge(var.database_flags, length(var.iam_service_accounts) > 0 ? { "cloudsql.iam_authentication" = "on" } : {})
       content {
         name  = database_flags.key
         value = database_flags.value
@@ -228,13 +230,15 @@ resource "google_sql_database" "database" {
 # password_wo_version follows the secret version's creation time, so the user
 # is updated whenever the version is replaced (a rotation or a new secret).
 resource "google_sql_user" "users" {
+  count = var.create_password_user ? 1 : 0
+
   project         = var.project_id
   name            = var.sql_username
   instance        = local.effective_instance_name
   deletion_policy = local.user_deletion_policy
 
-  password_wo         = ephemeral.google_secret_manager_secret_version.password.secret_data
-  password_wo_version = parseint(formatdate("YYYYMMDDhhmmss", google_secret_manager_secret_version.password.create_time), 10)
+  password_wo         = ephemeral.google_secret_manager_secret_version.password[0].secret_data
+  password_wo_version = parseint(formatdate("YYYYMMDDhhmmss", google_secret_manager_secret_version.password[0].create_time), 10)
 
   lifecycle {
     precondition {
@@ -244,7 +248,31 @@ resource "google_sql_user" "users" {
   }
 }
 
+# IAM database users log in with an OAuth access token, so they have no
+# password or secret. For PostgreSQL the user name is the email without
+# ".gserviceaccount.com". Emails are for_each keys, so they must be known at
+# plan time.
+resource "google_sql_user" "iam_service_accounts" {
+  for_each = toset(var.iam_service_accounts)
+
+  project         = var.project_id
+  name            = trimsuffix(each.value, ".gserviceaccount.com")
+  instance        = local.effective_instance_name
+  type            = "CLOUD_IAM_SERVICE_ACCOUNT"
+  database_roles  = var.iam_database_roles
+  deletion_policy = local.user_deletion_policy
+
+  lifecycle {
+    precondition {
+      condition     = startswith(local.database_engine, "POSTGRES")
+      error_message = "iam_service_accounts is supported only for PostgreSQL instances; this instance runs ${local.database_engine}."
+    }
+  }
+}
+
 resource "google_secret_manager_secret" "password" {
+  count = var.create_password_user ? 1 : 0
+
   project   = var.project_id
   secret_id = "${local.effective_instance_name}-${var.sql_username}-password"
   labels    = local.labels
@@ -279,16 +307,20 @@ resource "google_secret_manager_secret" "password" {
 # DISABLE keeps a replaced version, so an apply that fails between removing it
 # and creating its successor can be recovered by re-enabling it.
 resource "google_secret_manager_secret_version" "password" {
-  secret                 = google_secret_manager_secret.password.id
-  secret_data_wo         = var.sql_password != null ? var.sql_password : ephemeral.random_password.password.result
+  count = var.create_password_user ? 1 : 0
+
+  secret                 = google_secret_manager_secret.password[0].id
+  secret_data_wo         = var.sql_password != null ? var.sql_password : ephemeral.random_password.password[0].result
   secret_data_wo_version = var.password_version
   deletion_policy        = "DISABLE"
 }
 
 # Read on every plan and apply; see the README on unreadable secret versions.
 ephemeral "google_secret_manager_secret_version" "password" {
-  secret  = google_secret_manager_secret_version.password.secret
-  version = google_secret_manager_secret_version.password.version
+  count = var.create_password_user ? 1 : 0
+
+  secret  = google_secret_manager_secret_version.password[0].secret
+  version = google_secret_manager_secret_version.password[0].version
 }
 
 # Deletion protection is checked only when the instance itself is deleted,
@@ -302,6 +334,7 @@ resource "terraform_data" "destroy_guard" {
   depends_on = [
     google_sql_database.database,
     google_sql_user.users,
+    google_sql_user.iam_service_accounts,
     google_secret_manager_secret_iam_member.password_accessor,
     google_compute_forwarding_rule.psc_consumer,
   ]
@@ -312,11 +345,23 @@ resource "terraform_data" "destroy_guard" {
   }
 }
 
-# Members are for_each keys, so they must be known at plan time.
+# Members are for_each keys, so they must be known at plan time. The set is
+# empty when create_password_user is false, because there is no secret.
 resource "google_secret_manager_secret_iam_member" "password_accessor" {
   for_each = local.password_secret_accessors
 
-  secret_id = google_secret_manager_secret.password.id
+  secret_id = google_secret_manager_secret.password[0].id
   role      = "roles/secretmanager.secretAccessor"
   member    = each.value
+}
+
+# Clients verify the server against these CA certificates. Both the current
+# certificate and any upcoming one from a rotation are listed.
+data "google_sql_ca_certs" "instance" {
+  project  = var.project_id
+  instance = local.effective_instance_name
+
+  # The name is known before the instance exists, so wait for the instance;
+  # otherwise the first plan reads certificates of an instance not yet created.
+  depends_on = [google_sql_database_instance.instance]
 }

@@ -18,8 +18,10 @@ the same deployment name.
 `kms-key-iam` through `use`.
 
 **cloudsql-postgres.yaml**: The `cloudsql` module running PostgreSQL with
-`database_flags` and `query_insights`, plus a second module adopting an
-existing instance through `existing_instance_name`.
+`database_flags`, `query_insights` and an IAM database user for a
+`service-account` module's account (`iam_service_accounts` and
+`iam_database_roles`), plus a second module adopting an existing instance
+through `existing_instance_name`.
 
 **cloudsql-psc.yaml**: The `cloudsql` module over Private Service Connect,
 with the production settings: backups (start time, retention, final backup),

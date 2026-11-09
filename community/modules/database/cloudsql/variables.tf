@@ -228,6 +228,60 @@ variable "sql_username" {
   }
 }
 
+variable "iam_service_accounts" {
+  description = <<-EOT
+    Service account emails to add as IAM database users
+    (CLOUD_IAM_SERVICE_ACCOUNT), which log in with an OAuth access token
+    instead of a password. PostgreSQL only. When set, the module turns on the
+    cloudsql.iam_authentication flag on a created instance; an adopted
+    instance must already have it. The module grants no project IAM: each
+    account also needs roles/cloudsql.instanceUser. Values must be known at
+    plan time, such as literal strings or the `service_account_email` output
+    of `modules/project/service-account`.
+    EOT
+  type        = list(string)
+  default     = []
+  nullable    = false
+  validation {
+    condition     = alltrue([for email in var.iam_service_accounts : can(regex("^[a-z0-9][-a-z0-9_.]*@[a-z0-9][-a-z0-9.]*\\.gserviceaccount\\.com$", email))])
+    error_message = "Each iam_service_accounts entry must be a service account email ending in .gserviceaccount.com, such as app@my-project.iam.gserviceaccount.com."
+  }
+  validation {
+    condition     = length(distinct(var.iam_service_accounts)) == length(var.iam_service_accounts)
+    error_message = "iam_service_accounts must not list the same service account more than once."
+  }
+}
+
+variable "iam_database_roles" {
+  description = <<-EOT
+    Database roles granted to every account in iam_service_accounts, for
+    example ["cloudsqlsuperuser"]. A new IAM user has no privileges until it
+    is granted some. The list replaces the users' existing roles. The Cloud
+    SQL API does not return the roles, so Terraform does not detect drift on
+    them.
+    EOT
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
+variable "create_password_user" {
+  description = <<-EOT
+    Whether to create the built-in password user (sql_username) and the
+    Secret Manager secret holding its password. Set false when all logins use
+    IAM database authentication; iam_service_accounts must then list at least
+    one account, and the username, password_secret_id and
+    password_secret_version outputs are null.
+    EOT
+  type        = bool
+  default     = true
+  nullable    = false
+  validation {
+    condition     = var.create_password_user || length(var.iam_service_accounts) > 0
+    error_message = "create_password_user = false leaves the database with no login: list at least one service account in iam_service_accounts, or set create_password_user to true."
+  }
+}
+
 variable "sql_password" {
   description = <<-EOT
     Password for the SQL database. If not supplied, a random password is
@@ -424,7 +478,8 @@ variable "user_deletion_policy" {
     would otherwise fail, and while the created instance has
     deletion_protection or api_deletion_protection on; otherwise the
     provider default (drop the user). Set to ABANDON to always leave the user
-    in place on destroy.
+    in place on destroy. Also applies to the IAM users in
+    iam_service_accounts, including one removed from that list.
     EOT
   type        = string
   default     = null

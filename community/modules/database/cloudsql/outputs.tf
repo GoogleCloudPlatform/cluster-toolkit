@@ -46,13 +46,13 @@ output "database_name" {
 }
 
 output "username" {
-  description = "The username of the database user."
-  value       = google_sql_user.users.name
+  description = "The username of the password database user, or null when create_password_user is false."
+  value       = one(google_sql_user.users[*].name)
 }
 
 output "password_secret_id" {
-  description = "The Secret Manager secret ID holding the database password."
-  value       = google_secret_manager_secret.password.secret_id
+  description = "The Secret Manager secret ID holding the database password, or null when create_password_user is false."
+  value       = one(google_secret_manager_secret.password[*].secret_id)
 
   depends_on = [
     google_secret_manager_secret_version.password,
@@ -61,11 +61,26 @@ output "password_secret_id" {
 }
 
 output "password_secret_version" {
-  description = "The Secret Manager secret version resource name holding the database password."
-  value       = google_secret_manager_secret_version.password.name
+  description = "The Secret Manager secret version resource name holding the database password, or null when create_password_user is false."
+  value       = one(google_secret_manager_secret_version.password[*].name)
 
   depends_on = [
     google_secret_manager_secret_version.password,
     google_secret_manager_secret_iam_member.password_accessor,
   ]
+}
+
+output "iam_usernames" {
+  description = "Map from each email in iam_service_accounts to its IAM database username, the name to log in with."
+  value       = { for email, user in google_sql_user.iam_service_accounts : email => user.name }
+}
+
+output "server_ca_certs" {
+  description = <<-EOT
+    PEM bundle of the instance's server CA certificates, current and upcoming.
+    Clients use it as sslrootcert (or the equivalent CA file) to connect with
+    verify-ca. It changes when the server CA is rotated, so clients should
+    read it again after a rotation.
+    EOT
+  value       = join("", [for cert in data.google_sql_ca_certs.instance.certs : cert.cert])
 }

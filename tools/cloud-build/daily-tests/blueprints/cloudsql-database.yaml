@@ -20,7 +20,8 @@ blueprint_name: cloudsql-database-test
 # instance over Private Service Access, a second module adopting it, and a
 # PostgreSQL instance over Private Service Connect. Each generated password is
 # delivered only through Secret Manager, and a small client VM reads them with
-# its own service account. See
+# its own service account. The client VM's service account is also an IAM
+# database user on the PostgreSQL instance and logs in with a token. See
 # tools/cloud-build/daily-tests/tests/cloudsql-database.yml.
 
 vars:
@@ -59,6 +60,8 @@ deployment_groups:
       # Lets the client VM read its startup-script bucket, which vm-instance
       # creates without granting the VM any access to it.
       - storage.objectViewer
+      # Lets the client VM log in to pg as an IAM database user.
+      - cloudsql.instanceUser
 
   # The name must be known at plan time for sql_adopt to adopt this instance
   # in the same apply. Cloud SQL reserves a deleted instance's name for up to
@@ -109,6 +112,7 @@ deployment_groups:
     - username
     - password_secret_id
     - private_ip_address
+    - iam_usernames
     settings:
       database_name: pgappdb
       database_version: POSTGRES_15
@@ -119,6 +123,8 @@ deployment_groups:
       retain_backups_on_delete: false
       password_secret_accessors:
       - $(client_sa.service_account_iam_email)
+      iam_service_accounts:
+      - $(client_sa.service_account_email)
 
   - id: client
     source: modules/compute/vm-instance

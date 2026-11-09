@@ -46,6 +46,7 @@
     pg_username: "{{ outputs['username_pg']['value'] }}"
     pg_secret_id: "{{ outputs['password_secret_id_pg']['value'] }}"
     pg_ip: "{{ outputs['private_ip_address_pg']['value'] }}"
+    pg_iam_usernames: "{{ outputs['iam_usernames_pg']['value'] }}"
 
 - name: Describe the Cloud SQL instance
   delegate_to: localhost
@@ -208,6 +209,104 @@
   no_log: true
   changed_when: false
   failed_when: pg_plaintext_login.rc == 0 or 'no encryption' not in pg_plaintext_login.stderr
+
+- name: Assert the module reports one IAM database user for pg
+  ansible.builtin.assert:
+    that:
+    - pg_iam_usernames | length == 1
+    - (pg_iam_usernames.values() | first) == ((pg_iam_usernames.keys() | first) | regex_replace('\\.gserviceaccount\\.com$', ''))
+    fail_msg: "Unexpected iam_usernames output for pg: {{ pg_iam_usernames }}"
+
+- name: Record the IAM database username
+  ansible.builtin.set_fact:
+    pg_iam_username: "{{ pg_iam_usernames.values() | first }}"
+
+- name: List the PostgreSQL instance's users
+  delegate_to: localhost
+  ansible.builtin.command: >-
+    gcloud sql users list --instance={{ pg_instance }}
+    --project {{ project }}
+    --format=json(name,type)
+  register: pg_users
+  changed_when: false
+
+- name: Assert the client VM's service account is an IAM database user
+  vars:
+    users: "{{ pg_users.stdout | from_json }}"
+  ansible.builtin.assert:
+    that:
+    - users | selectattr('name', 'equalto', pg_iam_username) | map(attribute='type', default='') | list == ['CLOUD_IAM_SERVICE_ACCOUNT']
+    fail_msg: "{{ pg_iam_username }} is not a CLOUD_IAM_SERVICE_ACCOUNT user on {{ pg_instance }}: {{ users }}"
+
+- name: Read the database flags of both created instances
+  delegate_to: localhost
+  ansible.builtin.command: >-
+    gcloud sql instances describe {{ item }}
+    --project {{ project }}
+    --format=json(settings.databaseFlags)
+  loop:
+  - "{{ pg_instance }}"
+  - "{{ sql_instance }}"
+  register: instance_flags
+  changed_when: false
+
+- name: Assert IAM authentication is on for pg only
+  vars:
+    pg_flags: "{{ (instance_flags.results[0].stdout | from_json).get('settings', {}).get('databaseFlags', []) }}"
+    mysql_flags: "{{ (instance_flags.results[1].stdout | from_json).get('settings', {}).get('databaseFlags', []) }}"
+  ansible.builtin.assert:
+    that:
+    - pg_flags | selectattr('name', 'equalto', 'cloudsql.iam_authentication') | map(attribute='value') | list == ['on']
+    - mysql_flags | selectattr('name', 'in', ['cloudsql.iam_authentication', 'cloudsql_iam_authentication']) | list | length == 0
+    fail_msg: "Unexpected IAM authentication flags: pg {{ pg_flags }}, MySQL {{ mysql_flags }}"
+
+# The token is the password for an IAM database login. It comes from the VM's
+# metadata server, so it belongs to the VM's own service account.
+- name: Fetch an access token for the VM's service account
+  ansible.builtin.uri:
+    url: http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+    headers:
+      Metadata-Flavor: Google
+    return_content: true
+  register: vm_token
+  no_log: true
+
+# roles/cloudsql.instanceUser was granted in the same apply, and IAM changes
+# can take a few minutes to propagate.
+- name: Log in to PostgreSQL over TLS as the IAM database user
+  ansible.builtin.command: >-
+    psql "host={{ pg_ip }} dbname=pgappdb user={{ pg_iam_username }} sslmode=require connect_timeout=10"
+    -tAc 'SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()'
+  environment:
+    PGPASSWORD: "{{ vm_token.json.access_token }}"
+  register: pg_iam_login
+  no_log: true
+  changed_when: false
+  failed_when: false
+  retries: 30
+  delay: 10
+  until: pg_iam_login.rc == 0 and (pg_iam_login.stdout | trim) == 't'
+
+- name: Show why the IAM database login failed
+  ansible.builtin.debug:
+    var: pg_iam_login.stderr
+  when: pg_iam_login.rc != 0 or (pg_iam_login.stdout | trim) != 't'
+
+- name: Fail if the IAM database login failed
+  ansible.builtin.fail:
+    msg: The client VM could not log in to {{ pg_instance }} over TLS as {{ pg_iam_username }} with its own token
+  when: pg_iam_login.rc != 0 or (pg_iam_login.stdout | trim) != 't'
+
+- name: Assert an unencrypted IAM database login is refused
+  ansible.builtin.command: >-
+    psql "host={{ pg_ip }} dbname=pgappdb user={{ pg_iam_username }} sslmode=disable connect_timeout=10"
+    -tAc 'SELECT 1'
+  environment:
+    PGPASSWORD: "{{ vm_token.json.access_token }}"
+  register: pg_iam_plaintext_login
+  no_log: true
+  changed_when: false
+  failed_when: pg_iam_plaintext_login.rc == 0 or 'no encryption' not in pg_iam_plaintext_login.stderr
 
 - name: Pull the Terraform state
   delegate_to: localhost

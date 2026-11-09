@@ -36,6 +36,14 @@ deployment_groups:
       # the connection; the peering is removed with the network.
       deletion_policy: ABANDON
 
+  # Logs in to the database as an IAM user, without a password.
+  - id: app_sa
+    source: modules/project/service-account
+    settings:
+      name: app
+      project_roles:
+      - cloudsql.instanceUser
+
   - id: sql
     source: community/modules/database/cloudsql
     use: [network1, ps_connect]
@@ -49,6 +57,12 @@ deployment_groups:
       database_version: POSTGRES_15
       database_flags:
         log_min_duration_statement: "1000"
+      # Also sets the cloudsql.iam_authentication flag, merged with the
+      # database_flags above.
+      iam_service_accounts:
+      - $(app_sa.service_account_email)
+      iam_database_roles:
+      - cloudsqlsuperuser
       query_insights:
         enabled: true
 

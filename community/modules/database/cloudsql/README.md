@@ -155,6 +155,59 @@ Restore the access, or run
 cannot be restored, increase `password_version`: the plan then replaces the
 version instead of reading it.
 
+### IAM database authentication
+
+Set `iam_service_accounts` to let service accounts log in without a password.
+Supported for PostgreSQL only; Terraform refuses it on a MySQL instance.
+
+```yaml
+- id: sql
+  source: community/modules/database/cloudsql
+  use: [network, private_service_access]
+  settings:
+    database_name: appdb
+    database_version: POSTGRES_17
+    tier: db-f1-micro
+    iam_service_accounts:
+    - $(app_sa.service_account_email)
+    iam_database_roles: [cloudsqlsuperuser]
+```
+
+- **Users.** The module adds each account as a `CLOUD_IAM_SERVICE_ACCOUNT`
+  user named after its email without `.gserviceaccount.com`, for example
+  `app@my-project.iam`. The `iam_usernames` output maps each email to that
+  name. The built-in password user and its secret are still created.
+- **Flag.** On a created instance the module sets the
+  `cloudsql.iam_authentication` flag to `on`, alongside any `database_flags`.
+  It cannot set flags on an adopted instance (`existing_instance_name`), which
+  must already have the flag.
+- **Logging in.** The client uses the database username and an OAuth 2.0
+  access token for the service account as the password, and must connect over
+  TLS (for example `psql "sslmode=require"`). Cloud SQL refuses IAM logins
+  without encryption. Tokens expire after an hour, so fetch a fresh one for
+  each new connection, for example from the VM metadata server or with
+  `gcloud auth print-access-token`.
+- **Permissions.** The module grants no project IAM. Each account needs
+  `roles/cloudsql.instanceUser` (for example through `project_roles` of
+  `modules/project/service-account`), and the token must carry the
+  `https://www.googleapis.com/auth/sqlservice.login` or `cloud-platform`
+  scope; a VM's scopes limit the tokens its metadata server issues.
+- **Database roles.** A new IAM user has no privileges in the database, not
+  even to create tables in the `public` schema on PostgreSQL 15 and later.
+  `iam_database_roles` grants roles to every account in the list. For example,
+  `cloudsqlsuperuser` gives the same access as the module's built-in user,
+  which an application that runs its own schema migrations may need. The list
+  replaces the users' existing roles. The Cloud SQL API does not return the
+  roles, so Terraform does not detect drift on them.
+- **Removing users.** `user_deletion_policy` can only be null or `ABANDON`,
+  and resolves to `ABANDON` for PostgreSQL, so IAM users, like the built-in
+  user, are always abandoned: destroying the module, or removing an email from
+  `iam_service_accounts`, leaves that database user in Cloud SQL. Changing the
+  list between empty and non-empty also turns the
+  `cloudsql.iam_authentication` flag on the instance on or off.
+
+Support for MySQL IAM users is a possible follow-up.
+
 ### Customer-managed encryption keys
 
 Set `encryption_key_name` to encrypt the instance, and `kms_key_name` in
@@ -187,9 +240,12 @@ The daily integration test
 deploys a MySQL instance over Private Service Access, a second module
 adopting it, and a PostgreSQL instance over Private Service Connect. A client
 VM reads each secret with its own service account and logs in over TLS. The
-test also checks that unencrypted and root logins are refused and that no
-password is in Terraform state, then rotates the MySQL password by
-re-applying with a higher `password_version`.
+same service account is an IAM database user on the PostgreSQL instance: the
+test checks the user and the `cloudsql.iam_authentication` flag, and logs in
+with a token from the VM's metadata server. The test also checks that
+unencrypted (including IAM) and root logins are refused and that no password
+is in Terraform state, then rotates the MySQL password by re-applying with a
+higher `password_version`.
 
 ## License
 
@@ -213,14 +269,14 @@ limitations under the License.
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.13.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.18.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | >= 3.7.1, < 4.0.0 |
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | >= 7.13.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 7.18.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | >= 3.7.1, < 4.0.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
@@ -239,9 +295,11 @@ No modules.
 | [google_secret_manager_secret_version.password](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |
 | [google_sql_database.database](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_database) | resource |
 | [google_sql_database_instance.instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_database_instance) | resource |
+| [google_sql_user.iam_service_accounts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_user) | resource |
 | [google_sql_user.users](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_user) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [terraform_data.destroy_guard](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+| [google_sql_ca_certs.instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/sql_ca_certs) | data source |
 | [google_sql_database_instance.existing](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/sql_database_instance) | data source |
 
 ## Inputs
@@ -251,6 +309,7 @@ No modules.
 | <a name="input_api_deletion_protection"></a> [api\_deletion\_protection](#input\_api\_deletion\_protection) | Also block deletion of the instance through the Cloud SQL API and console (deletion\_protection\_enabled). Set false, and apply, before destroying the instance. | `bool` | `true` | no |
 | <a name="input_availability_type"></a> [availability\_type](#input\_availability\_type) | ZONAL, or REGIONAL for a high-availability instance with a standby in another zone. Set null to use the Cloud SQL default (ZONAL). | `string` | `"ZONAL"` | no |
 | <a name="input_backup_start_time"></a> [backup\_start\_time](#input\_backup\_start\_time) | Start of the daily backup window, in UTC as HH:MM. Leave null for a time chosen by Cloud SQL. | `string` | `null` | no |
+| <a name="input_create_password_user"></a> [create\_password\_user](#input\_create\_password\_user) | Whether to create the built-in password user (sql\_username) and the<br/>Secret Manager secret holding its password. Set false when all logins use<br/>IAM database authentication; iam\_service\_accounts must then list at least<br/>one account, and the username, password\_secret\_id and<br/>password\_secret\_version outputs are null. | `bool` | `true` | no |
 | <a name="input_data_cache_enabled"></a> [data\_cache\_enabled](#input\_data\_cache\_enabled) | Whether data cache is enabled for the instance. Can be used with ENTERPRISE\_PLUS edition. | `bool` | `false` | no |
 | <a name="input_database_deletion_policy"></a> [database\_deletion\_policy](#input\_database\_deletion\_policy) | Deletion policy for the database. Leave null to use ABANDON when adopting<br/>an existing instance or while the created instance has deletion\_protection<br/>or api\_deletion\_protection on, so destroying this module leaves the<br/>database and its data in place, and the provider default (drop the<br/>database) otherwise. Set to ABANDON to always leave it. | `string` | `null` | no |
 | <a name="input_database_flags"></a> [database\_flags](#input\_database\_flags) | Database flags to set on instance. | `map(string)` | `{}` | no |
@@ -265,6 +324,8 @@ No modules.
 | <a name="input_encryption_key_name"></a> [encryption\_key\_name](#input\_encryption\_key\_name) | The full resource name of a Cloud KMS CryptoKey used to encrypt the<br/>Cloud SQL instance data (CMEK). The Cloud SQL service identity must<br/>hold roles/cloudkms.cryptoKeyEncrypterDecrypter on the key, and the<br/>key location must match the instance region. Encryption mode is<br/>fixed at instance creation and cannot be changed in place. | `string` | `null` | no |
 | <a name="input_existing_instance_name"></a> [existing\_instance\_name](#input\_existing\_instance\_name) | Name of an existing Cloud SQL instance to adopt instead of creating a new<br/>one. The instance must have a private IP address. To adopt an instance<br/>created by another cloudsql module in the same apply, set that module's<br/>sql\_instance\_name and pass its instance\_name output here; a literal name<br/>is read at plan time, before the instance exists, and fails. When set,<br/>the inputs that shape a new instance are ignored: api\_deletion\_protection,<br/>availability\_type, backup\_start\_time, data\_cache\_enabled, database\_flags,<br/>database\_version, deletion\_protection, disk\_autoresize, disk\_size\_gb,<br/>edition, enable\_backups, encryption\_key\_name,<br/>final\_backup\_retention\_days, maintenance\_window, network\_id,<br/>point\_in\_time\_recovery, private\_vpc\_connection\_peering,<br/>psc\_allowed\_consumer\_projects, query\_insights, retain\_backups\_on\_delete,<br/>retained\_backups, set\_root\_password, sql\_instance\_name, ssl\_mode and<br/>tier. | `string` | `null` | no |
 | <a name="input_final_backup_retention_days"></a> [final\_backup\_retention\_days](#input\_final\_backup\_retention\_days) | Take a final backup when the instance is deleted and keep it for this many days. Leave null for no final backup. | `number` | `null` | no |
+| <a name="input_iam_database_roles"></a> [iam\_database\_roles](#input\_iam\_database\_roles) | Database roles granted to every account in iam\_service\_accounts, for<br/>example ["cloudsqlsuperuser"]. A new IAM user has no privileges until it<br/>is granted some. The list replaces the users' existing roles. The Cloud<br/>SQL API does not return the roles, so Terraform does not detect drift on<br/>them. | `list(string)` | `[]` | no |
+| <a name="input_iam_service_accounts"></a> [iam\_service\_accounts](#input\_iam\_service\_accounts) | Service account emails to add as IAM database users<br/>(CLOUD\_IAM\_SERVICE\_ACCOUNT), which log in with an OAuth access token<br/>instead of a password. PostgreSQL only. When set, the module turns on the<br/>cloudsql.iam\_authentication flag on a created instance; an adopted<br/>instance must already have it. The module grants no project IAM: each<br/>account also needs roles/cloudsql.instanceUser. Values must be known at<br/>plan time, such as literal strings or the `service_account_email` output<br/>of `modules/project/service-account`. | `list(string)` | `[]` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_maintenance_window"></a> [maintenance\_window](#input\_maintenance\_window) | Maintenance window for the Cloud SQL instance: day 1 (Monday) to 7, hour 0 to 23 UTC, and update\_track canary, stable or week5. Leave null to accept Cloud SQL defaults. | <pre>object({<br/>    day          = number<br/>    hour         = number<br/>    update_track = optional(string)<br/>  })</pre> | `null` | no |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is going to be created in:<br/>`projects/<project_id>/global/networks/<network_name>`. Required unless<br/>use\_psc\_connection is true or existing\_instance\_name is set. | `string` | `null` | no |
@@ -287,7 +348,7 @@ No modules.
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Self link of the network where Cloud SQL instance PSC endpoint will be created | `string` | `null` | no |
 | <a name="input_tier"></a> [tier](#input\_tier) | The machine type to use for the SQL instance. Required unless existing\_instance\_name is set. | `string` | `null` | no |
 | <a name="input_use_psc_connection"></a> [use\_psc\_connection](#input\_use\_psc\_connection) | Create Private Service Connection instead of using Private Service Access peering | `bool` | `false` | no |
-| <a name="input_user_deletion_policy"></a> [user\_deletion\_policy](#input\_user\_deletion\_policy) | Deletion policy for the database user. Leave null to use ABANDON for<br/>PostgreSQL, where a user that owns objects cannot be dropped and destroy<br/>would otherwise fail, and while the created instance has<br/>deletion\_protection or api\_deletion\_protection on; otherwise the<br/>provider default (drop the user). Set to ABANDON to always leave the user<br/>in place on destroy. | `string` | `null` | no |
+| <a name="input_user_deletion_policy"></a> [user\_deletion\_policy](#input\_user\_deletion\_policy) | Deletion policy for the database user. Leave null to use ABANDON for<br/>PostgreSQL, where a user that owns objects cannot be dropped and destroy<br/>would otherwise fail, and while the created instance has<br/>deletion\_protection or api\_deletion\_protection on; otherwise the<br/>provider default (drop the user). Set to ABANDON to always leave the user<br/>in place on destroy. Also applies to the IAM users in<br/>iam\_service\_accounts, including one removed from that list. | `string` | `null` | no |
 | <a name="input_user_managed_replication"></a> [user\_managed\_replication](#input\_user\_managed\_replication) | Replication parameters that will be used for the generated password secret. | <pre>list(object({<br/>    location     = string<br/>    kms_key_name = optional(string)<br/>  }))</pre> | `[]` | no |
 
 ## Outputs
@@ -296,10 +357,12 @@ No modules.
 | ---- | ----------- |
 | <a name="output_connection_name"></a> [connection\_name](#output\_connection\_name) | The connection name of the Cloud SQL instance, used by the Cloud SQL Auth Proxy and BigQuery federation. |
 | <a name="output_database_name"></a> [database\_name](#output\_database\_name) | The name of the database created on the instance. |
+| <a name="output_iam_usernames"></a> [iam\_usernames](#output\_iam\_usernames) | Map from each email in iam\_service\_accounts to its IAM database username, the name to log in with. |
 | <a name="output_instance_name"></a> [instance\_name](#output\_instance\_name) | The name of the Cloud SQL instance, whether created or adopted. |
-| <a name="output_password_secret_id"></a> [password\_secret\_id](#output\_password\_secret\_id) | The Secret Manager secret ID holding the database password. |
-| <a name="output_password_secret_version"></a> [password\_secret\_version](#output\_password\_secret\_version) | The Secret Manager secret version resource name holding the database password. |
+| <a name="output_password_secret_id"></a> [password\_secret\_id](#output\_password\_secret\_id) | The Secret Manager secret ID holding the database password, or null when create\_password\_user is false. |
+| <a name="output_password_secret_version"></a> [password\_secret\_version](#output\_password\_secret\_version) | The Secret Manager secret version resource name holding the database password, or null when create\_password\_user is false. |
 | <a name="output_private_ip_address"></a> [private\_ip\_address](#output\_private\_ip\_address) | The private IP address of the Cloud SQL instance, or its PSC endpoint address when use\_psc\_connection is true. |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The URI of the Cloud SQL instance. |
-| <a name="output_username"></a> [username](#output\_username) | The username of the database user. |
+| <a name="output_server_ca_certs"></a> [server\_ca\_certs](#output\_server\_ca\_certs) | PEM bundle of the instance's server CA certificates, current and upcoming.<br/>Clients use it as sslrootcert (or the equivalent CA file) to connect with<br/>verify-ca. It changes when the server CA is rotated, so clients should<br/>read it again after a rotation. |
+| <a name="output_username"></a> [username](#output\_username) | The username of the password database user, or null when create\_password\_user is false. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
