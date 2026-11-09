@@ -19,6 +19,7 @@ Frontend views will talk with functions here to perform real actions.
 
 import logging
 from . import utils
+from . import image_startup
 import json
 import subprocess
 import os
@@ -112,14 +113,25 @@ class ImageBackend:
             runners = ""
             for script in scripts:
                 script_path = os.path.join(settings.MEDIA_ROOT, script.content.name)
-                runners+=f"""        
+                runners+=f"""
       - type: {script.type}
         destination: {script.name}
         source: {script_path}"""
+            if not runners:
+                # The startup-script module rejects null runners, so render
+                # an explicit empty list for a no-op builder script.
+                runners = " []"
 
             with blueprint_file.open("w") as f:
                 f.write(
                     f"""blueprint_name: {self.blueprint_name}
+
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: {utils.get_terraform_state_bucket()}
+    prefix: {utils.terraform_state_prefix("image", self.image.id)}
+
 vars:
   project_id: {project_id}
   deployment_name: {self.blueprint_name}
@@ -150,6 +162,7 @@ deployment_groups:
     source: modules/packer/custom-image
     kind: packer
     use:
+    - network1
     - scripts_for_image
     settings:
       source_image_project_id: [{self.image.source_image_project}]
@@ -158,7 +171,6 @@ deployment_groups:
       image_family: $(vars.image_family)
       state_timeout: 30m
       zone: $(vars.zone)
-      subnetwork_name: $(vars.subnetwork_name)
       image_storage_locations: ["{self.image.cloud_region}"]
       metadata:
         enable-oslogin: {self.image.enable_os_login}
@@ -168,6 +180,7 @@ deployment_groups:
         except Exception as e:
             self.update_image_status("e")
             logger.error(f"Error occurred while creating blueprint: {e}")
+            raise
 
     def _run_ghpc(self):
         target_dir = self.image_dir
@@ -182,7 +195,8 @@ deployment_groups:
             with log_out_fn.open("wb") as log_out:
                 with log_err_fn.open("wb") as log_err:
                     subprocess.run(
-                        [self.ghpc_path, "create", "image.yaml"],
+                        [self.ghpc_path, "create", "image.yaml", "-w",
+                         "--validation-level", "WARNING"],
                         cwd=target_dir,
                         stdout=log_out,
                         stderr=log_err,
@@ -195,6 +209,46 @@ deployment_groups:
             # No logs from stdout/err - get dumped to files
             raise
       
+    def _run_ghpc_import_inputs(self):
+        """Bridge builder-env outputs into the packer group.
+
+        Mirrors the deployment instructions ghpc generates for
+        cross-group `use`: export-outputs from the applied builder
+        group, then import-inputs into the packer group.
+        """
+        target_dir = self.image_dir
+        log_out_fn = target_dir / "ghpc_import_log.stdout"
+        log_err_fn = target_dir / "ghpc_import_log.stderr"
+        env = os.environ.copy()
+        env["GOOGLE_APPLICATION_CREDENTIALS"] = self._get_credentials_file()
+        try:
+            with log_out_fn.open("ab") as log_out:
+                with log_err_fn.open("ab") as log_err:
+                    subprocess.run(
+                        [self.ghpc_path, "export-outputs",
+                         f"{self.blueprint_name}/builder-env"],
+                        cwd=target_dir,
+                        stdout=log_out,
+                        stderr=log_err,
+                        check=True,
+                        env=env,
+                    )
+                    subprocess.run(
+                        [self.ghpc_path, "import-inputs",
+                         f"{self.blueprint_name}/packer-image"],
+                        cwd=target_dir,
+                        stdout=log_out,
+                        stderr=log_err,
+                        check=True,
+                        env=env,
+                    )
+        except subprocess.CalledProcessError as cpe:
+            self.update_image_status("e")
+            logger.error(
+                f"gcluster export/import bridge failed for image "
+                f"{self.image.id}", exc_info=cpe)
+            raise
+
     def _create_builder_env(self):
         """Setup builder environment on GCP."""
         extra_env = {
@@ -208,7 +262,7 @@ deployment_groups:
             except OSError as e:
                 self.update_image_status("e")
                 logger.error(f"Error occurred while constructing terraform_dir: {e}")
-            utils.run_terraform(terraform_dir, "init")
+            utils.run_terraform(terraform_dir, "init", extra_env=extra_env)
             utils.run_terraform(terraform_dir, "validate", extra_env=extra_env)
             logger.info("Invoking Terraform Plan for builder env.")
             utils.run_terraform(terraform_dir, "plan", extra_env=extra_env)
@@ -220,7 +274,18 @@ deployment_groups:
                                     "-raw",
                                     "startup_script_scripts_for_image"],
                                     )
-            utils.copy_file(f"{terraform_dir}/terraform_output_log.stdout",f"{packer_dir}/custom-image/startup_script.sh")
+            # Wrapped so that the build cannot hang on the Packer plugin's
+            # own completion report; see image_startup.py.
+            with open(f"{terraform_dir}/terraform_output_log.stdout", encoding="utf-8") as src:
+                startup_script = image_startup.wrap_startup_script(src.read())
+            with open(f"{packer_dir}/custom-image/startup_script.sh", "w", encoding="utf-8") as dst:
+                dst.write(startup_script)
+            # The packer module uses the builder VPC (ghpc create rejects
+            # unused modules), so its subnetwork input arrives through the
+            # toolkit's cross-group bridge. startup_script arrives that way
+            # too, but the explicit startup_script_file -var below overrides it.
+            logger.info("Importing packer group inputs from builder env.")
+            self._run_ghpc_import_inputs()
         except subprocess.CalledProcessError as cpe:
             self.update_image_status("e")
             logger.error(f"Terraform exec failed for builder env, image: {self.image.id}", exc_info=cpe)
