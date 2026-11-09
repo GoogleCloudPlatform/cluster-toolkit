@@ -2027,7 +2027,7 @@ blueprints:
   scheduler: slurm
   description: "This advanced blueprint creates a cluster with Slurm with several performance tunings enabled, along with tiered file systems for higher performance. Some of these features come with additional cost and required additional quotas."
   machine_types: [n2-standard-2, c2-standard-60, c2d-standard-112, c3-highcpu-176, a2-ultragpu-8g, a2-megagpu-16g, h3-standard-88]
-  required_services: [compute.googleapis.com, file.googleapis.com, iam.googleapis.com, lustre.googleapis.com, servicenetworking.googleapis.com, stackdriver.googleapis.com, storage.googleapis.com]
+  required_services: [cloudresourcemanager.googleapis.com, compute.googleapis.com, file.googleapis.com, iam.googleapis.com, lustre.googleapis.com, servicenetworking.googleapis.com, stackdriver.googleapis.com, storage.googleapis.com]
   vars:
     a2_8_node_count_dynamic_max: 16
     a2_16_node_count_dynamic_max: 16
@@ -2063,12 +2063,24 @@ blueprints:
   - id: controller_sa
     source: modules/project/service-account
     settings: [name, project_roles]
+  - id: controller_profile
+    source: community/modules/iam/service-account-profiles
+    use: [controller_sa]
+    settings: [act_as_service_accounts, enable_placement_policies, grant_baseline_roles, name, profile]
   - id: login_sa
     source: modules/project/service-account
     settings: [name, project_roles]
+  - id: login_profile
+    source: community/modules/iam/service-account-profiles
+    use: [login_sa]
+    settings: [grant_baseline_roles, name, profile]
   - id: compute_sa
     source: modules/project/service-account
     settings: [name, project_roles]
+  - id: compute_profile
+    source: community/modules/iam/service-account-profiles
+    use: [compute_sa]
+    settings: [grant_baseline_roles, name, profile]
   - id: homefs
     source: modules/file-system/filestore
     use: [network, private_service_access]
@@ -2083,7 +2095,7 @@ blueprints:
     settings: [local_mount, name, remote_mount, size_gib]
   - id: n2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network, compute_sa]
+    use: [network, compute_profile]
     settings: [allow_automatic_updates, instance_image, machine_type, node_count_dynamic_max]
   - id: n2_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -2091,7 +2103,7 @@ blueprints:
     settings: [exclusive, is_default, partition_conf, partition_name]
   - id: c2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network, compute_sa]
+    use: [network, compute_profile]
     settings: [allow_automatic_updates, bandwidth_tier, disk_size_gb, disk_type, instance_image, machine_type, node_count_dynamic_max]
   - id: c2_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -2099,7 +2111,7 @@ blueprints:
     settings: [exclusive, partition_name]
   - id: c2d_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network, compute_sa]
+    use: [network, compute_profile]
     settings: [allow_automatic_updates, bandwidth_tier, disk_size_gb, disk_type, instance_image, machine_type, node_count_dynamic_max]
   - id: c2d_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -2107,7 +2119,7 @@ blueprints:
     settings: [partition_name]
   - id: c3_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network, compute_sa]
+    use: [network, compute_profile]
     settings: [allow_automatic_updates, bandwidth_tier, disk_size_gb, disk_type, instance_image, machine_type, node_count_dynamic_max]
   - id: c3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -2115,7 +2127,7 @@ blueprints:
     settings: [partition_name]
   - id: a2_8_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network, compute_sa]
+    use: [network, compute_profile]
     settings: [allow_automatic_updates, bandwidth_tier, disk_size_gb, disk_type, instance_image, machine_type, node_conf, node_count_dynamic_max, zones]
   - id: a2_8_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -2123,7 +2135,7 @@ blueprints:
     settings: [partition_conf, partition_name]
   - id: a2_16_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network, compute_sa]
+    use: [network, compute_profile]
     settings: [allow_automatic_updates, bandwidth_tier, disk_size_gb, disk_type, instance_image, machine_type, node_conf, node_count_dynamic_max, zones]
   - id: a2_16_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -2131,7 +2143,7 @@ blueprints:
     settings: [partition_conf, partition_name]
   - id: h3_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network, compute_sa]
+    use: [network, compute_profile]
     settings: [allow_automatic_updates, bandwidth_tier, disk_size_gb, disk_type, instance_image, machine_type, node_count_dynamic_max]
   - id: h3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -2139,11 +2151,11 @@ blueprints:
     settings: [partition_name]
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network, login_sa]
+    use: [network, login_profile]
     settings: [enable_login_public_ips, instance_image, machine_type]
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [network, controller_sa, homefs, projectsfs, lustre-gcp, slurm_login, n2_partition, c2_partition, c2d_partition, c3_partition, a2_8_partition, a2_16_partition, h3_partition]
+    use: [network, controller_profile, homefs, projectsfs, lustre-gcp, slurm_login, n2_partition, c2_partition, c2d_partition, c3_partition, a2_8_partition, a2_16_partition, h3_partition]
     settings: [cloud_parameters, enable_controller_public_ips, instance_image]
   - id: hpc_dashboard
     source: modules/monitoring/dashboard
@@ -2308,7 +2320,7 @@ blueprints:
   scheduler: slurm
   description: "This blueprint uses the Packer template module to create a custom VM image and uses it to provision an HPC cluster using the Slurm scheduler. By using a custom image, the cluster is able to begin running jobs sooner and more reliably..."
   machine_types: [c2-standard-60]
-  required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
+  required_services: [cloudresourcemanager.googleapis.com, compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
     compute_machine_type: c2-standard-60
     compute_node_count_dynamic_max: 20
@@ -2325,14 +2337,42 @@ blueprints:
     source: modules/network/vpc
   - id: scripts_for_image
     source: modules/scripts/startup-script
-    settings: [runners]
+    settings: [bucket_viewers, runners]
+  - id: image_builder_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: image_builder_profile
+    source: community/modules/iam/service-account-profiles
+    use: [image_builder_sa]
+    settings: [name, profile]
   - id: custom-image
     source: modules/packer/custom-image
-    use: [network, scripts_for_image]
+    use: [network, scripts_for_image, image_builder_profile]
     settings: [disk_size, image_family, source_image_family, source_image_project_id, state_timeout]
+  - id: compute_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: compute_profile
+    source: community/modules/iam/service-account-profiles
+    use: [compute_sa]
+    settings: [name, profile]
+  - id: login_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: login_profile
+    source: community/modules/iam/service-account-profiles
+    use: [login_sa]
+    settings: [name, profile]
+  - id: controller_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: controller_profile
+    source: community/modules/iam/service-account-profiles
+    use: [controller_sa]
+    settings: [act_as_service_accounts, enable_placement_policies, name, profile]
   - id: compute_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+    use: [network, compute_profile]
     settings: [allow_automatic_updates, bandwidth_tier, disk_size_gb, instance_image, machine_type, node_count_dynamic_max]
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -2340,11 +2380,11 @@ blueprints:
     settings: [is_default, partition_name]
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
+    use: [network, login_profile]
     settings: [disk_size_gb, enable_login_public_ips, instance_image]
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [network, compute_partition, slurm_login]
+    use: [network, controller_profile, compute_partition, slurm_login]
     settings: [disk_size_gb, enable_controller_public_ips, instance_image]
 - path: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml
   deployment_path: examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml
@@ -5360,15 +5400,15 @@ blueprints:
   scheduler: slurm
   description: "Creates a highly available (HA) Slurm cluster. This setup includes a primary controller and a backup controller to ensure control plane resilience. If the primary controller instance fails, the Slurm services can be failed over to the..."
   machine_types: [n1-standard-2]
-  required_services: [bigqueryconnection.googleapis.com, compute.googleapis.com, file.googleapis.com, iam.googleapis.com, servicenetworking.googleapis.com, sqladmin.googleapis.com, storage.googleapis.com]
+  required_services: [bigqueryconnection.googleapis.com, cloudresourcemanager.googleapis.com, compute.googleapis.com, file.googleapis.com, iam.googleapis.com, servicenetworking.googleapis.com, sqladmin.googleapis.com, storage.googleapis.com]
   vars:
     compute_machine_type: n1-standard-2
     compute_node_count_dynamic_max: 4
     compute_node_count_static: 0
-    controller_fs_size_gb: 1024
+    controller_fs_size_gb: 2560
     controller_machine_type: n1-standard-2
     deployment_name: hpcslurmha
-    homefs_size_gb: 1024
+    homefs_size_gb: 2560
     login_machine_type: n1-standard-2
     login_num_instances: 1
     project_id: null
@@ -5378,12 +5418,24 @@ blueprints:
   - id: controller_sa
     source: modules/project/service-account
     settings: [deployment_name, description, display_name, name, project_id, project_roles]
+  - id: controller_profile
+    source: community/modules/iam/service-account-profiles
+    use: [controller_sa]
+    settings: [act_as_service_accounts, enable_placement_policies, grant_baseline_roles, name, profile, slurm_cluster_name]
   - id: login_sa
     source: modules/project/service-account
     settings: [deployment_name, description, display_name, name, project_id, project_roles]
+  - id: login_profile
+    source: community/modules/iam/service-account-profiles
+    use: [login_sa]
+    settings: [grant_baseline_roles, name, profile]
   - id: compute_sa
     source: modules/project/service-account
     settings: [deployment_name, description, display_name, name, project_id, project_roles]
+  - id: compute_profile
+    source: community/modules/iam/service-account-profiles
+    use: [compute_sa]
+    settings: [grant_baseline_roles, name, profile]
   - id: network
     source: modules/network/vpc
     settings: [network_name, subnetworks]
@@ -5567,6 +5619,73 @@ blueprints:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network, compute_partition, slurm_login]
     settings: [controller_startup_script, controller_startup_scripts_timeout, enable_controller_public_ips, login_startup_script, login_startup_scripts_timeout]
+- path: community/examples/hpc-slurm-service-account-profiles.yaml
+  blueprint_name: hpc-slurm-service-account-profiles
+  scheduler: slurm
+  description: "Creates a small Slurm cluster -- two debug partitions (debug and debug2) of n2-standard-2 nodes, each running under its own compute account, a login node, and a controller -- whose accounts are created with..."
+  machine_types: [n2-standard-2]
+  required_services: [cloudresourcemanager.googleapis.com, compute.googleapis.com, iam.googleapis.com, storage.googleapis.com]
+  vars:
+    controller_role_stage: GA
+    deployment_name: lpsa01
+    project_id: null
+    region: us-central1
+    zone: us-central1-a
+  modules:
+  - id: network
+    source: modules/network/vpc
+  - id: compute_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: compute_profile
+    source: community/modules/iam/service-account-profiles
+    use: [compute_sa]
+    settings: [name, profile]
+  - id: compute2_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: compute2_profile
+    source: community/modules/iam/service-account-profiles
+    use: [compute2_sa]
+    settings: [name, profile]
+  - id: login_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: login_profile
+    source: community/modules/iam/service-account-profiles
+    use: [login_sa]
+    settings: [name, profile]
+  - id: controller_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: controller_profile
+    source: community/modules/iam/service-account-profiles
+    use: [controller_sa]
+    settings: [act_as_service_accounts, custom_role_stage, enable_placement_policies, name, profile]
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, compute_profile]
+    settings: [allow_automatic_updates, machine_type, node_count_dynamic_max]
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [debug_nodeset]
+    settings: [exclusive, is_default, partition_name]
+  - id: debug2_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, compute2_profile]
+    settings: [allow_automatic_updates, machine_type, node_count_dynamic_max]
+  - id: debug2_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [debug2_nodeset]
+    settings: [exclusive, partition_name]
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network, login_profile]
+    settings: [enable_login_public_ips, machine_type]
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, controller_profile, debug_partition, debug2_partition, slurm_login]
+    settings: [enable_controller_public_ips]
 - path: community/examples/hpc-slurm-sharedvpc.yaml
   blueprint_name: hpc-slurm-legacy-sharedvpc
   scheduler: slurm
@@ -5806,7 +5925,7 @@ blueprints:
   blueprint_name: slurm6-tpu
   scheduler: slurm
   description: "Creates an auto-scaling Slurm cluster with TPU nodes."
-  required_services: [compute.googleapis.com, iam.googleapis.com, storage.googleapis.com]
+  required_services: [cloudresourcemanager.googleapis.com, compute.googleapis.com, iam.googleapis.com, storage.googleapis.com]
   vars:
     deployment_name: slurm6-tpu
     login_machine_type: n2-standard-4
@@ -5817,21 +5936,42 @@ blueprints:
   modules:
   - id: network
     source: modules/network/vpc
+  - id: controller_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: controller_profile
+    source: community/modules/iam/service-account-profiles
+    use: [controller_sa]
+    settings: [act_as_service_accounts, enable_placement_policies, enable_tpu, name, profile]
+  - id: login_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: login_profile
+    source: community/modules/iam/service-account-profiles
+    use: [login_sa]
+    settings: [name, profile]
+  - id: tpu_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: tpu_profile
+    source: community/modules/iam/service-account-profiles
+    use: [tpu_sa]
+    settings: [name, profile]
   - id: tpu_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     use: [network]
-    settings: [node_count_dynamic_max, node_type, preemptible, preserve_tpu, tf_version]
+    settings: [node_count_dynamic_max, node_type, preemptible, preserve_tpu, service_account_email, tf_version]
   - id: tpu_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [tpu_nodeset]
     settings: [partition_name, resume_timeout]
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
+    use: [network, login_profile]
     settings: [enable_login_public_ips, machine_type]
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [tpu_partition, slurm_login, network]
+    use: [tpu_partition, slurm_login, network, controller_profile]
     settings: [enable_controller_public_ips]
 - path: community/examples/htc-htcondor.yaml
   blueprint_name: htc-htcondor
@@ -6766,6 +6906,16 @@ module_wiring:
     recommended_use:
     - community/modules/database/bigquery-dataset
     - community/modules/pubsub/topic
+  community/modules/iam/service-account-profiles:
+    required_services: [cloudresourcemanager.googleapis.com, iam.googleapis.com]
+    required_inputs: [name, profile, service_account_email]
+    recommended_use:
+    - modules/project/service-account
+    consumed_by:
+    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    - community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    - modules/packer/custom-image
   community/modules/management/dependencies-installer:
     required_services: [container.googleapis.com]
     required_inputs: [cluster_id]
@@ -7351,9 +7501,8 @@ module_wiring:
     required_inputs: [name, project_roles]
     consumed_by:
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    - community/modules/iam/service-account-profiles
     - community/modules/project/aiplatform-predict-iam
-    - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    - community/modules/scheduler/schedmd-slurm-gcp-v6-login
     - modules/compute/gke-node-pool
     - modules/compute/vm-instance
     - modules/project/workload_identity_binding
