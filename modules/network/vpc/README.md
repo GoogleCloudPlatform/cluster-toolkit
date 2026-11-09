@@ -17,16 +17,16 @@ Toolkit][cft]. We recommend following the [documentation for the network
 module][cft-network] and [submodules][cft-network-submodules] for more details.
 In particular, the detailed structure of input variables can be found for:
 
-* [var.firewall\_rules](https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0/modules/firewall-rules#inputs)
-* [var.secondary\_ranges](https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0/modules/subnets#inputs)
+* [var.firewall\_rules](https://github.com/terraform-google-modules/terraform-google-network/tree/v18.3.0/modules/firewall-rules#inputs)
+* [var.secondary\_ranges](https://github.com/terraform-google-modules/terraform-google-network/tree/v18.3.0/modules/subnets#inputs)
 
 [vpc]: https://cloud.google.com/vpc
 [router]: https://github.com/terraform-google-modules/terraform-google-cloud-router
 [nat]: https://github.com/terraform-google-modules/terraform-google-cloud-nat
 [iap]: https://cloud.google.com/iap
 [cft]: https://cloud.google.com/foundation-toolkit
-[cft-network]: https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0
-[cft-network-submodules]: https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0/modules
+[cft-network]: https://github.com/terraform-google-modules/terraform-google-network/tree/v18.3.0
+[cft-network-submodules]: https://github.com/terraform-google-modules/terraform-google-network/tree/v18.3.0/modules
 
 Additionally, [Google Private Access][gpa] is enabled by default on the
 default primary subnetwork (when `var.subnetworks` is not overridden). When
@@ -116,7 +116,7 @@ compact set of subnetworks possible.
 > recalculated for each subnetwork. We advise appending new subnetworks to the end
 > of `var.subnetworks`.
 
-[cftsubnets]: https://github.com/terraform-google-modules/terraform-google-network/tree/v5.1.0/modules/subnets
+[cftsubnets]: https://github.com/terraform-google-modules/terraform-google-network/tree/v18.3.0/modules/subnets
 
 ### SSH Access
 

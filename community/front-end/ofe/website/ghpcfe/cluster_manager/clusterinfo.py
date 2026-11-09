@@ -130,18 +130,21 @@ class ClusterInfo:
         # pylint: disable-next=protected-access
         self.cluster._cmek_deployed = cmek.is_frozen(self.cluster)
         # Stored too, so a cluster deployed before the flag existed stays
-        # frozen when this start fails and leaves it "e"/"nm".
+        # frozen after the reset below, also when this start fails.
         cmek.record_deployed(self.cluster)
-        self.cluster.cloud_state = "nm"
+        # A Retry of a cluster whose earlier apply succeeded must not forget
+        # that its resources exist.
+        if self.cluster.cloud_state != "m":
+            self.cluster.cloud_state = "nm"
         self.cluster.status = "c"
         self.cluster.save()
 
-        self._create_cluster_dir()
-        self._set_credentials(credentials)
-
         try:
-            # Inside the try: a failure to generate the blueprint (for example
-            # its key) must mark the cluster failed like any later step.
+            # Inside the try: a failure to prepare the directory or generate
+            # the blueprint (for example its key) must mark the cluster
+            # failed like any later step.
+            self._create_cluster_dir()
+            self._set_credentials(credentials)
             self.update()
             self._run_ghpc()
             self._initialize_terraform()
@@ -154,19 +157,28 @@ class ClusterInfo:
             self.cluster.save()
 
         # Not a lot we can do if terraform fails, it's on the admin user to
-        # investigate and fix the errors shown in the log
+        # investigate and fix the errors shown in the log.
+        # cloud_state is left alone: it becomes "m" as soon as the apply
+        # succeeds, so a later failure keeps the cluster managed.
         except Exception as err:  # pylint: disable=broad-except
             self.cluster.status = "e"
-            self.cluster.cloud_state = "nm"
             self.cluster.status_message = f"Start failed: {err}"
             cmek.keep_flags_current(self.cluster)
             self.cluster.save()
             raise
 
     def reconfigure_cluster(self):
-        # The caller has already regenerated the blueprint through update(),
-        # which refuses a revoked key; checked again so nothing applies one.
-        cmek.assert_not_revoked(self.cluster)
+        try:
+            # Refused before the blueprint is regenerated, so nothing
+            # applies a revoked key (update() checks it too).
+            cmek.assert_not_revoked(self.cluster)
+            self.update()
+        except Exception as err:  # pylint: disable=broad-except
+            # Nothing was applied, so the cluster keeps its status and
+            # cloud_state; only say why the reconfigure did not happen.
+            self.cluster.status_message = f"Reconfigure failed: {err}"
+            self.cluster.save(update_fields=["status_message"])
+            raise
         try:
             self._run_ghpc()
             self._initialize_terraform()
@@ -178,10 +190,12 @@ class ClusterInfo:
             self.cluster.save()
 
         # Not a lot we can do if terraform fails, it's on the admin user to
-        # investigate and fix the errors shown in the log
-        except Exception:  # pylint: disable=broad-except
+        # investigate and fix the errors shown in the log.
+        # The cluster was running before this reconfigure and still exists,
+        # so it stays managed.
+        except Exception as err:  # pylint: disable=broad-except
             self.cluster.status = "e"
-            self.cluster.cloud_state = "nm"
+            self.cluster.status_message = f"Reconfigure failed: {err}"
             cmek.keep_flags_current(self.cluster)
             self.cluster.save()
             raise
@@ -465,6 +479,10 @@ class ClusterInfo:
                     cmek_refs, indent_level=2),
                 "controller_sa": "sa",
                 "startup_bucket": self.config["server"]["gcs_bucket"],
+                "state_bucket": utils.get_terraform_state_bucket(),
+                "state_prefix": utils.terraform_state_prefix(
+                    "cluster", self.cluster.id
+                ),
             }
             rendered_yaml = template.render(context)
 
@@ -532,7 +550,7 @@ class ClusterInfo:
         }
         try:
             logger.info("Invoking Terraform Init")
-            utils.run_terraform(terraform_dir, "init")
+            utils.run_terraform(terraform_dir, "init", extra_env=extra_env)
             utils.run_terraform(terraform_dir, "validate", extra_env=extra_env)
             logger.info("Invoking Terraform Plan")
             utils.run_terraform(terraform_dir, "plan", extra_env=extra_env)
@@ -798,90 +816,92 @@ class ClusterInfo:
             logger.info("Invoking Terraform Apply")
             utils.run_terraform(terraform_dir, "apply", extra_env=extra_env)
 
-            # Look for Management and Login Nodes in TF state file
-            tf_state_file = terraform_dir / "terraform.tfstate"
-            with tf_state_file.open("r") as statefp:
-                state = json.load(statefp)
+            # The apply succeeded, so the cluster's resources exist. Record
+            # that before anything below can fail (reading the state back,
+            # registry or node bookkeeping), so the cluster stays managed.
+            self.cluster.internal_name = self.cluster.name
+            self.cluster.cloud_state = "m"
+            cmek.keep_flags_current(self.cluster)
+            self.cluster.save()
 
-                # Extract and save Artifact Registry repository and secret information (if any)
-                self.extract_and_update_registry_info(state)
+            # Look for Management and Login Nodes in the Terraform state
+            state = utils.get_terraform_state(terraform_dir, extra_env)
 
-                # Apply Perms to the service accounts
-                try:
-                    service_accounts = self._get_service_accounts(state)
-                    self._apply_service_account_permissions(service_accounts)
-                except Exception as e:
-                    # Be nicer to the user and continue creating cluster
-                    logger.warning(f"An error occurred while applying permissions to service accounts: {e}")
+            # Extract and save Artifact Registry repository and secret information (if any)
+            self.extract_and_update_registry_info(state)
+
+            # Apply Perms to the service accounts
+            try:
+                service_accounts = self._get_service_accounts(state)
+                self._apply_service_account_permissions(service_accounts)
+            except Exception as e:
+                # Be nicer to the user and continue creating cluster
+                logger.warning(f"An error occurred while applying permissions to service accounts: {e}")
 
 
-                # Cluster is now being initialized
-                self.cluster.internal_name = self.cluster.name
-                self.cluster.cloud_state = "m"
+            # Cluster initialization is now running. Stamp the start time
+            # so a bootstrap that stalls (controller never reports ready)
+            # can be surfaced instead of spinning on "initialising".
+            self.cluster.status = "i"
+            self.cluster.initialization_started = timezone.now()
+            cmek.keep_flags_current(self.cluster)
+            self.cluster.save()
 
-                # Cluster initialization is now running. Stamp the start time
-                # so a bootstrap that stalls (controller never reports ready)
-                # can be surfaced instead of spinning on "initialising".
-                self.cluster.status = "i"
-                self.cluster.initialization_started = timezone.now()
-                cmek.keep_flags_current(self.cluster)
-                self.cluster.save()
-
-                # Filters for Management Nodes (Controller)
-                mgmt_filters = {
-                    "module": "module.slurm_controller",
-                    "type": "google_compute_instance_from_template",
-                    "name": "controller",
-                }
-                mgmt_nodes = self._create_model_instances_from_tf_state(
-                    state,
-                    mgmt_filters,
+            # Filters for Management Nodes (Controller)
+            mgmt_filters = {
+                "module": "module.slurm_controller",
+                "type": "google_compute_instance_from_template",
+                "name": "controller",
+            }
+            mgmt_nodes = self._create_model_instances_from_tf_state(
+                state,
+                mgmt_filters,
+            )
+            if len(mgmt_nodes) != 1:
+                logger.warning(
+                    "Found %d controller nodes, there should be only 1",
+                    len(mgmt_nodes),
                 )
-                if len(mgmt_nodes) != 1:
-                    logger.warning(
-                        "Found %d controller nodes, there should be only 1",
-                        len(mgmt_nodes),
-                    )
-                if len(mgmt_nodes):
-                    node = mgmt_nodes[0]
-                    node.save()
-                    self.cluster.controller_node = node
-                    logger.info(
-                        "Created cluster controller node with IP address %s",
-                        node.public_ip if node.public_ip else node.internal_ip,
-                    )
-
-                # Filters for Login Nodes
-                login_filters = {
-                    "module": 'module.slurm_controller.module.login["slurm-login"].module.instance',
-                    "type": "google_compute_instance_from_template",
-                    "name": "slurm_instance",
-                }
-                login_nodes = self._create_model_instances_from_tf_state(
-                    state,
-                    login_filters,
+            if len(mgmt_nodes):
+                node = mgmt_nodes[0]
+                node.save()
+                self.cluster.controller_node = node
+                logger.info(
+                    "Created cluster controller node with IP address %s",
+                    node.public_ip if node.public_ip else node.internal_ip,
                 )
-                if len(login_nodes) != self.cluster.num_login_nodes:
-                    logger.warning(
-                        "Found %d login nodes, expected %d from config",
-                        len(login_nodes),
-                        self.cluster.num_login_nodes,
-                    )
-                for lnode in login_nodes:
-                    lnode.cluster_login = self.cluster
-                    lnode.save()
-                    logger.info(
-                        "Created login node with IP address %s",
-                        lnode.public_ip
-                        if lnode.public_ip
-                        else lnode.internal_ip,
-                    )
 
-                # Set up Spack Install location
-                self._configure_spack_install_loc()
+            # Filters for Login Nodes
+            login_filters = {
+                "module": 'module.slurm_controller.module.login["slurm-login"].module.instance',
+                "type": "google_compute_instance_from_template",
+                "name": "slurm_instance",
+            }
+            login_nodes = self._create_model_instances_from_tf_state(
+                state,
+                login_filters,
+            )
+            if len(login_nodes) != self.cluster.num_login_nodes:
+                logger.warning(
+                    "Found %d login nodes, expected %d from config",
+                    len(login_nodes),
+                    self.cluster.num_login_nodes,
+                )
+            for lnode in login_nodes:
+                lnode.cluster_login = self.cluster
+                lnode.save()
+                logger.info(
+                    "Created login node with IP address %s",
+                    lnode.public_ip
+                    if lnode.public_ip
+                    else lnode.internal_ip,
+                )
 
-                cmek.keep_flags_current(self.cluster)
-                self.cluster.save()
+            # Set up Spack Install location
+            self._configure_spack_install_loc()
+
+            cmek.keep_flags_current(self.cluster)
+            self.cluster.save()
 
         except subprocess.CalledProcessError as err:
             # We can error during provisioning, in which case Terraform
@@ -898,6 +918,11 @@ class ClusterInfo:
         extra_env = {
             "GOOGLE_APPLICATION_CREDENTIALS": self._get_credentials_file()
         }
+        # Read before it is overwritten: a cluster that was applied (m, re)
+        # has resources even when ghpc create has since replaced its
+        # directory, which drops `.terraform` until the next init, so the
+        # directory alone cannot show it.
+        was_applied = self.cluster.cloud_state in ("m", "re")
         try:
             logger.info("Invoking Terraform destroy")
             self.cluster.status = "t"
@@ -911,11 +936,13 @@ class ClusterInfo:
             # removed anything. Destroy from the recorded state instead.
             arguments = ["-refresh=false"] if self.cluster.cmek_revoked else []
             try:
-                # A start that failed before `terraform init` (in ghpc
-                # create, or generating the blueprint) applied nothing, and a
-                # destroy in that directory would fail on every retry. Only
-                # the clean-up below is needed.
-                if utils.terraform_may_have_applied(terraform_dir):
+                # A start that failed before the apply created anything (in
+                # ghpc create, generating the blueprint, or init) leaves
+                # nothing to destroy, and a destroy in a directory never
+                # initialised would fail on every retry. Only the clean-up
+                # below is needed.
+                if was_applied or utils.terraform_may_have_applied(
+                        terraform_dir, extra_env):
                     utils.run_terraform(terraform_dir, "destroy",
                                         arguments=arguments,
                                         extra_env=extra_env)
@@ -990,9 +1017,16 @@ class ClusterInfo:
         "Error:" line terraform wrote says why. Terraform draws its
         diagnostics in a box ("╷", "│ Error: ...", "╵"), so the box
         characters are stripped before the line is matched.
+
+        A state lock error carries its own message, whose first line names
+        the locked state and why it is refused. The log is not read for it:
+        a stale lock is refused before Terraform runs, so the log there is
+        an earlier run's, or absent.
         """
         text = str(err)
-        if isinstance(err, subprocess.CalledProcessError):
+        if isinstance(err, utils.TerraformStateLockError):
+            text = err.message.splitlines()[0]
+        elif isinstance(err, subprocess.CalledProcessError):
             try:
                 log = terraform_dir / "terraform_destroy_log.stderr"
                 for line in log.read_text(errors="replace").splitlines():

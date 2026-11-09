@@ -154,6 +154,9 @@ class ClusterFlowsTests(SimpleTestCase):
             return run
 
         cases = (
+            # pulling the state back, between the save that marks the
+            # cluster managed and the one that marks it initialising
+            (self._start, clusterinfo.utils, "get_terraform_state", {}),
             # reading the nodes from the state, before the apply's last save
             (self._start, None, "_create_model_instances_from_tf_state", []),
             # the dashboard, before the start's own last save

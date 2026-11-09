@@ -25,6 +25,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
+	"hpc-toolkit/pkg/telemetry"
 	"os"
 	"os/exec"
 	"os/user"
@@ -190,7 +191,8 @@ func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.Yam
 		logging.Fatal("Failed to set the backend config at CLI: %v", err)
 	}
 
-	mergeDeploymentSettings(&bp, ds)
+	checkErr(mergeDeploymentSettings(&bp, ds), ctx)
+	setSubblockIO(cmd, &bp, path)
 
 	checkErr(setValidationLevel(&bp, expandFlags.validationLevel), ctx)
 	skipValidators(&bp)
@@ -216,11 +218,24 @@ func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.Yam
 	// Expand the blueprint
 	checkErr(bp.Expand(), ctx)
 	validateMaybeDie(bp, *ctx)
+	applyAgentEnvAttribution(cmd, &bp)
 
 	return bp, ctx
 }
 
+// applyAgentEnvAttribution persists ai_assisted: true into deployment artifacts
+// and telemetry for create/deploy when invoked inside a coding agent environment,
+// after blueprint expansion so shell environment variables do not mutate vars.labels.
+func applyAgentEnvAttribution(cmd *cobra.Command, bp *config.Blueprint) {
+	if cmd != nil && cmd.Name() != "expand" && telemetry.IsAgentEnv() {
+		bp.AIAssisted = true
+	}
+}
+
 func mergeDeploymentSettings(bp *config.Blueprint, ds config.DeploymentSettings) error {
+	if ds.AIAssisted {
+		bp.AIAssisted = true
+	}
 	for k, v := range ds.Vars.Items() {
 		bp.Vars = bp.Vars.With(k, v)
 	}

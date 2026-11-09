@@ -37,15 +37,36 @@ import tempfile
 from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
-from unittest import mock
+from unittest import addModuleCleanup, mock
 
 import yaml
 from django.test import SimpleTestCase
 
-from ..cluster_manager import cloud_info, cmek
+from ..cluster_manager import cloud_info, cmek, utils
 
 CREDENTIAL = SimpleNamespace(detail=json.dumps({"project_id": "proj-abcde"}))
 ENFORCEMENTS = ("disabled", "preferred", "required")
+STATE_BUCKET = "ofe-state"
+STATE_NAMESPACE = "20260101-0a1b2c3d"
+
+
+def setUpModule():  # pylint: disable=invalid-name
+    """Give the generators a state bucket and namespace without a database.
+
+    The blueprints name the Terraform state bucket and this database's state
+    namespace. These tests use stand-in rows and no database, and must not
+    depend on the server configuration the runner loaded.
+    """
+    patch_state_backend()
+
+
+def patch_state_backend():
+    """Patch the state bucket and namespace until the module's tests end."""
+    for name, value in (("get_terraform_state_bucket", STATE_BUCKET),
+                        ("get_state_namespace", STATE_NAMESPACE)):
+        patcher = mock.patch.object(utils, name, return_value=value)
+        patcher.start()
+        addModuleCleanup(patcher.stop)
 
 
 def _config(enforcement):
@@ -267,7 +288,6 @@ def _cluster_terraform(stack, info, apply_error=None):
     """Patch what _apply_terraform() reaches beyond its own bookkeeping."""
     from ..cluster_manager import clusterinfo
     tf_dir = Path(tempfile.mkdtemp())
-    (tf_dir / "terraform.tfstate").write_text("{}")
 
     def terraform(directory, command, **kwargs):
         if command == "apply" and apply_error:
@@ -277,6 +297,9 @@ def _cluster_terraform(stack, info, apply_error=None):
         clusterinfo.c2, "create_cluster_subscription"))
     stack.enter_context(mock.patch.object(
         clusterinfo.utils, "run_terraform", side_effect=terraform))
+    # the state the apply wrote, pulled back from the state bucket
+    stack.enter_context(mock.patch.object(
+        clusterinfo.utils, "get_terraform_state", return_value={}))
     stack.enter_context(mock.patch.object(
         clusterinfo.grafana, "create_cluster_dashboard",
         return_value={"url": ""}))
@@ -341,8 +364,9 @@ class AppliedIsSetWhenTheApplyStartsTests(SimpleTestCase):
                     with self.assertRaises(subprocess.CalledProcessError), \
                             self.assertLogs(level="ERROR"):
                         info.reconfigure_cluster()
+                # it was running and still exists, so it stays managed
                 self.assertEqual((cluster.status, cluster.cloud_state),
-                                 ("e", "nm"))
+                                 ("e", "m"))
                 self.assertIs(cluster.cmek_applied, True)
                 for enforcement in ENFORCEMENTS:
                     settings = cmek.CmekSettings.from_config(
@@ -443,8 +467,9 @@ class AppliedIsStoredBeforeAnythingElseCanFailTests(SimpleTestCase):
                     with self.assertRaises(RuntimeError):
                         info.start_cluster("{}")
                 cluster = info.cluster
+                # the apply succeeded, so its resources exist: still managed
                 self.assertEqual((cluster.status, cluster.cloud_state),
-                                 ("e", "nm"))
+                                 ("e", "m"))
                 self.assertIs(cluster.cmek_applied, True)
                 self.assertIn(["cmek_applied"], cluster.saves)
                 cluster._cmek_deployed = False
@@ -624,23 +649,27 @@ class LegacyDeployedResourcesStayFrozenTests(SimpleTestCase):
                         info.reconfigure_cluster()
                 cluster = info.cluster
                 self.assertEqual((cluster.status, cluster.cloud_state),
-                                 ("e", "nm"))
+                                 ("e", "m"))
                 self.assertFrozen(cluster, _generate_cluster, enabled)
 
     def test_a_failed_start(self):
-        for enabled in (True, False):
-            with self.subTest(enabled=enabled):
-                info = _cluster_info(_cluster(
-                    enabled=enabled, status="e", cloud_state="m"))
-                with ExitStack() as stack:
-                    _cluster_terraform(stack, info, APPLY_FAILED)
-                    with self.assertRaises(subprocess.CalledProcessError), \
-                            self.assertLogs(level="ERROR"):
-                        info.start_cluster("{}")
-                cluster = info.cluster
-                self.assertEqual((cluster.status, cluster.cloud_state),
-                                 ("e", "nm"))
-                self.assertFrozen(cluster, _generate_cluster, enabled)
+        # A managed cluster keeps "m"; any other deployed state is reset to
+        # "nm" when the start begins, and only the stored flag remains.
+        for cloud_state, after in (("m", "m"), ("re", "nm")):
+            for enabled in (True, False):
+                with self.subTest(cloud_state=cloud_state, enabled=enabled):
+                    info = _cluster_info(_cluster(
+                        enabled=enabled, status="e", cloud_state=cloud_state))
+                    with ExitStack() as stack:
+                        _cluster_terraform(stack, info, APPLY_FAILED)
+                        with self.assertRaises(
+                                subprocess.CalledProcessError), \
+                                self.assertLogs(level="ERROR"):
+                            info.start_cluster("{}")
+                    cluster = info.cluster
+                    self.assertEqual((cluster.status, cluster.cloud_state),
+                                     ("e", after))
+                    self.assertFrozen(cluster, _generate_cluster, enabled)
 
     def test_a_filestore_create_that_fails(self):
         from ..cluster_manager import filesystem
@@ -712,15 +741,20 @@ class RevokedIsRefusedTests(SimpleTestCase):
                 mock.patch.object(clusterinfo.ClusterInfo,
                                   "_prepare_ghpc_yaml") as generate, \
                 mock.patch.object(clusterinfo.ClusterInfo,
-                                  "reconfigure_cluster") as apply, \
+                                  "_run_ghpc") as run_ghpc, \
+                mock.patch.object(clusterinfo.ClusterInfo,
+                                  "_apply_terraform") as apply, \
                 self.assertRaises(cmek.CmekConfigError):
             v.BackendReconfigureCluster().cmd(None, None, cluster)
         generate.assert_not_called()
+        run_ghpc.assert_not_called()
         apply.assert_not_called()
         self.assertTrue(
             cluster.status_message.startswith("Reconfigure failed: "))
         self.assertRefused(cluster)
         self.assertEqual((cluster.status, cluster.cloud_state), ("r", "m"))
+        # only the reason is written
+        self.assertEqual(cluster.saves, [["status_message"]])
 
     def _update_form(self, revoked):
         from ..views import clusters as v
@@ -751,18 +785,21 @@ class RevokedIsRefusedTests(SimpleTestCase):
                          [("controller_disk_type", "Invalid Disk Type")])
 
     def test_cluster_reconfigure_itself(self):
-        # BackendReconfigureCluster refuses first; this is the second check
+        # refused before the blueprint is regenerated, whoever calls it
         info = _cluster_info(_cluster(status="r", cloud_state="m",
                                       cmek_revoked=True))
-        with mock.patch.object(info, "_run_ghpc") as run_ghpc, \
+        with mock.patch.object(info, "_prepare_ghpc_yaml") as generate, \
+                mock.patch.object(info, "_run_ghpc") as run_ghpc, \
                 mock.patch.object(info, "_apply_terraform") as apply, \
                 self.assertRaises(cmek.CmekConfigError):
             info.reconfigure_cluster()
+        generate.assert_not_called()
         run_ghpc.assert_not_called()
         apply.assert_not_called()
         self.assertEqual((info.cluster.status, info.cluster.cloud_state),
                          ("r", "m"))
-        self.assertEqual(info.cluster.saves, [])
+        self.assertRefused(info.cluster)
+        self.assertEqual(info.cluster.saves, [["status_message"]])
 
     def _edit_filestore(self, revoked):
         from ..views import gcpfilestore as v
@@ -1160,3 +1197,54 @@ class LoginNodeUsesOnlyTheKeyTests(SimpleTestCase):
     def test_an_unencrypted_cluster_with_a_filestore(self):
         login = self._login_block(enabled=False)
         self.assertNotIn("use", login)
+
+
+def _terraform_group_backends(blueprint):
+    """{group: (bucket, prefix)} of each Terraform group, as ghpc sets them.
+
+    As pkg/config/expand.go expandBackend: a group without a backend of its
+    own takes terraform_backend_defaults, explicit prefix included. Packer
+    groups are left out: only Terraform groups keep state.
+    """
+    defaults = blueprint["terraform_backend_defaults"]
+    backends = {}
+    for group in blueprint["deployment_groups"]:
+        if any(m.get("kind") == "packer" for m in group["modules"]):
+            continue
+        backend = group.get("terraform_backend") or defaults
+        assert backend["type"] == "gcs"
+        config = backend["configuration"]
+        backends[group["group"]] = (config["bucket"], config["prefix"])
+    return backends
+
+
+class ImageStateBackendTests(SimpleTestCase):
+    """Each Terraform group of an image blueprint keeps its own state.
+
+    The key group outlives builder-env, which a successful build destroys,
+    so the two must never share a state object.
+    """
+
+    PREFIX = f"{STATE_NAMESPACE}/images/image_7"
+
+    def _blueprint(self, enabled):
+        backend = _image_backend(_image(enabled=enabled))
+        with mock.patch.object(cmek, "ring_already_exists",
+                               return_value=True):
+            backend._create_blueprint()
+        return yaml.safe_load((backend.image_dir / "image.yaml").read_text())
+
+    def test_an_encrypted_image_has_one_state_per_group(self):
+        backends = _terraform_group_backends(self._blueprint(enabled=True))
+        self.assertEqual(backends, {
+            "image-cmek": (STATE_BUCKET, f"{self.PREFIX}/image-cmek"),
+            "builder-env": (STATE_BUCKET, self.PREFIX),
+        })
+
+    def test_an_unencrypted_image_keeps_the_default_backend(self):
+        blueprint = self._blueprint(enabled=False)
+        self.assertEqual(_terraform_group_backends(blueprint),
+                         {"builder-env": (STATE_BUCKET, self.PREFIX)})
+        self.assertEqual(
+            [g["group"] for g in blueprint["deployment_groups"]],
+            ["builder-env", "packer-image"])

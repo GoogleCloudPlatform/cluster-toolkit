@@ -20,6 +20,7 @@ Frontend views will talk with functions here to perform real actions.
 import logging
 from . import cmek
 from . import utils
+from . import image_startup
 import json
 import secrets
 import subprocess
@@ -216,9 +217,22 @@ class ImageBackend:
                 ) + "\n"
                 key_use = f"\n    - {cmek.KEY_IAM_MODULE_ID}"
 
+            state_bucket = utils.get_terraform_state_bucket()
+            state_prefix = utils.terraform_state_prefix("image", self.image.id)
             cmek_group = ""
             if key_modules:
-                cmek_group = f"- group: {CMEK_GROUP}\n  modules:\n{key_modules}"
+                # The Toolkit copies the prefix in terraform_backend_defaults
+                # to every Terraform group without a backend of its own, so
+                # the key group and builder-env would share one state object.
+                # The key group outlives builder-env, so it keeps its own.
+                cmek_group = (
+                    f"- group: {CMEK_GROUP}\n"
+                    "  terraform_backend:\n"
+                    "    type: gcs\n"
+                    "    configuration:\n"
+                    f"      bucket: {state_bucket}\n"
+                    f"      prefix: {state_prefix}/{CMEK_GROUP}\n"
+                    f"  modules:\n{key_modules}")
 
             scripts = self.image.startup_script.all()
             runners = ""
@@ -229,14 +243,20 @@ class ImageBackend:
         destination: {script.name}
         source: {script_path}"""
             if not runners:
-                # No startup scripts selected: the startup-script module
-                # rejects null runners, so render an explicit
-                # empty list for a no-op builder script.
+                # The startup-script module rejects null runners, so render
+                # an explicit empty list for a no-op builder script.
                 runners = " []"
 
             with blueprint_file.open("w") as f:
                 f.write(
                     f"""blueprint_name: {self.blueprint_name}
+
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: {state_bucket}
+    prefix: {state_prefix}
+
 vars:
   project_id: {project_id}
   deployment_name: {self.blueprint_name}
@@ -378,7 +398,7 @@ deployment_groups:
             except OSError as e:
                 self.update_image_status("e")
                 logger.error(f"Error occurred while constructing terraform_dir: {e}")
-            utils.run_terraform(terraform_dir, "init")
+            utils.run_terraform(terraform_dir, "init", extra_env=extra_env)
             utils.run_terraform(terraform_dir, "validate", extra_env=extra_env)
             logger.info("Invoking Terraform Plan for builder env.")
             utils.run_terraform(terraform_dir, "plan", extra_env=extra_env)
@@ -390,13 +410,16 @@ deployment_groups:
                                     "-raw",
                                     "startup_script_scripts_for_image"],
                                     )
-            utils.copy_file(f"{terraform_dir}/terraform_output_log.stdout",f"{packer_dir}/custom-image/startup_script.sh")
-            # The packer module consumes the builder VPC via `use`
-            # (ghpc create hard-errors on unused modules), so
-            # its subnetwork input arrives through the toolkit's own
-            # cross-group bridge. startup_script also flows through it,
-            # but the explicit startup_script_file -var below still
-            # overrides it, keeping the historical behavior.
+            # Wrapped so that the build cannot hang on the Packer plugin's
+            # own completion report; see image_startup.py.
+            with open(f"{terraform_dir}/terraform_output_log.stdout", encoding="utf-8") as src:
+                startup_script = image_startup.wrap_startup_script(src.read())
+            with open(f"{packer_dir}/custom-image/startup_script.sh", "w", encoding="utf-8") as dst:
+                dst.write(startup_script)
+            # The packer module uses the builder VPC (ghpc create rejects
+            # unused modules), so its subnetwork input arrives through the
+            # toolkit's cross-group bridge. startup_script arrives that way
+            # too, but the explicit startup_script_file -var below overrides it.
             logger.info("Importing packer group inputs from builder env.")
             self._run_ghpc_import_inputs()
         except subprocess.CalledProcessError as cpe:
@@ -462,7 +485,7 @@ deployment_groups:
         terraform_dir = self._cmek_terraform_dir()
         try:
             logger.info("Invoking Terraform Apply for the image key.")
-            utils.run_terraform(terraform_dir, "init")
+            utils.run_terraform(terraform_dir, "init", extra_env=extra_env)
             utils.run_terraform(terraform_dir, "validate", extra_env=extra_env)
             utils.run_terraform(terraform_dir, "apply", extra_env=extra_env)
         except subprocess.CalledProcessError as cpe:
@@ -483,10 +506,11 @@ deployment_groups:
         encrypted with this key, so destroying the grant (or, under DELETE, the
         key) any earlier would leave an image nothing can boot from.
         """
-        # also covers a build that never created the key group at all
-        if not utils.terraform_may_have_applied(self._cmek_terraform_dir()):
-            return
         extra_env = {"GOOGLE_APPLICATION_CREDENTIALS": self.credentials_file}
+        # also covers a build that never created the key group at all
+        if not utils.terraform_may_have_applied(
+                self._cmek_terraform_dir(), extra_env):
+            return
         try:
             logger.info("Invoking Terraform Destroy for the image key.")
             utils.run_terraform(
@@ -543,8 +567,11 @@ deployment_groups:
             # build that never got as far as applying it leaves nothing to
             # destroy, as with the key group.
             try:
-                if utils.terraform_may_have_applied(os.path.join(
-                        self.image_dir, f"{self.blueprint_name}/builder-env")):
+                if utils.terraform_may_have_applied(
+                        os.path.join(self.image_dir,
+                                     f"{self.blueprint_name}/builder-env"),
+                        {"GOOGLE_APPLICATION_CREDENTIALS":
+                         self.credentials_file}):
                     self._destroy_builder_env()
                 builder_ok = True
             except Exception as e:

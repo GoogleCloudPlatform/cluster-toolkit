@@ -91,6 +91,12 @@ def write_filestore_yaml(fs: GCPFilestoreFilesystem, target_dir: Path) -> None:
             f"""
 blueprint_name: {fs.name}
 
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: {utils.get_terraform_state_bucket()}
+    prefix: {utils.terraform_state_prefix("filesystem", fs.id)}
+
 vars:
   project_id: {project_id}
   deployment_name: {fs.name}
@@ -143,11 +149,8 @@ def create_filesystem(fs: Filesystem) -> None:
 def _run_ghpc(target_dir: Path, cred_env: dict) -> None:
     ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
 
-    # env=cred_env alone replaces the ENTIRE subprocess
-    # environment (not just adds to it), so ghpc previously ran with no
-    # HOME/PATH/etc. and failed outright ("neither $XDG_CACHE_HOME nor
-    # $HOME are defined"). Copy the real environment first, as
-    # clusterinfo.py's _run_ghpc already does.
+    # env= replaces the whole environment, so add the credential to the real
+    # one, as clusterinfo.py's _run_ghpc does; without HOME, ghpc fails.
     env = os.environ.copy()
     env.update(cred_env)
 
@@ -169,7 +172,7 @@ def _run_ghpc(target_dir: Path, cred_env: dict) -> None:
                     stdout=log_out,
                     stderr=log_err,
                     check=True,
-                    env=env
+                    env=env,
                 )
     except subprocess.CalledProcessError as cpe:
         logger.error("ghpc exec failed", exc_info=cpe)
@@ -232,7 +235,7 @@ def start_filesystem(fs: Filesystem) -> None:
         _run_ghpc(_base_dir_for_fs(fs), extra_env)
 
         target_dir = _tf_dir_for_fs(fs)
-        utils.run_terraform(target_dir, "init")
+        utils.run_terraform(target_dir, "init", extra_env=extra_env)
         utils.run_terraform(target_dir, "plan", extra_env=extra_env)
 
         # No targeted key apply: consumers `use:` the kms-key-iam module, so
@@ -251,7 +254,7 @@ def start_filesystem(fs: Filesystem) -> None:
             fs.name,
         )
         (out_fn, _) = utils.run_terraform(
-            target_dir, "output", arguments=["-json"]
+            target_dir, "output", arguments=["-json"], extra_env=extra_env
         )
         with out_fn.open("r") as outputfp:
             results = json.load(outputfp)

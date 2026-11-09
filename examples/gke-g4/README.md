@@ -76,6 +76,15 @@ Option 1 (Specific Reservation) is uncommented by default in `gke-g4-deployment.
 
    Type `a` and hit enter to create the cluster.
 
+## Inference Benchmarks for GKE G4
+
+The [gke-inference-benchmarks](../../community/examples/gke-inference-benchmarks/README.md)
+directory contains community-maintained blueprints that run LLM inference
+benchmarks on G4. Each benchmark provisions a separate GKE cluster and G4 node
+pool, serves the model with vLLM and runs the benchmark with a single
+`gcluster deploy`. The first entry serves DiffusionGemma 26B-A4B on a Spot G4
+node pool.
+
 ## NCCL Tests for GKE G4
 
 This directory contains a manifest to run NVIDIA NCCL performance tests on the GKE G4 cluster.

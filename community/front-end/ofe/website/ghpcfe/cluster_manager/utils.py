@@ -15,10 +15,16 @@
 """Commonly used utility routines"""
 
 import copy
+import datetime
 import glob
 import json
 import logging
 import os
+import posixpath
+import re
+import secrets
+import shlex
+import socket
 import subprocess
 from pathlib import Path
 import shutil
@@ -129,6 +135,105 @@ def update_config_file(mutate, config_file=None):
     return document
 
 
+# Terraform state prefixes by resource kind, placed under this database's
+# state namespace (see get_state_namespace). They mirror the on-disk working
+# directory names (clusters/cluster_<id>, fs/fs_<id>, ...), so an operator can
+# map a prefix to its working directory by inspection.
+TERRAFORM_STATE_PREFIXES = {
+    "cluster": "clusters/cluster_{id}",
+    "filesystem": "fs/fs_{id}",
+    "vpc": "vpcs/vpc_{id}",
+    "workbench": "workbenches/workbench_{id}",
+    "image": "images/image_{id}",
+}
+
+
+def new_state_namespace():
+    """Return a fresh state namespace: UTC creation date plus 8 random hex digits."""
+    return (
+        f"{datetime.datetime.now(datetime.timezone.utc):%Y%m%d}-"
+        f"{secrets.token_hex(4)}"
+    )
+
+
+def get_state_namespace():
+    """Return this database's state namespace, creating it on first use.
+
+    Primary keys are unique only within one database, but the state bucket
+    outlives it; the namespace stops a fresh database reusing an earlier
+    database's prefixes.
+    """
+    # Imported here so this module stays importable without Django.
+    from ..models import StateNamespace  # pylint: disable=import-outside-toplevel
+
+    return StateNamespace.current()
+
+
+def terraform_state_prefix(kind, resource_id, namespace=None):
+    """Return the state-bucket prefix for one provisioned resource.
+
+    `kind` is a key of TERRAFORM_STATE_PREFIXES; `resource_id` is the model's
+    primary key. `namespace` defaults to this database's state namespace.
+    """
+    try:
+        template = TERRAFORM_STATE_PREFIXES[kind]
+    except KeyError as err:
+        raise ValueError(
+            f"No Terraform state prefix defined for resource kind {kind!r}. "
+            f"Known kinds: {sorted(TERRAFORM_STATE_PREFIXES)}"
+        ) from err
+    if namespace is None:
+        namespace = get_state_namespace()
+    return f"{namespace}/{template.format(id=resource_id)}"
+
+
+def get_terraform_state_bucket():
+    """Return the GCS bucket holding Terraform state for provisioned resources.
+
+    Set from the `terraform-state-bucket` instance metadata key by
+    infrastructure_files/gcs_bucket/webserver/startup.sh. Missing configuration
+    is fatal, not a fallback to local state: local state is lost with the
+    instance, and Terraform cannot destroy a resource whose state is lost.
+    """
+    bucket = load_config()["server"].get("terraform_state_bucket")
+    if not bucket:
+        raise RuntimeError(
+            "No 'terraform_state_bucket' in the server configuration. "
+            "Terraform state must be stored in GCS; refusing to provision with "
+            "local state. Check that the deployment set the "
+            "'terraform-state-bucket' instance metadata key and that "
+            "configuration.yaml was regenerated."
+        )
+    return bucket
+
+
+def write_backend_tf(target_dir, prefix):
+    """Write a GCS backend configuration into a Terraform working directory.
+
+    For the resources copied from infrastructure_files/ (networks,
+    workbenches); Cluster Toolkit deployments get their backend from
+    `terraform_backend_defaults` in the blueprint.
+
+    A file, unlike `-backend-config` at init, is found by every later
+    terraform invocation in the directory, including ones that re-enter a
+    directory created earlier (see vpc.create_subnet). Idempotent: an existing
+    file is overwritten with the same content.
+    """
+    target_dir = Path(target_dir)
+    backend_file = target_dir / "backend.tf"
+    backend_file.write_text(
+        "terraform {\n"
+        '  backend "gcs" {\n'
+        f'    bucket = "{get_terraform_state_bucket()}"\n'
+        f'    prefix = "{prefix}"\n'
+        "  }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    logger.info("Wrote GCS backend for prefix %s to %s", prefix, backend_file)
+    return backend_file
+
+
 def _parse_tfvars(filename):
     res = {}
     with open(filename, "r", encoding="utf-8") as fp:
@@ -186,14 +291,14 @@ def load_cluster_info(args):
                 f"{args.cluster_dir.as_posix()}"
             )
 
-    tf_state_file = (
-        args.cluster_dir / "terraform" / args.cloud / "terraform.tfstate"
-    )
-    with tf_state_file.open("r") as statefp:
-        state = json.load(statefp)
-        args.cluster_ip = state["outputs"]["ManagementPublicIP"]["value"]
-        args.cluster_name = state["outputs"]["cluster_id"]["value"]
-        args.tf_state = state
+    # NOTE: this function has no caller, and the layout it expects
+    # (<cluster_dir>/terraform/<cloud>) is not the one ClusterInfo produces.
+    # It reads state from the backend only because the local state file no
+    # longer exists; the layout mismatch is deliberately left alone.
+    state = get_terraform_state(args.cluster_dir / "terraform" / args.cloud)
+    args.cluster_ip = state["outputs"]["ManagementPublicIP"]["value"]
+    args.cluster_name = state["outputs"]["cluster_id"]["value"]
+    args.tf_state = state
 
     args.cluster_vars = _parse_tfvars(
         args.cluster_dir / "terraform" / args.cloud / "terraform.tfvars"
@@ -255,18 +360,302 @@ def rsync_dir(
         raise
 
 
-def terraform_may_have_applied(terraform_dir):
+def _terraform_env(extra_env=None):
+    """Build the environment for a terraform invocation."""
+    new_env = os.environ.copy()
+    # Don't have terraform try to reuse any existing SSH agent
+    # It has its own keys
+    if "SSH_AUTH_SOCK" in new_env:
+        del new_env["SSH_AUTH_SOCK"]
+    new_env.update(extra_env if extra_env else {})
+    return new_env
+
+
+def get_terraform_state(target_dir, extra_env=None):
+    """Return the Terraform state document for a working directory.
+
+    Uses `terraform state pull`, because with a GCS backend there is no local
+    terraform.tfstate; the output is the same raw state document.
+
+    This contacts the backend, so `extra_env` must carry
+    GOOGLE_APPLICATION_CREDENTIALS for the resource's provisioning credential.
+
+    Not run through run_terraform(): it inserts -no-color directly after the
+    command word, which `terraform state pull` rejects.
+    """
+    result = subprocess.run(
+        ["terraform", "state", "pull"],
+        cwd=target_dir,
+        env=_terraform_env(extra_env),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as err:
+        raise RuntimeError(
+            f"Could not parse Terraform state pulled from {target_dir}: {err}"
+        ) from err
+
+
+# Terraform commands that take the state lock. With the GCS backend a second
+# operation on one resource finds the lock held, and Terraform's default
+# -lock-timeout of 0 makes it fail at once instead of waiting for the first.
+TERRAFORM_LOCKING_COMMANDS = ("plan", "apply", "destroy", "import", "refresh")
+# A cluster create or destroy can hold the lock for 20-40 minutes, so a
+# shorter wait would still fail behind one.
+TERRAFORM_LOCK_TIMEOUT = "45m"
+
+
+class TerraformStateLockError(subprocess.CalledProcessError):
+    """A resource's Terraform state lock could not be taken.
+
+    Raised before Terraform runs when the lock is provably stale, and after
+    Terraform gives up waiting for a lock. It is a CalledProcessError so that
+    callers handle it exactly as any other failed Terraform run; the message
+    is also carried in `stderr`, which those callers log.
+    """
+
+    def __init__(self, cmd, message, returncode=1):
+        super().__init__(returncode, cmd, stderr=message.encode("utf-8"))
+        self.message = message
+
+    def __str__(self):
+        return self.message
+
+
+def _gcs_backend_config(target_dir):
+    """Return (bucket, prefix) of an initialised directory's GCS backend.
+
+    `terraform init` records the backend in .terraform/terraform.tfstate,
+    whether it came from a written backend.tf or from the main.tf the Cluster
+    Toolkit generates. Returns None if there is no such file or the backend
+    is not GCS.
+    """
+    marker = Path(target_dir) / ".terraform" / "terraform.tfstate"
+    try:
+        backend = json.loads(marker.read_text()).get("backend") or {}
+    except FileNotFoundError:
+        return None
+    if backend.get("type") != "gcs":
+        return None
+    config = backend.get("config") or {}
+    return config["bucket"], config.get("prefix") or ""
+
+
+def _gcs_client(credentials_file):
+    # Imported here so this module stays importable without the Cloud
+    # client libraries, which the Django-free tests rely on.
+    from google.cloud import storage  # pylint: disable=import-outside-toplevel
+
+    return storage.Client.from_service_account_json(credentials_file)
+
+
+def _read_gcs_state_lock(bucket, prefix, credentials_file):
+    """Return the lock info of the default workspace's state, or None.
+
+    The GCS backend uses the lock object's generation as the lock ID, not the
+    ID written inside the object, and force-unlock expects the generation, so
+    "ID" is replaced with it.
+    """
+    name = posixpath.join(prefix.strip("/"), "default.tflock")
+    blob = _gcs_client(credentials_file).bucket(bucket).get_blob(name)
+    if blob is None:
+        return None
+    info = json.loads(blob.download_as_bytes())
+    info["ID"] = str(blob.generation)
+    return info
+
+
+def _terraform_running_in(target_dir, proc_root="/proc"):
+    """True if any terraform process on this machine runs in target_dir."""
+    target = Path(target_dir).resolve()
+    for proc in Path(proc_root).iterdir():
+        if not proc.name.isdigit():
+            continue
+        try:
+            if (proc / "comm").read_text().strip() != "terraform":
+                continue
+            if (proc / "cwd").resolve(strict=True) == target:
+                return True
+        except PermissionError:
+            # Another user's terraform: its directory can't be read, so it
+            # may hold this lock. Count it as running; the operation then
+            # waits for the lock instead of calling it stale.
+            return True
+        except OSError:
+            # Exited since the listing
+            continue
+    return False
+
+
+def _short_hostname(name):
+    return name.split(".")[0]
+
+
+def _lock_age(created):
+    try:
+        then = datetime.datetime.fromisoformat(created)
+    except (TypeError, ValueError):
+        return "unknown"
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=datetime.timezone.utc)
+    age = datetime.datetime.now(datetime.timezone.utc) - then
+    return str(datetime.timedelta(seconds=max(0, int(age.total_seconds()))))
+
+
+def _state_lock_message(target_dir, info, credentials_file, reason):
+    lock_id = info.get("ID") or "<lock ID>"
+    credentials_file = credentials_file or "<resource credential file>"
+    unlock = (
+        f"cd {shlex.quote(str(target_dir))} && "
+        f"GOOGLE_APPLICATION_CREDENTIALS={shlex.quote(str(credentials_file))} "
+        f"terraform force-unlock -force {lock_id}"
+    )
+    return "\n".join([
+        f"Terraform state for {target_dir} is locked. {reason}",
+        f"  Lock ID:   {lock_id}",
+        f"  Operation: {info.get('Operation', 'unknown')}",
+        f"  Holder:    {info.get('Who', 'unknown')}",
+        f"  Age:       {_lock_age(info.get('Created'))}"
+        f" (created {info.get('Created', 'unknown')})",
+        "Only if no Terraform operation is running for this resource, clear"
+        " the lock with:",
+        f"  {unlock}",
+        "Never force-unlock while an operation is running. See \"A resource"
+        " reports a stale state lock\" in docs/admin_guide.md.",
+    ])
+
+
+def _check_stale_state_lock(target_dir, cmdline, credentials_file):
+    """Raise TerraformStateLockError if the state lock is provably stale.
+
+    A lock goes stale only when Terraform is killed hard (server reboot, OOM,
+    SIGKILL) while holding it. It is provably stale when it was taken on this
+    machine and no terraform process here runs in this directory. A lock
+    taken elsewhere, a live process, or any failure of this check is left to
+    Terraform, which waits up to TERRAFORM_LOCK_TIMEOUT for it.
+
+    This never removes the lock: removing a lock that is in use corrupts the
+    state it protects.
+    """
+    if not credentials_file:
+        return
+    try:
+        backend = _gcs_backend_config(target_dir)
+        if backend is None:
+            return
+        info = _read_gcs_state_lock(*backend, credentials_file)
+        if info is None:
+            return
+        _, sep, host = str(info.get("Who", "")).rpartition("@")
+        if not sep or (
+            _short_hostname(host) != _short_hostname(socket.gethostname())
+        ):
+            return
+        if _terraform_running_in(target_dir):
+            return
+        # The holder may have finished and released the lock between the
+        # read and the process scan; only the same lock still present counts.
+        again = _read_gcs_state_lock(*backend, credentials_file)
+        if again is None or again.get("ID") != info.get("ID"):
+            return
+    except Exception as err:  # pylint: disable=broad-except
+        # Diagnostic only: it must never block a legitimate operation.
+        logger.warning(
+            "Could not check the Terraform state lock for %s; running"
+            " Terraform anyway: %s", target_dir, err,
+        )
+        return
+
+    message = _state_lock_message(
+        target_dir, info, credentials_file,
+        "The lock was taken on this server and no Terraform process on this"
+        " server holds it, so it is stale: left by a Terraform run that was"
+        " killed.",
+    )
+    logger.error(message)
+    raise TerraformStateLockError(cmdline, message)
+
+
+_LOCK_INFO_LINE = re.compile(
+    r"^\s*(ID|Path|Operation|Who|Version|Created):\s*(.*?)\s*$", re.MULTILINE
+)
+
+
+def _raise_if_lock_timeout(err, target_dir, log_err_fn, credentials_file):
+    """Turn a run that timed out waiting for the state lock into a clear error."""
+    try:
+        stderr = Path(log_err_fn).read_text(errors="replace")
+    except OSError:
+        return
+    if "Error acquiring the state lock" not in stderr:
+        return
+    info = {}
+    for key, value in _LOCK_INFO_LINE.findall(stderr):
+        info.setdefault(key, value)
+    message = _state_lock_message(
+        target_dir, info, credentials_file,
+        f"Terraform waited {TERRAFORM_LOCK_TIMEOUT} for the lock and gave up.",
+    )
+    logger.error(message)
+    raise TerraformStateLockError(err.cmd, message, err.returncode) from err
+
+
+def _no_state_pulled(err):
+    """Whether get_terraform_state failed only because there was no state.
+
+    `terraform state pull` prints nothing when the backend holds no state
+    for the directory, which get_terraform_state reports as a parse error.
+    """
+    cause = err.__cause__
+    return (isinstance(cause, json.JSONDecodeError)
+            and not cause.doc.strip())
+
+
+def terraform_may_have_applied(terraform_dir, extra_env=None):
     """Whether Terraform may have created anything from a group directory.
 
     `ghpc create` writes each group's directory before any `terraform init`,
     so a run that failed in between leaves a directory nothing was applied
     from (or no directory at all), and a plain `terraform destroy` there only
-    fails. OFE's blueprints set no Terraform backend, so state is local:
-    `init` creates `.terraform` and `apply` writes `terraform.tfstate` (and
-    its backup).
+    fails.
+
+    With the GCS backend the state is in the bucket, not in the directory,
+    so it is read back with `terraform state pull`; `extra_env` must carry
+    GOOGLE_APPLICATION_CREDENTIALS, as for any command that contacts the
+    backend. State that records no resource, or no state at all, means
+    nothing was applied. If the state cannot be read, the answer is yes:
+    the destroy then runs and reports its own error, rather than the record
+    being dropped while resources may still exist.
+
+    A directory still on local state (initialised before the state moved to
+    the bucket) keeps the earlier rule: `init` creates `.terraform` and
+    `apply` writes `terraform.tfstate` (and its backup).
     """
-    return (os.path.isdir(os.path.join(terraform_dir, ".terraform"))
-            or bool(glob.glob(os.path.join(terraform_dir, "*.tfstate*"))))
+    if not os.path.isdir(terraform_dir):
+        return False
+    try:
+        gcs_backend = _gcs_backend_config(terraform_dir)
+    except (OSError, ValueError, KeyError) as err:
+        logger.warning("Could not read the Terraform backend of %s, so it "
+                       "may hold resources: %s", terraform_dir, err)
+        return True
+    if gcs_backend is None:
+        return (os.path.isdir(os.path.join(terraform_dir, ".terraform"))
+                or bool(glob.glob(os.path.join(terraform_dir, "*.tfstate*"))))
+    try:
+        state = get_terraform_state(terraform_dir, extra_env)
+    except (subprocess.CalledProcessError, OSError, RuntimeError) as err:
+        if isinstance(err, RuntimeError) and _no_state_pulled(err):
+            return False
+        logger.warning("Could not read the Terraform state of %s, so it may "
+                       "hold resources: %s", terraform_dir, err)
+        return True
+    if not state:
+        return False
+    return not isinstance(state, dict) or bool(state.get("resources"))
 
 
 def run_terraform(target_dir, command, arguments=None, extra_env=None):
@@ -286,9 +675,15 @@ def run_terraform(target_dir, command, arguments=None, extra_env=None):
     # it outright ("flag provided but not defined: -input") and fail. Use an
     # allowlist of the variable-evaluating writers rather than a denylist, so
     # a future read-only subcommand is not silently broken again.
+    #
+    # The same holds for any other prompt (e.g. init asking to migrate state
+    # after a backend change): with -input=false, Terraform fails with its
+    # message instead of blocking forever.
     cmdline = ["terraform", command, "-no-color"]
-    if command in ("init", "plan", "apply", "destroy", "refresh", "import"):
+    if command in ("init", "plan", "apply", "destroy", "import", "refresh"):
         cmdline.append("-input=false")
+    if command in TERRAFORM_LOCKING_COMMANDS:
+        cmdline.append(f"-lock-timeout={TERRAFORM_LOCK_TIMEOUT}")
     cmdline.extend(arguments)
     if command in ["apply", "destroy"]:
         cmdline.append("-auto-approve")
@@ -296,12 +691,12 @@ def run_terraform(target_dir, command, arguments=None, extra_env=None):
     log_out_fn = Path(target_dir) / f"terraform_{command}_log.stdout"
     log_err_fn = Path(target_dir) / f"terraform_{command}_log.stderr"
 
-    new_env = os.environ.copy()
-    # Don't have terraform try to reuse any existing SSH agent
-    # It has its own keys
-    if "SSH_AUTH_SOCK" in new_env:
-        del new_env["SSH_AUTH_SOCK"]
-    new_env.update(extra_env)
+    new_env = _terraform_env(extra_env)
+
+    if command in TERRAFORM_LOCKING_COMMANDS:
+        _check_stale_state_lock(
+            target_dir, cmdline, new_env.get("GOOGLE_APPLICATION_CREDENTIALS")
+        )
 
     # Some Cluster Toolkit modules (e.g. the Slurm controller's compute-node
     # cleanup) run `gcloud` directly from an apply/destroy-time local-exec
@@ -342,15 +737,24 @@ def run_terraform(target_dir, command, arguments=None, extra_env=None):
 
     with log_out_fn.open("wb") as log_out:
         with log_err_fn.open("wb") as log_err:
-            subprocess.run(
-                cmdline,
-                cwd=target_dir,
-                env=new_env,
-                stdout=log_out,
-                stderr=log_err,
-                stdin=subprocess.DEVNULL,
-                check=True,
-            )
+            try:
+                subprocess.run(
+                    cmdline,
+                    cwd=target_dir,
+                    env=new_env,
+                    stdout=log_out,
+                    stderr=log_err,
+                    stdin=subprocess.DEVNULL,
+                    check=True,
+                )
+            except subprocess.CalledProcessError as err:
+                if command in TERRAFORM_LOCKING_COMMANDS:
+                    log_err.flush()
+                    _raise_if_lock_timeout(
+                        err, target_dir, log_err_fn,
+                        new_env.get("GOOGLE_APPLICATION_CREDENTIALS"),
+                    )
+                raise
 
     return (log_out_fn, log_err_fn)
 

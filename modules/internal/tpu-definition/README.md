@@ -15,7 +15,7 @@ This follows the same design pattern as the `gpu-definition` internal module, pr
 
 This module is not intended for direct use in a blueprint. It should be called from a parent module like `gke-node-pool`.
 
-```yaml
+```hcl
 module "tpu" {
   source = "../../internal/tpu-definition"
 

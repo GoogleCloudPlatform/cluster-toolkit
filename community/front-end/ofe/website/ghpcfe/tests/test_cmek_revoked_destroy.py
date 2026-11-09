@@ -72,7 +72,9 @@ class DestroyTestCase(SimpleTestCase):
         and what the caller saw raised.
 
         The Terraform directory holds the entries named in `tf_dir_holds`
-        (an initialised one by default); None means it does not exist.
+        (an initialised one by default); None means it does not exist. An
+        entry is a directory if its name starts with ".", a file holding
+        "{}" otherwise, or a (path, content) pair for a file.
         """
         from ..cluster_manager import clusterinfo
         nodes = SimpleNamespace(all=lambda: SimpleNamespace(delete=lambda: None))
@@ -95,10 +97,15 @@ class DestroyTestCase(SimpleTestCase):
         if tf_dir_holds is not None:
             tf_dir.mkdir()
             for name in tf_dir_holds:
-                if name.startswith("."):
+                if isinstance(name, tuple):
+                    path, content = tf_dir / name[0], name[1]
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(content)
+                elif name.startswith("."):
                     (tf_dir / name).mkdir()
                 else:
                     (tf_dir / name).write_text("{}")
+        self.tf_dir = tf_dir
         commands, raised = [], None
         with ExitStack() as stack:
             stack.enter_context(mock.patch.object(
@@ -136,7 +143,7 @@ class RefreshFreeDestroyTests(DestroyTestCase):
         commands, _ = self._destroy(db, cmek_revoked=True)
         self.assertEqual(commands, [[
             "terraform", "destroy", "-no-color", "-input=false",
-            "-refresh=false", "-auto-approve"]])
+            "-lock-timeout=45m", "-refresh=false", "-auto-approve"]])
         self.assertEqual((db["status"], db["cloud_state"]), ("d", "xm"))
 
     def test_a_revoke_after_the_destroy_was_queued_counts(self):
@@ -151,7 +158,7 @@ class RefreshFreeDestroyTests(DestroyTestCase):
         commands, _ = self._destroy(db, cmek_revoked=False)
         self.assertEqual(commands, [[
             "terraform", "destroy", "-no-color", "-input=false",
-            "-auto-approve"]])
+            "-lock-timeout=45m", "-auto-approve"]])
         self.assertEqual((db["status"], db["cloud_state"]), ("d", "xm"))
         self.assertEqual(db["status_message"], "")
 

@@ -29,8 +29,13 @@ from unittest import mock
 from django.test import RequestFactory, SimpleTestCase
 
 from ..cluster_manager import cmek
+from .test_cmek_applied_flows import patch_state_backend
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def setUpModule():  # pylint: disable=invalid-name
+    patch_state_backend()
 CONFIG = {"cmek": {"enforcement": "preferred", "key_ring_name": "ofe-cmek"}}
 CREDENTIAL = SimpleNamespace(detail=json.dumps({"project_id": "proj"}))
 
@@ -49,7 +54,7 @@ class DerivedKeyNamesAreNotReusedTests(SimpleTestCase):
 
     def _filestore(self, name):
         return SimpleNamespace(
-            name=name, cloud_zone="europe-west4-a",
+            id=5, name=name, cloud_zone="europe-west4-a",
             cloud_region="europe-west4", capacity=1024,
             vpc=SimpleNamespace(cloud_id="net"),
             exports=SimpleNamespace(first=lambda: SimpleNamespace(
@@ -174,12 +179,20 @@ def _image_backend():
 
 
 def _group_dir(backend, group, state=None):
-    """A group directory as `ghpc create` writes it, plus `state` if given."""
+    """A group directory as `ghpc create` writes it, plus `state` if given.
+
+    "gcs" is a directory `terraform init` set up for the GCS state backend.
+    """
     group_dir = backend.image_dir / "image_7" / group
     group_dir.mkdir(parents=True)
     (group_dir / "main.tf").write_text("")
     if state == ".terraform":
         (group_dir / state).mkdir()
+    elif state == "gcs":
+        (group_dir / ".terraform").mkdir()
+        (group_dir / ".terraform" / "terraform.tfstate").write_text(
+            json.dumps({"backend": {"type": "gcs", "config": {
+                "bucket": "ofe-state", "prefix": f"images/{group}"}}}))
     elif state:
         (group_dir / state).write_text("{}")
     return str(group_dir)
@@ -226,6 +239,33 @@ class DeleteImageSkipsGroupsNothingWasAppliedFromTests(SimpleTestCase):
                                 1, "terraform destroy"))
                     self.assertEqual(destroyed, [group_dir])
                     self.assertIs(result, False)
+
+    def test_a_gcs_group_is_destroyed_only_if_its_state_has_resources(self):
+        from ..cluster_manager import image
+        for resources, destroyed_expected in (([{"type": "x"}], True),
+                                              ([], False)):
+            with self.subTest(resources=resources):
+                backend = _image_backend()
+                dirs = [_group_dir(backend, group, "gcs")
+                        for group in ("builder-env", "image-cmek")]
+                pulls = []
+
+                def pull(directory, extra_env=None):
+                    pulls.append((directory, extra_env))
+                    return {"version": 4, "resources": resources}
+
+                with mock.patch.object(image.utils, "get_terraform_state",
+                                       side_effect=pull):
+                    result, destroyed = self._delete(backend)
+                self.assertIs(result, True)
+                self.assertEqual(destroyed,
+                                 dirs if destroyed_expected else [])
+                # read as the image's own credential, from each group
+                self.assertEqual([d for d, _ in pulls], dirs)
+                for _, env in pulls:
+                    self.assertEqual(
+                        env, {"GOOGLE_APPLICATION_CREDENTIALS":
+                              backend.credentials_file})
 
     def test_the_view_keeps_the_row_when_an_applied_group_fails(self):
         from ..cluster_manager import image
@@ -410,14 +450,30 @@ class KeyGenerationFailureStopsTheDeployTests(SimpleTestCase):
         self.assertEqual(info.cluster.cloud_state, "nm")
 
     def test_reconfigure_records_why_and_leaves_the_cluster_as_it_was(self):
-        from ..views import clusters as v
-        cluster = mock.MagicMock(status="r", cloud_state="m",
-                                 status_message="")
-        with mock.patch.object(v, "ClusterInfo") as info, \
+        info = self._info()
+        info.cluster.status, info.cluster.cloud_state = "r", "m"
+        saves = []
+        info.cluster.save = lambda update_fields=None: saves.append(
+            update_fields)
+        with mock.patch.object(
+                info, "update",
+                side_effect=cmek.CmekConfigError("no key")), \
+                mock.patch.object(info, "_run_ghpc") as run_ghpc, \
                 self.assertRaises(cmek.CmekConfigError):
-            info.return_value.update.side_effect = cmek.CmekConfigError(
-                "no key")
+            info.reconfigure_cluster()
+        run_ghpc.assert_not_called()
+        self.assertEqual(info.cluster.status_message,
+                         "Reconfigure failed: no key")
+        self.assertEqual((info.cluster.status, info.cluster.cloud_state),
+                         ("r", "m"))
+        # nothing but the reason is written over the running cluster
+        self.assertEqual(saves, [["status_message"]])
+
+    def test_the_reconfigure_view_regenerates_the_blueprint_once(self):
+        # reconfigure_cluster() regenerates it; the view must not as well
+        from ..views import clusters as v
+        cluster = mock.MagicMock(status="r", cloud_state="m")
+        with mock.patch.object(v, "ClusterInfo") as info:
             v.BackendReconfigureCluster().cmd(None, None, cluster)
-        info.return_value.reconfigure_cluster.assert_not_called()
-        self.assertIn("no key", cluster.status_message)
-        self.assertEqual((cluster.status, cluster.cloud_state), ("r", "m"))
+        info.return_value.reconfigure_cluster.assert_called_once_with()
+        info.return_value.update.assert_not_called()

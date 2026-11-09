@@ -12,4 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""OFE application tests. Run with: python manage.py test ghpcfe.tests"""
+"""OFE application tests.
+
+From website/, run every unittest-style test (Django and Django-free) with
+`python manage.py test ghpcfe --settings=website.ci_settings`. The Django-free
+tests also run under `python3 -m pytest ghpcfe/tests/<file>`, which is the
+only runner for the pytest-style functions in test_workbench_changes.py.
+"""

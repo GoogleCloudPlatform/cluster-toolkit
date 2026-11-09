@@ -85,7 +85,7 @@ vars:
 
   # Optional overrides (defaults shown)
   # Machine type for the GKE system node pool.
-  system_node_pool_machine_type: n2-standard-8
+  system_node_pool_machine_type: n2d-standard-8
 
 
 deployment_groups:
@@ -285,7 +285,7 @@ deployment_groups:
         in_memory_volume_size: "50Gi"
         cloud_storage_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
         node_selector:
-          node.kubernetes.io/instance-type: $(vars.machine_type)
+          node.kubernetes.io/instance-type: $(vars.compute_machine_type)
         tolerations:
         - key: google.com/tpu
           operator: Exists

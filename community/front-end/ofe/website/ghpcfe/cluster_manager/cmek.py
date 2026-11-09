@@ -708,8 +708,9 @@ def is_frozen(resource) -> bool:
     they hold whatever state the record is in later. An unsaved resource has
     nothing deployed.
 
-    Starting a cluster and creating a Filestore reset the record to "nm"
-    before the blueprint is regenerated, so those flows take a snapshot
+    Starting a cluster that is not managed and creating a Filestore reset
+    the record to "nm" before the blueprint is regenerated, so those flows
+    take a snapshot
     first, in the instance attribute `_cmek_deployed`, and it counts here
     too. It lives on that one instance only; nothing stores it.
 
@@ -721,8 +722,8 @@ def is_frozen(resource) -> bool:
     The flags are compared with `is True`, so a stand-in object whose every
     attribute exists (a MagicMock) is never frozen by accident.
 
-    A failed first apply puts the record back to cloud_state "nm" (and a
-    cluster to status "e"), but `cmek_applied` is already stored, so the
+    A failed first apply leaves the record at cloud_state "nm" (and a
+    cluster at status "e"), but `cmek_applied` is already stored, so the
     resource stays frozen: a retry applies the same choice over whatever the
     failed apply created. To change the choice, destroy the resource and
     create it again.
@@ -748,10 +749,11 @@ def record_deployed(resource) -> None:
     """Store `cmek_applied` on a deployed resource that does not have it yet.
 
     A resource deployed before the flag existed is frozen only by its state
-    (is_frozen), and a failed start or reconfigure puts that state back to
-    "not managed". Called on entry to those flows, while the state (or the
-    `_cmek_deployed` snapshot) still says deployed, so that a failure later
-    in the flow cannot unfreeze it.
+    (is_frozen), and a start can put that state back to "not managed" (a
+    cluster that is not managed, or a Filestore whose start fails). Called
+    on entry to the start and reconfigure flows, while the state (or the
+    `_cmek_deployed` snapshot) still says deployed, so that nothing later in
+    the flow can unfreeze it.
     """
     if getattr(resource, "cmek_applied", False) is True \
             or not is_frozen(resource):

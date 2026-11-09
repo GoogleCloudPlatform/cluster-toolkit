@@ -13,14 +13,15 @@
 # limitations under the License.
 """A deployed resource keeps its encryption through the flows that reset it.
 
-- Starting a cluster and creating a Filestore put the record back to "nm"
-  before the blueprint is regenerated, so the generator must still see a
-  deployed resource and keep its stored choice whatever enforcement says.
+- Starting a cluster that is not managed and creating a Filestore put the
+  record back to "nm" before the blueprint is regenerated, so the generator
+  must still see a deployed resource and keep its stored choice whatever
+  enforcement says.
 - A running cluster's credential, name, subnet, region and zone cannot be
   changed by a forged POST.
 - A rotation period too long for int() is a normal settings error.
 - A successful start or reconfigure clears the last failure reason, and a
-  failed start says why.
+  failed start or reconfigure says why.
 """
 import json
 import tempfile
@@ -31,8 +32,13 @@ from unittest import mock
 from django.test import SimpleTestCase
 
 from ..cluster_manager import cmek
+from .test_cmek_applied_flows import patch_state_backend
 
 CREDENTIAL = SimpleNamespace(detail=json.dumps({"project_id": "proj-abcde"}))
+
+
+def setUpModule():  # pylint: disable=invalid-name
+    patch_state_backend()
 
 
 def _config(enforcement):
@@ -56,13 +62,14 @@ CASES = (("required", False), ("required", True), ("disabled", True),
 
 
 class StartClusterKeepsItsEncryptionTests(SimpleTestCase):
-    """start_cluster() resets the record before regenerating cluster.yaml."""
+    """start_cluster() resets a cluster that is not managed before
+    regenerating cluster.yaml; a managed one keeps "m"."""
 
-    def _cluster(self, enabled):
+    def _cluster(self, enabled, cloud_state):
         return SimpleNamespace(
             id=1, pk=1, name="c", cloud_id="c-abcd", project_id="proj-abcde",
             cloud_zone="europe-west4-a", cloud_region="europe-west4",
-            status="r", cloud_state="m", use_bigquery=False,
+            status="r", cloud_state=cloud_state, use_bigquery=False,
             use_containers=False, use_cloudsql=False, enable_slurm_auth=True,
             subnet=SimpleNamespace(
                 cloud_id="sub", vpc=SimpleNamespace(cloud_id="net")),
@@ -75,13 +82,13 @@ class StartClusterKeepsItsEncryptionTests(SimpleTestCase):
             partitions=SimpleNamespace(all=lambda: []), shared_fs=None,
             **_cmek_fields(enabled))
 
-    def _start(self, enforcement, enabled):
+    def _start(self, enforcement, enabled, cloud_state):
         """Start a deployed cluster and return the cluster.yaml it wrote."""
         from django.template import engines
         from ..cluster_manager import clusterinfo
         info = clusterinfo.ClusterInfo.__new__(clusterinfo.ClusterInfo)
         info.config = _config(enforcement)
-        info.cluster = self._cluster(enabled)
+        info.cluster = self._cluster(enabled, cloud_state)
         info.cluster_dir = Path(tempfile.mkdtemp())
         info.env = engines["django"]
         # Stop after the blueprint is written: the rest is Terraform.
@@ -97,10 +104,12 @@ class StartClusterKeepsItsEncryptionTests(SimpleTestCase):
         return (info.cluster_dir / "cluster.yaml").read_text()
 
     def test_the_stored_choice_survives_the_reset(self):
-        for enforcement, enabled in CASES:
-            with self.subTest(enforcement=enforcement, enabled=enabled):
-                text = self._start(enforcement, enabled)
-                self.assertEqual(cmek.KEY_IAM_MODULE_ID in text, enabled)
+        for cloud_state in ("m", "re"):
+            for enforcement, enabled in CASES:
+                with self.subTest(cloud_state=cloud_state,
+                                  enforcement=enforcement, enabled=enabled):
+                    text = self._start(enforcement, enabled, cloud_state)
+                    self.assertEqual(cmek.KEY_IAM_MODULE_ID in text, enabled)
 
 
 class CreateFilestoreKeepsItsEncryptionTests(SimpleTestCase):
@@ -285,10 +294,11 @@ class StatusMessageTests(SimpleTestCase):
                 cluster = self._run(method)
                 self.assertEqual(cluster.status_message, "")
 
-    def test_a_failed_reconfigure_keeps_it(self):
+    def test_a_failed_reconfigure_says_why(self):
         cluster = self._run(self._reconfigure, RuntimeError("apply failed"))
-        self.assertEqual(cluster.status_message, "Reconfigure failed: no key")
-        self.assertEqual(cluster.status, "e")
+        self.assertEqual(cluster.status_message,
+                         "Reconfigure failed: apply failed")
+        self.assertEqual((cluster.status, cluster.cloud_state), ("e", "nm"))
 
     def test_a_failed_start_says_why(self):
         cluster = self._run(self._start, RuntimeError("apply failed"))

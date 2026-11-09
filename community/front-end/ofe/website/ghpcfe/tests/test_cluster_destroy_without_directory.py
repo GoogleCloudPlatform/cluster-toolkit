@@ -18,10 +18,16 @@ directory, or one that was never initialised. `terraform destroy` there fails
 every time, and a failed destroy keeps the cluster "being destroyed" and
 refuses a start, so the cluster could neither be destroyed nor started. When
 nothing can have been applied the destroy is skipped and only the clean-up
-runs.
-"""
-import subprocess
+runs. With the state in the bucket, that is read from the state itself.
 
+A destroy refused because the state is locked says so, rather than showing
+an earlier run's error.
+"""
+import json
+import subprocess
+from unittest import mock
+
+from ..cluster_manager import clusterinfo
 from .test_cmek_revoked_destroy import BOXED_KMS_ERROR, DestroyTestCase
 
 
@@ -70,6 +76,25 @@ class NothingAppliedTests(DestroyTestCase):
         self.assertDestroyed(db, commands, raised)
 
 
+class RegeneratedDirectoryTests(DestroyTestCase):
+    """ghpc create replaces the group directory (and its `.terraform`), so a
+    running cluster whose start or reconfigure stopped before `init` looks
+    like nothing was applied. It must still be destroyed."""
+
+    def test_an_applied_cluster_with_a_regenerated_directory(self):
+        for cloud_state in ("m", "re"):
+            with self.subTest(cloud_state=cloud_state):
+                db = {}
+                commands, raised = self._destroy(
+                    db, status="e", cloud_state=cloud_state,
+                    tf_dir_holds=("main.tf", "variables.tf"))
+                self.assertIsNone(raised)
+                self.assertEqual(len(commands), 1)
+                self.assertEqual(commands[0][:2], ["terraform", "destroy"])
+                self.assertEqual((db["status"], db["cloud_state"]),
+                                 ("d", "xm"))
+
+
 class SomethingMayHaveBeenAppliedTests(DestroyTestCase):
 
     def test_an_initialised_directory_whose_destroy_fails_stays_retryable(self):
@@ -96,6 +121,89 @@ class SomethingMayHaveBeenAppliedTests(DestroyTestCase):
                 self.assertIsNone(raised)
                 self.assertEqual(commands, [[
                     "terraform", "destroy", "-no-color", "-input=false",
-                    "-auto-approve"]])
+                    "-lock-timeout=45m", "-auto-approve"]])
                 self.assertEqual((db["status"], db["cloud_state"]),
                                  ("d", "xm"))
+
+
+GCS_BACKEND = (".terraform/terraform.tfstate", json.dumps({
+    "backend": {"type": "gcs", "config": {
+        "bucket": "ofe-state", "prefix": "20260101-0a1b2c3d/clusters/c_1"}}}))
+
+
+class GcsStateTests(DestroyTestCase):
+    """With the state in the bucket, the state itself says whether anything
+    was applied: `init` alone, or an apply that created nothing, leaves an
+    initialised directory and state with no resources."""
+
+    def _destroy_with_state(self, db, state=None, error=None):
+        pulls = []
+
+        def pull(directory, extra_env=None):
+            pulls.append(extra_env)
+            if error:
+                raise error
+            return state
+
+        with mock.patch.object(clusterinfo.utils, "get_terraform_state",
+                               side_effect=pull):
+            commands, raised = self._destroy(
+                db, status="e", cloud_state="nm",
+                tf_dir_holds=(GCS_BACKEND,))
+        # read as the cluster's own credential, which the bucket requires
+        self.assertEqual(pulls, [{"GOOGLE_APPLICATION_CREDENTIALS": str(
+            self.tf_dir / "cloud_credentials")}])
+        return commands, raised
+
+    def test_state_with_resources_is_destroyed(self):
+        db = {}
+        commands, raised = self._destroy_with_state(
+            db, {"version": 4, "resources": [{"type": "google_compute_disk"}]})
+        self.assertIsNone(raised)
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(commands[0][:2], ["terraform", "destroy"])
+        self.assertEqual((db["status"], db["cloud_state"]), ("d", "xm"))
+
+    def test_state_without_resources_is_only_cleaned_up(self):
+        db = {}
+        commands, raised = self._destroy_with_state(
+            db, {"version": 4, "resources": []})
+        self.assertEqual(commands, [])
+        self.assertIsNone(raised)
+        self.assertEqual((db["status"], db["cloud_state"]), ("d", "xm"))
+        self.cleanup.subscription.assert_called_once()
+
+    def test_unreadable_state_lets_the_destroy_run(self):
+        db = {}
+        with self.assertLogs(level="WARNING"):
+            commands, raised = self._destroy_with_state(
+                db, error=subprocess.CalledProcessError(
+                    1, ["terraform", "state", "pull"]))
+        self.assertIsNone(raised)
+        self.assertEqual(len(commands), 1)
+        self.assertEqual((db["status"], db["cloud_state"]), ("d", "xm"))
+
+
+class StateLockTests(DestroyTestCase):
+    """A destroy refused for a state lock says so on the cluster's page."""
+
+    def test_a_stale_lock_is_reported_not_an_earlier_log(self):
+        message = ("Terraform state for /x/primary is locked. The lock was "
+                   "taken on this server and no Terraform process on this "
+                   "server holds it, so it is stale.\n  Lock ID:   17")
+        refused = clusterinfo.utils.TerraformStateLockError(
+            ["terraform", "destroy"], message)
+        db = {}
+        # refused before Terraform runs, so this log is an earlier run's
+        earlier_log = ("terraform_destroy_log.stderr",
+                       "Error: an earlier, unrelated failure\n")
+        with mock.patch.object(clusterinfo.utils, "_check_stale_state_lock",
+                               side_effect=refused), \
+                self.assertLogs(level="ERROR"):
+            commands, raised = self._destroy(
+                db, tf_dir_holds=(".terraform", earlier_log))
+        self.assertEqual(commands, [])
+        self.assertIs(raised, refused)
+        self.assertEqual((db["status"], db["cloud_state"]), ("e", "dm"))
+        self.assertEqual(db["status_message"],
+                         "Teardown failed: " + message.splitlines()[0])

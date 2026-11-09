@@ -27,7 +27,8 @@ They refuse any other manage.py command. On top of website/settings.py they:
   * stand in for the Spack checkout that only a deployed server has, which
     the URL configuration imports;
   * refuse any connection to a host other than this one, and running
-    terraform, packer, gcloud, gcluster or anything under /opt;
+    terraform, packer, gcloud, gcluster (unless it is this Python under
+    that name) or anything under /opt;
   * log to the console only, and create ghpcfe's tables directly in the
     test database, because OFE ships no migrations.
 """
@@ -75,9 +76,20 @@ def _refuse(event, args):
             raise PermissionError(f"CI tests must not look up {args[0]}")
     elif event == "subprocess.Popen":
         program = os.fspath(args[0]) if args[0] is not None else ""
-        if os.path.basename(program) in _REFUSED_PROGRAMS \
-                or program.startswith("/opt/"):
+        if program.startswith("/opt/") or (
+                os.path.basename(program) in _REFUSED_PROGRAMS
+                and not _is_this_python(program)):
             raise PermissionError(f"CI tests must not run {program}")
+
+
+def _is_this_python(program):
+    """Whether `program` is this Python under another name.
+
+    A test of the Terraform process scan starts this interpreter as a
+    process named `terraform`; that runs no cloud tool.
+    """
+    return (os.path.sep in program
+            and os.path.realpath(program) == os.path.realpath(sys.executable))
 
 
 sys.addaudithook(_refuse)
@@ -97,6 +109,7 @@ _utils.g_config.update({
         "gcs_bucket": "ofe-ci-placeholder",
         "c2_topic": "ofe-ci-placeholder",
         "deployment_name": "ofe-ci",
+        "terraform_state_bucket": "ofe-ci-placeholder",
     },
     "loaded": True,
 })

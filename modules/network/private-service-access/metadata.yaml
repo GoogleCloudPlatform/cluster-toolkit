@@ -18,3 +18,5 @@ spec:
     services:
     - compute.googleapis.com
     - servicenetworking.googleapis.com
+ghpc:
+  has_to_be_used: true

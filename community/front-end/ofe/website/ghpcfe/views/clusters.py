@@ -1137,14 +1137,6 @@ class BackendReconfigureCluster(BackendAsyncView):
 
     def cmd(self, unused_task_id, unused_token, cluster):
         ci = ClusterInfo(cluster)
-        try:
-            ci.update()
-        except Exception as err:
-            # Nothing was applied, so the cluster keeps its status and
-            # cloud_state; only say why the reconfigure did not happen.
-            cluster.status_message = f"Reconfigure failed: {err}"
-            cluster.save(update_fields=["status_message"])
-            raise
         ci.reconfigure_cluster()
 
     async def get(self, request, pk):

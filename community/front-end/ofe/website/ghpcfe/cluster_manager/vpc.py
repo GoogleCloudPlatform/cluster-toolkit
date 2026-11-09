@@ -35,6 +35,11 @@ def create_vpc(vpc: VirtualNetwork) -> None:
         target_dir.parent.mkdir(parents=True)
     shutil.copytree(_tf_source_dir_for_vpc("GCP"), target_dir)
 
+    # point Terraform at the shared state bucket before any init runs
+    utils.write_backend_tf(
+        target_dir, utils.terraform_state_prefix("vpc", vpc.id)
+    )
+
     # create credential file
     with open(target_dir / "cloud_credentials", "w", encoding="utf-8") as fp:
         fp.write(vpc.cloud_credential.detail)
@@ -64,7 +69,7 @@ project = "{project_id}"
         generate_vpc_tf_datablock(vpc, target_dir)
 
     try:
-        utils.run_terraform(target_dir, "init")
+        utils.run_terraform(target_dir, "init", extra_env=extra_env)
         utils.run_terraform(target_dir, "validate", extra_env=extra_env)
         utils.run_terraform(target_dir, "plan", extra_env=extra_env)
 
@@ -80,40 +85,47 @@ project = "{project_id}"
 def start_vpc(vpc: VirtualNetwork) -> None:
     """Effectively, just 'terraform apply'"""
     target_dir = _tf_dir_for_vpc(vpc.id)
+    extra_env = {
+        "GOOGLE_APPLICATION_CREDENTIALS": Path(
+            target_dir / "cloud_credentials"
+        ).as_posix()
+    }
     try:
-        extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": Path(
-                target_dir / "cloud_credentials"
-            ).as_posix()
-        }
         utils.run_terraform(target_dir, "apply", extra_env=extra_env)
-        tf_state_file = target_dir / "terraform.tfstate"
-        with tf_state_file.open("r") as statefp:
-            state = json.load(statefp)
-            if vpc.is_managed:
-                vpc.cloud_id = state["outputs"]["vpc_id"]["value"]
-                vpc.save()
-            for subnet in vpc.subnets.all():
-                if subnet.is_managed:
-                    subnet.cloud_id = state["outputs"][f"subnet-{subnet.id}"][
-                        "value"
-                    ]
-                    subnet.cloud_state = "m"
-                    subnet.save()
     except subprocess.CalledProcessError as err:
         logger.error("Terraform apply failed", exc_info=err)
         if err.stdout:
             logger.info("TF stdout:\n%s\n", err.stdout.decode("utf-8"))
         if err.stderr:
             logger.info("TF stderr:\n%s\n", err.stderr.decode("utf-8"))
-        # VirtualNetwork/CloudResource has no "status" field, only
-        # cloud_state, so `vpc.status = "e"` silently discarded on a plain
-        # Python attribute and never persisted -- a failed apply left
-        # cloud_state stuck at "cm" (Creating) forever with no visible
-        # error. "um" ("Unknown, following error") is the state this
-        # project's own status choices already define for exactly this.
+        # A failed apply can leave some resources behind. "Unknown" keeps
+        # Edit, Apply Cloud Changes and Destroy available instead of leaving
+        # the network stuck in "Creating".
         vpc.cloud_state = "um"
         vpc.save()
+        raise
+
+    # The apply succeeded, so the network exists. Mark it managed before
+    # reading the state back, so a failure there does not leave it stuck in
+    # "Creating".
+    vpc.cloud_state = "m"
+    vpc.save()
+    try:
+        state = utils.get_terraform_state(target_dir, extra_env)
+        vpc.cloud_id = state["outputs"]["vpc_id"]["value"]
+        vpc.save()
+        for subnet in vpc.subnets.all():
+            if subnet.is_managed:
+                subnet.cloud_id = state["outputs"][f"subnet-{subnet.id}"][
+                    "value"
+                ]
+                subnet.cloud_state = "m"
+                subnet.save()
+    except (subprocess.CalledProcessError, RuntimeError, KeyError) as err:
+        logger.error(
+            "Terraform apply succeeded but reading its state failed",
+            exc_info=err,
+        )
         raise
 
 
