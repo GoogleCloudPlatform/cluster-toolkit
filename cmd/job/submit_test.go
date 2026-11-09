@@ -351,68 +351,13 @@ func resetCommandFlags(cmd *cobra.Command) {
 }
 
 func resetJobFlags() {
-	resetCommandFlags(JobCmd)
-
-	imageName = ""
-	baseImage = ""
-	buildContext = ""
-	commandToRun = ""
-	computeType = ""
-	dryRunManifest = ""
-	clusterName = ""
-	location = ""
-	projectID = ""
-	gkeNamespace = ""
-	workloadName = ""
-
-	enableMLDiagnostics = false
-	mlDiagnosticsImage = ""
-	mlDiagnosticsTelemetryPort = 8889
-	gkeMtcEnabled = false
-	gkeMtcRamdiskDirectory = ""
-	gkeCustomTemplatesPath = ""
-	gkeDisableParallelContainers = false
-	kueueQueueName = ""
-	numNodes = 1
-	numSlices = 1
-	restarts = 1
-	ttlAfterFinished = "1h"
-	gracePeriodStr = "30s"
-	placementPolicy = ""
-	nodeConstraint = make(map[string]string)
-	cpuAffinityStr = ""
-	restartOnExitCodes = nil
-	imagePullSecrets = ""
-	serviceAccountName = ""
-	topology = ""
-	gkeScheduler = ""
-	platform = "linux/amd64"
-	awaitJobCompletion = false
-	timeout = "-1s"
-	priority = ""
-	verbose = false
-	volumeStr = nil
-	isPathwaysJob = false
-	skipPrereqs = false
 	pathways = orchestrator.PathwaysJobDefinition{}
-	gkeNapProvisioning = ""
-	gkeNapReservation = ""
-	envVars = nil
-	pathwaysProxyEnv = nil
-	pathwaysServerEnv = nil
-	pathwaysWorkerEnv = nil
-
-	// Reset list, logs, and inspect subcommand flags
-	filterStatus = ""
-	filterName = ""
-	follow = false
-	mainOnly = false
-	inspectWorkloadName = ""
-	inspectOutputPath = ""
-	inspectShow = false
+	resetCommandFlags(JobCmd)
+	nodeConstraint = make(map[string]string)
 }
 
 func setupSubmitTestEnv(t *testing.T) {
+	t.Helper()
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
 	resetJobFlags()
 

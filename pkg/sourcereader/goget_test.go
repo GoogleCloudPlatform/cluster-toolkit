@@ -34,15 +34,16 @@ func (s *goGetSuite) TestGetModule_GoGet(c *C) {
 		restoreGitLocalEnvVars(origEnv)
 	}()
 
-	_ = os.Setenv("GIT_INDEX_FILE", "should-be-unset")
+	badIndex := filepath.Join(c.MkDir(), "missing", "index")
+	_ = os.Setenv("GIT_INDEX_FILE", badIndex)
 	saved := unsetGitLocalEnvVars()
-	c.Assert(saved["GIT_INDEX_FILE"], Equals, "should-be-unset")
+	c.Assert(saved["GIT_INDEX_FILE"], Equals, badIndex)
 	for _, key := range gitLocalEnvVars {
 		_, ok := os.LookupEnv(key)
 		c.Assert(ok, Equals, false)
 	}
 	restoreGitLocalEnvVars(saved)
-	c.Assert(os.Getenv("GIT_INDEX_FILE"), Equals, "should-be-unset")
+	c.Assert(os.Getenv("GIT_INDEX_FILE"), Equals, badIndex)
 
 	destDir := c.MkDir()
 
@@ -50,7 +51,7 @@ func (s *goGetSuite) TestGetModule_GoGet(c *C) {
 	destDirForHTTPS := filepath.Join(destDir, "https")
 	err := s.r.GetModule("github.com/terraform-google-modules/terraform-google-project-factory//helpers", destDirForHTTPS)
 	c.Assert(err, IsNil)
-	c.Assert(os.Getenv("GIT_INDEX_FILE"), Equals, "should-be-unset")
+	c.Assert(os.Getenv("GIT_INDEX_FILE"), Equals, badIndex)
 	fInfo, err := os.Stat(filepath.Join(destDirForHTTPS, "terraform_validate"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "terraform_validate")
