@@ -82,5 +82,7 @@ output "server_ca_certs" {
     verify-ca. It changes when the server CA is rotated, so clients should
     read it again after a rotation.
     EOT
-  value       = join("", [for cert in data.google_sql_ca_certs.instance.certs : cert.cert])
+  # Cloud SQL returns each certificate without a final newline, so end each
+  # one with a newline; joined as returned, the bundle is not valid PEM.
+  value = join("", [for cert in data.google_sql_ca_certs.instance.certs : "${trimspace(cert.cert)}\n"])
 }
