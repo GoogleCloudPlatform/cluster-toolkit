@@ -28,6 +28,23 @@ matter of registering different service account credentials, for the different
 projects, to the TKFE portal. The process to create additional service accounts
 is outlined in the following section.
 
+A multi-project setup needs one extra step. Terraform state for every resource
+TKFE provisions is held in a Cloud Storage bucket in the deployment project
+(see [Terraform State](admin_guide.md#terraform-state)), and a service account
+can write the state of the resources it provisions only if it has access to
+that bucket. After creating an additional service account, add it to
+`state_bucket_writers` in
+`tf/state_bucket/deployments/<deployment_name>/admin.auto.tfvars` on the client
+machine and re-apply that directory:
+
+```shell
+terraform -chdir=tf/state_bucket/deployments/<deployment_name> apply
+```
+
+`deploy.sh` never overwrites `admin.auto.tfvars`, so the entry survives
+redeploys. Without this step, provisioning with that credential fails when
+Terraform tries to write state.
+
 ---
 
 ## Service Account Management
