@@ -693,6 +693,13 @@ populate_protected_resources() {
 			[[ -z "$bkt_name" ]] && continue
 			bkt_name="${bkt_name#gs://}"
 			bkt_name="${bkt_name%/}"
+			# Skip Google-managed buckets or buckets without Cluster Toolkit labels
+			if [[ "${bkt_labels:-}" == *"goog-managed-by="* || "${bkt_labels:-}" == *"goog-cloudbuild-location="* ]]; then
+				continue
+			fi
+			if [[ "${bkt_labels:-}" != *"ghpc_deployment="* && "${bkt_labels:-}" != *"ghpc_module="* && "${bkt_labels:-}" != *"slurm_cluster_name="* ]]; then
+				continue
+			fi
 			local protect=false
 			if is_excluded "$bkt_name" "${bkt_labels:-}"; then
 				protect=true
