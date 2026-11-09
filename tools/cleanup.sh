@@ -1453,7 +1453,6 @@ main() {
 
 	check_dependencies
 	load_exclusions
-	populate_active_build_exclusions
 	populate_protected_resources
 	log_protected_network_uris # Log the protected network URIs for debugging
 	log_exclusion_map          # Log the final exclusion map for debugging
