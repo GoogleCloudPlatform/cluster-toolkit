@@ -1283,12 +1283,8 @@ process_storage_buckets() {
 			continue
 		fi
 
-		# 4. Check if bucket's ghpc_deployment label is in PROTECTED_DEPLOYMENTS
+		# 4. Extract deployment label for active build prefix check
 		deployment=$(_get_deployment_from_labels "${labels_str:-}") || true
-		if [[ -n "$deployment" && -n "${PROTECTED_DEPLOYMENTS[${deployment}]:-}" ]]; then
-			log "SKIP" "Storage Bucket $name is protected because its deployment '$deployment' is protected."
-			continue
-		fi
 
 		# 5. Check if bucket name or deployment matches any active Cloud Build prefix
 		protected=false
