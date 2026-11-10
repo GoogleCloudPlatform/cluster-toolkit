@@ -1,0 +1,84 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# For node images built with Image Builder, which preload the NVIDIA driver
+# and IMEX under /var/lib/nvidia.
+# Installs the preloaded driver with cos-extensions (loads the kernel
+# modules), then copies /var/lib/nvidia, IMEX included, into
+# /home/kubernetes/bin/nvidia, where the GKE device plugin looks.
+# The driver version (nvidia_driver_version in the blueprint) must match the
+# one built into the image.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-preloaded-driver-installer
+  namespace: kube-system
+  labels:
+    k8s-app: nvidia-preloaded-driver-installer
+spec:
+  selector:
+    matchLabels:
+      k8s-app: nvidia-preloaded-driver-installer
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        name: nvidia-preloaded-driver-installer
+        k8s-app: nvidia-preloaded-driver-installer
+    spec:
+      priorityClassName: system-node-critical
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: cloud.google.com/gke-accelerator
+                operator: Exists
+              # Present only when GKE installs the driver itself.
+              - key: cloud.google.com/gke-gpu-driver-version
+                operator: DoesNotExist
+      tolerations:
+      - operator: "Exists"
+      hostNetwork: true
+      hostPID: true
+      initContainers:
+      - name: nvidia-driver-installer
+        image: ubuntu:24.04
+        securityContext:
+          privileged: true
+        command:
+        - nsenter
+        - --target
+        - "1"
+        - --mount
+        - --uts
+        - --ipc
+        - --net
+        - --pid
+        - --
+        - bash
+        - -c
+        - |
+          set -euo pipefail
+          if [ -z "${nvidia_driver_version}" ]; then
+            echo "ERROR: nvidia_driver_version is empty. Set it in the deployment file and run gcluster deploy again."
+            exit 1
+          fi
+          cos-extensions install gpu -- --version=${nvidia_driver_version}
+          mkdir -p /home/kubernetes/bin/nvidia
+          cp -af /var/lib/nvidia/. /home/kubernetes/bin/nvidia/
+      containers:
+      - name: pause
+        image: registry.k8s.io/pause:3.9

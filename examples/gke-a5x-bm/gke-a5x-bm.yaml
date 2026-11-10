@@ -1,0 +1,460 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# GKE A5X (VR200 NVL72) bare metal blueprint. A5X nodes use a custom COS node
+# image with the NVIDIA driver and IMEX preloaded (custom_image).
+
+blueprint_name: gke-a5x-bm
+
+vars:
+
+  # The following variables should be over-written in the deployment.yaml file.
+  # Your GCP Project ID
+  project_id:
+
+  # This should be unique across all of your Cluster Toolkit Deployments.
+  deployment_name: gke-a5x-bm-dep
+
+  # The GCP Region for this deployment.
+  region:
+
+  # The GCP Zone for this deployment.
+  zone:
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr:
+
+  # The number of nodes to be created in each node pool.
+  static_node_count:
+
+  # The number of node pools to be created.
+  num_node_pools:
+
+  # The name of the compute engine reservation of A5X nodes.
+  # To target a BLOCK_NAME, the name of the extended reservation
+  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
+  reservation:
+
+  # The GCP Project ID hosting the reservation. Set to owner project id if using a shared reservation.
+  reservation_project_id: $(vars.project_id)
+
+  # Sub-block mapping. Overridden in the deployment file.
+  # true: gcluster proposes free sub-blocks and saves the map into the deployment file.
+  # false: the module uses the map as written; no gcluster lookup.
+  # Requires `reservation` to be the bare reservation name.
+  pin_to_subblocks: true
+  # Map of key (block-subblock in form of BB-SSSS) to sub-block path. {} lets gcluster fill it in.
+  reservation_subblocks: {}
+
+  system_node_pool_machine_type: n2d-standard-16
+  system_node_pool_disk_size_gb: 200
+  a5x_node_pool_disk_size_gb: 400
+  # true: keep A5X node pool size changes made outside Terraform (for example
+  # by gcloud or an autoscaling controller) instead of reverting them to
+  # static_node_count on the next deploy.
+  ignore_node_count_changes: true
+  k8s_service_account_name: workload-identity-k8s-sa
+  accelerator_type: nvidia-vr200
+  # GKE version to use with the node image.
+  version_prefix:
+
+  # --- Custom Node image ---
+  # Name of the custom COS node image with the NVIDIA driver and IMEX
+  # preloaded. GKE driver install is turned off and a
+  # DaemonSet loads the preloaded driver.
+  # Set in the deployment file.
+  custom_image:
+  custom_image_project: $(vars.project_id)
+  # Type of custom_image. Set value as:
+  #   image-builder: for an image built with Image Builder.
+  #   prebuilt: for a prebuilt GKE A5X node image.
+  custom_image_source: image-builder
+  # Used only if custom_image is "" (GKE-managed image).
+  gpu_driver_version: LATEST
+
+  # false (default): eth0 only, in the cluster VPC. The second host NIC isn't
+  # set up and no RDMA NICs are attached.
+  enable_dranet: false
+
+  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+  nvidia_dra_driver_path: $(ghpc_stage("./nvidia-dra-driver.yaml.tftpl"))
+  # Driver DaemonSet for node images built with Image Builder (driver and IMEX
+  # preloaded under /var/lib/nvidia).
+  nvidia_driver_installer_path: $(ghpc_stage("./nvidia-preloaded-driver-installer.yaml.tftpl"))
+  # Driver DaemonSet for prebuilt GKE A5X node images.
+  nvidia_prebuilt_driver_installer_path: $(ghpc_stage("./nvidia-prebuilt-driver-installer.yaml"))
+  # NVIDIA driver version built into custom_image. Must match the NVIDIA bundle
+  # the image was built from. Used only with custom_image_source: image-builder.
+  nvidia_driver_version: ""
+
+# Google provider 8.x (needed for the monitoring_components list below).
+# Setting terraform_providers replaces the default providers, so their
+# project/region/zone configuration is repeated here.
+terraform_providers:
+  google:
+    source: hashicorp/google
+    version: ">= 8.0.0, <= 8.8.0"
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+  google-beta:
+    source: hashicorp/google-beta
+    version: ">= 8.0.0, <= 8.8.0"
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: gke-a5x-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-0
+      ips_per_nat: 6
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.0.0/18
+        subnet_private_access: true
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-sub-0
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: node_pool_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
+  - id: a5x-cluster
+    source: modules/scheduler/gke-cluster
+    use: [gke-a5x-net-0, workload_service_account]
+    settings:
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
+      system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
+      system_node_pool_taints: []
+      enable_dataplane_v2: true
+      enable_gcsfuse_csi: true
+      enable_private_endpoint: false
+      enable_shielded_nodes: false
+      configure_workload_identity_sa: true
+      k8s_service_account_name: $(vars.k8s_service_account_name)
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr)
+        display_name: "kubectl-access-network"
+      version_prefix: $(vars.version_prefix)
+      # In the order GKE returns them, to avoid drift on re-deploy. DCGM is
+      # listed so the module doesn't append it at the end.
+      monitoring_components:
+      - SYSTEM_COMPONENTS
+      - APISERVER
+      - SCHEDULER
+      - CONTROLLER_MANAGER
+      - STORAGE
+      - HPA
+      - POD
+      - DAEMONSET
+      - DEPLOYMENT
+      - STATEFULSET
+      - CADVISOR
+      - KUBELET
+      - DCGM
+      - JOBSET
+    outputs: [instructions]
+
+  - id: workload_policy
+    source: modules/compute/resource-policy
+    settings:
+      name: $(vars.deployment_name)-a5x-wp
+      project_id: $(vars.project_id)
+      region: $(vars.region)
+      workload_policy:
+        accelerator_topology: "1x72"
+        type: "HIGH_THROUGHPUT"
+
+  - id: a5x-pool
+    source: modules/compute/gke-node-pool
+    use: [a5x-cluster, node_pool_service_account, workload_policy]
+    settings:
+      name: a5x-sb  # short, so pool names are a5x-sb-BB-SSSS
+      # Hardware-locked: the driver, IMEX, DRA and NVLink settings in this
+      # blueprint are specific to this shape. To use a different accelerator or
+      # machine series, switch to the matching blueprint in examples/ (run
+      # './gcluster explain' to find it) instead of changing machine_type here.
+      machine_type: a5x-highgpu-4g-metal
+      zones: [$(vars.zone)]
+      static_node_count: $(vars.static_node_count)
+      ignore_node_count_changes: $(vars.ignore_node_count_changes)
+      num_node_pools: $(vars.num_node_pools)
+      disk_size_gb: $(vars.a5x_node_pool_disk_size_gb)
+      disk_type: hyperdisk-balanced
+      # The 4 local NVMe SSDs back ephemeral storage.
+      local_ssd_count_ephemeral_storage: 4
+      # Auto-upgrade Off. GKE allows this only in clusters without a release channel, so the
+      # cluster keeps the module default (UNSPECIFIED).
+      auto_upgrade: false
+      auto_repair: false
+      # Off: the custom image loads an unsigned NVIDIA kernel module.
+      enable_secure_boot: false
+      # Node image.
+      image_type: '$(vars.custom_image == "" ? "COS_CONTAINERD" : "CUSTOM_CONTAINERD")'
+      node_image_config:
+        image: '$(vars.custom_image == "" ? null : vars.custom_image)'
+        image_project: '$(vars.custom_image == "" ? null : vars.custom_image_project)'
+      guest_accelerator:
+      - type: $(vars.accelerator_type)
+        count: 4
+        gpu_driver_installation_config:
+          gpu_driver_version: '$(vars.custom_image == "" ? vars.gpu_driver_version : "INSTALLATION_DISABLED")'
+      enable_dranet: $(vars.enable_dranet)
+      kubernetes_labels:
+        lustre.csi.storage.gke.io/multi-nic: '$(vars.enable_dranet ? "true" : "false")'
+        cloud.google.com/gke-networking-dra-driver: '$(vars.enable_dranet ? "true" : "false")'
+
+      reservation_affinity:
+        consume_reservation_type: SPECIFIC_RESERVATION
+        specific_reservations:
+        - name: $(vars.reservation)
+          project: $(vars.reservation_project_id)
+          pin_to_subblocks: $(vars.pin_to_subblocks)
+          reservation_subblocks: $(vars.reservation_subblocks)
+      linux_node_config:
+        hugepages_config:
+          hugepage_size_2m: 4096
+    reconfigure_ignores:
+      google_container_node_pool:
+      # Pinned by version_prefix; don't downgrade nodes that GKE upgraded.
+      - version
+      - node_config[0].resource_labels
+    outputs: [instructions]
+
+  - id: workload-manager-install
+    source: modules/management/kubectl-apply
+    use: [a5x-cluster]
+    settings:
+      target_architecture: "arm64"
+      kueue:
+        install: true
+        version: "0.17.1"
+        config_path: $(vars.kueue_configuration_path)
+        config_template_vars:
+          num_gpus: $(a5x-pool.static_gpu_count)
+          accelerator_type: $(vars.accelerator_type)
+      jobset:
+        install: true
+      # ComputeDomain controller and IMEX daemons for multi-node NVLink.
+      # GPU allocation stays with the GKE device plugin (gpus.enabled=false).
+      nvidia_dra_driver:
+        install: true
+        version: "25.12.0"
+        accelerator_type: $(vars.accelerator_type)
+      apply_manifests:
+      # Namespace + pod quota for the DRA driver. Applied before the Helm chart.
+      - name: nvidia-dra-driver-quota
+        source: $(vars.nvidia_dra_driver_path)
+        template_vars:
+          static_node_count: $(vars.static_node_count)
+          num_node_pools: $(vars.num_node_pools)
+      # GPU driver DaemonSet, applied only when custom_image is set. Exactly one
+      # of the two below is applied, based on custom_image_source.
+      - name: nvidia-driver-installer
+        source: $(vars.nvidia_driver_installer_path)
+        enable: $(vars.custom_image != "" && vars.custom_image_source != "prebuilt")
+        wait_for_rollout: true
+        template_vars:
+          nvidia_driver_version: $(vars.nvidia_driver_version)
+      - name: nvidia-prebuilt-driver-installer
+        source: $(vars.nvidia_prebuilt_driver_installer_path)
+        enable: $(vars.custom_image != "" && vars.custom_image_source == "prebuilt")
+        wait_for_rollout: true
+
+  - id: job-template
+    source: modules/compute/gke-job-template
+    use: [a5x-pool]
+    settings:
+      enable_dranet: [false]
+      image: nvidia/cuda:13.4.3-base-ubuntu22.04
+      command:
+      - nvidia-smi
+      node_count: $(vars.static_node_count)
+      name: run-nvidia-smi
+      k8s_service_account_name: $(vars.k8s_service_account_name)
+      tolerations:
+      - key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+        effect: NoSchedule
+    outputs: [instructions]
+
+  - id: training_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /training-data
+      name_prefix: training
+      random_suffix: true
+      force_destroy: false
+      enable_hierarchical_namespace: true
+      # Bucket-level read/write for the workload service account, in addition
+      # to its project-level role, so GCS FUSE keeps working if project-level
+      # grants are restricted.
+      object_users:
+        workload: $(workload_service_account.service_account_iam_email)
+
+  - id: checkpoint_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /checkpoint-data
+      name_prefix: checkpoint
+      random_suffix: true
+      force_destroy: false
+      enable_hierarchical_namespace: true
+      # Bucket-level read/write for the workload service account, in addition
+      # to its project-level role, so GCS FUSE keeps working if project-level
+      # grants are restricted.
+      object_users:
+        workload: $(workload_service_account.service_account_iam_email)
+
+  # Persistent Volume for training data using GCS Fuse Storage Profile.
+  # For shared buckets or custom IAM roles, see modules/file-system/gke-persistent-volume/README.md
+  - id: training-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [training_bucket, a5x-cluster]
+    settings:
+      capacity_gib: 1000000
+      gcsfuse_storage_class_name: gcsfusecsi-training
+
+  # Persistent Volume for checkpoint data using GCS Fuse Storage Profile
+  - id: checkpointing-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [checkpoint_bucket, a5x-cluster]
+    settings:
+      capacity_gib: 1000000
+      gcsfuse_storage_class_name: gcsfusecsi-checkpointing
+
+  # Example job: fio against local SSD, both buckets.
+  - id: fio-bench-job-template
+    source: modules/compute/gke-job-template
+    use: [checkpointing-pv, training-pv, a5x-pool]
+    settings:
+      enable_dranet: [false]
+      name: storage-fio-job
+      security_context:  # to make sure the job have enough access to install the fio packages
+      - key: runAsUser
+        value: 0
+      - key: runAsGroup
+        value: 100
+      - key: fsGroup
+        value: 100
+      # 1000 GB scratch volume on the local SSDs. The module also adds the
+      # nodeSelector cloud.google.com/gke-ephemeral-storage-local-ssd: "true".
+      ephemeral_volumes:
+      - type: local-ssd
+        mount_path: /scratch-data
+        size_gb: 1000
+
+      k8s_service_account_name: workload-identity-k8s-sa
+      image: ubuntu:22.04
+      tolerations:
+      - key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+        effect: NoSchedule
+
+      command:
+      - bash
+      - -c
+      - |
+
+        set -eux
+        export DEBIAN_FRONTEND=noninteractive
+
+        # Install fio
+        apt update -y && apt install -y fio
+
+        # Use a tag to create a unique path for tests
+        TAG=`date +%s`
+
+        # Verify mountpoints
+        df -h
+        mountpoint /scratch-data
+        mountpoint /checkpoint-data
+        mountpoint /training-data
+
+        # Create temporary directory for fio benchmarks
+        mkdir -p /{scratch,training,checkpoint}-data/fio-benchmarks-${TAG}
+
+        # Perform scratch data write performance test
+        fio --ioengine=libaio --filesize=10G --ramp_time=2s --runtime=1m \
+          --numjobs=32 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/scratch-data/fio-benchmarks-${TAG} \
+          --name=scratch --blocksize=100m --iodepth=64 --readwrite=write
+
+        # Perform training data reading performance test
+        fio --ioengine=libaio --filesize=1G --ramp_time=2s --runtime=1m \
+          --numjobs=32 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/training-data/fio-benchmarks-${TAG} \
+          --name=training --blocksize=1m --iodepth=64 --readwrite=randread
+
+        # Perform checkpoint data writing performance test
+        fio --ioengine=libaio --filesize=10G --ramp_time=2s --runtime=1m \
+          --numjobs=32 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/checkpoint-data/fio-benchmarks-${TAG} \
+          --name=checkpoint --blocksize=100m --iodepth=64 --readwrite=write
+
+        # Perform checkpoint data reading performance test
+        fio --ioengine=libaio --filesize=10G --ramp_time=2s --runtime=1m \
+          --numjobs=32 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/checkpoint-data/fio-benchmarks-${TAG} \
+          --name=checkpoint --blocksize=100m --iodepth=64 --readwrite=read
+
+        # Clean up temporary directories for fio benchmarks
+        rm -rf /{scratch,training,checkpoint}-data/fio-benchmarks-${TAG}
+
+    outputs: [instructions]

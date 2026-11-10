@@ -1,0 +1,179 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Multi-node NCCL all-gather test over multi-node NVLink, run as a JobSet through
+# the "a5x" Kueue queue. Kueue places all worker pods in one sub-block (rack).
+# NCCL and nccl-tests are built into the test image.
+# Runs on 2 nodes by default. To change it, set the values marked
+# "# NUM_NODES" (up to 18, one sub-block).
+apiVersion: resource.nvidia.com/v1beta1
+kind: ComputeDomain
+metadata:
+  name: nccl-test-compute-domain
+spec:
+  numNodes: 2 # NUM_NODES
+  channel:
+    resourceClaimTemplate:
+      name: nccl-test-compute-domain-channel
+---
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: allgather
+  labels:
+    kueue.x-k8s.io/queue-name: a5x
+spec:
+  ttlSecondsAfterFinished: 1200
+  network:
+    enableDNSHostnames: true
+  replicatedJobs:
+  - name: worker
+    template:
+      spec:
+        parallelism: 2 # NUM_NODES
+        completions: 2 # NUM_NODES
+        template:
+          metadata:
+            annotations:
+              kueue.x-k8s.io/podset-required-topology: "cloud.google.com/gce-topology-subblock"
+          spec:
+            terminationGracePeriodSeconds: 5
+            activeDeadlineSeconds: 3600
+            restartPolicy: Never
+            nodeSelector:
+              cloud.google.com/gke-accelerator: nvidia-vr200
+              kubernetes.io/arch: arm64
+            tolerations:
+            - key: nvidia.com/gpu
+              operator: Equal
+              value: present
+              effect: NoSchedule
+            - key: kubernetes.io/arch
+              operator: Equal
+              value: arm64
+              effect: NoSchedule
+            setHostnameAsFQDN: true
+            volumes:
+            - name: library-dir-host
+              hostPath:
+                path: /home/kubernetes/bin/nvidia
+            - name: shared-memory
+              emptyDir:
+                medium: "Memory"
+                sizeLimit: 250Gi
+            resourceClaims:
+            - name: compute-domain-channel
+              resourceClaimTemplateName: nccl-test-compute-domain-channel
+            containers:
+            - name: nccl-test
+              image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-vr200-container:v08-2.32.6
+              securityContext:
+                capabilities:
+                  add: ["IPC_LOCK"]
+              env:
+              - name: MY_NODE_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: spec.nodeName
+              - name: MY_JOB_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.labels['job-name']
+              - name: MY_SUBDOMAIN
+                value: "allgather"
+              - name: N_NODES
+                value: "2" # NUM_NODES
+              - name: OMPI_ALLOW_RUN_AS_ROOT
+                value: "1"
+              - name: OMPI_ALLOW_RUN_AS_ROOT_CONFIRM
+                value: "1"
+              - name: LD_LIBRARY_PATH
+                value: /var/nccl/current/lib:/usr/local/cuda-13.5/lib64:/opt/rdma-core/build/lib:/usr/lib/aarch64-linux-gnu:/usr/local/nvidia/lib64
+              - name: UCX_NET_DEVICES
+                value: eth0
+              - name: NCCL_DEBUG
+                value: INFO
+              - name: NCCL_DEBUG_SUBSYS
+                value: INIT
+              - name: NCCL_SOCKET_IFNAME
+                value: eth0
+              - name: NCCL_IB_DISABLE
+                value: "1"
+              - name: NCCL_MNNVL_ENABLE
+                value: "1"
+              - name: NCCL_NVLINK_UTIL_CENTRIC_SCHED_ENABLE
+                value: "0"
+              - name: NCCL_GIN_ENABLE
+                value: "0"
+              - name: HWLOC_COMPONENTS
+                value: "-pci"
+              command: ["/bin/bash", "-c"]
+              args:
+              - |
+                echo "Starting on ${MY_NODE_NAME} for a ${N_NODES}-node test"
+                set -ex
+                # Start sshd (port 222) for mpirun; the image has a shared root key.
+                mkdir -p /run/sshd
+                ssh-keygen -A
+                /usr/sbin/sshd -p 222 -o PermitRootLogin=yes -o PubkeyAuthentication=yes -o StrictModes=no
+
+                # Wait for every worker to come online, and build the hostfile.
+                for i in $(seq 0 $((N_NODES - 1))); do
+                  OTHER=${MY_JOB_NAME}-${i}.${MY_SUBDOMAIN}
+                  until ssh -p 222 -o StrictHostKeyChecking=no -o BatchMode=yes ${OTHER} hostname; do
+                    echo "Waiting for ${OTHER}..."
+                    sleep 5
+                  done
+                  echo "${OTHER} port=222 slots=4" | tee -a /tmp/hostfile
+                done
+                cat /tmp/hostfile
+
+                if [[ "${JOB_COMPLETION_INDEX}" -eq 0 ]]; then
+                  # Launch from the head worker (worker-0-0).
+                  mpirun --allow-run-as-root \
+                    --hostfile /tmp/hostfile \
+                    --bind-to none \
+                    --mca btl self,tcp \
+                    --mca btl_tcp_if_include eth0 \
+                    --mca orte_keep_fqdn_hostnames 1 \
+                    --mca plm_rsh_no_tree_spawn 1 \
+                    --mca btl_tcp_disable_family 6 \
+                    --mca plm_rsh_agent "ssh -q -p 222 -o LogLevel=ERROR -o StrictHostKeyChecking=no -o BatchMode=yes" \
+                    -x PATH="/var/nccl-tests/build:${PATH}" \
+                    -x LD_LIBRARY_PATH -x UCX_NET_DEVICES \
+                    -x NCCL_DEBUG -x NCCL_DEBUG_SUBSYS -x NCCL_SOCKET_IFNAME \
+                    -x NCCL_IB_DISABLE -x NCCL_MNNVL_ENABLE \
+                    -x NCCL_NVLINK_UTIL_CENTRIC_SCHED_ENABLE -x NCCL_GIN_ENABLE \
+                    -x HWLOC_COMPONENTS \
+                    all_gather_perf -b 1K -e 8G -f 2 -g 1 -w 5 -n 50
+                  exit $?
+                fi
+                # Other workers keep sshd up until the head worker exits.
+                HEAD_NODE=${MY_JOB_NAME}-0.${MY_SUBDOMAIN}
+                while ssh -p 222 -o StrictHostKeyChecking=no -o BatchMode=yes ${HEAD_NODE} hostname; do
+                  sleep 5
+                done
+                exit 0
+              volumeMounts:
+              - name: library-dir-host
+                mountPath: /usr/local/nvidia
+              - name: shared-memory
+                mountPath: /dev/shm
+              resources:
+                requests:
+                  nvidia.com/gpu: 4
+                limits:
+                  nvidia.com/gpu: 4
+                claims:
+                - name: compute-domain-channel

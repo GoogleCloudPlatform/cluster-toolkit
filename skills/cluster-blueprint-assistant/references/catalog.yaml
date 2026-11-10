@@ -616,6 +616,89 @@ blueprints:
     source: modules/compute/gke-job-template
     use: [checkpointing-pv, training-pv, a4x-pool]
     settings: [command, ephemeral_volumes, image, k8s_service_account_name, name, security_context, tolerations]
+- path: examples/gke-a5x-bm/gke-a5x-bm.yaml
+  deployment_path: examples/gke-a5x-bm/gke-a5x-bm-deployment.yaml
+  blueprint_name: gke-a5x-bm
+  scheduler: gke
+  description: "This blueprint creates a GKE cluster with A5X Bare Metal nodes (a5x-highgpu-4g-metal: 4 × NVIDIA VR200 GPUs per node, NVLink domains of up to 18 nodes / 72 GPUs) using Cluster Toolkit."
+  machine_types: [a5x-highgpu-4g-metal]
+  required_services: [compute.googleapis.com, container.googleapis.com, iam.googleapis.com, storage.googleapis.com]
+  vars:
+    a5x_node_pool_disk_size_gb: 400
+    accelerator_type: nvidia-vr200
+    authorized_cidr: null
+    custom_image: null
+    custom_image_project: $(vars.project_id)
+    custom_image_source: image-builder
+    deployment_name: null
+    enable_dranet: false
+    gpu_driver_version: LATEST
+    ignore_node_count_changes: true
+    k8s_service_account_name: workload-identity-k8s-sa
+    kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
+    num_node_pools: null
+    nvidia_dra_driver_path: "$(ghpc_stage(\"./nvidia-dra-driver.yaml.tftpl\"))"
+    nvidia_driver_installer_path: "$(ghpc_stage(\"./nvidia-preloaded-driver-installer.yaml.tftpl\"))"
+    nvidia_driver_version: null
+    nvidia_prebuilt_driver_installer_path: "$(ghpc_stage(\"./nvidia-prebuilt-driver-installer.yaml\"))"
+    pin_to_subblocks: true
+    project_id: null
+    region: null
+    reservation: null
+    reservation_project_id: null
+    reservation_subblocks: {}
+    static_node_count: null
+    system_node_pool_disk_size_gb: 200
+    system_node_pool_machine_type: n2d-standard-16
+    version_prefix: null
+    zone: null
+  modules:
+  - id: gke-a5x-net-0
+    source: modules/network/vpc
+    settings: [firewall_rules, ips_per_nat, network_name, secondary_ranges_list, subnetworks]
+  - id: node_pool_service_account
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: workload_service_account
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: a5x-cluster
+    source: modules/scheduler/gke-cluster
+    use: [gke-a5x-net-0, workload_service_account]
+    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_gcsfuse_csi, enable_private_endpoint, enable_shielded_nodes, k8s_service_account_name, master_authorized_networks, monitoring_components, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+  - id: workload_policy
+    source: modules/compute/resource-policy
+    settings: [name, project_id, region, workload_policy]
+  - id: a5x-pool
+    source: modules/compute/gke-node-pool
+    use: [a5x-cluster, node_pool_service_account, workload_policy]
+    settings: [auto_repair, auto_upgrade, disk_size_gb, disk_type, enable_dranet, enable_secure_boot, guest_accelerator, ignore_node_count_changes, image_type, kubernetes_labels, linux_node_config, local_ssd_count_ephemeral_storage, machine_type, name, node_image_config, num_node_pools, reservation_affinity, static_node_count, zones]
+  - id: workload-manager-install
+    source: modules/management/kubectl-apply
+    use: [a5x-cluster]
+    settings: [apply_manifests, jobset, kueue, nvidia_dra_driver, target_architecture]
+  - id: job-template
+    source: modules/compute/gke-job-template
+    use: [a5x-pool]
+    settings: [command, enable_dranet, image, k8s_service_account_name, name, node_count, tolerations]
+  - id: training_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings: [enable_hierarchical_namespace, force_destroy, local_mount, name_prefix, object_users, random_suffix]
+  - id: checkpoint_bucket
+    source: modules/file-system/cloud-storage-bucket
+    settings: [enable_hierarchical_namespace, force_destroy, local_mount, name_prefix, object_users, random_suffix]
+  - id: training-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [training_bucket, a5x-cluster]
+    settings: [capacity_gib, gcsfuse_storage_class_name]
+  - id: checkpointing-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [checkpoint_bucket, a5x-cluster]
+    settings: [capacity_gib, gcsfuse_storage_class_name]
+  - id: fio-bench-job-template
+    source: modules/compute/gke-job-template
+    use: [checkpointing-pv, training-pv, a5x-pool]
+    settings: [command, enable_dranet, ephemeral_volumes, image, k8s_service_account_name, name, security_context, tolerations]
 - path: examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d/gke-h4d.yaml
   deployment_path: examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d/gke-h4d-deployment.yaml
   blueprint_name: gke-h4d
