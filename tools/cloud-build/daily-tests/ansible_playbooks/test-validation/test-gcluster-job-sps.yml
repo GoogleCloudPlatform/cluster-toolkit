@@ -66,6 +66,15 @@
 # WORKFLOW 1: Deploy SPS Instance (--pathways-deploy-sps) & Inspect (--filter pathways-sps)
 # ==========================================
 
+- name: Wait for previous Pathways test pods to finish terminating before deploying SPS
+  delegate_to: localhost
+  ansible.builtin.command: >
+    kubectl wait --for=delete pod
+    -l jobset.sigs.k8s.io/jobset-name=pw-{{ build | default('test') }}
+    --timeout=120s
+  failed_when: false
+  changed_when: false
+
 - name: Deploy the SPS instance to GKE
   delegate_to: localhost
   ansible.builtin.command:
@@ -101,21 +110,23 @@
   block:
   - name: Wait for SPS pathways-head and worker pods to reach Ready state
     delegate_to: localhost
-    ansible.builtin.command: >
-      kubectl wait --for=condition=Ready pod
-      -l jobset.sigs.k8s.io/jobset-name={{ sps_job_name }}
-      --timeout=600s
+    ansible.builtin.shell: |
+      set -eo pipefail
+      kubectl wait --for=condition=Ready pod -l jobset.sigs.k8s.io/jobset-name={{ sps_job_name }},jobset.sigs.k8s.io/replicatedjob-name=pathways-head --timeout=60s
+      kubectl wait --for=condition=Ready pod -l jobset.sigs.k8s.io/jobset-name={{ sps_job_name }},jobset.sigs.k8s.io/replicatedjob-name=worker --timeout=60s
+    args:
+      executable: /bin/bash
     register: sps_pods_ready
     until: sps_pods_ready.rc == 0
     retries: 20
-    delay: 5
+    delay: 10
     changed_when: false
 
   - name: Wait for SPS Resource Manager to log slice readiness
     delegate_to: localhost
     ansible.builtin.shell: |
       set -eo pipefail
-      kubectl logs -l jobset.sigs.k8s.io/jobset-name={{ sps_job_name }},jobset.sigs.k8s.io/replicatedjob-name=pathways-head -c pathways-rm | grep -E "[0-9]+/[0-9]+ Pathways Slices Now Ready"
+      kubectl logs -l jobset.sigs.k8s.io/jobset-name={{ sps_job_name }},jobset.sigs.k8s.io/replicatedjob-name=pathways-head -c pathways-rm | grep -E "{{ custom_vars.num_slices }}/{{ custom_vars.num_slices }} Pathways Slices Now Ready"
     args:
       executable: /bin/bash
     register: sps_rm_ready
@@ -143,7 +154,7 @@
       - sps_job_name in sps_inspect_output.stdout
       - sps_inspect_output.stdout is search("Status:\\s+Running")
       - (sps_job_name ~ "-pathways-head-0-0." ~ sps_job_name ~ ":29001") in sps_inspect_output.stdout
-      - sps_inspect_output.stdout is search("Slices:.*ready")
+      - sps_inspect_output.stdout is search("Slices:.*" ~ (custom_vars.num_slices | string) ~ "/" ~ (custom_vars.num_slices | string) ~ " ready")
       fail_msg: "SPS inspect output did not match expected summary: {{ sps_inspect_output.stdout }}"
 
   # ==========================================
@@ -282,11 +293,9 @@
 
   - name: Stream in-cluster SPS client workload logs for JAX TPU execution result
     delegate_to: localhost
-    ansible.builtin.shell: |
-      set -o pipefail
-      timeout 180 {{ workspace }}/gcluster job logs "{{ sps_client_job_name }}" -f --cluster {{ deployment_name }} --location {{ region }} --project {{ custom_vars.project }} --main-only | grep -m 1 "SPS In-Cluster JAX TPU Result"
-    args:
-      executable: /bin/bash
+    ansible.builtin.shell:
+      cmd: |
+        timeout 180 {{ workspace }}/gcluster job logs "{{ sps_client_job_name }}" -f --cluster {{ deployment_name }} --location {{ region }} --project {{ custom_vars.project }} --main-only | grep -m 1 "SPS In-Cluster JAX TPU Result"
     register: sps_client_streaming_logs
     until: sps_client_streaming_logs.rc == 0
     retries: 3
