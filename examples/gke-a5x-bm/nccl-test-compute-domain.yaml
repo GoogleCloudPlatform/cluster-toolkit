@@ -1,0 +1,242 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Two-node NCCL test over multi-node NVLink: a ComputeDomain and 2 test pods.
+# Both nodes must be in the same rack. NCCL and nccl-tests are built into the
+# test image. Run the test with mpirun from nccl-test-host-1 (see README.md).
+apiVersion: v1
+kind: Service
+metadata:
+  name: nccl-host-1
+spec:
+  selector:
+    name: nccl-host-1
+  clusterIP: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nccl-host-2
+spec:
+  selector:
+    name: nccl-host-2
+  clusterIP: None
+---
+apiVersion: resource.nvidia.com/v1beta1
+kind: ComputeDomain
+metadata:
+  name: nccl-test-compute-domain
+spec:
+  numNodes: 2
+  channel:
+    resourceClaimTemplate:
+      name: nccl-test-compute-domain-channel
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nccl-test-host-1
+  labels:
+    name: nccl-host-1
+  annotations:
+    compute-domain.nvidia.com/channel-claim-template: nccl-test-compute-domain-channel
+    compute-domain.nvidia.com/domain-name: nccl-test-compute-domain
+spec:
+  restartPolicy: Never
+  hostPID: false
+  tolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Equal"
+    value: "present"
+    effect: "NoSchedule"
+  - key: "kubernetes.io/arch"
+    operator: "Equal"
+    value: "arm64"
+    effect: "NoSchedule"
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: cloud.google.com/gke-accelerator
+            operator: In
+            values:
+            - nvidia-vr200
+          - key: kubernetes.io/arch
+            operator: In
+            values:
+            - arm64
+  volumes:
+  - name: library-dir-host
+    hostPath:
+      path: /home/kubernetes/bin/nvidia
+  - name: shared-memory
+    emptyDir:
+      medium: "Memory"
+      sizeLimit: 250Gi
+  containers:
+  - name: test
+    image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-vr200-container:v08-2.32.6
+    securityContext:
+      privileged: true
+      capabilities:
+        add: ["IPC_LOCK"]
+    resources:
+      requests:
+        cpu: 150m
+        nvidia.com/gpu: 4
+      limits:
+        nvidia.com/gpu: 4
+      claims:
+      - name: compute-domain-channel
+    volumeMounts:
+    - name: library-dir-host
+      mountPath: /usr/local/nvidia
+    - name: shared-memory
+      mountPath: /dev/shm
+    env:
+    - name: OMPI_ALLOW_RUN_AS_ROOT
+      value: "1"
+    - name: OMPI_ALLOW_RUN_AS_ROOT_CONFIRM
+      value: "1"
+    - name: LD_LIBRARY_PATH
+      value: /var/nccl/current/lib:/usr/local/cuda-13.5/lib64:/opt/rdma-core/build/lib:/usr/lib/aarch64-linux-gnu:/usr/local/nvidia/lib64
+    - name: UCX_NET_DEVICES
+      value: eth0
+    - name: NCCL_DEBUG
+      value: INFO
+    - name: NCCL_DEBUG_SUBSYS
+      value: INIT
+    - name: NCCL_SOCKET_IFNAME
+      value: eth0
+    - name: NCCL_IB_DISABLE
+      value: "1"
+    - name: NCCL_MNNVL_ENABLE
+      value: "1"
+    - name: NCCL_NVLINK_UTIL_CENTRIC_SCHED_ENABLE
+      value: "0"
+    - name: HWLOC_COMPONENTS
+      value: "-pci"
+    command: ["/bin/bash", "-c"]
+    args:
+    - |
+      set -ex
+      mkdir -p /run/sshd
+      ssh-keygen -A
+      /usr/sbin/sshd -p 222 -o PermitRootLogin=yes -o PubkeyAuthentication=yes -o StrictModes=no
+      seq -f "nccl-host-%.0f port=222 slots=4" 1 2 > /tmp/hostfile
+      echo "ComputeDomain Template Booted!"
+      sleep infinity
+  resourceClaims:
+  - name: compute-domain-channel
+    resourceClaimTemplateName: nccl-test-compute-domain-channel
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nccl-test-host-2
+  labels:
+    name: nccl-host-2
+  annotations:
+    compute-domain.nvidia.com/channel-claim-template: nccl-test-compute-domain-channel
+    compute-domain.nvidia.com/domain-name: nccl-test-compute-domain
+spec:
+  restartPolicy: Never
+  hostPID: false
+  tolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Equal"
+    value: "present"
+    effect: "NoSchedule"
+  - key: "kubernetes.io/arch"
+    operator: "Equal"
+    value: "arm64"
+    effect: "NoSchedule"
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: cloud.google.com/gke-accelerator
+            operator: In
+            values:
+            - nvidia-vr200
+          - key: kubernetes.io/arch
+            operator: In
+            values:
+            - arm64
+  volumes:
+  - name: library-dir-host
+    hostPath:
+      path: /home/kubernetes/bin/nvidia
+  - name: shared-memory
+    emptyDir:
+      medium: "Memory"
+      sizeLimit: 250Gi
+  containers:
+  - name: test
+    image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-vr200-container:v08-2.32.6
+    securityContext:
+      privileged: true
+      capabilities:
+        add: ["IPC_LOCK"]
+    resources:
+      requests:
+        cpu: 150m
+        nvidia.com/gpu: 4
+      limits:
+        nvidia.com/gpu: 4
+      claims:
+      - name: compute-domain-channel
+    volumeMounts:
+    - name: library-dir-host
+      mountPath: /usr/local/nvidia
+    - name: shared-memory
+      mountPath: /dev/shm
+    env:
+    - name: OMPI_ALLOW_RUN_AS_ROOT
+      value: "1"
+    - name: OMPI_ALLOW_RUN_AS_ROOT_CONFIRM
+      value: "1"
+    - name: LD_LIBRARY_PATH
+      value: /var/nccl/current/lib:/usr/local/cuda-13.5/lib64:/opt/rdma-core/build/lib:/usr/lib/aarch64-linux-gnu:/usr/local/nvidia/lib64
+    - name: UCX_NET_DEVICES
+      value: eth0
+    - name: NCCL_DEBUG
+      value: INFO
+    - name: NCCL_DEBUG_SUBSYS
+      value: INIT
+    - name: NCCL_SOCKET_IFNAME
+      value: eth0
+    - name: NCCL_IB_DISABLE
+      value: "1"
+    - name: NCCL_MNNVL_ENABLE
+      value: "1"
+    - name: NCCL_NVLINK_UTIL_CENTRIC_SCHED_ENABLE
+      value: "0"
+    - name: HWLOC_COMPONENTS
+      value: "-pci"
+    command: ["/bin/bash", "-c"]
+    args:
+    - |
+      set -ex
+      mkdir -p /run/sshd
+      ssh-keygen -A
+      /usr/sbin/sshd -p 222 -o PermitRootLogin=yes -o PubkeyAuthentication=yes -o StrictModes=no
+      seq -f "nccl-host-%.0f port=222 slots=4" 1 2 > /tmp/hostfile
+      echo "ComputeDomain Template Booted!"
+      sleep infinity
+  resourceClaims:
+  - name: compute-domain-channel
+    resourceClaimTemplateName: nccl-test-compute-domain-channel
