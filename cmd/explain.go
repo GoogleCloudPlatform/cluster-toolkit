@@ -20,6 +20,7 @@ import (
 	"hpc-toolkit/pkg/catalog"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulereader"
+	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/sourcereader"
 	"hpc-toolkit/pkg/telemetry"
 	"io"
@@ -133,6 +134,7 @@ type ExplainModuleResult struct {
 	OptionalInputs   []ExplainModuleInput `json:"optional_inputs,omitempty" yaml:"optional_inputs,omitempty"`
 	DeprecatedInputs []ExplainModuleInput `json:"deprecated_inputs,omitempty" yaml:"deprecated_inputs,omitempty"`
 	Outputs          []string             `json:"outputs,omitempty" yaml:"outputs,omitempty"`
+	DefaultIgnores   map[string][]string  `json:"default_ignores,omitempty" yaml:"default_ignores,omitempty"`
 }
 
 // ExplainAutoInput describes an input filled automatically via use:, vars:, or inject_module_id.
@@ -1158,6 +1160,11 @@ func buildExplainModule(modPath, kind string) (ExplainModuleResult, error) {
 
 	snippet := renderModuleYAMLBlock(defaultModuleID(modPath), modPath, upstreamIDsFromGroups(upstreamGroups), reqInputs, optInputs)
 
+	var defaultIgnores map[string][]string
+	if kind == config.TerraformKind.String() {
+		defaultIgnores, _ = modulewriter.GetModuleDefaultIgnores(modPath)
+	}
+
 	return ExplainModuleResult{
 		Module:           modPath,
 		Kind:             kind,
@@ -1171,6 +1178,7 @@ func buildExplainModule(modPath, kind string) (ExplainModuleResult, error) {
 		OptionalInputs:   optInputs,
 		DeprecatedInputs: depInputs,
 		Outputs:          outputs,
+		DefaultIgnores:   defaultIgnores,
 	}, nil
 }
 
@@ -1761,6 +1769,22 @@ func printExplainModuleText(w io.Writer, res ExplainModuleResult) {
 
 	if len(res.Outputs) > 0 {
 		writef(w, "\nModule Outputs (%d): %s\n", len(res.Outputs), strings.Join(res.Outputs, ", "))
+	}
+
+	if len(res.DefaultIgnores) > 0 {
+		writeln(w, "\nLifecycle Ignore Guardrails:")
+		targets := make([]string, 0, len(res.DefaultIgnores))
+		for t := range res.DefaultIgnores {
+			targets = append(targets, t)
+		}
+		sort.Strings(targets)
+		for _, target := range targets {
+			writef(w, "  %s:\n", target)
+			for _, ign := range res.DefaultIgnores[target] {
+				writef(w, "    - %s\n", ign)
+			}
+		}
+		writeln(w, "  Tip: Use 'reconfigure_ignores' in your blueprint to add attributes or subtract with '-' (e.g. -node_config[0].labels).")
 	}
 }
 

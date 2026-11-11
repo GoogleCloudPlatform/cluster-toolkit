@@ -1093,14 +1093,115 @@ resource "google_compute_disk" "disk" {
 	}
 }
 
+func TestWriteModuleReconfigureOverrides_EmptyResultRejected(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mainTf := `
+resource "google_compute_disk" "disk" {
+  name = "disk"
+  lifecycle {
+    ignore_changes = [
+      labels,
+    ]
+  }
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte(mainTf), 0644); err != nil {
+		t.Fatalf("failed to write main.tf: %v", err)
+	}
+
+	reconfigIgnores := map[string][]string{
+		"google_compute_disk": {
+			"-labels",
+		},
+	}
+
+	err := writeModuleReconfigureOverrides(tmpDir, reconfigIgnores)
+	if err == nil || !strings.Contains(err.Error(), "cannot subtract all attributes") {
+		t.Fatalf("expected error for empty result override, got: %v", err)
+	}
+}
+
+func TestWriteModuleReconfigureOverrides_IgnoreChangesAll_SubtractionRejected(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mainTf := `
+resource "google_compute_disk" "disk" {
+  name = "disk"
+  lifecycle {
+    ignore_changes = all
+  }
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte(mainTf), 0644); err != nil {
+		t.Fatalf("failed to write main.tf: %v", err)
+	}
+
+	reconfigIgnores := map[string][]string{
+		"google_compute_disk": {
+			"-labels",
+		},
+	}
+
+	err := writeModuleReconfigureOverrides(tmpDir, reconfigIgnores)
+	if err == nil || !strings.Contains(err.Error(), "selective subtraction is not supported on resources that ignore all changes") {
+		t.Fatalf("expected error for subtraction on ignore_changes = all, got: %v", err)
+	}
+}
+
 func TestFormatTargetNotFoundError(t *testing.T) {
 	discovered := map[string][]string{
 		"google_compute_disk": {"disk_a", "disk_b"},
 	}
-	err := formatTargetNotFoundError("google_compute_disk.wrong", "/path/to/mod", discovered)
+	err := formatTargetNotFoundError("google_compute_disk.wrong", "modules/compute/gke-node-pool", discovered)
 	expectedSub := "Available resources in this module: google_compute_disk.disk_a, google_compute_disk.disk_b"
 	if !strings.Contains(err.Error(), expectedSub) {
 		t.Errorf("got error %q, want substring %q", err.Error(), expectedSub)
+	}
+	expectedHint := "Inspect module: https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/compute/gke-node-pool"
+	if !strings.Contains(err.Error(), expectedHint) {
+		t.Errorf("got error %q, want substring %q", err.Error(), expectedHint)
+	}
+}
+
+func TestGetModuleDefaultIgnores(t *testing.T) {
+	repoDir := t.TempDir()
+	modDir := filepath.Join(repoDir, "modules", "compute", "gke-node-pool")
+	if err := os.MkdirAll(modDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	mainTf := `
+resource "google_container_node_pool" "node_pool" {
+  name = "test"
+  lifecycle {
+    ignore_changes = [
+      initial_node_count,
+      node_config[0].labels,
+      node_config[0].resource_labels,
+    ]
+  }
+}
+`
+	if err := os.WriteFile(filepath.Join(modDir, "main.tf"), []byte(mainTf), 0644); err != nil {
+		t.Fatal(err)
+	}
+	oldFS := sourcereader.ModuleFS
+	t.Cleanup(func() { sourcereader.ModuleFS = oldFS })
+	sourcereader.ModuleFS = mockFS{os.DirFS(repoDir)}
+
+	ignores, err := GetModuleDefaultIgnores("modules/compute/gke-node-pool")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	poolIgnores, ok := ignores["google_container_node_pool"]
+	if !ok {
+		t.Fatalf("expected google_container_node_pool in ignores, got %v", ignores)
+	}
+	expectedContains := []string{"initial_node_count", "node_config[0].labels", "node_config[0].resource_labels"}
+	for _, exp := range expectedContains {
+		if !slices.Contains(poolIgnores, exp) {
+			t.Errorf("expected %q in poolIgnores, got %v", exp, poolIgnores)
+		}
 	}
 }
 
@@ -1126,6 +1227,152 @@ func TestNormalizeIgnoreAttribute(t *testing.T) {
 	}
 }
 
+func TestMergeIgnores(t *testing.T) {
+	tests := []struct {
+		name      string
+		existing  []string
+		additions []string
+		expected  []string
+		wantErr   bool
+	}{
+		{
+			name:      "additive merge and deduplication",
+			existing:  []string{"initial_node_count", "node_config[0].labels"},
+			additions: []string{"version", "node_config[0].labels"},
+			expected:  []string{"initial_node_count", "node_config[0].labels", "version"},
+		},
+		{
+			name:      "subtraction syntax removes existing ignore",
+			existing:  []string{"initial_node_count", "node_config[0].labels", "version"},
+			additions: []string{"-node_config[0].labels"},
+			expected:  []string{"initial_node_count", "version"},
+		},
+		{
+			name:      "subtraction syntax handles preceding whitespace and spaces around dash",
+			existing:  []string{"initial_node_count", "node_config[0].labels", "version"},
+			additions: []string{"  -  node_config[0].labels  "},
+			expected:  []string{"initial_node_count", "version"},
+		},
+		{
+			name:      "subtraction syntax handles normalized quotes and whitespace",
+			existing:  []string{`labels[ "key" ]`, "version"},
+			additions: []string{`-labels['key']`},
+			expected:  []string{"version"},
+		},
+		{
+			name:      "combined addition and subtraction",
+			existing:  []string{"node_config[0].labels", "initial_node_count"},
+			additions: []string{"-node_config[0].labels", "placement_policy[0].type"},
+			expected:  []string{"initial_node_count", "placement_policy[0].type"},
+		},
+		{
+			name:      "error on empty or whitespace-only entry",
+			existing:  []string{"version"},
+			additions: []string{"   "},
+			wantErr:   true,
+		},
+		{
+			name:      "error on dash-only entry",
+			existing:  []string{"version"},
+			additions: []string{" - "},
+			wantErr:   true,
+		},
+		{
+			name:      "error on invalid attribute syntax",
+			existing:  []string{"version"},
+			additions: []string{"123bad_attr"},
+			wantErr:   true,
+		},
+		{
+			name:      "error on all",
+			existing:  []string{"version"},
+			additions: []string{"all"},
+			wantErr:   true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := mergeIgnores(tc.existing, tc.additions)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("mergeIgnores(%v, %v) expected error, got nil", tc.existing, tc.additions)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !slices.Equal(got, tc.expected) {
+				t.Errorf("mergeIgnores(%v, %v) = %v, want %v", tc.existing, tc.additions, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestWriteModuleReconfigureOverrides_Subtraction(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mainTf := `
+resource "google_container_node_pool" "pool" {
+  name = "pool"
+  lifecycle {
+    ignore_changes = [
+      node_config[0].labels,
+      initial_node_count,
+    ]
+  }
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte(mainTf), 0644); err != nil {
+		t.Fatalf("failed to write main.tf: %v", err)
+	}
+
+	// 1. Success case with preceding whitespace and dash
+	reconfigIgnores := map[string][]string{
+		"google_container_node_pool": {
+			"version",
+			"  -  node_config[0].labels ",
+		},
+	}
+
+	if err := writeModuleReconfigureOverrides(tmpDir, reconfigIgnores); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertSingleResourceOverrideIgnores(t, filepath.Join(tmpDir, "override.tf.json"), []string{"initial_node_count", "version"})
+
+	// 2. Error case when subtracting a non-existent attribute
+	nonExistentIgnores := map[string][]string{
+		"google_container_node_pool": {
+			"-non_existent_attribute",
+		},
+	}
+	if err := writeModuleReconfigureOverrides(tmpDir, nonExistentIgnores); err == nil || !strings.Contains(err.Error(), "attribute is not in the module's lifecycle.ignore_changes") {
+		t.Fatalf("expected error for non-existent subtraction, got: %v", err)
+	}
+
+	// 3. Error case for dash-only entry
+	dashOnlyIgnores := map[string][]string{
+		"google_container_node_pool": {
+			" - ",
+		},
+	}
+	if err := writeModuleReconfigureOverrides(tmpDir, dashOnlyIgnores); err == nil || !strings.Contains(err.Error(), "must specify an attribute name after '-'") {
+		t.Fatalf("expected error for dash-only entry, got: %v", err)
+	}
+
+	// 4. Error case for conflicting addition and subtraction
+	conflictIgnores := map[string][]string{
+		"google_container_node_pool": {
+			"node_config[0].labels",
+			"-node_config[0].labels",
+		},
+	}
+	if err := writeModuleReconfigureOverrides(tmpDir, conflictIgnores); err == nil || !strings.Contains(err.Error(), "cannot both add and subtract attribute") {
+		t.Fatalf("expected error for conflicting add and subtract, got: %v", err)
+	}
+}
+
 func setupMockVpcFS(t *testing.T) {
 	t.Helper()
 	repoDir := t.TempDir()
@@ -1144,6 +1391,17 @@ resource "google_compute_network" "network" {
 	oldFS := sourcereader.ModuleFS
 	t.Cleanup(func() { sourcereader.ModuleFS = oldFS })
 	sourcereader.ModuleFS = mockFS{os.DirFS(repoDir)}
+}
+
+func assertValidateModuleIgnoresError(t *testing.T, bp config.Blueprint, wantSubstr string) {
+	t.Helper()
+	err := validateModuleIgnores(bp)
+	if err == nil {
+		t.Fatalf("expected error containing %q, got nil", wantSubstr)
+	}
+	if wantSubstr != "" && !strings.Contains(err.Error(), wantSubstr) {
+		t.Fatalf("expected error containing %q, got: %v", wantSubstr, err)
+	}
 }
 
 func TestValidateModuleIgnores(t *testing.T) {
@@ -1165,9 +1423,7 @@ func TestValidateModuleIgnores(t *testing.T) {
 			},
 		},
 	}
-	if err := validateModuleIgnores(bpPacker); err == nil {
-		t.Fatalf("expected error for packer module with reconfigure_ignores, got nil")
-	}
+	assertValidateModuleIgnoresError(t, bpPacker, "only supported for terraform modules")
 
 	bpRemote := config.Blueprint{
 		Groups: []config.Group{
@@ -1186,9 +1442,7 @@ func TestValidateModuleIgnores(t *testing.T) {
 			},
 		},
 	}
-	if err := validateModuleIgnores(bpRemote); err == nil {
-		t.Fatalf("expected error for remote module with reconfigure_ignores, got nil")
-	}
+	assertValidateModuleIgnoresError(t, bpRemote, "remote source")
 
 	bpAll := config.Blueprint{
 		Groups: []config.Group{
@@ -1207,9 +1461,7 @@ func TestValidateModuleIgnores(t *testing.T) {
 			},
 		},
 	}
-	if err := validateModuleIgnores(bpAll); err == nil {
-		t.Fatalf("expected error for reconfigure_ignores with 'all', got nil")
-	}
+	assertValidateModuleIgnoresError(t, bpAll, "ignoring \"all\" changes is not supported")
 
 	bpTypo := config.Blueprint{
 		Groups: []config.Group{
@@ -1228,9 +1480,7 @@ func TestValidateModuleIgnores(t *testing.T) {
 			},
 		},
 	}
-	if err := validateModuleIgnores(bpTypo); err == nil || !strings.Contains(err.Error(), "modules/network/vpc") {
-		t.Fatalf("expected error mentioning mod.Source for target typo, got: %v", err)
-	}
+	assertValidateModuleIgnoresError(t, bpTypo, "modules/network/vpc")
 
 	bpValid := config.Blueprint{
 		Groups: []config.Group{
@@ -1252,6 +1502,101 @@ func TestValidateModuleIgnores(t *testing.T) {
 	if err := validateModuleIgnores(bpValid); err != nil {
 		t.Fatalf("unexpected error for embedded module: %v", err)
 	}
+
+	bpEmpty := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "local_mod",
+						Kind:   config.TerraformKind,
+						Source: "modules/network/vpc",
+						ReconfigureIgnores: map[string][]string{
+							"google_compute_network": {"   "},
+						},
+					},
+				},
+			},
+		},
+	}
+	assertValidateModuleIgnoresError(t, bpEmpty, "cannot be empty or whitespace only")
+
+	bpDashOnly := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "local_mod",
+						Kind:   config.TerraformKind,
+						Source: "modules/network/vpc",
+						ReconfigureIgnores: map[string][]string{
+							"google_compute_network": {" - "},
+						},
+					},
+				},
+			},
+		},
+	}
+	assertValidateModuleIgnoresError(t, bpDashOnly, "must specify an attribute name after '-'")
+
+	bpInvalidAttr := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "local_mod",
+						Kind:   config.TerraformKind,
+						Source: "modules/network/vpc",
+						ReconfigureIgnores: map[string][]string{
+							"google_compute_network": {"123invalid_attr"},
+						},
+					},
+				},
+			},
+		},
+	}
+	assertValidateModuleIgnoresError(t, bpInvalidAttr, "not a valid attribute name")
+
+	bpSubNonExistent := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "local_mod",
+						Kind:   config.TerraformKind,
+						Source: "modules/network/vpc",
+						ReconfigureIgnores: map[string][]string{
+							"google_compute_network": {"-mtu"},
+						},
+					},
+				},
+			},
+		},
+	}
+	assertValidateModuleIgnoresError(t, bpSubNonExistent, "target resource has no lifecycle.ignore_changes")
+
+	bpConflict := config.Blueprint{
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "local_mod",
+						Kind:   config.TerraformKind,
+						Source: "modules/network/vpc",
+						ReconfigureIgnores: map[string][]string{
+							"google_compute_network": {"mtu", "-mtu"},
+						},
+					},
+				},
+			},
+		},
+	}
+	assertValidateModuleIgnoresError(t, bpConflict, "cannot both add and subtract attribute")
 }
 
 func TestWriteDeployment_Day2StatePreservationOnValidationError(t *testing.T) {

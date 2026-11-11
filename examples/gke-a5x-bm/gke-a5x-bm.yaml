@@ -272,7 +272,8 @@ deployment_groups:
       google_container_node_pool:
       # Pinned by version_prefix; don't downgrade nodes that GKE upgraded.
       - version
-      - node_config[0].resource_labels
+      # Allow Day-2 label updates to take effect without node pool replacement.
+      - "-node_config[0].labels"
     outputs: [instructions]
 
   - id: workload-manager-install
