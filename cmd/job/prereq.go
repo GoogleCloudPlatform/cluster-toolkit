@@ -20,10 +20,12 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -176,7 +178,7 @@ func printMissingPrereqs(cmd *cobra.Command, missing []missingPrereq) {
 	fmt.Fprintln(cmd.OutOrStdout())
 }
 
-func checkLocalCLI(name string, checkArgs []string, installedFlag *bool, missing *[]missingPrereq) {
+func checkLocalCLI(name string, checkArgs []string, installHints []string, installedFlag *bool, missing *[]missingPrereq) {
 	res := shell.ExecuteCommandWithTimeout(shell.DefaultLocalCommandTimeout, name, checkArgs...)
 	if errors.Is(res.Err, context.DeadlineExceeded) {
 		logging.Warn("Command timeout while checking %s. Please verify the binary is responsive.", name)
@@ -187,21 +189,16 @@ func checkLocalCLI(name string, checkArgs []string, installedFlag *bool, missing
 		return
 	}
 	if res.ExitCode != 0 {
-		*missing = append(*missing, missingPrereq{
-			name: name,
-			commands: []string{
+		if len(installHints) == 0 {
+			installHints = []string{
 				fmt.Sprintf("gcloud components install %s --quiet   # gcloud from Google's installer", name),
-				fmt.Sprintf("# or install %s with your OS package manager (apt/dnf/brew) if gcloud came from there", name),
-			},
-		})
+				fmt.Sprintf("# or install %s with your OS package manager (apt/dnf/brew on Linux/macOS, winget/choco on Windows) if gcloud came from there", name),
+			}
+		}
+		*missing = append(*missing, missingPrereq{name: name, commands: installHints})
 		return
 	}
 	*installedFlag = true
-}
-
-func checkK8sDependencies(state *PrereqState, missing *[]missingPrereq) {
-	checkLocalCLI("kubectl", []string{"version", "--client", "--output=json"}, &state.KubectlInstalled, missing)
-	checkLocalCLI("gke-gcloud-auth-plugin", []string{"--version"}, &state.GKEGCloudAuthPluginInstalled, missing)
 }
 
 // isDockerCredsConfigured reports whether Docker is configured to authenticate
@@ -278,81 +275,137 @@ func ensureProjectExists(projectID string) error {
 	return nil
 }
 
-// ensureBasicPrerequisites checks for gcloud, auth, project existence, and kubectl.
+// ensureBasicPrerequisites checks for GKE prerequisites (gcloud, auth, project, kubectl, and auth plugin).
 func ensureBasicPrerequisites(cmd *cobra.Command, projectID string) error {
+	return ensureBasicPrerequisitesFor(cmd, orchestrator.TypeGKE, projectID)
+}
+
+// ensureBasicPrerequisitesFor runs only the basic prerequisites declared by orchType.
+func ensureBasicPrerequisitesFor(cmd *cobra.Command, orchType orchestrator.Type, projectID string) error {
 	if dryRunManifest != "" {
 		return nil
 	}
+	kinds := orchestrator.BasicPrerequisites(orchType)
+	if !slices.Contains(kinds, orchestrator.PrereqGCloudSDK) {
+		return ensureK8sOnlyBasicPrerequisites(cmd, kinds)
+	}
+	return ensureGKEBasicPrerequisites(cmd, projectID, kinds)
+}
 
+func resetBasicPrereqStateForProject(state PrereqState, projectID string) PrereqState {
+	if time.Since(state.LastCheckedTimestamp) > stateFreshness {
+		return PrereqState{}
+	}
+	return PrereqState{
+		KubectlInstalled:             state.KubectlInstalled,
+		GKEGCloudAuthPluginInstalled: state.GKEGCloudAuthPluginInstalled,
+	}
+}
+
+func checkDeclaredK8sDependencies(kinds []orchestrator.PrereqKind, state *PrereqState, missing *[]missingPrereq) {
+	if slices.Contains(kinds, orchestrator.PrereqKubectl) && !state.KubectlInstalled {
+		checkLocalCLI("kubectl", []string{"version", "--client", "--output=json"}, nil, &state.KubectlInstalled, missing)
+	}
+	if slices.Contains(kinds, orchestrator.PrereqGKEAuthPlugin) && !state.GKEGCloudAuthPluginInstalled {
+		checkLocalCLI("gke-gcloud-auth-plugin", []string{"--version"}, nil, &state.GKEGCloudAuthPluginInstalled, missing)
+	}
+}
+
+func checkDeclaredGCloudAuth(kinds []orchestrator.PrereqKind, missing *[]missingPrereq) (gcloudAuthOK, adcOK bool, err error) {
+	if slices.Contains(kinds, orchestrator.PrereqGCloudAuth) {
+		if authErr := ensureGCloudAuthenticated(); authErr != nil {
+			if errors.Is(authErr, context.DeadlineExceeded) {
+				return false, false, authErr
+			}
+			*missing = append(*missing, missingPrereq{name: "Google Cloud Authentication", commands: []string{"gcloud auth login"}})
+		} else {
+			gcloudAuthOK = true
+		}
+	}
+	adcOK = true
+	if slices.Contains(kinds, orchestrator.PrereqADC) {
+		if adcCmd := getADCSetupCommandFunc(); adcCmd != "" {
+			adcOK = false
+			*missing = append(*missing, missingPrereq{name: "Application Default Credentials (ADC)", commands: []string{adcCmd}})
+		}
+	}
+	return gcloudAuthOK, adcOK, nil
+}
+
+func ensureGKEBasicPrerequisites(cmd *cobra.Command, projectID string, kinds []orchestrator.PrereqKind) error {
 	state := store.Load()
-
-	if !isStateStale(state, projectID) {
+	if hasPassedBasicPrerequisites(state, projectID) {
 		logging.Info("Skipping basic checks; prerequisites are fresh (project: %s, checked: %v ago).", state.LastCheckedProjectID, time.Since(state.LastCheckedTimestamp).Round(time.Second))
 		return nil
 	}
 
-	state = PrereqState{}
-
+	state = resetBasicPrereqStateForProject(state, projectID)
 	var missing []missingPrereq
 
-	// Hard dependency: gcloud must be installed
 	if err := ensureGCloudSDKInstalled(); err != nil {
 		return err
 	}
 
-	// Check GCloud Auth
-	gcloudAuthOK := false
-	if err := ensureGCloudAuthenticated(); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			return err
-		}
-		missing = append(missing, missingPrereq{name: "Google Cloud Authentication", commands: []string{"gcloud auth login"}})
-	} else {
-		gcloudAuthOK = true
+	gcloudAuthOK, adcOK, err := checkDeclaredGCloudAuth(kinds, &missing)
+	if err != nil {
+		return err
 	}
+	checkDeclaredK8sDependencies(kinds, &state, &missing)
 
-	// Check ADC
-	adcCmd := getADCSetupCommandFunc()
-	if adcCmd != "" {
-		missing = append(missing, missingPrereq{name: "Application Default Credentials (ADC)", commands: []string{adcCmd}})
-	}
-
-	checkK8sDependencies(&state, &missing)
-
-	// Run project validation if auth is OK, regardless of other missing checks
 	var projectErr error
-	if gcloudAuthOK && projectID != "" {
+	if slices.Contains(kinds, orchestrator.PrereqGCPProject) && gcloudAuthOK && projectID != "" {
 		projectErr = ensureProjectExists(projectID)
 	}
-
-	// Now decide what to return
 	if projectErr != nil {
 		if len(missing) > 0 {
 			printMissingPrereqs(cmd, missing)
 		}
 		return fmt.Errorf("project %q is invalid or inaccessible: %w", projectID, projectErr)
 	}
-
 	if len(missing) > 0 {
 		printMissingPrereqs(cmd, missing)
 		return fmt.Errorf("some basic prerequisites are missing")
 	}
 
-	// All basic checks passed! Save state.
 	state.GCloudSDKInstalled = true
 	state.GCloudProjectConfigured = true
-	state.GCloudAuthenticated = true
-	state.ADCConfigured = (adcCmd == "")
-	// state.KubectlInstalled and state.GKEGCloudAuthPluginInstalled are already set inside checkK8sDependencies
-
+	state.GCloudAuthenticated = gcloudAuthOK
+	state.ADCConfigured = adcOK
 	state.LastCheckedTimestamp = time.Now()
 	state.LastCheckedProjectID = projectID
 	store.Save(state)
-
 	return nil
 }
 
-// hasPassedBasicPrerequisites checks if all basic prerequisite checks are fresh and marked as passed.
+func ensureK8sOnlyBasicPrerequisites(cmd *cobra.Command, kinds []orchestrator.PrereqKind) error {
+	if !slices.Contains(kinds, orchestrator.PrereqKubectl) {
+		return nil
+	}
+	state := store.Load()
+	if time.Since(state.LastCheckedTimestamp) <= stateFreshness && state.KubectlInstalled {
+		logging.Info("Skipping basic checks; kubectl prerequisite is fresh (checked: %v ago).", time.Since(state.LastCheckedTimestamp).Round(time.Second))
+		return nil
+	}
+	if time.Since(state.LastCheckedTimestamp) > stateFreshness {
+		state = PrereqState{}
+	}
+
+	var missing []missingPrereq
+	kubectlHints := []string{"# Install kubectl with your OS package manager or offline bundle and ensure it is in your PATH"}
+	checkLocalCLI("kubectl", []string{"version", "--client", "--output=json"}, kubectlHints, &state.KubectlInstalled, &missing)
+	if len(missing) > 0 {
+		printMissingPrereqs(cmd, missing)
+		return fmt.Errorf("some basic prerequisites are missing")
+	}
+
+	if state.LastCheckedTimestamp.IsZero() {
+		state.LastCheckedTimestamp = time.Now()
+	}
+	store.Save(state)
+	return nil
+}
+
+// hasPassedBasicPrerequisites checks if all GKE basic prerequisite checks are fresh and marked as passed.
 func hasPassedBasicPrerequisites(state PrereqState, projectID string) bool {
 	if isStateStale(state, projectID) {
 		return false

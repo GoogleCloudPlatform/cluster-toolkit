@@ -19,10 +19,14 @@ package telemetry
 import (
 	"encoding/json"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/shell"
 	"time"
 )
 
 func (c *Collector) Execute(exitCode int, err error) {
+	if shell.IsKnownAirGapped() {
+		return
+	}
 	c.CollectMetrics(exitCode, err)
 	concordEvent := c.BuildConcordEvent()
 	payload := BuildPayload(concordEvent)

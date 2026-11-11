@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 	"net/http"
 	"strings"
@@ -178,6 +179,7 @@ type DefaultKubeClient struct {
 type DefaultExecutor struct{}
 
 type GKEOrchestrator struct {
+	mode                        orchestrator.Type
 	executor                    Executor
 	projectID                   string
 	clusterZones                []string
@@ -205,7 +207,7 @@ type GKEOrchestrator struct {
 	httpOnce                    sync.Once
 	// kubeconfigLoader reads the merged kubeconfig. nil means the default
 	// client-go loading rules (KUBECONFIG env or ~/.kube/config).
-	kubeconfigLoader kubeconfigLoader
+	kubeconfigLoader k8s.KubeconfigLoader
 	// kubeContext is the context set by configureKubectl; all kubectl and dynamic-client calls use it.
 	kubeContext string
 }
@@ -941,3 +943,30 @@ type spsJobSetView struct {
 		} `json:"replicatedJobsStatus"`
 	} `json:"status"`
 }
+
+// endpointMode identifies which control-plane endpoint a kubeconfig cluster entry targets.
+type endpointMode int
+
+const (
+	endpointModeUnknown endpointMode = iota
+	endpointModeIP                   // public/private IP; subject to authorized networks
+	endpointModeDNS                  // *.gke.goog; IAM-gated, bypasses authorized networks
+)
+
+// kubeContextCheck is the static verdict on an existing kubeconfig context.
+type kubeContextCheck struct {
+	contextName string
+	mode        endpointMode
+	reason      string // non-empty when the context must not be reused
+}
+
+// probeOutcome classifies a connectivity probe result.
+type probeOutcome int
+
+const (
+	probeOK           probeOutcome = iota
+	probeForbidden                 // reachable and authenticated; RBAC denies /version
+	probeConnectivity              // this endpoint is unreachable or untrusted from here
+	probeAuth                      // credentials are broken; another endpoint will not help
+	probeUnknown
+)

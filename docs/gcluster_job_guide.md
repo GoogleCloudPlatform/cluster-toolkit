@@ -17,22 +17,26 @@ If you use `--build-context` to build images on-the-fly, you must set:
 
 * `GCLUSTER_REFRESH_CREDENTIALS`: Set to `1` to make every `gcluster job` command re-run `gcloud container clusters get-credentials` instead of reusing an existing, verified `kubeconfig` context for the cluster. See [Cluster connectivity and kubeconfig reuse](#101-cluster-connectivity-and-kubeconfig-reuse) for when this is useful.
 * `GCLUSTER_TELEMETRY_IMAGE`: Container image URI for the ML Diagnostics collector native sidecar on Kubernetes 1.29+ TPU workloads when `--enable-ml-diagnostics` is passed without `--ml-diagnostics-image` (switches GKE jobs from the managed webhook to native sidecar injection). Pass `--ml-diagnostics-image=""` to ignore it for one submission.
+* `GCLUSTER_ORCHESTRATOR`: Override automatic orchestrator detection (`gke` or `k8s`). When unset, `gcluster` inspects your `KUBECONFIG` context (`gke-gcloud-auth-plugin`, `*.gke.goog`, or `-gke.` API server version) and routes generic Kubernetes clusters to `k8s` mode without requiring `--project`, `--location`, or `gcloud`.
+* `GCLUSTER_AIR_GAPPED`: Set to `true` in disconnected or air-gapped environments to skip the live API server version probe during orchestrator detection and skip CLI telemetry uploads.
 
 > [!NOTE]
 > ### Automated Prerequisite Checks Overview
 >
-> When you run `gcluster job submit` (or other job commands), the tool will check for:
+> When you run `gcluster job submit` (or other job commands), prerequisite checks match the detected orchestrator:
 >
-> * **Google Cloud SDK**: Verifies `gcloud` is installed.
-> * **Gcloud Authentication**: Checks if authenticated and if Application Default Credentials (ADC) are valid.
-> * **`kubectl` Installation**: Checks if `kubectl` is installed.
-> * **GKE Auth Plugin**: Checks if `gke-gcloud-auth-plugin` is installed.
-> * **Artifact Registry API** (Crane builds only): Checks if `artifactregistry.googleapis.com` is enabled in the cluster's project.
-> * **Container Credential Helper** (Crane builds only): Checks that Docker uses `gcloud` credentials for the Artifact Registry host the build pushes to (`<cluster-region>-docker.pkg.dev`).
+> * **Kubernetes (`k8s`) mode**: Checks only that `kubectl` is installed (zero `gcloud` or Google Cloud credential checks).
+> * **GKE (`gke`) mode**:
+>   * **Google Cloud SDK**: Verifies `gcloud` is installed.
+>   * **Gcloud Authentication**: Checks if authenticated and if Application Default Credentials (ADC) are valid.
+>   * **`kubectl` Installation**: Checks if `kubectl` is installed.
+>   * **GKE Auth Plugin**: Checks if `gke-gcloud-auth-plugin` is installed.
+>   * **Artifact Registry API** (Crane builds only): Checks if `artifactregistry.googleapis.com` is enabled in the cluster's project.
+>   * **Container Credential Helper** (Crane builds only): Checks that Docker uses `gcloud` credentials for the Artifact Registry host the build pushes to (`<cluster-region>-docker.pkg.dev`).
 >
 > The two Crane-build checks only run when `gcluster` builds and pushes the image itself (`--base-image` with `--build-context`). A pre-built `--image` is pulled by the cluster nodes and needs neither.
 >
-> If any required dependencies are missing or unconfigured, `gcluster` will identify them and print the necessary installation or remediation commands directly to your console for review and execution
+> If any required dependencies are missing or unconfigured, `gcluster` will identify them and print the necessary installation or remediation commands directly to your console for review and execution.
 >
 > Successful checks are remembered in `~/.gcluster/job_prereq_state.json` to optimize subsequent runs. Checks are re-run if the state is older than 24 hours or if you switch projects. The Docker credential check is not cached: it reads your local Docker config on every Crane build, because the registry depends on the cluster's region.
 >
@@ -1269,11 +1273,11 @@ Pass the `--gke-custom-templates-path` flag to the `submit` command:
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-c, --cluster` | `string` | Name of the target GKE cluster. |
-| `-l, --location` | `string` | Google Cloud location (Zone or Region) of the GKE cluster. |
-| `-p, --project` | `string` | Google Cloud Project ID. |
-| `--gke-namespace` | `string` | Target GKE namespace for the operation. Supported across all job commands. If omitted, automatic detection is used. |
-| `--skip-prereqs` | `flag` | Bypasses local workstation pre-flight environment checks (e.g. gcloud SDK, IAM checks, Docker config). |
+| `-c, --cluster` | `string` | Name of the target GKE cluster or Kubernetes `kubeconfig` context. *(Required for GKE; optional in Kubernetes mode when `current-context` is set)* |
+| `-l, --location` | `string` | Google Cloud location (Zone or Region) of the GKE cluster. *(Required for GKE; optional in Kubernetes mode)* |
+| `-p, --project` | `string` | Google Cloud Project ID. *(Required for GKE; optional in Kubernetes mode)* |
+| `--gke-namespace` | `string` | Target Kubernetes namespace for the operation. Supported across all job commands. If omitted, automatic detection is used. |
+| `--skip-prereqs` | `flag` | Bypasses local workstation pre-flight environment checks (`kubectl`, `gcloud`, registry auth, etc.). |
 
 ### 9.2 Configuration Commands
 *Use `gcluster job config` to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*

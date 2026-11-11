@@ -19,10 +19,9 @@ package gke
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
-	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -32,7 +31,6 @@ import (
 	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
-	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
@@ -43,22 +41,9 @@ const (
 	gkeAuthPluginBinary = "gke-gcloud-auth-plugin"
 	// probeRequestTimeout keeps an unreachable endpoint from blocking for the full kubectl dial timeout.
 	probeRequestTimeout = "5s"
-)
-
-// kubeconfigLoader returns the merged kubeconfig; injectable for tests.
-type kubeconfigLoader func() (*clientcmdapi.Config, error)
-
-func defaultKubeconfigLoader() (*clientcmdapi.Config, error) {
-	return clientcmd.NewDefaultClientConfigLoadingRules().Load()
-}
-
-// endpointMode identifies which control-plane endpoint a kubeconfig cluster entry targets.
-type endpointMode int
-
-const (
-	endpointModeUnknown endpointMode = iota
-	endpointModeIP                   // public/private IP; subject to authorized networks
-	endpointModeDNS                  // *.gke.goog; IAM-gated, bypasses authorized networks
+	// gkeVersionProbeTimeout bounds the Layer-1 kubectl version tie-breaker on static-token GKE endpoints.
+	gkeVersionProbeTimeout        = "2s"
+	gkeVersionProbeProcessTimeout = 3 * time.Second
 )
 
 func (m endpointMode) String() string {
@@ -130,29 +115,104 @@ func gkeContextName(projectID, location, clusterName string) string {
 	return fmt.Sprintf("gke_%s_%s_%s", projectID, location, clusterName)
 }
 
-// findKubeContext returns the gcloud-named context, or a legacy context renamed to the bare cluster name.
+// findKubeContext returns the gcloud-named context (including zonal-to-regional fallback), or a context matching clusterName.
 func findKubeContext(cfg *clientcmdapi.Config, clusterName, location, projectID string) (string, *clientcmdapi.Context, bool) {
-	if cfg == nil {
+	if cfg == nil || clusterName == "" {
 		return "", nil, false
 	}
-	expected := gkeContextName(projectID, location, clusterName)
-	if kubeCtx, ok := cfg.Contexts[expected]; ok && kubeCtx != nil {
-		return expected, kubeCtx, true
-	}
-	for _, name := range slices.Sorted(maps.Keys(cfg.Contexts)) {
-		kubeCtx := cfg.Contexts[name]
-		if kubeCtx != nil && (name == clusterName || kubeCtx.Cluster == clusterName) {
-			return name, kubeCtx, true
+	if projectID != "" && location != "" {
+		expected := gkeContextName(projectID, location, clusterName)
+		if kubeCtx, ok := cfg.Contexts[expected]; ok && kubeCtx != nil {
+			return expected, kubeCtx, true
+		}
+		if region := shell.ExtractRegion(location); region != location {
+			regExpected := gkeContextName(projectID, region, clusterName)
+			if kubeCtx, ok := cfg.Contexts[regExpected]; ok && kubeCtx != nil {
+				return regExpected, kubeCtx, true
+			}
 		}
 	}
-	return "", nil, false
+	return k8s.FindContextByCluster(cfg, clusterName)
 }
 
-// kubeContextCheck is the static verdict on an existing kubeconfig context.
-type kubeContextCheck struct {
-	contextName string
-	mode        endpointMode
-	reason      string // non-empty when the context must not be reused
+func resolveGKEContext(cfg *clientcmdapi.Config, clusterName, location, projectID string) (string, *clientcmdapi.Context, string, bool) {
+	if strings.TrimSpace(clusterName) != "" {
+		name, kubeCtx, ok := findKubeContext(cfg, clusterName, location, projectID)
+		if !ok {
+			return "", nil, "", false
+		}
+		return name, kubeCtx, clusterName, true
+	}
+	return k8s.ResolveCurrentContext(cfg)
+}
+
+// detectGKE evaluates GKE kubeconfig credentials, *.gke.goog endpoints, and the bounded 2s serverVersion tie-breaker.
+func detectGKE(in orchestrator.ProbeInput) (orchestrator.Detection, bool) {
+	ctxName, kubeCtx, resolvedCluster, ok := resolveGKEContext(in.Config, in.ClusterName, in.Location, in.ProjectID)
+	if !ok {
+		// Only treat --project/--location as GKE bootstrap when no kubeconfig context matched; saved `job config`
+		// defaults also populate these fields when targeting an existing non-GKE KUBECONFIG context.
+		if strings.TrimSpace(in.ProjectID) != "" || strings.TrimSpace(in.Location) != "" {
+			return orchestrator.Detection{
+				Type:        orchestrator.TypeGKE,
+				KubeContext: "",
+				ClusterName: in.ClusterName,
+				Reason:      "GKE flags specified with no existing kubeconfig context",
+			}, true
+		}
+		return orchestrator.Detection{}, false
+	}
+	auth := in.Config.AuthInfos[kubeCtx.AuthInfo]
+	cluster := in.Config.Clusters[kubeCtx.Cluster]
+	if k8s.ExecPluginBaseName(auth) == gkeAuthPluginBinary {
+		return orchestrator.Detection{
+			Type:        orchestrator.TypeGKE,
+			KubeContext: ctxName,
+			ClusterName: resolvedCluster,
+			Reason:      fmt.Sprintf("kubeconfig context %q authenticates via %s", ctxName, gkeAuthPluginBinary),
+		}, true
+	}
+	if host := k8s.ClusterServerHostname(cluster); strings.HasSuffix(host, ".gke.goog") {
+		return orchestrator.Detection{
+			Type:        orchestrator.TypeGKE,
+			KubeContext: ctxName,
+			ClusterName: resolvedCluster,
+			Reason:      fmt.Sprintf("kubeconfig context %q targets GKE endpoint %s", ctxName, host),
+		}, true
+	}
+	if gitVersion, isGKEServer := probeGKEServerVersion(in, ctxName, auth); isGKEServer {
+		return orchestrator.Detection{
+			Type:        orchestrator.TypeGKE,
+			KubeContext: ctxName,
+			ClusterName: resolvedCluster,
+			Reason:      fmt.Sprintf("API server for context %q reported GKE version %s", ctxName, gitVersion),
+		}, true
+	}
+	return orchestrator.Detection{}, false
+}
+
+func probeGKEServerVersion(in orchestrator.ProbeInput, ctxName string, auth *clientcmdapi.AuthInfo) (string, bool) {
+	if in.AirGapped || ctxName == "" || in.Runner == nil || k8s.HasClientCertificateAuth(auth) {
+		return "", false
+	}
+	res := in.Runner.ExecuteCommandWithTimeout(
+		gkeVersionProbeProcessTimeout,
+		"kubectl",
+		k8s.WithContext(ctxName, []string{"version", "-o", "json", "--request-timeout=" + gkeVersionProbeTimeout})...,
+	)
+	if strings.TrimSpace(res.Stdout) == "" {
+		return "", false
+	}
+	var payload struct {
+		ServerVersion *struct {
+			GitVersion string `json:"gitVersion"`
+		} `json:"serverVersion"`
+	}
+	if err := json.Unmarshal([]byte(res.Stdout), &payload); err != nil || payload.ServerVersion == nil {
+		return "", false
+	}
+	ver := strings.TrimSpace(payload.ServerVersion.GitVersion)
+	return ver, strings.Contains(strings.ToLower(ver), "-gke.")
 }
 
 func (k kubeContextCheck) reusable() bool { return k.reason == "" }
@@ -198,31 +258,12 @@ func evaluateExistingContext(cfg *clientcmdapi.Config, clusterName, location, pr
 		}
 	}
 
-	auth := cfg.AuthInfos[kubeCtx.AuthInfo]
-	var cmd string
-	if auth != nil && auth.Exec != nil {
-		// Windows kubeconfigs name the plugin gke-gcloud-auth-plugin.exe and may use backslash paths; filepath.Base
-		// on Unix (e.g. WSL) does not split on backslashes.
-		command := strings.ReplaceAll(auth.Exec.Command, `\`, "/")
-		cmd = strings.TrimSuffix(strings.ToLower(filepath.Base(command)), ".exe")
-	}
-	if cmd != gkeAuthPluginBinary {
+	if k8s.ExecPluginBaseName(cfg.AuthInfos[kubeCtx.AuthInfo]) != gkeAuthPluginBinary {
 		check.reason = fmt.Sprintf("user %q does not authenticate via %s", kubeCtx.AuthInfo, gkeAuthPluginBinary)
 		return check
 	}
 	return check
 }
-
-// probeOutcome classifies a connectivity probe result.
-type probeOutcome int
-
-const (
-	probeOK           probeOutcome = iota
-	probeForbidden                 // reachable and authenticated; RBAC denies /version
-	probeConnectivity              // this endpoint is unreachable or untrusted from here
-	probeAuth                      // credentials are broken; another endpoint will not help
-	probeUnknown
-)
 
 var (
 	probeAuthMarkers = []string{
@@ -289,10 +330,9 @@ func classifyProbeFailure(stderr string) probeOutcome {
 	}
 }
 
-// probeContext runs a bounded read of /version against contextName (or the
-// current context when empty). Success proves network, TLS and credentials.
+// probeContext runs a bounded read of /version against contextName. Success proves network, TLS and credentials.
 func (g *GKEOrchestrator) probeContext(contextName string) (probeOutcome, string) {
-	res := g.executor.ExecuteCommand("kubectl", withKubeContext(contextName, []string{"get", "--raw", "/version", "--request-timeout=" + probeRequestTimeout})...)
+	res := g.kubectlIn(contextName, "get", "--raw", "/version", "--request-timeout="+probeRequestTimeout)
 	if res.ExitCode == 0 {
 		return probeOK, ""
 	}
@@ -322,21 +362,13 @@ func (g *GKEOrchestrator) loadKubeconfig() (*clientcmdapi.Config, error) {
 	if g.kubeconfigLoader != nil {
 		return g.kubeconfigLoader()
 	}
-	return defaultKubeconfigLoader()
-}
-
-// withKubeContext prepends --context so kubectl ignores current-context.
-func withKubeContext(kubeContext string, args []string) []string {
-	if kubeContext == "" {
-		return args
-	}
-	return append([]string{"--context", kubeContext}, args...)
+	return k8s.DefaultKubeconfigLoader()
 }
 
 // kubectlCommandLine renders a kubectl command, pinned like the ones gcluster runs, for users to copy.
 // Arguments that contain whitespace, such as Windows paths, are double-quoted.
 func kubectlCommandLine(kubeContext string, args ...string) string {
-	parts := append([]string{"kubectl"}, withKubeContext(kubeContext, args)...)
+	parts := append([]string{"kubectl"}, k8s.WithContext(kubeContext, args)...)
 	for i, p := range parts {
 		if strings.ContainsAny(p, " \t") {
 			parts[i] = `"` + p + `"`
@@ -345,19 +377,30 @@ func kubectlCommandLine(kubeContext string, args ...string) string {
 	return strings.Join(parts, " ")
 }
 
+// kubectlIn runs kubectl against an explicit non-empty kubeContext, refusing an empty context so probes never
+// silently fall back to current-context.
+func (g *GKEOrchestrator) kubectlIn(kubeContext string, args ...string) shell.CommandResult {
+	ctx := strings.TrimSpace(kubeContext)
+	if ctx == "" {
+		err := fmt.Errorf("internal error: refusing to run kubectl without an explicit --context")
+		return shell.CommandResult{ExitCode: 1, Stderr: err.Error(), Err: err}
+	}
+	return g.executor.ExecuteCommand("kubectl", k8s.WithContext(ctx, args)...)
+}
+
 // kubectl runs kubectl against the context chosen by configureKubectl.
 func (g *GKEOrchestrator) kubectl(args ...string) shell.CommandResult {
-	return g.executor.ExecuteCommand("kubectl", withKubeContext(g.kubeContext, args)...)
+	return g.executor.ExecuteCommand("kubectl", k8s.WithContext(g.kubeContext, args)...)
 }
 
 // kubectlWithTimeout runs kubectl with a process timeout against the context chosen by configureKubectl.
 func (g *GKEOrchestrator) kubectlWithTimeout(timeout time.Duration, args ...string) shell.CommandResult {
-	return g.executor.ExecuteCommandWithTimeout(timeout, "kubectl", withKubeContext(g.kubeContext, args)...)
+	return g.executor.ExecuteCommandWithTimeout(timeout, "kubectl", k8s.WithContext(g.kubeContext, args)...)
 }
 
 // kubectlStream streams kubectl output against the context chosen by configureKubectl.
 func (g *GKEOrchestrator) kubectlStream(args ...string) error {
-	return g.executor.ExecuteCommandStream("kubectl", withKubeContext(g.kubeContext, args)...)
+	return g.executor.ExecuteCommandStream("kubectl", k8s.WithContext(g.kubeContext, args)...)
 }
 
 // inspectExistingContext loads the kubeconfig and statically validates the cluster's entry.
@@ -481,6 +524,9 @@ func (g *GKEOrchestrator) regenerateKubeContext(clusterName, clusterLocation, pr
 // Reuse never writes to kubeconfig; only get-credentials changes current-context.
 // GCLUSTER_REFRESH_CREDENTIALS=1 skips reuse.
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
+	if g.mode == orchestrator.TypeK8s {
+		return g.configureK8sKubectl(clusterName)
+	}
 	g.kubeContext = ""
 	avoid := endpointModeUnknown
 

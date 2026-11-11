@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"os/exec"
@@ -474,7 +475,7 @@ func TestCheckK8sDependencies_Timeout(t *testing.T) {
 	}
 	var state PrereqState
 	var missing []missingPrereq
-	checkK8sDependencies(&state, &missing)
+	checkDeclaredK8sDependencies(orchestrator.BasicPrerequisites(orchestrator.TypeGKE), &state, &missing)
 	if len(missing) != 2 {
 		t.Fatalf("expected 2 missing prereqs, got %d", len(missing))
 	}
@@ -501,7 +502,7 @@ func TestCheckK8sDependencies_Missing(t *testing.T) {
 
 	var state PrereqState
 	var missing []missingPrereq
-	checkK8sDependencies(&state, &missing)
+	checkDeclaredK8sDependencies(orchestrator.BasicPrerequisites(orchestrator.TypeGKE), &state, &missing)
 
 	if len(missing) != 2 {
 		t.Fatalf("expected 2 missing prereqs, got %d", len(missing))
@@ -514,7 +515,7 @@ func TestCheckK8sDependencies_Missing(t *testing.T) {
 			t.Fatalf("expected 2 install commands for %s, got %d", bin, len(missing[i].commands))
 		}
 		wantCmd0 := fmt.Sprintf("gcloud components install %s --quiet   # gcloud from Google's installer", bin)
-		wantCmd1 := fmt.Sprintf("# or install %s with your OS package manager (apt/dnf/brew) if gcloud came from there", bin)
+		wantCmd1 := fmt.Sprintf("# or install %s with your OS package manager (apt/dnf/brew on Linux/macOS, winget/choco on Windows) if gcloud came from there", bin)
 		if missing[i].commands[0] != wantCmd0 {
 			t.Errorf("missing[%d].commands[0] = %q, want %q", i, missing[i].commands[0], wantCmd0)
 		}
@@ -965,5 +966,83 @@ func TestEnsureBasicPrerequisites_ProjectNameContainsPermission_Fails(t *testing
 
 	if !strings.Contains(err.Error(), "NOT_FOUND") {
 		t.Errorf("expected error to contain NOT_FOUND, got: %v", err)
+	}
+}
+
+func TestEnsureBasicPrerequisitesFor_NoCrossModeCachePoisoning(t *testing.T) {
+	executed := stubPrereqCommands(t)
+	cmd := &cobra.Command{}
+
+	// First run in TypeK8s mode: only kubectl runs and is saved.
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeK8s, "shared-proj"); err != nil {
+		t.Fatalf("TypeK8s basic prereqs failed: %v", err)
+	}
+	if len(*executed) != 1 || !strings.HasPrefix((*executed)[0], "kubectl version") {
+		t.Fatalf("TypeK8s executed %v, want only kubectl version", *executed)
+	}
+
+	// Second run in TypeGKE mode on the same project must NOT skip gcloud/ADC/plugin checks.
+	*executed = nil
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeGKE, "shared-proj"); err != nil {
+		t.Fatalf("TypeGKE basic prereqs failed: %v", err)
+	}
+	if len(*executed) < 3 {
+		t.Fatalf("expected TypeGKE to run full gcloud/plugin checks after TypeK8s run, got %v", *executed)
+	}
+
+	// Unexpired partial state (e.g. 10h-old GAR check with KubectlInstalled=false) must NOT have its timestamp extended by TypeK8s.
+	tenHoursAgo := time.Now().Add(-10 * time.Hour).Round(time.Second)
+	store.Save(PrereqState{
+		GCloudSDKInstalled:         true,
+		GCloudAuthenticated:        true,
+		ADCConfigured:              true,
+		ArtifactRegistryAPIEnabled: true,
+		LastCheckedProjectID:       "shared-proj",
+		LastCheckedTimestamp:       tenHoursAgo,
+	})
+	*executed = nil
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeK8s, ""); err != nil {
+		t.Fatalf("TypeK8s on unexpired partial state failed: %v", err)
+	}
+	saved := store.Load()
+	if !saved.KubectlInstalled || !saved.LastCheckedTimestamp.Equal(tenHoursAgo) {
+		t.Fatalf("expected TypeK8s to set KubectlInstalled without extending unexpired timestamp (%v), got %+v", tenHoursAgo, saved)
+	}
+
+	// Expire the GKE state (>24h), run TypeK8s (which refreshes kubectl), then verify TypeGKE does NOT resurrect expired GKE flags.
+	expired := store.Load()
+	expired.LastCheckedTimestamp = time.Now().Add(-48 * time.Hour)
+	store.Save(expired)
+
+	*executed = nil
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeK8s, ""); err != nil {
+		t.Fatalf("TypeK8s after expiry failed: %v", err)
+	}
+	*executed = nil
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeGKE, "shared-proj"); err != nil {
+		t.Fatalf("TypeGKE after expired K8s refresh failed: %v", err)
+	}
+	if len(*executed) < 3 {
+		t.Fatalf("TypeK8s refresh resurrected expired GKE PrereqState flags; executed = %v", *executed)
+	}
+}
+
+func TestEnsureK8sOnlyBasicPrerequisites_MissingKubectl(t *testing.T) {
+	stubPrereqCommands(t)
+	origExec := shell.ExecuteCommandWithTimeout
+	t.Cleanup(func() { shell.ExecuteCommandWithTimeout = origExec })
+	shell.ExecuteCommandWithTimeout = func(_ time.Duration, name string, args ...string) shell.CommandResult {
+		return shell.CommandResult{ExitCode: 127, Stderr: "kubectl: command not found"}
+	}
+
+	var out bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&out)
+	err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeK8s, "")
+	if err == nil || !strings.Contains(err.Error(), "prerequisites are missing") {
+		t.Fatalf("expected missing prerequisites error, got %v", err)
+	}
+	if !strings.Contains(out.String(), "kubectl") || strings.Contains(out.String(), "gcloud") {
+		t.Errorf("TypeK8s missing kubectl remediation = %q, want kubectl hint without gcloud", out.String())
 	}
 }
