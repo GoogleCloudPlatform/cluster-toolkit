@@ -143,7 +143,7 @@ Before running the script, ensure you have:
 
 1. A Google Compute Engine (GCE) GPU VM instance or a GKE node running
    **Container-Optimized OS (COS)**, **Ubuntu**, **Debian**, or a **RHEL-family
-   OS** (such as Rocky Linux).
+   OS** (such as Rocky Linux and CentOS Stream).
 
 2. The GPU driver is installed on the GCE VM instance.
 
@@ -215,7 +215,7 @@ Before running the script, ensure you have:
    ```bash
    PROJECT=... # your project id
    gcloud projects add-iam-policy-binding ${PROJECT?} \
-   --member="serviceAccount:$(staging_gcloud iam service-accounts list --project=${PROJECT?} \
+   --member="serviceAccount:$(gcloud iam service-accounts list --project=${PROJECT?} \
    --filter="email~'-compute@developer.gserviceaccount.com'" --format="value(email)")" \
    --role='roles/storage.admin'
    ```
@@ -230,11 +230,11 @@ command.
 
 #### Option 1: Using the launcher script (Recommended)
 
-Copy `run-goog-gpu-bug-report.sh` to the VM and run it with `sudo bash` (using
-`bash` avoids `noexec` mount restrictions on `/home` and `/tmp` on COS):
+Copy `run-goog-gpu-bug-report.sh` to the VM and run it with `bash` (using `bash`
+avoids `noexec` mount restrictions on `/home` and `/tmp` on COS):
 
 ```bash
-sudo bash run-goog-gpu-bug-report.sh -- --gcs_bucket=${GCS_BUCKET}
+bash run-goog-gpu-bug-report.sh -- --gcs_bucket=${GCS_BUCKET}
 ```
 
 Note: Exporting the final bug reports to a GCS bucket is optional. If you do not
@@ -256,7 +256,7 @@ fails). If you do not want to build or load MFT kernel modules on the host, pass
 `--mft_kernel_modules=never`:
 
 ```bash
-sudo bash run-goog-gpu-bug-report.sh -- --mft_kernel_modules=never --gcs_bucket=${GCS_BUCKET}
+bash run-goog-gpu-bug-report.sh -- --mft_kernel_modules=never --gcs_bucket=${GCS_BUCKET}
 ```
 
 Launcher options and collector flags:
@@ -288,7 +288,7 @@ directory mounts:
     system logs:
 
     ```bash
-    sudo docker run --rm \
+    docker run --rm \
       --name goog-gpu-bug-report \
       --pull=always \
       --privileged --network=host --uts=host --pid=host \
@@ -317,7 +317,7 @@ directory mounts:
     status, and journal logs:
 
     ```bash
-    sudo docker run --rm \
+    docker run --rm \
       --name goog-gpu-bug-report \
       --pull=always \
       --privileged --network=host --uts=host --pid=host \
@@ -365,7 +365,7 @@ kubectl apply -f cluster-toolkit/community/goog-gpu-bug-report/bug-report-pod.ya
 ```bash
 I1019 23:24:51.010709 274063027707936 goog-gpu-bug-report.py:1486] Bug report logs are available locally at: /tmp/goog_gpu_bug_reports/utc_2026_10_19_23_24_23/vm_id_868647182909775754
 I1019 23:24:51.010743 274063027707936 goog-gpu-bug-report.py:1491] Master bug report archive created at: /tmp/goog_gpu_bug_reports/utc_2026_10_19_23_24_23/vm_id_868647182909775754/goog_gpu_bug_report_868647182909775754_utc_2026_10_19_23_24_23.tar.gz
-I1019 23:24:51.275231 274063027707936 goog-gpu-bug-report.py:1508] Bug report master archive is available at: https://pantheon.corp.google.com/storage/browser/my-nv-bug-reports/bug_report/utc_2026_10_19_23_24_23/vm_id_868647182909775754
+I1019 23:24:51.275231 274063027707936 goog-gpu-bug-report.py:1508] Bug report master archive is available at: https://console.cloud.google.com/storage/browser/my-nv-bug-reports/bug_report/utc_2026_10_19_23_24_23/vm_id_868647182909775754
 ```
 
 The output directory contains `instance_info.txt`, `nvidia-bug-report.log.gz`,
@@ -407,10 +407,10 @@ access mode:
 
 ```bash
 GCE Instance Info:
-    Project ID: gpu-test-project-staging
+    Project ID: my-gpu-project
     Instance ID: 868647182909775754
     Image: ubuntu-2204-jammy-arm64-v20261016
-    Zone: us-central1-virtualir
+    Zone: us-central1-a
     Machine Type: a4x-highgpu-4g
     Architecture: Architecture.ARM
     MST Version: mst, mft 4.33.0-169, built on Jul 24 2025, 16:49:49. Git SHA Hash: N/A
@@ -421,12 +421,11 @@ GCE Instance Info:
 * If you are running with GPU architectures supported by the NVIDIA MFT (eg.
     B200), you may also validate that the GPU NVLink information are also being
     recorded. You can easily validate it through searching for the keyword
-    `Starting GPU MST dump..` in the unzipped log file (passing `-a` to `grep`
-    because the log contains binary data):
+    `Starting GPU MST dump..` or `Starting GPU NetIR dump` in the log file
+    (passing `-a` to `grep` because the log contains binary data):
 
 ```bash
-$ sudo gunzip /tmp/goog_gpu_bug_reports/utc_2026_10_18_09_21_29/vm_id_8220847375056493254/nvidia-bug-report.log.gz
-$ grep -a -m 1 -A 30 "Starting GPU MST dump.." /tmp/goog_gpu_bug_reports/utc_2026_10_18_09_21_29/vm_id_8220847375056493254/nvidia-bug-report.log
+$ zcat /tmp/goog_gpu_bug_reports/utc_2026_10_18_09_21_29/vm_id_8220847375056493254/nvidia-bug-report.log.gz | grep -a -m 1 -A 30 -E "Starting GPU (MST|NetIR) dump"
 Starting GPU MST dump.../dev/mst/netir10497_00.cc.00_gpu7
 ____________________________________________
 /usr/bin/mlxlink -d /dev/mst/netir10497_00.cc.00_gpu7 --amber_collect /tmp/mlx96.csv > /tmp/mlx96.info 2>&1
@@ -509,7 +508,7 @@ bash build-and-push-goog-gpu-bug-report.sh \
 To run your custom image via the launcher script, pass `--image`:
 
 ```bash
-sudo bash run-goog-gpu-bug-report.sh \
+bash run-goog-gpu-bug-report.sh \
     --image=us-east1-docker.pkg.dev/${PROJECT?}/${ARTIFACT_REPO?}/custom-bug-report-collector:YYYY-MM-DD \
     -- --gcs_bucket=${GCS_BUCKET}
 ```

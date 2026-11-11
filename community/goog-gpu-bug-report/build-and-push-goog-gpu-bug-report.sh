@@ -27,10 +27,10 @@ usage() {
 	echo >&2 "  -h    Display this help message."
 	echo >&2 ""
 	echo >&2 "Example (default region):"
-	echo >&2 "  bash build-and-push-goog-gpu-bug-report.sh -p gpu-test-project -r goog-gpu-bug-report-repo -i goog-gpu-bug-report"
+	echo >&2 "  bash build-and-push-goog-gpu-bug-report.sh -p my-gpu-project -r goog-gpu-bug-report-repo -i goog-gpu-bug-report"
 	echo >&2 ""
 	echo >&2 "Example (specific region):"
-	echo >&2 "  bash build-and-push-goog-gpu-bug-report.sh -p gpu-test-project -r goog-gpu-bug-report-repo -i goog-gpu-bug-report -l us-east4"
+	echo >&2 "  bash build-and-push-goog-gpu-bug-report.sh -p my-gpu-project -r goog-gpu-bug-report-repo -i goog-gpu-bug-report -l us-east4"
 	exit 1
 }
 

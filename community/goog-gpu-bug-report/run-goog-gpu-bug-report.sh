@@ -28,7 +28,7 @@
 # setting up the toolkit.
 #
 # Usage:
-#   sudo bash run-goog-gpu-bug-report.sh [--image=IMAGE] [-- COLLECTOR_FLAGS...]
+#   bash run-goog-gpu-bug-report.sh [--image=IMAGE] [-- COLLECTOR_FLAGS...]
 #
 # Options:
 #   --image=IMAGE  Collector image to run. Defaults to DEFAULT_IMAGE below.
@@ -46,7 +46,7 @@
 #       loaded. "never" unloads and blocks them, so MFT runs driverless.
 #
 # Example:
-#   sudo bash run-goog-gpu-bug-report.sh -- --gcs_bucket=my-bucket
+#   bash run-goog-gpu-bug-report.sh -- --gcs_bucket=my-bucket
 
 set -euo pipefail
 
@@ -125,10 +125,6 @@ main() {
 		shift
 	done
 
-	if ((EUID != 0)); then
-		echo "Run as root (sudo)." >&2
-		exit 1
-	fi
 	if ! command -v docker >/dev/null; then
 		echo "docker is not installed." >&2
 		exit 1

@@ -1064,17 +1064,11 @@ def ExtractCosToolsBucketInfo(
 
 
 def IsMftNecessaryForMachineType(machine_type: str) -> bool:
-  """Checks if the running MFT software is necessary for the current VM type.
-
-  Args:
-    machine_type: The machine type of the VM.
-
-  Returns:
-    True if the Mellanox devices is supposed to be included in the VM's
-    underlying hardware, False otherwise. GCE uses Mellanox devices (CX7 NICs)
-    on machines for A4 VM.
-  """
-  return machine_type.startswith("a4")
+  """Returns True if the machine type needs MFT data (A4 and later series)."""
+  if not machine_type:
+    return False
+  match = re.match(r"^a(\d+)", machine_type.lower())
+  return match is not None and int(match.group(1)) >= 4
 
 
 def GetMftVersion() -> str:
@@ -1477,7 +1471,7 @@ def main(argv: Sequence[str]) -> None | int:
 
     logging.info(
         "Bug report master archive is available at: %s",
-        f"https://pantheon.corp.google.com/storage/browser/{os.path.join(_GCS_BUCKET.value, gcs_destination_directory)}",
+        f"https://console.cloud.google.com/storage/browser/{os.path.join(_GCS_BUCKET.value, gcs_destination_directory)}",
     )
 
 
