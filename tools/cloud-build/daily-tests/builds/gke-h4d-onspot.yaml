@@ -208,6 +208,7 @@ steps:
                 echo "WARNING: newest REGULAR version \$$GKE_LATEST is skipped (denylisted or pinned); using \$$GKE_SELECTED." >&2
               fi
               echo "INFO: Using GKE version \$$GKE_SELECTED (prefix '\$$GKE_PREFIX', region \$$REGION)"
+              sed -i '/min_master_version:/d' \$$EXAMPLE_BP
               sed -i "s/^\( *\)version_prefix:.*/&\n\1min_master_version: \$$GKE_SELECTED/" \$$EXAMPLE_BP
               grep -q "min_master_version: \$$GKE_SELECTED" \$$EXAMPLE_BP || { echo "ERROR: failed to set GKE version in \$$EXAMPLE_BP" >&2; exit 1; }
               # --- end GKE version selection ---
