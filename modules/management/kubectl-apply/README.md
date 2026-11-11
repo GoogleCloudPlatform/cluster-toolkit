@@ -129,7 +129,7 @@ You can specify a particular kueue version that you would like to use using the 
         install: true
 ```
 
-You can also install [k8s-aibom](https://github.com/GoogleCloudPlatform/k8s-aibom) by setting the `k8s_aibom` input variable. It records an AI bill of materials (a CycloneDX document per inference or training workload: models, runtime, images, signatures) for namespaces that carry the `aibom.k8saibom.dev/enabled=true` label. The module installs the controller only; opt namespaces in afterwards with `kubectl label namespace <name> aibom.k8saibom.dev/enabled=true`, and read the inventory with `kubectl get aibom -A`. The controller is unprivileged and reads the Kubernetes API only.
+You can also install [k8s-aibom](https://github.com/GoogleCloudPlatform/k8s-aibom) by setting the `k8s_aibom` input variable. It records an AI bill of materials (a CycloneDX document per inference or training workload: models, runtime, images, signatures) for namespaces that carry the `aibom.k8saibom.dev/enabled=true` label. The module installs the controller only; opt namespaces in afterwards with `kubectl label namespace <name> aibom.k8saibom.dev/enabled=true`, and read the inventory with `kubectl get aibom -A`. The controller is unprivileged and reads the Kubernetes API only. You can pick a specific chart release with the `version` field under `k8s_aibom` (the default tracks the current k8s-aibom release; the chart pins its controller image by digest).
 
 ```yaml
   - id: workload_component_install
