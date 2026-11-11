@@ -336,8 +336,8 @@ func TestSubmitCmd_PathwaysLongWorkloadName_Fails(t *testing.T) {
 	}
 }
 
-func resetFlagSetState(fs *pflag.FlagSet) {
-	fs.VisitAll(func(f *pflag.Flag) {
+func resetCommandFlags(cmd *cobra.Command) {
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
 		if sv, ok := f.Value.(pflag.SliceValue); ok {
 			_ = sv.Replace(nil)
 		} else {
@@ -345,65 +345,26 @@ func resetFlagSetState(fs *pflag.FlagSet) {
 		}
 		f.Changed = false
 	})
+	for _, sub := range cmd.Commands() {
+		resetCommandFlags(sub)
+	}
+}
+
+func resetJobFlags() {
+	pathways = orchestrator.PathwaysJobDefinition{}
+	resetCommandFlags(JobCmd)
+	nodeConstraint = make(map[string]string)
 }
 
 func setupSubmitTestEnv(t *testing.T) {
+	t.Helper()
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
-	resetFlagSetState(SubmitCmd.Flags())
-	resetFlagSetState(JobCmd.PersistentFlags())
-	imageName = ""
-	baseImage = ""
-	buildContext = ""
-	commandToRun = ""
-	computeType = ""
-	dryRunManifest = ""
-	clusterName = ""
-	location = ""
-	projectID = ""
-	gkeNamespace = ""
-	workloadName = ""
-
-	enableMLDiagnostics = false
-	mlDiagnosticsImage = ""
-	mlDiagnosticsTelemetryPort = 8889
-	gkeMtcEnabled = false
-	gkeMtcRamdiskDirectory = ""
-	gkeCustomTemplatesPath = ""
-	gkeDisableParallelContainers = false
-	kueueQueueName = ""
-	numNodes = 1
-	numSlices = 1
-	restarts = 1
-	ttlAfterFinished = "1h"
-	gracePeriodStr = "30s"
-	timeout = "-1s"
-	verbose = false
-	placementPolicy = ""
-	nodeConstraint = map[string]string{}
-	cpuAffinityStr = ""
-	restartOnExitCodes = nil
-	volumeStr = nil
-	imagePullSecrets = ""
-	serviceAccountName = ""
-	topology = ""
-	gkeScheduler = ""
-	platform = "linux/amd64"
-	awaitJobCompletion = false
-	priority = "medium"
-	isPathwaysJob = false
-	skipPrereqs = false
-	pathways = orchestrator.PathwaysJobDefinition{}
-	gkeNapProvisioning = ""
-	gkeNapReservation = ""
-	envVars = nil
-	volumeStr = nil
-	pathwaysProxyEnv = nil
-	pathwaysServerEnv = nil
-	pathwaysWorkerEnv = nil
+	resetJobFlags()
 
 	oldFactory := gkeOrchestratorFactory
-	defer t.Cleanup(func() {
+	t.Cleanup(func() {
 		gkeOrchestratorFactory = oldFactory
+		resetJobFlags()
 	})
 	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 		return &mockOrchestrator{}
