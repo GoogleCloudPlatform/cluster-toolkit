@@ -133,6 +133,7 @@ deployment_groups:
       version_prefix: "1.35."
       release_channel: REGULAR
       # TODO: Remove min_master_version once 1.35.8-gke.1975000 is replaced in REGULAR.
+      # 1.35.8-gke.1975000 breaks H4D + IRDMA node registration (STALLED_IP_ACQUISITION).
       min_master_version: "1.35.8-gke.1796000"
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
