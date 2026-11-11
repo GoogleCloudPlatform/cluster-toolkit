@@ -24,6 +24,7 @@ cli_deployment_vars:
   test_name: "{{ test_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
+  lustre_size_gib: 18000  
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-managed-lustre-vm.yml

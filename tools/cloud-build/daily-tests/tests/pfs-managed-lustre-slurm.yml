@@ -26,7 +26,8 @@ cli_deployment_vars: >-
     'zone': zone,
     'compute_machine_type': 'c2-standard-4',
     'slurm_cluster_name': slurm_cluster_name,
-    'lustre_instance_id': 'lustre-instance-' ~ build
+    'lustre_instance_id': 'lustre-instance-' ~ build,
+    'lustre_size_gib': 18000
   } | combine({'kms_key': 'projects/' ~ project ~ '/locations/us-central1/keyRings/lustre-keyring/cryptoKeys/lustre-key'} if region == 'us-central1' else {}) }}
 # Note: Pattern matching in gcloud only supports 1 wildcard.
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"

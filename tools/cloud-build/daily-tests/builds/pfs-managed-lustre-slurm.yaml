@@ -120,7 +120,7 @@ steps:
             - name: CHECK_LUSTRE
               value: "true"
             - name: REQUIRED_LUSTRE_GB
-              value: "36000"
+              value: "18000"
             - name: OPTIONS_GCS_PATH
               value: "gs://hpc-ctk1357/lustreoptions.txt"
             command: ["/bin/bash", "-c"]

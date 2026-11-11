@@ -89,7 +89,7 @@ steps:
             - name: CHECK_LUSTRE
               value: "true"
             - name: REQUIRED_LUSTRE_GB
-              value: "36000"
+              value: "18000"
             - name: MACHINE_TYPE
               value: "n2-standard-2"
             - name: NUM_NODES
@@ -150,6 +150,8 @@ steps:
               echo "Selected zone: \$$ZONE (region: \$$REGION)"
 
               bash tools/add_ttl_label.sh "\$$BLUEPRINT"
+
+              # 1. Add the fix_vpc_name.py script execution
               python3 tools/fix_vpc_name.py "\$$BLUEPRINT" "${_TEST_PREFIX}"
 
               # 2. Add separated extra-vars to safely isolate an empty test_prefix from use_fixed_vpc
