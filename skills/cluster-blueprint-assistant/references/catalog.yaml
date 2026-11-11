@@ -3163,7 +3163,7 @@ blueprints:
   - id: h4d-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-h4d-net, gke-h4d-rdma-net, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_dcgm_monitoring, enable_filestore_csi, enable_multi_networking, enable_private_endpoint, maintenance_exclusions, master_authorized_networks, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [configure_workload_identity_sa, enable_dcgm_monitoring, enable_filestore_csi, enable_multi_networking, enable_private_endpoint, maintenance_exclusions, master_authorized_networks, min_master_version, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: workload_policy
     source: modules/compute/resource-policy
     settings: [name, project_id, region, workload_policy]
@@ -3707,7 +3707,7 @@ blueprints:
   - id: h4d-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-h4d-net, gke-h4d-rdma-net, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_dcgm_monitoring, enable_filestore_csi, enable_multi_networking, enable_private_endpoint, maintenance_exclusions, master_authorized_networks, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [configure_workload_identity_sa, enable_dcgm_monitoring, enable_filestore_csi, enable_multi_networking, enable_private_endpoint, maintenance_exclusions, master_authorized_networks, min_master_version, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: h4d-pool
     source: modules/compute/gke-node-pool
     use: [h4d-cluster, gke-h4d-rdma-net, node_pool_service_account]
