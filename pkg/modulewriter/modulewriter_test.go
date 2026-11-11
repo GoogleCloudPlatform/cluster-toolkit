@@ -1217,6 +1217,9 @@ func TestNormalizeIgnoreAttribute(t *testing.T) {
 		{"node_config[0].labels['app']", `node_config[0].labels["app"]`},
 		{`node_config[0].labels[ "app" ]`, `node_config[0].labels["app"]`},
 		{`node_config[0].labels["app"]`, `node_config[0].labels["app"]`},
+		{"node_config[ 0 ].labels", "node_config[0].labels"},
+		{"node_config[  0  ].labels[ 'app' ]", `node_config[0].labels["app"]`},
+		{"node_config[ 10 ]", "node_config[10]"},
 		{"labels", "labels"},
 	}
 	for _, tc := range tests {
@@ -1258,6 +1261,12 @@ func TestMergeIgnores(t *testing.T) {
 			existing:  []string{`labels[ "key" ]`, "version"},
 			additions: []string{`-labels['key']`},
 			expected:  []string{"version"},
+		},
+		{
+			name:      "subtraction syntax handles whitespace inside integer bracket index",
+			existing:  []string{"initial_node_count", "node_config[0].labels", "version"},
+			additions: []string{"-node_config[ 0 ].labels"},
+			expected:  []string{"initial_node_count", "version"},
 		},
 		{
 			name:      "combined addition and subtraction",

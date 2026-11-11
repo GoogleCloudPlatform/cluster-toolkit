@@ -490,11 +490,13 @@ type tfOverrideFile struct {
 
 var (
 	quoteIndexRe = regexp.MustCompile(`\[\s*['"]([^'"]*)['"]\s*\]`)
+	intIndexRe   = regexp.MustCompile(`\[\s*([0-9]+)\s*\]`)
 	validAttrRe  = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*(\[\s*([0-9]+|'[^']+'|"[^"]+")\s*\]|\.[a-zA-Z_][a-zA-Z0-9_]*)*$`)
 )
 
 func normalizeIgnoreAttribute(attr string) string {
-	return quoteIndexRe.ReplaceAllString(attr, `["$1"]`)
+	attr = quoteIndexRe.ReplaceAllString(attr, `["$1"]`)
+	return intIndexRe.ReplaceAllString(attr, `[$1]`)
 }
 
 func parseIgnoreEntry(item string) (string, bool, error) {
