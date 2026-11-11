@@ -73,4 +73,6 @@ vars:
   custom_image_source: image-builder
 
   # NVIDIA driver version built into custom_image.
+  # Required when custom_image_source is "image-builder".
+  # Comment out this line when custom_image_source is "prebuilt".
   nvidia_driver_version:

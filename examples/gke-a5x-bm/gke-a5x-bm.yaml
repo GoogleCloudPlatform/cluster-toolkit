@@ -285,7 +285,7 @@ deployment_groups:
         version: "0.17.1"
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
-          num_gpus: $(a5x-pool.static_gpu_count)
+          num_gpus: $(a5x-pool.total_static_gpu_count)
           accelerator_type: $(vars.accelerator_type)
       jobset:
         install: true
@@ -323,7 +323,7 @@ deployment_groups:
       image: nvidia/cuda:13.4.3-base-ubuntu22.04
       command:
       - nvidia-smi
-      node_count: $(vars.static_node_count)
+      node_count: $(a5x-pool.total_static_node_count)
       name: run-nvidia-smi
       k8s_service_account_name: $(vars.k8s_service_account_name)
       tolerations:
@@ -399,7 +399,7 @@ deployment_groups:
         mount_path: /scratch-data
         size_gb: 1000
 
-      k8s_service_account_name: workload-identity-k8s-sa
+      k8s_service_account_name: $(vars.k8s_service_account_name)
       image: ubuntu:22.04
       tolerations:
       - key: kubernetes.io/arch

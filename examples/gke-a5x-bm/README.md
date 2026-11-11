@@ -105,7 +105,7 @@ gcloud compute images describe IMAGE_NAME --project=PROJECT_ID \
       custom_image: IMAGE_NAME
       custom_image_source: IMAGE_SOURCE  # image-builder or prebuilt
       version_prefix: "GKE_VERSION"      # GKE version for the node image, from your account team
-      nvidia_driver_version: "DRIVER_VERSION"  # driver built into the image
+      nvidia_driver_version: "DRIVER_VERSION"  # image-builder: driver in the image; comment out for prebuilt
     ```
 
 3. Deploy:
@@ -207,7 +207,7 @@ Set these in `vars` in `gke-a5x-bm.yaml`, or override them in the deployment fil
 
     Each pod lists 4 GPUs with `0MiB / 286524MiB`.
 
-6. CUDA test with `a5x-cuda-test.yaml`:
+6. CUDA test with `a5x-cuda-test.yaml` (one pod on one A5X node):
 
     ```bash
     kubectl apply -f examples/gke-a5x-bm/a5x-cuda-test.yaml
@@ -218,7 +218,7 @@ Set these in `vars` in `gke-a5x-bm.yaml`, or override them in the deployment fil
 
     Ends with `Test PASSED`.
 
-7. Storage benchmark:
+7. Storage benchmark (one pod on one A5X node):
 
     ```bash
     kubectl create -f DEPLOYMENT_NAME/primary/storage-fio-job-SUFFIX.yaml
@@ -244,7 +244,7 @@ kubectl logs nccl-test-single-node | grep -E "nccl-library|^\s+8589934592|Out of
 kubectl delete -f examples/gke-a5x-bm/nccl-test-single-node.yaml
 ```
 
-Expected: `nccl-library=23206` (NCCL 2.32.6) and `Out of bounds values : 0 OK`.
+Expected: `nccl-library=23206` (NCCL 2.32.6) and `Out of bounds values : 0 OK`. Reference: about **1,020 GB/s** bus bandwidth at 8 GiB.
 
 ### Two nodes over multi-node NVLink (ComputeDomain)
 
@@ -278,7 +278,7 @@ mpirun --allow-run-as-root \
 kubectl delete -f examples/gke-a5x-bm/nccl-test-compute-domain.yaml
 ```
 
-Check for `via P2P/MNNVL` and `Out of bounds values : 0 OK`.
+Check for `via P2P/MNNVL` and `Out of bounds values : 0 OK`. Reference (2 nodes, one rack): all-reduce about **1,470 GB/s**, all-gather about **1,080 / 1,090 GB/s** (out-of-place / in-place) at 8 GiB.
 
 ### Multiple nodes with JobSet and Kueue
 
@@ -298,6 +298,8 @@ kubectl logs "$HEAD" | grep -m1 "via P2P/MNNVL"
 kubectl logs "$HEAD" | grep -E "^\s+8589934592|Out of bounds|Avg bus"
 kubectl delete -f examples/gke-a5x-bm/nccl-jobset-example.yaml --ignore-not-found
 ```
+
+Check for `via P2P/MNNVL` and `Out of bounds values : 0 OK`. Reference (2 nodes, one rack): all-gather about **1,080 / 1,090 GB/s** (out-of-place / in-place) at 8 GiB.
 
 The manifest creates a ComputeDomain and the JobSet; the delete command removes both. Delete them before running the test again with a different node count.
 

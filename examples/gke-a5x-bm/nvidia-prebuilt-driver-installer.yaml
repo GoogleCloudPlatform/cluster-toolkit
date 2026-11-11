@@ -88,6 +88,7 @@ spec:
         - bash
         - -c
         - |
+          set -euo pipefail
           # Stage the preloaded IMEX binaries before the driver is loaded.
           # The NVIDIA DRA kubelet plugin's init container waits until
           # nvidia-smi succeeds (driver loaded), then the plugin lists the
@@ -108,7 +109,7 @@ spec:
           fi
           echo "No GPU driver module detected, moving pre-installed drivers now..."
           mkdir -p /usr/local/nvidia/bin /usr/local/nvidia/lib64
-          DRIVER_VER=$(ls /root/opt/nvidia/ 2>/dev/null | head -n 1)
+          DRIVER_VER=$(ls /root/opt/nvidia/ 2>/dev/null | head -n 1 || true)
           if [ -z "$DRIVER_VER" ]; then
             echo "ERROR: No driver found under /root/opt/nvidia/! Are you sure the custom image is loaded?"
             exit 1
