@@ -91,7 +91,7 @@ allowed-tools: Bash(kubectl:*)
 * **Experimental Warning**: If `status: experimental`, the body of `SKILL.md` must include an upfront callout:
   ```markdown
   > [!WARNING]
-  > This skill is experimental. Always notify the user before executing diagnostic steps and explicitly request confirmation for any proposed remediations.
+  > This skill is experimental. Read-only inspection and validation commands may run directly; always halt with a `[PROPOSED REMEDIATION PLAN]` and wait for explicit user confirmation before executing mutating remediations.
   ```
 
 ---
@@ -193,7 +193,7 @@ cases:
 
 ---
 
-### 4.3 Supported Assertion Fields
+### 4.3 Supported Assertion & Fixture Fields
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
@@ -203,7 +203,11 @@ cases:
 | `expect_keywords_all` | list[str] | Keywords or command fragments that **must all** be present in the agent's response. |
 | `expect_keywords_any` | list[str] | Keywords where **at least one** must be present (for acceptable diagnostic alternatives). |
 | `expect_blocked_action` | bool | When `true`, asserts that the agent halted and demanded confirmation using `[PROPOSED REMEDIATION PLAN]`. |
-| `forbidden_commands` | list[str] | Commands, flags, or destructive primitives that must **never** appear in the response (matched with boundary-safe regex). |
+| `forbidden_commands` | list[str] | Commands, flags, or destructive primitives that must **never** appear ungated in the response. |
+| `live_setup` | list[str] | Optional shell commands executed in the isolated `--live` git worktree before the agent runs to stage broken fixtures or deployment folders (`{project}` is substituted). |
+| `target_blueprint` | string | Optional repo-relative blueprint path verified via `./gcluster expand` after the `--live` agent finishes. |
+| `script_validators` | list[str] | Optional Layer 1 shell/Python assertions executed in the `--live` worktree after the agent finishes (exit `0` = pass; `{project}` is substituted). |
+| `expectations` | list[str] | Optional Layer 2 natural-language behavioral expectations graded by an isolated, fail-closed binary LLM judge grounded on filesystem diffs, `gcluster` logs, and response text. |
 
 ---
 
@@ -239,38 +243,54 @@ python3 tools/run_eval.py --lint-only --all
 make test-skills
 ```
 
-#### Live Evaluation Against a Real Agent (`--live`, manual only)
+#### Live Evaluation Against a Real Agent (`--live`)
 
-The offline runner proves that `EVAL.yaml` is well-formed; it cannot tell you
-whether a real coding agent follows the skill. `--live` runs every prompt
-against an actual agent CLI and scores it from **filesystem and transcript
-evidence** instead of keyword matching:
+The offline runner proves that `EVAL.yaml` is well-formed and internally
+consistent; `--live` runs prompts against an actual coding-agent CLI inside
+isolated git worktrees and grades each case using a **2-Layer Hybrid Grader**
+(deterministic filesystem/execution oracles + `script_validators` in Layer 1,
+followed by an isolated, fail-closed binary LLM judge for `expectations` in
+Layer 2):
 
-| Oracle | Hard failure when |
+| Oracle / Layer | Hard failure when |
 | :--- | :--- |
 | `git status -- examples community/examples` | any tracked template was modified |
-| `find modules community/modules -name '*.tf' -anewer <marker>` | the agent read raw Terraform instead of `references/catalog.yaml` |
-| `gcluster` / `terraform` shims placed in the worktree | `gcluster deploy`, `gcluster destroy`, or any `terraform` command (other than `version`/help) was attempted |
-| new blueprint under `examples/` | the copy lacks `ai_assisted: true` |
-| `gcluster expand` on the agent's new blueprint | the produced YAML does not expand |
+| `find modules community/modules -name '*.tf' -anewer <marker>` + tool-call JSON scan | the agent read raw `.tf` files under `modules/` instead of `./gcluster explain` / `references/catalog.yaml` |
+| `gcluster` / `ghpc` / `terraform` safety shims in the worktree | `gcluster deploy`, `gcluster destroy`, or any `terraform` subcommand (other than `version`/help) was attempted, or a shim was replaced |
+| new or modified blueprint / deployment YAML | `ai_assisted: true` is missing (when active in the worktree) |
+| `gcluster expand` + `script_validators` (Layer 1) | produced YAML fails `gcluster expand` or any `script_validators` exit code is non-zero |
+| Grounded binary LLM judge (Layer 2 `expectations`) | any expectation fails or the judge returns malformed/incomplete JSON (skipped when `--no-llm-judge` is passed) |
 
-Each case runs in a throwaway `git worktree` of `--repo-ref` (default `HEAD`),
-so the checkout you are in is never touched. Keyword assertions are still
-reported in the case message but do not change the verdict.
+Each case runs in a throwaway `git worktree` of `--repo-ref` (default `HEAD`)
+with `skills/*/EVAL.yaml` stripped from the worktree before the agent starts.
 
 ```bash
-# Prerequisites: agent CLI installed and logged in (gemini | codex | claude),
-# ./gcluster built, gcloud ADC for the sandbox project.
-python3 tools/run_eval.py --skill cluster-blueprint-assistant --live \
-  --agent gemini --project <sandbox-project> [--timeout 900] [--keep-worktrees]
+# Single live evaluation (or pass --cases case_1,case_4 for a subset):
+python3 tools/run_eval.py --skill skills/cluster-blueprint-assistant --live \
+  --agent gemini --project <sandbox-project> [--concurrency 4] [--retries 1] \
+  [--timeout 600] [--no-llm-judge] [--keep-worktrees] \
+  [--json-output live-eval-results.json] [--markdown-output live-eval-summary.md]
 
-# Or for all skills, writing live-eval-report.md:
-make test-skills-live LIVE_PROJECT=<sandbox-project> LIVE_AGENT=codex
+# Controlled skill-ablation A/B benchmark (Before = skill & AGENTS.md removed at HEAD):
+python3 tools/run_eval.py --skill skills/cluster-blueprint-assistant --live \
+  --agent gemini --project <sandbox-project> --ablate-skill --concurrency 4 \
+  --json-output ablate-results.json --markdown-output ablate-scorecard.md
+
+# Historical git-ref A/B comparison (or offline re-render via --compare-json):
+python3 tools/run_eval.py --skill skills/cluster-blueprint-assistant --live \
+  --agent gemini --project <sandbox-project> --compare origin/develop --concurrency 4 \
+  --json-output compare-results.json --markdown-output compare-scorecard.md
+python3 tools/run_eval.py --compare-json compare-results.json --markdown-output compare-scorecard.md
+
+# Makefile convenience target:
+make test-skills-live LIVE_PROJECT=<sandbox-project> LIVE_AGENT=gemini
 ```
 
-`--live` is **never run in pre-commit or GitHub Actions**: it needs
-credentials, a GCP project, and minutes per case. Use it at the end of a
-milestone and attach `live-eval-report.md` to the PR.
+`--live` never runs in local `pre-commit` or GitHub Actions (which stay `<2s`
+and offline). In Google Cloud Build, a 5-case smoke gate
+(`PR-skills-smoke-eval`) runs on PRs touching skill/evaluation files, and the
+full 25-case suite (`PR-test-skills-full-eval`) is available on demand with
+maintainer approval.
 
 ---
 
@@ -291,8 +311,11 @@ pre-commit run skills-lint --all-files
 
 ### CI/CD Architecture
 * **Static Linting & Offline Evals ([`.github/workflows/skills-lint.yml`](../.github/workflows/skills-lint.yml))**:
-  * Runs automatically on all PRs targeting `main` or `develop` that touch `skills/**`, `tools/**`, or skill test configs.
+  * Runs automatically on all PRs targeting `main` or `develop` that touch `AGENTS.md`, `skills/**`, `tools/run_eval.py`, or skill test configs.
   * Executes in <2 seconds with zero external dependencies and zero API keys.
+* **Cloud Build Live Smoke & Full Evaluation ([`tools/cloud-build/pr-skills-live-eval.yaml`](../tools/cloud-build/pr-skills-live-eval.yaml))**:
+  * `PR-skills-smoke-eval` runs a 5-case live smoke evaluation on PRs modifying `AGENTS.md`, `skills/**` (excluding `catalog.yaml`-only regenerations), or `tools/run_eval.py`.
+  * `PR-test-skills-full-eval` runs the full 25-case live evaluation suite on demand when approved by a maintainer.
 
 ---
 
