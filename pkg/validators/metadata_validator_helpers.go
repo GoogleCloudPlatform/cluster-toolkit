@@ -273,7 +273,7 @@ func isSingleValSet(val cty.Value) bool {
 }
 
 // isVarSet returns true if the value is known (or a dynamic expression/module use reference), non-null,
-// and non-empty (positive number, non-empty string, true bool, or non-empty collection).
+// and non-empty (non-zero number, non-empty string, true bool, or non-empty collection).
 func isVarSet(values []cty.Value) bool {
 	if len(values) == 0 {
 		return false

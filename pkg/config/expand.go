@@ -312,9 +312,16 @@ func stepNestedSetting(curr cty.Value, bp Blueprint, key string) (cty.Value, boo
 	return cty.NilVal, false
 }
 
-// IsValueSet reports whether a cty.Value is considered set (non-null, known or an
-// expression/use reference, and non-empty). For object types, at least one attribute
-// must recursively be set.
+// IsValueSet reports whether a cty.Value is considered active ("set") using
+// value truthiness rather than key presence. It returns true when val is
+// non-null, known (or an expression/use reference), and holds a non-zero number
+// (positive or negative), non-empty string, true boolean, non-empty collection,
+// or object with at least one recursively set attribute.
+//
+// Zero and falsy values (0, "", false, empty collections, and objects with no
+// set attributes) intentionally return false so explicitly disabled settings
+// (such as spot: false or count: 0) do not trigger exclusive or conditional
+// conflicts.
 func IsValueSet(val cty.Value) bool {
 	if val == cty.NilVal || val.IsNull() {
 		return false
@@ -328,7 +335,7 @@ func IsValueSet(val cty.Value) bool {
 	case cty.String:
 		return val.AsString() != ""
 	case cty.Number:
-		return val.AsBigFloat().Sign() > 0
+		return val.AsBigFloat().Sign() != 0
 	case cty.Bool:
 		return val.True()
 	default:
