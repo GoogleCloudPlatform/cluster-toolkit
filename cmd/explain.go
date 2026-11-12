@@ -101,6 +101,7 @@ type ExplainVariable struct {
 	Name     string `json:"name" yaml:"name"`
 	Type     string `json:"type" yaml:"type"`
 	Required bool   `json:"required" yaml:"required"`
+	Global   bool   `json:"global,omitempty" yaml:"global,omitempty"`
 	Default  string `json:"default,omitempty" yaml:"default,omitempty"`
 }
 
@@ -120,17 +121,18 @@ type ExplainStageModule struct {
 
 // ExplainModuleResult is the structured output for Mode 2b (module path).
 type ExplainModuleResult struct {
-	Module         string               `json:"module" yaml:"module"`
-	Kind           string               `json:"kind" yaml:"kind"`
-	Deprecated     string               `json:"deprecated,omitempty" yaml:"deprecated,omitempty"`
-	Alternative    string               `json:"alternative_module,omitempty" yaml:"alternative_module,omitempty"`
-	RequiredAPIs   []string             `json:"required_apis" yaml:"required_apis"`
-	GcloudCommand  string               `json:"gcloud_enable_command" yaml:"gcloud_enable_command"`
-	Snippet        string               `json:"snippet" yaml:"snippet"`
-	AutoInputs     []ExplainAutoInput   `json:"auto_injected_inputs" yaml:"auto_injected_inputs"`
-	RequiredInputs []ExplainModuleInput `json:"required_inputs,omitempty" yaml:"required_inputs,omitempty"`
-	OptionalInputs []ExplainModuleInput `json:"optional_inputs,omitempty" yaml:"optional_inputs,omitempty"`
-	Outputs        []string             `json:"outputs,omitempty" yaml:"outputs,omitempty"`
+	Module           string               `json:"module" yaml:"module"`
+	Kind             string               `json:"kind" yaml:"kind"`
+	Deprecated       string               `json:"deprecated,omitempty" yaml:"deprecated,omitempty"`
+	Alternative      string               `json:"alternative_module,omitempty" yaml:"alternative_module,omitempty"`
+	RequiredAPIs     []string             `json:"required_apis" yaml:"required_apis"`
+	GcloudCommand    string               `json:"gcloud_enable_command" yaml:"gcloud_enable_command"`
+	Snippet          string               `json:"snippet" yaml:"snippet"`
+	AutoInputs       []ExplainAutoInput   `json:"auto_injected_inputs" yaml:"auto_injected_inputs"`
+	RequiredInputs   []ExplainModuleInput `json:"required_inputs,omitempty" yaml:"required_inputs,omitempty"`
+	OptionalInputs   []ExplainModuleInput `json:"optional_inputs,omitempty" yaml:"optional_inputs,omitempty"`
+	DeprecatedInputs []ExplainModuleInput `json:"deprecated_inputs,omitempty" yaml:"deprecated_inputs,omitempty"`
+	Outputs          []string             `json:"outputs,omitempty" yaml:"outputs,omitempty"`
 }
 
 // ExplainAutoInput describes an input filled automatically via use:, vars:, or inject_module_id.
@@ -141,10 +143,19 @@ type ExplainAutoInput struct {
 
 // ExplainModuleInput describes a Terraform/Packer module variable.
 type ExplainModuleInput struct {
-	Name        string `json:"name" yaml:"name"`
-	Type        string `json:"type" yaml:"type"`
-	Default     string `json:"default,omitempty" yaml:"default,omitempty"`
-	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	Name        string   `json:"name" yaml:"name"`
+	Type        string   `json:"type" yaml:"type"`
+	Default     string   `json:"default,omitempty" yaml:"default,omitempty"`
+	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
+	Validations []string `json:"validations,omitempty" yaml:"validations,omitempty"`
+	textType    string
+}
+
+func (in ExplainModuleInput) displayType() string {
+	if in.textType != "" {
+		return in.textType
+	}
+	return in.Type
 }
 
 // ExplainSpecMatchResult is the structured output for Mode 3 (spec matching).
@@ -973,13 +984,16 @@ func orderBlueprintVarKeys(merged map[string]cty.Value) []string {
 }
 
 func inspectCtyVariable(name string, v cty.Value) ExplainVariable {
+	var ev ExplainVariable
 	if expr, isExpr := config.IsExpressionValue(v); isExpr {
-		return inspectExpressionVariable(name, expr)
+		ev = inspectExpressionVariable(name, expr)
+	} else if !v.IsKnown() || v.IsNull() {
+		ev = ExplainVariable{Name: name, Type: inferPlaceholderType(name), Required: true}
+	} else {
+		ev = inspectKnownCtyVariable(name, v)
 	}
-	if !v.IsKnown() || v.IsNull() {
-		return ExplainVariable{Name: name, Type: inferPlaceholderType(name), Required: true}
-	}
-	return inspectKnownCtyVariable(name, v)
+	ev.Global = config.IsAutoInjectedGlobal(name)
+	return ev
 }
 
 func inspectExpressionVariable(name string, expr config.Expression) ExplainVariable {
@@ -1058,13 +1072,7 @@ func printExplainBlueprintText(w io.Writer, res ExplainBlueprintResult) {
 	} else {
 		writeln(w, "\n2. Customizable Variables (vars):")
 	}
-	for _, v := range res.Variables {
-		if v.Required {
-			writef(w, "   - %-26s (%s, required)\n", v.Name, v.Type)
-		} else {
-			writef(w, "   - %-26s (%s, default: %s)\n", v.Name, v.Type, v.Default)
-		}
-	}
+	printBlueprintVariableGroups(w, res.Variables)
 
 	writeln(w, "\n3. Deployment Stages & Modules:")
 	for i, st := range res.Stages {
@@ -1086,6 +1094,37 @@ func printExplainBlueprintText(w io.Writer, res ExplainBlueprintResult) {
 	}
 }
 
+func printBlueprintVariableGroups(w io.Writer, vars []ExplainVariable) {
+	var globalVars, bpVars []ExplainVariable
+	for _, v := range vars {
+		if v.Global {
+			globalVars = append(globalVars, v)
+		} else {
+			bpVars = append(bpVars, v)
+		}
+	}
+	if len(globalVars) > 0 {
+		writeln(w, "   Global Variables:")
+		printBlueprintVariableList(w, globalVars)
+		if len(bpVars) > 0 {
+			writeln(w, "   Blueprint Variables:")
+			printBlueprintVariableList(w, bpVars)
+		}
+		return
+	}
+	printBlueprintVariableList(w, vars)
+}
+
+func printBlueprintVariableList(w io.Writer, vars []ExplainVariable) {
+	for _, v := range vars {
+		if v.Required {
+			writef(w, "   - %-26s (%s, required)\n", v.Name, v.Type)
+		} else {
+			writef(w, "   - %-26s (%s, default: %s)\n", v.Name, v.Type, v.Default)
+		}
+	}
+}
+
 type upstreamCandidateGroup struct {
 	PrimarySource string
 	PrimaryID     string
@@ -1098,6 +1137,7 @@ func buildExplainModule(modPath, kind string) (ExplainModuleResult, error) {
 	if err != nil {
 		return ExplainModuleResult{}, fmt.Errorf("failed to inspect module %s: %w", modPath, err)
 	}
+	mi = modulereader.ApplyVarMeta(modPath, mi)
 
 	apis := nonEmptyStrings(mi.Metadata.Spec.Requirements.Services)
 	sort.Strings(apis)
@@ -1108,7 +1148,7 @@ func buildExplainModule(modPath, kind string) (ExplainModuleResult, error) {
 
 	upstreamGroups, useProvidedInputs := findUpstreamCandidateGroups(modPath, mi)
 	autoInputs := buildModuleAutoInputs(mi, upstreamGroups)
-	reqInputs, optInputs := partitionModuleInputs(mi, useProvidedInputs)
+	reqInputs, optInputs, depInputs := partitionModuleInputs(mi, useProvidedInputs)
 
 	outputs := make([]string, 0, len(mi.Outputs))
 	for _, out := range mi.Outputs {
@@ -1119,17 +1159,18 @@ func buildExplainModule(modPath, kind string) (ExplainModuleResult, error) {
 	snippet := renderModuleYAMLBlock(defaultModuleID(modPath), modPath, upstreamIDsFromGroups(upstreamGroups), reqInputs, optInputs)
 
 	return ExplainModuleResult{
-		Module:         modPath,
-		Kind:           kind,
-		Deprecated:     mi.Metadata.Ghpc.DeprecationDate,
-		Alternative:    mi.Metadata.Ghpc.AlternativeModule,
-		RequiredAPIs:   apis,
-		GcloudCommand:  gcloudCmd,
-		Snippet:        snippet,
-		AutoInputs:     autoInputs,
-		RequiredInputs: reqInputs,
-		OptionalInputs: optInputs,
-		Outputs:        outputs,
+		Module:           modPath,
+		Kind:             kind,
+		Deprecated:       mi.Metadata.Ghpc.DeprecationDate,
+		Alternative:      mi.Metadata.Ghpc.AlternativeModule,
+		RequiredAPIs:     apis,
+		GcloudCommand:    gcloudCmd,
+		Snippet:          snippet,
+		AutoInputs:       autoInputs,
+		RequiredInputs:   reqInputs,
+		OptionalInputs:   optInputs,
+		DeprecatedInputs: depInputs,
+		Outputs:          outputs,
 	}, nil
 }
 
@@ -1168,19 +1209,31 @@ func buildModuleAutoInputs(mi modulereader.ModuleInfo, upstreamGroups []upstream
 	return autoInputs
 }
 
-func partitionModuleInputs(mi modulereader.ModuleInfo, useProvidedInputs map[string]bool) ([]ExplainModuleInput, []ExplainModuleInput) {
+func partitionModuleInputs(mi modulereader.ModuleInfo, useProvidedInputs map[string]bool) ([]ExplainModuleInput, []ExplainModuleInput, []ExplainModuleInput) {
 	injectedID := mi.Metadata.Ghpc.InjectModuleId
 	var reqInputs []ExplainModuleInput
 	var optInputs []ExplainModuleInput
+	var depInputs []ExplainModuleInput
 	for _, in := range mi.Inputs {
 		if config.IsAutoInjectedGlobal(in.Name) || in.Name == injectedID || useProvidedInputs[in.Name] || in.Name == "machine_configs" {
+			continue
+		}
+		if in.Deprecated && !in.Required {
+			depInputs = append(depInputs, ExplainModuleInput{
+				Name:        in.Name,
+				Type:        formatCtyType(in.Type),
+				textType:    formatCtyTypeForText(in.Type),
+				Description: in.DeprecatedMsg,
+			})
 			continue
 		}
 		entry := ExplainModuleInput{
 			Name:        in.Name,
 			Type:        formatCtyType(in.Type),
+			textType:    formatCtyTypeForText(in.Type),
 			Default:     formatInterfaceDefault(in.Default),
-			Description: firstSentence(in.Description),
+			Description: strings.Join(strings.Fields(in.Description), " "),
+			Validations: in.Validations,
 		}
 		if in.Required {
 			reqInputs = append(reqInputs, entry)
@@ -1190,7 +1243,8 @@ func partitionModuleInputs(mi modulereader.ModuleInfo, useProvidedInputs map[str
 	}
 	sort.Slice(reqInputs, func(i, j int) bool { return reqInputs[i].Name < reqInputs[j].Name })
 	sort.Slice(optInputs, func(i, j int) bool { return optInputs[i].Name < optInputs[j].Name })
-	return reqInputs, optInputs
+	sort.Slice(depInputs, func(i, j int) bool { return depInputs[i].Name < depInputs[j].Name })
+	return reqInputs, optInputs, depInputs
 }
 
 type candidateProvider struct {
@@ -1211,6 +1265,9 @@ func classifyTargetModuleInputs(targetInfo modulereader.ModuleInfo) (map[string]
 	targetReqInputs := make(map[string]bool)
 	injectedID := targetInfo.Metadata.Ghpc.InjectModuleId
 	for _, in := range targetInfo.Inputs {
+		if in.Deprecated && !in.Required {
+			continue
+		}
 		targetInputs[in.Name] = true
 		if in.Required && !config.IsAutoInjectedGlobal(in.Name) && in.Name != injectedID {
 			targetReqInputs[in.Name] = true
@@ -1522,11 +1579,26 @@ func sampleValueForInput(name, typ string) string {
 	if v, ok := sampleByInputType[typ]; ok {
 		return v
 	}
-	return fmt.Sprintf("<%s>", name)
+	switch {
+	case strings.HasPrefix(typ, "list"), strings.HasPrefix(typ, "set"):
+		return "[]"
+	case strings.HasPrefix(typ, "map"), strings.HasPrefix(typ, "object"):
+		return "{}"
+	default:
+		return fmt.Sprintf("<%s>", name)
+	}
 }
 
 func formatCtyType(t cty.Type) string {
-	if t == cty.NilType {
+	return formatCtyTypeMode(t, false)
+}
+
+func formatCtyTypeForText(t cty.Type) string {
+	return formatCtyTypeMode(t, true)
+}
+
+func formatCtyTypeMode(t cty.Type, compactText bool) string {
+	if t == cty.NilType || t == cty.DynamicPseudoType {
 		return "any"
 	}
 	switch {
@@ -1536,9 +1608,91 @@ func formatCtyType(t cty.Type) string {
 		return "number"
 	case t == cty.Bool:
 		return "bool"
-	case t.IsListType() || t.IsTupleType() || t.IsSetType():
+	case t.IsListType():
+		return formatCollectionType("list", t.ElementType(), compactText)
+	case t.IsSetType():
+		return formatCollectionType("set", t.ElementType(), compactText)
+	case t.IsTupleType():
 		return "list"
-	case t.IsMapType() || t.IsObjectType():
+	case t.IsMapType():
+		return formatCollectionType("map", t.ElementType(), compactText)
+	case t.IsObjectType():
+		return formatCtyObjectType(t, compactText)
+	default:
+		return t.FriendlyName()
+	}
+}
+
+func formatCollectionType(prefix string, elem cty.Type, compactText bool) string {
+	elemStr := formatCtyTypeMode(elem, compactText)
+	if elemStr == "any" {
+		return prefix
+	}
+	return fmt.Sprintf("%s(%s)", prefix, elemStr)
+}
+
+func formatCtyObjectType(t cty.Type, compactText bool) string {
+	attrs := t.AttributeTypes()
+	if len(attrs) == 0 {
+		return "object"
+	}
+	keys := sortObjectAttrKeys(t, attrs)
+	const maxAttrs = 6
+	parts := make([]string, 0, len(keys))
+	for i, k := range keys {
+		if compactText && i >= maxAttrs && t.AttributeOptional(k) {
+			parts = append(parts, "...")
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%s=%s", k, formatObjectAttrType(t, k, attrs[k], compactText)))
+	}
+	return fmt.Sprintf("object({%s})", strings.Join(parts, ", "))
+}
+
+func sortObjectAttrKeys(t cty.Type, attrs map[string]cty.Type) []string {
+	keys := make([]string, 0, len(attrs))
+	for k := range attrs {
+		keys = append(keys, k)
+	}
+	// Required attributes first so text-mode truncation never hides required fields.
+	sort.Slice(keys, func(i, j int) bool {
+		oi, oj := t.AttributeOptional(keys[i]), t.AttributeOptional(keys[j])
+		if oi != oj {
+			return !oi
+		}
+		return keys[i] < keys[j]
+	})
+	return keys
+}
+
+func formatObjectAttrType(objType cty.Type, key string, attrType cty.Type, compactText bool) string {
+	attr := formatCtyTypeMode(attrType, compactText)
+	if compactText {
+		attr = formatCtyScalarOrKind(attrType)
+	}
+	if objType.AttributeOptional(key) {
+		return "optional(" + attr + ")"
+	}
+	return attr
+}
+
+func formatCtyScalarOrKind(t cty.Type) string {
+	switch {
+	case t == cty.NilType || t == cty.DynamicPseudoType:
+		return "any"
+	case t == cty.String:
+		return "string"
+	case t == cty.Number:
+		return "number"
+	case t == cty.Bool:
+		return "bool"
+	case t.IsSetType():
+		return "set"
+	case t.IsListType() || t.IsTupleType():
+		return "list"
+	case t.IsMapType():
+		return "map"
+	case t.IsObjectType():
 		return "object"
 	default:
 		return t.FriendlyName()
@@ -1598,11 +1752,12 @@ func printExplainModuleText(w io.Writer, res ExplainModuleResult) {
 	if len(res.RequiredInputs) > 0 {
 		writeln(w, "\nRequired Settings (variables.tf):")
 		for _, in := range res.RequiredInputs {
-			writef(w, "  - %-28s (%s) %s\n", in.Name, in.Type, in.Description)
+			printModuleInputLine(w, in.Name, in.displayType(), firstSentence(in.Description), in.Validations)
 		}
 	}
 
 	printOptionalModuleInputs(w, res.OptionalInputs)
+	printDeprecatedModuleInputs(w, res.DeprecatedInputs)
 
 	if len(res.Outputs) > 0 {
 		writef(w, "\nModule Outputs (%d): %s\n", len(res.Outputs), strings.Join(res.Outputs, ", "))
@@ -1613,11 +1768,53 @@ func printOptionalModuleInputs(w io.Writer, optInputs []ExplainModuleInput) {
 	if len(optInputs) == 0 {
 		return
 	}
-	names := make([]string, 0, len(optInputs))
+	writef(w, "\nOptional Settings (%d):\n", len(optInputs))
 	for _, in := range optInputs {
-		names = append(names, in.Name)
+		typeMeta := in.displayType()
+		if in.Default != "" {
+			typeMeta = fmt.Sprintf("%s, default: %s", typeMeta, truncateForText(in.Default, 60))
+		}
+		printModuleInputLine(w, in.Name, typeMeta, firstSentence(in.Description), in.Validations)
 	}
-	writef(w, "\nOptional Settings (%d): %s\n", len(names), strings.Join(names, ", "))
+}
+
+func printModuleInputLine(w io.Writer, name, typeMeta, desc string, validations []string) {
+	var tail []string
+	if desc != "" {
+		tail = append(tail, desc)
+	}
+	if len(validations) > 0 {
+		tail = append(tail, fmt.Sprintf("[Validation: %s]", strings.Join(validations, " | ")))
+	}
+	if len(tail) > 0 {
+		writef(w, "  - %-28s (%s) %s\n", name, typeMeta, strings.Join(tail, " "))
+	} else {
+		writef(w, "  - %-28s (%s)\n", name, typeMeta)
+	}
+}
+
+func truncateForText(s string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return string(runes[:maxLen])
+	}
+	return string(runes[:maxLen-3]) + "..."
+}
+
+func printDeprecatedModuleInputs(w io.Writer, depInputs []ExplainModuleInput) {
+	if len(depInputs) == 0 {
+		return
+	}
+	writef(w, "\nDeprecated Settings (%d - do NOT use):\n", len(depInputs))
+	for _, in := range depInputs {
+		printModuleInputLine(w, in.Name, in.displayType(), in.Description, nil)
+	}
 }
 
 type normalizedSpec struct {
@@ -2166,10 +2363,11 @@ func buildMissingModuleSnippetForBlueprint(modSource string, bp catalog.Blueprin
 	if err != nil {
 		return fmt.Sprintf("# could not inspect %s: %v", modSource, err)
 	}
+	mi = modulereader.ApplyVarMeta(modSource, mi)
 
 	upstreamGroups, useProvided := findUpstreamCandidateGroups(modSource, mi)
 	prereqBlocks, useIDs := resolveBlueprintUpstreamBlocks(bp, upstreamGroups)
-	reqInputs, optInputs := partitionModuleInputs(mi, useProvided)
+	reqInputs, optInputs, _ := partitionModuleInputs(mi, useProvided)
 	mainBlock := renderModuleYAMLBlock(defaultModuleID(modSource), modSource, useIDs, reqInputs, optInputs)
 	return strings.Join(append(prereqBlocks, mainBlock), "\n")
 }
@@ -2194,6 +2392,7 @@ func resolvePrereqUpstreamUseIDs(bp catalog.BlueprintEntry, prereqSource string)
 	if err != nil {
 		return nil
 	}
+	pInfo = modulereader.ApplyVarMeta(prereqSource, pInfo)
 	pGroups, _ := findUpstreamCandidateGroups(prereqSource, pInfo)
 	var prereqUse []string
 	for _, pg := range pGroups {
