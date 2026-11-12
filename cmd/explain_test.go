@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	. "gopkg.in/check.v1"
@@ -510,4 +511,146 @@ func (s *MySuite) TestExplainUnderscoreCompanion(c *C) {
 	symOut, err := runExplainForTest("community/examples/fsi/ibm-symphony-on-gke/symphony.yaml")
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(symOut, "Companion Deployment File: community/examples/fsi/ibm-symphony-on-gke/symphony_deployment.yaml"), Equals, true)
+}
+
+func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	// 1. Workload + accelerator spec matching: gke + vllm (ml-inference) + h200
+	outVLLM, err := runExplainForTest("gke", "vllm", "h200")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outVLLM, "Exact Blueprint Match (3/3 specs matched: gke, ml-inference, a3-ultragpu-8g):"), Equals, true)
+	c.Check(strings.Contains(outVLLM, "Blueprint: examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml"), Equals, true)
+
+	// 2. TPU framework spec matching: gke + maxtext (tpu) + tpu-v6e
+	outMaxText, err := runExplainForTest("gke", "maxtext", "tpu-v6e")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outMaxText, "Exact Blueprint Match (3/3 specs matched: gke, tpu, tpu-v6e):"), Equals, true)
+	c.Check(strings.Contains(outMaxText, "Blueprint: examples/gke-tpu-v6e/gke-tpu-v6e.yaml"), Equals, true)
+
+	// 3. Training framework spec matching: slurm + pytorch/jax (ml-training) + h100
+	outPyTorch, err := runExplainForTest("slurm", "pytorch", "h100")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outPyTorch, "Exact Blueprint Match (3/3 specs matched: slurm, ml-training, a3-highgpu-8g):"), Equals, true)
+	c.Check(strings.Contains(outPyTorch, "Blueprint: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"), Equals, true)
+
+	outJAX, err := runExplainForTest("slurm", "jax", "h100")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outJAX, "Exact Blueprint Match (3/3 specs matched: slurm, ml-training, a3-highgpu-8g):"), Equals, true)
+	c.Check(strings.Contains(outJAX, "Blueprint: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"), Equals, true)
+
+	// 4. L4, RTX PRO 6000, A100, and generic GPU/NVIDIA hardware aliases
+	outL4, err := runExplainForTest("gke", "l4")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outL4, "Blueprint: examples/ml-gke.yaml"), Equals, true)
+
+	outRTX, err := runExplainForTest("gke", "rtx-pro-6000", "inference")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outRTX, "Blueprint: examples/gke-g4/gke-g4.yaml"), Equals, true)
+
+	outG4Train, err := runExplainForTest("gke", "g4", "training")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outG4Train, "Exact Blueprint Match (3/3 specs matched: gke, g4, ml-training):"), Equals, true)
+	c.Check(strings.Contains(outG4Train, "Blueprint: examples/gke-g4/gke-g4.yaml"), Equals, true)
+
+	outH100GKE, err := runExplainForTest("gke", "h100")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outH100GKE, "Blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml"), Equals, true)
+	c.Check(strings.Contains(outH100GKE, "examples/gke-a3-megagpu/gke-a3-megagpu.yaml"), Equals, true)
+
+	outGkeGPU, err := runExplainForTest("gke", "gpu")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeGPU, "Blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml"), Equals, true)
+	c.Check(strings.Contains(outGkeGPU, "examples/gke-g4/gke-g4.yaml"), Equals, true)
+
+	outGkeNvidia, err := runExplainForTest("gke", "nvidia")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeNvidia, "Blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml"), Equals, true)
+
+	outGkeInfer, err := runExplainForTest("gke", "inference")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeInfer, "Blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml"), Equals, true)
+
+	outA100, err := runExplainForTest("slurm", "a100")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outA100, "Exact Blueprint Match (2/2 specs matched: slurm, a2):"), Equals, true)
+
+	// 4b. Raw-token path specificity bonus preserved even when generic token precedes specific token
+	outGromacs, err := runExplainForTest("slurm", "gromacs")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGromacs, "Blueprint: community/examples/hpc-slurm-gromacs.yaml"), Equals, true)
+
+	outHpcGromacs, err := runExplainForTest("slurm", "hpc", "gromacs")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outHpcGromacs, "Blueprint: community/examples/hpc-slurm-gromacs.yaml"), Equals, true)
+
+	outMpiGromacs, err := runExplainForTest("slurm", "mpi", "gromacs")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outMpiGromacs, "Blueprint: community/examples/hpc-slurm-gromacs.yaml"), Equals, true)
+
+	outTpuMaxText, err := runExplainForTest("slurm", "tpu", "maxtext")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outTpuMaxText, "Blueprint: community/examples/hpc-slurm6-tpu-maxtext.yaml"), Equals, true)
+
+	// 4c. Specific workload tokens in module IDs/sources or non-segment path substrings (vllm, gemma, spack)
+	outGkeVLLM, err := runExplainForTest("gke", "vllm")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeVLLM, "Blueprint: community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml"), Equals, true)
+
+	outGkeGemma, err := runExplainForTest("gke", "gemma")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeGemma, "Blueprint: community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml"), Equals, true)
+
+	outSpack, err := runExplainForTest("slurm", "spack")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSpack, "Blueprint: examples/hcls-blueprint.yaml"), Equals, true)
+
+	// 4d. Pure-ML vs mixed HPC+ML tie-break, hardware alias path-bonus consistency, and A5X/VR200
+	outSlurmTrain, err := runExplainForTest("slurm", "training")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSlurmTrain, "Blueprint: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"), Equals, true)
+
+	outSlurmInfer, err := runExplainForTest("slurm", "inference")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSlurmInfer, "Blueprint: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"), Equals, true)
+
+	outTPU7xAlias, err := runExplainForTest("tpu7x")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outTPU7xAlias, "Blueprint: examples/gke-tpu-7x/gke-tpu-7x.yaml"), Equals, true)
+
+	outN2, err := runExplainForTest("n2")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outN2, "Blueprint: examples/batch.yaml"), Equals, true)
+
+	outA5X, err := runExplainForTest("gke", "vr200")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outA5X, "Blueprint: examples/gke-a5x-bm/gke-a5x-bm.yaml"), Equals, true)
+
+	// 5. Tied exact-match blueprints (OtherExactMatches) surfaced in text and JSON
+	outTied, err := runExplainForTest("a3-ultragpu")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outTied, "other blueprint(s) also matched all requested specs:"), Equals, true)
+	c.Check(strings.Contains(outTied, "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"), Equals, true)
+
+	oldFormat := explainFlags.format
+	explainFlags.format = "json"
+	defer func() { explainFlags.format = oldFormat }()
+	outTiedJSON, err := runExplainForTest("a3-ultragpu")
+	c.Assert(err, IsNil)
+	var specRes ExplainSpecMatchResult
+	c.Assert(json.Unmarshal([]byte(outTiedJSON), &specRes), IsNil)
+	c.Check(specRes.ExactMatch, Equals, true)
+	c.Check(specRes.OtherExact > 0, Equals, true)
+	c.Check(len(specRes.OtherExactMatches), Equals, specRes.OtherExact)
+
+	// Excluded blueprints must not leak into 'hpc' workload matches
+	outHPCJSON, err := runExplainForTest("hpc")
+	c.Assert(err, IsNil)
+	var hpcRes ExplainSpecMatchResult
+	c.Assert(json.Unmarshal([]byte(outHPCJSON), &hpcRes), IsNil)
+	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/alphaevolve/alpha-evolve-experiment.yaml"), Equals, false)
+	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/kms-key-per-service.yaml"), Equals, false)
+	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/hpc-slurm6-tpu.yaml"), Equals, false)
+	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/hpc-slurm6-tpu-maxtext.yaml"), Equals, false)
 }

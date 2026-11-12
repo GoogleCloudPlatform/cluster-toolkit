@@ -699,3 +699,91 @@ func TestSameDirResolvesRelativeSymlinkCwd(t *testing.T) {
 		t.Errorf("sameDir(\".\", %q) = false from symlinked cwd %q, want true", realDir, linkDir)
 	}
 }
+
+func TestInferAcceleratorsAndWorkloads(t *testing.T) {
+	_, blueprints := cachedScan(t)
+	byPath := indexBlueprintsByPath(t, blueprints)
+
+	cases := []struct {
+		path      string
+		wantAccel []string
+		wantWork  []string
+	}{
+		{
+			path:      "examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml",
+			wantAccel: []string{"nvidia-h200"},
+			wantWork:  []string{"ml-training", "ml-inference"},
+		},
+		{
+			path:      "examples/gke-a4/gke-a4.yaml",
+			wantAccel: []string{"nvidia-b200"},
+			wantWork:  []string{"ml-training", "ml-inference"},
+		},
+		{
+			path:      "examples/gke-a5x-bm/gke-a5x-bm.yaml",
+			wantAccel: []string{"nvidia-vr200"},
+			wantWork:  []string{"ml-training", "ml-inference"},
+		},
+		{
+			path:      "examples/gke-tpu-v6e/gke-tpu-v6e.yaml",
+			wantAccel: []string{"tpu-v6e"},
+			wantWork:  []string{"ml-training", "ml-inference"},
+		},
+		{
+			path:      "examples/gke-a3-highgpu-inference-gateway.yaml",
+			wantAccel: []string{"nvidia-h100"},
+			wantWork:  []string{"ml-inference"},
+		},
+		{
+			path:      "examples/gke-g4/gke-g4.yaml",
+			wantAccel: []string{"nvidia-rtx-pro-6000"},
+			wantWork:  []string{"ml-training", "ml-inference"},
+		},
+		{
+			path:      "community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml",
+			wantAccel: []string{"nvidia-rtx-pro-6000"},
+			wantWork:  []string{"ml-inference"},
+		},
+		{
+			path:      "community/examples/alphaevolve/alpha-evolve-experiment.yaml",
+			wantAccel: nil,
+			wantWork:  nil,
+		},
+		{
+			path:      "examples/hpc-slurm.yaml",
+			wantAccel: nil,
+			wantWork:  []string{"hpc"},
+		},
+		{
+			path:      "examples/hcls-blueprint.yaml",
+			wantAccel: []string{"nvidia-l4"},
+			wantWork:  []string{"hpc"},
+		},
+		{
+			path:      "community/examples/hpc-slurm6-tpu-maxtext.yaml",
+			wantAccel: []string{"tpu"},
+			wantWork:  []string{"ml-training", "ml-inference"},
+		},
+	}
+	for _, tc := range cases {
+		bp, ok := byPath[tc.path]
+		if !ok {
+			t.Fatalf("missing blueprint %s", tc.path)
+		}
+		if !slices.Equal(bp.Accelerators, tc.wantAccel) {
+			t.Errorf("%s: Accelerators = %v, want %v", tc.path, bp.Accelerators, tc.wantAccel)
+		}
+		if !slices.Equal(bp.Workloads, tc.wantWork) {
+			t.Errorf("%s: Workloads = %v, want %v", tc.path, bp.Workloads, tc.wantWork)
+		}
+	}
+
+	allowedWorkloads := map[string]bool{"ml-training": true, "ml-inference": true, "hpc": true}
+	for _, bp := range blueprints {
+		for _, w := range bp.Workloads {
+			if !allowedWorkloads[w] {
+				t.Errorf("%s has non-canonical workload %q", bp.Path, w)
+			}
+		}
+	}
+}
