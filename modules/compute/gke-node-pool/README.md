@@ -369,7 +369,7 @@ The `node_pool_count`, `total_static_node_count` and `total_static_gpu_count` ou
 ## Day-2 Lifecycle Ignore Guardrails & Overrides
 
 This module defines defensive `lifecycle.ignore_changes` to prevent destructive node pool recreations on Day-2:
-- `node_config[0].labels`: Ignored by default to prevent node pool replacement when labels change.
+- `node_config[0].labels`: Ignored by default to prevent Terraform from reverting Day-2 labels applied outside Terraform.
 - `node_config[0].resource_labels`: Ignored to prevent node pool replacement when blueprint/metadata labels change.
 - `initial_node_count`: Ignored so autoscaling changes do not conflict with initial sizing.
 - `node_config[0].ephemeral_storage_local_ssd_config`, `node_config[0].local_nvme_ssd_block_config`, `placement_policy[0].type`: Guarded against destructive drift.
@@ -384,14 +384,14 @@ To customize what is ignored on Day-2, use `reconfigure_ignores` in your bluepri
     use: [gke_cluster]
     reconfigure_ignores:
       google_container_node_pool:
-      # 1. Prevent node pool recreation after GKE minor auto-upgrade:
+      # 1. Prevent node pool downgrade after GKE minor auto-upgrade:
       - version
       # 2. Allow Day-2 node label updates to take effect in-place:
-      - -node_config[0].labels
+      - "-node_config[0].labels"
 ```
 
-- **Add to ignores (`+attr`):** Prevents destructive recreation (`forces replacement`) when GKE auto-upgrades a field (like `version`).
-- **Subtract from ignores (`-attr`):** Un-ignores a field (like `-node_config[0].labels`) so changes in `vars:` or `deployment.yaml` take effect in-place.
+- **Add to ignores (`attr`):** Prevents unwanted node pool downgrades (e.g. `version`) or destructive drift after GKE auto-upgrades.
+- **Subtract from ignores (`-attr`):** Un-ignores a field (like `"-node_config[0].labels"`) so changes in `vars:` or `deployment.yaml` take effect in-place.
 
 ## License
 

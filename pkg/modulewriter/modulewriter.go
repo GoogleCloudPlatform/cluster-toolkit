@@ -804,9 +804,6 @@ func setResourceOverride(override tfOverrideFile, existingIgnores map[string]map
 	if slices.Contains(existingIgnores[rType][rName], "all") {
 		return nil
 	}
-	if override.Resource[rType] == nil {
-		override.Resource[rType] = make(map[string]tfResourceOverride)
-	}
 	current := existingIgnores[rType][rName]
 	if prev, ok := override.Resource[rType][rName]; ok {
 		current = prev.Lifecycle.IgnoreChanges
@@ -814,6 +811,12 @@ func setResourceOverride(override tfOverrideFile, existingIgnores map[string]map
 	finalIgnores, err := mergeIgnores(current, ignores)
 	if err != nil {
 		return err
+	}
+	if len(finalIgnores) == 0 {
+		return nil
+	}
+	if override.Resource[rType] == nil {
+		override.Resource[rType] = make(map[string]tfResourceOverride)
 	}
 	sort.Strings(finalIgnores)
 	override.Resource[rType][rName] = tfResourceOverride{

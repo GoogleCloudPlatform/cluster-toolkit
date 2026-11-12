@@ -1382,6 +1382,53 @@ resource "google_container_node_pool" "pool" {
 	}
 }
 
+func TestWriteModuleReconfigureOverrides_OmitUntouchedResources(t *testing.T) {
+	// Verification that resources with no module ignores are omitted rather than written as null
+	multiDir := t.TempDir()
+	multiMainTf := `
+resource "google_container_node_pool" "pool_with_ignores" {
+  name = "pool_with_ignores"
+  lifecycle {
+    ignore_changes = [
+      node_config[0].labels,
+      initial_node_count,
+    ]
+  }
+}
+resource "google_container_node_pool" "pool_without_ignores" {
+  name = "pool_without_ignores"
+}
+`
+	if err := os.WriteFile(filepath.Join(multiDir, "main.tf"), []byte(multiMainTf), 0644); err != nil {
+		t.Fatalf("failed to write main.tf: %v", err)
+	}
+
+	subIgnores := map[string][]string{
+		"google_container_node_pool": {
+			"-node_config[0].labels",
+		},
+	}
+	if err := writeModuleReconfigureOverrides(multiDir, subIgnores); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	overrideData, err := os.ReadFile(filepath.Join(multiDir, "override.tf.json"))
+	if err != nil {
+		t.Fatalf("failed to read override.tf.json: %v", err)
+	}
+	var multiOverride tfOverrideFile
+	if err := json.Unmarshal(overrideData, &multiOverride); err != nil {
+		t.Fatalf("failed to unmarshal override.tf.json: %v", err)
+	}
+	pools := multiOverride.Resource["google_container_node_pool"]
+	if _, ok := pools["pool_without_ignores"]; ok {
+		t.Errorf("expected pool_without_ignores to be omitted from override.tf.json, but found: %+v", pools["pool_without_ignores"])
+	}
+	if pWith, ok := pools["pool_with_ignores"]; !ok || !slices.Equal(pWith.Lifecycle.IgnoreChanges, []string{"initial_node_count"}) {
+		t.Errorf("expected pool_with_ignores to have [initial_node_count], got: %+v", pWith.Lifecycle.IgnoreChanges)
+	}
+}
+
 func setupMockVpcFS(t *testing.T) {
 	t.Helper()
 	repoDir := t.TempDir()

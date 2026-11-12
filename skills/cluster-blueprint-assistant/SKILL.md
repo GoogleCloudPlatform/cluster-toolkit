@@ -373,18 +373,18 @@ When updating an existing cluster on Day-2, Terraform may either plan destructiv
 
 | Symptom | What Happened | What to Add |
 | :--- | :--- | :--- |
-| **Destructive Recreation:** `terraform plan` says `forces replacement` on a field like `version` or `placement_policy`. | GKE auto-upgraded the cluster, or metadata changed, and Terraform wants to replace the entire node pool. | **Add to ignores (`+attr`):**<br>```reconfigure_ignores:```<br>&nbsp;&nbsp;```google_container_node_pool:```<br>&nbsp;&nbsp;```  - version``` |
-| **Changes Ignored:** You updated `labels` in `vars:` or `deployment.yaml`, but `terraform plan` says `No changes`. | The module hardcoded `ignore_changes = [node_config[0].labels]` to prevent Day-1 drift, blocking in-place updates. | **Subtract from ignores (`-attr`):**<br>```reconfigure_ignores:```<br>&nbsp;&nbsp;```google_container_node_pool:```<br>&nbsp;&nbsp;```  - -node_config[0].labels``` |
+| **Unwanted Downgrade or Recreation:** `terraform plan` says `forces replacement` on `placement_policy` or plans to downgrade `version`. | GKE auto-upgraded the cluster node pool, or metadata changed, and Terraform wants to downgrade or replace the node pool. | **Add to ignores (`attr`):**<br>```reconfigure_ignores:```<br>&nbsp;&nbsp;```google_container_node_pool:```<br>&nbsp;&nbsp;```  - version``` |
+| **Changes Ignored:** You updated `labels` in `vars:` or `deployment.yaml`, but `terraform plan` says `No changes`. | The module hardcoded `ignore_changes = [node_config[0].labels]` to prevent Day-1 drift, blocking in-place updates. | **Subtract from ignores (`-attr`):**<br>```reconfigure_ignores:```<br>&nbsp;&nbsp;```google_container_node_pool:```<br>&nbsp;&nbsp;```  - "-node_config[0].labels"``` |
 
 #### Common Recipes
 
 ```yaml
     reconfigure_ignores:
       google_container_node_pool:
-        # Prevent node pool recreation after GKE minor auto-upgrade:
+        # Prevent node pool downgrade after GKE minor auto-upgrade:
         - version
         # Allow Day-2 node label updates to take effect in-place:
-        - -node_config[0].labels
+        - "-node_config[0].labels"
 ```
 
 #### Discovery & Self-Diagnostics

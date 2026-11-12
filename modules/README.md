@@ -677,14 +677,15 @@ internal_ip_vm = [
 ### Reconfigure Ignores (Optional)
 
 The `reconfigure_ignores` field (`map[string][]string`) specifies Terraform
-resource attributes to add to `lifecycle.ignore_changes` via an automatically
+resource attributes to add to or subtract from `lifecycle.ignore_changes` via an automatically
 generated `override.tf.json` file in the deployment directory. Keys can be a
 resource type (e.g. `google_compute_instance`, applying to all resources of that
 type in the module) or a specific `type.name` address (e.g.
 `google_compute_instance.controller`), and values are lists of attribute names
-to ignore across subsequent `gcluster deploy` re-runs (the keyword `"all"` is not
-supported). `reconfigure_ignores` is supported on local and embedded `terraform`
-modules only:
+to ignore across subsequent `gcluster deploy` re-runs, or prefixed with `-`
+(e.g. `"-node_config[0].labels"`) to selectively un-ignore attributes hardcoded
+in module defaults (the keyword `"all"` is not supported). `reconfigure_ignores`
+is supported on local and embedded `terraform` modules only:
 
 ```yaml
   - id: workstation
