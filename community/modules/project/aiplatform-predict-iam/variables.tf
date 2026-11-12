@@ -20,8 +20,8 @@ variable "project_id" {
 
 variable "deployment_name" {
   validation {
-    condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,55}$", var.deployment_name))
-    error_message = "deployment_name must start with an alphanumeric character and contain 1–56 letters, digits, underscores, periods or hyphens; the generated role ID adds _predict and replaces hyphens with underscores."
+    condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9_-]{0,55}$", var.deployment_name))
+    error_message = "deployment_name must start with an alphanumeric character and contain 1–56 letters, digits, underscores, or hyphens; the generated role ID adds _predict and replaces hyphens with underscores."
   }
   description = "Unique deployment name, used to name the custom role."
   type        = string
