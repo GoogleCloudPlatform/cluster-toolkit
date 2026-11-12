@@ -389,6 +389,15 @@ deployment_groups:
 	outNoAPIs, err := runExplainForTest("community/examples/gcloud-example.yaml")
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(outNoAPIs, `"required_apis": []`), Equals, true)
+
+	// Explain module includes lifecycle ignore guardrails in text output
+	explainFlags.format = "text"
+	outNodePool, err := runExplainForTest("modules/compute/gke-node-pool")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outNodePool, "Lifecycle Ignore Guardrails:"), Equals, true)
+	c.Check(strings.Contains(outNodePool, "google_container_node_pool:"), Equals, true)
+	c.Check(strings.Contains(outNodePool, "node_config[0].labels"), Equals, true)
+	c.Check(strings.Contains(outNodePool, "Tip: Use 'reconfigure_ignores'"), Equals, true)
 }
 
 func (s *MySuite) TestExplainTelemetryTargetModes(c *C) {

@@ -154,6 +154,13 @@ Set these in `vars` in `gke-a5x-bm.yaml`, or override them in the deployment fil
 * Boot disk sizes: `system_node_pool_disk_size_gb` (200) and `a5x_node_pool_disk_size_gb` (400).
 * Node auto-upgrade and auto-repair are off for the A5X node pool; the cluster isn't in a release channel. The custom image is built for one GKE version.
 
+### Day-2 Node Pool Labels
+
+The blueprint un-ignores node pool labels (`"-node_config[0].labels"` under `reconfigure_ignores`), allowing Day-2 label updates defined in `kubernetes_labels` to take effect in-place on the next `gcluster deploy`.
+
+> [!NOTE]
+> Because labels are actively managed by Terraform rather than ignored, any labels added directly to the node pool outside Terraform (such as via `gcloud container node-pools update --node-labels` or the Google Cloud Console) will be reconciled back to what the blueprint specifies. If you prefer to manage labels outside of Terraform and ignore external drift, remove `"-node_config[0].labels"` from `reconfigure_ignores` in `gke-a5x-bm.yaml`.
+
 ## Verify the cluster
 
 1. Get credentials:

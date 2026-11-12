@@ -31,7 +31,9 @@ import (
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
 	"io"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -202,16 +204,35 @@ func validateSingleModuleIgnores(mod config.Module) error {
 		return fmt.Errorf("module %q specifies reconfigure_ignores, but uses a remote source %q: "+
 			"reconfigure_ignores is currently only supported on local and embedded modules", mod.ID, mod.Source)
 	}
-	for target, ignores := range mod.ReconfigureIgnores {
-		if slices.Contains(ignores, "all") {
-			return fmt.Errorf("reconfigure_ignores target %q specifies %q; ignoring \"all\" changes is not supported, please specify individual attribute names", target, "all")
-		}
-	}
 	discovered, err := findModuleResources(mod.Source)
 	if err != nil {
 		return fmt.Errorf("failed to discover resources in module %q (%s): %w", mod.ID, mod.Source, err)
 	}
-	return validateTargetExistence(mod.Source, mod.ReconfigureIgnores, discovered)
+	if err := validateTargetExistence(mod.Source, mod.ReconfigureIgnores, discovered); err != nil {
+		return err
+	}
+
+	existingIgnores, err := parseExistingModuleIgnores(mod.Source)
+	if err != nil {
+		return fmt.Errorf("failed to parse existing lifecycle ignores in module %q (%s): %w", mod.ID, mod.Source, err)
+	}
+
+	for target, ignores := range mod.ReconfigureIgnores {
+		var targetNames []string
+		var rType string
+		if strings.Contains(target, ".") {
+			parts := strings.SplitN(target, ".", 2)
+			rType = parts[0]
+			targetNames = []string{parts[1]}
+		} else {
+			rType = target
+			targetNames = discovered[rType]
+		}
+		if err := validateTargetIgnoreEntries(mod.Source, target, ignores, targetNames, rType, existingIgnores); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func validateModuleIgnores(bp config.Blueprint) error {
@@ -467,46 +488,220 @@ type tfOverrideFile struct {
 	Resource map[string]map[string]tfResourceOverride `json:"resource"`
 }
 
-var quoteIndexRe = regexp.MustCompile(`\[\s*['"]([^'"]*)['"]\s*\]`)
+var (
+	quoteIndexRe = regexp.MustCompile(`\[\s*['"]([^'"]*)['"]\s*\]`)
+	intIndexRe   = regexp.MustCompile(`\[\s*([0-9]+)\s*\]`)
+	validAttrRe  = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*(\[\s*([0-9]+|'[^']+'|"[^"]+")\s*\]|\.[a-zA-Z_][a-zA-Z0-9_]*)*$`)
+)
 
 func normalizeIgnoreAttribute(attr string) string {
-	return quoteIndexRe.ReplaceAllString(attr, `["$1"]`)
+	attr = quoteIndexRe.ReplaceAllString(attr, `["$1"]`)
+	return intIndexRe.ReplaceAllString(attr, `[$1]`)
 }
 
-func mergeIgnores(existing, additions []string) []string {
+func parseIgnoreEntry(item string) (string, bool, error) {
+	trimmed := strings.TrimSpace(item)
+	if trimmed == "" {
+		return "", false, fmt.Errorf("entry cannot be empty or whitespace only")
+	}
+
+	isSub := false
+	rawAttr := trimmed
+	if strings.HasPrefix(trimmed, "-") {
+		isSub = true
+		rawAttr = strings.TrimSpace(strings.TrimPrefix(trimmed, "-"))
+		if rawAttr == "" {
+			return "", false, fmt.Errorf("subtraction entry %q must specify an attribute name after '-'", item)
+		}
+	}
+
+	normAttr := normalizeIgnoreAttribute(rawAttr)
+	if normAttr == "all" {
+		return "", false, fmt.Errorf("specifies %q; ignoring \"all\" changes is not supported, please specify individual attribute names", item)
+	}
+
+	if !validAttrRe.MatchString(normAttr) {
+		return "", false, fmt.Errorf("entry %q is not a valid attribute name", item)
+	}
+
+	return normAttr, isSub, nil
+}
+
+func mergeIgnores(existing, additions []string) ([]string, error) {
 	seen := make(map[string]bool)
+	removeSet := make(map[string]bool)
+	var adds []string
+
+	for _, item := range additions {
+		norm, isSub, err := parseIgnoreEntry(item)
+		if err != nil {
+			return nil, err
+		}
+		if isSub {
+			removeSet[norm] = true
+		} else {
+			adds = append(adds, norm)
+		}
+	}
+
 	var merged []string
 	for _, item := range existing {
 		norm := normalizeIgnoreAttribute(item)
+		if removeSet[norm] {
+			continue
+		}
 		if !seen[norm] {
 			seen[norm] = true
 			merged = append(merged, norm)
 		}
 	}
-	for _, item := range additions {
-		norm := normalizeIgnoreAttribute(item)
+	for _, norm := range adds {
 		if !seen[norm] {
 			seen[norm] = true
 			merged = append(merged, norm)
 		}
 	}
-	return merged
+	return merged, nil
 }
 
-func parseExistingModuleIgnores(moduleDir string) (map[string]map[string][]string, error) {
+func validateTargetSubtraction(source, target, attr string, targetNames []string, rType string, existing map[string]map[string][]string) error {
+	var available []string
+	found := false
+
+	for _, name := range targetNames {
+		for _, ign := range existing[rType][name] {
+			norm := normalizeIgnoreAttribute(ign)
+			available = append(available, norm)
+			if norm == attr {
+				found = true
+			}
+		}
+	}
+
+	if found {
+		return nil
+	}
+
+	slices.Sort(available)
+	available = slices.Compact(available)
+
+	hint := moduleSourceURLHint(source)
+	if len(available) == 0 {
+		return fmt.Errorf("cannot subtract %q in reconfigure_ignores target %q: target resource has no lifecycle.ignore_changes defined in module %s%s", attr, target, source, hint)
+	}
+
+	return fmt.Errorf("cannot subtract %q in reconfigure_ignores target %q: attribute is not in the module's lifecycle.ignore_changes (available module ignores: [%s])%s",
+		attr, target, strings.Join(available, ", "), hint)
+}
+
+func validateTargetAllAndEmpty(source, target, rType string, targetNames []string, ignores []string, existing map[string]map[string][]string) error {
+	hint := moduleSourceURLHint(source)
+	for _, rName := range targetNames {
+		current := existing[rType][rName]
+		if slices.Contains(current, "all") {
+			for _, item := range ignores {
+				if _, isSub, _ := parseIgnoreEntry(item); isSub {
+					return fmt.Errorf("cannot subtract in reconfigure_ignores target %q: resource defines \"lifecycle { ignore_changes = all }\" in module %s; selective subtraction is not supported on resources that ignore all changes%s",
+						target, source, hint)
+				}
+			}
+			continue
+		}
+		if len(current) > 0 {
+			final, err := mergeIgnores(current, ignores)
+			if err != nil {
+				return fmt.Errorf("in module %s reconfigure_ignores target %q: %w", source, target, err)
+			}
+			if len(final) == 0 {
+				return fmt.Errorf("cannot subtract all attributes from reconfigure_ignores target %q in module %s: Terraform's override loader cannot clear base module ignores with an empty list; at least one attribute must remain ignored%s",
+					target, source, hint)
+			}
+		}
+	}
+	return nil
+}
+
+func validateTargetIgnoreEntries(source, target string, ignores []string, targetNames []string, rType string, existing map[string]map[string][]string) error {
+	if err := validateTargetAllAndEmpty(source, target, rType, targetNames, ignores, existing); err != nil {
+		return err
+	}
+
+	seenAdd := make(map[string]bool)
+	seenSub := make(map[string]bool)
+
+	for _, item := range ignores {
+		norm, isSub, err := parseIgnoreEntry(item)
+		if err != nil {
+			return fmt.Errorf("in module %s reconfigure_ignores target %q: %w", source, target, err)
+		}
+		if isSub {
+			if seenAdd[norm] {
+				return fmt.Errorf("in module %s reconfigure_ignores target %q: cannot both add and subtract attribute %q", source, target, norm)
+			}
+			seenSub[norm] = true
+			if err := validateTargetSubtraction(source, target, norm, targetNames, rType, existing); err != nil {
+				return err
+			}
+		} else {
+			if seenSub[norm] {
+				return fmt.Errorf("in module %s reconfigure_ignores target %q: cannot both add and subtract attribute %q", source, target, norm)
+			}
+			seenAdd[norm] = true
+		}
+	}
+	return nil
+}
+
+func isTFSourceFile(e fs.DirEntry) bool {
+	return !e.IsDir() && strings.HasSuffix(e.Name(), ".tf") && !strings.HasSuffix(e.Name(), "override.tf")
+}
+
+func listModuleTFFiles(source string) ([]string, func(string) ([]byte, error), error) {
+	if sourcereader.IsEmbeddedPath(source) && sourcereader.ModuleFS != nil {
+		slashSource := sourcereader.ToSlash(source)
+		entries, err := sourcereader.ModuleFS.ReadDir(slashSource)
+		if err == nil {
+			var tfFiles []string
+			for _, e := range entries {
+				if isTFSourceFile(e) {
+					tfFiles = append(tfFiles, e.Name())
+				}
+			}
+			return tfFiles, func(name string) ([]byte, error) {
+				return sourcereader.ModuleFS.ReadFile(path.Join(slashSource, name))
+			}, nil
+		}
+	}
+
+	entries, err := os.ReadDir(source)
+	if err != nil {
+		return nil, nil, err
+	}
+	var tfFiles []string
+	for _, e := range entries {
+		if isTFSourceFile(e) {
+			tfFiles = append(tfFiles, e.Name())
+		}
+	}
+	return tfFiles, func(name string) ([]byte, error) {
+		return os.ReadFile(filepath.Join(source, name))
+	}, nil
+}
+
+func parseExistingModuleIgnores(source string) (map[string]map[string][]string, error) {
 	existing := make(map[string]map[string][]string)
-	entries, err := os.ReadDir(moduleDir)
+	tfFiles, readFn, err := listModuleTFFiles(source)
 	if err != nil {
 		return nil, err
 	}
 
 	parser := hclparse.NewParser()
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tf") || strings.HasSuffix(entry.Name(), "override.tf") {
+	for _, fileName := range tfFiles {
+		bytes, err := readFn(fileName)
+		if err != nil {
 			continue
 		}
-		filePath := filepath.Join(moduleDir, entry.Name())
-		f, diags := parser.ParseHCLFile(filePath)
+		f, diags := parser.ParseHCL(bytes, fileName)
 		if diags.HasErrors() || f == nil {
 			continue
 		}
@@ -559,6 +754,13 @@ func extractResourceIgnores(block *hclsyntax.Block, src []byte, existing map[str
 	}
 }
 
+func moduleSourceURLHint(source string) string {
+	if sourcereader.IsEmbeddedPath(source) {
+		return fmt.Sprintf("\nInspect module: https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/%s", source)
+	}
+	return ""
+}
+
 func formatTargetNotFoundError(target, moduleDir string, discovered map[string][]string) error {
 	var available []string
 	for rType, names := range discovered {
@@ -567,57 +769,100 @@ func formatTargetNotFoundError(target, moduleDir string, discovered map[string][
 		}
 	}
 	sort.Strings(available)
+	hint := moduleSourceURLHint(moduleDir)
 	if len(available) > 0 {
-		return fmt.Errorf("reconfigure_ignores target %q was not found in module %s. Available resources in this module: %s",
-			target, moduleDir, strings.Join(available, ", "))
+		return fmt.Errorf("reconfigure_ignores target %q was not found in module %s. Available resources in this module: %s%s",
+			target, moduleDir, strings.Join(available, ", "), hint)
 	}
-	return fmt.Errorf("reconfigure_ignores target %q was not found in module %s", target, moduleDir)
+	return fmt.Errorf("reconfigure_ignores target %q was not found in module %s%s", target, moduleDir, hint)
 }
 
-func setResourceOverride(override tfOverrideFile, existingIgnores map[string]map[string][]string, rType, rName string, ignores []string) {
-	if slices.Contains(existingIgnores[rType][rName], "all") {
-		return
+// GetModuleDefaultIgnores returns a map of resource target to its default lifecycle.ignore_changes.
+func GetModuleDefaultIgnores(source string) (map[string][]string, error) {
+	existing, err := parseExistingModuleIgnores(source)
+	if err != nil {
+		return nil, err
 	}
-	if override.Resource[rType] == nil {
-		override.Resource[rType] = make(map[string]tfResourceOverride)
+	result := make(map[string][]string)
+	for rType, resMap := range existing {
+		var allTypeIgnores []string
+		for _, ignores := range resMap {
+			for _, ign := range ignores {
+				allTypeIgnores = append(allTypeIgnores, normalizeIgnoreAttribute(ign))
+			}
+		}
+		slices.Sort(allTypeIgnores)
+		allTypeIgnores = slices.Compact(allTypeIgnores)
+		if len(allTypeIgnores) > 0 {
+			result[rType] = allTypeIgnores
+		}
+	}
+	return result, nil
+}
+
+func setResourceOverride(override tfOverrideFile, existingIgnores map[string]map[string][]string, rType, rName string, ignores []string, moduleDir string) error {
+	if slices.Contains(existingIgnores[rType][rName], "all") {
+		return nil
 	}
 	current := existingIgnores[rType][rName]
 	if prev, ok := override.Resource[rType][rName]; ok {
 		current = prev.Lifecycle.IgnoreChanges
 	}
-	finalIgnores := mergeIgnores(current, ignores)
+	finalIgnores, err := mergeIgnores(current, ignores)
+	if err != nil {
+		return err
+	}
+	if len(finalIgnores) == 0 {
+		if len(existingIgnores[rType][rName]) > 0 {
+			hint := moduleSourceURLHint(moduleDir)
+			return fmt.Errorf("cannot subtract all attributes from reconfigure_ignores target %q in module %s: Terraform's override loader cannot clear base module ignores with an empty list; at least one attribute must remain ignored%s",
+				fmt.Sprintf("%s.%s", rType, rName), moduleDir, hint)
+		}
+		return nil
+	}
+	if override.Resource[rType] == nil {
+		override.Resource[rType] = make(map[string]tfResourceOverride)
+	}
 	sort.Strings(finalIgnores)
 	override.Resource[rType][rName] = tfResourceOverride{
 		Lifecycle: tfLifecycleOverride{IgnoreChanges: finalIgnores},
 	}
+	return nil
 }
 
 func applyTargetOverrides(override tfOverrideFile, discovered map[string][]string, existingIgnores map[string]map[string][]string, target string, ignores []string, moduleDir string) error {
 	if len(ignores) == 0 {
 		return nil
 	}
-	if slices.Contains(ignores, "all") {
-		return fmt.Errorf("reconfigure_ignores target %q specifies %q; ignoring \"all\" changes is not supported, please specify individual attribute names", target, "all")
-	}
 
+	var targetNames []string
+	var rType string
 	if strings.Contains(target, ".") {
 		parts := strings.SplitN(target, ".", 2)
-		rType, rName := parts[0], parts[1]
+		rType = parts[0]
+		rName := parts[1]
 		names, ok := discovered[rType]
 		if !ok || !slices.Contains(names, rName) {
 			return formatTargetNotFoundError(target, moduleDir, discovered)
 		}
-		setResourceOverride(override, existingIgnores, rType, rName, ignores)
-		return nil
+		targetNames = []string{rName}
+	} else {
+		rType = target
+		names, ok := discovered[rType]
+		if !ok || len(names) == 0 {
+			return formatTargetNotFoundError(target, moduleDir, discovered)
+		}
+		targetNames = names
 	}
 
-	rType := target
-	names, ok := discovered[rType]
-	if !ok || len(names) == 0 {
-		return formatTargetNotFoundError(target, moduleDir, discovered)
+	if err := validateTargetIgnoreEntries(moduleDir, target, ignores, targetNames, rType, existingIgnores); err != nil {
+		return err
 	}
-	for _, rName := range names {
-		setResourceOverride(override, existingIgnores, rType, rName, ignores)
+
+	for _, rName := range targetNames {
+		if err := setResourceOverride(override, existingIgnores, rType, rName, ignores, moduleDir); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -668,6 +913,7 @@ func writeModuleReconfigureOverrides(moduleDir string, reconfigIgnores map[strin
 		return fmt.Errorf("failed to write %s: %w", overridePath, err)
 	}
 
+	logging.Info("generated %s with reconfigured lifecycle ignores", overridePath)
 	return nil
 }
 

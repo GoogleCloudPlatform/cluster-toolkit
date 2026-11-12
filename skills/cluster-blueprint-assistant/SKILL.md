@@ -367,6 +367,30 @@ YAML — fix it there.
 | Reservation / machine type not found in zone | Change `zone` / `machine_type` in `vars:` or `deployment.yaml`. |
 | Terraform error pointing at `<deployment_name>/<group>/main.tf` | Do **not** edit that file. Fix the blueprint and re-run `gcluster create ... -w` (or `gcluster deploy <blueprint> -d <deployment.yaml> -w` after confirmation). |
 
+### Day-2 Drift & reconfigure_ignores
+
+When updating an existing cluster on Day-2, Terraform may either plan destructive replacement (`# forces replacement`) or ignore changes made in `deployment.yaml`. Use `reconfigure_ignores` in the module block to control Terraform's `lifecycle.ignore_changes`:
+
+| Symptom | What Happened | What to Add |
+| :--- | :--- | :--- |
+| **Unwanted Downgrade or Recreation:** `terraform plan` says `forces replacement` on `placement_policy` or plans to downgrade `version`. | GKE auto-upgraded the cluster node pool, or metadata changed, and Terraform wants to downgrade or replace the node pool. | **Add to ignores (`attr`):**<br>```reconfigure_ignores:```<br>&nbsp;&nbsp;```google_container_node_pool:```<br>&nbsp;&nbsp;```  - version``` |
+| **Changes Ignored:** You updated `labels` in `vars:` or `deployment.yaml`, but `terraform plan` says `No changes`. | The module hardcoded `ignore_changes = [node_config[0].labels]` to prevent Day-1 drift, blocking in-place updates. | **Subtract from ignores (`-attr`):**<br>```reconfigure_ignores:```<br>&nbsp;&nbsp;```google_container_node_pool:```<br>&nbsp;&nbsp;```  - "-node_config[0].labels"``` |
+
+#### Common Recipes
+
+```yaml
+    reconfigure_ignores:
+      google_container_node_pool:
+        # Prevent node pool downgrade after GKE minor auto-upgrade:
+        - version
+        # Allow Day-2 node label updates to take effect in-place:
+        - "-node_config[0].labels"
+```
+
+#### Discovery & Self-Diagnostics
+- Run `./gcluster explain <module>` to inspect a module's default `Lifecycle Ignore Guardrails`.
+- `gcluster` validates all entries: typos or subtracting non-existent attributes fail fast with actionable error messages listing available resources, ignores, and module source links.
+
 ### 5. Deploy (gated)
 
 Present this and wait for explicit confirmation before running anything that
