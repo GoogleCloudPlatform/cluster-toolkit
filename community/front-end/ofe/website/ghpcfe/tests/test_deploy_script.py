@@ -83,6 +83,57 @@ class RegionDerivationTests(unittest.TestCase):
         )
 
 
+class DeploymentNameValidationTests(unittest.TestCase):
+    """Ensure deploy.sh and tf/variables.tf enforce the same 3..22 character
+    limit on deployment_name so `<name>-tkfe-sa` fits within GCP's 30-char
+    service account ID cap.
+    """
+
+    VARIABLES_TF = OFE_DIR / "tf" / "variables.tf"
+    VALIDATE_SCRIPT = "\n".join(
+        [
+            _extract_bash_function(DEPLOY_SH, "error"),
+            re.search(
+                r"^DEPLOYMENT_NAME_MAX_LENGTH=\d+$", DEPLOY_SH.read_text(), re.MULTILINE
+            ).group(0),
+            _extract_bash_function(DEPLOY_SH, "validate_deployment_name"),
+        ]
+    )
+
+    def _run_validate_deployment_name(self, name: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["bash", "-c", f'{self.VALIDATE_SCRIPT}\nvalidate_deployment_name "$1"', "_", name],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_deploy_sh_accepts_3_to_22_char_names_and_rejects_23_or_24(self):
+        for valid in ("abc", "my-deployment", "a" * 22):
+            with self.subTest(valid=valid):
+                res = self._run_validate_deployment_name(valid)
+                self.assertEqual(res.returncode, 0, res.stderr)
+
+        for invalid in ("ab", "a" * 23, "a" * 24, "MyDeploy", "a.b", "-abc", "abc-"):
+            with self.subTest(invalid=invalid):
+                res = self._run_validate_deployment_name(invalid)
+                self.assertNotEqual(res.returncode, 0)
+                self.assertIn("3 to 22 characters long", res.stderr)
+
+    def test_tf_variables_deployment_name_matches_22_char_limit(self):
+        text = self.VARIABLES_TF.read_text()
+        block_match = re.search(
+            r'variable\s+"deployment_name"\s*\{(.*?)\n\}', text, re.DOTALL
+        )
+        self.assertIsNotNone(block_match, "variable 'deployment_name' not found in tf/variables.tf")
+        block = block_match.group(1)
+        self.assertIn("length(var.deployment_name) >= 3", block)
+        self.assertIn("length(var.deployment_name) <= 22", block)
+        self.assertNotIn("<= 24", block)
+        self.assertIn("3 to 22 characters long", block)
+        self.assertIn("<name>-tkfe-sa", block)
+
+
 class StateBucketSandbox(unittest.TestCase):
     """Runs the real deploy_state_bucket() against stubbed external tools.
 
