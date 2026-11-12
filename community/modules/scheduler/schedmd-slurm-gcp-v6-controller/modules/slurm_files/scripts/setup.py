@@ -439,7 +439,7 @@ def widen_event_cluster_nodes(lkp: util.Lookup) -> None:
         "select data_type from information_schema.columns where table_schema='slurm_acct_db'"
         f" and table_name='{table}' and column_name='cluster_nodes'"
     )
-    alter = f"alter table `{table}` modify `cluster_nodes` mediumtext not null default ''"
+    alter = f"alter table `{table}` modify `cluster_nodes` mediumtext not null"
     # Best effort, a failed ALTER must not keep slurmctld from starting.
     try:
         data_type = run(f"mysql -N -u root -e {shlex.quote(query)}", timeout=30).stdout.strip()

@@ -31,7 +31,7 @@ def test_widen_event_cluster_nodes(data_type, altered):
     assert "table_name='m22_event_table'" in sql[0]
     assert len(sql) == (2 if altered else 1)
     if altered:
-        assert sql[1].startswith("alter table `m22_event_table` modify `cluster_nodes` mediumtext")
+        assert sql[1] == "alter table `m22_event_table` modify `cluster_nodes` mediumtext not null"
 
 
 def test_widen_event_cluster_nodes_failure_is_logged():
