@@ -23,7 +23,7 @@ The blueprint creates:
     ```
 
 2. Permissions for the user running `gcluster` to create networks, GKE clusters, service accounts and their IAM bindings, and Cloud Storage buckets: for example `roles/owner`, or `roles/compute.admin`, `roles/container.admin`, `roles/iam.serviceAccountAdmin`, `roles/iam.serviceAccountUser`, `roles/resourcemanager.projectIamAdmin` and `roles/storage.admin`. Listing reservation sub-blocks needs `roles/compute.viewer` on the reservation's project.
-3. `gcloud`, Terraform, `kubectl`, Go and `make`. [Cloud Shell](https://docs.cloud.google.com/shell/docs/launching-cloud-shell) has all of them; for another environment, see [install dependencies](https://docs.cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
+3. Tools required: `gcloud`, `kubectl` and Terraform (version 1.12.2 or later). To build Cluster Toolkit from the repository instead of using the release bundle, you also need Go (version 1.26.11 or later) and `make`. [Cloud Shell](https://docs.cloud.google.com/shell/docs/launching-cloud-shell) has all of them; for another environment, see [install dependencies](https://docs.cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
 4. A Cloud Storage bucket in your project for the A5X files (A5X_BUCKET), with upload access for your Google Cloud account team.
 5. From your account team:
    * allowlisting for the A5X machine type, and an A5X reservation;
@@ -32,7 +32,22 @@ The blueprint creates:
 
 ## Get Cluster Toolkit
 
-Clone the repository and build `gcluster`:
+Download a Cluster Toolkit release bundle (v1.109.0 or later includes this blueprint):
+
+```bash
+OS=linux        # or mac
+ARCH=amd64      # or arm64
+VERSION=<release_version>   # for example: v1.109.0
+curl -LO https://github.com/GoogleCloudPlatform/cluster-toolkit/releases/download/${VERSION}/gcluster_bundle_${OS}_${ARCH}.tgz
+mkdir -p cluster-toolkit
+tar -xzf gcluster_bundle_${OS}_${ARCH}.tgz -C cluster-toolkit
+cd cluster-toolkit
+./gcluster --version
+```
+
+Run the remaining commands from the `cluster-toolkit` folder. New releases are published every two weeks on the [Releases page](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases).
+
+To use the repository instead of the release bundle, clone it and build `gcluster` (requires Go and `make`):
 
 ```bash
 git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
@@ -40,8 +55,6 @@ cd cluster-toolkit
 make
 ./gcluster --version
 ```
-
-Run the remaining commands from the `cluster-toolkit` folder.
 
 ## Get the node image
 
@@ -154,7 +167,7 @@ Set these in `vars` in `gke-a5x-bm.yaml`, or override them in the deployment fil
 * Boot disk sizes: `system_node_pool_disk_size_gb` (200) and `a5x_node_pool_disk_size_gb` (400).
 * Node auto-upgrade and auto-repair are off for the A5X node pool; the cluster isn't in a release channel. The custom image is built for one GKE version.
 
-### Day-2 Node Pool Labels
+### Day-2 node pool labels
 
 The blueprint un-ignores node pool labels (`"-node_config[0].labels"` under `reconfigure_ignores`), allowing Day-2 label updates defined in `kubernetes_labels` to take effect in-place on the next `gcluster deploy`.
 
