@@ -37,6 +37,10 @@ LOG = logging.getLogger("ghpc-desktop-broker")
 
 METADATA_ROOT = "http://metadata.google.internal/computeMetadata/v1/oslogin"
 CACHE_SECONDS = 60
+# An ID missing from the cached listing refetches it at most this often: every
+# request from a signed-in user without OS Login access would otherwise list
+# every profile again.
+SUBJECTS_MIN_REFRESH_SECONDS = 60
 
 
 class ProfileNotFound(BrokerError):
@@ -50,6 +54,9 @@ class Directory:
         self.metadata_root = metadata_root
         self.cache_seconds = cache_seconds
         self._cache = {}
+        self._subjects = {}
+        self._subjects_expire_at = 0
+        self._subjects_fetched_at = 0
 
     def _get(self, path, params):
         """JSON from an OS Login metadata endpoint, or None if it answers 404."""
@@ -116,6 +123,62 @@ class Directory:
                 403, "OS Login does not allow this account to log in here."
             )
         return dict(account)
+
+    def _usernames_by_subject(self):
+        usernames = {}
+        params = {"pagesize": 1024}
+        seen = set()
+        while True:
+            payload = self._get("users", params) or {}
+            for profile in payload.get("loginProfiles") or []:
+                linux = [
+                    account
+                    for account in profile.get("posixAccounts") or []
+                    if account.get("operatingSystemType") in (None, "", "LINUX")
+                    and account.get("username")
+                ]
+                if profile.get("name") and linux:
+                    primary = [a for a in linux if a.get("primary")] or linux
+                    usernames[str(profile["name"])] = primary[0]["username"]
+            # The metadata server never sends an empty token: it ends a listing
+            # with "LAST_PAGE_TOKEN", then answers "0" indefinitely. "0" is the
+            # end marker the guest agent's NSS module stops on. A repeated
+            # token stops it too, so it can never loop.
+            token = payload.get("nextPageToken")
+            if not token or token == "0" or token in seen:
+                return usernames
+            seen.add(token)
+            params = {"pagesize": 1024, "pagetoken": token}
+
+    def username_for_subject(self, subject):
+        """The POSIX username of the Google account with this numeric ID.
+
+        For callers that arrive through IAP, which names the Google account
+        rather than a local one. Only the name is decided here: whether that
+        account may log in is still asked by resolve(), on every hand-off.
+        Profiles carry no email, so the numeric ID is the only join. The
+        listing is cached, but refetched for an ID it lacks, at most once a
+        minute, so an account that has just been granted access waits a
+        minute at most.
+        """
+        subject = str(subject)
+        now = time.time()
+        missing = (
+            subject not in self._subjects
+            and now - self._subjects_fetched_at >= SUBJECTS_MIN_REFRESH_SECONDS
+        )
+        if missing or now >= self._subjects_expire_at:
+            self._subjects = self._usernames_by_subject()
+            self._subjects_fetched_at = now
+            self._subjects_expire_at = now + self.cache_seconds
+        username = self._subjects.get(subject)
+        if username:
+            return username
+        raise ProfileNotFound(
+            403,
+            "No OS Login account was found for your Google account. Ask an "
+            "administrator for OS Login access to this cluster.",
+        )
 
     def resolve(self, username):
         """The OS Login POSIX account for a username, if it may log in.

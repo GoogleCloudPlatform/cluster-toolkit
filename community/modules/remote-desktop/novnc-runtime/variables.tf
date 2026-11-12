@@ -138,3 +138,22 @@ variable "enable_gpu_acceleration" {
   type        = bool
   default     = false
 }
+
+variable "iap_backend_service" {
+  description = <<-EOT
+    Name of the backend service through which an HTTPS load balancer with
+    Identity-Aware Proxy reaches this host, such as one created by the
+    iap-backend-service module. When set, the broker also serves the load
+    balancer on TCP iap_listen_port, as whichever user IAP names. The instance
+    service account needs compute.backendServices.get. Leave null to serve
+    desktops only over an SSH tunnel.
+    EOT
+  type        = string
+  default     = null
+}
+
+variable "iap_listen_port" {
+  description = "TCP port the broker serves the load balancer on. Only used when iap_backend_service is set."
+  type        = number
+  default     = 6080
+}

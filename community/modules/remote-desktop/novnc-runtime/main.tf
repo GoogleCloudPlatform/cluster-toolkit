@@ -31,4 +31,7 @@ module "desktop_broker" {
   session_idle_timeout_seconds = var.session_idle_timeout_seconds
 
   novnc_version = var.novnc_version
+
+  iap_backend_service = var.iap_backend_service
+  iap_listen_port     = var.iap_listen_port
 }

@@ -33,7 +33,7 @@ LOG = logging.getLogger("ghpc-desktop-broker")
 
 
 def bind_socket(path):
-    """The broker's only listener, open to every local user.
+    """The broker's main listener, open to every local user.
 
     Reaching the socket grants nothing by itself: the broker asks the kernel
     who connected (see identity.py) and starts a desktop only for that account.
@@ -46,6 +46,20 @@ def bind_socket(path):
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     listener.bind(str(path))
     os.chmod(path, 0o666)
+    return listener
+
+
+def bind_tcp(port):
+    """The listener for an HTTPS load balancer behind Identity-Aware Proxy.
+
+    On every interface, because the load balancer connects to the instance's
+    own address. A firewall rule admits Google's front ends, but other VMs in
+    the network may reach the port too, under its internal traffic rule. So a
+    request is refused unless it carries a verified IAP assertion (see iap.py).
+    """
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("0.0.0.0", port))
     return listener
 
 
@@ -70,7 +84,10 @@ def main(argv=None):
         LOG.error("Desktop broker configuration is invalid: %s", err)
         raise SystemExit(1) from err
 
-    web.run_app(app, sock=bind_socket(config.socket_path), access_log=LOG)
+    listeners = [bind_socket(config.socket_path)]
+    if config.iap_listen_port:
+        listeners.append(bind_tcp(config.iap_listen_port))
+    web.run_app(app, sock=listeners, access_log=LOG)
 
 
 if __name__ == "__main__":

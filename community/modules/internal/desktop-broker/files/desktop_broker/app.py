@@ -60,11 +60,19 @@ class Broker:
         self.user_environment = UserEnvironment(
             config.runtime_dir, config.session_dir, self.vnc_backend
         )
+        self.oslogin = oslogin.Directory()
+        self.iap = None
+        if config.iap_backend_service:
+            # Imported here so that only a broker with the TCP listener needs
+            # google-auth and cryptography installed.
+            from . import iap
+
+            self.iap = iap.Verifier(config.iap_backend_service)
         self.sessions = SessionManager(
             config=config,
             store=self.store,
             user_environment=self.user_environment,
-            oslogin_directory=oslogin.Directory(),
+            oslogin_directory=self.oslogin,
             vnc_backend=self.vnc_backend,
             passwd_lookup=oslogin.lookup_passwd,
         )
@@ -96,6 +104,13 @@ class Broker:
         await self.sessions.stop_cleanup()
 
     async def authenticate(self, request):
+        if not identity.on_unix_socket(request.transport):
+            # Only the IAP listener accepts TCP, so a TCP request without a
+            # verifier means one is misconfigured: refuse rather than guess.
+            if self.iap is None:
+                raise BrokerError(403, "This broker only serves its unix socket.")
+            subject = await run_blocking(self.iap.subject, request.headers)
+            return await run_blocking(self.oslogin.username_for_subject, subject)
         uid = identity.peer_uid(request.transport)
         # The passwd lookup can go through the OS Login NSS module, so keep it
         # off the loop.
@@ -136,6 +151,7 @@ class Broker:
     async def handle(self, request):
         try:
             username = await self.authenticate(request)
+            self.frontend.check_origin(request)
             if not self.frontend.needs_session(request):
                 # Authenticated, but a static asset: no lock, no record write
                 # and no probe of the display.

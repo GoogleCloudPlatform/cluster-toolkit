@@ -28,6 +28,10 @@ listens on a `0700` per-user unix socket, so other local users cannot reach it.
 
 - [hpc-slurm-remote-desktop.yaml](./hpc-slurm-remote-desktop.yaml): login and
   visualization desktops, reached over SSH through IAP.
+- [hpc-slurm-remote-desktop-iap.yaml](./hpc-slurm-remote-desktop-iap.yaml): the
+  same desktops, also reachable in a browser at an HTTPS hostname through a
+  load balancer behind Identity-Aware Proxy. See
+  [Reaching a desktop through a load balancer](#reaching-a-desktop-through-a-load-balancer).
 
 ## GPU desktops
 
@@ -116,6 +120,89 @@ prints this command for its VM as the `iap_tunnel_command` output.
 
 There is nothing else to set up on your machine: no proxy and no headers. The
 connection is yours because sshd opened it as your OS Login account.
+
+## Reaching a desktop through a load balancer
+
+`hpc-slurm-remote-desktop-iap.yaml` also publishes each desktop at its own HTTPS
+hostname, so no SSH tunnel is needed. The SSH route above keeps working
+alongside it.
+
+A load balancer cannot reach a unix socket, so these brokers also listen on TCP
+port 6080. A firewall rule admits Google's front ends to it, and the network's
+rule for internal traffic admits its other VMs. On that port the user is
+whoever Identity-Aware Proxy says they are, and a request without IAP's
+assertion is refused. The broker
+verifies the assertion IAP signs onto every request, checks it was minted for
+this host's backend service, and maps the Google account to its OS Login
+account. OS Login then decides whether that account may have a desktop, as it
+does over SSH. There is still no shared secret, and no header is taken on
+trust.
+
+The blueprint has three parts:
+
+- [iap-backend-service](../../modules/network/iap-backend-service/README.md)
+  creates one backend service per desktop target.
+- [modules/network/firewall-rules](../../../modules/network/firewall-rules/README.md)
+  admits the load balancer to the brokers.
+- [ext-app-lb](../../modules/network/ext-app-lb/README.md) provides the
+  address, certificate and URL map. For one wildcard certificate rather than
+  one per hostname, pass it the `certificate_map` of
+  [managed-certificate](../../modules/network/managed-certificate/README.md).
+
+The front end only needs each backend service's self link, so it can live in
+another deployment and serve several clusters.
+
+### Before deploying
+
+1. Reserve a global address and note the IP:
+
+   ```bash
+   gcloud compute addresses create DEPLOYMENT_NAME-desktops --global
+   gcloud compute addresses describe DEPLOYMENT_NAME-desktops --global \
+     --format='value(address)'
+   ```
+
+2. In a DNS zone you control, point `login.DOMAIN` and `viz.DOMAIN` at that IP,
+   or create one wildcard `*.DOMAIN` record. The Google-managed certificate is
+   only issued once these names resolve to the load balancer.
+3. Configure the
+   [OAuth consent screen](https://console.cloud.google.com/auth/overview) once
+   per project, so IAP can sign users in.
+4. Grant each desktop user both `roles/compute.osLogin` and, through
+   `desktop_iap_members`, IAP access. IAP admits them to the load balancer; OS
+   Login decides whether they get a desktop.
+5. Grant the desktop hosts' service account `roles/compute.viewer`, so each
+   broker can look up its backend service. This blueprint runs them as the
+   default compute service account, which otherwise has that only through the
+   Editor role, and organization policy may keep it from being granted:
+
+   ```bash
+   gcloud projects add-iam-policy-binding PROJECT_ID \
+     --member=serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com \
+     --role=roles/compute.viewer
+   ```
+
+Set `desktop_domain`, `desktop_address` (the IP itself) and
+`desktop_iap_members` in the blueprint, then create and deploy it as above.
+
+IAP's Google-managed OAuth client only admits users in your organization;
+for anyone else, set `oauth2_client_id` and `oauth2_client_secret` on
+`iap-backend-service`.
+
+### Connecting
+
+Browse to `https://login.DOMAIN/vnc.html` or `https://viz.DOMAIN/vnc.html`. The
+certificate takes a while to become active after the first deploy. Until then,
+every hostname fails TLS. Watch its progress with:
+
+```bash
+gcloud compute ssl-certificates list --global \
+  --format='value(name,managed.status,managed.domainStatus)'
+```
+
+A user who reaches the same host over SSH and through the load balancer gets
+the same desktop session either way, because both resolve to the same OS Login
+account.
 
 ## Teardown Instructions
 
