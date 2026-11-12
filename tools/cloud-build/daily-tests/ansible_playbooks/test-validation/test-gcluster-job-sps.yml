@@ -24,6 +24,7 @@
     - custom_vars.num_slices is defined
     - custom_vars.expected_tpu_count is defined
     - custom_vars.workload_image is defined
+    - custom_vars.k8s_service_account is defined
 
 - name: Get cluster credentials for GCluster SPS operations
   delegate_to: localhost
@@ -35,32 +36,24 @@
     sps_client_job_name: "sps-cli-{{ build | default('test') }}"
     sps_terminal_job_name: "sps-pdb-{{ build | default('test') }}"
     sps_pdb_script_file: "/tmp/{{ deployment_name }}-sps-pdb-test.py"
+    sps_inspect_log_file: "/tmp/{{ deployment_name }}-sps-inspect.log"
+    sps_failure_inspect_log_file: "/tmp/{{ deployment_name }}-sps-inspect-failure.log"
     sps_client_command: >-
       pip install -U jax jaxlib &&
       for i in $(seq 1 60); do python -c 'import socket; socket.create_connection(("127.0.0.1", 29000), timeout=1).close()' 2>/dev/null && break; sleep 1; done &&
       python -c 'import os, jax; assert os.environ.get("TEST_WORKLOAD_VAR") == "workload_val"; dc = jax.device_count(); print("JAX Device count:", dc); assert dc == {{ custom_vars.expected_tpu_count }}, f"Expected {{ custom_vars.expected_tpu_count }} devices, got {dc}"; a = jax.random.normal(jax.random.PRNGKey(0), (2, 2)); print("SPS In-Cluster JAX TPU Result:", a.tolist(), flush=True)'
 
-- name: Check if ML Diagnostics GCS bucket exists
+- name: Check if Pathways scratch GCS bucket exists
   delegate_to: localhost
   ansible.builtin.command: gcloud storage buckets describe gs://{{ custom_vars.gcs_bucket }} --project {{ custom_vars.project }}
   register: bucket_check
   failed_when: false
   changed_when: false
 
-- name: Create ML Diagnostics GCS bucket
+- name: Create Pathways scratch GCS bucket
   delegate_to: localhost
   ansible.builtin.command: gcloud storage buckets create gs://{{ custom_vars.gcs_bucket }} --project {{ custom_vars.project }} --location {{ region | default('us-central1') }}
   when: bucket_check.rc != 0
-
-- name: Configure Docker authentication for GCR registry checks
-  delegate_to: localhost
-  ansible.builtin.command: gcloud auth configure-docker gcr.io --quiet
-  changed_when: false
-
-- name: Configure Docker authentication for regional Artifact Registry checks
-  delegate_to: localhost
-  ansible.builtin.command: gcloud auth configure-docker {{ region }}-docker.pkg.dev --quiet
-  changed_when: false
 
 # ==========================================
 # WORKFLOW 1: Deploy SPS Instance (--pathways-deploy-sps) & Inspect (--filter pathways-sps)
@@ -142,6 +135,7 @@
       --filter pathways-sps
       --name "{{ sps_job_name }}"
       --show
+      --output "{{ sps_inspect_log_file }}"
       --cluster {{ deployment_name }}
       --location {{ region }}
       --project {{ custom_vars.project }}
@@ -285,21 +279,34 @@
       kubectl get pod -l jobset.sigs.k8s.io/jobset-name={{ sps_client_job_name }},jobset.sigs.k8s.io/replicatedjob-name=pathways-head
       -o jsonpath='{.items[*].status.containerStatuses[?(@.name=="workload-container")].state}'
       | grep -E "running|terminated"
+    args:
+      executable: /bin/bash
     register: sps_client_workload_state
     until: sps_client_workload_state.rc == 0
     retries: 60
     delay: 5
     changed_when: false
 
+  - name: Verify custom environment variables on SPS server, worker, and client proxy containers
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      set -eo pipefail
+      kubectl logs -l jobset.sigs.k8s.io/jobset-name={{ sps_job_name }},jobset.sigs.k8s.io/replicatedjob-name=pathways-head -c pathways-rm | grep -q "TEST_SERVER_VAR=server_val"
+      kubectl logs -l jobset.sigs.k8s.io/jobset-name={{ sps_job_name }},jobset.sigs.k8s.io/replicatedjob-name=worker -c pathways-worker | grep -q "TEST_WORKER_VAR=worker_val"
+      kubectl logs -l jobset.sigs.k8s.io/jobset-name={{ sps_client_job_name }},jobset.sigs.k8s.io/replicatedjob-name=pathways-head -c pathways-proxy | grep -q "TEST_PROXY_VAR=proxy_val"
+    args:
+      executable: /bin/bash
+    changed_when: false
+
   - name: Stream in-cluster SPS client workload logs for JAX TPU execution result
     delegate_to: localhost
     ansible.builtin.shell:
       cmd: |
-        timeout 180 {{ workspace }}/gcluster job logs "{{ sps_client_job_name }}" -f --cluster {{ deployment_name }} --location {{ region }} --project {{ custom_vars.project }} --main-only | grep -m 1 "SPS In-Cluster JAX TPU Result"
+        timeout 600 {{ workspace }}/gcluster job logs "{{ sps_client_job_name }}" -f --cluster {{ deployment_name }} --location {{ region }} --project {{ custom_vars.project }} --main-only | grep -m 1 "SPS In-Cluster JAX TPU Result"
     register: sps_client_streaming_logs
     until: sps_client_streaming_logs.rc == 0
-    retries: 3
-    delay: 5
+    retries: 10
+    delay: 2
     changed_when: false
 
   - name: Assert in-cluster SPS client JAX TPU computation succeeded
@@ -316,6 +323,7 @@
       --filter pathways-sps
       --name "{{ sps_job_name }}"
       --show
+      --output "{{ sps_failure_inspect_log_file }}"
       --cluster {{ deployment_name }}
       --location {{ region }}
       --project {{ custom_vars.project }}
@@ -326,6 +334,21 @@
   - name: Print GCluster SPS inspection report on failure
     ansible.builtin.debug:
       msg: "{{ sps_failure_inspect.stdout_lines | default('No SPS diagnostic report generated') }}"
+
+  - name: Get SPS server and worker logs on failure
+    delegate_to: localhost
+    ansible.builtin.command: >
+      {{ workspace }}/gcluster job logs "{{ sps_job_name }}"
+      --cluster {{ deployment_name }}
+      --location {{ region }}
+      --project {{ custom_vars.project }}
+    register: sps_server_failure_logs
+    changed_when: false
+    ignore_errors: true
+
+  - name: Print SPS server and worker logs on failure
+    ansible.builtin.debug:
+      msg: "{{ sps_server_failure_logs.stdout | default('No SPS server logs found') }}"
 
   - name: Get in-cluster SPS client workload logs on failure
     delegate_to: localhost
@@ -347,6 +370,17 @@
       msg: "Integration test failed to verify GCluster Shared Pathways Service (SPS) workflow."
 
   always:
+  - name: Remove temporary SPS test files on test runner
+    delegate_to: localhost
+    ansible.builtin.file:
+      path: "{{ item }}"
+      state: absent
+    loop:
+    - "{{ sps_pdb_script_file }}"
+    - "{{ sps_inspect_log_file }}"
+    - "{{ sps_failure_inspect_log_file }}"
+    ignore_errors: true
+
   - name: Clean up in-cluster SPS client workload
     delegate_to: localhost
     ansible.builtin.command: >
@@ -357,13 +391,13 @@
     ignore_errors: true
 
   - name: Clean up terminal SPS proxy workload
-    when: sps_terminal_cleanup_check is not defined or sps_terminal_cleanup_check.rc == 0
     delegate_to: localhost
     ansible.builtin.command: >
       {{ workspace }}/gcluster job cancel "{{ sps_terminal_job_name }}"
       --cluster {{ deployment_name }}
       --location {{ region }}
       --project {{ custom_vars.project }}
+    failed_when: false
     ignore_errors: true
 
   - name: Clean up SPS instance
@@ -374,3 +408,12 @@
       --location {{ region }}
       --project {{ custom_vars.project }}
     ignore_errors: true
+
+  - name: Wait for SPS pods to finish terminating to free TPU slice
+    delegate_to: localhost
+    ansible.builtin.command: >
+      kubectl wait --for=delete pod
+      -l jobset.sigs.k8s.io/jobset-name={{ sps_job_name }}
+      --timeout=180s
+    failed_when: false
+    changed_when: false
