@@ -1,0 +1,138 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Driver DaemonSet for prebuilt GKE A5X node images (custom_image_source:
+# prebuilt).
+# The prebuilt image ships the driver under /opt/nvidia/<version>/ and the
+# installer container image cos-nvidia-installer:fixed (hence
+# imagePullPolicy: Never). This DaemonSet copies the driver into
+# /home/kubernetes/bin/nvidia (where the GKE device plugin looks), loads the
+# kernel modules and creates the /dev/nvidia* device files.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-driver-installer
+  namespace: kube-system
+  labels:
+    k8s-app: nvidia-driver-installer
+spec:
+  selector:
+    matchLabels:
+      k8s-app: nvidia-driver-installer
+  template:
+    metadata:
+      labels:
+        name: nvidia-driver-installer
+        k8s-app: nvidia-driver-installer
+    spec:
+      priorityClassName: system-node-critical
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: cloud.google.com/gke-accelerator
+                operator: Exists
+              # Present only when GKE installs the driver itself.
+              - key: cloud.google.com/gke-gpu-driver-version
+                operator: DoesNotExist
+      tolerations:
+      - operator: "Exists"
+      hostNetwork: true
+      hostPID: true
+      volumes:
+      - name: dev
+        hostPath:
+          path: /dev
+      - name: nvidia-install-dir-host
+        hostPath:
+          path: /home/kubernetes/bin/nvidia
+      - name: root-mount
+        hostPath:
+          path: /
+      initContainers:
+      - image: "cos-nvidia-installer:fixed"
+        imagePullPolicy: Never
+        name: nvidia-driver-installer
+        resources:
+          requests:
+            cpu: 150m
+        securityContext:
+          privileged: true
+        env:
+        - name: NVIDIA_INSTALL_DIR_HOST
+          value: /home/kubernetes/bin/nvidia
+        - name: NVIDIA_INSTALL_DIR_CONTAINER
+          value: /usr/local/nvidia
+        - name: ROOT_MOUNT_DIR
+          value: /root
+        volumeMounts:
+        - name: nvidia-install-dir-host
+          mountPath: /usr/local/nvidia
+        - name: dev
+          mountPath: /dev
+        - name: root-mount
+          mountPath: /root
+        command:
+        - bash
+        - -c
+        - |
+          set -euo pipefail
+          # Stage the preloaded IMEX binaries before the driver is loaded.
+          # The NVIDIA DRA kubelet plugin's init container waits until
+          # nvidia-smi succeeds (driver loaded), then the plugin lists the
+          # driver files once. Copying IMEX first means nvidia-imex-ctl is
+          # always in that list; otherwise the IMEX daemon's health check
+          # fails and ComputeDomain pods never get an IMEX channel.
+          # Runs before the "already installed" check so a restart re-stages.
+          echo "Staging preloaded IMEX binaries..."
+          mkdir -p /usr/local/nvidia/bin /usr/local/nvidia/usr/bin
+          cp -af /root/usr/bin/nvidia-imex* /usr/local/nvidia/bin/
+          cp -af /root/usr/bin/nvidia-imex* /usr/local/nvidia/usr/bin/
+          chmod +x /usr/local/nvidia/bin/nvidia-imex* /usr/local/nvidia/usr/bin/nvidia-imex*
+          ls -la /usr/local/nvidia/bin/nvidia-imex* /usr/local/nvidia/usr/bin/nvidia-imex*
+          echo "Checking for existing GPU driver modules..."
+          if lsmod | grep nvidia > /dev/null; then
+            echo "GPU driver is already installed, skipping installation."
+            exit 0
+          fi
+          echo "No GPU driver module detected, moving pre-installed drivers now..."
+          mkdir -p /usr/local/nvidia/bin /usr/local/nvidia/lib64
+          DRIVER_VER=$(ls /root/opt/nvidia/ 2>/dev/null | head -n 1 || true)
+          if [ -z "$DRIVER_VER" ]; then
+            echo "ERROR: No driver found under /root/opt/nvidia/! Are you sure the custom image is loaded?"
+            exit 1
+          fi
+          echo "Detected pre-installed driver version: $DRIVER_VER"
+          if [ -d "/root/opt/nvidia/$DRIVER_VER/bin" ]; then
+            cp -r /root/opt/nvidia/$DRIVER_VER/bin/* /usr/local/nvidia/bin/
+          else
+            echo "ERROR: /root/opt/nvidia/$DRIVER_VER/bin does not exist!"
+            exit 1
+          fi
+          if [ -d "/root/opt/nvidia/$DRIVER_VER/lib64" ]; then
+            cp -r /root/opt/nvidia/$DRIVER_VER/lib64/* /usr/local/nvidia/lib64/
+          fi
+          echo "Loading kernel modules..."
+          chroot /root modprobe nvidia
+          chroot /root modprobe nvidia-uvm
+          chroot /root modprobe nvidia-drm
+          echo "Initializing NVIDIA devices to create /dev/nvidia* files..."
+          mount --bind /dev /root/dev
+          chroot /root /home/kubernetes/bin/nvidia/bin/nvidia-smi -L > /dev/null
+          umount /root/dev
+          echo "Driver successfully moved and loaded!"
+      containers:
+      - image: "gke.gcr.io/pause:3.8@sha256:880e63f94b145e46f1b1082bb71b85e21f16b99b180b9996407d61240ceb9830"
+        name: pause

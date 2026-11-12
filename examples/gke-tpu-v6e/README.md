@@ -296,7 +296,7 @@ Once deployed, the `Lustre` filesystem is available to the cluster as a `Persist
 
 2. Apply the manifest to your cluster:
 
-    ```yaml
+    ```sh
     kubectl apply -f lustre-claim-pod.yaml
     ```
 

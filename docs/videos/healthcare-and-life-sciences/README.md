@@ -80,9 +80,9 @@ storage intact and b) you can build software before you deploy your cluster.
 > - Compute Node Group
 >   - 60 CPUs * 20 VMs = **1200 `C2 CPUs`**
 > - Slurm Login VM
->   - **2 `N2 CPUs`**
+>   - **4 `C2 CPUs`** (`c2-standard-4`)
 > - Slurm Controller VM
->   - **4 `C2 CPUs`**
+>   - **4 `C2 CPUs`** (`c2-standard-4`)
 >
 > Neither the Water Benchmark Example or the Lysozyme Example require the
 > cluster to fully scale up. Please see:
@@ -275,7 +275,7 @@ blueprint, as such you will only need quota for either:
 - CPU: 60 `C2 CPUs`
 
 Note that these quotas are in addition to the quota requirements for the slurm
-login node (2x `N2 CPUs`) and slurm controller VM (4x `C2 CPUs`). The
+login node (4x `C2 CPUs`) and slurm controller VM (4x `C2 CPUs`). The
 `spack-builder` VM should have completed and stopped, freeing its CPU quota
 usage, before the computational VMs are deployed.
 

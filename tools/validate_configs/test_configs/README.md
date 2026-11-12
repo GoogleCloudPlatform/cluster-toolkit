@@ -29,6 +29,15 @@ head-node and 2 compute vms
 SLURM partitions and primarily default settings. The blueprint also creates a new
 VPC network, a filestore instance mounted to `/home` and a workstation VM.
 
+**service-account-profiles.yaml**: Exercises community/modules/iam/service-account-profiles
+once per profile (slurm-controller with every capability flag, slurm-login,
+slurm-compute, image-builder, and custom), including every resource-scoped
+binding type, actAs grants from the controller to the compute accounts, a
+custom profile for the Open Front End web identity, a custom profile binding
+an existing custom role alongside a generated one, a custom role at a
+non-default `custom_role_stage`, and capability flags on the custom profile, with each profile
+block connected to its account by `use:`.
+
 **instance_with_startup.yaml**: Creates a simple cluster with one
 vm-instance and filestore using the startup-script module to setup and
 mount the filestore instance.

@@ -62,6 +62,8 @@ type BlueprintEntry struct {
 	Scheduler        string                 `yaml:"scheduler"`
 	Description      string                 `yaml:"description,omitempty"`
 	MachineTypes     []string               `yaml:"machine_types,omitempty,flow"`
+	Accelerators     []string               `yaml:"accelerators,omitempty,flow"`
+	Workloads        []string               `yaml:"workloads,omitempty,flow"`
 	RequiredServices []string               `yaml:"required_services,omitempty,flow"`
 	Vars             map[string]interface{} `yaml:"vars,omitempty"`
 	Modules          []ModuleSummary        `yaml:"modules"`
@@ -156,6 +158,11 @@ func ScanBlueprints(repoRoot string, readmeDescs map[string]string) ([]Blueprint
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
+		ci := strings.HasPrefix(entries[i].Path, "community/")
+		cj := strings.HasPrefix(entries[j].Path, "community/")
+		if ci != cj {
+			return !ci
+		}
 		return entries[i].Path < entries[j].Path
 	})
 	return entries, nil
@@ -180,6 +187,10 @@ func scanBlueprintDir(repoRoot, absRoot string, readmeDescs map[string]string, t
 }
 
 func gitTrackedFiles(repoRoot string, roots ...string) map[string]bool {
+	top, err := exec.Command("git", "-C", repoRoot, "rev-parse", "--show-toplevel").Output()
+	if err != nil || !sameDir(strings.TrimSpace(string(top)), repoRoot) {
+		return nil
+	}
 	args := append([]string{"-C", repoRoot, "ls-files", "-z", "--"}, roots...)
 	out, err := exec.Command("git", args...).Output()
 	if err != nil {
@@ -191,7 +202,21 @@ func gitTrackedFiles(repoRoot string, roots ...string) map[string]bool {
 			set[p] = true
 		}
 	}
+	if len(set) == 0 {
+		return nil
+	}
 	return set
+}
+
+func sameDir(a, b string) bool {
+	aa, errA := filepath.Abs(a)
+	ab, errB := filepath.Abs(b)
+	if errA != nil || errB != nil {
+		return false
+	}
+	ra, errA := filepath.EvalSymlinks(aa)
+	rb, errB := filepath.EvalSymlinks(ab)
+	return errA == nil && errB == nil && ra == rb
 }
 
 func isTracked(repoRoot, absPath string, tracked map[string]bool) bool {
@@ -206,8 +231,7 @@ func isCandidateBlueprintFile(path string) bool {
 	if !strings.HasSuffix(path, ".yaml") {
 		return false
 	}
-	base := filepath.Base(path)
-	return !strings.HasSuffix(base, "-deployment.yaml") && base != "deployment.yaml"
+	return !isDeploymentFileName(filepath.Base(path))
 }
 
 func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string, tracked map[string]bool) (BlueprintEntry, bool) {
@@ -234,8 +258,10 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 	modules := extractModuleSummaries(bp)
 	scheduler := inferScheduler(modules)
 	machineTypes := extractMachineTypes(bp, machineVarsMap)
+	accelerators := inferAccelerators(machineTypes, machineVarsMap, relPath)
 	reqServices := ExtractBlueprintServices(repoRoot, filepath.Dir(absPath), bp)
 	desc := lookupDescription(repoRoot, absPath, relPath, readmeDescs)
+	workloads := inferWorkloads(machineTypes, accelerators, relPath)
 	if len(varsMap) == 0 {
 		varsMap = nil
 	}
@@ -247,6 +273,8 @@ func parseBlueprintEntry(repoRoot, absPath string, readmeDescs map[string]string
 		Scheduler:        scheduler,
 		Description:      desc,
 		MachineTypes:     machineTypes,
+		Accelerators:     accelerators,
+		Workloads:        workloads,
 		RequiredServices: reqServices,
 		Vars:             varsMap,
 		Modules:          modules,
@@ -391,7 +419,7 @@ func trackedDeploymentFiles(repoRoot, dir string, tracked map[string]bool) []str
 }
 
 func isDeploymentFileName(name string) bool {
-	return name == "deployment.yaml" || strings.HasSuffix(name, "-deployment.yaml")
+	return name == "deployment.yaml" || strings.HasSuffix(name, "-deployment.yaml") || strings.HasSuffix(name, "_deployment.yaml")
 }
 
 // isExampleSubfolder reports whether dir is strictly below examples/ or
@@ -407,17 +435,22 @@ func isExampleSubfolder(repoRoot, dir string) bool {
 
 // matchDeploymentFile selects the deployment file for a blueprint from the
 // candidates (basenames) in the same directory using three deterministic steps:
-//  1. exact match: <stem>-deployment.yaml or <blueprint_name>-deployment.yaml
-//  2. longest prefix match: <prefix>-deployment.yaml where <stem> starts with
-//     "<prefix>-" or <prefix> starts with "<stem>-"
+//  1. exact match: <stem>-deployment.yaml, <stem>_deployment.yaml, or <blueprint_name>[-_]deployment.yaml
+//  2. longest prefix match: <prefix>[-_]deployment.yaml where <stem> starts with
+//     "<prefix>-" / "<prefix>_" or <prefix> starts with "<stem>-" / "<stem>_"
 //  3. single-file fallback: the only candidate when dir is an examples subfolder
 func matchDeploymentFile(baseName, blueprintName string, candidates []string, inSubfolder bool) string {
 	if len(candidates) == 0 {
 		return ""
 	}
 	stem := strings.TrimSuffix(baseName, ".yaml")
-	for _, exact := range []string{stem + "-deployment.yaml", blueprintName + "-deployment.yaml"} {
-		if exact != "-deployment.yaml" && slices.Contains(candidates, exact) {
+	for _, exact := range []string{
+		stem + "-deployment.yaml",
+		stem + "_deployment.yaml",
+		blueprintName + "-deployment.yaml",
+		blueprintName + "_deployment.yaml",
+	} {
+		if exact != "-deployment.yaml" && exact != "_deployment.yaml" && slices.Contains(candidates, exact) {
 			return exact
 		}
 	}
@@ -434,10 +467,13 @@ func longestPrefixDeployment(stem string, candidates []string) string {
 	best, bestLen := "", 0
 	for _, cand := range candidates {
 		prefix := strings.TrimSuffix(cand, "-deployment.yaml")
+		if prefix == cand {
+			prefix = strings.TrimSuffix(cand, "_deployment.yaml")
+		}
 		if prefix == cand || prefix == "" {
 			continue
 		}
-		if (strings.HasPrefix(stem, prefix+"-") || strings.HasPrefix(prefix, stem+"-")) && len(prefix) > bestLen {
+		if (strings.HasPrefix(stem, prefix+"-") || strings.HasPrefix(stem, prefix+"_") || strings.HasPrefix(prefix, stem+"-") || strings.HasPrefix(prefix, stem+"_")) && len(prefix) > bestLen {
 			best, bestLen = cand, len(prefix)
 		}
 	}
@@ -575,6 +611,137 @@ func resolveMachineTypeString(raw string, varsMap map[string]interface{}) string
 		return ""
 	}
 	return raw
+}
+
+var machineTypePrefixAccelerators = []struct {
+	prefix string
+	accel  string
+}{
+	{"a3-highgpu-", "nvidia-h100"},
+	{"a3-megagpu-", "nvidia-h100"},
+	{"a3-ultragpu-", "nvidia-h200"},
+	{"a4-highgpu-", "nvidia-b200"},
+	{"a4x-highgpu-", "nvidia-gb200"},
+	{"a4x-maxgpu-", "nvidia-gb300"},
+	{"a5x-highgpu-", "nvidia-vr200"},
+	{"a2-", "nvidia-a100"},
+	{"g2-", "nvidia-l4"},
+	{"g4-", "nvidia-rtx-pro-6000"},
+	{"tpu7x-", "tpu-7x"},
+	{"ct6e-", "tpu-v6e"},
+	{"ct5p-", "tpu-v5p"},
+	{"ct5lp-", "tpu-v5e"},
+	{"ct4p-", "tpu-v4"},
+}
+
+func inferAccelerators(machineTypes []string, varsMap map[string]interface{}, relPath string) []string {
+	var out []string
+	add := func(acc string) {
+		if acc != "" && !slices.Contains(out, acc) {
+			out = append(out, acc)
+		}
+	}
+	for _, mt := range machineTypes {
+		lower := strings.ToLower(mt)
+		for _, rule := range machineTypePrefixAccelerators {
+			if strings.HasPrefix(lower, rule.prefix) {
+				add(rule.accel)
+			}
+		}
+	}
+	if len(out) == 0 && (len(machineTypes) == 0 || hasN1MachineType(machineTypes)) {
+		if acc, ok := varsMap["accelerator_type"].(string); ok {
+			add(resolveMachineTypeString(acc, varsMap))
+		}
+	}
+	lowerPath := strings.ToLower(relPath)
+	if strings.Contains(lowerPath, "tpu-v5e-v5p-v6e") {
+		add("tpu-v5e")
+		add("tpu-v5p")
+		add("tpu-v6e")
+	} else if len(out) == 0 && strings.Contains(lowerPath, "tpu") {
+		add("tpu")
+	}
+	return out
+}
+
+func hasN1MachineType(machineTypes []string) bool {
+	for _, mt := range machineTypes {
+		if strings.HasPrefix(strings.ToLower(mt), "n1-") {
+			return true
+		}
+	}
+	return false
+}
+
+var hpcMachinePrefixes = []string{"h4d-", "h3-", "c2-", "c2d-", "c3-", "c3d-", "c4a-"}
+
+var hpcPathTokens = []string{
+	"hpc-", "/cae/", "/eda/", "eda-", "htc-", "batch-mpi", "symphony",
+	"flux", "starccm", "fluent", "gromacs", "openfoam", "af3", "slinky",
+	"slurm-gke", "slurm-high-throughput",
+}
+
+func inferWorkloads(machineTypes, accelerators []string, relPath string) []string {
+	lowerPath := strings.ToLower(relPath)
+	if strings.Contains(lowerPath, "build-service-images/") {
+		return nil
+	}
+	var out []string
+	add := func(w string) {
+		if !slices.Contains(out, w) {
+			out = append(out, w)
+		}
+	}
+	addMLWorkloads(accelerators, lowerPath, add)
+	if isHPCBlueprint(machineTypes, lowerPath) {
+		add("hpc")
+	}
+	return out
+}
+
+func addMLWorkloads(accelerators []string, lowerPath string, add func(string)) {
+	if strings.Contains(lowerPath, "hcls-") {
+		return
+	}
+	isInferOnlyPath := strings.Contains(lowerPath, "inference-gateway") || strings.Contains(lowerPath, "inference-benchmarks") || strings.Contains(lowerPath, "agentgateway")
+	if len(accelerators) > 0 {
+		if !isInferOnlyPath {
+			add("ml-training")
+		}
+		add("ml-inference")
+	} else if isInferOnlyPath {
+		add("ml-inference")
+	}
+	if strings.Contains(lowerPath, "xpk-") {
+		add("ml-training")
+	}
+}
+
+func isExcludedFromHPC(lowerPath string) bool {
+	return strings.Contains(lowerPath, "storage-") ||
+		strings.Contains(lowerPath, "hyperdisk") ||
+		strings.Contains(lowerPath, "gke-large-scale/") ||
+		strings.Contains(lowerPath, "tpu")
+}
+
+func isHPCBlueprint(machineTypes []string, lowerPath string) bool {
+	if isExcludedFromHPC(lowerPath) {
+		return false
+	}
+	for _, tok := range hpcPathTokens {
+		if strings.Contains(lowerPath, tok) {
+			return true
+		}
+	}
+	for _, mt := range machineTypes {
+		for _, pref := range hpcMachinePrefixes {
+			if strings.HasPrefix(mt, pref) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func dictToPlainMap(d config.Dict) map[string]interface{} {

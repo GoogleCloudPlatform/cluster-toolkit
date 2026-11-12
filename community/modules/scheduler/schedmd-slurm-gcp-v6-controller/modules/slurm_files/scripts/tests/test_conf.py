@@ -14,7 +14,7 @@
 
 import pytest
 import mock
-from common import TstNodeset, TstCfg, TstMachineConf, TstTemplateInfo, Placeholder
+from common import TstNodeset, TstCfg, TstMachineConf, TstTemplateInfo, Placeholder, TstPartition
 
 from util import NSDict
 import conf
@@ -36,14 +36,15 @@ def test_nodeset_tpu_lines():
     )
 
 
-def test_nodeset_lines():
+@pytest.mark.parametrize("skip", [False, True])
+def test_nodeset_lines(skip):
     nodeset = TstNodeset(
         "turbo",
         node_count_static=2,
         node_count_dynamic_max=3,
         node_conf={"red": "velvet", "CPUs": 55},
     )
-    lkp = util.Lookup(TstCfg(nodeset={'turbo': nodeset}))
+    lkp = util.Lookup(TstCfg(nodeset={'turbo': nodeset}, cloud_parameters={"skip_nodeset_lines": skip}))
     lkp.template_info = mock.Mock(return_value=TstTemplateInfo(
         gpu=util.AcceleratorInfo(type="Popov", count=33)
     ))
@@ -57,12 +58,77 @@ def test_nodeset_lines():
         cores_per_socket=11,
     )
     lkp.template_machine_conf = mock.Mock(return_value=mc) # type: ignore[method-assign]
-    assert conf.nodeset_lines(nodeset, lkp) == "\n".join(
-        [
-            "NodeName=m22-turbo-[0-4] State=CLOUD RealMemory=6 Boards=9 SocketsPerBoard=8 CoresPerSocket=11 ThreadsPerCore=10 CPUs=55 Gres=gpu:33 red=velvet",
-            "NodeSet=turbo Nodes=m22-turbo-[0-4]",
-        ]
+    lines = ["NodeName=m22-turbo-[0-4] State=CLOUD RealMemory=6 Boards=9 SocketsPerBoard=8 CoresPerSocket=11 ThreadsPerCore=10 CPUs=55 Gres=gpu:33 red=velvet"]
+    if not skip:
+        lines.append("NodeSet=turbo Nodes=m22-turbo-[0-4]")
+    assert conf.nodeset_lines(nodeset, lkp) == "\n".join(lines)
+
+
+@pytest.mark.parametrize(
+    "skip,partition_nodeset,expected",
+    [
+        (False, ["turbo", "empty"], "Nodes=turbo,empty,dyno,bolt "),
+        (True, ["turbo", "empty"], "Nodes=m22-turbo-[0-4],dyno,bolt "),
+    ],
+)
+def test_partitionlines_nodes(skip, partition_nodeset, expected):
+    turbo = TstNodeset("turbo", node_count_dynamic_max=5)
+    empty = TstNodeset("empty")
+    lkp = util.Lookup(TstCfg(
+        nodeset={"turbo": turbo, "empty": empty},
+        cloud_parameters={"skip_nodeset_lines": skip},
+    ))
+    lkp.template_machine_conf = mock.Mock(return_value=TstMachineConf(  # type: ignore[method-assign]
+        cpus=2, memory=8000, sockets=1, sockets_per_board=1, boards=1,
+        threads_per_core=1, cores_per_socket=2,
+    ))
+    part = TstPartition(
+        partition_nodeset=partition_nodeset,
+        partition_nodeset_tpu=["bolt"],
+        partition_nodeset_dyn=["dyno"],
     )
+    assert expected in conf.SlurmConfigGenerator(lkp).partitionlines(part)
+
+
+def test_partitionlines_skip_nodeset_lines_all_empty():
+    lkp = util.Lookup(TstCfg(
+        nodeset={"empty": TstNodeset("empty")},
+        cloud_parameters={"skip_nodeset_lines": True},
+    ))
+    lkp.template_machine_conf = mock.Mock(return_value=TstMachineConf(  # type: ignore[method-assign]
+        cpus=2, memory=8000, sockets=1, sockets_per_board=1, boards=1,
+        threads_per_core=1, cores_per_socket=2,
+    ))
+    line = conf.SlurmConfigGenerator(lkp).partitionlines(TstPartition(partition_nodeset=["empty"]))
+    assert "Nodes=" not in line
+
+
+@pytest.mark.parametrize("version", ["24.11", "25.05", "25.11", "26.05"])
+@mock.patch("util.Lookup.slurm_version", new_callable=mock.PropertyMock)
+def test_make_cloud_conf_skip_nodeset_lines(mock_slurm_version, version):
+    import re
+    mock_slurm_version.return_value = version
+    part = TstPartition("p", partition_nodeset=["blue", "pink"])
+    part.partition_feature = None  # type: ignore[attr-defined]
+    lkp = util.Lookup(TstCfg(
+        install_dir="ukulele",
+        nodeset={
+            "blue": TstNodeset("blue", node_count_static=2),
+            "pink": TstNodeset("pink", node_count_dynamic_max=3),
+        },
+        partitions={"p": part},
+        cloud_parameters={"skip_nodeset_lines": True},
+    ))
+    lkp.template_info = mock.Mock(return_value=TstTemplateInfo(gpu=None))
+    lkp.template_machine_conf = mock.Mock(return_value=TstMachineConf(  # type: ignore[method-assign]
+        cpus=2, memory=8000, sockets=1, sockets_per_board=1, boards=1,
+        threads_per_core=1, cores_per_socket=2,
+    ))
+    cloud_conf = conf.get_generator(lkp).make_cloud_conf()
+    assert "PartitionName=p Nodes=m22-blue-[0-1],m22-pink-[0-2] " in cloud_conf
+    assert "NodeSet=" not in cloud_conf
+    # Without NodeSet lines a bare nodeset name is an invalid node name to slurmctld.
+    assert not re.search(r"(?<![-\w])(blue|pink)(?![-\w])", cloud_conf)
 
 
 @pytest.mark.parametrize(

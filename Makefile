@@ -58,7 +58,7 @@ install: install-user
 
 endif
 
-tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check validate-docs
+tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check validate-docs test-agentgateway
 
 format: warn-go-version warn-terraform-version warn-packer-version terraform-format packer-format
 	$(info **************** formatting go code *******************)
@@ -260,7 +260,7 @@ endif
 
 ###################################
 # AGENT SKILLS SECTION
-.PHONY: lint-skills test-skills test-skills-live generate-docs validate-docs
+.PHONY: lint-skills test-skills test-skills-live generate-docs validate-docs check-cloud-docs
 
 lint-skills:
 	$(info **************** linting agent skills ***************)
@@ -289,4 +289,18 @@ test-skills-live: gcluster
 validate-docs:
 	$(info **************** validating README snippets and links ***************)
 	@python3 tools/validate_readme_snippets.py
+	@python3 tools/tests/test_validate_cloud_docs.py
+
+check-cloud-docs:
+	$(info **************** validating public cloud.google.com docs against repo (use main/latest tag for release-accurate results) ***************)
+	@python3 tools/validate_cloud_docs.py --check-live
 # END OF AGENT SKILLS SECTION
+
+.PHONY: test-agentgateway agentgateway-static
+test-agentgateway:
+	go test ./tests
+	python3 -m unittest tests.test_agentgateway tests.agentgateway_playbook_checks
+
+# Requires Helm >= 3.12 and Python packages PyYAML and jsonschema.
+agentgateway-static:
+	python3 tools/validate_configs/agentgateway/validate_static.py

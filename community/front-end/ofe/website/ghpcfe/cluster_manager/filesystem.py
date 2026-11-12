@@ -17,6 +17,7 @@
 
 import json
 import logging
+import os
 import subprocess
 from pathlib import Path
 
@@ -39,6 +40,12 @@ def write_filestore_yaml(fs: GCPFilestoreFilesystem, target_dir: Path) -> None:
         f.write(
             f"""
 blueprint_name: {fs.name}
+
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: {utils.get_terraform_state_bucket()}
+    prefix: {utils.terraform_state_prefix("filesystem", fs.id)}
 
 vars:
   project_id: {project_id}
@@ -92,6 +99,11 @@ def create_filesystem(fs: Filesystem) -> None:
 def _run_ghpc(target_dir: Path, cred_env: dict) -> None:
     ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
 
+    # env= replaces the whole environment, so add the credential to the real
+    # one, as clusterinfo.py's _run_ghpc does; without HOME, ghpc fails.
+    env = os.environ.copy()
+    env.update(cred_env)
+
     try:
         logger.info("Invoking ghpc create")
         log_out_fn = target_dir / "ghpc_create_log.stdout"
@@ -104,7 +116,7 @@ def _run_ghpc(target_dir: Path, cred_env: dict) -> None:
                     stdout=log_out,
                     stderr=log_err,
                     check=True,
-                    env=cred_env
+                    env=env,
                 )
     except subprocess.CalledProcessError as cpe:
         logger.error("ghpc exec failed", exc_info=cpe)
@@ -123,7 +135,7 @@ def start_filesystem(fs: Filesystem) -> None:
         _run_ghpc(_base_dir_for_fs(fs), extra_env)
 
         target_dir = _tf_dir_for_fs(fs)
-        utils.run_terraform(target_dir, "init")
+        utils.run_terraform(target_dir, "init", extra_env=extra_env)
         utils.run_terraform(target_dir, "plan", extra_env=extra_env)
 
         logger.info("Invoking terraform apply for fs %s:%s", fs.id, fs.name)
@@ -135,7 +147,7 @@ def start_filesystem(fs: Filesystem) -> None:
             fs.name,
         )
         (out_fn, _) = utils.run_terraform(
-            target_dir, "output", arguments=["-json"]
+            target_dir, "output", arguments=["-json"], extra_env=extra_env
         )
         with out_fn.open("r") as outputfp:
             results = json.load(outputfp)

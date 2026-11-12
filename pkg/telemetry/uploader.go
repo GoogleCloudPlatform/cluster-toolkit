@@ -21,9 +21,42 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 )
+
+func resolveTelemetryEndpoint() (*url.URL, error) {
+	custom := strings.TrimSpace(os.Getenv(telemetryEndpointEnvVar))
+	if custom == "" {
+		return url.Parse(clearcutProdURL)
+	}
+	u, err := url.Parse(custom)
+	if err != nil {
+		return nil, err
+	}
+	if !isAllowedCustomTelemetryURL(u) {
+		return nil, fmt.Errorf("custom telemetry endpoint %q must be an http(s) loopback URL (localhost, 127.0.0.1, or ::1)", custom)
+	}
+	return u, nil
+}
+
+func isAllowedCustomTelemetryURL(u *url.URL) bool {
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	if u.Host == "" || u.User != nil {
+		return false
+	}
+	host := u.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
 
 func Flush(payload LogRequest) {
 
@@ -36,9 +69,13 @@ func Flush(payload LogRequest) {
 	client := &http.Client{
 		Timeout: uploadTimeout,
 	}
-	u, _ := url.Parse(clearcutProdURL)
-	params := url.Values{}
-	params.Add("format", "json_proto")
+	u, err := resolveTelemetryEndpoint()
+	if err != nil {
+		logging.Error("Error resolving Telemetry endpoint URL: %v", err)
+		return
+	}
+	params := u.Query()
+	params.Set("format", "json_proto")
 	u.RawQuery = params.Encode()
 
 	req, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(jsonData))

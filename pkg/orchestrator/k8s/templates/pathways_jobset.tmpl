@@ -2,18 +2,16 @@ apiVersion: jobset.x-k8s.io/v1alpha2
 kind: JobSet
 metadata:
   name: {{.WorkloadName}}
-  labels:
-    gcluster.google.com/workload: {{.WorkloadName}}
-    kueue.x-k8s.io/queue-name: {{.KueueQueueName}}
-{{- if .MLDiagnosticsEnabled }}
-    managed-mldiagnostics-gke: "true"
+{{- if .Namespace }}
+  namespace: {{.Namespace}}
 {{- end }}
+  labels:
+{{(StructuralData (.RenderBlock "workload_labels" 4))}}
 spec:
   suspend: false
   ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
   network:
-    enableDNSHostnames: true
-    publishNotReadyAddresses: true
+{{(StructuralData (.RenderBlock "jobset_network" 4))}}
   coordinator:
     replicatedJob: pathways-head
   startupPolicy:
@@ -45,10 +43,12 @@ spec:
         backoffLimit: 0
 {{- if .PodFailurePolicy }}
         podFailurePolicy:
-{{(StructuralData .PodFailurePolicy)}}
+{{reindent 10 (StructuralData .PodFailurePolicy)}}
 {{- end }}
         template:
           metadata:
+            labels:
+              gcluster.google.com/workload: {{.WorkloadName}}
             annotations:
               kueue.x-k8s.io/safe-to-forcefully-delete: "true"
 {{- if .GCSFuseEnabled }}
@@ -57,24 +57,18 @@ spec:
           spec:
             nodeSelector:
               cloud.google.com/gke-nodepool: {{.Pathways.HeadNodePool}}
+{{- if .HostNetworkEnabled }}
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
+{{- end }}
             restartPolicy: Never
-{{- if .PriorityClassName }}
-            priorityClassName: {{.PriorityClassName}}
-{{- end }}
-{{- if .ServiceAccountName }}
-            serviceAccountName: {{.ServiceAccountName}}
-{{- end }}
-{{- if .ImagePullSecrets }}
-            imagePullSecrets:
-{{(StructuralData .ImagePullSecrets)}}
-{{- end }}
+{{- with (.RenderBlock "pod_auth_and_priority" 12) }}{{"\n"}}{{(StructuralData .)}}{{- end }}
 {{- if .PathwaysWorkloadEnabled}}
             initContainers:
 {{- else }}
             containers:
 {{- end }}
+{{- if .PathwaysRMEnabled }}
             - name: pathways-rm
               image: {{.Pathways.ServerImage}}
               imagePullPolicy: Always
@@ -121,6 +115,7 @@ spec:
                 requests:
                   cpu: "2"
                   memory: "8Gi"
+{{- end }}
 {{- if .PathwaysProxyEnabled }}
             - name: pathways-proxy
               image: {{.Pathways.ProxyServerImage}}
@@ -129,7 +124,11 @@ spec:
               - containerPort: 29000
               args:
               - --server_port=29000
+{{- if .PathwaysRMAddress }}
+              - "--resource_manager_address={{.PathwaysRMAddress}}"
+{{- else }}
               - --resource_manager_address=$(PATHWAYS_HEAD):29001
+{{- end }}
               - "--gcs_scratch_location={{.Pathways.GCSLocation}}"
               {{- if gt .Pathways.ElasticSlices 0}}
               - --num_elastic_slices={{.Pathways.ElasticSlices}}
@@ -197,7 +196,7 @@ spec:
                 - name: dshm
                   mountPath: /dev/shm
 {{- if .VolumeMountsYAML }}
-{{(StructuralData .VolumeMountsYAML)}}
+{{reindent 16 (StructuralData .VolumeMountsYAML)}}
 {{- end }}
             {{- end}}
             volumes:
@@ -211,8 +210,9 @@ spec:
                   medium: Memory
 {{- end }}
 {{- if .VolumesYAML }}
-{{(StructuralData .VolumesYAML)}}
+{{reindent 14 (StructuralData .VolumesYAML)}}
 {{- end }}
+{{- if .PathwaysWorkersEnabled }}
   - name: worker
     replicas: {{.NumSlices}}
     template:
@@ -233,36 +233,33 @@ spec:
           metadata:
             labels:
               gcluster.google.com/workload: {{.WorkloadName}}
+{{- if .TelemetryCollectorImage }}
+              tpu-workload-name: {{.WorkloadName}}
+{{- end }}
             annotations:
-                kueue.x-k8s.io/safe-to-forcefully-delete: "true"
-                cloud.google.com/skip-tpu-webhook-check: "true"
+              kueue.x-k8s.io/safe-to-forcefully-delete: "true"
+              cloud.google.com/skip-tpu-webhook-check: "true"
 {{- if .TopologyAnnotation }}
-{{(StructuralData .TopologyAnnotation)}}
+{{reindent 14 (StructuralData .TopologyAnnotation)}}
 {{- end }}
 {{- if .GCSFuseEnabled }}
-                gke-gcsfuse/volumes: "true"
+              gke-gcsfuse/volumes: "true"
 {{- end }}
           spec:
+{{- if .HostNetworkEnabled }}
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
+{{- end }}
 {{- if eq .WorkerBackoffLimitPerIndex 0 }}
             restartPolicy: Never
 {{- else }}
             restartPolicy: OnFailure
 {{- end }}
-{{- if .ServiceAccountName }}
-            serviceAccountName: {{.ServiceAccountName}}
-{{- end }}
-{{- if .ImagePullSecrets }}
-            imagePullSecrets:
-{{(StructuralData .ImagePullSecrets)}}
-{{- end }}
-{{- if .PriorityClassName }}
-            priorityClassName: {{.PriorityClassName}}
-{{- end }}
+{{- with (.RenderBlock "pod_auth_and_priority" 12) }}{{"\n"}}{{(StructuralData .)}}{{- end }}
             terminationGracePeriodSeconds: {{.TerminationGracePeriodSeconds}}
-            {{- if .Pathways.ColocatedPythonSidecarImage}}
+{{- if or .Pathways.ColocatedPythonSidecarImage .TelemetryCollectorImage }}
             initContainers:
+{{- if .Pathways.ColocatedPythonSidecarImage }}
             - name: colocated-python-sidecar
               image: {{.Pathways.ColocatedPythonSidecarImage}}
               imagePullPolicy: Always
@@ -281,15 +278,22 @@ spec:
               - name: PYTHONUNBUFFERED
                 value: "1"
               volumeMounts:
-              - name: shared-tmp
-                mountPath: /tmp
-              - name: sidecar-shared-memory
-                mountPath: /tmp/sidecar
-              {{- if .GKEMTCEnabled}}
-              - name: cache
-                mountPath: {{ printf "%q" .GKEMTCRamdiskDirectory }}
-              {{- end}}
-            {{- end}}
+                - name: shared-tmp
+                  mountPath: /tmp
+                - name: sidecar-shared-memory
+                  mountPath: /tmp/sidecar
+                {{- if .GKEMTCEnabled}}
+                - name: cache
+                  mountPath: {{ printf "%q" .GKEMTCRamdiskDirectory }}
+                {{- end}}
+{{- if .VolumeMountsYAML }}
+{{reindent 16 (StructuralData .VolumeMountsYAML)}}
+{{- end }}
+{{- end }}
+{{- if .TelemetryCollectorImage }}
+{{(StructuralData (.RenderBlock "telemetry_sidecar" 12))}}
+{{- end }}
+{{- end }}
             containers:
             - name: pathways-worker
               image: {{.Pathways.WorkerImage}}
@@ -350,7 +354,9 @@ spec:
               - name: {{ .Name }}
                 value: {{ printf "%q" .Value }}
               {{- end }}
-{{(StructuralData .ResourcesString)}}
+{{- if .ResourcesString }}
+{{reindent 14 (StructuralData .ResourcesString)}}
+{{- end }}
               volumeMounts:
                 - name: shared-tmp
                   mountPath: /tmp
@@ -363,7 +369,7 @@ spec:
                   mountPath: {{ printf "%q" .GKEMTCRamdiskDirectory }}
                 {{- end}}
 {{- if .VolumeMountsYAML }}
-{{(StructuralData .VolumeMountsYAML)}}
+{{reindent 16 (StructuralData .VolumeMountsYAML)}}
 {{- end }}
             volumes:
               - name: shared-tmp
@@ -381,17 +387,7 @@ spec:
                   driver: multitier-checkpoint.csi.storage.gke.io
               {{- end}}
 {{- if .VolumesYAML }}
-{{(StructuralData .VolumesYAML)}}
-{{- end }}
-{{- if .NodeSelector }}
-            nodeSelector:
-{{(StructuralData .NodeSelector)}}
-{{- end }}
-{{- if .Affinity }}
-            affinity:
-{{(StructuralData .Affinity)}}
-{{- end }}
-{{- if .Tolerations }}
-            tolerations:
-{{(StructuralData .Tolerations)}}
+{{reindent 14 (StructuralData .VolumesYAML)}}
+{{- end -}}
+{{- with (.RenderBlock "pod_placement" 12) }}{{"\n"}}{{(StructuralData .)}}{{- end }}
 {{- end }}

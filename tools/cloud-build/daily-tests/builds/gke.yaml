@@ -123,15 +123,18 @@ steps:
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
-              # Configure network1 with 172.16.0.0/12 (primary subnet 172.16.0.0/20) and wire
+              # Configure network1 with 172.16.0.0/16 (primary subnet 172.16.0.0/20) and wire
               # pre-existing-vpc into gke_cluster to verify no master_ipv4_cidr_block collision.
-              sed -i '/^      subnetwork_name: \$(vars.deployment_name)-subnet$/a\      network_address_range: 172.16.0.0/12\n      default_primary_subnetwork_size: 8' "\$$SG_EXAMPLE"
+              sed -i '/^      subnetwork_name: \$(vars.deployment_name)-subnet$/a\      network_address_range: 172.16.0.0/16\n      default_primary_subnetwork_size: 4' "\$$SG_EXAMPLE"
               sed -i 's/use: \[network1, workload_service_account\]/use: [existing_network, workload_service_account]/' "\$$SG_EXAMPLE"
-              grep -q "network_address_range: 172.16.0.0/12" "\$$SG_EXAMPLE"
+              grep -q "network_address_range: 172.16.0.0/16" "\$$SG_EXAMPLE"
               grep -q "use: \[existing_network, workload_service_account\]" "\$$SG_EXAMPLE"
               echo '  - id: existing_network'                    >> \$$SG_EXAMPLE
               echo '    source: modules/network/pre-existing-vpc' >> \$$SG_EXAMPLE
               echo '    use: [network1]'                         >> \$$SG_EXAMPLE
+
+              # Update the region to us-west1 to avoid capacity constraints in us-east4 and us-central1
+              sed -i 's/us-east4/us-west1/g' tools/cloud-build/daily-tests/tests/gke.yml
 
               # adding vm to act as remote node
               echo '  - id: remote-node'                     >> \$$SG_EXAMPLE
@@ -139,7 +142,7 @@ steps:
               echo '    use: [network1]'                     >> \$$SG_EXAMPLE
               echo '    settings:'                           >> \$$SG_EXAMPLE
               echo '      machine_type: n2d-standard-2'       >> \$$SG_EXAMPLE
-              echo '      zone: us-east4-a'               >> \$$SG_EXAMPLE
+              echo '      zone: us-west1-a'            >> \$$SG_EXAMPLE
 
               echo '  - id: ubuntu_pool'                                         >> \$$SG_EXAMPLE
               echo '    source: modules/compute/gke-node-pool'                   >> \$$SG_EXAMPLE

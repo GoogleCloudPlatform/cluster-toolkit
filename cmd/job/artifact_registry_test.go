@@ -27,6 +27,7 @@ import (
 )
 
 func TestLookupArtifactRegistryRepos(t *testing.T) {
+	t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
 	// 1. Setup the httptest server with a handler to mock GCP API
 	mockHandler := func(w http.ResponseWriter, r *http.Request) {
 		// Verify URL matches the expected parent URL requested
@@ -77,7 +78,7 @@ func TestLookupArtifactRegistryRepos(t *testing.T) {
 	defer func() { newArtifactRegistryService = origNewService }()
 
 	newArtifactRegistryService = func(ctx context.Context) (*artifactregistry.Service, error) {
-		return artifactregistry.NewService(ctx, option.WithEndpoint(ts.URL), option.WithoutAuthentication())
+		return artifactregistry.NewService(ctx, option.WithEndpoint(ts.URL), option.WithHTTPClient(ts.Client()))
 	}
 
 	// 3. Call the logic
@@ -95,6 +96,7 @@ func TestLookupArtifactRegistryRepos(t *testing.T) {
 }
 
 func TestLookupArtifactRegistryRepos_NilResponse(t *testing.T) {
+	t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -106,7 +108,7 @@ func TestLookupArtifactRegistryRepos_NilResponse(t *testing.T) {
 	defer func() { newArtifactRegistryService = origNewService }()
 
 	newArtifactRegistryService = func(ctx context.Context) (*artifactregistry.Service, error) {
-		return artifactregistry.NewService(ctx, option.WithEndpoint(ts.URL), option.WithoutAuthentication())
+		return artifactregistry.NewService(ctx, option.WithEndpoint(ts.URL), option.WithHTTPClient(ts.Client()))
 	}
 
 	suggestions, hasMore := lookupArtifactRegistryRepos(context.Background(), "my-project", "us-central1-c")

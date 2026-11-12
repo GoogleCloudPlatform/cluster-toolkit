@@ -71,8 +71,8 @@ Each validator is described below:
   * PASS: If the disk type is available in the specified zone and project.
   * FAIL: If the disk type is invalid or unavailable in that zone.
 * `test_reservation_exists`
-  * Inputs: `project_id` (string), `zone` (string), `reservation_name` (string)
-  * PASS: if a standard or future reservation with that name exists in the project/zone
+  * Inputs: `project_id` (string), `zone` (string, optional when implicit), `reservation_name` (string, optional when implicit)
+  * PASS: if a standard or future reservation with that name exists in the target project/zone. When run implicitly, automatically scans active modules' `reservation_affinity.specific_reservations` (including shared-reservation `project` fields) and `*reservation*` settings, while skipping modules where Spot, Preemptible, DWS Flex, or Queued Provisioning is active.
 * `test_quota_availability`
   * Inputs: `project_id` (string), `region` (string, optional default); resource requirements are derived from the blueprint's modules
   * PASS: If sufficient project/regional quota is available for the requested resources.
@@ -223,7 +223,7 @@ ghpc:
 ```
 
 ### Exclusive Validator
-The `exclusive` validator ensures that at most one of the specified variables is set. It treats variables as 'set' if they are non-empty strings, non-zero numbers, true booleans, or non-empty lists/maps.
+The `exclusive` validator ensures that at most one of the specified variables is set (and optionally at least `min_set` variables when `min_set` is specified, e.g. `min_set: 1` to require that exactly one variable in `vars` is set). It treats variables as 'set' if they are non-empty strings, non-zero numbers, true booleans, or non-empty lists/maps.
 
 **Example definition in `metadata.yaml`:**
 
@@ -233,6 +233,7 @@ ghpc:
   - validator: exclusive
     inputs:
       vars: [preemptible, reserved]
+      min_set: 0 # Optional minimum number of variables in vars that must be set
     error_message: "'preemptible' and 'reserved' are mutually exclusive and both cannot be set at the same time."
 ```
 
