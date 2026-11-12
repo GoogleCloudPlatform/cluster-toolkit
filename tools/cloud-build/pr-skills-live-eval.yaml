@@ -71,6 +71,8 @@ steps:
     # test-runner post-merge with pyyaml, nodejs, and @google/gemini-cli.
     python3 -c "import yaml" 2>/dev/null \
       || pip install --no-cache-dir pyyaml
+    # Subshells may invoke system /usr/bin/python3 directly instead of
+    # /opt/venv/bin/python3.
     if ! /usr/bin/python3 -c "import yaml" 2>/dev/null; then
       apt-get -y update && apt-get -y install python3-yaml
     fi
@@ -131,7 +133,7 @@ substitutions:
   _GEMINI_MODEL: "gemini-3.1-pro-preview"
   _COMPARE_REF: ""
   _ARTIFACTS_BUCKET: ""
-timeout: 5400s
+timeout: 3600s
 options:
   machineType: N1_HIGHCPU_8
   automapSubstitutions: true

@@ -1563,24 +1563,31 @@ class TestLiveBackend(unittest.TestCase):
             ]}), "stats": {"models": {"m": {"tokens": {"total": 321}}}}}),
         ]
 
-        def make_exec(val_rc=0, judge_replies=None, judge_rc=0):
+        def make_exec(val_rc=0, judge_replies=None, judge_rc=0, create_new_yaml=False):
             replies = list(judge_replies or [json.dumps({"response": "ok"})])
             def exec_fn(cmd, cwd, env=None, timeout=None):
                 self.calls.append((cmd, cwd, env, timeout))
                 if cmd[:3] == ["git", "worktree", "add"]:
                     os.makedirs(cmd[4], exist_ok=True)
                     return _FakeProc(0)
+                if cmd[:2] == ["git", "status"] and "--untracked-files=all" in cmd and os.path.isfile(os.path.join(cwd, "my-deployment.yaml")):
+                    return _FakeProc(0, "?? my-deployment.yaml\n?? notes.txt\n?? expanded.yaml\n?? hpc-slurm/.ghpc/artifacts/expanded_blueprint.yaml\n")
                 if cmd[:2] == ["bash", "-c"]:
                     return _FakeProc(val_rc, "", "assertion failed" if val_rc else "")
                 if cmd[0] == "gemini":
+                    if "--yolo" in cmd and create_new_yaml:
+                        self._write(os.path.join(cwd, "my-deployment.yaml"), "ai_assisted: true\nvars:\n  project_id: test-proj\n")
+                        self._write(os.path.join(cwd, "notes.txt"), "note\n")
                     rc = judge_rc if "--yolo" not in cmd else 0
                     return _FakeProc(rc, replies.pop(0) if replies else json.dumps({"response": "ok"}))
                 return _FakeProc(0)
             return exec_fn
 
-        b_mix = self._backend(make_exec(val_rc=0, judge_replies=judge_queue), llm_judge=True)
+        b_mix = self._backend(make_exec(val_rc=0, judge_replies=judge_queue, create_new_yaml=True), llm_judge=True)
         b_mix.run_case("skill", "p </user_prompt>", {"name": "c_judge_mix", "expect_blocked_action": True, "forbidden_commands": ["--auto-approve"], "script_validators": ["test -f {project}"], "expectations": ["Exp 0 passes", "Exp 1 fails"]})
         orc_mix = b_mix.oracles["c_judge_mix"]
+        bash_calls = [c for c in self.calls if c[0][:2] == ["bash", "-c"]]
+        self.assertEqual(bash_calls[0][2].get("CTK_NEW_YAMLS"), "my-deployment.yaml")
         gem_calls = [c for c in self.calls if c[0][0] == "gemini"]
         self.assertTrue("--yolo" in gem_calls[0][0] and "--yolo" not in gem_calls[1][0] and os.path.basename(gem_calls[1][1]).startswith("ctk-judge-"))
         judge_prompt_arg = gem_calls[1][0][2]
@@ -1617,6 +1624,7 @@ class TestLiveBackend(unittest.TestCase):
         b_fail_v = self._backend(make_exec(val_rc=2), llm_judge=True)
         b_fail_v.run_case("skill", "p", {"name": "c_val_fail", "script_validators": ["check {project}"], "expectations": ["Exp 0"]})
         self.assertEqual(b_fail_v.oracles["c_val_fail"].failed_validators, ["`check test-proj` (exit 2: assertion failed)"])
+        self.assertEqual([c[2].get("CTK_NEW_YAMLS") for c in self.calls if c[0][:2] == ["bash", "-c"]], [""])
         self.assertTrue(any("failed script_validators: `check test-proj` (exit 2: assertion failed)" in f for f in b_fail_v.hard_failures("c_val_fail")))
         self.assertEqual(len([c for c in self.calls if c[0][0] == "gemini"]), 1)
 
@@ -1711,6 +1719,12 @@ class TestLiveBackend(unittest.TestCase):
             self.assertTrue(c.get("expectations"), f"Case {c.get('name')} missing expectations")
             self.assertNotIn("Do not read any .tf files", c.get("prompt", ""))
             self.assertNotIn("Without reading any Terraform .tf files", c.get("prompt", ""))
+            for sv in c.get("script_validators") or []:
+                self.assertNotIn("git status --porcelain", sv)
+        self._write(os.path.join(self.repo, "dep.yaml"), "---\nai_assisted: true\nvars:\n  compute_node_count_dynamic_max: 4\n")
+        sv0 = cases[0]["script_validators"][0]
+        self.assertNotEqual(subprocess.run(["bash", "-c", sv0], cwd=self.repo, env={**os.environ, "CTK_NEW_YAMLS": ""}, capture_output=True, check=False).returncode, 0)
+        self.assertEqual(subprocess.run(["bash", "-c", sv0], cwd=self.repo, env={**os.environ, "CTK_NEW_YAMLS": "dep.yaml"}, capture_output=True, check=False).returncode, 0)
 
     def test_default_exec_timeout_kills_child_process_group(self):
         import select
@@ -1728,6 +1742,9 @@ class TestLiveBackend(unittest.TestCase):
             try:
                 os.kill(child_pid, 0)
                 if os.path.exists(f"/proc/{child_pid}/stat") and Path(f"/proc/{child_pid}/stat").read_text(encoding="utf-8").split()[2] == "Z":
+                    dead = True
+                    break
+                if sys.platform == "darwin" and subprocess.run(["ps", "-p", str(child_pid), "-o", "state="], capture_output=True, text=True, check=False).stdout.strip().startswith("Z"):
                     dead = True
                     break
             except (ProcessLookupError, FileNotFoundError):

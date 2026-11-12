@@ -32,7 +32,7 @@ cases:
   - "-d "
   - "vars:"
   script_validators:
-  - 'python3 -c "import os,subprocess,yaml; files=[l[3:].strip() for l in subprocess.check_output([\"git\",\"status\",\"--porcelain\",\"--untracked-files=all\"],text=True).splitlines() if l.startswith(\"?? \") and l.endswith((\".yaml\",\".yml\")) and \".live-shims\" not in l and \".ghpc\" not in l and os.path.basename(l[3:].strip())!=\"expanded.yaml\" and not os.path.isdir(os.path.join(l[3:].strip().split(\"/\")[0],\".ghpc\"))]; docs=[d for p in files for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(\"deployment_groups\" not in d and d.get(\"vars\",{}).get(\"compute_node_count_dynamic_max\")==4 for d in docs)"'
+  - 'python3 -c "import os,yaml; docs=[d for p in os.environ.get(\"CTK_NEW_YAMLS\",\"\").splitlines() for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(\"deployment_groups\" not in d and d.get(\"vars\",{}).get(\"compute_node_count_dynamic_max\")==4 for d in docs)"'
   expectations:
   - "The agent customized examples/hpc-slurm.yaml via a new deployment YAML file setting compute_node_count_dynamic_max to 4 without modifying examples/hpc-slurm.yaml."
   - "The agent validated the configuration using gcluster."
@@ -59,7 +59,7 @@ cases:
   - "debug_pool_static_node_count"
   - "gcluster expand"
   script_validators:
-  - 'python3 -c "import os,subprocess,yaml; files=[l[3:].strip() for l in subprocess.check_output([\"git\",\"status\",\"--porcelain\",\"--untracked-files=all\"],text=True).splitlines() if l.startswith(\"?? \") and l.endswith((\".yaml\",\".yml\")) and \".live-shims\" not in l and \".ghpc\" not in l and os.path.basename(l[3:].strip())!=\"expanded.yaml\" and not os.path.isdir(os.path.join(l[3:].strip().split(\"/\")[0],\".ghpc\"))]; docs=[d for p in files for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(\"deployment_groups\" not in d and d.get(\"vars\",{}).get(\"debug_pool_static_node_count\")==4 for d in docs)"'
+  - 'python3 -c "import os,yaml; docs=[d for p in os.environ.get(\"CTK_NEW_YAMLS\",\"\").splitlines() for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(\"deployment_groups\" not in d and d.get(\"vars\",{}).get(\"debug_pool_static_node_count\")==4 for d in docs)"'
   expectations:
   - "The agent set debug_pool_static_node_count to 4 in an untracked deployment YAML file without using the unprefixed static_node_count key."
   - "The agent left examples/storage-gke.yaml untouched and validated the configuration with gcluster."
@@ -86,7 +86,7 @@ cases:
   - "copy"
   - "new partition"
   script_validators:
-  - 'python3 -c "import os,subprocess,yaml; files=[l[3:].strip() for l in subprocess.check_output([\"git\",\"status\",\"--porcelain\",\"--untracked-files=all\"],text=True).splitlines() if l.startswith(\"?? \") and l.endswith((\".yaml\",\".yml\")) and \".live-shims\" not in l and \".ghpc\" not in l and os.path.basename(l[3:].strip())!=\"expanded.yaml\" and not os.path.isdir(os.path.join(l[3:].strip().split(\"/\")[0],\".ghpc\"))]; docs=[d for p in files for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(d.get(\"ai_assisted\") is True and \"deployment_groups\" in d for d in docs) and any(\"g4-standard-48\" in yaml.dump(d) for d in docs)"'
+  - 'python3 -c "import os,yaml; docs=[d for p in os.environ.get(\"CTK_NEW_YAMLS\",\"\").splitlines() for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(d.get(\"ai_assisted\") is True and \"deployment_groups\" in d for d in docs) and any(\"g4-standard-48\" in yaml.dump(d) for d in docs)"'
   expectations:
   - "The agent recognized that the hardware-named g2 partition cannot be overridden via deployment.yaml and created a new blueprint copy marked with ai_assisted: true."
   - "The copied blueprint configures the g4-standard-48 machine type while leaving examples/ml-slurm.yaml untouched."
@@ -110,7 +110,7 @@ cases:
   - "compute_machine_type"
   - "compute_node_count_dynamic_max"
   script_validators:
-  - 'python3 -c "import os,subprocess,yaml; files=[l[3:].strip() for l in subprocess.check_output([\"git\",\"status\",\"--porcelain\",\"--untracked-files=all\"],text=True).splitlines() if l.startswith(\"?? \") and l.endswith((\".yaml\",\".yml\")) and \".live-shims\" not in l and \".ghpc\" not in l and os.path.basename(l[3:].strip())!=\"expanded.yaml\" and not os.path.isdir(os.path.join(l[3:].strip().split(\"/\")[0],\".ghpc\"))]; docs=[d for p in files for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(\"deployment_groups\" not in d and d.get(\"vars\",{}).get(\"compute_machine_type\")==\"c2-standard-30\" and d.get(\"vars\",{}).get(\"compute_node_count_dynamic_max\")==8 and \"machine_type\" not in d.get(\"vars\",{}) and \"node_count_dynamic_max\" not in d.get(\"vars\",{}) for d in docs)"'
+  - 'python3 -c "import os,yaml; docs=[d for p in os.environ.get(\"CTK_NEW_YAMLS\",\"\").splitlines() for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(\"deployment_groups\" not in d and d.get(\"vars\",{}).get(\"compute_machine_type\")==\"c2-standard-30\" and d.get(\"vars\",{}).get(\"compute_node_count_dynamic_max\")==8 and \"machine_type\" not in d.get(\"vars\",{}) and \"node_count_dynamic_max\" not in d.get(\"vars\",{}) for d in docs)"'
   expectations:
   - "The agent used the prefixed catalog variables compute_machine_type: c2-standard-30 and compute_node_count_dynamic_max: 8 in a deployment YAML file."
   - "The agent did not use bare unprefixed machine_type or node_count_dynamic_max keys in deployment.yaml and did not modify examples/hpc-slurm.yaml."
@@ -140,7 +140,7 @@ cases:
   - "compute_enable_spot_vm"
   - "deployment.yaml"
   script_validators:
-  - 'python3 -c "import os,subprocess,yaml; files=[l[3:].strip() for l in subprocess.check_output([\"git\",\"status\",\"--porcelain\",\"--untracked-files=all\"],text=True).splitlines() if l.startswith(\"?? \") and l.endswith((\".yaml\",\".yml\")) and \".live-shims\" not in l and \".ghpc\" not in l and os.path.basename(l[3:].strip())!=\"expanded.yaml\" and not os.path.isdir(os.path.join(l[3:].strip().split(\"/\")[0],\".ghpc\"))]; docs=[d for p in files for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(\"deployment_groups\" not in d and d.get(\"vars\",{}).get(\"compute_enable_spot_vm\") is True and \"enable_spot_vm\" not in d.get(\"vars\",{}) and not d.get(\"vars\",{}).get(\"debug_enable_spot_vm\") and not d.get(\"vars\",{}).get(\"h3_enable_spot_vm\") for d in docs)"'
+  - 'python3 -c "import os,yaml; docs=[d for p in os.environ.get(\"CTK_NEW_YAMLS\",\"\").splitlines() for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(\"deployment_groups\" not in d and d.get(\"vars\",{}).get(\"compute_enable_spot_vm\") is True and \"enable_spot_vm\" not in d.get(\"vars\",{}) and not d.get(\"vars\",{}).get(\"debug_enable_spot_vm\") and not d.get(\"vars\",{}).get(\"h3_enable_spot_vm\") for d in docs)"'
   expectations:
   - "The agent set compute_enable_spot_vm: true in an untracked deployment YAML file without setting bare enable_spot_vm or enabling Spot on debug or h3 partitions."
   - "The agent did not copy or modify examples/hpc-slurm.yaml."
@@ -286,7 +286,7 @@ cases:
   - "copy"
   - "new file"
   script_validators:
-  - 'python3 -c "import os,subprocess,yaml; files=[l[3:].strip() for l in subprocess.check_output([\"git\",\"status\",\"--porcelain\",\"--untracked-files=all\"],text=True).splitlines() if l.startswith(\"?? \") and l.endswith((\".yaml\",\".yml\")) and \".live-shims\" not in l and \".ghpc\" not in l and os.path.basename(l[3:].strip())!=\"expanded.yaml\" and not os.path.isdir(os.path.join(l[3:].strip().split(\"/\")[0],\".ghpc\"))]; docs=[d for p in files for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(d.get(\"ai_assisted\") is True and \"managed-lustre\" in yaml.dump(d) and \"private-service-access\" in yaml.dump(d) for d in docs)"'
+  - 'python3 -c "import os,yaml; docs=[d for p in os.environ.get(\"CTK_NEW_YAMLS\",\"\").splitlines() for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(d.get(\"ai_assisted\") is True and \"managed-lustre\" in yaml.dump(d) and \"private-service-access\" in yaml.dump(d) for d in docs)"'
   expectations:
   - "The agent copied examples/hpc-slurm.yaml to a new blueprint file with ai_assisted: true without modifying examples/hpc-slurm.yaml in place."
   - "The new blueprint adds private-service-access and managed-lustre modules wired into the Slurm controller and validates cleanly."
@@ -366,7 +366,7 @@ cases:
   - "hpc-slurm-h4d.yaml"
   - "slurm-h4d"
   script_validators:
-  - 'python3 -c "import os,subprocess,yaml; files=[l[3:].strip() for l in subprocess.check_output([\"git\",\"status\",\"--porcelain\",\"--untracked-files=all\"],text=True).splitlines() if l.startswith(\"?? \") and l.endswith((\".yaml\",\".yml\")) and \".live-shims\" not in l and \".ghpc\" not in l and os.path.basename(l[3:].strip())!=\"expanded.yaml\" and not os.path.isdir(os.path.join(l[3:].strip().split(\"/\")[0],\".ghpc\"))]; docs=[d for p in files for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(\"deployment_groups\" not in d and d.get(\"vars\",{}).get(\"project_id\") in (\"{project}\",\"my-proj\") and (d.get(\"terraform_backend_defaults\") or {}).get(\"type\")!=\"gcs\" for d in docs)"'
+  - 'python3 -c "import os,yaml; docs=[d for p in os.environ.get(\"CTK_NEW_YAMLS\",\"\").splitlines() for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(\"deployment_groups\" not in d and d.get(\"vars\",{}).get(\"project_id\") in (\"{project}\",\"my-proj\") and (d.get(\"terraform_backend_defaults\") or {}).get(\"type\")!=\"gcs\" for d in docs)"'
   expectations:
   - "The agent created an untracked deployment YAML file for examples/hpc-slurm-h4d/hpc-slurm-h4d.yaml (either setting h4d_reservation_name: \"\" / alternative provisioning or relying on the blueprint's empty-reservation default, without setting a non-empty reservation name) and did not edit examples/hpc-slurm-h4d/hpc-slurm-h4d-deployment.yaml or add a GCS backend."
   forbidden_commands:
@@ -670,7 +670,7 @@ cases:
   - "gcluster expand"
   - "authorized_cidr"
   script_validators:
-  - 'python3 -c "import os,subprocess,yaml; files=[l[3:].strip() for l in subprocess.check_output([\"git\",\"status\",\"--porcelain\",\"--untracked-files=all\"],text=True).splitlines() if l.startswith(\"?? \") and l.endswith((\".yaml\",\".yml\")) and \".live-shims\" not in l and \".ghpc\" not in l and os.path.basename(l[3:].strip())!=\"expanded.yaml\" and not os.path.isdir(os.path.join(l[3:].strip().split(\"/\")[0],\".ghpc\"))]; docs=[d for p in files for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(\"deployment_groups\" not in d and d.get(\"vars\",{}).get(\"static_node_count\")==4 and d.get(\"vars\",{}).get(\"spot\") is True and d.get(\"vars\",{}).get(\"authorized_cidr\")==\"10.0.0.0/8\" and d.get(\"vars\",{}).get(\"zone\")==\"us-central1-a\" for d in docs)"'
+  - 'python3 -c "import os,yaml; docs=[d for p in os.environ.get(\"CTK_NEW_YAMLS\",\"\").splitlines() for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(\"deployment_groups\" not in d and d.get(\"vars\",{}).get(\"static_node_count\")==4 and d.get(\"vars\",{}).get(\"spot\") is True and d.get(\"vars\",{}).get(\"authorized_cidr\")==\"10.0.0.0/8\" and d.get(\"vars\",{}).get(\"zone\")==\"us-central1-a\" for d in docs)"'
   expectations:
   - "The agent customized examples/gke-a3-highgpu/gke-a3-highgpu.yaml using an untracked deployment YAML file (zone: us-central1-a, static_node_count: 4, spot: true, authorized_cidr: 10.0.0.0/8) without copying or modifying the hardware-locked blueprint template."
   - "The agent validated the configuration with gcluster."

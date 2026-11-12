@@ -882,9 +882,11 @@ class LiveCLIEvaluatorBackend:
         self._reexpand(wt, shim_dir, oracles, setup_fixture_hashes=setup_fixture_hashes, case_config=case_config)
 
         # 8. Layer 1: Deterministic script_validators in the worktree.
+        new_yamls = "\n".join(r for r in oracles.new_files if r.endswith((".yaml", ".yml")) and os.path.isfile(os.path.join(wt, r)))
+        val_env = {**self._build_agent_env(wt=wt, shim_dir=shim_dir), "CTK_NEW_YAMLS": new_yamls}
         for raw_cmd in _coerce_to_string_list((case_config or {}).get("script_validators")):
             cmd = raw_cmd.replace("{project}", self.project)
-            v_res = self._exec(["bash", "-c", cmd], wt, self._build_agent_env(wt=wt, shim_dir=shim_dir), 30)
+            v_res = self._exec(["bash", "-c", cmd], wt, val_env, 30)
             if v_res.returncode != 0:
                 err_snip = (v_res.stderr or v_res.stdout or "").strip()[-160:]
                 oracles.failed_validators.append(f"`{cmd}` (exit {v_res.returncode}{': ' + err_snip if err_snip else ''})")
