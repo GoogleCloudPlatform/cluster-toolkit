@@ -39,8 +39,8 @@ RUN apt-get -y update && apt-get -y install \
     apt-get -y install kubectl && \
     # following is required to execute kubectl commands
     apt-get -y install google-cloud-cli-gke-gcloud-auth-plugin && \
-    # install Node.js 20.x and Gemini CLI for live skill evaluations
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    # install Node.js 22.x and Gemini CLI for live skill evaluations
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get -y install nodejs && \
     npm install -g @google/gemini-cli@0.66.0 && \
     mkdir -p /root/.gemini/policies && \

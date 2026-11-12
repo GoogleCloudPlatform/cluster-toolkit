@@ -13,7 +13,7 @@
 # limitations under the License.
 
 variable "skills_eval_service_account" {
-  description = "Optional least-privilege service account resource name (projects/<project>/serviceAccounts/<email>) for live agent skill evaluation triggers. If null, the default Cloud Build service account is used."
+  description = "Optional least-privilege service account resource name (projects/<project>/serviceAccounts/<email>) for live agent skill evaluation triggers (requires roles/aiplatform.user, roles/logging.logWriter, and storage write access on the regional Cloud Build logs bucket used by defaultLogsBucketBehavior: REGIONAL_USER_OWNED_BUCKET). If null, the default Cloud Build service account is used."
   type        = string
   default     = null
 }

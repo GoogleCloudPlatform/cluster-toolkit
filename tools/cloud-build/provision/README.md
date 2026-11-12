@@ -78,7 +78,7 @@ When prompted for project, use integration test project.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID | `string` | `"hpc-toolkit-dev"` | no |
 | <a name="input_region"></a> [region](#input\_region) | GCP region | `string` | `"us-central1"` | no |
 | <a name="input_repo_uri"></a> [repo\_uri](#input\_repo\_uri) | URI of GitHub repo | `string` | `"https://github.com/GoogleCloudPlatform/cluster-toolkit"` | no |
-| <a name="input_skills_eval_service_account"></a> [skills\_eval\_service\_account](#input\_skills\_eval\_service\_account) | Optional least-privilege service account resource name (projects/<project>/serviceAccounts/<email>) for live agent skill evaluation triggers. If null, the default Cloud Build service account is used. | `string` | `null` | no |
+| <a name="input_skills_eval_service_account"></a> [skills\_eval\_service\_account](#input\_skills\_eval\_service\_account) | Optional least-privilege service account resource name (projects/<project>/serviceAccounts/<email>) for live agent skill evaluation triggers (requires roles/aiplatform.user, roles/logging.logWriter, and storage write access on the regional Cloud Build logs bucket used by defaultLogsBucketBehavior: REGIONAL\_USER\_OWNED\_BUCKET). If null, the default Cloud Build service account is used. | `string` | `null` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | GCP zone | `string` | `"us-central1-c"` | no |
 
 ## Outputs

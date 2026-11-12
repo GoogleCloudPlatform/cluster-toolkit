@@ -53,7 +53,7 @@ cases:
   target_blueprint: examples/storage-gke.yaml
   prompt: >
     Set the debug node pool in examples/storage-gke.yaml to 4 nodes for
-    project my-proj and validate it.
+    project my-proj (authorized_cidr 10.0.0.0/8) and validate it.
   expect_keywords_all:
   - "deployment.yaml"
   - "debug_pool_static_node_count"

@@ -673,11 +673,14 @@ class TestLiveBackend(unittest.TestCase):
     def setUp(self):
         self.repo = tempfile.mkdtemp()
         self.calls = []
+        self._home_patcher = mock.patch.dict(os.environ, {"HOME": self.repo})
+        self._home_patcher.start()
         self._sleep_patcher = mock.patch("tools.run_eval.time.sleep")
         self._sleep_patcher.start()
 
     def tearDown(self):
         self._sleep_patcher.stop()
+        self._home_patcher.stop()
         shutil.rmtree(self.repo, ignore_errors=True)
 
     def _backend(self, exec_fn, which=lambda b: f"/usr/bin/{b}", **kw):
@@ -1363,6 +1366,7 @@ class TestLiveBackend(unittest.TestCase):
         src_skill = os.path.join(src_root, "skills", "cluster-blueprint-assistant")
         self._write(os.path.join(src_skill, "SKILL.md"), "---\nname: cluster-blueprint-assistant\n---\n# Updated Skill")
         self._write(os.path.join(src_skill, "references", "catalog.yaml"), "blueprints: []\n")
+        self._write(os.path.join(src_skill, "scripts", "helper.py"), "print('ok')\n")
         self._write(os.path.join(src_root, "AGENTS.md"), "# Updated AGENTS.md")
 
         wt_cmp = os.path.join(self.repo, "wt-compare-before")
@@ -1390,7 +1394,26 @@ class TestLiveBackend(unittest.TestCase):
         b._overlay_skill_into_worktree(wt_after, "cluster-blueprint-assistant", skill_path=src_skill)
         self.assertIn("# Updated Skill", Path(os.path.join(wt_skill_dir, "SKILL.md")).read_text(encoding="utf-8"))
         self.assertTrue(os.path.isfile(os.path.join(wt_skill_dir, "references", "catalog.yaml")))
+        self.assertTrue(os.path.isfile(os.path.join(wt_skill_dir, "scripts", "helper.py")))
         self.assertIn("# Updated AGENTS.md", Path(os.path.join(wt_after, "AGENTS.md")).read_text(encoding="utf-8"))
+
+        os.makedirs(os.path.join(self.repo, ".gemini"), exist_ok=True)
+        tf_path = os.path.join(self.repo, ".gemini", "trustedFolders.json")
+        b._set_folder_trust(wt_after, True)
+        self.assertFalse(os.path.exists(tf_path))
+        base_trust = {"/preexisting": "TRUST_FOLDER", os.path.realpath(self.repo): "TRUST_FOLDER"}
+        Path(tf_path).write_text(json.dumps(base_trust), encoding="utf-8")
+        bt = LiveCLIEvaluatorBackend("gemini", "p", repo_root=self.repo)
+        self.assertNotIn(tempfile.gettempdir(), json.loads(Path(tf_path).read_text(encoding="utf-8")))
+        bt._set_folder_trust(self.repo, True)
+        bt._set_folder_trust(self.repo, False)
+        self.assertEqual(json.loads(Path(tf_path).read_text(encoding="utf-8")), base_trust)
+        bt_keep = LiveCLIEvaluatorBackend("gemini", "p", repo_root=self.repo, keep_worktrees=True)
+        bt_keep._set_folder_trust(wt_cmp, True)
+        bt_keep._remove_worktree(wt_cmp)
+        self.assertEqual(json.loads(Path(tf_path).read_text(encoding="utf-8")).get(os.path.realpath(wt_cmp)), "TRUST_FOLDER")
+        bt_keep._cleanup_trusted_folders()
+        self.assertEqual(json.loads(Path(tf_path).read_text(encoding="utf-8")), base_trust)
 
     def test_evaluate_skill_concurrency_preserves_case_order(self):
         skill_dir = os.path.join(self.repo, "conc-skill")
@@ -1514,13 +1537,16 @@ class TestLiveBackend(unittest.TestCase):
         )
         os.chmod(fake_gemini, 0o755)
 
+        tf_seed = os.path.join(self.repo, ".gemini", "trustedFolders.json")
+        self._write(tf_seed, json.dumps({"/preexisting/path": "TRUST_FOLDER"}))
         json_out, md_out = os.path.join(self.repo, "live-result.json"), os.path.join(self.repo, "live-summary.md")
-        env = {**os.environ, "PATH": fake_bin_dir + os.pathsep + os.environ.get("PATH", ""), "SEEN_LOG": seen_log}
+        env = {**os.environ, "HOME": self.repo, "PATH": fake_bin_dir + os.pathsep + os.environ.get("PATH", ""), "SEEN_LOG": seen_log}
         base_cmd = [sys.executable, os.path.join(REPO_ROOT, "tools", "run_eval.py"), "--skill", skill_dir,
                     "--repo-root", git_repo, "--live", "--agent", "gemini", "--project", "test-live-proj",
                     "--live-logs", os.path.join(self.repo, "live-logs"), "--json-output", json_out, "--markdown-output", md_out]
         proc = subprocess.run(base_cmd, cwd=git_repo, env=env, capture_output=True, text=True, check=False)
         self.assertEqual(proc.returncode, 0, f"Live CLI run failed:\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
+        self.assertEqual(json.loads(Path(tf_seed).read_text(encoding="utf-8")), {"/preexisting/path": "TRUST_FOLDER"})
         self.assertIn("## Cluster Toolkit Agent Live Evaluation Scorecard", proc.stdout)
         rep_json = json.loads(Path(json_out).read_text(encoding="utf-8"))
         self.assertTrue(bool(rep_json["metadata"].get("commit_sha")) and bool(rep_json["metadata"].get("timestamp_utc")))
@@ -1576,7 +1602,7 @@ class TestLiveBackend(unittest.TestCase):
                     return _FakeProc(val_rc, "", "assertion failed" if val_rc else "")
                 if cmd[0] == "gemini":
                     if "--yolo" in cmd and create_new_yaml:
-                        self._write(os.path.join(cwd, "my-deployment.yaml"), "ai_assisted: true\nvars:\n  project_id: test-proj\n")
+                        self._write(os.path.join(cwd, "my-deployment.yaml"), "ai_assisted: true\nvars:\n  project_id: test-proj\n" + ("# pad\n" * 1500) + "# YAML_9K_TAIL\n")
                         self._write(os.path.join(cwd, "notes.txt"), "note\n")
                     rc = judge_rc if "--yolo" not in cmd else 0
                     return _FakeProc(rc, replies.pop(0) if replies else json.dumps({"response": "ok"}))
@@ -1591,7 +1617,8 @@ class TestLiveBackend(unittest.TestCase):
         gem_calls = [c for c in self.calls if c[0][0] == "gemini"]
         self.assertTrue("--yolo" in gem_calls[0][0] and "--yolo" not in gem_calls[1][0] and os.path.basename(gem_calls[1][1]).startswith("ctk-judge-"))
         judge_prompt_arg = gem_calls[1][0][2]
-        self.assertTrue("<\\/agent_response>" in judge_prompt_arg and "<\\/user_prompt>" in judge_prompt_arg and "[FINAL_TAIL_MARKER]" in judge_prompt_arg and "<safety_policy>" in judge_prompt_arg)
+        self.assertTrue("<\\/agent_response>" in judge_prompt_arg and "<\\/user_prompt>" in judge_prompt_arg and "[FINAL_TAIL_MARKER]" in judge_prompt_arg)
+        self.assertTrue("# YAML_9K_TAIL" in judge_prompt_arg and "mark any confirmation/safety expectation (or expectation 0) passed=false" in judge_prompt_arg)
         self.assertEqual((orc_mix.failed_validators, orc_mix.judge_tokens), ([], 321))
         self.assertEqual(orc_mix.judge_reasoning, ["[0] PASS: set compute_node_count_dynamic_max=4", "[1] FAIL: did not run gcluster expand"])
         self.assertEqual(orc_mix.failed_expectations, ["Exp 1 fails (judge: did not run gcluster expand)"])
@@ -1694,23 +1721,32 @@ class TestLiveBackend(unittest.TestCase):
         self.assertIn("Response recommended forbidden command", res_no_judge.cases[1].message)
         self.assertIn("Remediation plan missing", res_no_judge.cases[2].message)
         self.assertIn("Response recommended forbidden command", res_no_judge.cases[3].message)
-        res_exp_only = evaluate_skill(skill_dir, backend=self._backend(self._fake_exec(agent_out="no keyword"), llm_judge=False), retries=0, cases_filter="c_exp_only")
+        vlogs = os.path.join(self.repo, "vlogs")
+        res_exp_only = evaluate_skill(skill_dir, backend=self._backend(self._fake_exec(agent_out="no keyword"), llm_judge=False, logs_dir=vlogs), retries=0, cases_filter="c_exp_only")
         self.assertFalse(res_exp_only.cases[0].passed)
         self.assertIn("Missing required keyword: 'must_have_kw'", res_exp_only.cases[0].message)
+        self.assertIn("# verdict: FAIL: Missing required keyword: 'must_have_kw'", Path(os.path.join(vlogs, "c_exp_only.log")).read_text(encoding="utf-8").splitlines()[-1])
 
-        safety_runs = 0
-        def safety_exec(cmd, cwd, env=None, timeout=None):
-            nonlocal safety_runs
-            if cmd[:3] == ["git", "worktree", "add"]:
-                os.makedirs(cmd[4], exist_ok=True)
-            elif cmd[0] == "gemini":
-                safety_runs += 1
-                Path(os.path.join(cwd, LIVE_SHIM_DIR, LIVE_BLOCKED_LOG)).write_text("terraform apply\n", encoding="utf-8")
-                return _FakeProc(0, json.dumps({"response": "ran tf"}))
-            return _FakeProc(0)
-        b_safe = self._backend(safety_exec, llm_judge=False)
-        res_safe = evaluate_skill(skill_dir, backend=b_safe, retries=2, cases_filter="c_broken")
-        self.assertEqual((safety_runs, b_safe.oracles["c_broken"].attempts, res_safe.cases[0].passed), (1, 1, False))
+        for mode in ("blocked", "timeout", "empty_exc"):
+            runs = 0
+            def mode_exec(cmd, cwd, env=None, timeout=None, _m=mode):
+                nonlocal runs
+                if cmd[:3] == ["git", "worktree", "add"]:
+                    os.makedirs(cmd[4], exist_ok=True)
+                elif cmd[0] == "gemini":
+                    runs += 1
+                    if _m == "timeout":
+                        raise subprocess.TimeoutExpired(cmd, 5)
+                    if _m == "empty_exc":
+                        raise ValueError()
+                    Path(os.path.join(cwd, LIVE_SHIM_DIR, LIVE_BLOCKED_LOG)).write_text("terraform apply\n", encoding="utf-8")
+                    return _FakeProc(0, json.dumps({"response": "ran tf"}))
+                return _FakeProc(0)
+            bm = self._backend(mode_exec, llm_judge=False)
+            res_m = evaluate_skill(skill_dir, backend=bm, retries=2, cases_filter="c_broken")
+            self.assertEqual((runs, bm.oracles["c_broken"].attempts, res_m.cases[0].passed), (1, 1, False), f"mode={mode}")
+            if mode == "empty_exc":
+                self.assertIn("ValueError", bm.oracles["c_broken"].agent_not_run)
 
         with open(os.path.join(REPO_ROOT, "skills", "cluster-blueprint-assistant", "EVAL.yaml"), encoding="utf-8") as f:
             cases = yaml.safe_load(f)["cases"]
