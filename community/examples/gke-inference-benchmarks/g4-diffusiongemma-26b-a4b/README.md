@@ -186,7 +186,7 @@ distributed deployments and multi-TB models:
 * Authentication is Workload Identity Federation for GKE: the pods run as the
   `workload-identity-k8s-sa` Kubernetes service account, which the blueprint
   binds to the `<deployment_name>-gke-wl-sa` Google service account with
-  `roles/storage.objectAdmin` and `roles/storage.bucketViewer` on the project
+  `roles/storage.objectUser` and `roles/storage.bucketViewer` on the project
   (the Run:ai GCS backend reads bucket metadata, which object roles alone do
   not allow). For a bucket in **another project**, grant both roles on the
   bucket to that service account before deploying:
@@ -194,7 +194,7 @@ distributed deployments and multi-TB models:
   ```shell
   gcloud storage buckets add-iam-policy-binding gs://$MODEL_BUCKET \
     --member=serviceAccount:<deployment_name>-gke-wl-sa@<project_id>.iam.gserviceaccount.com \
-    --role=roles/storage.objectAdmin
+    --role=roles/storage.objectUser
   gcloud storage buckets add-iam-policy-binding gs://$MODEL_BUCKET \
     --member=serviceAccount:<deployment_name>-gke-wl-sa@<project_id>.iam.gserviceaccount.com \
     --role=roles/storage.bucketViewer
