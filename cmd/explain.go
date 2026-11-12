@@ -148,6 +148,14 @@ type ExplainModuleInput struct {
 	Default     string   `json:"default,omitempty" yaml:"default,omitempty"`
 	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
 	Validations []string `json:"validations,omitempty" yaml:"validations,omitempty"`
+	textType    string
+}
+
+func (in ExplainModuleInput) displayType() string {
+	if in.textType != "" {
+		return in.textType
+	}
+	return in.Type
 }
 
 // ExplainSpecMatchResult is the structured output for Mode 3 (spec matching).
@@ -1095,11 +1103,13 @@ func printBlueprintVariableGroups(w io.Writer, vars []ExplainVariable) {
 			bpVars = append(bpVars, v)
 		}
 	}
-	if len(globalVars) > 0 && len(bpVars) > 0 {
+	if len(globalVars) > 0 {
 		writeln(w, "   Global Variables:")
 		printBlueprintVariableList(w, globalVars)
-		writeln(w, "   Blueprint Variables:")
-		printBlueprintVariableList(w, bpVars)
+		if len(bpVars) > 0 {
+			writeln(w, "   Blueprint Variables:")
+			printBlueprintVariableList(w, bpVars)
+		}
 		return
 	}
 	printBlueprintVariableList(w, vars)
@@ -1179,7 +1189,7 @@ func buildModuleAutoInputs(mi modulereader.ModuleInfo, upstreamGroups []upstream
 
 	var globalInjected []string
 	for _, in := range mi.Inputs {
-		if !in.Deprecated && config.IsAutoInjectedGlobal(in.Name) {
+		if config.IsAutoInjectedGlobal(in.Name) {
 			globalInjected = append(globalInjected, in.Name)
 		}
 	}
@@ -1205,22 +1215,24 @@ func partitionModuleInputs(mi modulereader.ModuleInfo, useProvidedInputs map[str
 	var optInputs []ExplainModuleInput
 	var depInputs []ExplainModuleInput
 	for _, in := range mi.Inputs {
+		if config.IsAutoInjectedGlobal(in.Name) || in.Name == injectedID || useProvidedInputs[in.Name] || in.Name == "machine_configs" {
+			continue
+		}
 		if in.Deprecated && !in.Required {
 			depInputs = append(depInputs, ExplainModuleInput{
 				Name:        in.Name,
 				Type:        formatCtyType(in.Type),
+				textType:    formatCtyTypeForText(in.Type),
 				Description: in.DeprecatedMsg,
 			})
-			continue
-		}
-		if config.IsAutoInjectedGlobal(in.Name) || in.Name == injectedID || useProvidedInputs[in.Name] || in.Name == "machine_configs" {
 			continue
 		}
 		entry := ExplainModuleInput{
 			Name:        in.Name,
 			Type:        formatCtyType(in.Type),
+			textType:    formatCtyTypeForText(in.Type),
 			Default:     formatInterfaceDefault(in.Default),
-			Description: firstSentence(in.Description),
+			Description: strings.Join(strings.Fields(in.Description), " "),
 			Validations: in.Validations,
 		}
 		if in.Required {
@@ -1578,6 +1590,14 @@ func sampleValueForInput(name, typ string) string {
 }
 
 func formatCtyType(t cty.Type) string {
+	return formatCtyTypeMode(t, false)
+}
+
+func formatCtyTypeForText(t cty.Type) string {
+	return formatCtyTypeMode(t, true)
+}
+
+func formatCtyTypeMode(t cty.Type, compactText bool) string {
 	if t == cty.NilType || t == cty.DynamicPseudoType {
 		return "any"
 	}
@@ -1589,38 +1609,52 @@ func formatCtyType(t cty.Type) string {
 	case t == cty.Bool:
 		return "bool"
 	case t.IsListType():
-		return formatCollectionType("list", t.ElementType())
+		return formatCollectionType("list", t.ElementType(), compactText)
 	case t.IsSetType():
-		return formatCollectionType("set", t.ElementType())
+		return formatCollectionType("set", t.ElementType(), compactText)
 	case t.IsTupleType():
 		return "list"
 	case t.IsMapType():
-		return formatCollectionType("map", t.ElementType())
+		return formatCollectionType("map", t.ElementType(), compactText)
 	case t.IsObjectType():
-		return formatCtyObjectType(t)
+		return formatCtyObjectType(t, compactText)
 	default:
 		return t.FriendlyName()
 	}
 }
 
-func formatCollectionType(prefix string, elem cty.Type) string {
-	elemStr := formatCtyType(elem)
+func formatCollectionType(prefix string, elem cty.Type, compactText bool) string {
+	elemStr := formatCtyTypeMode(elem, compactText)
 	if elemStr == "any" {
 		return prefix
 	}
 	return fmt.Sprintf("%s(%s)", prefix, elemStr)
 }
 
-func formatCtyObjectType(t cty.Type) string {
+func formatCtyObjectType(t cty.Type, compactText bool) string {
 	attrs := t.AttributeTypes()
 	if len(attrs) == 0 {
 		return "object"
 	}
+	keys := sortObjectAttrKeys(t, attrs)
+	const maxAttrs = 6
+	parts := make([]string, 0, len(keys))
+	for i, k := range keys {
+		if compactText && i >= maxAttrs && t.AttributeOptional(k) {
+			parts = append(parts, "...")
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%s=%s", k, formatObjectAttrType(t, k, attrs[k], compactText)))
+	}
+	return fmt.Sprintf("object({%s})", strings.Join(parts, ", "))
+}
+
+func sortObjectAttrKeys(t cty.Type, attrs map[string]cty.Type) []string {
 	keys := make([]string, 0, len(attrs))
 	for k := range attrs {
 		keys = append(keys, k)
 	}
-	// Required attributes first so the maxAttrs cut never hides them.
+	// Required attributes first so text-mode truncation never hides required fields.
 	sort.Slice(keys, func(i, j int) bool {
 		oi, oj := t.AttributeOptional(keys[i]), t.AttributeOptional(keys[j])
 		if oi != oj {
@@ -1628,20 +1662,18 @@ func formatCtyObjectType(t cty.Type) string {
 		}
 		return keys[i] < keys[j]
 	})
-	const maxAttrs = 6
-	parts := make([]string, 0, min(len(keys), maxAttrs)+1)
-	for i, k := range keys {
-		if i >= maxAttrs {
-			parts = append(parts, "...")
-			break
-		}
-		attr := formatCtyScalarOrKind(attrs[k])
-		if t.AttributeOptional(k) {
-			attr = "optional(" + attr + ")"
-		}
-		parts = append(parts, fmt.Sprintf("%s=%s", k, attr))
+	return keys
+}
+
+func formatObjectAttrType(objType cty.Type, key string, attrType cty.Type, compactText bool) string {
+	attr := formatCtyTypeMode(attrType, compactText)
+	if compactText {
+		attr = formatCtyScalarOrKind(attrType)
 	}
-	return fmt.Sprintf("object({%s})", strings.Join(parts, ", "))
+	if objType.AttributeOptional(key) {
+		return "optional(" + attr + ")"
+	}
+	return attr
 }
 
 func formatCtyScalarOrKind(t cty.Type) string {
@@ -1720,7 +1752,7 @@ func printExplainModuleText(w io.Writer, res ExplainModuleResult) {
 	if len(res.RequiredInputs) > 0 {
 		writeln(w, "\nRequired Settings (variables.tf):")
 		for _, in := range res.RequiredInputs {
-			writef(w, "  - %-28s (%s) %s%s\n", in.Name, in.Type, in.Description, formatValidationSuffix(in.Validations))
+			printModuleInputLine(w, in.Name, in.displayType(), firstSentence(in.Description), in.Validations)
 		}
 	}
 
@@ -1738,19 +1770,41 @@ func printOptionalModuleInputs(w io.Writer, optInputs []ExplainModuleInput) {
 	}
 	writef(w, "\nOptional Settings (%d):\n", len(optInputs))
 	for _, in := range optInputs {
-		typeMeta := in.Type
+		typeMeta := in.displayType()
 		if in.Default != "" {
-			typeMeta = fmt.Sprintf("%s, default: %s", in.Type, truncateForText(in.Default, 60))
+			typeMeta = fmt.Sprintf("%s, default: %s", typeMeta, truncateForText(in.Default, 60))
 		}
-		writef(w, "  - %-28s (%s) %s%s\n", in.Name, typeMeta, in.Description, formatValidationSuffix(in.Validations))
+		printModuleInputLine(w, in.Name, typeMeta, firstSentence(in.Description), in.Validations)
+	}
+}
+
+func printModuleInputLine(w io.Writer, name, typeMeta, desc string, validations []string) {
+	var tail []string
+	if desc != "" {
+		tail = append(tail, desc)
+	}
+	if len(validations) > 0 {
+		tail = append(tail, fmt.Sprintf("[Validation: %s]", strings.Join(validations, " | ")))
+	}
+	if len(tail) > 0 {
+		writef(w, "  - %-28s (%s) %s\n", name, typeMeta, strings.Join(tail, " "))
+	} else {
+		writef(w, "  - %-28s (%s)\n", name, typeMeta)
 	}
 }
 
 func truncateForText(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	if maxLen <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
-	return s[:maxLen-3] + "..."
+	if maxLen <= 3 {
+		return string(runes[:maxLen])
+	}
+	return string(runes[:maxLen-3]) + "..."
 }
 
 func printDeprecatedModuleInputs(w io.Writer, depInputs []ExplainModuleInput) {
@@ -1759,19 +1813,8 @@ func printDeprecatedModuleInputs(w io.Writer, depInputs []ExplainModuleInput) {
 	}
 	writef(w, "\nDeprecated Settings (%d - do NOT use):\n", len(depInputs))
 	for _, in := range depInputs {
-		if in.Description != "" {
-			writef(w, "  - %-28s (%s) %s\n", in.Name, in.Type, in.Description)
-		} else {
-			writef(w, "  - %-28s (%s)\n", in.Name, in.Type)
-		}
+		printModuleInputLine(w, in.Name, in.displayType(), in.Description, nil)
 	}
-}
-
-func formatValidationSuffix(validations []string) string {
-	if len(validations) == 0 {
-		return ""
-	}
-	return fmt.Sprintf(" [Validation: %s]", strings.Join(validations, " | "))
 }
 
 type normalizedSpec struct {
@@ -2349,6 +2392,7 @@ func resolvePrereqUpstreamUseIDs(bp catalog.BlueprintEntry, prereqSource string)
 	if err != nil {
 		return nil
 	}
+	pInfo = modulereader.ApplyVarMeta(prereqSource, pInfo)
 	pGroups, _ := findUpstreamCandidateGroups(prereqSource, pInfo)
 	var prereqUse []string
 	for _, pg := range pGroups {

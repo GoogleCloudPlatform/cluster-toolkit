@@ -18,7 +18,6 @@ import (
 	"hpc-toolkit/pkg/sourcereader"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/zclconf/go-cty/cty"
@@ -177,7 +176,7 @@ variable "size" {
   default = 1
   validation {
     condition     = var.size > 0
-    error_message = "size must be positive (got ${var.size})."
+    error_message = "size must be positive\n(got ${var.size})."
   }
 }
 `,
@@ -204,8 +203,8 @@ variable "old_scopes" {
 	if !mi.Inputs[0].Deprecated || mi.Inputs[0].DeprecatedMsg != "legacy is deprecated; use modern." {
 		t.Fatalf("expected legacy deprecated via validation, got %+v", mi.Inputs[0])
 	}
-	if mi.Inputs[1].Deprecated || len(mi.Inputs[1].Validations) != 1 || !strings.Contains(mi.Inputs[1].Validations[0], "${var.size}") {
-		t.Fatalf("expected size to keep its raw interpolated validation message, got %+v", mi.Inputs[1])
+	if mi.Inputs[1].Deprecated || len(mi.Inputs[1].Validations) != 1 || mi.Inputs[1].Validations[0] != "size must be positive (got ${var.size})." {
+		t.Fatalf("expected size to unescape template and preserve ${var.size}, got %+v", mi.Inputs[1])
 	}
 	if !mi.Inputs[2].Deprecated {
 		t.Fatalf("expected old_scopes from .pkr.hcl to be deprecated, got %+v", mi.Inputs[2])

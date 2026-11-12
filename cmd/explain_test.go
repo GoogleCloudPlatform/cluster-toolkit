@@ -655,6 +655,12 @@ func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
 	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/hpc-slurm6-tpu-maxtext.yaml"), Equals, false)
 }
 
+func runExplainJSONForTest(args ...string) (string, error) {
+	explainFlags.format = "json"
+	defer func() { explainFlags.format = "text" }()
+	return runExplainForTest(args...)
+}
+
 func (s *MySuite) TestExplainModuleDeprecatedAndValidations(c *C) {
 	_, cleanup := setupExplainTestFS(c)
 	defer cleanup()
@@ -666,9 +672,7 @@ func (s *MySuite) TestExplainModuleDeprecatedAndValidations(c *C) {
 	c.Check(strings.Contains(npOut, "use autoscaling_total_max_nodes"), Equals, true)
 	c.Check(strings.Contains(npOut, "object({strategy=string, max_surge=optional(number), max_unavailable=optional(number)})"), Equals, true)
 
-	explainFlags.format = "json"
-	npJSONOut, err := runExplainForTest("modules/compute/gke-node-pool")
-	explainFlags.format = "text"
+	npJSONOut, err := runExplainJSONForTest("modules/compute/gke-node-pool")
 	c.Assert(err, IsNil)
 	var npRes ExplainModuleResult
 	c.Assert(json.Unmarshal([]byte(npJSONOut), &npRes), IsNil)
@@ -686,6 +690,11 @@ func (s *MySuite) TestExplainModuleDeprecatedAndValidations(c *C) {
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(kaOut, "object({cloud_storage_bucket_name=string, gcs_fuse_mount_options=optional(list), in_memory_volume_size=optional(string), name=optional(string), node_selector=optional(map), tolerations=optional(list)})"), Equals, true)
 	c.Check(strings.Contains(kaOut, " | checkpoint_configuration.name must be"), Equals, true)
+
+	kaJSONOut, err := runExplainJSONForTest("modules/management/kubectl-apply")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(kaJSONOut, "install=optional(bool)"), Equals, true)
+	c.Check(strings.Contains(kaJSONOut, "config_template_vars"), Equals, true)
 }
 
 func (s *MySuite) TestExplainBlueprintGlobalVsBlueprintVars(c *C) {
@@ -698,9 +707,12 @@ func (s *MySuite) TestExplainBlueprintGlobalVsBlueprintVars(c *C) {
 	bpVarIdx := strings.Index(bpOut, "Blueprint Variables:")
 	c.Check(globalIdx > 0 && bpVarIdx > globalIdx, Equals, true)
 
-	explainFlags.format = "json"
-	bpJSONOut, err := runExplainForTest("examples/gke-a4/gke-a4.yaml")
-	explainFlags.format = "text"
+	gcloudOut, err := runExplainForTest("community/examples/gcloud-example.yaml")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(gcloudOut, "Global Variables:"), Equals, true)
+	c.Check(strings.Contains(gcloudOut, "Blueprint Variables:"), Equals, false)
+
+	bpJSONOut, err := runExplainJSONForTest("examples/gke-a4/gke-a4.yaml")
 	c.Assert(err, IsNil)
 	var bpRes ExplainBlueprintResult
 	c.Assert(json.Unmarshal([]byte(bpJSONOut), &bpRes), IsNil)

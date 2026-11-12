@@ -284,8 +284,29 @@ func extractValidationErrorMessage(src []byte, attr *hclsyntax.Attribute) string
 	if val, diags := attr.Expr.Value(nil); !diags.HasErrors() && val.Type() == cty.String && val.IsKnown() && !val.IsNull() {
 		return strings.Join(strings.Fields(val.AsString()), " ")
 	}
+	if tmpl, ok := attr.Expr.(*hclsyntax.TemplateExpr); ok {
+		return renderHCLTemplate(src, tmpl)
+	}
 	raw := strings.Trim(extractAttrSource(src, attr), `"`)
 	return strings.Join(strings.Fields(raw), " ")
+}
+
+func renderHCLTemplate(src []byte, tmpl *hclsyntax.TemplateExpr) string {
+	var sb strings.Builder
+	for _, part := range tmpl.Parts {
+		sb.WriteString(renderHCLTemplatePart(src, part))
+	}
+	return strings.Join(strings.Fields(sb.String()), " ")
+}
+
+func renderHCLTemplatePart(src []byte, part hclsyntax.Expression) string {
+	if lit, ok := part.(*hclsyntax.LiteralValueExpr); ok && lit.Val.Type() == cty.String && lit.Val.IsKnown() && !lit.Val.IsNull() {
+		return lit.Val.AsString()
+	}
+	if r := part.Range(); r.Start.Byte >= 0 && r.End.Byte <= len(src) && r.Start.Byte < r.End.Byte {
+		return "${" + string(src[r.Start.Byte:r.End.Byte]) + "}"
+	}
+	return ""
 }
 
 func isDeprecationCondition(varName, cond string) bool {
