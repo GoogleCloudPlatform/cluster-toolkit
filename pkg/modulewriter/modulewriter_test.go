@@ -1429,6 +1429,44 @@ resource "google_container_node_pool" "pool_without_ignores" {
 	}
 }
 
+func TestWriteModuleReconfigureOverrides_CumulativeSubtractionEmptyError(t *testing.T) {
+	// Verifies that when a type target and an instance target cumulatively subtract all
+	// attributes from a resource that had module ignores, an error is returned.
+	tmpDir := t.TempDir()
+	mainTf := `
+resource "google_compute_instance" "a" {
+  name = "a"
+  lifecycle {
+    ignore_changes = [
+      metadata,
+      labels,
+    ]
+  }
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.tf"), []byte(mainTf), 0644); err != nil {
+		t.Fatalf("failed to write main.tf: %v", err)
+	}
+
+	reconfigIgnores := map[string][]string{
+		"google_compute_instance": {
+			"-labels",
+		},
+		"google_compute_instance.a": {
+			"-metadata",
+		},
+	}
+
+	err := writeModuleReconfigureOverrides(tmpDir, reconfigIgnores)
+	if err == nil {
+		t.Fatal("expected error when type and instance targets cumulatively subtract all attributes, got nil")
+	}
+	wantSubstr := "cannot subtract all attributes from reconfigure_ignores target \"google_compute_instance.a\""
+	if !strings.Contains(err.Error(), wantSubstr) {
+		t.Fatalf("expected error containing %q, got: %v", wantSubstr, err)
+	}
+}
+
 func setupMockVpcFS(t *testing.T) {
 	t.Helper()
 	repoDir := t.TempDir()

@@ -800,7 +800,7 @@ func GetModuleDefaultIgnores(source string) (map[string][]string, error) {
 	return result, nil
 }
 
-func setResourceOverride(override tfOverrideFile, existingIgnores map[string]map[string][]string, rType, rName string, ignores []string) error {
+func setResourceOverride(override tfOverrideFile, existingIgnores map[string]map[string][]string, rType, rName string, ignores []string, moduleDir string) error {
 	if slices.Contains(existingIgnores[rType][rName], "all") {
 		return nil
 	}
@@ -813,6 +813,11 @@ func setResourceOverride(override tfOverrideFile, existingIgnores map[string]map
 		return err
 	}
 	if len(finalIgnores) == 0 {
+		if len(existingIgnores[rType][rName]) > 0 {
+			hint := moduleSourceURLHint(moduleDir)
+			return fmt.Errorf("cannot subtract all attributes from reconfigure_ignores target %q in module %s: Terraform's override loader cannot clear base module ignores with an empty list; at least one attribute must remain ignored%s",
+				fmt.Sprintf("%s.%s", rType, rName), moduleDir, hint)
+		}
 		return nil
 	}
 	if override.Resource[rType] == nil {
@@ -855,7 +860,7 @@ func applyTargetOverrides(override tfOverrideFile, discovered map[string][]strin
 	}
 
 	for _, rName := range targetNames {
-		if err := setResourceOverride(override, existingIgnores, rType, rName, ignores); err != nil {
+		if err := setResourceOverride(override, existingIgnores, rType, rName, ignores, moduleDir); err != nil {
 			return err
 		}
 	}
