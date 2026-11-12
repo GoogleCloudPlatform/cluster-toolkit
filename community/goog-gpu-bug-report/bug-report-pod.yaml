@@ -1,4 +1,4 @@
-# Copyright 2025 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -76,6 +76,9 @@ spec:
     - name: host-issue
       mountPath: /etc/issue
       readOnly: true
+    - name: host-nvidia-imex
+      mountPath: /etc/nvidia-imex
+      readOnly: true
   hostNetwork: true
   hostPID: true
   volumes:
@@ -118,7 +121,7 @@ spec:
   - name: host-lsb-release
     hostPath:
       path: /etc/lsb-release
-      type: File
+      type: FileOrCreate
   - name: host-machine-id
     hostPath:
       path: /etc/machine-id
@@ -127,3 +130,7 @@ spec:
     hostPath:
       path: /etc/issue
       type: File
+  - name: host-nvidia-imex
+    hostPath:
+      path: /etc/nvidia-imex
+      type: DirectoryOrCreate

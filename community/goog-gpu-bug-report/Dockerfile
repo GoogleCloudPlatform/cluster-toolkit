@@ -1,4 +1,4 @@
-# Copyright 2025 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -76,10 +76,8 @@ RUN ln -s /usr/local/bin/pip3.13 /usr/local/bin/pip3 && \
 # CVE-2026-13346; pin the floor so a rebuild cannot silently reintroduce them.
 RUN python3 -m pip install --upgrade 'pip>=26.2' setuptools wheel
 
-# Create and activate a virtual environment.
+# Create a virtual environment.
 RUN python3 -m venv .venv
-
-RUN . .venv/bin/activate
 
 RUN .venv/bin/pip install --upgrade 'pip>=26.2' setuptools wheel
 

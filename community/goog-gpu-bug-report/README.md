@@ -175,11 +175,25 @@ Before running the script, ensure you have:
    * Please refer to
      [Artifact Registry's authentication page](https://cloud.google.com/artifact-registry/docs/docker/authentication)
      for more detail.
-   * Sample commands to configure the docker credential:
+   * **On non-COS Linux distributions** (Ubuntu, Debian, Rocky Linux, CentOS
+     Stream), non-root users are not in the `docker` group by default. Add your
+     user to the `docker` group so Docker runs without `sudo` (or, if you prefer
+     running `docker` commands with `sudo`, configure credentials with `sudo` as
+     well since `sudo` reads `/root/.docker/config.json` instead of
+     `$HOME/.docker/config.json`):
+
+   ```bash
+   sudo usermod -aG docker $USER && newgrp docker
+   ```
+
+   * Sample commands to configure the Docker credential:
 
    ```bash
    ARTIFACT_REGISTRIES="us-central1-docker.pkg.dev"
+   # If using standalone credential helper:
    docker-credential-gcr configure-docker --registries=${ARTIFACT_REGISTRIES?}
+   # If using gcloud CLI credential helper:
+   gcloud auth configure-docker ${ARTIFACT_REGISTRIES?}
    ```
 
 4. [Optional, Recommended for non-COS OS] NVIDIA Container Toolkit (`1.18.0` or
@@ -202,7 +216,8 @@ Before running the script, ensure you have:
 
 5. [Optional] If you would like to export the bug report to GCS, the VM's
    service account must have *at least* Storage Object Creator
-   (`roles/storage.objectCreator`) permissions for the target bucket.
+   (`roles/storage.objectCreator`) and Storage Bucket Viewer
+   (`roles/storage.bucketViewer`) permissions for the target bucket.
 
    * Our script would attempt to create the specified GCS bucket when the
      specified bucket does not exist in the project. If you would like to

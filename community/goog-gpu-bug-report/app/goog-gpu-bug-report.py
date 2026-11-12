@@ -1,4 +1,4 @@
-# Copyright 2025 "Google LLC"
+# Copyright 2026 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ from absl import app
 from absl import flags
 from absl import logging
 import constants
-from google.cloud import exceptions as google_cloud_exceptions
+from google.api_core import exceptions as google_api_exceptions
 from google.cloud import storage
 from packaging import version
 import requests
@@ -74,7 +74,6 @@ class Artifact:
   content_type: str = "application/octet-stream"
 
 
-@dataclasses.dataclass
 class Architecture(enum.Enum):
   X86 = "x86_64"
   ARM = "arm64"
@@ -159,20 +158,14 @@ def RunCommand(
   return process.returncode, stdout, stderr
 
 
-def GetArchitectureFromMachineType(machine_type: str) -> Architecture:
-  """Returns the architecture of the machine type.
-
-  Args:
-    machine_type: The machine type to get the architecture for.
-
-  Returns:
-    The architecture of the machine type. This can be either X86 or ARM.
-  """
-  machine_type = machine_type.lower().split("-")
-  if machine_type[0].lower().endswith("x"):
+def GetHostArchitecture() -> Architecture:
+  """Returns the host CPU architecture from Linux uname(2)."""
+  machine = os.uname().machine
+  if machine == "aarch64":
     return Architecture.ARM
-  else:
+  if machine == "x86_64":
     return Architecture.X86
+  raise ValueError(f"Unsupported host architecture: {machine}")
 
 
 @retry.retry(
@@ -222,7 +215,7 @@ def GetGceInstanceInformationOrDie() -> GceInstanceInfo:
   if "gpu" not in machine_type:
     raise ValueError(f"{machine_type} is not a GPU machine type.")
 
-  architecture = GetArchitectureFromMachineType(machine_type)
+  architecture = GetHostArchitecture()
 
   gce_instance_info = GceInstanceInfo(
       project_id=project_id,
@@ -389,7 +382,7 @@ def UploadArtifactsToGcs(
     try:
       bucket = storage_client.create_bucket(bucket_name)
       logging.info("Created bucket [%s] in the project.", bucket_name)
-    except google_cloud_exceptions.exceptions.GoogleAPIError as e:
+    except google_api_exceptions.GoogleAPIError as e:
       logging.info(
           "Bucket creation failed for %s: %s. Skipping GCS upload.",
           bucket_name,
@@ -666,13 +659,27 @@ def GenerateBugReport(
         )
     )
     # Generate the NVIDIA bug report.
-    RunCommand(
-        command=(
-            f"{constants.DUPLICATED_NVIDIA_BUG_REPORT_SCRIPT_PATH}"
-            f" {constants.NVIDIA_BUG_REPORT_FLAGS}"
-        ),
-        timeout_sec=600,
-    )
+    try:
+      ret_code, _, stderr = RunCommand(
+          command=(
+              f"{constants.DUPLICATED_NVIDIA_BUG_REPORT_SCRIPT_PATH}"
+              f" {constants.NVIDIA_BUG_REPORT_FLAGS}"
+          ),
+          timeout_sec=600,
+          check_retcode=False,
+      )
+      if ret_code != 0:
+        logging.warning(
+            "%s exited with code %d: %s",
+            constants.NVIDIA_BUG_REPORT_SCRIPT,
+            ret_code,
+            stderr,
+        )
+    except subprocess.TimeoutExpired:
+      logging.warning(
+          "%s timed out after 600s; continuing with remaining diagnostics.",
+          constants.NVIDIA_BUG_REPORT_SCRIPT,
+      )
     if os.path.exists(default_nvidia_bug_report_output_path):
       final_nvidia_bug_report_output_path = os.path.join(
           output_directory,
@@ -798,7 +805,7 @@ def DownloadAndUnpackMft(
     )
     DownloadFileFromUrl(mft_download_url, mft_filename_path)
   logging.info("Unpacking MFT: %s", mft_filename_path)
-  unpacked_mft_directory_path = mft_filename_path.replace(".tgz", "")
+  unpacked_mft_directory_path = mft_filename_path.removesuffix(".tgz")
   if not os.path.exists(unpacked_mft_directory_path):
     RunCommand(command=f"tar -xzvf {mft_filename_path} -C /tmp")
   if not os.path.exists(unpacked_mft_directory_path):
