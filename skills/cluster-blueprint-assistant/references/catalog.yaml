@@ -639,7 +639,7 @@ blueprints:
   description: "This blueprint creates a GKE cluster with A5X Bare Metal nodes (a5x-highgpu-4g-metal: 4 × NVIDIA VR200 GPUs per node, NVLink domains of up to 18 nodes / 72 GPUs) using Cluster Toolkit."
   machine_types: [a5x-highgpu-4g-metal]
   accelerators: [nvidia-vr200]
-  workloads: [ml-inference]
+  workloads: [ml-training, ml-inference]
   required_services: [compute.googleapis.com, container.googleapis.com, iam.googleapis.com, storage.googleapis.com]
   vars:
     a5x_node_pool_disk_size_gb: 400

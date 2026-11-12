@@ -623,6 +623,7 @@ var machineTypePrefixAccelerators = []struct {
 	{"a4-highgpu-", "nvidia-b200"},
 	{"a4x-highgpu-", "nvidia-gb200"},
 	{"a4x-maxgpu-", "nvidia-gb300"},
+	{"a5x-highgpu-", "nvidia-vr200"},
 	{"a2-", "nvidia-a100"},
 	{"g2-", "nvidia-l4"},
 	{"g4-", "nvidia-rtx-pro-6000"},

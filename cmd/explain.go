@@ -1651,13 +1651,14 @@ var knownSpecAliasTable = []specAliasDef{
 	{Canonical: "a4-highgpu-8g", Category: "hardware", Aliases: []string{"a4-highgpu-8g", "a4-highgpu", "a4high", "gke-a4", "nvidia-b200"}, Tokens: []string{"a4", "a4h", "a4-high", "a4high", "b200", "nvidia-b200", "a4-highgpu", "a4-highgpu-8g"}},
 	{Canonical: "a4x-highgpu-4g", Category: "hardware", Aliases: []string{"a4x-highgpu-4g", "a4xhigh", "gke-a4x", "nvidia-gb200"}, Tokens: []string{"a4x", "a4xh", "a4x-high", "a4xhigh", "gb200", "nvidia-gb200", "a4x-highgpu", "a4x-highgpu-4g"}},
 	{Canonical: "a4x-maxgpu-4g-metal", Category: "hardware", Aliases: []string{"a4x-maxgpu-4g-metal", "a4xmax-bm", "gke-a4x-max-bm", "nvidia-gb300"}, Tokens: []string{"a4xmax", "a4x-max", "a4x-max-bm", "a4xmax-bm", "gb300", "nvidia-gb300", "a4x-maxgpu", "a4x-maxgpu-4g-metal"}},
+	{Canonical: "a5x-highgpu-4g-metal", Category: "hardware", Aliases: []string{"a5x-highgpu-4g-metal", "a5x-highgpu", "a5x-bm", "gke-a5x-bm", "nvidia-vr200"}, Tokens: []string{"a5x", "a5x-bm", "a5x-high", "a5xhigh", "vr200", "nvidia-vr200", "a5x-highgpu", "a5x-highgpu-4g-metal"}},
 	{Canonical: "tpu7x-standard-4t", Category: "hardware", Aliases: []string{"tpu7x-standard-4t", "tpu-7x", "tpu7x"}, Tokens: []string{"tpu7x", "tpu-7x", "7x", "ironwood", "tpu7x-standard-4t"}},
 	{Canonical: "tpu-v6e", Category: "hardware", Aliases: []string{"tpu-v6e", "v6e", "ct6e"}, Tokens: []string{"tpuv6e", "tpu-v6e", "v6e", "trillium"}},
 	{Canonical: "tpu-v5p", Category: "hardware", Aliases: []string{"tpu-v5p", "v5p", "ct5p"}, Tokens: []string{"tpuv5p", "tpu-v5p", "v5p"}},
 	{Canonical: "tpu-v5e", Category: "hardware", Aliases: []string{"tpu-v5e", "v5e", "ct5lp"}, Tokens: []string{"tpuv5e", "tpu-v5e", "v5e"}},
 	{Canonical: "tpu-v4", Category: "hardware", Aliases: []string{"tpu-v4", "v4", "ct4p"}, Tokens: []string{"tpuv4", "tpu-v4", "v4"}},
 	{Canonical: "tpu", Category: "hardware", Aliases: []string{"tpu", "tpu-7x", "tpu7x", "tpu-v6e", "tpu-v5p", "tpu-v5e", "tpu-v4", "ct6e", "ct5p", "ct5lp", "ct4p"}, Tokens: []string{"tpu", "tpus", "maxtext", "pathways"}},
-	{Canonical: "gpu", Category: "hardware", Aliases: []string{"nvidia", "a3-highgpu", "a3-megagpu", "a3-ultragpu", "a4-highgpu", "a4x-highgpu", "a4x-maxgpu", "a2", "g2", "g4"}, Tokens: []string{"gpu", "gpus", "nvidia", "cuda"}},
+	{Canonical: "gpu", Category: "hardware", Aliases: []string{"nvidia", "a3-highgpu", "a3-megagpu", "a3-ultragpu", "a4-highgpu", "a4x-highgpu", "a4x-maxgpu", "a5x-highgpu", "a2", "g2", "g4"}, Tokens: []string{"gpu", "gpus", "nvidia", "cuda"}},
 	{Canonical: "h4d", Category: "hardware", Aliases: []string{"h4d"}, Tokens: []string{"h4d"}},
 	{Canonical: "h3", Category: "hardware", Aliases: []string{"h3"}, Tokens: []string{"h3"}},
 	{Canonical: "c4a", Category: "hardware", Aliases: []string{"c4a"}, Tokens: []string{"c4a"}},
@@ -1752,7 +1753,7 @@ func blueprintMatchesSpec(bp catalog.BlueprintEntry, spec normalizedSpec) bool {
 }
 
 func matchWorkloadSpec(bp catalog.BlueprintEntry, spec normalizedSpec) bool {
-	return slices.Contains(bp.Workloads, spec.Canonical) || matchKeywordSpec(bp, spec)
+	return slices.Contains(bp.Workloads, spec.Canonical)
 }
 
 func matchSchedulerSpec(bp catalog.BlueprintEntry, spec normalizedSpec) bool {
@@ -1934,19 +1935,42 @@ func specMatchWeight(bp catalog.BlueprintEntry, sp normalizedSpec) int {
 		weight += 5
 	}
 	if sp.Category == "workload" || sp.Category == "hardware" {
-		weight += maxWorkloadOrHardwarePathBonus(strings.ToLower(bp.Path), sp)
+		weight += maxWorkloadOrHardwarePathBonus(bp, sp)
+	}
+	if sp.Category == "workload" && workloadsWithinFamily(bp.Workloads, sp.Canonical) {
+		weight += 3
 	}
 	return weight
 }
 
-func maxWorkloadOrHardwarePathBonus(lowerPath string, sp normalizedSpec) int {
+func workloadsWithinFamily(workloads []string, canonical string) bool {
+	isHPC := canonical == "hpc"
+	for _, w := range workloads {
+		if (w == "hpc") != isHPC {
+			return false
+		}
+	}
+	return len(workloads) > 0
+}
+
+func maxWorkloadOrHardwarePathBonus(bp catalog.BlueprintEntry, sp normalizedSpec) int {
 	tokens := sp.RawTokens
 	if len(tokens) == 0 && sp.Raw != "" {
 		tokens = []string{sp.Raw}
 	}
+	lowerPath := strings.ToLower(bp.Path)
 	best := 0
 	for _, raw := range tokens {
-		if b := workloadOrHardwarePathBonus(lowerPath, strings.ToLower(raw)); b > best {
+		lowerRaw := strings.ToLower(raw)
+		if sp.Category == "hardware" && slices.Contains(sp.Aliases, lowerRaw) {
+			continue
+		}
+		b := workloadOrHardwarePathBonus(lowerPath, lowerRaw)
+		if b == 0 && sp.Category == "workload" && !isGenericWorkloadToken(lowerRaw) &&
+			matchKeywordSpec(bp, normalizedSpec{Canonical: lowerRaw}) {
+			b = 12
+		}
+		if b > best {
 			best = b
 		}
 	}

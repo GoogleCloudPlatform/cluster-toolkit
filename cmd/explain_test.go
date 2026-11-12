@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	. "gopkg.in/check.v1"
@@ -592,6 +593,40 @@ func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(outTpuMaxText, "Blueprint: community/examples/hpc-slurm6-tpu-maxtext.yaml"), Equals, true)
 
+	// 4c. Specific workload tokens in module IDs/sources or non-segment path substrings (vllm, gemma, spack)
+	outGkeVLLM, err := runExplainForTest("gke", "vllm")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeVLLM, "Blueprint: community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml"), Equals, true)
+
+	outGkeGemma, err := runExplainForTest("gke", "gemma")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeGemma, "Blueprint: community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml"), Equals, true)
+
+	outSpack, err := runExplainForTest("slurm", "spack")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSpack, "Blueprint: examples/hcls-blueprint.yaml"), Equals, true)
+
+	// 4d. Pure-ML vs mixed HPC+ML tie-break, hardware alias path-bonus consistency, and A5X/VR200
+	outSlurmTrain, err := runExplainForTest("slurm", "training")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSlurmTrain, "Blueprint: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"), Equals, true)
+
+	outSlurmInfer, err := runExplainForTest("slurm", "inference")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSlurmInfer, "Blueprint: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"), Equals, true)
+
+	outTPU7xAlias, err := runExplainForTest("tpu7x")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outTPU7xAlias, "Blueprint: examples/gke-tpu-7x/gke-tpu-7x.yaml"), Equals, true)
+
+	outN2, err := runExplainForTest("n2")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outN2, "Blueprint: examples/batch.yaml"), Equals, true)
+
+	outA5X, err := runExplainForTest("gke", "vr200")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outA5X, "Blueprint: examples/gke-a5x-bm/gke-a5x-bm.yaml"), Equals, true)
+
 	// 5. Tied exact-match blueprints (OtherExactMatches) surfaced in text and JSON
 	outTied, err := runExplainForTest("a3-ultragpu")
 	c.Assert(err, IsNil)
@@ -608,4 +643,14 @@ func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
 	c.Check(specRes.ExactMatch, Equals, true)
 	c.Check(specRes.OtherExact > 0, Equals, true)
 	c.Check(len(specRes.OtherExactMatches), Equals, specRes.OtherExact)
+
+	// Excluded blueprints must not leak into 'hpc' workload matches
+	outHPCJSON, err := runExplainForTest("hpc")
+	c.Assert(err, IsNil)
+	var hpcRes ExplainSpecMatchResult
+	c.Assert(json.Unmarshal([]byte(outHPCJSON), &hpcRes), IsNil)
+	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/alphaevolve/alpha-evolve-experiment.yaml"), Equals, false)
+	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/kms-key-per-service.yaml"), Equals, false)
+	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/hpc-slurm6-tpu.yaml"), Equals, false)
+	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/hpc-slurm6-tpu-maxtext.yaml"), Equals, false)
 }

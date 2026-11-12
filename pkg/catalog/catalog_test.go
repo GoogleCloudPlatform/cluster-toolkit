@@ -720,6 +720,11 @@ func TestInferAcceleratorsAndWorkloads(t *testing.T) {
 			wantWork:  []string{"ml-training", "ml-inference"},
 		},
 		{
+			path:      "examples/gke-a5x-bm/gke-a5x-bm.yaml",
+			wantAccel: []string{"nvidia-vr200"},
+			wantWork:  []string{"ml-training", "ml-inference"},
+		},
+		{
 			path:      "examples/gke-tpu-v6e/gke-tpu-v6e.yaml",
 			wantAccel: []string{"tpu-v6e"},
 			wantWork:  []string{"ml-training", "ml-inference"},
