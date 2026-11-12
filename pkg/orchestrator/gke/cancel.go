@@ -89,7 +89,8 @@ func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions
 
 func isToolkitGatewayClaimName(claim string) bool {
 	return strings.HasPrefix(claim, gcsFuseGatewayPrefix+"-") ||
-		strings.HasPrefix(claim, filestoreGatewayPrefix+"-")
+		strings.HasPrefix(claim, filestoreGatewayPrefix+"-") ||
+		strings.HasPrefix(claim, nfsGatewayPrefix+"-")
 }
 
 // reclaimStorageGateways deletes unused toolkit gateways in the namespace. Failures only warn.

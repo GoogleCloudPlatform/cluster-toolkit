@@ -58,7 +58,9 @@ const (
 
 	gcsFuseGatewayPrefix   = "gcluster-gcsfuse"
 	filestoreGatewayPrefix = "gcluster-filestore"
-	gcsFuseGatewayCapacity = "5Gi" // Ignored by GCSFuse CSI driver, required by Kubernetes.
+	nfsGatewayPrefix       = "gcluster-nfs"
+	gcsFuseGatewayCapacity = "5Gi"    // Ignored by GCSFuse CSI driver, required by Kubernetes.
+	nfsGatewayCapacity     = "1024Gi" // Nominal capacity required by Kubernetes PV/PVC schema for static NFS bindings.
 
 	gatewayNameDigestLength = 10
 
@@ -68,6 +70,7 @@ const (
 	storageTypeLabel     = "gcluster.google.com/storage-type"
 	storageTypeGCSFuse   = "gcsfuse"
 	storageTypeFilestore = "filestore"
+	storageTypeNFS       = "nfs"
 
 	// Submit stamps these on gateway PVCs so cleanup can tell a gateway was just reused.
 	lastClaimedAtAnnotation = "gcluster.google.com/last-claimed-at"
@@ -76,6 +79,7 @@ const (
 	gatewayReleaseTimeout = 2 * time.Minute
 
 	gcsFuseCSIDriver           = "gcsfuse.csi.storage.gke.io"
+	filestoreCSIDriver         = "filestore.csi.storage.gke.io"
 	servingProfileStorageClass = "gcsfusecsi-serving"
 	pvcGCSFuseJSONPath         = `jsonpath={.spec.volumeName}{"\t"}{.spec.storageClassName}{"\t"}{.metadata.annotations.volume\.kubernetes\.io/storage-provisioner}{"\t"}{.metadata.annotations.volume\.beta\.kubernetes\.io/storage-provisioner}`
 	pvCSIDriverTemplate        = `go-template={{if .spec.csi}}{{.spec.csi.driver}}{{end}}`
@@ -103,7 +107,10 @@ const (
 )
 
 func newMountBuildState() *mountBuildState {
-	return &mountBuildState{gatewayVolumeNames: map[string]string{}}
+	return &mountBuildState{
+		gatewayVolumeNames: map[string]string{},
+		pvcNeedsSidecar:    map[string]bool{},
+	}
 }
 
 func (s *mountBuildState) volumeNameFor(pvName string, idx int) (name string, reused bool) {
@@ -147,17 +154,24 @@ func (sm *StorageManager) dispatchMount(pm parsedMount, idx int, job orchestrato
 	switch {
 	case strings.HasPrefix(pm.Src, "filestore://"):
 		return sm.generateFilestoreResources(pm, idx, job, state)
+	case strings.HasPrefix(pm.Src, "nfs://"):
+		return sm.generateNFSResources(pm, idx, job, state)
 	case strings.HasPrefix(pm.Src, "gs://") && pm.Profile != "":
 		return sm.generateGCSFuseProfileResources(pm, idx, job, state)
 	default:
-		info := buildPodLevelMount(pm, idx)
+		info := buildPodLevelMount(pm, idx, state)
 		if info.Type == "pvc" {
-			ns, err := sm.resolveNamespace(job)
-			if err != nil {
-				logging.Warn("Could not resolve namespace to inspect PVC %q for GCSFuse CSI driver (%v); defaulting to \"default\".", info.Source, err)
-				ns = "default"
+			needsSidecar, checked := state.pvcNeedsSidecar[info.Source]
+			if !checked {
+				ns, err := sm.resolveNamespace(job)
+				if err != nil {
+					logging.Warn("Could not resolve namespace to inspect PVC %q for GCSFuse CSI driver (%v); defaulting to \"default\".", info.Source, err)
+					ns = "default"
+				}
+				needsSidecar = sm.isGCSFuseBackedPVC(info.Source, ns)
+				state.pvcNeedsSidecar[info.Source] = needsSidecar
 			}
-			if sm.isGCSFuseBackedPVC(info.Source, ns) {
+			if needsSidecar {
 				info.NeedsGCSFuseSidecar = true
 			}
 		}
@@ -165,7 +179,36 @@ func (sm *StorageManager) dispatchMount(pm parsedMount, idx int, job orchestrato
 	}
 }
 
-// isGCSFuseBackedPVC reports whether an existing PVC is backed by the GKE GCSFuse CSI driver
+func (sm *StorageManager) getInspectedPVC(ns, pvcName string) (pvcInspectResult, bool) {
+	key := ns + "/" + pvcName
+	if sm.inspectedPVCs != nil {
+		if res, ok := sm.inspectedPVCs[key]; ok {
+			return res, true
+		}
+	}
+	if sm.orchestrator != nil && sm.orchestrator.inspectedPVCs != nil {
+		if res, ok := sm.orchestrator.inspectedPVCs[key]; ok {
+			return res, true
+		}
+	}
+	return pvcInspectResult{}, false
+}
+
+func (sm *StorageManager) setInspectedPVC(ns, pvcName string, res pvcInspectResult) {
+	key := ns + "/" + pvcName
+	if sm.inspectedPVCs == nil {
+		sm.inspectedPVCs = make(map[string]pvcInspectResult)
+	}
+	sm.inspectedPVCs[key] = res
+	if sm.orchestrator != nil {
+		if sm.orchestrator.inspectedPVCs == nil {
+			sm.orchestrator.inspectedPVCs = make(map[string]pvcInspectResult)
+		}
+		sm.orchestrator.inspectedPVCs[key] = res
+	}
+}
+
+// isGCSFuseBackedPVC reports whether an existing PVC is backed by the GCSFuse CSI driver
 // (via its storage-provisioner annotation, a bound PV with spec.csi.driver=gcsfuse.csi.storage.gke.io,
 // or a GCSFuse StorageClass), which requires the pod to carry the gke-gcsfuse/volumes: "true" webhook annotation.
 func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string) bool {
@@ -176,13 +219,18 @@ func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string) bool {
 		return false
 	}
 
-	res := sm.orchestrator.kubectl("get", "pvc", pvcName, "-n", ns, "--ignore-not-found", kubectlReadTimeout,
-		"-o", pvcGCSFuseJSONPath)
-	if res.ExitCode != 0 {
-		logGCSFuseInspectWarning("pvc", pvcName, pvcName, res.Stderr)
-		return false
+	var volumeName, storageClassName, provisioner string
+	if cached, ok := sm.getInspectedPVC(ns, pvcName); ok {
+		volumeName, storageClassName, provisioner = cached.volumeName, cached.storageClassName, cached.provisioner
+	} else {
+		res := sm.orchestrator.kubectl("get", "pvc", pvcName, "-n", ns, "--ignore-not-found", kubectlReadTimeout,
+			"-o", pvcGCSFuseJSONPath)
+		if res.ExitCode != 0 {
+			logGCSFuseInspectWarning("pvc", pvcName, pvcName, res.Stderr)
+			return false
+		}
+		volumeName, storageClassName, provisioner = parsePVCGCSFuseFields(res.Stdout)
 	}
-	volumeName, storageClassName, provisioner := parsePVCGCSFuseFields(res.Stdout)
 	if provisioner != "" {
 		return provisioner == gcsFuseCSIDriver
 	}
@@ -241,7 +289,7 @@ func logGCSFuseInspectWarning(resourceKind, name, pvcName, stderr string) {
 		resourceKind, name, pvcName, errMsg)
 }
 
-func buildPodLevelMount(pm parsedMount, idx int) MountInfo {
+func buildPodLevelMount(pm parsedMount, idx int, state *mountBuildState) MountInfo {
 	volType := "pvc"
 	if strings.HasPrefix(pm.Src, "gs://") {
 		volType = "gcsfuse"
@@ -249,8 +297,13 @@ func buildPodLevelMount(pm parsedMount, idx int) MountInfo {
 		volType = "hostPath"
 	}
 
+	volName := fmt.Sprintf("vol-%d", idx)
+	if volType == "pvc" && state != nil {
+		volName, _ = state.volumeNameFor("pvc:"+pm.Src, idx)
+	}
+
 	info := MountInfo{
-		Name:      fmt.Sprintf("vol-%d", idx),
+		Name:      volName,
 		Source:    pm.Src,
 		MountPath: pm.Dest,
 		Type:      volType,
@@ -393,7 +446,7 @@ func (sm *StorageManager) ValidateRamdiskDir(ramdiskDir string, rawMounts []stri
 }
 
 func missingDestOrFormatErr(vStr string) error {
-	if strings.HasPrefix(vStr, "gs://") || strings.HasPrefix(vStr, "filestore://") {
+	if strings.HasPrefix(vStr, "gs://") || strings.HasPrefix(vStr, "filestore://") || strings.HasPrefix(vStr, "nfs://") {
 		return fmt.Errorf("invalid volume format: %s. Missing destination.", vStr)
 	}
 	return fmt.Errorf("invalid volume format: %s. Expected format: <src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]", vStr)
@@ -608,13 +661,8 @@ func (sm *StorageManager) parseSingleVolume(vStr string) (parsedMount, error) {
 		return parsedMount{}, err
 	}
 
-	if strings.HasPrefix(pm.Src, "gs://") {
-		bucket, subPath, err := splitGCSSource(pm.Src)
-		if err != nil {
-			return parsedMount{}, err
-		}
-		pm.Src = "gs://" + bucket
-		pm.SubPath = subPath
+	if err := resolveMountSourceAndSubPath(&pm); err != nil {
+		return parsedMount{}, err
 	}
 
 	if segments.ProfileSet {
@@ -629,7 +677,94 @@ func (sm *StorageManager) parseSingleVolume(vStr string) (parsedMount, error) {
 		return parsedMount{}, err
 	}
 
+	if strings.HasPrefix(pm.Src, "nfs://") {
+		if _, _, err := parseNFSSource(pm.Src); err != nil {
+			return parsedMount{}, err
+		}
+	}
+
 	return pm, nil
+}
+
+func resolveMountSourceAndSubPath(pm *parsedMount) error {
+	if strings.HasPrefix(pm.Src, "gs://") {
+		bucket, subPath, err := splitGCSSource(pm.Src)
+		if err != nil {
+			return err
+		}
+		pm.Src = "gs://" + bucket
+		pm.SubPath = subPath
+		return nil
+	}
+	if !strings.HasPrefix(pm.Src, "/") && !strings.Contains(pm.Src, "://") && !strings.Contains(pm.Src, ":") {
+		claim, subPath, err := splitPVCSource(pm.Src)
+		if err != nil {
+			return err
+		}
+		pm.Src = claim
+		pm.SubPath = subPath
+	}
+	return nil
+}
+
+func splitPVCSource(src string) (claim string, subPath string, err error) {
+	if !strings.Contains(src, "/") {
+		return src, "", nil
+	}
+	claim, rawSub, _ := strings.Cut(src, "/")
+	if claim == "" || claim == "." || claim == ".." {
+		return "", "", fmt.Errorf("invalid PVC mount %q: PVC claim name is invalid. Expected format: <pvc-name>[/<sub-path>];<dest>", src)
+	}
+	for _, seg := range strings.Split(rawSub, "/") {
+		if seg == ".." {
+			return "", "", fmt.Errorf("invalid PVC mount %q: sub-path %q must not contain '..' path traversal segments", src, rawSub)
+		}
+	}
+	subPath = strings.Trim(rawSub, "/")
+	if subPath == "." {
+		subPath = ""
+	} else if subPath != "" {
+		subPath = path.Clean(subPath)
+	}
+	return claim, subPath, nil
+}
+
+func parseNFSSource(src string) (server string, share string, err error) {
+	trimmed := strings.TrimPrefix(src, "nfs://")
+	trimmed = strings.TrimRight(trimmed, "/")
+	parts := strings.SplitN(trimmed, "/", 2)
+
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("invalid NFS mount %q. Expected format: nfs://<server>/<export_path>;<dest>", src)
+	}
+
+	rawServer := parts[0]
+	if strings.Contains(rawServer, "[") || strings.Contains(rawServer, "]") {
+		if !strings.HasPrefix(rawServer, "[") || !strings.HasSuffix(rawServer, "]") {
+			return "", "", fmt.Errorf("invalid NFS mount %q: malformed bracketed IPv6 server address %q", src, rawServer)
+		}
+		inner := rawServer[1 : len(rawServer)-1]
+		if net.ParseIP(inner) == nil {
+			return "", "", fmt.Errorf("invalid NFS mount %q: invalid IPv6 server address %q", src, rawServer)
+		}
+		server = inner
+	} else {
+		server = extractHost(rawServer)
+	}
+	if server == "" {
+		return "", "", fmt.Errorf("invalid NFS mount %q: server host is missing. Expected format: nfs://<server>/<export_path>;<dest>", src)
+	}
+
+	share = strings.Trim(parts[1], "/")
+	if share == "" {
+		return "", "", fmt.Errorf("invalid NFS mount %q: export path is missing. Expected format: nfs://<server>/<export_path>;<dest>", src)
+	}
+	for _, seg := range strings.Split(share, "/") {
+		if seg == ".." {
+			return "", "", fmt.Errorf("invalid NFS mount %q: export path %q must not contain '..' path traversal segments", src, share)
+		}
+	}
+	return server, share, nil
 }
 
 func extractHost(hostStr string) string {
@@ -647,7 +782,7 @@ func validateSrcScheme(src string, vStr string) error {
 	if !strings.Contains(src, ":") {
 		return nil
 	}
-	if strings.HasPrefix(src, "gs://") || strings.HasPrefix(src, "filestore://") {
+	if strings.HasPrefix(src, "gs://") || strings.HasPrefix(src, "filestore://") || strings.HasPrefix(src, "nfs://") {
 		idx := strings.Index(src, "://")
 		remaining := src[idx+3:]
 		// If the source contains a colon after the scheme (e.g., in IPv6 addresses or port),
@@ -667,7 +802,7 @@ func validateSrcScheme(src string, vStr string) error {
 		return nil
 	}
 	scheme, _, _ := strings.Cut(src, ":")
-	return fmt.Errorf("invalid volume format: %s. unsupported scheme: %s. Only gs:// and filestore:// schemes are supported. To mount an existing PVC (including for other storage types), specify the volume claim name directly without a URI scheme prefix (e.g. '<pvc-name>;<destination>')", vStr, scheme)
+	return fmt.Errorf("invalid volume format: %s. unsupported scheme: %s. Only gs://, filestore://, and nfs:// schemes are supported. To mount an existing PVC (including for other storage types), specify the volume claim name directly without a URI scheme prefix (e.g. '<pvc-name>;<destination>')", vStr, scheme)
 }
 
 // truncatePVCName enforces maxLen without leaving a trailing '-'.
@@ -679,6 +814,9 @@ func truncatePVCName(name string, maxLen int) string {
 }
 
 func (sm *StorageManager) resolveNamespace(job orchestrator.JobDefinition) (string, error) {
+	if ns := strings.TrimSpace(job.GKENamespace); ns != "" {
+		return ns, nil
+	}
 	// Test-only scaffolding: all production callers populate sm.orchestrator.
 	if sm.orchestrator == nil {
 		return "default", nil
@@ -771,6 +909,101 @@ func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, jo
 	}
 
 	return info, pvYAML, nil
+}
+
+func (sm *StorageManager) generateNFSResources(pm parsedMount, idx int, job orchestrator.JobDefinition, state *mountBuildState) (MountInfo, string, error) {
+	server, share, err := parseNFSSource(pm.Src)
+	if err != nil {
+		return MountInfo{}, "", err
+	}
+
+	if err := sm.checkNFSPVCreatePermission(pm.Src, job.DryRunManifest != "", state); err != nil {
+		return MountInfo{}, "", err
+	}
+
+	pvcName := fmt.Sprintf("%s-%s-%s", nfsGatewayPrefix, server, share)
+	pvcName = truncatePVCName(sanitizePVCName(pvcName), maxGeneratedPVCNameLength)
+
+	ns, err := sm.resolveNamespace(job)
+	if err != nil {
+		return MountInfo{}, "", err
+	}
+	pvName := sanitizePVCName(pvcName + "-" + ns)
+
+	info := MountInfo{
+		Source:    pvcName,
+		MountPath: pm.Dest,
+		Type:      "pvc",
+		ReadOnly:  pm.ReadOnly,
+	}
+
+	name, reused := state.volumeNameFor(pvName, idx)
+	info.Name = name
+	if reused {
+		return info, "", nil
+	}
+
+	filestoreTmpl, err := k8s.ParseTextTemplate(sm.orchestrator.gkeCustomTemplatesPath, "filestore.tmpl")
+	if err != nil {
+		return MountInfo{}, "", fmt.Errorf("failed to parse filestore template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	err = filestoreTmpl.Execute(&buf, map[string]string{
+		"PVName":           pvName,
+		"PVCName":          pvcName,
+		"Share":            share,
+		"IP":               server,
+		"Capacity":         nfsGatewayCapacity,
+		"ManagedByLabel":   managedByLabel,
+		"ManagedByValue":   managedByValue,
+		"StorageTypeLabel": storageTypeLabel,
+		"StorageType":      storageTypeNFS,
+
+		"LastClaimedAtAnnotation": lastClaimedAtAnnotation,
+		"LastClaimedAt":           sm.claimedAt(),
+		"LastClaimedByAnnotation": lastClaimedByAnnotation,
+		"LastClaimedBy":           job.WorkloadName,
+	})
+	if err != nil {
+		return MountInfo{}, "", fmt.Errorf("failed to execute filestore template: %w", err)
+	}
+	pvYAML := buf.String()
+	if msg := unmanagedGatewayWarning(pvName, pvYAML); msg != "" {
+		logging.Warn("%s", msg)
+	}
+
+	if err := sm.checkExistingGatewayPV(pvName, pvcName, ns, pvYAML, job.DryRunManifest != ""); err != nil {
+		return MountInfo{}, "", err
+	}
+
+	return info, pvYAML, nil
+}
+
+func (sm *StorageManager) checkNFSPVCreatePermission(src string, dryRun bool, state *mountBuildState) error {
+	if dryRun || sm.orchestrator == nil || sm.orchestrator.executor == nil || (state != nil && state.nfsAuthChecked) {
+		return nil
+	}
+	res := sm.orchestrator.kubectl("auth", "can-i", "create", "persistentvolumes")
+	if res.ExitCode == 0 && strings.EqualFold(strings.TrimSpace(res.Stdout), "yes") {
+		if state != nil {
+			state.nfsAuthChecked = true
+		}
+		return nil
+	}
+	detail := strings.TrimSpace(res.Stderr)
+	if detail == "" {
+		detail = strings.TrimSpace(res.Stdout)
+	}
+	if detail != "" {
+		detail = fmt.Sprintf(" (%s)", detail)
+	}
+	return fmt.Errorf(
+		"mount %q requires cluster-scoped permission to create PersistentVolumes (`kubectl auth can-i create persistentvolumes` returned no%s). "+
+			"gcluster does not fall back to inline PodSpec NFS volumes on restricted clusters. "+
+			"Ask a cluster administrator to provision a PersistentVolumeClaim for this NFS export (or use an existing StorageClass) "+
+			"and mount it with --mount <pvc-name>;<dest> (or --mount <pvc-name>/<sub-path>;<dest>)",
+		src, detail)
 }
 
 var gcsBucketNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
@@ -1139,6 +1372,14 @@ func (sm *StorageManager) resolveFilestoreIP(projectID, location, nameOrIP strin
 		return sm.getFilestoreIP(ctx, projectID, location, nameOrIP, isIP)
 	}
 
+	if !isIP && sm.instancesCache == nil && sm.filestoreClient == nil && strings.TrimSpace(projectID) == "" {
+		return "", "", 0, fmt.Errorf(
+			"filestore://%s requires a GCP project (--project) to resolve the Filestore instance IP. "+
+				"On generic Kubernetes or off-cloud clusters, mount the NFS export directly with --mount nfs://<server>/<export>;<dest> "+
+				"or mount an existing PVC with --mount <pvc-name>;<dest>",
+			nameOrIP)
+	}
+
 	var instances []*filestorepb.Instance
 	if sm.instancesCache != nil {
 		instances = sm.instancesCache
@@ -1344,6 +1585,201 @@ var (
 	gcpRegionPattern = regexp.MustCompile(`^[a-z]+-[a-z]+[0-9]+$`)
 )
 
+type userPVCRequest struct {
+	claim     string
+	firstDest string
+	needsRW   bool
+}
+
+// ValidateClusterMounts runs pre-submit cluster checks for --mount entries:
+//   - Guards cloud-only mount schemes (gs://, filestore://) when running off-cloud or when the cluster lacks the GCSFuse CSI driver.
+//   - Verifies each user-referenced PVC exists in the target namespace (one Get per unique claim) and caches its metadata for ProcessMounts.
+//   - Rejects ReadWriteOnce / ReadWriteOncePod PVCs when the job spans multiple nodes (NumSlices * NodesPerSlice > 1).
+func (sm *StorageManager) ValidateClusterMounts(job orchestrator.JobDefinition) error {
+	if len(job.RawMounts) == 0 || job.DryRunManifest != "" {
+		return nil
+	}
+
+	pvcOrder, pvcReqs, firstGCSMount, firstFilestoreMount, err := sm.collectClusterMountTargets(job.RawMounts)
+	if err != nil {
+		return err
+	}
+
+	if err := sm.validateCloudMountSchemes(job.ProjectID, firstGCSMount, firstFilestoreMount); err != nil {
+		return err
+	}
+
+	if len(pvcOrder) == 0 || sm.orchestrator == nil || sm.orchestrator.executor == nil {
+		return nil
+	}
+
+	ns, err := sm.resolveNamespace(job)
+	if err != nil {
+		return err
+	}
+
+	numSlices := max(1, job.NumSlices)
+	nodesPerSlice := max(1, job.NodesPerSlice)
+	totalNodes := numSlices * nodesPerSlice
+
+	for _, claim := range pvcOrder {
+		req := pvcReqs[claim]
+		if err := sm.validateSingleUserPVC(claim, req.firstDest, req.needsRW, ns, totalNodes, numSlices, nodesPerSlice); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (sm *StorageManager) collectClusterMountTargets(rawMounts []string) (pvcOrder []string, pvcReqs map[string]*userPVCRequest, firstGCS, firstFilestore string, err error) {
+	pvcReqs = make(map[string]*userPVCRequest)
+	for _, raw := range rawMounts {
+		pm, parseErr := sm.parseSingleVolume(raw)
+		if parseErr != nil {
+			return nil, nil, "", "", parseErr
+		}
+		switch {
+		case strings.HasPrefix(pm.Src, "gs://"):
+			if firstGCS == "" {
+				firstGCS = pm.Src
+			}
+		case strings.HasPrefix(pm.Src, "filestore://"):
+			if firstFilestore == "" {
+				firstFilestore = pm.Src
+			}
+		case isUserPVCMountSource(pm.Src):
+			req, exists := pvcReqs[pm.Src]
+			if !exists {
+				req = &userPVCRequest{claim: pm.Src, firstDest: pm.Dest}
+				pvcReqs[pm.Src] = req
+				pvcOrder = append(pvcOrder, pm.Src)
+			}
+			if !pm.ReadOnly {
+				req.needsRW = true
+			}
+		}
+	}
+	return pvcOrder, pvcReqs, firstGCS, firstFilestore, nil
+}
+
+func isUserPVCMountSource(src string) bool {
+	return !strings.HasPrefix(src, "/") && !strings.Contains(src, ":") && !isToolkitGatewayClaimName(src)
+}
+
+func (sm *StorageManager) validateCloudMountSchemes(projectID, firstGCSMount, firstFilestoreMount string) error {
+	hasProject := strings.TrimSpace(projectID) != ""
+	if firstGCSMount != "" {
+		if !hasProject {
+			return fmt.Errorf(
+				"mount %q uses a Cloud Storage (gs://) URI, which requires a GCP project (--project) and the Cloud Storage FUSE CSI driver (%s). "+
+					"On generic Kubernetes or off-cloud clusters, use --mount <pvc-name>;<dest>, --mount nfs://<server>/<export>;<dest>, or --mount /host/path;<dest>",
+				firstGCSMount, gcsFuseCSIDriver)
+		}
+		if err := sm.validateCSIDriverInstalled(firstGCSMount, gcsFuseCSIDriver); err != nil {
+			return err
+		}
+	}
+	if firstFilestoreMount != "" && !hasProject {
+		return fmt.Errorf(
+			"mount %q uses a Cloud Filestore (filestore://) URI, which requires a GCP project (--project). "+
+				"On generic Kubernetes or off-cloud clusters, mount the NFS export directly with --mount nfs://<server>/<export>;<dest> "+
+				"or mount an existing PVC with --mount <pvc-name>;<dest>",
+			firstFilestoreMount)
+	}
+	return nil
+}
+
+func (sm *StorageManager) validateCSIDriverInstalled(mountSrc, driverName string) error {
+	if sm.orchestrator == nil || sm.orchestrator.executor == nil {
+		return nil
+	}
+	res := sm.orchestrator.kubectl("get", "csidriver", driverName, "--ignore-not-found", kubectlReadTimeout, "-o", "name")
+	if res.ExitCode != 0 {
+		logging.Warn("Could not verify CSI driver %q for mount %q (%s); proceeding with job submission.",
+			driverName, mountSrc, strings.TrimSpace(res.Stderr))
+		return nil
+	}
+	if strings.TrimSpace(res.Stdout) == "" {
+		return fmt.Errorf(
+			"mount %q requires CSI driver %q, which is not installed on this cluster. "+
+				"On clusters without Cloud Storage FUSE, mount storage using --mount <pvc-name>;<dest>, "+
+				"--mount nfs://<server>/<export>;<dest>, or --mount /host/path;<dest>",
+			mountSrc, driverName)
+	}
+	return nil
+}
+
+func (sm *StorageManager) validateSingleUserPVC(claim, firstDest string, needsRW bool, ns string, totalNodes, numSlices, nodesPerSlice int) error {
+	res := sm.orchestrator.kubectl("get", "pvc", claim, "-n", ns, "--ignore-not-found", kubectlReadTimeout, "-o", "json")
+	if res.ExitCode != 0 {
+		errMsg := strings.TrimSpace(res.Stderr)
+		if strings.Contains(errMsg, "Forbidden") {
+			logging.Warn("Permission denied inspecting PersistentVolumeClaim %q in namespace %q (%s); skipping pre-submit PVC existence and accessMode check.",
+				claim, ns, errMsg)
+			return nil
+		}
+		return fmt.Errorf("failed to inspect PersistentVolumeClaim %q in namespace %q: %s", claim, ns, errMsg)
+	}
+	if strings.TrimSpace(res.Stdout) == "" {
+		return fmt.Errorf(
+			"PersistentVolumeClaim %q (mounted at %q) was not found in namespace %q. "+
+				"Verify the claim name with 'kubectl get pvc -n %s' or specify the target namespace with --gke-namespace",
+			claim, firstDest, ns, ns)
+	}
+
+	var pvcObj struct {
+		Metadata struct {
+			Annotations map[string]string `json:"annotations"`
+		} `json:"metadata"`
+		Spec struct {
+			VolumeName       string   `json:"volumeName"`
+			StorageClassName string   `json:"storageClassName"`
+			AccessModes      []string `json:"accessModes"`
+		} `json:"spec"`
+		Status struct {
+			AccessModes []string `json:"accessModes"`
+		} `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(res.Stdout), &pvcObj); err != nil {
+		return fmt.Errorf("failed to parse PersistentVolumeClaim %q in namespace %q: %w", claim, ns, err)
+	}
+
+	provisioner := pvcObj.Metadata.Annotations["volume.kubernetes.io/storage-provisioner"]
+	if provisioner == "" {
+		provisioner = pvcObj.Metadata.Annotations["volume.beta.kubernetes.io/storage-provisioner"]
+	}
+	sm.setInspectedPVC(ns, claim, pvcInspectResult{
+		volumeName:       strings.TrimSpace(pvcObj.Spec.VolumeName),
+		storageClassName: strings.TrimSpace(pvcObj.Spec.StorageClassName),
+		provisioner:      strings.TrimSpace(provisioner),
+	})
+
+	modes := pvcObj.Status.AccessModes
+	if len(modes) == 0 {
+		modes = pvcObj.Spec.AccessModes
+	}
+	if totalNodes > 1 && len(modes) > 0 {
+		hasRWX := slices.Contains(modes, "ReadWriteMany")
+		hasROX := slices.Contains(modes, "ReadOnlyMany")
+		if !hasRWX && !hasROX {
+			return fmt.Errorf(
+				"PersistentVolumeClaim %q (mounted at %q) has accessModes %v, which only allows mounting on a single node, "+
+					"but this job requests %d nodes (numSlices=%d, nodesPerSlice=%d). "+
+					"Single-node volumes (ReadWriteOnce / ReadWriteOncePod) cannot be attached to multiple hosts simultaneously and will fail with Multi-Attach errors. "+
+					"Use a ReadWriteMany PVC, mount an NFS share with --mount nfs://<server>/<export>;%s, or use a node-local path with --mount /host/path;%s",
+				claim, firstDest, modes, totalNodes, numSlices, nodesPerSlice, firstDest, firstDest)
+		}
+		if needsRW && !hasRWX {
+			return fmt.Errorf(
+				"PersistentVolumeClaim %q (mounted read-write at %q) has accessModes %v and does not support ReadWriteMany across %d nodes (numSlices=%d, nodesPerSlice=%d). "+
+					"Mount the PVC read-only (--mount %s;%s;ro) or use a ReadWriteMany PVC or --mount nfs://<server>/<export>;%s;rw",
+				claim, firstDest, modes, totalNodes, numSlices, nodesPerSlice, claim, firstDest, firstDest)
+		}
+	}
+	return nil
+}
+
 // RunStorageProfilePreflight checks that profile= mounts can be satisfied by the cluster and bucket.
 func (sm *StorageManager) RunStorageProfilePreflight(rawMounts []string, projectID, clusterLocation string, dryRun bool) error {
 	mounts, err := sm.collectProfileMounts(rawMounts)
@@ -1351,8 +1787,12 @@ func (sm *StorageManager) RunStorageProfilePreflight(rawMounts []string, project
 		return err
 	}
 
-	if err := sm.validateStorageClassesExist(mounts, dryRun); err != nil {
+	allFound, err := sm.validateStorageClassesExist(mounts, dryRun)
+	if err != nil {
 		return err
+	}
+	if !allFound || strings.TrimSpace(projectID) == "" {
+		return nil
 	}
 
 	return sm.checkProfileMisconfiguration(projectID, clusterLocation, mounts, dryRun)
@@ -1420,44 +1860,50 @@ func splitAnywhereCacheZones(raw string) []string {
 	return zones
 }
 
-func (sm *StorageManager) validateStorageClassesExist(mounts []profileMount, dryRun bool) error {
+func (sm *StorageManager) validateStorageClassesExist(mounts []profileMount, dryRun bool) (bool, error) {
 	if sm.orchestrator == nil || sm.orchestrator.executor == nil {
-		return nil
+		return true, nil
 	}
 
+	allFound := true
 	checked := map[string]bool{}
 	for _, m := range mounts {
 		if checked[m.Profile] {
 			continue
 		}
 		checked[m.Profile] = true
-		if err := sm.validateStorageClassExists(m.Profile, dryRun); err != nil {
-			return err
+		found, err := sm.validateStorageClassExists(m.Profile, dryRun)
+		if err != nil {
+			return false, err
+		}
+		if !found {
+			allFound = false
 		}
 	}
-	return nil
+	return allFound, nil
 }
 
-func (sm *StorageManager) validateStorageClassExists(storageClass string, dryRun bool) error {
+func (sm *StorageManager) validateStorageClassExists(storageClass string, dryRun bool) (bool, error) {
 	res := sm.orchestrator.kubectl("get", "storageclass", storageClass, "--ignore-not-found", "-o", "name")
 	if res.ExitCode != 0 {
 		logging.Warn("Could not verify that StorageClass %q exists on the cluster: %s. Proceeding with job submission.",
 			storageClass, strings.TrimSpace(res.Stderr))
-		return nil
+		return true, nil
 	}
 	if strings.TrimSpace(res.Stdout) != "" {
-		return nil
+		return true, nil
 	}
 
 	err := fmt.Errorf("StorageClass %q was not found on cluster, so the generated PersistentVolumeClaim would stay Pending forever. "+
 		"GCSFuse storage profiles require a GKE cluster running %s or later with the Cloud Storage FUSE CSI driver enabled. "+
-		"Run 'kubectl get storageclass -l %s' to list the profiles available on this cluster, or drop profile= to use an inline GCSFuse mount. See %s",
+		"Run 'kubectl get storageclass -l %s' to list the profiles available on this cluster, drop profile= to use an inline GCSFuse mount, "+
+		"or on non-GKE Kubernetes clusters use --mount <pvc-name>;<dest>, --mount nfs://<server>/<export>;<dest>, or --mount /host/path;<dest>. See %s",
 		storageClass, minGCSFuseProfileGKEVersion, gcsFuseProfileSelector, gcsFuseProfileDocsURL)
 	if dryRun {
 		logging.Warn("%v. Writing the manifest anyway because this is a dry run.", err)
-		return nil
+		return false, nil
 	}
-	return err
+	return false, err
 }
 
 func (sm *StorageManager) checkProfileMisconfiguration(projectID, clusterLocation string, mounts []profileMount, dryRun bool) error {

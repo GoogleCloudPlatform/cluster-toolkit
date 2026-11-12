@@ -457,6 +457,10 @@ func TestToolkitGatewayClaimPrefixMatchesGenerator(t *testing.T) {
 	if !isToolkitGatewayClaimName(name) {
 		t.Errorf("generated claim %q does not match isToolkitGatewayClaimName()", name)
 	}
+	nfsClaim := sanitizePVCName(nfsGatewayPrefix + "-10-0-0-1-export")
+	if !isToolkitGatewayClaimName(nfsClaim) {
+		t.Errorf("generated NFS gateway claim %q does not match isToolkitGatewayClaimName()", nfsClaim)
+	}
 }
 
 func TestIsFinished(t *testing.T) {
