@@ -1116,6 +1116,20 @@ func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string, machineTy
 	return strings.TrimSpace(output), nil
 }
 
+func (g *GKEOrchestrator) resolveBuildTargetNamespace(explicitNS, clusterName, location, projectID string, dryRun bool) (string, error) {
+	if ns := strings.TrimSpace(explicitNS); ns != "" {
+		return ns, nil
+	}
+	ns, err := g.getCurrentNamespace(clusterName, location, projectID)
+	if err != nil {
+		if dryRun {
+			return "default", nil
+		}
+		return "", fmt.Errorf("failed to resolve target namespace for image build: %w", err)
+	}
+	return ns, nil
+}
+
 func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (string, error) {
 	if job.Pathways.Headless || job.Pathways.DeploySPS {
 		return "", nil
@@ -1123,7 +1137,11 @@ func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (s
 	if job.DryRunManifest != "" {
 		if job.BaseImage != "" {
 			logging.Info("[Dry Run] Skipping Crane build, generating predicted URI...")
-			return imagebuilder.GenerateImageName(job.ProjectID, job.ClusterLocation)
+			targetNS, err := g.resolveBuildTargetNamespace(job.GKENamespace, job.ClusterName, job.ClusterLocation, job.ProjectID, true)
+			if err != nil {
+				return "", err
+			}
+			return imagebuilder.GenerateImageName(job.ProjectID, job.ClusterLocation, targetNS, job.WorkloadName, job.BaseImage, "")
 		}
 		if job.ImageName != "" {
 			logging.Info("[Dry Run] Using pre-existing container image: %s", job.ImageName)
@@ -1133,6 +1151,11 @@ func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (s
 
 	if job.BaseImage != "" {
 		logging.Info("Building container image using Crane (Go implementation) on top of %s...", job.BaseImage)
+
+		targetNS, err := g.resolveBuildTargetNamespace(job.GKENamespace, job.ClusterName, job.ClusterLocation, job.ProjectID, false)
+		if err != nil {
+			return "", err
+		}
 
 		ignorePatterns := []string{
 			".git", ".terraform", ".ghpc", ".ansible", "vendor", "bin", "pkg", "node_modules", "*.log", "tmp/", ".DS_Store", "__pycache__",
@@ -1146,6 +1169,8 @@ func (g *GKEOrchestrator) BuildContainerImage(job orchestrator.JobDefinition) (s
 		fullImageName, err := imagebuilder.BuildContainerImageFromBaseImage(
 			job.ProjectID,
 			job.ClusterLocation,
+			targetNS,
+			job.WorkloadName,
 			job.BaseImage,
 			job.BuildContext,
 			job.Platform,

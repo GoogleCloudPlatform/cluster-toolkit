@@ -721,6 +721,7 @@ func ranArtifactRegistryCheck(executed []string) bool {
 
 func TestEnsureBuildPrerequisites_MissingDockerCreds(t *testing.T) {
 	stubPrereqCommands(t)
+	t.Setenv("GCLUSTER_IMAGE_REPO", "test-repo")
 
 	cmd := &cobra.Command{}
 	var buf bytes.Buffer
@@ -755,6 +756,7 @@ func TestEnsureBuildPrerequisites_FreshState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			executed := stubPrereqCommands(t)
+			t.Setenv("GCLUSTER_IMAGE_REPO", "test-repo")
 			if tt.dockerRegistry != "" {
 				writeDockerConfig(t, tt.dockerRegistry)
 			}

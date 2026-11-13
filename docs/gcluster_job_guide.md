@@ -8,10 +8,11 @@ Before you begin, ensure you have installed `gcluster` and set up your environme
 
 ### Conditional Prerequisites (For On-the-Fly Builds)
 
-If you use `--build-context` to build images on-the-fly, you must set:
+If you use `--build-context` to build images on-the-fly:
 
-* `GCLUSTER_IMAGE_REPO`: The name of your Artifact Registry repository only (e.g., `gcluster-repo`). The tool will automatically construct the full path using the cluster's region and project ID.
-* `USER` or `USERNAME`: Used for unique image tagging (usually set automatically by your OS).
+* `GCLUSTER_IMAGE_REPO`: For Artifact Registry, set the repository name (e.g., `gcluster-repo`) and `gcluster` constructs `<region>-docker.pkg.dev/<project>/<GCLUSTER_IMAGE_REPO>/<user>-runner:<tag>`. For Harbor or other OCI registries, set `<registry-host>[/<repository>]` (e.g., `harbor.example.com/ml-team`), or omit `GCLUSTER_IMAGE_REPO` when `--base-image` already comes from a private/local OCI registry to auto-derive `<host>/gcluster/<namespace>/<workload>:<hash>`.
+* `USER` or `USERNAME`: Used for unique `<user>-runner` image tagging on Artifact Registry builds (usually set automatically by your OS; not required for non-Artifact Registry OCI builds).
+* `GCLUSTER_INSECURE_REGISTRY`: Optional (`true` / `1`) to allow plain-HTTP or self-signed TLS connections when pushing or pulling `--build-context` images against local OCI registries (loopback and RFC 1918 / IPv6 ULA private IP registries automatically support plain-HTTP fallback).
 
 ### Optional Environment Variables
 
@@ -57,7 +58,7 @@ To use this feature, the cluster administrator must also deploy the `CheckpointC
 
 ## 2. Prepare Sample Application Code
 
-Create a directory named `job_details` and place your application files inside it. This will serve as your build context for the job. The tool packages the files in this directory (excluding `.dockerignore` patterns and default build/VCS artifacts) and adds them to the root (`/`) of the container image.
+Create a directory named `job_details` and place your application files inside it. This will serve as your build context for the job. The tool packages the files in this directory (excluding `.dockerignore` patterns and default build/VCS artifacts) into the active working directory (`WORKDIR`) of the base container image (defaulting to `/workspace` when the base image sets no `WORKDIR` or `/`).
 
 ### `cluster-toolkit/job_details/app.py`
 
@@ -68,7 +69,7 @@ print("This is a sample application running on GKE.")
 ```
 
 > [!NOTE]
-> This on-the-fly image build does not execute a Dockerfile. It packages the files from your build context directory directly into the root directory (`/`) of the container image, honoring `.dockerignore` and skipping 12 hardcoded VCS/build patterns (`.git`, `.terraform`, `.ghpc`, `.ansible`, `vendor`, `bin`, `pkg`, `node_modules`, `*.log`, `tmp/`, `.DS_Store`, and `__pycache__`). Because the container's runtime `WORKDIR` is inherited from `--base-image` (which is `/` for standard base images like `python:3.9-slim`, so `python app.py` resolves `/app.py`), if your `--base-image` sets a non-root `WORKDIR`, reference your packaged files from `/` (for example, `python /app.py`). If you need to install dependencies, make sure they are already present in your `--base-image`.
+> This on-the-fly image build does not execute a Dockerfile. It packages the files from your build context directory directly into the `WORKDIR` of `--base-image` (or sets `WORKDIR /workspace` and extracts there when the base image `WORKDIR` is unset or `/`), preserving file permissions, honoring `.dockerignore`, and skipping 12 hardcoded VCS/build patterns (`.git`, `.terraform`, `.ghpc`, `.ansible`, `vendor`, `bin`, `pkg`, `node_modules`, `*.log`, `tmp/`, `.DS_Store`, and `__pycache__`). Relative commands such as `--command "python app.py"` therefore resolve directly against your packaged files regardless of the base image's `WORKDIR`. If you need to install dependencies, make sure they are already present in your `--base-image`.
 
 ## 3. Deploy a GKE Cluster
 
@@ -111,9 +112,9 @@ Deploy the GKE cluster:
 Now that the cluster is deployed and your application code is prepared, you can submit your sample Python script as a JobSet job. `gcluster job submit` will automatically build your container image and push it to Artifact Registry in your project.
 
 > [!IMPORTANT]
-> The image will be pushed to a regional Artifact Registry endpoint: `<region>-docker.pkg.dev/<project>/<GCLUSTER_IMAGE_REPO>/<user>-runner:<tag>`.
+> On Artifact Registry, the image will be pushed to a regional endpoint: `<region>-docker.pkg.dev/<project>/<GCLUSTER_IMAGE_REPO>/<user>-runner:<tag>`. On non-Artifact Registry OCI registries, images are pushed to `<registry-host>/<repo-or-gcluster>/<namespace>/<workload>:<content-hash>`.
 
-* You **must** set the `GCLUSTER_IMAGE_REPO` environment variable to specify the name of the Artifact Registry repository when using `--build-context` for on-the-fly builds (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo`). The tool will automatically construct the full path using the cluster's region and project ID. The command will fail fast if this variable is not set. The repository **must exist** before submitting the job. If it does not exist, you can create it with:
+* When pushing to Artifact Registry (or using a public `--base-image` such as `python:3.9-slim`), you **must** set the `GCLUSTER_IMAGE_REPO` environment variable to specify the repository (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo` for Artifact Registry, or `export GCLUSTER_IMAGE_REPO=harbor.example.com/ml-team` for an OCI registry). When `--base-image` already references a private/local OCI registry, `GCLUSTER_IMAGE_REPO` is optional and defaults to `<host>/gcluster`. For Artifact Registry, the repository **must exist** before submitting the job. If it does not exist, you can create it with:
 
     ```bash
     gcloud artifacts repositories create <REPOSITORY_NAME> \
@@ -121,7 +122,7 @@ Now that the cluster is deployed and your application code is prepared, you can 
         --location=<REGION>
     ```
 
-* You **must** have either `USER` or `USERNAME` environment variable set when using `--build-context` (usually set automatically by your OS). `gcluster` uses this to ensure unique image tagging (e.g., `my-user-runner:tag`). The command will fail if both are missing.
+* For Artifact Registry builds, you **must** have either `USER` or `USERNAME` environment variable set when using `--build-context` (usually set automatically by your OS). `gcluster` uses this to ensure unique image tagging (e.g., `my-user-runner:tag`).
 
 ### 4.1 Unified Job Submission
 
@@ -157,7 +158,7 @@ A TPU shorthand names a slice size, not a host shape. GKE can run the same slice
   --location <REGION/ZONE> \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --command "python /app.py" \
+  --command "python app.py" \
   --name my-python-app-job \
   --compute-type n2-standard-32
 ```
@@ -220,7 +221,7 @@ Mounting a GCS bucket (read-write):
 ```bash
 ./gcluster job submit \
   --name my-storage-job \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -235,7 +236,7 @@ Mounting GCS buckets with storage profiles:
 ```bash
 ./gcluster job submit \
   --name my-training-job \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -251,7 +252,7 @@ Mounting an existing PVC named `lustre-pvc` (read-only):
 ```bash
 ./gcluster job submit \
   --name my-lustre-job \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -271,7 +272,7 @@ You can pass additional custom environment variables—or override `WORKERS_0_HO
 ```bash
 ./gcluster job submit \
   --name my-env-job \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -379,7 +380,7 @@ Use `--node-constraint` to target a specific node pool. This maps to node labels
 ```bash
 ./gcluster job submit \
   --name my-nodepool-job \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type c2-standard-60 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -471,7 +472,7 @@ Use `--queue` to submit the job to a specific Kueue LocalQueue.
 ```bash
 ./gcluster job submit \
   --name my-kueue-job \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -544,7 +545,7 @@ Request a specific TPU slice topology using `--topology`.
   --name my-topology-job \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type v6e-16 \
   --topology 4x4
 ```
@@ -558,7 +559,7 @@ Use a specific GKE scheduler (e.g., `gke.io/topology-aware-auto`) using `--gke-s
   --cluster <CLUSTER_NAME> \
   --location <REGION/ZONE> \
   --name my-scheduler-job \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -1316,7 +1317,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-n, --name` | `string` | Name of the job (JobSet) to create. Used for Kubernetes resources. Maximum of 28 characters for standard workloads, or 22 characters when `--pathways` is enabled. *(Required)* |
-| `-e, --command` | `string` | Command to execute inside the container (e.g., `'python /app.py'`). *(Required except when `--pathways-headless` or `--pathways-deploy-sps` is set)* |
+| `-e, --command` | `string` | Command to execute inside the container (e.g., `'python app.py'`). *(Required except when `--pathways-headless` or `--pathways-deploy-sps` is set)* |
 | `--compute-type` | `string` | The hardware target for the job. GPU/TPU shorthands (e.g., `h100-80gb-8`, `l4-1`, `v6e-8`) and machine types from `gcluster`'s built-in shorthand map (e.g., `a3-highgpu-8g`) resolve without a matching node pool, so they also work on NAP clusters. Any other GCE machine type (e.g., `n2-standard-32`) or a GKE accelerator label (e.g., `nvidia-l4`) is resolved against the cluster's existing node pools. *(Required except when `--pathways-run-sps-workload` is set)* The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed. |
 | `-i, --image` | `string` | Full registry path of a pre-built container image to run. Either `--image`, **or** both `--base-image` and `--build-context`, is required and the two forms are mutually exclusive (except when `--pathways-headless` or `--pathways-deploy-sps` is set, where no image is needed, or when `--pathways-run-sps-workload` is used in terminal mode). |
 | `-B, --base-image` | `string` | Name of the base container image to build upon (e.g., `python:3.9-slim`). Requires `--build-context`; mutually exclusive with `--image`. |
