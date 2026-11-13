@@ -54,6 +54,19 @@ jobs:
         count: 0
         labels: "do-not-merge"
         add_comment: false
+    - id: no-chore-combo
+      # release-chore is in the `exclude` list of .github/release.yml, so a PR that
+      # carries release-chore together with any other release-* label is hidden
+      # from the release notes entirely, even if it is release-breaking.
+      env:
+        PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+      run: |
+        RELEASE_LABELS=$(echo "$PR_LABELS" | tr ',' '\n' | grep -E '^release-' || true)
+        if echo "$RELEASE_LABELS" | grep -qx 'release-chore' && [ "$(echo "$RELEASE_LABELS" | grep -c .)" -gt 1 ]; then
+          echo "::error::release-chore cannot be combined with other release-* labels ($(echo "$RELEASE_LABELS" | tr '\n' ' ')). release-chore hides the PR from the release notes; keep either release-chore alone or remove it."
+          exit 1
+        fi
+        echo "Label combination OK."
     - id: print-labels
       run: |
         echo "Current PR labels:"

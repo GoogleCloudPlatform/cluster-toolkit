@@ -19,6 +19,8 @@ on:
     - opened
     - edited
     - synchronize
+    - labeled
+    - unlabeled
 
 permissions:
   contents: read
@@ -34,6 +36,7 @@ jobs:
     - name: Check PR description
       env:
         PR_BODY: ${{ github.event.pull_request.body }}
+        PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
       run: |
         TEMPLATE_PATH=".github/pull_request_template.md"
 
@@ -71,6 +74,22 @@ jobs:
         if [[ "$ADDED_TEXT_LEN" -lt 10 ]]; then
           echo "Error: PR description must contain at least 10 added characters."
           exit 1
+        fi
+
+        # 4. Breaking PRs must document upgrade steps and redeploy impact.
+        #    Only enforced when the release-breaking-changes label is present.
+        if echo "$PR_LABELS" | tr ',' '\n' | grep -qx 'release-breaking-changes'; then
+          for SECTION in "Upgrade steps" "Redeploy impact"; do
+            # Text under "#### <SECTION>" up to the next heading, minus HTML comments and whitespace.
+            SECTION_TEXT=$(echo "$PR_BODY" | tr -d '\r' \
+              | awk -v s="#### $SECTION" '$0==s{f=1;next} /^#{1,4} /{f=0} f' \
+              | sed -e 's/<!--.*-->//g' | tr -d '[:space:]')
+            if [ -z "$SECTION_TEXT" ]; then
+              echo "Error: PR is labeled release-breaking-changes but the '#### $SECTION' section is empty."
+              echo "Fill in both '#### Upgrade steps' and '#### Redeploy impact' in the PR description (see skills/release-breaking-check/SKILL.md)."
+              exit 1
+            fi
+          done
         fi
 
         echo "PR description check passed."
