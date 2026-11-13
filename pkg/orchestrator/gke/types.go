@@ -208,6 +208,8 @@ type GKEOrchestrator struct {
 	kubeconfigLoader kubeconfigLoader
 	// kubeContext is the context set by configureKubectl; all kubectl and dynamic-client calls use it.
 	kubeContext string
+	// inspectedPVCs caches per-submit PVC metadata inspected during ValidateClusterMounts.
+	inspectedPVCs map[string]pvcInspectResult
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -348,6 +350,13 @@ type StorageManager struct {
 	instancesCache  []*filestorepb.Instance
 	preflightClient storagePreflightClient
 	now             func() time.Time // stamps last-claimed-at; nil means time.Now
+	inspectedPVCs   map[string]pvcInspectResult
+}
+
+type pvcInspectResult struct {
+	volumeName       string
+	storageClassName string
+	provisioner      string
 }
 
 type storagePreflightClient interface {
@@ -406,9 +415,11 @@ type mountSegments struct {
 	ProfileSet bool
 }
 
-// mountBuildState maps generated PV name -> Pod volume name to de-duplicate gateways within a job.
+// mountBuildState maps generated PV/PVC keys -> Pod volume name to de-duplicate volumes within a job.
 type mountBuildState struct {
 	gatewayVolumeNames map[string]string
+	pvcNeedsSidecar    map[string]bool
+	nfsAuthChecked     bool
 }
 
 // MountInfo represents parsed volume mount options
@@ -459,6 +470,10 @@ type existingGatewayPV struct {
 			VolumeHandle     string            `yaml:"volumeHandle"`
 			VolumeAttributes map[string]string `yaml:"volumeAttributes"`
 		} `yaml:"csi"`
+		NFS *struct {
+			Path   string `yaml:"path" json:"path,omitempty"`
+			Server string `yaml:"server" json:"server,omitempty"`
+		} `yaml:"nfs" json:"nfs,omitempty"`
 	} `yaml:"spec"`
 	Status struct {
 		Phase string `yaml:"phase"`

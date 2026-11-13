@@ -98,6 +98,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	g.namespace = job.GKENamespace
 	logging.Info("Starting gcluster job submit workflow...")
 	g.gkeCustomTemplatesPath = job.GkeCustomTemplatesPath
+	g.inspectedPVCs = make(map[string]pvcInspectResult)
 
 	sm := &StorageManager{orchestrator: g}
 	if err := g.validateSubmitLocalPreflight(sm, job); err != nil {
@@ -124,6 +125,9 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 	if err := g.pinTelemetryAndValidate(&job); err != nil {
+		return err
+	}
+	if err := sm.ValidateClusterMounts(job); err != nil {
 		return err
 	}
 
