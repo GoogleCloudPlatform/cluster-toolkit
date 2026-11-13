@@ -586,14 +586,6 @@ variable "best_effort_provisioning" {
     )
     error_message = "best_effort_provisioning.min_provision_nodes must be a whole number greater than or equal to 0."
   }
-
-  validation {
-    condition = (
-      try(var.best_effort_provisioning.min_provision_nodes, null) == null ||
-      try(var.best_effort_provisioning.enabled, false)
-    )
-    error_message = "best_effort_provisioning.min_provision_nodes can only be set when best_effort_provisioning.enabled is true."
-  }
 }
 
 variable "max_run_duration" {

@@ -410,8 +410,8 @@ Use [`best_effort_provisioning`](#input_best_effort_provisioning) to enable it:
         min_provision_nodes: 4
 ```
 
-- `min_provision_nodes` is the minimum number of running nodes **per zone** for creation to succeed. If it isn't set, no minimum is sent to GKE, so set it explicitly to control when creation counts as successful. It can't be larger than the per-zone node count the node pool is created with: `static_node_count`, or `initial_node_count` for autoscaling node pools (`autoscaling_min_node_count` isn't part of the create request).
-- The setting only applies when the node pool is created. Changing it later has no effect, and it never causes an existing node pool to be recreated.
+- `min_provision_nodes` is the minimum number of running nodes **per zone** for creation to succeed. If unset, creation can succeed even with 0 running nodes, so set it explicitly. It can't be larger than the per-zone node count at creation: `static_node_count`, or `initial_node_count` for autoscaling pools (`autoscaling_total_min_nodes` and `autoscaling_min_node_count` aren't used at creation).
+- The setting only applies when the node pool is created. Changing or removing it later has no effect and never recreates an existing node pool (if you later reduce `static_node_count` below `min_provision_nodes`, lower `min_provision_nodes` or remove `best_effort_provisioning` too so validation passes).
 - GKE only tolerates stockouts. If nodes can't be created because a specific reservation doesn't have enough capacity, creation still fails.
 - Best-effort provisioning isn't supported for TPU node pools or for node pools that use [`placement_policy`](#input_placement_policy), including workload policies such as the ones used by A4X node pools. See [Node pool creation fails due to insufficient resources](https://cloud.google.com/kubernetes-engine/docs/troubleshooting/node-pools#insufficient-resources).
 - Requires version 8.7.0 or later of the `google-beta` provider.

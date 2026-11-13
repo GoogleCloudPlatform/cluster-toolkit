@@ -624,6 +624,16 @@ resource "google_container_node_pool" "subblock_node_pool" {
     }
   }
 
+  # Only rendered when enabled: every field in this block forces replacement,
+  # so an always-present block would recreate existing node pools.
+  dynamic "best_effort_provisioning" {
+    for_each = local.best_effort_enabled ? [1] : []
+    content {
+      enabled             = true
+      min_provision_nodes = try(var.best_effort_provisioning.min_provision_nodes, null)
+    }
+  }
+
   node_config {
     disk_size_gb                = var.disk_size_gb
     disk_type                   = var.disk_type
@@ -810,6 +820,9 @@ resource "google_container_node_pool" "subblock_node_pool" {
       node_config[0].local_nvme_ssd_block_config,
       # Suppress GKE API read drift where type="COMPACT" is omitted on GET
       placement_policy[0].type,
+      # Best-effort provisioning only applies at creation and forces replacement,
+      # so changing it must never recreate an existing node pool.
+      best_effort_provisioning,
     ]
     precondition {
       condition     = !(length(compact(local.input_reservation_suffixes)) > 0 && length((var.zones != null ? var.zones : [])) == 0)
@@ -973,6 +986,18 @@ resource "google_container_node_pool" "subblock_node_pool" {
     precondition {
       condition     = !var.enable_confidential_storage || (var.disk_type != null && can(regex("^hyperdisk", var.disk_type)))
       error_message = "Confidential Storage (enable_confidential_storage = true) is only supported on Hyperdisks. Please set disk_type to 'hyperdisk-balanced' or another hyperdisk type."
+    }
+    precondition {
+      condition     = !(local.best_effort_enabled && module.tpu.is_tpu)
+      error_message = "best_effort_provisioning is not supported for TPU node pools."
+    }
+    precondition {
+      condition     = !(local.best_effort_enabled && try(var.placement_policy.type, null) != null)
+      error_message = "best_effort_provisioning cannot be used with placement_policy. GKE does not support best-effort provisioning on node pools that use a placement policy, including workload policies."
+    }
+    precondition {
+      condition     = !local.best_effort_enabled || local.best_effort_min_nodes <= coalesce(var.static_node_count, var.initial_node_count, 0)
+      error_message = "best_effort_provisioning.min_provision_nodes cannot be larger than the per-zone node count the node pool is created with: static_node_count, or initial_node_count for autoscaling node pools (0 if neither is set)."
     }
     # BEGIN sub-block checks (only in subblock_node_pool)
     # The reservation checks (SPECIFIC_RESERVATION, bare name, paths in that reservation) are
