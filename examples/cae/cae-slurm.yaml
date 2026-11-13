@@ -60,16 +60,16 @@ vars:
   h4d_enable_spot_vm: false
 
   # G4 GPU settings
-  g4_cluster_size: 0
-  g4_machine_type: g4-standard-48
+  gpu_cluster_size: 0
+  gpu_machine_type: g4-standard-48
   # To enable Dual NIC, you MUST use g4-standard-384
-  # g4_machine_type: g4-standard-384
+  # gpu_machine_type: g4-standard-384
   # net1_range: 192.168.2.0/24 # Uncomment for Dual NIC on g4-standard-384
-  g4_disk_size_gb: 100
+  gpu_disk_size_gb: 100
   # Provisioning models (set to true or fill in reservation name, pick only one)
-  g4_reservation_name: "" # To use a reservation, provide its name here.
-  g4_enable_spot_vm: false # To use Spot VMs, set this to true.
-  g4_dws_flex_enabled: true # To use DWS Flex Provisioning
+  gpu_reservation_name: "" # To use a reservation, provide its name here.
+  gpu_enable_spot_vm: false # To use Spot VMs, set this to true.
+  gpu_dws_flex_enabled: true # To use DWS Flex Provisioning
 
   # Managed Lustre settings for /scratch
   # The values of lustre_size_gib and per_unit_storage_throughput are co-related
@@ -400,20 +400,20 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, g4_node_startup]
     settings:
-      node_count_static: $(vars.g4_cluster_size)
+      node_count_static: $(vars.gpu_cluster_size)
       node_count_dynamic_max: 2
-      machine_type: $(vars.g4_machine_type)
+      machine_type: $(vars.gpu_machine_type)
       instance_image: $(vars.slurm_image)
       bandwidth_tier: gvnic_enabled
       disk_type: hyperdisk-balanced
-      disk_size_gb: $(vars.g4_disk_size_gb)
+      disk_size_gb: $(vars.gpu_disk_size_gb)
       enable_placement: false
       allow_automatic_updates: false
       # Provisioning models
-      reservation_name: $(vars.g4_reservation_name)
-      enable_spot_vm: $(vars.g4_enable_spot_vm)
+      reservation_name: $(vars.gpu_reservation_name)
+      enable_spot_vm: $(vars.gpu_enable_spot_vm)
       dws_flex:
-        enabled: $(vars.g4_dws_flex_enabled)
+        enabled: $(vars.gpu_dws_flex_enabled)
 
       # Instructions for Dual NIC on g4-standard-384:
       # 3. Uncomment 'additional_networks' below to attach the second NIC.

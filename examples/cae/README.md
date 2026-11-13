@@ -70,7 +70,7 @@ You can customize your deployment settings in [`cae-slurm-deployment.yaml`](./ca
 
 - **Project & Location**: Set `project_id`, `deployment_name` (defaults to `cae-slurm-solutions`), `region`, and `zone` (ensure the selected zone supports H4D, C4D, G4, and Managed Lustre).
 - **H4D & Cloud RDMA Settings**: Configure `rdma_net_range`, `h4d_cluster_size` (static node count), and the provisioning model (`h4d_reservation_name`, `h4d_dws_flex_enabled`, or `h4d_enable_spot_vm`).
-- **G4 GPU Settings**: Configure `g4_cluster_size`, `g4_machine_type` (`g4-standard-48` or `g4-standard-384`), `g4_disk_size_gb`, and the provisioning model (`g4_reservation_name`, `g4_enable_spot_vm`, or `g4_dws_flex_enabled`). To use Dual NIC with `g4-standard-384`, uncomment `net1_range` in the deployment file as well as the `net1` module and `additional_networks` setting in [`cae-slurm.yaml`](./cae-slurm.yaml).
+- **G4 GPU Settings**: Configure `gpu_cluster_size`, `gpu_machine_type` (`g4-standard-48` or `g4-standard-384`), `gpu_disk_size_gb`, and the provisioning model (`gpu_reservation_name`, `gpu_enable_spot_vm`, or `gpu_dws_flex_enabled`). To use Dual NIC with `g4-standard-384`, uncomment `net1_range` in the deployment file as well as the `net1` module and `additional_networks` setting in [`cae-slurm.yaml`](./cae-slurm.yaml).
 - **Managed Lustre Settings**: Configure `lustre_instance_id`, `lustre_size_gib` (default `9000`), and `per_unit_storage_throughput` (default `1000`). Refer to [Managed Lustre performance tiers](https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers) for valid size and throughput combinations.
 
 ## Deployment Instructions

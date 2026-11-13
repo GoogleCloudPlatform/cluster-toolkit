@@ -103,12 +103,12 @@ blueprints:
     c3_node_count_dynamic_max: 10
     controller_machine_type: n2-standard-16
     deployment_name: cae-slurm-solutions
-    g4_cluster_size: 0
-    g4_disk_size_gb: 100
-    g4_dws_flex_enabled: true
-    g4_enable_spot_vm: false
-    g4_machine_type: g4-standard-48
-    g4_reservation_name: ""
+    gpu_cluster_size: 0
+    gpu_disk_size_gb: 100
+    gpu_dws_flex_enabled: true
+    gpu_enable_spot_vm: false
+    gpu_machine_type: g4-standard-48
+    gpu_reservation_name: ""
     h3_enable_spot_vm: false
     h3_node_count_dynamic_max: 10
     h4d_cluster_size: 0

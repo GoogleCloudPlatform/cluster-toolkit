@@ -55,7 +55,7 @@ mkdir -p cluster-toolkit && curl -L https://github.com/GoogleCloudPlatform/clust
 ./gcluster --version
 ` + "```" + `
 
-Option B — Clone and build from source (requires Go 1.26+ and Terraform 1.12.2+):
+Option B — Clone and build from source (requires Go 1.27+ and Terraform 1.12.2+):
 
 ` + "```bash" + `
 git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git

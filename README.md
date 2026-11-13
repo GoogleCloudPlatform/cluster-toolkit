@@ -85,7 +85,7 @@ The pre-built bundles are compiled for Linux and macOS execution environments an
 
 ### Building from source
 
-If you prefer to build the `gcluster` binary from source (requires Go 1.26+, Terraform 1.12.2+, and Packer 1.15.3+), run:
+If you prefer to build the `gcluster` binary from source (requires Go 1.27+, Terraform 1.12.2+, and Packer 1.15.3+), run:
 
 ```bash
 git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
