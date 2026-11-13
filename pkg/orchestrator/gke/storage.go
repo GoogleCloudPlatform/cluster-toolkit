@@ -160,23 +160,29 @@ func (sm *StorageManager) dispatchMount(pm parsedMount, idx int, job orchestrato
 		return sm.generateGCSFuseProfileResources(pm, idx, job, state)
 	default:
 		info := buildPodLevelMount(pm, idx, state)
-		if info.Type == "pvc" {
-			needsSidecar, checked := state.pvcNeedsSidecar[info.Source]
-			if !checked {
-				ns, err := sm.resolveNamespace(job)
-				if err != nil {
-					logging.Warn("Could not resolve namespace to inspect PVC %q for GCSFuse CSI driver (%v); defaulting to \"default\".", info.Source, err)
-					ns = "default"
-				}
-				needsSidecar = sm.isGCSFuseBackedPVC(info.Source, ns)
-				state.pvcNeedsSidecar[info.Source] = needsSidecar
-			}
-			if needsSidecar {
-				info.NeedsGCSFuseSidecar = true
-			}
+		if info.Type == "pvc" && sm.pvcNeedsGCSFuseSidecar(info.Source, job, state) {
+			info.NeedsGCSFuseSidecar = true
 		}
 		return info, "", nil
 	}
+}
+
+func (sm *StorageManager) pvcNeedsGCSFuseSidecar(pvcName string, job orchestrator.JobDefinition, state *mountBuildState) bool {
+	if state != nil && state.pvcNeedsSidecar != nil {
+		if needsSidecar, checked := state.pvcNeedsSidecar[pvcName]; checked {
+			return needsSidecar
+		}
+	}
+	ns, err := sm.resolveNamespace(job)
+	if err != nil {
+		logging.Warn("Could not resolve namespace to inspect PVC %q for GCSFuse CSI driver (%v); defaulting to \"default\".", pvcName, err)
+		ns = "default"
+	}
+	needsSidecar := sm.isGCSFuseBackedPVC(pvcName, ns)
+	if state != nil && state.pvcNeedsSidecar != nil {
+		state.pvcNeedsSidecar[pvcName] = needsSidecar
+	}
+	return needsSidecar
 }
 
 func (sm *StorageManager) getInspectedPVC(ns, pvcName string) (pvcInspectResult, bool) {
@@ -738,21 +744,9 @@ func parseNFSSource(src string) (server string, share string, err error) {
 		return "", "", fmt.Errorf("invalid NFS mount %q. Expected format: nfs://<server>/<export_path>;<dest>", src)
 	}
 
-	rawServer := parts[0]
-	if strings.Contains(rawServer, "[") || strings.Contains(rawServer, "]") {
-		if !strings.HasPrefix(rawServer, "[") || !strings.HasSuffix(rawServer, "]") {
-			return "", "", fmt.Errorf("invalid NFS mount %q: malformed bracketed IPv6 server address %q", src, rawServer)
-		}
-		inner := rawServer[1 : len(rawServer)-1]
-		if net.ParseIP(inner) == nil {
-			return "", "", fmt.Errorf("invalid NFS mount %q: invalid IPv6 server address %q", src, rawServer)
-		}
-		server = inner
-	} else {
-		server = extractHost(rawServer)
-	}
-	if server == "" {
-		return "", "", fmt.Errorf("invalid NFS mount %q: server host is missing. Expected format: nfs://<server>/<export_path>;<dest>", src)
+	server, err = parseNFSServerHost(src, parts[0])
+	if err != nil {
+		return "", "", err
 	}
 
 	share = strings.Trim(parts[1], "/")
@@ -765,6 +759,30 @@ func parseNFSSource(src string) (server string, share string, err error) {
 		}
 	}
 	return server, share, nil
+}
+
+func parseNFSServerHost(src, rawServer string) (string, error) {
+	if strings.Contains(rawServer, "[") || strings.Contains(rawServer, "]") {
+		if h, _, splitErr := net.SplitHostPort(rawServer); splitErr == nil {
+			if net.ParseIP(h) == nil {
+				return "", fmt.Errorf("invalid NFS mount %q: invalid IPv6 server address %q", src, rawServer)
+			}
+			return h, nil
+		}
+		if !strings.HasPrefix(rawServer, "[") || !strings.HasSuffix(rawServer, "]") {
+			return "", fmt.Errorf("invalid NFS mount %q: malformed bracketed IPv6 server address %q", src, rawServer)
+		}
+		inner := rawServer[1 : len(rawServer)-1]
+		if net.ParseIP(inner) == nil {
+			return "", fmt.Errorf("invalid NFS mount %q: invalid IPv6 server address %q", src, rawServer)
+		}
+		return inner, nil
+	}
+	server := extractHost(rawServer)
+	if server == "" {
+		return "", fmt.Errorf("invalid NFS mount %q: server host is missing. Expected format: nfs://<server>/<export_path>;<dest>", src)
+	}
+	return server, nil
 }
 
 func extractHost(hostStr string) string {

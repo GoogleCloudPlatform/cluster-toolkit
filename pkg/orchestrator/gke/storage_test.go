@@ -4315,7 +4315,7 @@ func TestProcessMounts_NFSGatewayRendering(t *testing.T) {
 	mounts := []string{
 		"nfs://10.0.0.1/exports/train;/mnt/train;rw",
 		"nfs://10.0.0.1/exports/train;/mnt/train-ro;ro",
-		"nfs://[fd12::1]/share;/mnt/ipv6",
+		"nfs://[fd12::1]:2049/share;/mnt/ipv6",
 	}
 	infos, manifests, err := sm.ProcessMounts(mounts, job)
 	if err != nil {
