@@ -42,7 +42,8 @@ end
 
 function get_vmcount(part)
     if not is_valid_partition_list(part) then
-        slurm.log_info("job_submit.lua: rejecting invalid or unsafe partition name: " .. tostring(part))
+        slurm.log_info("job_submit.lua: rejecting invalid or unsafe partition name: " ..
+            (string.gsub(tostring(part), "%c", "?")))
         return PART_INVALID
     end
     local cmd = SCRIPTS_DIR .. "/get_tpu_vmcount.py -p " .. part

@@ -625,3 +625,5 @@ def test_install_jobsubmit_lua(tmp_path, mocker):
     assert "is_valid_partition_list(part)" in content
     assert "if part == nil then" in content
     assert "tostring(part)" in content
+    # Pin the exact allowlist; %w is locale-dependent (isalnum).
+    assert 'string.match(token, "^[a-zA-Z0-9_.-]+$")' in content
