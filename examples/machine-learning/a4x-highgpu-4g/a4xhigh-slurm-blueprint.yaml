@@ -322,6 +322,43 @@ deployment_groups:
                   name: "{{ item.split('=')[0] }}"
                   selection: hold
                 loop: "{{ nvidia_packages }}"
+      - type: data
+        destination: /etc/modprobe.d/nvidia-profiling.conf
+        content: |
+          options nvidia NVreg_RestrictProfilingToAdminUsers=0
+      - type: shell
+        destination: enable_nvidia_profiling.sh
+        content: |
+          #!/bin/bash
+          set -euo pipefail
+          if grep -q "RestrictProfilingToAdminUsers: 1" /proc/driver/nvidia/params 2>/dev/null; then
+            active_services=""
+            for svc in nvidia-dcgm.service nvidia-imex.service nvidia-fabricmanager.service nvidia-persistenced.service; do
+              if systemctl is-active --quiet "$svc" 2>/dev/null; then
+                active_services="${svc} ${active_services}"
+                systemctl stop "$svc"
+              fi
+            done
+            if command -v nvidia-smi >/dev/null 2>&1; then
+              nvidia-smi -pm 0 >/dev/null 2>&1 || true
+            fi
+            unloaded_mods=""
+            for mod in nvidia_uvm nvidia_peermem nvidia_drm nvidia_modeset nvidia; do
+              if grep -q "^${mod} " /proc/modules 2>/dev/null; then
+                modprobe -r "$mod"
+                unloaded_mods="${mod} ${unloaded_mods}"
+              fi
+            done
+            modprobe nvidia NVreg_RestrictProfilingToAdminUsers=0
+            for mod in $unloaded_mods; do
+              if [ "$mod" != "nvidia" ]; then
+                modprobe "$mod" 2>/dev/null || true
+              fi
+            done
+            for svc in $active_services; do
+              systemctl start "$svc"
+            done
+          fi
       - type: ansible-local
         destination: enable_dcgm.yml
         content: |

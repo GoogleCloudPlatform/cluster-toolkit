@@ -31,6 +31,10 @@ deployment_groups:
     settings:
       runners:
       - type: data
+        destination: /etc/modprobe.d/nvidia-profiling.conf
+        content: |
+          options nvidia NVreg_RestrictProfilingToAdminUsers=0
+      - type: data
         destination: /etc/apt/preferences.d/block-broken-nvidia-container
         content: |
           Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1

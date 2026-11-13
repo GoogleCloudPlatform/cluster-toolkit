@@ -83,6 +83,10 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
+      - type: data
+        destination: /etc/modprobe.d/nvidia-profiling.conf
+        content: |
+          options nvidia NVreg_RestrictProfilingToAdminUsers=0
       - type: shell
         destination: update_gce_nic_naming.sh
         content: |
