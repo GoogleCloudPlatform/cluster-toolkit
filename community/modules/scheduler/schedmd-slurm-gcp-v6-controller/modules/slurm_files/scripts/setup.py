@@ -19,12 +19,14 @@ import argparse
 from itertools import chain
 import logging
 import os
+import re
 import shlex
 import shutil
 import subprocess
 import stat
 import sys
 import time
+from typing import List
 import yaml
 from pathlib import Path
 import functools
@@ -336,15 +338,133 @@ def setup_nss_slurm():
 
 
 def setup_sudoers():
-    content = """
-# Allow SlurmUser to manage the slurm daemons
-slurm ALL= NOPASSWD: /usr/bin/systemctl restart slurmd.service
-slurm ALL= NOPASSWD: /usr/bin/systemctl restart sackd.service
-slurm ALL= NOPASSWD: /usr/bin/systemctl restart slurmctld.service
-"""
+    lines = [
+        "# Allow SlurmUser to manage the slurm daemons",
+        "slurm ALL= NOPASSWD: /usr/bin/systemctl restart slurmd.service",
+        "slurm ALL= NOPASSWD: /usr/bin/systemctl restart sackd.service",
+        "slurm ALL= NOPASSWD: /usr/bin/systemctl restart slurmctld.service",
+    ]
+    if util.lookup().is_controller:
+        lines.extend([
+            "# Allow SlurmUser on controllers to adjust nfsd thread pool without option injection",
+            "slurm ALL= NOPASSWD: /usr/sbin/nfsconf --set -- nfsd threads [1-9]*, !/usr/sbin/nfsconf --set -- nfsd threads * *",
+            "slurm ALL= NOPASSWD: /usr/sbin/rpc.nfsd -- [1-9]*, !/usr/sbin/rpc.nfsd -- * *",
+        ])
+    content = "\n" + "\n".join(lines) + "\n"
     sudoers_file = Path("/etc/sudoers.d/slurm")
     sudoers_file.write_text(content)
     sudoers_file.chmod(0o0440)
+
+
+_SCALE_SYSCTL_CONTENT = """# Managed by Slurm GCP setup.py for high-scale RPC & metadata traffic
+net.ipv4.ip_local_port_range = 10240 65535
+net.ipv4.tcp_tw_reuse = 1
+net.core.somaxconn = 16384
+net.ipv4.tcp_max_syn_backlog = 16384
+"""
+
+_SCALE_LIMITS_CONTENT = """# Managed by Slurm GCP setup.py for large-scale srun fan-out
+* soft nofile 131072
+* hard nofile 131072
+root soft nofile 131072
+root hard nofile 131072
+"""
+
+
+_CONTROLLER_SERVICE_DROPIN_CONTENT = """# Managed by Slurm GCP setup.py for daemon crash resilience & scale FD limits
+[Service]
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=131072
+"""
+
+
+def configure_controller_systemd_units(systemd_dir: Path = Path("/etc/systemd/system")) -> None:
+    """Ensure slurmctld, slurmdbd, and slurmrestd auto-restart on crash/SIGKILL and have 131072 FDs."""
+    changed = False
+    for svc in ("slurmctld.service", "slurmdbd.service", "slurmrestd.service"):
+        dropin = systemd_dir / f"{svc}.d" / "90-slurm-scale.conf"
+        util.mkdirp(dropin.parent)
+        if not dropin.exists() or dropin.read_text() != _CONTROLLER_SERVICE_DROPIN_CONTENT:
+            dropin.write_text(_CONTROLLER_SERVICE_DROPIN_CONTENT)
+            changed = True
+    if changed:
+        run("systemctl daemon-reload", timeout=30, check=False)
+
+
+def _rewrite_nscd_conf_text(content: str) -> str:
+    """Enable passwd/group caching in nscd while keeping hosts caching disabled for cloud_dns."""
+    desired = {
+        "passwd": "yes",
+        "group": "yes",
+        "hosts": "no",
+        "services": "no",
+        "netgroup": "no",
+    }
+    seen = set()
+    out_lines = []
+    pattern = re.compile(r"^(\s*enable-cache\s+)(\S+)(\s+)\S+(.*)$")
+    for line in content.splitlines():
+        m = pattern.match(line)
+        if m and m.group(2) in desired:
+            svc = m.group(2)
+            seen.add(svc)
+            out_lines.append(f"{m.group(1)}{svc}{m.group(3)}{desired[svc]}{m.group(4)}")
+        else:
+            out_lines.append(line)
+    for svc, val in desired.items():
+        if svc not in seen:
+            out_lines.append(f"\tenable-cache\t\t{svc}\t\t{val}")
+    return "\n".join(out_lines) + "\n"
+
+
+def configure_scale_limits_and_sysctls(
+    sysctl_path: Path = Path("/etc/sysctl.d/90-slurm-scale.conf"),
+    limits_path: Path = Path("/etc/security/limits.d/90-slurm-scale.conf"),
+) -> None:
+    """Apply TCP listen/ephemeral-port sysctls and PAM nofile limits for large-scale Slurm fan-out."""
+    try:
+        util.mkdirp(sysctl_path.parent)
+        sysctl_path.write_text(_SCALE_SYSCTL_CONTENT)
+        run(f"sysctl -p {shlex.quote(str(sysctl_path))}", timeout=15, check=False)
+    except Exception:
+        log.exception(f"Failed to apply scale sysctls at {sysctl_path}")
+
+    try:
+        util.mkdirp(limits_path.parent)
+        limits_path.write_text(_SCALE_LIMITS_CONTENT)
+    except Exception:
+        log.exception(f"Failed to write PAM limits at {limits_path}")
+
+
+def configure_scale_network_and_nss(
+    sysctl_path: Path = Path("/etc/sysctl.d/90-slurm-scale.conf"),
+    nscd_conf: Path = Path("/etc/nscd.conf"),
+    limits_path: Path = Path("/etc/security/limits.d/90-slurm-scale.conf"),
+) -> None:
+    """Tune ephemeral port reuse and enable OS Login / NSS passwd+group caching on control/login nodes.
+
+    Without nscd or google-oslogin-cache active, every slurm_cred_create() fetch_identity() call
+    and Slurm CLI UID lookup opens an unpooled HTTP connection via libnss_oslogin to
+    169.254.169.254:80, exhausting ephemeral ports in TIME_WAIT (~28k sockets) at >5k-node scale.
+    On Rocky 9 / Ubuntu / Debian where nscd is absent, google-oslogin-cache.service populates
+    /etc/oslogin_passwd.cache.bin (served by libnss_cache_oslogin) while tcp_tw_reuse=1 and the
+    widened ephemeral port range protect uncached lookups.
+    """
+    configure_scale_limits_and_sysctls(sysctl_path=sysctl_path, limits_path=limits_path)
+
+    # Populate /etc/oslogin_passwd.cache and keep the refresh timer enabled when available.
+    run("systemctl enable --now google-oslogin-cache.timer", timeout=30, check=False)
+    run("systemctl start google-oslogin-cache.service", timeout=60, check=False)
+
+    # Enable nscd strictly for passwd/group (never hosts, so cloud_dns never caches negative NXDOMAIN).
+    if nscd_conf.exists():
+        try:
+            nscd_conf.write_text(_rewrite_nscd_conf_text(nscd_conf.read_text()))
+            run("systemctl enable --now nscd", timeout=30, check=False)
+            run("systemctl restart nscd", timeout=30, check=False)
+        except Exception:
+            log.exception("Failed to configure and start nscd")
 
 
 def setup_maintenance_script():
@@ -595,6 +715,7 @@ def setup_controller(is_primary: bool):
     conf.get_generator(lkp).generate_configs()
 
     setup_sudoers()
+    configure_scale_network_and_nss()
     setup_network_storage()
 
     # Ensure state directory permissions are correct (especially if mounted via NFS)
@@ -626,6 +747,7 @@ def setup_controller(is_primary: bool):
         if not db_sentinel.exists():
             log.warning("Timed out waiting for database initialization sentinel on primary. Proceeding anyway.")
 
+    configure_controller_systemd_units()
     run("systemctl enable slurmdbd", timeout=30)
     run("systemctl restart slurmdbd", timeout=30)
 
@@ -669,11 +791,12 @@ def setup_controller(is_primary: bool):
 
     setup_slurm_health_check_service(lkp)
 
-    # Export at the end to signal that everything is up
+    # Prepare /etc/exports.d/slurm.exports and /etc/nfs.conf thread count BEFORE starting
+    # nfs-server so TCP :2049 never opens with an empty export table or 8 stock threads.
+    setup_nfs_exports()
     run("systemctl enable nfs-server", timeout=30)
     run("systemctl start nfs-server", timeout=30)
-
-    setup_nfs_exports()
+    run("exportfs -ra", timeout=30)
     run("systemctl enable --now slurmcmd.timer", timeout=30)
 
     log.info("Check status of cluster services")
@@ -683,10 +806,11 @@ def setup_controller(is_primary: bool):
     run("systemctl status slurmctld", timeout=30)
     run("systemctl status slurmrestd", timeout=30)
 
-    try:
-        slurmsync.sync_instances()
-    except Exception:
-        log.exception("Failed to sync instances, will try next time.")
+    if is_primary:
+        try:
+            slurmsync.sync_instances()
+        except Exception:
+            log.exception("Failed to sync instances, will try next time.")
 
     run("systemctl enable slurm_load_bq.timer", timeout=30)
     run("systemctl start slurm_load_bq.timer", timeout=30)
@@ -720,6 +844,7 @@ def setup_login():
 
     setup_network_storage()
     setup_sudoers()
+    configure_scale_network_and_nss()
     if not lkp.cfg.enable_slurm_auth:
       run("systemctl restart munge", timeout=30)
     check_sackd_ready()
@@ -832,6 +957,7 @@ def setup_compute():
 
     sysconf = f"""SLURMD_OPTIONS='{" ".join(slurmd_options)}'"""
     update_system_config("slurmd", sysconf)
+    configure_scale_limits_and_sysctls()
     install_custom_scripts()
 
     setup_nss_slurm()
@@ -1014,7 +1140,175 @@ def get_config(bucket = None):
     log.info("Config fetched")
 
 
-def populate_etc_hosts(lkp: util.Lookup) -> None:
+def _cluster_zones(lkp: util.Lookup) -> List[str]:
+    """Return ordered unique GCE zones participating in the cluster."""
+    ordered: List[str] = []
+    seen = set()
+
+    def _add(raw_zone) -> None:
+        z = util.to_leaf_name(raw_zone)
+        if z and z not in seen:
+            seen.add(z)
+            ordered.append(z)
+
+    _add(lkp.cfg.get("controller_zone"))
+    _add(lkp.cfg.get("backup_controller_zone"))
+
+    extra_zones = set()
+    for ns in chain(
+        (lkp.cfg.get("nodeset") or {}).values(),
+        (lkp.cfg.get("nodeset_tpu") or {}).values(),
+        (lkp.cfg.get("nodeset_dyn") or {}).values(),
+        (lkp.cfg.get("login_groups") or {}).values(),
+    ):
+        if ns is None:
+            continue
+        getter = ns.get if isinstance(ns, dict) else lambda k: getattr(ns, k, None)
+        for key in ("zone_policy_allow", "zones"):
+            vals = getter(key)
+            if vals:
+                for v in vals:
+                    z = util.to_leaf_name(v)
+                    if z:
+                        extra_zones.add(z)
+        single = util.to_leaf_name(getter("zone"))
+        if single:
+            extra_zones.add(single)
+
+    for z in sorted(extra_zones, key=lambda z: ("-ai" in z, z)):
+        _add(z)
+    return ordered
+
+
+def _splice_search_domains(existing_tokens: List[str], desired_domains: List[str]) -> List[str]:
+    """Merge desired_domains into existing_tokens in deterministic order before google.internal."""
+    tokens = list(dict.fromkeys(existing_tokens))
+    to_add = [d for d in desired_domains if d not in tokens]
+    if not to_add:
+        return tokens
+    if "google.internal" in tokens:
+        idx = tokens.index("google.internal")
+        return tokens[:idx] + to_add + tokens[idx:]
+    return tokens + to_add
+
+
+def _merge_resolv_search_lines(lines: List[str], missing_domains: List[str]) -> List[str]:
+    """Insert missing_domains into /etc/resolv.conf search directive (before google.internal)."""
+    out: List[str] = []
+    merged = False
+    for line in lines:
+        parts = line.strip().split()
+        if not merged and parts[:1] == ["search"]:
+            tokens = _splice_search_domains(parts[1:], missing_domains)
+            out.append("search " + " ".join(tokens))
+            merged = True
+        else:
+            out.append(line)
+    if not merged and missing_domains:
+        out.insert(0, "search " + " ".join(missing_domains))
+    return out
+
+
+def configure_cluster_dns_search(
+    lkp: util.Lookup,
+    resolv_path: Path = Path("/etc/resolv.conf"),
+) -> None:
+    """Ensure multi-region cluster zones are in DNS search domains under ZonalOnly DNS."""
+    if lkp.is_hybrid_setup or not lkp.project or not resolv_path.exists():
+        return
+
+    zones = _cluster_zones(lkp)
+    if not zones:
+        return
+
+    try:
+        lines = resolv_path.read_text().splitlines()
+    except Exception as e:
+        log.warning(f"Failed to read {resolv_path}: {e}")
+        return
+
+    existing: List[str] = []
+    for line in lines:
+        parts = line.strip().split()
+        if parts[:1] == ["search"]:
+            for tok in parts[1:]:
+                if tok not in existing:
+                    existing.append(tok)
+
+    desired = [f"{z}.c.{lkp.project}.internal" for z in zones]
+    missing = [d for d in desired if d not in existing]
+    if not missing:
+        return
+
+    log.info(f"Adding cross-region cluster DNS search domains: {missing}")
+    default_dev = None
+    route_res = run("ip -o -4 route show to default", timeout=5, check=False)
+    if route_res.returncode == 0 and route_res.stdout:
+        m_dev = re.search(r"\bdev\s+(\S+)", route_res.stdout)
+        if m_dev:
+            default_dev = m_dev.group(1)
+
+    nm_applied = False
+    nm_res = run("nmcli -t -f NAME,DEVICE connection show --active", timeout=10, check=False)
+    if nm_res.returncode == 0 and nm_res.stdout:
+        candidates = []
+        for row in nm_res.stdout.splitlines():
+            conn_name, sep, dev = row.rpartition(":")
+            if sep and conn_name and dev and dev != "lo":
+                candidates.append((conn_name, dev))
+        chosen = next(((c, d) for c, d in candidates if d == default_dev), None) or (
+            candidates[0] if candidates else None
+        )
+        if chosen:
+            conn_name, dev = chosen
+            joined = ",".join(missing)
+            mod_res = run(
+                f"nmcli connection modify {shlex.quote(conn_name)} +ipv4.dns-search {shlex.quote(joined)}",
+                timeout=10,
+                check=False,
+            )
+            reapply_res = run(f"nmcli device reapply {shlex.quote(dev)}", timeout=10, check=False)
+            nm_applied = mod_res.returncode == 0 and reapply_res.returncode == 0
+
+    # Fallback: verify /etc/resolv.conf contains the domains even if NetworkManager is not managing it
+    # (on Ubuntu/Debian with systemd-resolved, configure a resolved.conf.d drop-in instead of overwriting the symlink).
+    try:
+        if resolv_path.is_symlink() and "systemd" in str(os.readlink(resolv_path)):
+            if not nm_applied:
+                spliced = _splice_search_domains(existing, desired)
+                if len(spliced) > 32 and "google.internal" in spliced:
+                    without_gi = [d for d in spliced if d != "google.internal"]
+                    merged_domains = without_gi[:31] + ["google.internal"]
+                else:
+                    merged_domains = spliced[:32]
+                dropin = Path("/etc/systemd/resolved.conf.d/90-slurm-scale.conf")
+                util.mkdirp(dropin.parent)
+                dropin.write_text(f"[Resolve]\nDomains={' '.join(merged_domains)}\n")
+                # Restart systemd-resolved BEFORE applying per-link resolvectl domains so the
+                # daemon restart does not wipe transient per-interface domain state.
+                run("systemctl reload-or-restart systemd-resolved", timeout=15, check=False)
+                if default_dev:
+                    domains_args = " ".join(shlex.quote(d) for d in merged_domains)
+                    run(f"resolvectl domain {shlex.quote(default_dev)} {domains_args}", timeout=10, check=False)
+            return
+        post_lines = resolv_path.read_text().splitlines()
+        post_existing = set()
+        for line in post_lines:
+            parts = line.strip().split()
+            if parts[:1] == ["search"]:
+                post_existing.update(parts[1:])
+        still_missing = [d for d in missing if d not in post_existing]
+        if still_missing:
+            updated = _merge_resolv_search_lines(post_lines, still_missing)
+            resolv_path.write_text("\n".join(updated) + "\n")
+    except Exception as e:
+        log.warning(f"Failed to update {resolv_path} fallback search domains: {e}")
+
+
+def populate_etc_hosts(
+    lkp: util.Lookup,
+    hosts_path: Path = Path("/etc/hosts"),
+) -> None:
     """Populate static IP mappings for controllers in /etc/hosts to bypass DNS propagation latency."""
     log.info("Populating /etc/hosts with controller IP mappings")
     primary_name = lkp.cfg.get("slurm_control_host")
@@ -1043,7 +1337,6 @@ def populate_etc_hosts(lkp: util.Lookup) -> None:
             except Exception as e:
                 log.error(f"Failed to query real controller IPs via gcloud: {e}")
 
-    hosts_path = Path("/etc/hosts")
     if not hosts_path.exists():
         log.warning("/etc/hosts does not exist, skipping population")
         return
@@ -1098,6 +1391,7 @@ def main():
     log.info("Starting setup, fetching config")
     get_config()
     lkp = lookup()
+    configure_cluster_dns_search(lkp)
     populate_etc_hosts(lkp)
     setup_cloud_ops()
     configure_dirs()

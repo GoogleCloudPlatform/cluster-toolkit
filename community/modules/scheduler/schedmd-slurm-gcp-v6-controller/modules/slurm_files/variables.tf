@@ -73,6 +73,18 @@ variable "slurm_cluster_name" {
   }
 }
 
+variable "controller_zone" {
+  type        = string
+  description = "Primary controller GCE zone (used to construct cross-zone FQDNs under ZonalOnly DNS)."
+  default     = null
+}
+
+variable "backup_controller_zone" {
+  type        = string
+  description = "Backup controller GCE zone when HA is enabled (used to construct cross-zone FQDNs under ZonalOnly DNS)."
+  default     = null
+}
+
 variable "slurm_backup_controller_name" {
   type        = string
   description = "The backup controller name."

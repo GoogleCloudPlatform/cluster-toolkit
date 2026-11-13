@@ -63,7 +63,7 @@ locals {
   controller_project_id = coalesce(var.controller_project_id, var.project_id)
 
   # HA Locals
-  backup_zone                  = coalesce(var.backup_zone, var.zone)
+  backup_zone                  = try(coalesce(var.backup_zone, var.zone), null)
   slurm_backup_controller_name = var.enable_backup_controller ? "${local.slurm_cluster_name}-controller-1" : ""
 
   # Merge HA metadata

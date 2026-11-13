@@ -45,6 +45,14 @@ module "login" {
   universe_domain = var.universe_domain
 
   # trigger replacement of login nodes when the controller instance is replaced
-  # Needed for re-mounting volumes hosted on controller
-  replace_trigger = var.enable_hybrid ? null : (var.enable_backup_controller ? module.slurm_controller_template[0].self_link : one(google_compute_instance_from_template.controller[*].self_link))
+  # Needed for re-mounting volumes hosted on controller. In HA mode, include the
+  # controller stateful IP per-instance config IDs so login VM creation waits for
+  # HA controllers without blocking login template/SA/GCS-bucket IAM evaluation.
+  replace_trigger = var.enable_hybrid ? null : (
+    var.enable_backup_controller ? join(",", flatten([
+      module.slurm_controller_template[0].self_link,
+      [for k in sort(keys(google_compute_region_per_instance_config.controller_regional_stateful_ips)) : google_compute_region_per_instance_config.controller_regional_stateful_ips[k].id],
+      [for k in sort(keys(google_compute_per_instance_config.controller_zonal_stateful_ips)) : google_compute_per_instance_config.controller_zonal_stateful_ips[k].id],
+    ])) : one(google_compute_instance_from_template.controller[*].self_link)
+  )
 }

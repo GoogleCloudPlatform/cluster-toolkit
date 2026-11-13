@@ -104,6 +104,8 @@ locals {
     group_name              = local.name
     startup_scripts_timeout = var.startup_scripts_timeout
     network_storage         = var.network_storage
+    zone                    = var.login_nodes.zone
+    num_instances           = length(coalesce(var.login_nodes.static_ips, [])) > 0 ? length(coalesce(var.login_nodes.static_ips, [])) : coalesce(var.login_nodes.num_instances, 1)
   }
 }
 
