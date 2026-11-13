@@ -131,6 +131,12 @@ deployment_groups:
           * - cpu unlimited
           * - rtprio unlimited
 
+      # Allow non-root users to access NVIDIA GPU performance counters for profiling (e.g. Nsight)
+      - type: data
+        destination: /etc/modprobe.d/nvidia-profiling.conf
+        content: |
+          options nvidia NVreg_RestrictProfilingToAdminUsers=0
+
       # Install Nvidia driver / CUDA components
       - type: ansible-local
         destination: install_a4h_drivers.yml
