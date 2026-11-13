@@ -26,6 +26,12 @@ function os.capture(cmd, raw)
 end
 
 function get_vmcount(part)
+    if part == nil or part == "" or
+       string.sub(part, 1, 1) == "-" or
+       not string.match(part, "^[%w,_.%-]+$") then
+        slurm.log_info("job_submit.lua: rejecting invalid or unsafe partition name: " .. tostring(part))
+        return PART_INVALID
+    end
     local cmd = SCRIPTS_DIR .. "/get_tpu_vmcount.py -p " .. part
     local out = os.capture(cmd, true)
     for line in out:gmatch("(.-)\r?\n") do
