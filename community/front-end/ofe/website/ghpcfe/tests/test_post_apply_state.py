@@ -102,6 +102,10 @@ def _load_clusterinfo():
     )
     for name in ("c2", "cloud_info"):
         stubs[f"ofe_stub.cluster_manager.{name}"] = mock.MagicMock()
+    # The encryption checks need the models; nothing here is encrypted.
+    cmek = mock.MagicMock(unsafe=True)  # it has assert_* functions
+    cmek.CmekConfigError = type("CmekConfigError", (Exception,), {})
+    stubs["ofe_stub.cluster_manager.cmek"] = cmek
     stubs["ofe_stub.grafana"] = mock.MagicMock()
     stubs.update(
         {
@@ -257,11 +261,15 @@ class ClusterPostApplyTests(unittest.TestCase):
         for failing_step in ("update", "_run_ghpc", "_initialize_terraform"):
             with self.subTest(step=failing_step):
                 info = _cluster_info("m")
+                info.cluster.status = "r"
                 getattr(info, failing_step).side_effect = RuntimeError("x")
                 with self.assertRaises(RuntimeError):
                     info.reconfigure_cluster()
                 self.assertEqual(info.cluster.cloud_state, "m")
-                self.assertEqual(info.cluster.status, "e")
+                # A blueprint that cannot be regenerated stops the
+                # reconfigure before anything runs: the cluster keeps running.
+                self.assertEqual(info.cluster.status,
+                                 "r" if failing_step == "update" else "e")
 
     def test_reconfigure_state_read_failure_keeps_cluster_managed(self):
         info = _cluster_info("m")

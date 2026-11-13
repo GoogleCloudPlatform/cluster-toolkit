@@ -30,6 +30,7 @@ from django.http import (
 from django.urls import reverse
 from django.views import generic
 from django.views.generic.edit import CreateView
+from .view_utils import cmek_detail_context
 from ..models import StartupScript, Image, Credential
 from ..forms import StartupScriptForm, ImageForm, ImageImportForm
 from ..cluster_manager.image import ImageBackend
@@ -209,6 +210,7 @@ class ImageDetailView(LoginRequiredMixin, generic.DetailView):
         image = self.get_object()
         startup_scripts = image.startup_script.all()
         context["startup_scripts"] = startup_scripts
+        context["cmek_detail"] = cmek_detail_context(image)
 
         # Check if the user is an admin, the owner, or authorized for the image
         if self.is_admin_or_authorized_user(image):
@@ -225,15 +227,30 @@ class ImageDeleteView(UserPassesTestMixin, generic.View):
         return self.request.user.is_superuser
 
     def post(self, request, *args, **kwargs):
-        image = Image.objects.get(pk=self.kwargs['pk'])
-        if image.source_image_project == "Imported":
+        image = get_object_or_404(Image, pk=self.kwargs['pk'])
+        # source_image_project is free text, so it alone cannot prove an
+        # import: an encrypted image may have a key group to tear down, so it
+        # always goes through the backend.
+        if image.source_image_project == "Imported" and not image.cmek_enabled:
             image.delete()
             response = {'success': True, 'import': True}
         else:
             img_backend = ImageBackend(image)
-            img_backend.delete_image()
-            image.delete()
-            response = {'success': True}
+            if img_backend.delete_image():
+                image.delete()
+                response = {'success': True}
+            else:
+                # Keep the record: it is what still points at the image's
+                # key, so deleting it now would orphan the key in Cloud KMS.
+                error = (
+                    "Deleting the image's builder environment or its "
+                    "encryption key group failed (see the server log). The "
+                    "image record was kept so its key is not orphaned; "
+                    "retry the delete."
+                )
+                image.status_message = error
+                image.save(update_fields=["status_message"])
+                response = {'success': False, 'error': error}
         return JsonResponse(response)
     
     
@@ -262,16 +279,43 @@ class ImageStatusView(LoginRequiredMixin, generic.View):
 class BackendCreateImage(BackendAsyncView):
     """A view to make async call to create a new image"""
 
+    refused = False
+
     @sync_to_async
     def get_orm(self, image_id):
+        # An image is built once, straight after it is configured. Building
+        # it again would overwrite a ready image's blueprint and key group.
+        # Claimed in one UPDATE, so of two requests for the same new image
+        # only one starts a build; the other finds it "being created".
+        claimed = Image.objects.filter(pk=image_id, status="n").update(
+            status="c")
         image = Image.objects.get(pk=image_id)
+        if not claimed:
+            self.refused = True
+            messages.add_message(
+                self.request,
+                messages.ERROR,
+                "Cannot build - the image is not newly configured "
+                f"({image.get_status_display()}).",
+            )
         creds = image.cloud_credential
         return (image, creds)
 
+    @sync_to_async
+    def release_claim(self, image_id):
+        Image.objects.filter(pk=image_id, status="c").update(status="n")
+
     def cmd(self, unused_task_id, unused_token, image, creds):
-        img_backend = ImageBackend(image)
+        try:
+            img_backend = ImageBackend(image)
+        except Exception as err:
+            # prepare() records its own failures; this one comes before it.
+            image.status = "e"
+            image.status_message = f"The image build failed: {err}"
+            image.save(update_fields=["status", "status_message"])
+            raise
         img_backend.prepare()
-        
+
     async def get(self, request, pk):
         """this will invoke the background tasks and return immediately"""
         # Mixins don't yet work with Async views
@@ -280,7 +324,15 @@ class BackendCreateImage(BackendAsyncView):
         await self.test_user_is_cluster_admin(request.user)
 
         args = await self.get_orm(pk)
-        await self.create_task("Create Image", *args)
+        if self.refused:
+            return HttpResponseRedirect(reverse("images"))
+        try:
+            await self.create_task("Create Image", *args)
+        except Exception:
+            # No build was started, so the image is new again, not left
+            # "being created" with nothing running.
+            await self.release_claim(pk)
+            raise
         return HttpResponseRedirect(
             reverse("images")
         )

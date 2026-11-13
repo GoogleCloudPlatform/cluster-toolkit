@@ -1,0 +1,140 @@
+{% comment %}
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ The encryption panel, included by every resource form that offers a key.
+ Renders nothing when the deployment has encryption disabled, because the
+ form drops the fields in that case.
+
+ Tear-down sits at panel level rather than under Advanced: it is the most
+ consequential setting here, since DELETE makes anything still encrypted
+ with the key unreadable. It is hidden for an adopted key, whose lifecycle
+ OFE does not manage.
+{% endcomment %}
+
+{% if "cmek_enabled" in form.fields %}
+<p style="text-decoration: underline; font-size: large;">Encryption (CMEK)</p>
+
+<div class="form-group">
+  <div class="grid-container">
+    <label class="slider-switch-container">
+      <div class="slider-switch">
+        {{ form.cmek_enabled }}
+        <span class="slider"></span>
+      </div>
+    </label>
+    <div class="help-text">{{ form.cmek_enabled.help_text }}</div>
+  </div>
+  {{ form.cmek_enabled.errors }}
+</div>
+
+<div id="cmek-panel" class="mb-3">
+  <div class="border" style="background:#fff;">
+    <div class="px-3 py-2" style="background:#f2f2f2; border-bottom:1px solid #ddd;">
+      <strong>Key configuration</strong>
+      <span class="text-muted" style="font-size:.84rem;">
+        &nbsp;&mdash; the key created for this resource</span>
+    </div>
+    <div class="px-3 pt-3 pb-1">
+
+      <p class="text-muted" style="font-size:.9rem;">
+        OFE creates a key for this resource alone, named after it and placed
+        using the deployment defaults. Each resource needs its own key: two
+        resources sharing one would share a single access grant, and tearing
+        either down would revoke the other's access.
+      </p>
+
+      <div class="form-group">
+        {{ form.cmek_key_name.errors }}
+        {{ form.cmek_key_name.label_tag }}
+        {{ form.cmek_key_name }}
+        <small class="form-text text-muted">{{ form.cmek_key_name.help_text }}</small>
+      </div>
+      <div class="form-group">
+        {{ form.cmek_key_project_id.errors }}
+        {{ form.cmek_key_project_id.label_tag }}
+        {{ form.cmek_key_project_id }}
+        <small class="form-text text-muted">{{ form.cmek_key_project_id.help_text }}</small>
+      </div>
+      <div class="form-group">
+        {{ form.cmek_key_ring_name.errors }}
+        {{ form.cmek_key_ring_name.label_tag }}
+        {{ form.cmek_key_ring_name }}
+        <small class="form-text text-muted">{{ form.cmek_key_ring_name.help_text }}</small>
+      </div>
+
+      <div class="form-group" id="cmek-teardown">
+        {{ form.cmek_deletion_policy.errors }}
+        {{ form.cmek_deletion_policy.label_tag }}
+        {{ form.cmek_deletion_policy }}
+        <small class="form-text text-muted">{{ form.cmek_deletion_policy.help_text }}
+          Keys left in place cost nothing to keep and can be removed later in
+          the <a href="https://console.cloud.google.com/security/kms/keyrings"
+          target="_blank" rel="noopener">Cloud KMS console</a>{% if user.is_superuser %},
+          and are listed on the <a href="{% url 'cmek-keys' %}">encryption keys</a>
+          page{% endif %}.
+        </small>
+      </div>
+
+      <div class="mt-2">
+        <a href="#" id="cmek-advanced-toggle" style="font-size:.9rem;">
+          <span id="cmek-advanced-caret">&#9656;</span> Advanced
+        </a>
+        <span class="text-muted" style="font-size:.82rem;">
+          &mdash; rarely needed; key properties and the encrypting identity{% if user.is_superuser %}.
+          <a href="{% url 'cmek-settings' %}">Deployment defaults</a>{% endif %}</span>
+      </div>
+
+      <div id="cmek-advanced" class="mt-2 pl-3"
+           style="border-left:3px solid #e9ecef; display:none;">
+
+        {% comment %}
+          Key properties OFE can set. Left blank they are the kms-key module's
+          own defaults, which is why "module default" is an option rather than
+          a value restated here.
+
+          Block form, because Django's short comment syntax does not span
+          lines: a multi-line one is rendered to the page as literal text.
+        {% endcomment %}
+        <div class="form-group">
+          {{ form.cmek_protection_level.errors }}
+          {{ form.cmek_protection_level.label_tag }}
+          {{ form.cmek_protection_level }}
+          <small class="form-text text-muted">
+            {{ form.cmek_protection_level.help_text }}
+          </small>
+        </div>
+        <div class="form-group">
+          {{ form.cmek_rotation_period.errors }}
+          {{ form.cmek_rotation_period.label_tag }}
+          {{ form.cmek_rotation_period }}
+          <small class="form-text text-muted">
+            {{ form.cmek_rotation_period.help_text }}
+          </small>
+        </div>
+
+        <div class="form-group">
+          {{ form.cmek_encryption_service_account.errors }}
+          {{ form.cmek_encryption_service_account.label_tag }}
+          {{ form.cmek_encryption_service_account }}
+          <small class="form-text text-muted">
+            {{ form.cmek_encryption_service_account.help_text }}
+          </small>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endif %}

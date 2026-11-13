@@ -284,21 +284,25 @@ class BlueprintBackendTests(unittest.TestCase):
                 self.assertIn("get_terraform_state_bucket()", text)
                 self.assertIn("terraform_state_prefix(", text)
 
-    def test_single_terraform_group_per_blueprint(self):
+    def test_one_terraform_group_per_state_prefix(self):
         # An explicit prefix is applied by the Toolkit to EVERY deployment
-        # group, so two Terraform groups in one blueprint would collide on a
-        # single state object. Each blueprint must keep exactly one.
+        # group without a backend of its own, so two such Terraform groups
+        # in one blueprint would collide on a single state object.
         self.assertEqual(self.TEMPLATE.read_text().count("- group:"), 1)
         fs_text = (CLUSTER_MANAGER / "filesystem.py").read_text()
         self.assertEqual(fs_text.count("- group:"), 1)
-        # The image blueprint has two groups, but the second is a Packer group
-        # and the Toolkit writes a backend only for Terraform groups. Modules
-        # with no explicit kind default to terraform (pkg/config/config.go
-        # addKindToModules), so the Terraform group is the one WITHOUT
-        # "kind: packer".
+        # The image blueprint has up to three groups: the Packer group (the
+        # Toolkit writes a backend only for Terraform groups), builder-env
+        # on the default backend, and, for an encrypted image, the key group
+        # (image-cmek), which declares its own backend with a prefix below
+        # the image's. Modules with no explicit kind default to terraform
+        # (pkg/config/config.go addKindToModules), so the Packer group is the
+        # one with "kind: packer".
         image_text = (CLUSTER_MANAGER / "image.py").read_text()
-        self.assertEqual(image_text.count("- group:"), 2)
+        self.assertEqual(image_text.count("- group:"), 3)
         self.assertEqual(image_text.count("kind: packer"), 1)
+        self.assertEqual(image_text.count("terraform_backend:"), 1)
+        self.assertIn("prefix: {state_prefix}/{CMEK_GROUP}", image_text)
 
 
 class RawTemplateBackendTests(unittest.TestCase):
@@ -390,9 +394,16 @@ def _load_filesystem():
     website.__path__ = []
     settings = types.ModuleType("website.settings")
     settings.SITE_NAME = "test-site"
+    # The encryption choice needs the models; these tests generate an
+    # unencrypted Filestore.
+    cmek = mock.MagicMock(unsafe=True)  # it has assert_* functions
+    cmek.CmekConfigError = type("CmekConfigError", (Exception,), {})
+    cmek.resource_settings.return_value = None
+    manager.cmek = cmek
     stubs = {
         "ofe_stub": pkg,
         "ofe_stub.cluster_manager": manager,
+        "ofe_stub.cluster_manager.cmek": cmek,
         "ofe_stub.cluster_manager.utils": utils,
         "ofe_stub.models": models,
         "website": website,
@@ -438,6 +449,9 @@ class FilesystemBlueprintYamlTests(unittest.TestCase):
                 utils, "get_terraform_state_bucket", return_value="bucket-x"
             ), mock.patch.object(
                 utils, "get_state_namespace", return_value=self.NS
+            ), mock.patch.object(
+                # read for the encryption settings, which the cmek stub ignores
+                utils, "load_config", return_value={"server": {}}
             ):
                 filesystem.write_filestore_yaml(fs, Path(tmp))
             doc = yaml.safe_load((Path(tmp) / "filesystem.yaml").read_text())

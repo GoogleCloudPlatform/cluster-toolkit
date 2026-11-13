@@ -1,0 +1,128 @@
+{% comment %}
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ One collapsible Encryption section, holding everything known about this
+ resource's encryption. Collapsed by default with the status on the header
+ line, so the page reads the same as before until you open it.
+
+ Rendered from cmek.describe(), which reports only what OFE decided. A
+ setting OFE left alone is labelled as the module's default rather than
+ shown as a choice. Live key state is absent: it would need the Cloud KMS
+ call that moving to the modules made unnecessary.
+
+ Expects `cmek_detail` in the context. Renders nothing without it, so a
+ detail page for a resource kind that cannot be encrypted is unaffected.
+ When the deployment's encryption settings cannot be read it carries only
+ `invalid_settings`, and the section says so instead of describing the key.
+{% endcomment %}
+
+{% if cmek_detail %}
+<div class="border mb-3" style="background:#fff; max-width:56rem;">
+  <div class="px-3 py-2" id="cmek-detail-head"
+       style="background:#f2f2f2; border-bottom:1px solid #ddd; cursor:pointer;">
+    <span id="cmek-detail-caret">&#9656;</span>
+    <strong>Encryption</strong>
+    <span class="text-muted" style="font-size:.84rem;">
+      &nbsp;&mdash;
+      {% if cmek_detail.invalid_settings %}
+        settings invalid
+      {% elif cmek_detail.encrypted %}
+        customer-managed key{% if cmek_detail.key_name %}, {{ cmek_detail.key_name }}{% endif %}
+      {% else %}
+        Google-managed
+      {% endif %}
+    </span>
+  </div>
+
+  <div id="cmek-detail-body" style="display:none;">
+    {% if cmek_detail.invalid_settings %}
+    <p class="text-danger px-3 py-2 mb-0">
+      Encryption settings for this deployment are invalid:
+      {{ cmek_detail.invalid_settings }}. An administrator must correct them
+      on the Encryption settings page.
+    </p>
+    {% else %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        {% if cmek_detail.encrypted %}
+        <tr>
+          <th scope="row" style="width:16rem;">Status</th>
+          <td>Encrypted with a customer-managed key</td>
+        </tr>
+        <tr><th scope="row">How it was chosen</th><td>{{ cmek_detail.how }}</td></tr>
+        {% if cmek_detail.key_name %}
+        <tr><th scope="row">Key</th><td>{{ cmek_detail.key_name }}</td></tr>
+        {% endif %}
+        {% if cmek_detail.key_path %}
+        <tr>
+          <th scope="row">Full key path</th>
+          <td><code style="font-size:.78rem; word-break:break-all;">{{ cmek_detail.key_path }}</code></td>
+        </tr>
+        {% endif %}
+        {% if cmek_detail.key_ring_name %}
+        <tr><th scope="row">Key ring</th><td>{{ cmek_detail.key_ring_name }}</td></tr>
+        {% endif %}
+        {% if cmek_detail.key_project_id %}
+        <tr><th scope="row">Key project</th><td>{{ cmek_detail.key_project_id }}</td></tr>
+        {% endif %}
+        {% if cmek_detail.protection_level %}
+        <tr><th scope="row">Protection level</th><td>{{ cmek_detail.protection_level }}</td></tr>
+        {% endif %}
+        {% if cmek_detail.rotation_period %}
+        <tr><th scope="row">Rotation</th><td>every {{ cmek_detail.rotation_period }}</td></tr>
+        {% endif %}
+        <tr><th scope="row">Tear-down</th><td>{{ cmek_detail.teardown }}</td></tr>
+        {% if cmek_detail.encryption_service_account %}
+        <tr>
+          <th scope="row">Encryption service account</th>
+          <td><code style="font-size:.78rem;">{{ cmek_detail.encryption_service_account }}</code></td>
+        </tr>
+        {% endif %}
+        {% else %}
+        <tr>
+          <th scope="row" style="width:16rem;">Status</th>
+          <td>Google-managed encryption</td>
+        </tr>
+        <tr>
+          <th scope="row">How it was chosen</th>
+          <td>No customer-managed key was selected when this resource was created</td>
+        </tr>
+        <tr><th scope="row">Key</th><td class="text-muted">Not applicable</td></tr>
+        {% endif %}
+      </table>
+    </div>
+    <p class="text-muted px-3 py-2 mb-0" style="font-size:.82rem;">
+      Encryption is chosen when the resource is created and cannot be changed
+      afterwards. Where a setting says &ldquo;module default&rdquo;, OFE left it
+      to <code>kms-key</code> rather than setting a value of its own.
+    </p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+(function () {
+  var head = document.getElementById("cmek-detail-head");
+  var body = document.getElementById("cmek-detail-body");
+  var caret = document.getElementById("cmek-detail-caret");
+  if (!head || !body) { return; }
+  head.addEventListener("click", function () {
+    var open = body.style.display === "none";
+    body.style.display = open ? "" : "none";
+    caret.innerHTML = open ? "&#9662;" : "&#9656;";
+  });
+})();
+</script>
+{% endif %}
