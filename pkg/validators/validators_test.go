@@ -748,12 +748,12 @@ func (s *MySuite) TestReservationExistsValidatorWithReservationBlocksAndSubBlock
 	}{
 		{
 			resInput:    "reservation-20261008-231448/reservationBlocks/reservation-20261008-231448-block-0001",
-			wantProject: "hcs-ext-tvc",
+			wantProject: "consumer-proj",
 			wantName:    "reservation-20261008-231448",
 		},
 		{
 			resInput:    "reservation-20261008-231448/reservationBlocks/reservation-20261008-231448-block-0001/reservationSubBlocks/subblock-0001",
-			wantProject: "hcs-ext-tvc",
+			wantProject: "consumer-proj",
 			wantName:    "reservation-20261008-231448",
 		},
 		{
@@ -772,13 +772,13 @@ func (s *MySuite) TestReservationExistsValidatorWithReservationBlocksAndSubBlock
 		capturedProject, capturedZone, capturedName = "", "", ""
 		bp := config.Blueprint{
 			Vars: config.NewDict(map[string]cty.Value{
-				"project_id":       cty.StringVal("hcs-ext-tvc"),
+				"project_id":       cty.StringVal("consumer-proj"),
 				"zone":             cty.StringVal("us-central1-b"),
 				"reservation_name": cty.StringVal(tc.resInput),
 			}),
 		}
 		inputs := config.NewDict(map[string]cty.Value{
-			"project_id":       cty.StringVal("hcs-ext-tvc"),
+			"project_id":       cty.StringVal("consumer-proj"),
 			"zone":             cty.StringVal("us-central1-b"),
 			"reservation_name": cty.StringVal(tc.resInput),
 		})
