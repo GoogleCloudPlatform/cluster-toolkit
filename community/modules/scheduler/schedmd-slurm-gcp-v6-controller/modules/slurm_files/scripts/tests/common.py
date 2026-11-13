@@ -70,6 +70,7 @@ class TstCfg:
     provisioning_engine: str = "BULK_INSERT"
     cloud_parameters: dict[str, Any] = field(default_factory=dict)
     experimental: dict[str, Any] = field(default_factory=dict)
+    enable_async_reply: bool = True
     enable_health_check_start_only: bool = False
     enable_expedited_requeue: bool = False
     enable_openmetrics: bool = False
