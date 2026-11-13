@@ -25,10 +25,23 @@ function os.capture(cmd, raw)
     return output
 end
 
+function is_valid_partition_list(part)
+    if part == nil or part == "" then
+        return false
+    end
+    if string.sub(part, 1, 1) == "," or string.sub(part, -1, -1) == "," or string.find(part, ",,") then
+        return false
+    end
+    for token in string.gmatch(part, "([^,]+)") do
+        if string.sub(token, 1, 1) == "-" or not string.match(token, "^[%w_.-]+$") then
+            return false
+        end
+    end
+    return true
+end
+
 function get_vmcount(part)
-    if part == nil or part == "" or
-       string.sub(part, 1, 1) == "-" or
-       not string.match(part, "^[%w,_.%-]+$") then
+    if not is_valid_partition_list(part) then
         slurm.log_info("job_submit.lua: rejecting invalid or unsafe partition name: " .. tostring(part))
         return PART_INVALID
     end
@@ -45,6 +58,10 @@ end
 
 function slurm_job_submit(job_desc, part_list, submit_uid)
     local part = get_part(job_desc, part_list)
+    -- If no partition specified and no default partition, defer to Slurm's native validation
+    if part == nil then
+        return slurm.SUCCESS
+    end
     local vmcount = get_vmcount(part)
     -- Only do something if the job is in a TPU partition, if vmcount is 0, it implies that the partition(s) specified are not TPU ones
     if vmcount == 0 then
@@ -56,16 +73,16 @@ function slurm_job_submit(job_desc, part_list, submit_uid)
     end
     -- Check for errors
     if vmcount == PART_INVALID then
-        slurm.log_user("Invalid partition specified " .. part)
+        slurm.log_user("Invalid partition specified: " .. tostring(part))
         return slurm.FAILURE
     end
     if vmcount == DIFF_VMCOUNTS_SAME_PART then
-        slurm.log_user("In partition(s) " .. part ..
+        slurm.log_user("In partition(s) " .. tostring(part) ..
                            " there are more than one tpu nodeset vmcount, this should not happen.")
         return slurm.ERROR
     end
     if vmcount == DIFF_PART_DIFFERENT_VMCOUNTS then
-        slurm.log_user("In partition list " .. part ..
+        slurm.log_user("In partition list " .. tostring(part) ..
                            " there are more than one TPU types, cannot determine which is the correct vmcount to use, please retry with only one partition.")
         return slurm.FAILURE
     end
