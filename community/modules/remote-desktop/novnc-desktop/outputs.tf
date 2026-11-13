@@ -46,7 +46,7 @@ output "iap_tunnel_command" {
   description = "SSH command that forwards localhost:6080 to the desktop broker through IAP. Run it, then browse to http://localhost:6080/vnc.html."
   value = var.instance_count > 0 ? join(" ", [
     "gcloud", "compute", "ssh",
-    module.instances.name[0],
+    try(module.instances.name[0], ""),
     "--project", var.project_id,
     "--zone", var.zone,
     "--tunnel-through-iap",
