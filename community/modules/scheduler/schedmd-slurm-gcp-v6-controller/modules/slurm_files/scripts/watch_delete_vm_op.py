@@ -232,6 +232,12 @@ def _watch_op(lkp: util.Lookup, m: WatchDeleteVmOp_Message) -> bool:
         )
         return False  # nack
     except Exception as e:
+        if util.retry_exception(e):
+            log.warning(
+                f"Transient exception querying operation {m.op_name} "
+                f"for node {m.node}: {e}. Will retry in subsequent cycle."
+            )
+            return False  # nack
         log.exception(
             f"Unexpected error processing operation {m.op_name} for node {m.node}, "
             f"acknowledging to avoid queue poisoning: {e}"

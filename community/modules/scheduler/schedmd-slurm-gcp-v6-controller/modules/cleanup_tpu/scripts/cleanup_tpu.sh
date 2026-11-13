@@ -41,6 +41,24 @@ if ! type -P gcloud 1>/dev/null; then
 	exit 1
 fi
 
+tmp_gcloud_cfg=""
+trap '[[ -n "$tmp_gcloud_cfg" ]] && rm -rf "$tmp_gcloud_cfg"' EXIT
+tmp_gcloud_cfg=$(mktemp -d)
+src_gcloud_cfg="${CLOUDSDK_CONFIG:-$HOME/.config/gcloud}"
+if [[ -d "$src_gcloud_cfg" ]]; then
+	for item in "$src_gcloud_cfg"/*; do
+		[[ -e "$item" ]] || continue
+		base="$(basename "$item")"
+		case "$base" in
+		logs | access_tokens.db* | *.lock) continue ;;
+		esac
+		cp -a "$item" "$tmp_gcloud_cfg/" 2>/dev/null || true
+	done
+fi
+export CLOUDSDK_CONFIG="$tmp_gcloud_cfg"
+export CLOUDSDK_CORE_DISABLE_FILE_LOGGING=1
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+
 echo "Deleting TPU nodes"
 node_filter="name~${cluster_name}-${nodeset_name}"
 running_nodes_filter="${node_filter} AND state!=DELETING"
