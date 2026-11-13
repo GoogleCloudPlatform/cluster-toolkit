@@ -382,7 +382,6 @@ Common deployment failures:
 Install the following tools to ensure your changes pass validation:
 - [pre-commit](https://pre-commit.com/)
 - [TFLint](https://github.com/terraform-linters/tflint#installation) (requires version compatible with `.tflint.hcl`)
-- [ShellCheck](https://github.com/koalaman/shellcheck#installing)
 
 Additional development dependencies can be installed with a single command:
 

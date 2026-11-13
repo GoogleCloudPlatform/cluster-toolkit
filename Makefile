@@ -64,14 +64,12 @@ format: warn-go-version warn-terraform-version warn-packer-version terraform-for
 	$(info **************** formatting go code *******************)
 	go fmt $(ENG)
 
-install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit check-tflint check-shellcheck
+# `terraform-docs` is needed by `make format`; version read from .pre-commit-config.yaml
+install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit check-tflint
 	$(info *********** installing developer dependencies *********)
-	go install github.com/terraform-docs/terraform-docs@v0.24.0
-	go install github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0
+	tfdocs=$$(grep -m 1 -oE 'github\.com/terraform-docs/terraform-docs@v[0-9A-Za-z.+-]+' .pre-commit-config.yaml) && \
+		go install "$$tfdocs"
 	go install github.com/go-critic/go-critic/cmd/gocritic@v0.15.0
-	go install github.com/google/addlicense@v1.2.0
-	go install mvdan.cc/sh/v3/cmd/shfmt@v3.14.1
-	go install golang.org/x/tools/cmd/goimports@v0.50.0
 	go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
 	go install github.com/jstemmer/go-junit-report/v2@latest
 	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements-dev.txt
@@ -118,14 +116,6 @@ check-tflint:
 	$(info WARNING: tflint not installed, visit https://github.com/terraform-linters/tflint#installation for installation instructions.)
 else
 check-tflint:
-
-endif
-
-ifeq (, $(shell which shellcheck))
-check-shellcheck:
-	$(info WARNING: shellcheck not installed, visit https://github.com/koalaman/shellcheck#installing for installation instructions.)
-else
-check-shellcheck:
 
 endif
 
