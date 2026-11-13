@@ -132,6 +132,9 @@ deployment_groups:
       # Please manage cluster version from the Google Cloud Console directly
       version_prefix: "1.35."
       release_channel: REGULAR
+      # TODO: Remove min_master_version once a fixed 1.35.x patch rolls out to REGULAR.
+      # 1.35.8-gke.1975000 breaks H4D + IRDMA node registration (STALLED_IP_ACQUISITION).
+      min_master_version: "1.35.8-gke.1796000"
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
