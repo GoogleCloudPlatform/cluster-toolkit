@@ -17,8 +17,11 @@ package telemetry
 import (
 	"encoding/json"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"hpc-toolkit/pkg/shell"
 
 	"github.com/spf13/cobra"
 )
@@ -86,25 +89,75 @@ func TestBuildPayload(t *testing.T) {
 }
 
 func TestExecute(t *testing.T) {
-	// Save the original transport and restore it after tests run
-	// to prevent Flush() from triggering real external network requests
-	origTransport := http.DefaultTransport
-	defer func() { http.DefaultTransport = origTransport }()
+	t.Setenv(shell.AirGappedEnvVar, "")
+	shell.SetDefaultAirGappedState(false)
 
+	// Save original globals and restore them after tests run
+	// to prevent Flush() or CollectMetrics() from triggering real network/subprocess calls
+	origTransport := http.DefaultTransport
+	origTfVersion := tfVersionFunc
+	t.Cleanup(func() {
+		http.DefaultTransport = origTransport
+		tfVersionFunc = origTfVersion
+	})
+	tfVersionFunc = func() (string, error) { return "1.5.0", nil }
+
+	var calls atomic.Int32
 	http.DefaultTransport = &telemetryMockTransport{
 		roundTripFunc: func(req *http.Request) (*http.Response, error) {
-			// Mock a successful 200 OK response from Clearcut
+			calls.Add(1)
 			return &http.Response{
 				StatusCode: http.StatusOK,
+				Body:       http.NoBody,
 			}, nil
 		},
 	}
 
-	// Setup dummy cobra command and collector
 	cmd := &cobra.Command{Use: "test-execute"}
 	c := NewCollector(cmd, nil, SOURCE)
-
-	// Trigger Execute. Since Execute doesn't return anything, we verify
-	// it functions without panicking or failing.
 	c.Execute(0, nil)
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("expected 1 Clearcut HTTP call when not air-gapped, got %d", got)
+	}
+}
+
+func TestExecute_AirGappedSkipsClearcut(t *testing.T) {
+	origTransport := http.DefaultTransport
+	origTfVersion := tfVersionFunc
+	t.Cleanup(func() {
+		http.DefaultTransport = origTransport
+		tfVersionFunc = origTfVersion
+		shell.SetDefaultAirGappedState(false)
+	})
+	tfVersionFunc = func() (string, error) { return "1.5.0", nil }
+
+	var calls atomic.Int32
+	http.DefaultTransport = &telemetryMockTransport{
+		roundTripFunc: func(req *http.Request) (*http.Response, error) {
+			calls.Add(1)
+			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+		},
+	}
+
+	cmd := &cobra.Command{Use: "test-airgapped"}
+
+	t.Setenv(shell.AirGappedEnvVar, "true")
+	shell.SetDefaultAirGappedState(false)
+	NewCollector(cmd, nil, SOURCE).Execute(0, nil)
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("expected 0 Clearcut HTTP calls when GCLUSTER_AIR_GAPPED=true, got %d", got)
+	}
+
+	t.Setenv(shell.AirGappedEnvVar, "")
+	shell.SetDefaultAirGappedState(true)
+	NewCollector(cmd, nil, SOURCE).Execute(0, nil)
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("expected 0 Clearcut HTTP calls when SetDefaultAirGapped is active, got %d", got)
+	}
+
+	t.Setenv(shell.AirGappedEnvVar, "false")
+	NewCollector(cmd, nil, SOURCE).Execute(0, nil)
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("expected 1 Clearcut HTTP call when GCLUSTER_AIR_GAPPED=false overrides default, got %d", got)
+	}
 }
