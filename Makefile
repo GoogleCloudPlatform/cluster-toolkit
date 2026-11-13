@@ -275,16 +275,19 @@ generate-docs:
 	$(info **************** generating catalog, README tables, and llms.txt ***************)
 	@go run ./tools/catalog-gen
 
-# Manual only (never CI): drives a real agent CLI against every EVAL.yaml prompt
+# Opt-in locally (and executed in Cloud Build via PR-skills-smoke-eval /
+# PR-test-skills-full-eval): drives a real agent CLI against EVAL.yaml prompts
 # in throwaway git worktrees. Requires the agent CLI installed + logged in and a
 # GCP project for gcluster validators. Example:
 #   make test-skills-live LIVE_PROJECT=my-sandbox LIVE_AGENT=gemini
 LIVE_AGENT ?= gemini
-LIVE_SKILL ?= cluster-blueprint-assistant
+LIVE_SKILL ?= skills/cluster-blueprint-assistant
+LIVE_CONCURRENCY ?= 4
+LIVE_RETRIES ?= 0
 test-skills-live: gcluster
 	$(info **************** running LIVE skills evals ($(LIVE_SKILL)) against $(LIVE_AGENT) ***************)
 	@test -n "$(LIVE_PROJECT)" || { echo "LIVE_PROJECT=<gcp-project> is required"; exit 2; }
-	@python3 tools/run_eval.py --skill $(LIVE_SKILL) --live --agent $(LIVE_AGENT) --project $(LIVE_PROJECT) --markdown-output live-eval-report.md
+	@python3 tools/run_eval.py --skill $(LIVE_SKILL) --live --agent $(LIVE_AGENT) --project $(LIVE_PROJECT) --concurrency $(LIVE_CONCURRENCY) --retries $(LIVE_RETRIES) --json-output live-eval-results.json --markdown-output live-eval-summary.md
 
 validate-docs:
 	$(info **************** validating README snippets and links ***************)
