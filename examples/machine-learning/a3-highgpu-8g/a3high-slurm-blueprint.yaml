@@ -110,6 +110,11 @@ deployment_groups:
       - 10.3.0.*
       - $(vars.slurm_cluster_name)*
       runners:
+      # Allow non-root users to access NVIDIA GPU performance counters for profiling (e.g. Nsight)
+      - type: data
+        destination: /etc/modprobe.d/nvidia-profiling.conf
+        content: |
+          options nvidia NVreg_RestrictProfilingToAdminUsers=0
       - type: ansible-local
         destination: install_tcpx_kernel.yml
         content: |

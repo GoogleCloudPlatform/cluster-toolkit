@@ -85,6 +85,11 @@ deployment_groups:
       configure_ssh_host_patterns:
       - $(vars.hostname_prefix)-*
       runners:
+      # Allow non-root users to access NVIDIA GPU performance counters for profiling (e.g. Nsight)
+      - type: data
+        destination: /etc/modprobe.d/nvidia-profiling.conf
+        content: |
+          options nvidia NVreg_RestrictProfilingToAdminUsers=0
       - type: ansible-local
         destination: setup_nvidia_cuda_environment.yml
         content: |
