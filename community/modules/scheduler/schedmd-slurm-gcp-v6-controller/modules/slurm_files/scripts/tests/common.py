@@ -59,6 +59,8 @@ class TstPartition:
     partition_name: str = "euler"
     partition_nodeset: list[str] = field(default_factory=list)
     partition_nodeset_tpu: list[str] = field(default_factory=list)
+    partition_nodeset_dyn: list[str] = field(default_factory=list)
+    partition_conf: dict[str, Any] = field(default_factory=dict)
     enable_job_exclusive: bool = False
 
 @dataclass
@@ -81,6 +83,7 @@ class TstCfg:
 
     install_dir: Optional[str] = None
     output_dir: Optional[str] = None
+    slurm_scripts_dir: Optional[Path] = None
     slurm_bin_dir: Optional[str] = "/usr/bin"
 
     enable_controller_load_balancer: bool = False

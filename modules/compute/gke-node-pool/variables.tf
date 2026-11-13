@@ -123,7 +123,7 @@ variable "guest_accelerator" {
 }
 
 variable "image_type" {
-  description = "The default image type used by NAP once a new node pool is being created. Use either COS_CONTAINERD or UBUNTU_CONTAINERD. Use CUSTOM_CONTAINERD together with var.node_image_config to run a custom node image."
+  description = "The OS image type for the nodes in this node pool. Use either COS_CONTAINERD or UBUNTU_CONTAINERD. Use CUSTOM_CONTAINERD together with var.node_image_config to run a custom node image."
   type        = string
   default     = "COS_CONTAINERD"
 }
@@ -302,7 +302,7 @@ variable "service_account_scopes" {
 }
 
 variable "taints" {
-  description = "Taints to be applied to the system node pool."
+  description = "Kubernetes taints to be applied to the nodes in this node pool. GPU and TPU node pools always also receive their accelerator taint (nvidia.com/gpu=present or google.com/tpu=present, effect NO_SCHEDULE) in addition to these."
   type = list(object({
     key    = string
     value  = any
@@ -536,7 +536,7 @@ variable "upgrade_settings" {
 }
 
 variable "run_workload_script" {
-  description = "Whether execute the script to create a sample workload and inject rxdm sidecar into workload. Currently, implemented for A3-Highgpu and A3-Megagpu only."
+  description = "If true, runs a local Python helper script (installing pyyaml via pip3) to generate a sample workload manifest with the rxdm sidecar injected. Only runs when machine_type is a3-highgpu-8g or a3-megagpu-8g."
   type        = bool
   default     = true
 }
@@ -562,6 +562,30 @@ variable "enable_flex_start" {
   EOT
   type        = bool
   default     = false
+}
+
+variable "best_effort_provisioning" {
+  description = <<-EOT
+  Enables GKE best-effort provisioning when the node pool is created, similar to
+  `gcloud container node-pools create --enable-best-effort-provision --min-provision-nodes`.
+  Creation succeeds once `min_provision_nodes` nodes per zone are running (no minimum is sent if unset),
+  and GKE keeps creating the remaining nodes as capacity becomes available. `enabled` defaults to true.
+  Only applies at creation; later changes are ignored. Not supported for TPU node pools or with
+  `placement_policy`. See the module README for details.
+  EOT
+  type = object({
+    enabled             = optional(bool, true)
+    min_provision_nodes = optional(number)
+  })
+  default = null
+
+  validation {
+    condition = (
+      try(var.best_effort_provisioning.min_provision_nodes, null) == null ||
+      try(var.best_effort_provisioning.min_provision_nodes >= 0 && floor(var.best_effort_provisioning.min_provision_nodes) == var.best_effort_provisioning.min_provision_nodes, false)
+    )
+    error_message = "best_effort_provisioning.min_provision_nodes must be a whole number greater than or equal to 0."
+  }
 }
 
 variable "max_run_duration" {

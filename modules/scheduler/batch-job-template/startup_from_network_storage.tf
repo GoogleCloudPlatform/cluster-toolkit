@@ -51,6 +51,12 @@ locals {
     local.startup_script_runner
   )
 
+  startup_script_gcs_bucket_path = var.startup_script_path == null ? null : (
+    var.startup_script_path == "" ? null : (
+      startswith(var.startup_script_path, "gs://") ? var.startup_script_path : "gs://${var.startup_script_path}"
+    )
+  )
+
   startup_from_network_storage = module.netstorage_startup_script.startup_script
 }
 
@@ -62,4 +68,5 @@ module "netstorage_startup_script" {
   deployment_name = var.deployment_name
   region          = var.region
   runners         = local.full_runner_list
+  gcs_bucket_path = local.startup_script_gcs_bucket_path
 }

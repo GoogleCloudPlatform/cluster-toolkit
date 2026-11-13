@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
@@ -1843,8 +1844,7 @@ func TestGCSFuseProfile_ManifestRendering(t *testing.T) {
 
 func renderGCSFuseGateway(t *testing.T, params GCSFusePVPVCTemplateParams) string {
 	t.Helper()
-	var g *GKEOrchestrator
-	tmpl, err := g.parseGKETextTemplate("gcs_fuse_pv_pvc.tmpl")
+	tmpl, err := k8s.ParseTextTemplate("", "gcs_fuse_pv_pvc.tmpl")
 	if err != nil {
 		t.Fatalf("failed to parse template: %v", err)
 	}
@@ -4037,4 +4037,184 @@ func TestVerifyStorageGateways_NoGatewaysIsANoOp(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assertDeleted(t, mock, nil, nil)
+}
+
+func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
+	pvcCmd := func(name, ns string) string {
+		return fmt.Sprintf("kubectl get pvc %s -n %s --ignore-not-found --request-timeout=10s -o %s", name, ns, pvcGCSFuseJSONPath)
+	}
+	pvCmd := func(name string) string {
+		return fmt.Sprintf("kubectl get pv %s --ignore-not-found --request-timeout=10s -o %s", name, pvCSIDriverTemplate)
+	}
+	scCmd := func(name string) string {
+		return fmt.Sprintf("kubectl get storageclass %s --ignore-not-found --request-timeout=10s -o jsonpath={.provisioner}", name)
+	}
+
+	tests := []struct {
+		name          string
+		mount         string
+		namespace     string
+		mockResponses map[string][]shell.CommandResult
+		wantGCSFuse   bool
+		wantCalls     int
+	}{
+		{
+			name:  "static PVC bound to gcsfuse CSI PV enables gke-gcsfuse annotation",
+			mount: "ub-verify-dataset-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("ub-verify-dataset-pvc", "default"): {
+					{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t\t\t"},
+				},
+				pvCmd("ub-verify-dataset-pv"): {
+					{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: true,
+			wantCalls:   2,
+		},
+		{
+			name:      "unbound PVC with built-in gcsfusecsi-training StorageClass in custom namespace",
+			mount:     "profile-pvc;/data;ro",
+			namespace: "team-ns",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("profile-pvc", "team-ns"): {
+					{ExitCode: 0, Stdout: "\tgcsfusecsi-training\t\t"},
+				},
+			},
+			wantGCSFuse: true,
+			wantCalls:   1,
+		},
+		{
+			name:  "dynamically provisioned PVC with storage-provisioner annotation avoids cluster-scoped lookups",
+			mount: "dynamic-gcsfuse-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("dynamic-gcsfuse-pvc", "default"): {
+					{ExitCode: 0, Stdout: "pvc-dyn-123\tcustom-sc\tgcsfuse.csi.storage.gke.io\t"},
+				},
+			},
+			wantGCSFuse: true,
+			wantCalls:   1,
+		},
+		{
+			name:  "PVC with custom StorageClass provisioned by gcsfuse.csi.storage.gke.io",
+			mount: "custom-sc-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("custom-sc-pvc", "default"): {
+					{ExitCode: 0, Stdout: "\tmy-custom-gcsfuse-sc\t\t"},
+				},
+				scCmd("my-custom-gcsfuse-sc"): {
+					{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: true,
+			wantCalls:   2,
+		},
+		{
+			name:        "toolkit gcluster-gcsfuse-* PVC name enables gke-gcsfuse annotation without kubectl lookup",
+			mount:       "gcluster-gcsfuse-mybucket-training-abc123;/data;ro",
+			wantGCSFuse: true,
+			wantCalls:   0,
+		},
+		{
+			name:  "dynamically provisioned non-GCSFuse PVC (Persistent Disk CSI annotation) short-circuits without cluster-scoped lookups",
+			mount: "pd-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("pd-pvc", "default"): {
+					{ExitCode: 0, Stdout: "pvc-12345\tstandard-rwo\tpd.csi.storage.gke.io\t"},
+				},
+			},
+			wantGCSFuse: false,
+			wantCalls:   1,
+		},
+		{
+			name:  "static non-GCSFuse PVC (Persistent Disk CSI without annotation) checks PV and StorageClass",
+			mount: "static-pd-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("static-pd-pvc", "default"): {
+					{ExitCode: 0, Stdout: "pvc-12345\tstandard-rwo\t\t"},
+				},
+				pvCmd("pvc-12345"): {
+					{ExitCode: 0, Stdout: "pd.csi.storage.gke.io"},
+				},
+				scCmd("standard-rwo"): {
+					{ExitCode: 0, Stdout: "pd.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: false,
+			wantCalls:   3,
+		},
+		{
+			name:  "StorageClass named training with non-GCSFuse provisioner leaves GCSFuseEnabled false",
+			mount: "training-sc-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("training-sc-pvc", "default"): {
+					{ExitCode: 0, Stdout: "\ttraining\t\t"},
+				},
+				scCmd("training"): {
+					{ExitCode: 0, Stdout: "pd.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: false,
+			wantCalls:   2,
+		},
+		{
+			name:  "missing PVC leaves GCSFuseEnabled false without failing",
+			mount: "nonexistent-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("nonexistent-pvc", "default"): {
+					{ExitCode: 0, Stdout: ""},
+				},
+			},
+			wantGCSFuse: false,
+			wantCalls:   1,
+		},
+		{
+			name:  "kubectl get pv failure degrades gracefully and falls back to StorageClass check",
+			mount: "rbac-restricted-pvc;/data;ro",
+			mockResponses: map[string][]shell.CommandResult{
+				pvcCmd("rbac-restricted-pvc", "default"): {
+					{ExitCode: 0, Stdout: "restricted-pv\tcustom-gcsfuse-sc\t\t"},
+				},
+				pvCmd("restricted-pv"): {
+					{ExitCode: 1, Stderr: "Error from server (Forbidden): persistentvolumes \"restricted-pv\" is forbidden"},
+				},
+				scCmd("custom-gcsfuse-sc"): {
+					{ExitCode: 0, Stdout: "gcsfuse.csi.storage.gke.io"},
+				},
+			},
+			wantGCSFuse: true,
+			wantCalls:   3,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(tc.mockResponses)
+			orc := newTestGKEOrchestrator(mockExec)
+			if tc.namespace != "" {
+				orc.namespace = tc.namespace
+			}
+			sm := &StorageManager{orchestrator: orc}
+
+			infos, _, err := sm.ProcessMounts([]string{tc.mount}, orchestrator.JobDefinition{})
+			if err != nil {
+				t.Fatalf("ProcessMounts() unexpected error: %v", err)
+			}
+			if len(infos) != 1 {
+				t.Fatalf("expected 1 MountInfo, got %d", len(infos))
+			}
+			if infos[0].NeedsGCSFuseSidecar != tc.wantGCSFuse {
+				t.Errorf("MountInfo.NeedsGCSFuseSidecar = %v, want %v", infos[0].NeedsGCSFuseSidecar, tc.wantGCSFuse)
+			}
+			if len(mockExec.calls) != tc.wantCalls {
+				t.Errorf("kubectl call count = %d (%v), want %d", len(mockExec.calls), mockExec.calls, tc.wantCalls)
+			}
+
+			opts := &ManifestOptions{}
+			sm.AddVolumeOptions(opts, infos)
+			if opts.GCSFuseEnabled != tc.wantGCSFuse {
+				t.Errorf("ManifestOptions.GCSFuseEnabled = %v, want %v", opts.GCSFuseEnabled, tc.wantGCSFuse)
+			}
+		})
+	}
 }

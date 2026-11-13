@@ -14,10 +14,13 @@
 
 """Unit tests for tools/validate_readme_snippets.py."""
 
+import glob
 import os
+import re
 import sys
 import tempfile
 import unittest
+import unittest.mock
 import yaml
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -111,6 +114,142 @@ class TestValidateReadmeSnippets(unittest.TestCase):
             vrs._get_non_ignored_repo_files() | {llms_txt, llms_full}
         )
         self.assertEqual(errs, [])
+
+    def test_validate_yaml_block_nested_object_keys(self):
+        snippet = """
+- id: gke_cluster
+  source: modules/scheduler/gke-cluster
+  settings:
+    cluster_autoscaling:
+      enabled: true
+      limits:
+        - autoprovisioning_machine_type: g2-standard-48
+          invalid_limit_field: 10
+- id: workload_mgr
+  source: modules/management/kubectl-apply
+  settings:
+    kueue:
+      install: true
+      wait: true
+      wait_for_pods_ready:
+        bad_timeout_key: 30m
+    jobset:
+      install: true
+      wait: true
+"""
+        tf_cache = {}
+        errs = vrs.validate_yaml_block(snippet, "test.md", tf_cache)
+        self.assertEqual(len(errs), 5)
+        self.assertIn("cluster_autoscaling.enabled", errs[0])
+        self.assertIn("cluster_autoscaling.limits.invalid_limit_field", errs[1])
+        self.assertIn("kueue.wait", errs[2])
+        self.assertIn("kueue.wait_for_pods_ready.bad_timeout_key", errs[3])
+        self.assertIn("jobset.wait", errs[4])
+
+    def test_strip_yaml_elision_lines(self):
+        raw = (
+            "    vars:\n"
+            "      project_id: test\n"
+            "      # ...\n"
+            "    ---\n"
+            "    deployment_groups: []\n"
+        )
+        cleaned = vrs._strip_yaml_elision_lines(raw)
+        docs = list(yaml.safe_load_all(cleaned))
+        self.assertEqual(len(docs), 2)
+        self.assertEqual(docs[0]["vars"]["project_id"], "test")
+
+    def test_uncommented_yaml_ellipsis_is_rejected(self):
+        for raw in (
+            "  ...\n  - id: script\n    source: modules/scripts/startup-script\n",
+            "  - id: script\n    source: modules/scripts/startup-script\n  ...\n",
+            "  - id: script\n    source: modules/scripts/startup-script\n  ... # more modules\n",
+        ):
+            errs = vrs.validate_yaml_block(raw, "test.md", {})
+            self.assertEqual(len(errs), 1)
+            self.assertIn("invalid YAML syntax in snippet", errs[0])
+            self.assertIn("use '# ...' for elided lines", errs[0])
+
+    def test_backticked_and_leading_slash_links_rejected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            md_path = os.path.join(tmpdir, "README.md")
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write(
+                    "See [`missing`](missing.md) and [abs](/modules/foo.md).\n"
+                )
+            with unittest.mock.patch.object(vrs, "REPO_ROOT", tmpdir), unittest.mock.patch.object(
+                vrs, "_find_markdown_files_under", return_value=[]
+            ):
+                errs = vrs.validate_markdown_links_and_cli({os.path.normpath(md_path)})
+            self.assertEqual(len(errs), 2)
+            self.assertTrue(any("missing.md" in e for e in errs))
+            self.assertTrue(any("/modules/foo.md" in e for e in errs))
+
+    def test_validate_yaml_block_required_kms_key_settings(self):
+        snippet = """
+- id: kms_key
+  source: community/modules/security/kms-key
+  settings:
+    project_id: $(vars.project_id)
+    location: $(vars.region)
+    key_ring_name: my-keyring
+    key_name: my-key
+"""
+        errs = vrs.validate_yaml_block(snippet, "kms-key-iam/README.md", {})
+        self.assertEqual(len(errs), 1)
+        self.assertIn("missing required setting 'deletion_policy'", errs[0])
+
+    def test_nested_object_keys_match_variables_tf(self):
+        """NESTED_OBJECT_KEYS must mirror the object({...}) attributes declared in variables.tf."""
+
+        def object_attrs(type_expr: str) -> dict[str, str]:
+            start = type_expr.index("object({") + len("object({")
+            body = vrs._hcl_block_body(type_expr, start)[:-1]
+            attrs: dict[str, str] = {}
+            depth, cur = 0, None
+            for line in body.splitlines():
+                m = re.match(r"\s*([A-Za-z_]\w*)\s*=\s*(.*)$", line)
+                if depth == 0 and m:
+                    cur = m.group(1)
+                    attrs[cur] = m.group(2)
+                elif cur:
+                    attrs[cur] += "\n" + line
+                depth += sum(line.count(c) for c in "({[") - sum(line.count(c) for c in ")}]")
+            return attrs
+
+        for (module, dotted), allowed in vrs.NESTED_OBJECT_KEYS.items():
+            with self.subTest(module=module, key=dotted):
+                root, *rest = dotted.split(".")
+                text = ""
+                for tf in sorted(glob.glob(os.path.join(vrs.REPO_ROOT, module, "*.tf"))):
+                    with open(tf, encoding="utf-8") as f:
+                        text += vrs._strip_hcl_comments(f.read())
+                m = re.search(rf'variable\s+"{root}"\s*\{{', text)
+                self.assertIsNotNone(m, f"variable {root!r} not found in {module}")
+                body = vrs._hcl_block_body(text, m.end())
+                type_attr = re.search(r"^\s*type\s*=", body, re.MULTILINE)
+                self.assertIsNotNone(type_attr, f"no type for {root!r} in {module}")
+                attrs = object_attrs(body[type_attr.start():])
+                for part in rest:
+                    attrs = object_attrs(attrs[part])
+                self.assertEqual(allowed, set(attrs))
+
+    def test_required_module_settings_have_no_default(self):
+        """REQUIRED_MODULE_SETTINGS entries must be variables without a default in variables.tf."""
+        for module, required in vrs.REQUIRED_MODULE_SETTINGS.items():
+            text = ""
+            for tf in sorted(glob.glob(os.path.join(vrs.REPO_ROOT, module, "*.tf"))):
+                with open(tf, encoding="utf-8") as f:
+                    text += vrs._strip_hcl_comments(f.read())
+            for name in sorted(required):
+                with self.subTest(module=module, var=name):
+                    m = re.search(rf'variable\s+"{name}"\s*\{{', text)
+                    self.assertIsNotNone(m, f"variable {name!r} not found in {module}")
+                    body = vrs._hcl_block_body(text, m.end())
+                    self.assertIsNone(
+                        re.search(r"^\s*default\s*=", body, re.MULTILINE),
+                        f"{module}: {name!r} now has a default; drop it from REQUIRED_MODULE_SETTINGS",
+                    )
 
 
 if __name__ == "__main__":

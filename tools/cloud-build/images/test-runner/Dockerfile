@@ -30,7 +30,7 @@ RUN apt-get -y update && apt-get -y install \
     echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com trixie main" | tee /etc/apt/sources.list.d/hashicorp.list && \
     apt-get -y update && \
     # Pin Terraform version to 1.12.2
-    apt-get install -y unzip python3-pip python3-venv terraform=1.12.2-1 packer jq && \
+    apt-get install -y unzip python3-pip python3-venv python3-yaml terraform=1.12.2-1 packer jq && \
     # install gcloud
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
@@ -39,12 +39,22 @@ RUN apt-get -y update && apt-get -y install \
     apt-get -y install kubectl && \
     # following is required to execute kubectl commands
     apt-get -y install google-cloud-cli-gke-gcloud-auth-plugin && \
+    # install Node.js 22.x and Gemini CLI for live skill evaluations
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get -y install nodejs && \
+    npm install -g @google/gemini-cli@0.66.0 && \
+    mkdir -p /root/.gemini/policies && \
+    printf '{\n  "security": {"auth": {"selectedType": "vertex-ai"}},\n  "model": {"name": "gemini-3.1-pro-preview"}\n}\n' > /root/.gemini/settings.json && \
+    printf '{\n  "/tmp": "TRUST_FOLDER",\n  "/workspace": "TRUST_FOLDER"\n}\n' > /root/.gemini/trustedFolders.json && \
+    printf '[[rule]]\ntoolName = "run_shell_command"\nargsPattern = ".*"\ndecision = "allow"\npriority = 999\nmodes = ["yolo"]\nallowRedirection = true\n' > /root/.gemini/policies/allow-yolo-shell.toml && \
+    npm cache clean --force && rm -rf ~/.npm && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     # create virtual environment
     python3 -m venv /opt/venv && \
     # install ansible and python dependencies
     /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /opt/venv/bin/pip install --no-cache-dir -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/scripts/requirements.txt && \
+    /opt/venv/bin/pip install --no-cache-dir pyyaml && \
     /opt/venv/bin/pip install --no-cache-dir ansible && \
     /opt/venv/bin/pip install --no-cache-dir paramiko && \
     /opt/venv/bin/pip install --no-cache-dir netaddr && \

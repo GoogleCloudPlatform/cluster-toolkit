@@ -432,7 +432,7 @@ The blueprints (`primary-cluster.yaml` and `burst-cluster.yaml`) are specificall
    * The startup scripts automatically hash usernames to deterministic numeric UIDs (`USER_UID=$((2000 + UID_HASH % 58000))`) and use `flock` on shared NFS `/home` to safely generate shared SSH keypairs without race conditions.
 
 3. **Standalone NFS Server Architecture**:
-   * Instead of managed services like Google Cloud Filestore, Primary Cluster provisions a dedicated standalone NFS Server VM (`modules/file-system/nfs-server`) backed by Hyperdisk Balanced to serve `/home` across both clusters over VPC peering.
+   * Instead of managed services like Google Cloud Filestore, Primary Cluster provisions a dedicated standalone NFS Server VM (`community/modules/file-system/nfs-server`) backed by Hyperdisk Balanced to serve `/home` across both clusters over VPC peering.
 
 ### B. Cross-Cluster SAuth & Bursting Mechanism
 * **Synchronous SAuth Key Propagation**:
