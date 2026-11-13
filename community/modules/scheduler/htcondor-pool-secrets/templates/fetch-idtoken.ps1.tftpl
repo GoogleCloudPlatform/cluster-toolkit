@@ -17,10 +17,22 @@ TRUST_DOMAIN = ${trust_domain}
 Set-Content -Path "$config_file" -Value "$config_string"
 
 # obtain IDTOKEN for authentication by StartD to Central Manager
-gcloud secrets versions access latest --secret ${xp_idtoken_secret_id} `
-    --out-file C:\condor\tokens.d\condor@${trust_domain}
-
-if ($LASTEXITCODE -ne 0)
+$tokens_dir = 'C:\Condor\tokens.d'
+if(!(test-path -PathType container -Path $tokens_dir))
 {
-    throw "Could not download HTCondor IDTOKEN; exiting startup script"
+    New-Item -ItemType Directory -Path $tokens_dir
+}
+$max_retries = 60
+$retry_count = 0
+while ($true) {
+    gcloud secrets versions access latest --secret ${xp_idtoken_secret_id} --out-file "$tokens_dir\condor@${trust_domain}"
+    if ($LASTEXITCODE -eq 0) {
+        break
+    }
+    $retry_count++
+    if ($retry_count -ge $max_retries) {
+        throw "Could not download HTCondor IDTOKEN after $max_retries attempts; exiting startup script"
+    }
+    Write-Output "Waiting for HTCondor IDTOKEN secret ${xp_idtoken_secret_id} to be populated (attempt $retry_count/$max_retries)..."
+    Start-Sleep -Seconds 10
 }
