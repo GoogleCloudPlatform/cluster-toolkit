@@ -4193,6 +4193,396 @@ func TestSubmitJob_MTCFastFailBeforeClusterCalls(t *testing.T) {
 	}
 }
 
+func TestPopulateClusterMetadata_PathwaysHeadNodePoolPreflight(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	tests := []struct {
+		name         string
+		pools        []gkeJobNodePool
+		headNodePool string
+		wantErr      string
+		forbidErr    string
+	}{
+		{
+			name: "non-existent --pathways-head-np fails fast",
+			pools: []gkeJobNodePool{{
+				Name:             "cpu-np",
+				InitialNodeCount: 1,
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+			}},
+			headNodePool: "missing-pool",
+			wantErr:      "Pathways head node pool 'missing-pool' not found in cluster 'test-cluster' (available node pools: cpu-np)",
+		},
+		{
+			name: "non-existent --pathways-head-np omits available node pools when none qualify",
+			pools: []gkeJobNodePool{{
+				Name:             "tpu-np",
+				InitialNodeCount: 1,
+				Config:           gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+			}},
+			headNodePool: "missing-pool",
+			wantErr:      "Pathways head node pool 'missing-pool' not found in cluster 'test-cluster'.",
+			forbidErr:    "available node pools",
+		},
+		{
+			name: "system pool --pathways-head-np fails fast with system pool error",
+			pools: []gkeJobNodePool{{
+				Name:             "default-pool",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2-standard-8",
+					Taints:      []gkeTaint{{Key: "components.gke.io/gke-managed-components", Value: "true", Effect: "NoSchedule"}},
+				},
+			}},
+			headNodePool: "default-pool",
+			wantErr:      "Pathways head node pool 'default-pool' in cluster 'test-cluster' is a GKE system node pool",
+		},
+		{
+			name: "non-CPU --pathways-head-np fails fast",
+			pools: []gkeJobNodePool{{
+				Name:             "tpu-np",
+				InitialNodeCount: 1,
+				Config:           gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+			}},
+			headNodePool: "tpu-np",
+			wantErr:      "Pathways head node pool 'tpu-np' in cluster 'test-cluster' is not a CPU node pool",
+		},
+		{
+			name: "0-node cpu-np with autoscaling disabled fails fast",
+			pools: []gkeJobNodePool{{
+				Name:             "cpu-np",
+				InitialNodeCount: 0,
+				Autoscaling:      gkeAutoscaling{Enabled: false},
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+			}},
+			wantErr: "Pathways head node pool 'cpu-np' in cluster 'test-cluster' has 0 nodes and autoscaling is disabled",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+			orc.clusterDesc = gkeCluster{NodePools: tt.pools}
+			job := &orchestrator.JobDefinition{
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				IsPathwaysJob:   true,
+				Pathways:        orchestrator.PathwaysJobDefinition{HeadNodePool: tt.headNodePool},
+			}
+			err := orc.populateClusterMetadata(job)
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("unexpected error message: %v", err)
+			}
+			if tt.forbidErr != "" && strings.Contains(err.Error(), tt.forbidErr) {
+				t.Errorf("did not expect %q in error, got: %v", tt.forbidErr, err)
+			}
+		})
+	}
+}
+
+func TestPopulateClusterMetadata_PathwaysHeadNodePoolCapacity(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	t.Run("scale-to-zero cpu-np with autoscaling enabled (min=0, max>0) succeeds and creates pathways-flavor", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.machineCapCache["n2-standard-16:us-central1-a"] = MachineTypeCap{GuestCpus: 16, MemoryMb: 65536}
+		orc.clusterDesc = gkeCluster{
+			NodePools: []gkeJobNodePool{{
+				Name:             "cpu-np",
+				InitialNodeCount: 0,
+				Autoscaling:      gkeAutoscaling{Enabled: true, MinNodeCount: 0, MaxNodeCount: 16},
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-16"},
+			}},
+		}
+		job := &orchestrator.JobDefinition{
+			ClusterName:     "test-cluster",
+			ClusterLocation: "us-central1-a",
+			IsPathwaysJob:   true,
+		}
+		if err := orc.populateClusterMetadata(job); err != nil {
+			t.Fatalf("expected scale-to-zero head node pool to succeed, got error: %v", err)
+		}
+		pwFlavor, ok := orc.capacity.Flavors["pathways-flavor"]
+		if !ok {
+			t.Fatalf("expected pathways-flavor to be populated in cluster capacity, got flavors: %+v", orc.capacity.Flavors)
+		}
+		if pwFlavor.NodeLabels["cloud.google.com/gke-nodepool"] != "cpu-np" {
+			t.Errorf("expected pathways-flavor nodepool label 'cpu-np', got %q", pwFlavor.NodeLabels["cloud.google.com/gke-nodepool"])
+		}
+	})
+
+	t.Run("autoDetectCPUNodePool prefers pool with capacity over 0-node disabled pool", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.clusterDesc = gkeCluster{
+			NodePools: []gkeJobNodePool{
+				{
+					Name:             "cpu-np",
+					InitialNodeCount: 0,
+					Autoscaling:      gkeAutoscaling{Enabled: false},
+					Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+				},
+				{
+					Name:             "pathways-np",
+					InitialNodeCount: 1,
+					Config:           gkeNodePoolConfig{MachineType: "n2-standard-16"},
+				},
+			},
+		}
+		if got := orc.autoDetectCPUNodePool(); got != "pathways-np" {
+			t.Errorf("autoDetectCPUNodePool() = %q, want 'pathways-np'", got)
+		}
+	})
+}
+
+func TestCheckJobSetWarningEvents_IncludesPodSchedulingEvents(t *testing.T) {
+	const jobSetEventsCmd = "kubectl get events -n default --field-selector=involvedObject.name=pw-job,involvedObject.kind=JobSet,type=Warning --request-timeout=10s --no-headers"
+	const jobPodsCmd = "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=pw-job -o name"
+	const podEventsCmd = "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	podEventsOutput := strings.Join([]string{
+		"2m          Normal    Scheduled           pod/pw-job-worker-0-0-abc   Successfully assigned default/pw-job-worker-0-0-abc to node-1",
+		"70s         Normal    Pulled              pod/pw-job-worker-0-0-abc   Pulled container image with no Warning reported",
+		"90s         Warning   FailedScheduling    pod/pw-job-pathways-head-0-0-xyz   0/5 nodes are available: 5 Insufficient cpu.",
+		"85s         Normal    NotTriggerScaleUp   pod/pw-job-pathways-head-0-0-xyz   pod didn't trigger scale-up: 1 max node group size reached",
+		"80s         Warning   FailedScheduling    pod/other-pw-job-0-0-def   0/5 nodes are available",
+		"75s         Warning   FailedScheduling    pod/pw-job-2-worker-0-0-abc   0/5 nodes are available",
+	}, "\n")
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		jobSetEventsCmd: {{ExitCode: 0, Stdout: ""}},
+		jobPodsCmd:      {{ExitCode: 0, Stdout: "pod/pw-job-worker-0-0-abc\npod/pw-job-pathways-head-0-0-xyz\n"}},
+		podEventsCmd:    {{ExitCode: 0, Stdout: podEventsOutput}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	got := orc.checkJobSetWarningEvents("default", "pw-job")
+	if !strings.Contains(got, "FailedScheduling") || !strings.Contains(got, "pw-job-pathways-head-0-0-xyz") {
+		t.Errorf("expected FailedScheduling event for pw-job head pod, got:\n%s", got)
+	}
+	if !strings.Contains(got, "NotTriggerScaleUp") {
+		t.Errorf("expected NotTriggerScaleUp event for pw-job head pod, got:\n%s", got)
+	}
+	if strings.Contains(got, "Successfully assigned") {
+		t.Errorf("did not expect Normal Scheduled event in warning output, got:\n%s", got)
+	}
+	if strings.Contains(got, "Pulled container image") {
+		t.Errorf("did not expect Normal event mentioning 'Warning' in message, got:\n%s", got)
+	}
+	if strings.Contains(got, "other-pw-job") {
+		t.Errorf("did not expect events from unrelated job with matching suffix, got:\n%s", got)
+	}
+	if strings.Contains(got, "pw-job-2") {
+		t.Errorf("did not expect events from unrelated job with matching prefix, got:\n%s", got)
+	}
+}
+
+func TestFetchLogsWithRetry_SurfacesUnscheduledPodsAndEvents(t *testing.T) {
+	oldInterval := logsRetryInterval
+	logsRetryInterval = time.Millisecond
+	defer func() { logsRetryInterval = oldInterval }()
+
+	const selector = "jobset.sigs.k8s.io/jobset-name=pw-job"
+	const logsCmd = "kubectl logs -n default -l " + selector + " --max-log-requests=10 --tail=-1"
+	const unschedCmd = "kubectl get pods -n default -l " + selector + " -o jsonpath=" + unscheduledPodsJSONPath
+	const podEventsCmd = "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	waiting := shell.CommandResult{ExitCode: 1, Stderr: `container "worker" in pod "pw-job-worker-0-0-abc" is waiting to start: PodInitializing`}
+	timedOut := make([]shell.CommandResult, 12)
+	for i := range timedOut {
+		timedOut[i] = waiting
+	}
+	unschedResult := shell.CommandResult{
+		ExitCode: 0,
+		Stdout: "pw-job-worker-0-0-abc\tPending\tTrue\t\t\n" +
+			"pw-job-pathways-head-0-0-xyz\tPending\tFalse\tUnschedulable\t0/4 nodes are available: 4 node(s) didn't match Pod's node affinity/selector.\n",
+	}
+	podEventResult := shell.CommandResult{
+		ExitCode: 0,
+		Stdout:   "60s Normal NotTriggerScaleUp pod/pw-job-pathways-head-0-0-xyz pod didn't trigger scale-up: 2 node(s) didn't match Pod's node affinity/selector\n",
+	}
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		logsCmd:      timedOut,
+		unschedCmd:   {unschedResult, unschedResult},
+		podEventsCmd: {podEventResult, podEventResult, podEventResult},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	_, err := orc.fetchLogsWithRetry("default", "pw-job", selector, false, 0, -1)
+	if err == nil {
+		t.Fatal("expected fetchLogsWithRetry to return timeout error, got nil")
+	}
+	for _, want := range []string{
+		"unscheduled pods:",
+		"pw-job-pathways-head-0-0-xyz (Unschedulable: 0/4 nodes are available",
+		"NotTriggerScaleUp",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("expected error to contain %q, got:\n%v", want, err)
+		}
+	}
+	if n := strings.Count(err.Error(), "NotTriggerScaleUp"); n != 1 {
+		t.Errorf("want NotTriggerScaleUp once in the timeout error, got %d:\n%v", n, err)
+	}
+}
+
+func TestGetJobLogs_EmptyLogsSurfacesUnscheduledPods(t *testing.T) {
+	const selector = "jobset.sigs.k8s.io/jobset-name=stuck-pod-test"
+	podsQuery := "kubectl get pods -n default -l " + selector + " -o jsonpath=" + podContainersJSONPath
+	jobSetQuery := "kubectl get jobsets.jobset.x-k8s.io stuck-pod-test -n default -o jsonpath=" + jobSetInfoJSONPath
+	logsCmd := "kubectl logs -n default -l " + selector + " --all-containers --max-log-requests=10 --tail=-1"
+	unschedCmd := "kubectl get pods -n default -l " + selector + " -o jsonpath=" + unscheduledPodsJSONPath
+	podEventsCmd := "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+		"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+		podsQuery:                            {{ExitCode: 0, Stdout: "main\n"}},
+		jobSetQuery:                          {{ExitCode: 0, Stdout: "\tFalse\tmain-job\n1 1\n"}},
+		logsCmd:                              {{ExitCode: 0, Stdout: ""}},
+		unschedCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "stuck-pod-test-main-job-0-0-f9lv8\tPending\tFalse\tUnschedulable\t0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector.\n",
+			},
+		},
+		podEventsCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "2m51s Warning FailedScheduling pod/stuck-pod-test-main-job-0-0-f9lv8 0/1 nodes are available\n3m9s Normal NotTriggerScaleUp pod/stuck-pod-test-main-job-0-0-f9lv8 Pod didn't trigger scale-up\n",
+			},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	got, err := orc.GetJobLogs("stuck-pod-test", orchestrator.LogsOptions{
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "test-project",
+	})
+	if err != nil {
+		t.Fatalf("GetJobLogs() unexpected error: %v", err)
+	}
+	for _, want := range []string{
+		"Job pods are waiting to be scheduled (no container logs available yet):",
+		"stuck-pod-test-main-job-0-0-f9lv8 (Unschedulable: 0/1 nodes are available",
+		"FailedScheduling",
+		"NotTriggerScaleUp",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("GetJobLogs() = %q, want substring %q", got, want)
+		}
+	}
+}
+
+func TestGetJobLogs_MainOnlySurfacesUnscheduledWorkerPods(t *testing.T) {
+	const jobsetSel = "jobset.sigs.k8s.io/jobset-name=pw-job"
+	const headSel = jobsetSel + ",jobset.sigs.k8s.io/replicatedjob-name=pathways-head,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0"
+	podsQuery := "kubectl get pods -n default -l " + jobsetSel + " -o jsonpath=" + podContainersJSONPath
+	jobSetQuery := "kubectl get jobsets.jobset.x-k8s.io pw-job -n default -o jsonpath=" + jobSetInfoJSONPath
+	logsCmd := "kubectl logs -n default -l " + headSel + " --max-log-requests=10 --tail=-1"
+	unschedCmd := "kubectl get pods -n default -l " + jobsetSel + " -o jsonpath=" + unscheduledPodsJSONPath
+	podEventsCmd := "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+		"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+		// >5 pods automatically narrows log selector to pathways-head rank 0.
+		podsQuery:   {{ExitCode: 0, Stdout: "pathways-head\n" + strings.Repeat("worker\n", 5)}},
+		jobSetQuery: {{ExitCode: 0, Stdout: "\tFalse\tpathways-head\n1 1\n1 5\n"}},
+		logsCmd:     {{ExitCode: 0, Stdout: ""}},
+		unschedCmd: {
+			{
+				ExitCode: 0,
+				Stdout: "pw-job-pathways-head-0-0-abc\tRunning\tTrue\t\t\n" +
+					"pw-job-worker-0-0-xyz\tPending\tFalse\tUnschedulable\t0/2 nodes are available: 2 Insufficient google.com/tpu.\n",
+			},
+		},
+		podEventsCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "30s Warning FailedScheduling pod/pw-job-worker-0-0-xyz 0/2 nodes are available: 2 Insufficient google.com/tpu.\n",
+			},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	got, err := orc.GetJobLogs("pw-job", orchestrator.LogsOptions{
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "test-project",
+	})
+	if err != nil {
+		t.Fatalf("GetJobLogs() unexpected error: %v", err)
+	}
+	for _, want := range []string{
+		"Job pods are waiting to be scheduled (no container logs available yet):",
+		"pw-job-worker-0-0-xyz (Unschedulable: 0/2 nodes are available",
+		"FailedScheduling",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("GetJobLogs() = %q, want substring %q", got, want)
+		}
+	}
+	if strings.Contains(got, "pw-job-pathways-head-0-0-abc") {
+		t.Errorf("did not expect scheduled head pod in unscheduled output, got: %q", got)
+	}
+	mockExec.assertAllKubectlPinned(t, "gke_test-project_us-central1-a_test-cluster")
+}
+
+func TestGetJobLogs_FollowEmptyProbeChecksUnscheduledPods(t *testing.T) {
+	const selector = "jobset.sigs.k8s.io/jobset-name=stuck-pod-test"
+	podsQuery := "kubectl get pods -n default -l " + selector + " -o jsonpath=" + podContainersJSONPath
+	jobSetQuery := "kubectl get jobsets.jobset.x-k8s.io stuck-pod-test -n default -o jsonpath=" + jobSetInfoJSONPath
+	probeCmd := "kubectl logs -n default -l " + selector + " --all-containers --max-log-requests=10 --tail=1"
+	streamCmd := "kubectl logs -n default -l " + selector + " --all-containers -f --max-log-requests=10 --tail=-1"
+	unschedCmd := "kubectl get pods -n default -l " + selector + " -o jsonpath=" + unscheduledPodsJSONPath
+	podEventsCmd := "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+		"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+		podsQuery:                            {{ExitCode: 0, Stdout: "main\n"}, {ExitCode: 0, Stdout: "main\n"}},
+		jobSetQuery:                          {{ExitCode: 0, Stdout: "\tFalse\tmain-job\n1 1\n"}},
+		probeCmd:                             {{ExitCode: 0, Stdout: ""}},
+		unschedCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "stuck-pod-test-main-job-0-0-f9lv8\tPending\tFalse\tUnschedulable\t0/1 nodes are available.\n",
+			},
+		},
+		podEventsCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "30s Warning FailedScheduling pod/stuck-pod-test-main-job-0-0-f9lv8 0/1 nodes are available\n",
+			},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	if _, err := orc.GetJobLogs("stuck-pod-test", orchestrator.LogsOptions{
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "test-project",
+		Follow:          true,
+	}); err != nil {
+		t.Fatalf("GetJobLogs() unexpected error: %v", err)
+	}
+	if mockExec.callCount[unschedCmd] != 1 {
+		t.Errorf("expected unscheduled pods query to run once, got %d", mockExec.callCount[unschedCmd])
+	}
+	if mockExec.callCount[podEventsCmd] != 1 {
+		t.Errorf("expected pod events query to run once for unscheduled pod, got %d", mockExec.callCount[podEventsCmd])
+	}
+	if len(mockExec.streamCalls) != 1 || mockExec.streamCalls[0] != streamCmd {
+		t.Errorf("streamCalls = %q, want [%q]", mockExec.streamCalls, streamCmd)
+	}
+	mockExec.assertAllKubectlPinned(t, "gke_test-project_us-central1-a_test-cluster")
+}
+
 func TestSubmitJob_TelemetryAndTemplateFastFailBeforeImageBuild(t *testing.T) {
 	setupMockMachineConfig(t)
 	badSyntaxDir := t.TempDir()
