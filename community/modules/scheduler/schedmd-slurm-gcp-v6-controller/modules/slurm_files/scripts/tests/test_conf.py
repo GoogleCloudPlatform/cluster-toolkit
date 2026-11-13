@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pathlib import Path
 import pytest
 import mock
 from common import TstNodeset, TstCfg, TstMachineConf, TstTemplateInfo, Placeholder, TstPartition
@@ -592,3 +593,35 @@ def test_v2605_generator_tpu_vs_cpu(mock_slurm_version, tmp_path):
     topo_by_name = {entry["topology"]: entry for entry in topo_sections}
     assert conf_v2605.TOPOLOGY_TPU_BLOCK in topo_by_name
     assert topo_by_name[conf_v2605.TOPOLOGY_TPU_BLOCK]["block"]["block_sizes"] == [1]
+
+
+def test_install_jobsubmit_lua(tmp_path, mocker):
+    mocker.patch("util.chown_slurm")
+    scripts_dir = Path(__file__).resolve().parent.parent
+    etc_dir = tmp_path / "etc"
+    etc_dir.mkdir()
+
+    mocker.patch.object(util.Lookup, "etc_dir", new_callable=mock.PropertyMock, return_value=etc_dir)
+
+    # 1. Partitions without TPU -> should NOT install job_submit.lua
+    cfg_no_tpu = TstCfg(
+        slurm_scripts_dir=scripts_dir,
+        partitions={"p1": TstPartition(partition_nodeset_tpu=[])},
+    )
+    lkp_no_tpu = util.Lookup(cfg_no_tpu)
+    conf.install_jobsubmit_lua(lkp_no_tpu)
+    assert not (etc_dir / "job_submit.lua").exists()
+
+    # 2. Partitions with TPU -> should install job_submit.lua containing validation logic
+    cfg_tpu = TstCfg(
+        slurm_scripts_dir=scripts_dir,
+        partitions={"tpu_part": TstPartition(partition_nodeset_tpu=["tpu_node"])},
+    )
+    lkp_tpu = util.Lookup(cfg_tpu)
+    conf.install_jobsubmit_lua(lkp_tpu)
+    lua_file = etc_dir / "job_submit.lua"
+    assert lua_file.exists()
+    content = lua_file.read_text()
+    assert "is_valid_partition_list(part)" in content
+    assert "if part == nil then" in content
+    assert "tostring(part)" in content
