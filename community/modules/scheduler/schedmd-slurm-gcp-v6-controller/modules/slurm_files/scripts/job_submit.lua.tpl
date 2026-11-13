@@ -33,7 +33,7 @@ function is_valid_partition_list(part)
         return false
     end
     for token in string.gmatch(part, "([^,]+)") do
-        if string.sub(token, 1, 1) == "-" or not string.match(token, "^[%w_.-]+$") then
+        if string.sub(token, 1, 1) == "-" or not string.match(token, "^[a-zA-Z0-9_.-]+$") then
             return false
         end
     end
