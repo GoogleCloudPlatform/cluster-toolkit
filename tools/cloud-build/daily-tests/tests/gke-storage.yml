@@ -14,8 +14,6 @@
 ---
 test_name: storage-gke
 deployment_name: gke-storage-{{ build }}
-region: us-central1
-zone: us-central1-b  # for remote node
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/storage-gke.yaml"
 network: "{{ test_name }}-net"
@@ -33,7 +31,7 @@ cli_deployment_vars:
   authorized_cidr: "{{ build_ip.stdout }}/32"
   gcp_public_cidrs_access_enabled: true
   project_id: "{{ project }}"
-  hyperdisk_balanced_storage_pool: "projects/{{ project }}/zones/us-central1-b/storagePools/{{ hyperdisk_balanced_pool }}"
-  hyperdisk_throughput_storage_pool: "projects/{{ project }}/zones/us-central1-b/storagePools/{{ hyperdisk_throughput_pool }}"
+  hyperdisk_balanced_storage_pool: "projects/{{ project }}/zones/{{ zone }}/storagePools/{{ hyperdisk_balanced_pool }}"
+  hyperdisk_throughput_storage_pool: "projects/{{ project }}/zones/{{ zone }}/storagePools/{{ hyperdisk_throughput_pool }}"
 custom_vars:
   project: "{{ project }}"
