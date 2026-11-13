@@ -69,6 +69,7 @@ class TstCfg:
     project: str = "p"
     provisioning_engine: str = "BULK_INSERT"
     cloud_parameters: dict[str, Any] = field(default_factory=dict)
+    capacity_circuit_breaker: dict[str, Any] = field(default_factory=dict)
     experimental: dict[str, Any] = field(default_factory=dict)
     enable_health_check_start_only: bool = False
     enable_expedited_requeue: bool = False
