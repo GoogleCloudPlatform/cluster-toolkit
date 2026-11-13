@@ -27,6 +27,7 @@ import enum
 import os
 import re
 import shutil
+import signal
 import subprocess
 import tarfile
 
@@ -133,17 +134,21 @@ def RunCommand(
       shell=True,
       stdout=subprocess.PIPE,
       stderr=subprocess.PIPE,
+      start_new_session=True,
   )
   logging.debug("Running command: %s", command)
   try:
     stdout, stderr = process.communicate(timeout=timeout_sec)
-  except subprocess.TimeoutExpired as te:
-    # clean up the process before raising the timeout experied.
-    process.kill()
+  except subprocess.TimeoutExpired:
+    # Kill the whole process group so shell children do not outlive timeout.
+    try:
+      os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+      pass
     process.communicate()
-    raise te
-  stdout = stdout.decode()
-  stderr = stderr.decode()
+    raise
+  stdout = stdout.decode("utf-8", errors="replace")
+  stderr = stderr.decode("utf-8", errors="replace")
   logging.debug(
       "\n===\ncommand:\n%s\nstdout:\n%s\nstderr:\n%s\nreturn code: %s\n===",
       command,
@@ -376,14 +381,23 @@ def UploadArtifactsToGcs(
 
   storage_client = storage.Client()
 
-  bucket = storage_client.lookup_bucket(bucket_name)
+  try:
+    bucket = storage_client.lookup_bucket(bucket_name)
+  except google_api_exceptions.GoogleAPIError as e:
+    logging.warning(
+        "Bucket lookup failed for %s: %s. Skipping GCS upload.",
+        bucket_name,
+        e,
+    )
+    return
+
   if bucket is None:
     # Create the bucket if it does not exist.
     try:
       bucket = storage_client.create_bucket(bucket_name)
       logging.info("Created bucket [%s] in the project.", bucket_name)
     except google_api_exceptions.GoogleAPIError as e:
-      logging.info(
+      logging.warning(
           "Bucket creation failed for %s: %s. Skipping GCS upload.",
           bucket_name,
           e,
