@@ -736,6 +736,9 @@ func (s *MySuite) TestReservationExistsValidatorWithReservationBlocksAndSubBlock
 				capturedProject = parts[2]
 				capturedZone = parts[4]
 				capturedName = parts[6]
+			} else {
+				http.Error(w, "invalid reservation URL path", http.StatusNotFound)
+				return
 			}
 			_, _ = w.Write([]byte(`{"name": "` + capturedName + `", "status": "READY"}`))
 		}), nil
@@ -770,13 +773,7 @@ func (s *MySuite) TestReservationExistsValidatorWithReservationBlocksAndSubBlock
 
 	for _, tc := range testCases {
 		capturedProject, capturedZone, capturedName = "", "", ""
-		bp := config.Blueprint{
-			Vars: config.NewDict(map[string]cty.Value{
-				"project_id":       cty.StringVal("consumer-proj"),
-				"zone":             cty.StringVal("us-central1-b"),
-				"reservation_name": cty.StringVal(tc.resInput),
-			}),
-		}
+		bp := config.Blueprint{}
 		inputs := config.NewDict(map[string]cty.Value{
 			"project_id":       cty.StringVal("consumer-proj"),
 			"zone":             cty.StringVal("us-central1-b"),

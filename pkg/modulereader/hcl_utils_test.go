@@ -278,8 +278,11 @@ func TestVMInstanceReservationNameValidationHCL(t *testing.T) {
 		{"shared_block", "projects/consumer-proj/reservations/reservation-20261008-231448/reservationBlocks/reservation-20261008-231448-block-0001", true},
 		{"shared_subblock", "projects/consumer-proj/reservations/reservation-20261008-231448/reservationBlocks/reservation-20261008-231448-block-0001/reservationSubBlocks/subblock-0001", true},
 		{"invalid_subblock_without_block", "reservation-20261008-231448/reservationSubBlocks/subblock-0001", false},
+		{"invalid_empty_block_with_subblock", "reservation-20261008-231448/reservationBlocks//reservationSubBlocks/subblock-0001", false},
 		{"invalid_trailing_slash", "reservation-20261008-231448/reservationBlocks/", false},
+		{"invalid_subblock_trailing_slash", "reservation-20261008-231448/reservationBlocks/block-0001/reservationSubBlocks/", false},
 		{"invalid_uppercase", "Reservation-20261008/reservationBlocks/block-0001", false},
+		{"invalid_uppercase_block", "reservation-20261008/reservationBlocks/Block-0001", false},
 		{"invalid_extra_segment", "reservation-20261008-231448/reservationBlocks/block-0001/reservationSubBlocks/sub-0001/extra", false},
 	}
 
