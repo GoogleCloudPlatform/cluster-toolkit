@@ -1,0 +1,78 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    # The GCS bucket used for storing terraform state
+    bucket:
+
+vars:
+  # Your GCP Project ID
+  project_id:
+
+  # This should be unique across all of your cluster toolkit deployments.
+  deployment_name:
+
+  # The GCP Region for this deployment.
+  region:
+
+  # The GCP Zone for this deployment.
+  zone:
+
+  # The number of nodes to be created in each node pool.
+  static_node_count:
+
+  # The number of node pools to be created.
+  num_node_pools:
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr:
+
+  # The name of the compute engine reservation in the form of
+  # <reservation-name>
+  # To target a BLOCK_NAME, the name of the extended reservation
+  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
+  # (set pin_to_subblocks: false in that case).
+  reservation:
+
+  # The GCP Project ID hosting the reservation. Set to owner project id if using a shared reservation.
+  reservation_project_id:
+
+  # Pin each A5X node pool to its own reservation sub-block (one rack). Needs
+  # `reservation` to be the reservation name.
+  # true: gcluster proposes free sub-blocks and saves them to reservation_subblocks map.
+  # false: the module uses the map below as written; no gcluster lookup.
+  pin_to_subblocks: true
+  # Key (block-subblock in form of BB-SSSS) -> sub-block path, one entry per node pool (num_node_pools).
+  # Leave {} on the first deploy; gcluster fills it in.
+  reservation_subblocks: {}
+
+  # GKE version to use with the node image.
+  version_prefix:
+
+  # Custom COS node image (NVIDIA driver and IMEX preloaded) in this project.
+  custom_image:
+
+  # Type of custom_image. Set value as:
+  #   image-builder: for an image built with Image Builder.
+  #   prebuilt: for a prebuilt GKE A5X node image.
+  custom_image_source: image-builder
+
+  # NVIDIA driver version built into custom_image.
+  # Required when custom_image_source is "image-builder".
+  # Comment out this line when custom_image_source is "prebuilt".
+  nvidia_driver_version:

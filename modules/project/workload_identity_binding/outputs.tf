@@ -16,5 +16,5 @@
 
 output "workload_identity_principal" {
   description = "The Workload Identity principal."
-  value       = "serviceAccount:${var.project_id}.svc.id.goog[${var.namespace}/${var.k8s_service_account_name}]"
+  value       = "serviceAccount:${replace(var.project_id, ":", "/")}.svc.id.goog[${var.namespace}/${var.k8s_service_account_name}]"
 }

@@ -44,7 +44,7 @@ import (
 
 const (
 	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
-	latestToolkitVersion     = "v1.108.0"
+	latestToolkitVersion     = "v1.109.0"
 	// SharedModulesDirName is the name of the shared directory for embedded modules
 	SharedModulesDirName = "_modules"
 )
@@ -400,6 +400,7 @@ func (bp *Blueprint) visitDicts(cb func(dictPath, *Dict)) {
 
 // DeploymentSettings are deployment-specific override settings
 type DeploymentSettings struct {
+	AIAssisted               bool             `yaml:"ai_assisted,omitempty"`
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
 	Vars                     Dict
 }

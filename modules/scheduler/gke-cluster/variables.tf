@@ -332,7 +332,7 @@ variable "system_node_pool_kubernetes_labels" {
   default     = null
 }
 variable "system_node_pool_image_type" {
-  description = "The default image type used by NAP once a new node pool is being created. Use either COS_CONTAINERD or UBUNTU_CONTAINERD."
+  description = "The OS image type used for the system node pool nodes. Use either COS_CONTAINERD or UBUNTU_CONTAINERD."
   type        = string
   default     = "COS_CONTAINERD"
 }
@@ -628,6 +628,12 @@ variable "enable_external_dns_endpoint" {
   default     = false
 }
 
+variable "enable_gateway_api" {
+  description = "Enable the GKE Standard Gateway API channel and HttpLoadBalancing addon without installing Inference Extension CRDs. Inference Gateway also enables these prerequisites independently of this setting."
+  type        = bool
+  default     = false
+}
+
 variable "enable_inference_gateway" {
   description = "If true, enables GKE features required for Inference Gateway, including the HttpLoadBalancing addon, and installs required CRDs."
   type        = bool
@@ -667,9 +673,8 @@ variable "enable_slice_controller" {
 
 variable "cluster_autoscaling" {
   description = <<EOT
-  GKE Node Auto-Provisioning (NAP) and Cluster Autoscaling configuration.
+  GKE Node Auto-Provisioning (NAP) and Cluster Autoscaling configuration. Passing a non-null object enables NAP; leave null (default) to disable.
 
-  enabled:               Enable/disable GKE Cluster autoscaling and auto-provisioning.
   service_account_email: The service account tied to node-provisioning. Defaults to the deployment service account.
   oauth_scopes:          Scopes assigned to nodes provisioned by NAP.
   autoprovisioning_disk_size_gb: The disk size of auto-provisioned nodes (GB). Default 100.

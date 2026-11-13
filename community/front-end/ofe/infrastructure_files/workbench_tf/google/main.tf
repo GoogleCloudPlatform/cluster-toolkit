@@ -71,7 +71,7 @@ data "google_project" "existing_project" {
 module "project_radlab_ds_analytics" {
   count   = var.create_project ? 1 : 0
   source  = "terraform-google-modules/project-factory/google"
-  version = "~> 11.0"
+  version = "~> 18.0"
 
   name              = format("%s-%s", var.project_name, local.random_id)
   random_project_id = false
@@ -110,7 +110,7 @@ data "google_compute_subnetwork" "default" {
 module "vpc_ai_notebook" {
   count   = var.create_network ? 1 : 0
   source  = "terraform-google-modules/network/google"
-  version = "~> 3.0"
+  version = "~> 10.0"
 
   project_id   = local.project.project_id
   network_name = var.network_name
@@ -166,47 +166,55 @@ resource "google_service_account_iam_member" "sa_ai_notebook_user_iam" {
   member             = "user:${var.trusted_user}"
 }
 
-resource "google_notebooks_instance" "ai_notebook" {
-  project      = local.project.project_id
-  name         = "notebooks-instance-${local.random_id}"
-  location     = var.zone
-  machine_type = var.machine_type
+# Vertex AI Workbench Instance: Google retired user-managed notebooks
+# (google_notebooks_instance), which can no longer be created. Legacy
+# deep-learning image families do not apply, so the default Workbench image
+# is used.
+resource "google_workbench_instance" "ai_notebook" {
+  project  = local.project.project_id
+  name     = "notebooks-instance-${local.random_id}"
+  location = var.zone
 
-  vm_image {
-    image_family = try(var.instance_image.family, null)
-    image_name   = try(var.instance_image.name, null)
-    project      = var.instance_image.project
+  gce_setup {
+    machine_type = var.machine_type
+
+    boot_disk {
+      # The API rejects boot disks smaller than the 150 GB Workbench image.
+      disk_size_gb = max(var.boot_disk_size_gb, 150)
+      disk_type    = var.boot_disk_type
+    }
+
+    # Workbench Instances also create a data disk, mounted at /home/jupyter.
+    data_disks {
+      disk_size_gb = var.data_disk_size_gb
+      disk_type    = var.boot_disk_type
+    }
+
+    network_interfaces {
+      network = local.network.self_link
+      subnet  = local.subnet.self_link
+    }
+
+    disable_public_ip = false
+
+    metadata = {
+      terraform           = "true"
+      proxy-mode          = "mail"
+      post-startup-script = format("gs://%s/%s", var.wb_startup_script_bucket, var.wb_startup_script_name)
+    }
   }
 
   instance_owners = var.owner_id
 
-  install_gpu_driver = false
-  boot_disk_type     = var.boot_disk_type
-  boot_disk_size_gb  = var.boot_disk_size_gb
-
-  no_public_ip    = false
-  no_proxy_access = false
-
-  network = local.network.self_link
-  subnet  = local.subnet.self_link
-
-  post_startup_script = format("gs://%s/%s", var.wb_startup_script_bucket, var.wb_startup_script_name)
-
   labels = {
     module = "data-science"
   }
-
-  metadata = {
-    terraform  = "true"
-    proxy-mode = "mail"
-  }
-
 }
 
 resource "google_compute_instance_iam_member" "oslogin_permissions" {
-  project       = google_notebooks_instance.ai_notebook.project
-  zone          = google_notebooks_instance.ai_notebook.location
-  instance_name = google_notebooks_instance.ai_notebook.name
+  project       = google_workbench_instance.ai_notebook.project
+  zone          = google_workbench_instance.ai_notebook.location
+  instance_name = google_workbench_instance.ai_notebook.name
   role          = "roles/compute.osLogin"
   member        = "user:${var.trusted_user}"
 }
@@ -215,8 +223,8 @@ module "waitforstartup" {
 
   source = "./wait-for-startup"
 
-  instance_name = google_notebooks_instance.ai_notebook.name
-  zone          = google_notebooks_instance.ai_notebook.location
-  project_id    = google_notebooks_instance.ai_notebook.project
+  instance_name = google_workbench_instance.ai_notebook.name
+  zone          = google_workbench_instance.ai_notebook.location
+  project_id    = google_workbench_instance.ai_notebook.project
   timeout       = 1200
 }
