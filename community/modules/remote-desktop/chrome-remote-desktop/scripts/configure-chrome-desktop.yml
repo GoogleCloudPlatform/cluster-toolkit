@@ -56,6 +56,6 @@
       mode: 0644
 
   - name: Start Chrome remote desktop
-    ansible.builtin.command: /etc/init.d/chrome-remote-desktop start
-    register: result
-    changed_when: result.rc == 0
+    ansible.builtin.service:
+      name: chrome-remote-desktop
+      state: started

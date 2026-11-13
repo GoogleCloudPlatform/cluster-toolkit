@@ -89,30 +89,58 @@ blueprints:
     source: modules/scheduler/batch-login-node
     use: [batch-job]
 - path: examples/cae/cae-slurm.yaml
+  deployment_path: examples/cae/cae-slurm-deployment.yaml
   blueprint_name: cae-slurm-v6
   scheduler: slurm
   description: "The Computer Aided Engineering (CAE) blueprint captures a reference architecture where the right cloud components are assembled to optimally cater to the requirements of computationally-intensive CAE workloads. Specifically, it is..."
-  machine_types: [h3-standard-88, c3-highmem-176]
-  workloads: [hpc]
-  required_services: [compute.googleapis.com, file.googleapis.com, iam.googleapis.com, stackdriver.googleapis.com, storage.googleapis.com]
+  machine_types: [h4d-highmem-192-lssd, c3-highmem-176, g4-standard-48]
+  accelerators: [nvidia-rtx-pro-6000]
+  workloads: [ml-training, ml-inference, hpc]
+  required_services: [compute.googleapis.com, file.googleapis.com, iam.googleapis.com, lustre.googleapis.com, servicenetworking.googleapis.com, serviceusage.googleapis.com, stackdriver.googleapis.com, storage.googleapis.com]
   vars:
     appsfs_size_gb: 2560
     c3_enable_spot_vm: false
     c3_node_count_dynamic_max: 10
     controller_machine_type: n2-standard-16
-    deployment_name: cae-slurm-v6
+    deployment_name: cae-slurm-solutions
+    gpu_cluster_size: 0
+    gpu_disk_size_gb: 100
+    gpu_dws_flex_enabled: true
+    gpu_enable_spot_vm: false
+    gpu_machine_type: g4-standard-48
+    gpu_reservation_name: ""
     h3_enable_spot_vm: false
     h3_node_count_dynamic_max: 10
+    h4d_cluster_size: 0
+    h4d_dws_flex_enabled: false
+    h4d_enable_spot_vm: true
+    h4d_reservation_name: ""
     homefs_size_gb: 2560
     login_machine_type: n2-standard-8
+    lustre_instance_id: cae-scratch-lustre
+    lustre_size_gib: 9000
+    per_unit_storage_throughput: 1000
     project_id: null
+    rdma_net_range: 192.168.128.0/18
     region: us-central1
     scratchfs_size_gb: 10240
-    zone: us-central1-a
+    slurm_image:
+      family: slurm-gcp-6-12-hpc-rocky-linux-9
+      project: schedmd-slurm-public
+    zone: us-central1-b
   modules:
+  - id: services-api
+    source: community/modules/project/service-enablement
+    settings: [gcp_service_list]
   - id: network
     source: modules/network/vpc
     settings: [network_name, subnetwork_name]
+  - id: private_service_access
+    source: modules/network/private-service-access
+    use: [network]
+  - id: h4d-rdma-net
+    source: modules/network/vpc
+    settings: [enable_cloud_nat, enable_cloud_router, enable_internal_traffic, mtu, network_name, network_profile, network_routing_mode, nic_type, subnetworks]
   - id: homefs
     source: modules/file-system/filestore
     use: [network]
@@ -124,36 +152,53 @@ blueprints:
   - id: hpc_dash
     source: modules/monitoring/dashboard
   - id: scratchfs
-    source: modules/file-system/filestore
-    use: [network]
-    settings: [filestore_share_name, filestore_tier, local_mount, size_gb]
+    source: modules/file-system/managed-lustre
+    use: [network, private_service_access]
+    settings: [filestore_share_name, filestore_tier, local_mount, per_unit_storage_throughput, remote_mount, size_gb, size_gib]
   - id: remotedesktop
     source: community/modules/remote-desktop/chrome-remote-desktop
-    use: [network]
-    settings: [add_deployment_name_before_prefix, guest_accelerator, install_nvidia_driver, name_prefix]
-  - id: h3_nodeset
+    use: [network, homefs, appsfs]
+    settings: [add_deployment_name_before_prefix, guest_accelerator, install_nvidia_driver, instance_image, name_prefix]
+  - id: h4d_startup
+    source: modules/scripts/startup-script
+    settings: [local_ssd_filesystem, set_ofi_cloud_rdma_tunables]
+  - id: h4d_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [h4d_startup, network]
+    settings: [additional_networks, allow_automatic_updates, bandwidth_tier, disk_type, dws_flex, enable_placement, enable_spot_vm, instance_image, machine_type, node_count_dynamic_max, node_count_static, on_host_maintenance, reservation_name]
+  - id: h4d_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [h4d_nodeset]
+    settings: [exclusive, is_default, partition_conf, partition_name]
+  - id: c4d_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings: [allow_automatic_updates, bandwidth_tier, disk_type, enable_spot_vm, machine_type, node_count_dynamic_max]
-  - id: h3_partition
+  - id: c4d_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [h3_nodeset]
-    settings: [is_default, partition_name]
-  - id: c3_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
-    settings: [allow_automatic_updates, bandwidth_tier, disk_type, enable_spot_vm, machine_type, node_count_dynamic_max]
-  - id: c3_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [c3_nodeset]
+    use: [c4d_nodeset]
     settings: [partition_name]
+  - id: g4_node_startup
+    source: modules/scripts/startup-script
+    settings: [runners]
+  - id: g4_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network, g4_node_startup]
+    settings: [allow_automatic_updates, bandwidth_tier, disk_size_gb, disk_type, dws_flex, enable_placement, enable_spot_vm, instance_image, machine_type, node_count_dynamic_max, node_count_static, reservation_name]
+  - id: g4_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [g4_nodeset]
+    settings: [exclusive, partition_name]
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings: [machine_type]
+  - id: controller_startup
+    source: modules/scripts/startup-script
+    settings: [runners]
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [network, homefs, appsfs, scratchfs, h3_partition, c3_partition, slurm_login]
+    use: [network, homefs, appsfs, scratchfs, h4d_partition, c4d_partition, g4_partition, slurm_login]
     settings: [cloud_parameters, compute_startup_scripts_timeout, machine_type]
 - path: examples/gke-a3-highgpu-inference-gateway.yaml
   blueprint_name: gke-a3-highgpu-inference-gateway

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM golang:1.26-trixie
+FROM golang:1.27-trixie
 
 RUN apt-get -y update && apt-get install -y python3-pip python3-venv git \
     shellcheck && \
