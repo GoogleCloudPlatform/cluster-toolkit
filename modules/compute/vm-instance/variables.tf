@@ -449,6 +449,10 @@ variable "reservation_name" {
     Name of the reservation to use for VM resources, should be in one of the following formats:
     - projects/PROJECT_ID/reservations/RESERVATION_NAME
     - RESERVATION_NAME
+    - projects/PROJECT_ID/reservations/RESERVATION_NAME/reservationBlocks/BLOCK_NAME
+    - RESERVATION_NAME/reservationBlocks/BLOCK_NAME
+    - projects/PROJECT_ID/reservations/RESERVATION_NAME/reservationBlocks/BLOCK_NAME/reservationSubBlocks/SUB_BLOCK_NAME
+    - RESERVATION_NAME/reservationBlocks/BLOCK_NAME/reservationSubBlocks/SUB_BLOCK_NAME
 
     Must be a "SPECIFIC_RESERVATION"
     Set to empty string if using no reservation or automatically-consumed reservations
@@ -458,8 +462,8 @@ variable "reservation_name" {
   nullable    = false
 
   validation {
-    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+))?$", var.reservation_name)) > 0
-    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME', [...] is an optional part."
+    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+)(/reservationBlocks/[a-z0-9-]+(/reservationSubBlocks/[a-z0-9-]+)?)?)?$", var.reservation_name)) > 0
+    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME[/reservationBlocks/BLOCK_NAME[/reservationSubBlocks/SUB_BLOCK_NAME]]', [...] are optional parts."
   }
 }
 
