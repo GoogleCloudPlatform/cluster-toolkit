@@ -113,20 +113,23 @@ data "google_project" "project" {
 data "google_compute_zones" "available" {
   project = var.project_id
   region  = var.region
+  status  = "UP"
 }
 
 locals {
   candidate_zones = toset(
     var.system_node_pool_zones != null ? var.system_node_pool_zones : (
-      var.cluster_availability_type == "ZONAL" ? (var.zone != null ? [var.zone] : []) : data.google_compute_zones.available.names
+      var.cluster_availability_type == "ZONAL" ? (var.zone != null ? [var.zone] : []) : [
+        for z in data.google_compute_zones.available.names : z if can(regex("-[a-z]$", z))
+      ]
     )
   )
   target_system_node_pool_zones = var.system_node_pool_machine_type != null ? toset([]) : local.candidate_zones
   cpu_np_machine_type           = "n4-standard-64"
   cpu_np_candidate_zones        = var.enable_pathways_for_tpus ? local.candidate_zones : toset([])
   cpu_np_available_zones = sort([
-    for z, data in data.google_compute_machine_types.available_cpu_np_machines :
-    z if length(data.machine_types) > 0
+    for z, m in data.google_compute_machine_types.available_cpu_np_machines :
+    z if length(m.machine_types) > 0
   ])
 }
 
@@ -506,8 +509,13 @@ resource "google_container_cluster" "gke_cluster" {
     }
 
     precondition {
+      condition     = !(var.enable_confidential_nodes && var.enable_pathways_for_tpus)
+      error_message = "'enable_pathways_for_tpus' cannot be true when 'enable_confidential_nodes' is enabled because cpu-np uses '${local.cpu_np_machine_type}', which does not support Confidential VMs."
+    }
+
+    precondition {
       condition     = !var.enable_pathways_for_tpus || length(local.cpu_np_available_zones) > 0
-      error_message = "Machine type '${local.cpu_np_machine_type}' required for Pathways (cpu-np) is not available in any target zone (${join(", ", sort(local.cpu_np_candidate_zones))}). Choose a region/zone with '${local.cpu_np_machine_type}' support, set 'system_node_pool_zones' to supported zone(s) in the region, or set 'enable_pathways_for_tpus = false'."
+      error_message = "Machine type '${local.cpu_np_machine_type}' required for Pathways (cpu-np) is not available in target zone(s): ${length(local.cpu_np_candidate_zones) > 0 ? join(", ", sort(local.cpu_np_candidate_zones)) : "none specified"}. Choose a region or zone with '${local.cpu_np_machine_type}' support, update or unset 'system_node_pool_zones', or set 'enable_pathways_for_tpus' to false."
     }
   }
 
@@ -673,10 +681,12 @@ resource "google_container_node_pool" "cpu_np" {
   provider = google-beta
   count    = var.enable_pathways_for_tpus ? 1 : 0
 
-  project        = var.project_id
-  name           = "cpu-np"
-  cluster        = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
-  location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
+  project  = var.project_id
+  name     = "cpu-np"
+  cluster  = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
+  location = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
+  # Preserve var.system_node_pool_zones (null by default) when all candidate zones support N4
+  # so GKE keeps its 3-zone regional default instead of expanding to all zones (e.g., 4 in us-central1).
   node_locations = length(local.cpu_np_available_zones) == length(local.cpu_np_candidate_zones) ? var.system_node_pool_zones : local.cpu_np_available_zones
   version        = local.master_version
 

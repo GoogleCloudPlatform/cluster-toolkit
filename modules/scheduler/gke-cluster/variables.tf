@@ -343,7 +343,7 @@ variable "system_node_pool_enable_secure_boot" {
 }
 
 variable "system_node_pool_zones" {
-  description = "The zones to use for the system node pool. If not specified, the cluster default node zone(s) will be used."
+  description = "The zones to use for the system node pool (and candidate zones for cpu-np when enable_pathways_for_tpus is true, filtered by n4-standard-64 availability). If not specified, the cluster default node zone(s) will be used."
   type        = list(string)
   default     = null
 }
@@ -648,7 +648,7 @@ variable "auto_monitoring_scope" {
 }
 
 variable "enable_pathways_for_tpus" {
-  description = "If true, conditionally deploys a dedicated CPU node pool (cpu-np) using n4-standard-64 instances."
+  description = "If true, deploys a dedicated CPU node pool (cpu-np) using n4-standard-64 instances across target zones where n4-standard-64 is available (fails if no target zone supports it or if enable_confidential_nodes is true)."
   type        = bool
   default     = false
 }
