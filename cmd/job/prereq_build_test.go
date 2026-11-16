@@ -24,6 +24,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -257,11 +258,27 @@ func TestEnsureBuildPrerequisites_ExplicitGARSkipsGKEAuthPluginAndPreservesCache
 		LastCheckedProjectID:         "gar-build-proj",
 		LastCheckedTimestamp:         time.Now().Add(-2 * stateFreshness),
 	}, "gar-build-proj")
-	if !expired.GCloudSDKInstalled || !expired.KubectlInstalled || !expired.GKEGCloudAuthPluginInstalled {
-		t.Fatalf("expected TTL expiry to preserve installed CLI binary flags, got %+v", expired)
+	if expired != (PrereqState{}) {
+		t.Fatalf("expected >24h TTL expiry to reset all cached flags (including CLI binaries), got %+v", expired)
 	}
-	if expired.GCloudAuthenticated || expired.ADCConfigured || expired.ArtifactRegistryAPIEnabled {
-		t.Fatalf("expected TTL expiry to force re-verification of auth and API flags, got %+v", expired)
+
+	// Verify an expired (>24h) state re-runs 'gcloud version' and surfaces the SDK install hint when gcloud is missing.
+	store.Save(PrereqState{
+		GCloudSDKInstalled:           true,
+		GCloudAuthenticated:          true,
+		ADCConfigured:                true,
+		GCloudProjectConfigured:      true,
+		KubectlInstalled:             true,
+		GKEGCloudAuthPluginInstalled: true,
+		LastCheckedProjectID:         "cluster-proj",
+		LastCheckedTimestamp:         time.Now().Add(-60 * 24 * time.Hour),
+	})
+	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		return shell.CommandResult{ExitCode: 127, Err: exec.ErrNotFound}
+	}
+	err := ensureBasicPrerequisites(&cobra.Command{}, "cluster-proj")
+	if err == nil || !strings.Contains(err.Error(), "Google Cloud SDK (gcloud) is required") {
+		t.Fatalf("expected expired state with missing gcloud to fail with install hint, got: %v", err)
 	}
 }
 

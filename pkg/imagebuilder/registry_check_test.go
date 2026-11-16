@@ -85,28 +85,6 @@ func TestInspectTargetRegistry_OpenAndAuthKeychain(t *testing.T) {
 		}
 	})
 
-	t.Run("docker.io authority rewrites /v2/ ping to index.docker.io", func(t *testing.T) {
-		var gotURL string
-		insp := &RegistryInspector{
-			Getenv: func(string) string { return "" },
-			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-				gotURL = req.URL.String()
-				return &http.Response{
-					StatusCode: http.StatusUnauthorized,
-					Body:       http.NoBody,
-					Header:     make(http.Header),
-				}, nil
-			}),
-			Keychain: staticTestKeychain{cfg: authn.AuthConfig{Username: "u", Password: "p"}},
-		}
-		if err := insp.InspectTargetRegistry("docker.io"); err != nil {
-			t.Fatalf("InspectTargetRegistry(docker.io) unexpected error: %v", err)
-		}
-		if gotURL != "https://index.docker.io/v2/" {
-			t.Fatalf("pinged URL = %q, want %q", gotURL, "https://index.docker.io/v2/")
-		}
-	})
-
 	t.Run("401 Unauthorized requires keychain credentials and surfaces helper errors", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="harbor"`)

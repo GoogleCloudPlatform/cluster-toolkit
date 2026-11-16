@@ -103,11 +103,7 @@ func expireStalePrereqState(state PrereqState) PrereqState {
 	if !isTimestampExpired(state) {
 		return state
 	}
-	return PrereqState{
-		GCloudSDKInstalled:           state.GCloudSDKInstalled,
-		KubectlInstalled:             state.KubectlInstalled,
-		GKEGCloudAuthPluginInstalled: state.GKEGCloudAuthPluginInstalled,
-	}
+	return PrereqState{}
 }
 
 func prepareBasicPrereqState(state PrereqState, projectID string) PrereqState {

@@ -41,15 +41,9 @@ func (r *RegistryInspector) InspectTargetRegistry(registryAuthority string) erro
 	effectiveInsecure := allowsInsecure && isInsecureRegistryEnv(r.Getenv)
 	allowHTTPFallback := effectiveInsecure || isPrivateOrLoopbackHost(authority)
 
-	pingHost := authority
-	if pingHost == "docker.io" {
-		pingHost = name.DefaultRegistry
-	}
-
 	errs, suggestInsecure, done, authErr := r.probeRegistrySchemes(
 		r.httpClient(effectiveInsecure),
 		authority,
-		pingHost,
 		allowHTTPFallback,
 		allowsInsecure && !effectiveInsecure,
 	)
@@ -63,7 +57,7 @@ func (r *RegistryInspector) InspectTargetRegistry(registryAuthority string) erro
 	return fmt.Errorf("target container registry %q is unreachable or failed OCI /v2/ check (%s)", authority, errStr)
 }
 
-func (r *RegistryInspector) probeRegistrySchemes(client *http.Client, authority, pingHost string, allowHTTPFallback, canSuggestInsecure bool) ([]string, bool, bool, error) {
+func (r *RegistryInspector) probeRegistrySchemes(client *http.Client, authority string, allowHTTPFallback, canSuggestInsecure bool) ([]string, bool, bool, error) {
 	schemes := []string{"https"}
 	if allowHTTPFallback {
 		schemes = append(schemes, "http")
@@ -71,7 +65,7 @@ func (r *RegistryInspector) probeRegistrySchemes(client *http.Client, authority,
 	var errs []string
 	suggestInsecure := false
 	for _, scheme := range schemes {
-		status, pingErr := pingRegistryV2(client, scheme, pingHost)
+		status, pingErr := pingRegistryV2(client, scheme, authority)
 		if pingErr != nil {
 			stop, suggest := recordPingError(&errs, scheme, pingErr, allowHTTPFallback, canSuggestInsecure)
 			suggestInsecure = suggestInsecure || suggest

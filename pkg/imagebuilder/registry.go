@@ -39,9 +39,6 @@ const (
 var ErrMissingImageRepo = errors.New("GCLUSTER_IMAGE_REPO environment variable is required")
 
 var knownPublicRegistries = map[string]bool{
-	"docker.io":                  true,
-	"index.docker.io":            true,
-	"registry-1.docker.io":       true,
 	"ghcr.io":                    true,
 	"quay.io":                    true,
 	"nvcr.io":                    true,
@@ -169,10 +166,15 @@ func isPrivateOrLoopbackHost(host string) bool {
 	return false
 }
 
+func isDockerHubHost(host string) bool {
+	bare := registryBareHost(host)
+	return bare == "docker.io" || strings.HasSuffix(bare, ".docker.io")
+}
+
 func isPublicRegistry(host string) bool {
 	bare := registryBareHost(host)
-	return knownPublicRegistries[bare] ||
-		strings.HasSuffix(bare, ".docker.io") ||
+	return isDockerHubHost(bare) ||
+		knownPublicRegistries[bare] ||
 		strings.HasSuffix(bare, ".azurecr.io") ||
 		strings.HasSuffix(bare, ".amazonaws.com") ||
 		strings.HasSuffix(bare, ".amazonaws.com.cn")
@@ -273,7 +275,7 @@ func resolveExplicitRepo(project, location, trimmedRepo string) (DestinationRepo
 	}
 	if strings.TrimSpace(project) == "" || strings.TrimSpace(location) == "" {
 		if strings.Contains(trimmedRepo, "/") {
-			return DestinationRepo{}, fmt.Errorf("GCLUSTER_IMAGE_REPO=%q has no registry host and requires --project and --location for Artifact Registry (or include a registry host such as 'harbor.example.com/%s' or 'docker.io/%s')", trimmedRepo, trimmedRepo, trimmedRepo)
+			return DestinationRepo{}, fmt.Errorf("GCLUSTER_IMAGE_REPO=%q has no registry host and requires --project and --location for Artifact Registry (or include a registry host such as 'harbor.example.com/%s' or 'ghcr.io/%s')", trimmedRepo, trimmedRepo, trimmedRepo)
 		}
 		return DestinationRepo{}, fmt.Errorf("GCLUSTER_IMAGE_REPO=%q is a bare Artifact Registry repository name and requires --project and --location (or set GCLUSTER_IMAGE_REPO=<registry-host>/<repository> for a non-Artifact Registry OCI registry)", trimmedRepo)
 	}
@@ -289,6 +291,9 @@ func resolveExplicitRepo(project, location, trimmedRepo string) (DestinationRepo
 }
 
 func validateDestinationRepo(dest DestinationRepo) (DestinationRepo, error) {
+	if isDockerHubHost(dest.RegistryHost) {
+		return DestinationRepo{}, fmt.Errorf("invalid destination repository %q: Docker Hub only allows two-level '<namespace>/<repository>' paths, whereas gcluster pushes to '<repository-prefix>/<namespace>/<workload>'; use a registry that supports nested repository paths (such as Artifact Registry, Harbor, or ghcr.io)", dest.RepoPrefix)
+	}
 	_, repoPath, hasSlash := strings.Cut(dest.RepoPrefix, "/")
 	if !hasSlash || repoPath == "" {
 		return DestinationRepo{}, fmt.Errorf("invalid destination repository %q: repository path cannot be empty", dest.RepoPrefix)

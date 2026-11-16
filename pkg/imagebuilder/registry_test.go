@@ -114,12 +114,24 @@ func TestResolveDestinationRepo(t *testing.T) {
 			wantIsGAR:  true,
 		},
 		{
-			name:       "hostless multi-segment GCLUSTER_IMAGE_REPO without project and location fails with Harbor/Docker Hub and GAR guidance",
+			name:       "hostless multi-segment GCLUSTER_IMAGE_REPO without project and location fails with Harbor/GHCR and GAR guidance",
 			project:    "",
 			location:   "",
 			baseImage:  "python:3.11-slim",
 			envRepo:    "my-proj/my-repo",
-			wantErrSub: "'docker.io/my-proj/my-repo'",
+			wantErrSub: "'ghcr.io/my-proj/my-repo'",
+		},
+		{
+			name:       "Docker Hub GCLUSTER_IMAGE_REPO with org and repo rejected upfront due to two-level repository path limit",
+			baseImage:  "python:3.11-slim",
+			envRepo:    "docker.io/my-org/my-repo",
+			wantErrSub: "two-level",
+		},
+		{
+			name:       "Docker Hub index.docker.io GCLUSTER_IMAGE_REPO with org only rejected upfront due to two-level repository path limit",
+			baseImage:  "python:3.11-slim",
+			envRepo:    "index.docker.io/my-org",
+			wantErrSub: "two-level",
 		},
 		{
 			name:       "scheme-prefixed hostless GCLUSTER_IMAGE_REPO fails fast",
