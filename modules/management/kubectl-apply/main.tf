@@ -396,7 +396,7 @@ module "install_k8s_aibom" {
     }) : ""
   ])
   dependencies = var.system_node_pool_id != null ? [var.system_node_pool_id] : []
-  depends_on   = [var.gke_cluster_exists, module.install_k8s_aibom_crds]
+  depends_on   = [var.gke_cluster_exists, module.install_k8s_aibom_crds, module.configure_kueue]
 }
 
 module "install_nvidia_dra_driver" {
