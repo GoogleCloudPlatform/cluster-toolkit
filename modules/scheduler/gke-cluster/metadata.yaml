@@ -46,3 +46,13 @@ ghpc:
       vars: [master_authorized_networks]
       object_key: cidr_block
     error_message: "Validation failed due to invalid CIDR IP address in 'master_authorized_networks.cidr_block'. All values must be in CIDR format (e.g. 1.2.3.4/32)."
+  - validator: cidr
+    inputs:
+      vars: [master_ipv4_cidr_block]
+      allow_null: true
+    error_message: "master_ipv4_cidr_block must be null or a valid IPv4 /28 CIDR block (e.g. 1.2.3.0/28)."
+  - validator: regex
+    inputs:
+      vars: [master_ipv4_cidr_block]
+      pattern: ^([0-9]{1,3}\.){3}[0-9]{1,3}/28$
+    error_message: "master_ipv4_cidr_block must be null or a valid IPv4 /28 CIDR block (e.g. 1.2.3.0/28)."

@@ -38,14 +38,18 @@ ghpc:
     error_message: "In 'instance_image', at most one of the \"family\" or \"name\" fields can be set."
   - validator: required
     inputs:
+      vars: [partitions]
+    error_message: "At least one partition must be provided to the Slurm controller."
+  - validator: required
+    inputs:
       vars: [enable_smt, disable_smt]
       deprecated: true
     error_message: "Unsupported variables: 'enable_smt', 'disable_smt'. Please use 'advanced_machine_features.threads_per_core' instead."
   - validator: conditional
     level: warning
     inputs:
-      trigger: enable_slurm_auth
-      trigger_value: false
+      triggers:
+        enable_slurm_auth: false
       dependent: enable_slurm_auth
       dependent_value: true
     error_message: "DEPRECATION NOTICE: Legacy MUNGE-based authentication is end-of-support and no longer maintained in Cluster Toolkit; the option to use MUNGE will be completely removed soon. Please migrate your blueprint to Slurm Native Authentication. See docs/slurm-native-auth-migration-guide.md for migration steps."

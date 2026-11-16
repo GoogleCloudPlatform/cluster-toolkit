@@ -1,0 +1,30 @@
+steps:
+  - name: 'gcr.io/cloud-builders/git'
+    id: 'clone-source'
+    args:
+      - 'clone'
+      - '--depth=1'
+      - '--branch=${_REPO_REF}'
+      - '${_REPO_URL}'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-alphafold3'
+    args:
+      - 'buildx'
+      - 'build'
+      - '--build-arg'
+      - 'UV_EXTRAS=--extra gcsfs'
+      - '-t'
+      - '${_DEST_REPO_URL}/alphafold3:${_REPO_REF}'
+      - '-f'
+      - 'docker/Dockerfile'
+      - '.'
+
+images:
+  - '${_DEST_REPO_URL}/alphafold3:${_REPO_REF}'
+
+options:
+  machineType: 'E2_HIGHCPU_32'
+
+timeout: '1200s'

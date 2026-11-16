@@ -1,0 +1,170 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Check the desktop broker is running
+  become: true
+  ansible.builtin.command: systemctl is-active ghpc-desktop-broker
+  changed_when: false
+  register: broker_state
+  retries: 20
+  delay: 15
+  until: broker_state.rc == 0
+
+- name: Check the broker answers its health check on its socket
+  ansible.builtin.command: >-
+    curl -fsS --unix-socket /run/ghpc-remote-desktop/broker.sock
+    http://localhost/healthz
+  changed_when: false
+  register: broker_health
+  retries: 20
+  delay: 15
+  until: broker_health.rc == 0 and 'ok' in broker_health.stdout
+
+- name: Check the broker socket
+  become: true
+  ansible.builtin.stat:
+    path: /run/ghpc-remote-desktop/broker.sock
+  register: broker_socket
+
+- name: Assert the broker socket is open to every local user
+  ansible.builtin.assert:
+    that:
+    - broker_socket.stat.issock
+    - broker_socket.stat.mode == '0666'
+    fail_msg: >-
+      Expected a 0666 unix socket at /run/ghpc-remote-desktop/broker.sock. Any
+      local user must be able to connect; the broker decides who they are.
+
+- name: Look for a broker TCP listener
+  become: true
+  ansible.builtin.shell: |
+    set -o pipefail
+    ss -ltn | grep -E ':6080\b' || true
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: broker_tcp
+
+- name: Assert the broker does not listen on TCP
+  ansible.builtin.assert:
+    that: broker_tcp.stdout | length == 0
+    fail_msg: "The broker is listening on TCP ({{ broker_tcp.stdout }}); it must serve only its unix socket."
+
+- name: Check noVNC was installed
+  become: true
+  ansible.builtin.stat:
+    path: /opt/ghpc-remote-desktop/novnc/vnc.html
+  register: novnc_page
+
+- name: Assert the noVNC client is present
+  ansible.builtin.assert:
+    that: novnc_page.stat.exists
+    fail_msg: noVNC was not installed under the install root.
+
+# End to end: ask the broker for a session as this OS Login account and confirm
+# it starts one and serves the noVNC client. Nothing in the request says who is
+# asking; the broker learns that from the socket's peer credentials.
+- name: Request a desktop session from the broker
+  ansible.builtin.command: >-
+    curl -sS -o /tmp/novnc-page.html -w '%{http_code}'
+    --unix-socket /run/ghpc-remote-desktop/broker.sock
+    http://localhost/vnc.html
+  changed_when: false
+  register: session_request
+  retries: 10
+  delay: 20
+  until: session_request.stdout == '200'
+
+- name: Check the broker served the noVNC client
+  ansible.builtin.command: grep -qi novnc /tmp/novnc-page.html
+  changed_when: false
+
+- name: Check the session belongs to the connecting account
+  become: true
+  ansible.builtin.shell: |
+    set -o pipefail
+    python3 -c "import glob, json; print(' '.join(json.load(open(p))['username'] for p in glob.glob('/var/lib/ghpc-remote-desktop/*.json')))"
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: session_owners
+
+- name: Assert the desktop was started for the connecting account
+  ansible.builtin.assert:
+    that: ansible_user_id in session_owners.stdout.split()
+    fail_msg: "Expected a session for {{ ansible_user_id }}, found: {{ session_owners.stdout }}"
+
+- name: Request a desktop session as root
+  become: true
+  ansible.builtin.command: >-
+    curl -sS -o /dev/null -w '%{http_code}'
+    --unix-socket /run/ghpc-remote-desktop/broker.sock
+    http://localhost/vnc.html
+  changed_when: false
+  register: root_request
+
+- name: Assert root is refused a desktop
+  ansible.builtin.assert:
+    that: root_request.stdout == '403'
+    fail_msg: "Expected 403 for a connection from root, got {{ root_request.stdout }}"
+
+- name: Check a per-user display socket was created
+  become: true
+  ansible.builtin.shell: |
+    set -o pipefail
+    find /run/ghpc-remote-desktop -name vnc.sock -type s | head -1
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: display_socket
+
+- name: Assert the display is a unix socket
+  ansible.builtin.assert:
+    that: display_socket.stdout | length > 0
+    fail_msg: No per-user vnc.sock was created under the broker runtime directory.
+
+# The point of the socket transport: the display must have no TCP listener at
+# all, so it is unreachable by other local users on a shared login node.
+- name: Look for any RFB TCP listener
+  become: true
+  ansible.builtin.shell: |
+    set -o pipefail
+    ss -ltn | grep -E ':59[0-9][0-9]' || true
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: rfb_listeners
+
+- name: Assert no display bound a TCP port
+  ansible.builtin.assert:
+    that: rfb_listeners.stdout | length == 0
+    fail_msg: >-
+      A display is listening on TCP ({{ rfb_listeners.stdout }}). The socket
+      transport must not bind an RFB port, or the desktop becomes reachable by
+      any local user.
+
+- name: Check the socket directory is private to its owner
+  become: true
+  ansible.builtin.stat:
+    path: "{{ display_socket.stdout | dirname }}"
+  register: socket_dir
+
+- name: Assert the socket directory is 0700
+  ansible.builtin.assert:
+    that: socket_dir.stat.mode == '0700'
+    fail_msg: >-
+      Expected the per-user runtime directory to be 0700, got
+      {{ socket_dir.stat.mode }}. This permission is what stops other local
+      users reaching the display.

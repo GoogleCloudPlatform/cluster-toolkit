@@ -128,7 +128,7 @@ vars:
   zone: us-central1-a
   region: us-central1
   num_slices: 2
-  machine_type: ct6e-standard-4t
+  compute_machine_type: ct6e-standard-4t
   tpu_topology: 4x4
   enable_private_endpoint: true
   authorized_cidr: 10.0.0.0/8
@@ -154,7 +154,7 @@ deployment_groups:
     use: [tpu_cluster]
     settings:
       name: tpu-pool
-      machine_type: $(vars.machine_type)
+      machine_type: $(vars.compute_machine_type)
       num_slices: $(vars.num_slices)
       spot: $(vars.spot)
       placement_policy:
@@ -209,19 +209,19 @@ Submit workloads in Cluster Toolkit using `gcluster job submit`.
 
 ### 🧠 Compute Type & Topology Resolution
 
-Supported hardware shorthands (such as `v6e-4`, `v4-8`, `l4-8`, `h100-80gb-8`) can be passed directly into `--compute-type`. For configurations where the shorthand is not in the static map (such as `v5e-*`), or when specifying multi-slice topologies, pass the resolved GCE machine type with explicit `--topology` (e.g., `--compute-type ct5lp-hightpu-4t --topology 4x4` or `--compute-type ct6e-standard-4t --topology 4x4`). Note that for TPU 7x, an explicit `--topology` is always mandatory (e.g. `--compute-type tpu7x-standard-4t --topology 4x4x8`).
+Supported hardware shorthands (such as `v6e-4`, `v5e-8` / `v5litepod-8`, `v4-8`, `l4-8`, `h100-80gb-8`) can be passed directly into `--compute-type`. Because a TPU slice shorthand (e.g., `v5e-8`) can run on different host shapes (`ct5lp-hightpu-8t` vs. `ct5lp-hightpu-4t`), `gcluster` resolves the host machine type from the cluster's existing TPU node pools; to pin a specific host shape or when specifying custom multi-slice topologies on NAP clusters, pass the resolved GCE machine type with explicit `--topology` (e.g., `--compute-type ct5lp-hightpu-4t --topology 2x4` or `--compute-type ct6e-standard-4t --topology 4x4`). Note that for TPU 7x, an explicit `--topology` is always mandatory (e.g. `--compute-type tpu7x-standard-4t --topology 4x4x8`).
 
 ### 📋 1:1 Flag Mapping Matrix
 
 | XPK `workload create` Flag | `gcluster job submit` Flag | Notes / Differences |
 | :--- | :--- | :--- |
-| `--workload <NAME>` | `--name <NAME>` | Workload name (max 28 characters) |
+| `--workload <NAME>` | `--name <NAME>` | Workload name (max 28 characters for standard jobs, or max 22 characters when `--pathways` is enabled) |
 | `--cluster <NAME>` | `--cluster <NAME>` | Target GKE cluster (optional if configured in `gcluster job config`) |
 | `--project <ID>` | `--project <ID>` | Target Google Cloud project |
 | `--zone <ZONE>` / `--region <REGION>` | `--location <LOC>` | Target cluster region or zone |
 | `--docker-image <IMG>` | `--image <IMG>` | Container image URL |
 | `--command "<CMD>"` | `--command "<CMD>"` | Main entrypoint command |
-| `--tpu-type <TYPE>` / `--device-type <TYPE>` | `--compute-type <TYPE> [--topology <TOP>]` | Accepts shorthand directly (e.g. `v6e-4`, `v4-8`, `l4-8`) or GCE machine type with topology (e.g. `ct5lp-hightpu-4t --topology 4x4`, `tpu7x-standard-4t --topology 4x4x8`) |
+| `--tpu-type <TYPE>` / `--device-type <TYPE>` | `--compute-type <TYPE> [--topology <TOP>]` | Accepts shorthand directly (e.g. `v6e-4`, `v5e-8`, `v4-8`, `l4-8`) or GCE machine type with topology (e.g. `ct5lp-hightpu-4t --topology 2x4`, `tpu7x-standard-4t --topology 4x4x8`) |
 | `--num-slices <N>` | `--num-slices <N>` | Number of TPU slices |
 | `--num-nodes <N>` | `--num-nodes <N>` | GPU/CPU jobs only. Omit `--num-nodes` for TPU jobs |
 | `--priority <PRIORITY>` | `--priority <PRIORITY>` | Kueue queue priority (`low`, `medium`, `high`) |

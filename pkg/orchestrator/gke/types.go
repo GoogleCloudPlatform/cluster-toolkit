@@ -27,10 +27,12 @@ import (
 	"time"
 
 	"cloud.google.com/go/filestore/apiv1/filestorepb"
+	"github.com/google/safetext/yamltemplate"
 	crm "google.golang.org/api/cloudresourcemanager/v1"
 	compute "google.golang.org/api/compute/v1"
 	iamapi "google.golang.org/api/iam/v1"
 	gcs "google.golang.org/api/storage/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -42,6 +44,10 @@ const (
 	tpuTopologyLabel = "cloud.google.com/gke-tpu-topology"
 	// nodePoolLabel is the GKE label for the node pool name.
 	nodePoolLabel = "cloud.google.com/gke-nodepool"
+	// placementPolicyNameLabel selects nodes carrying a named GCE compact placement or workload policy.
+	placementPolicyNameLabel = "cloud.google.com/placement-policy-name"
+	// placementGroupLabel is the GKE-managed compact placement group identifier used by NAP.
+	placementGroupLabel = "cloud.google.com/gke-placement-group"
 	// multitierCheckpointCSIDriver is the CSI driver for Multi-Tier Checkpointing (MTC).
 	multitierCheckpointCSIDriver = "multitier-checkpoint.csi.storage.gke.io"
 )
@@ -124,6 +130,12 @@ var pvGVR = schema.GroupVersionResource{
 	Resource: "persistentvolumes",
 }
 
+var serviceGVR = schema.GroupVersionResource{
+	Group:    "",
+	Version:  "v1",
+	Resource: "services",
+}
+
 // HTTPClient abstracts HTTP GET calls for testability and thread safety.
 type HTTPClient interface {
 	Get(url string) (*http.Response, error)
@@ -131,6 +143,7 @@ type HTTPClient interface {
 
 type Executor interface {
 	ExecuteCommand(name string, args ...string) shell.CommandResult
+	ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) shell.CommandResult
 	ExecuteCommandStream(name string, args ...string) error
 }
 
@@ -141,7 +154,7 @@ type KubeClient interface {
 	ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error)
 	GetCurrentNamespace(clusterName, location, projectID string) (string, error)
 	// An empty namespace means cluster-scoped.
-	ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error)
+	ListResources(gvr schema.GroupVersionResource, namespace, labelSelector, fieldSelector string) ([]unstructured.Unstructured, error)
 	GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error)
 	// A nil pre deletes unconditionally.
 	DeleteResource(gvr schema.GroupVersionResource, namespace, name string, pre *metav1.Preconditions) error
@@ -193,6 +206,8 @@ type GKEOrchestrator struct {
 	// kubeconfigLoader reads the merged kubeconfig. nil means the default
 	// client-go loading rules (KUBECONFIG env or ~/.kube/config).
 	kubeconfigLoader kubeconfigLoader
+	// kubeContext is the context set by configureKubectl; all kubectl and dynamic-client calls use it.
+	kubeContext string
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -213,16 +228,16 @@ type gkeClusterDescribe struct {
 
 func (c gkeClusterDescribe) String() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Cluster Resource Summary for: %s\n", c.Name))
-	sb.WriteString(fmt.Sprintf("Location: %s\n", c.Location))
+	fmt.Fprintf(&sb, "Cluster Resource Summary for: %s\n", c.Name)
+	fmt.Fprintf(&sb, "Location: %s\n", c.Location)
 	sb.WriteString("------------------------------------------\n")
 	for _, np := range c.NodePools {
-		sb.WriteString(fmt.Sprintf("NodePool: %s\n", np.Name))
-		sb.WriteString(fmt.Sprintf("  MachineType: %s\n", np.Config.MachineType))
+		fmt.Fprintf(&sb, "NodePool: %s\n", np.Name)
+		fmt.Fprintf(&sb, "  MachineType: %s\n", np.Config.MachineType)
 		if np.Count > 0 {
-			sb.WriteString(fmt.Sprintf("  Count: %d\n", np.Count))
+			fmt.Fprintf(&sb, "  Count: %d\n", np.Count)
 		}
-		sb.WriteString(fmt.Sprintf("  Status: %s\n", np.Status))
+		fmt.Fprintf(&sb, "  Status: %s\n", np.Status)
 		sb.WriteString("\n")
 	}
 	return sb.String()
@@ -241,6 +256,35 @@ type gkePVC struct {
 
 type gkePVCList struct {
 	Items []gkePVC `json:"items"`
+}
+
+type k8sEndpointSliceList struct {
+	Items []struct {
+		Endpoints []struct {
+			Addresses  []string `json:"addresses"`
+			Conditions struct {
+				// Ready is a pointer because discovery/v1 treats an omitted condition as ready.
+				Ready *bool `json:"ready"`
+			} `json:"conditions"`
+		} `json:"endpoints"`
+	} `json:"items"`
+}
+
+func (eps *k8sEndpointSliceList) HasReadyEndpoint() bool {
+	for _, item := range eps.Items {
+		for _, ep := range item.Endpoints {
+			if (ep.Conditions.Ready == nil || *ep.Conditions.Ready) && len(ep.Addresses) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// permissionCheck is one `kubectl auth can-i <verb> <resource>` query.
+type permissionCheck struct {
+	verb     string
+	resource string
 }
 
 type JobProfile struct {
@@ -289,6 +333,8 @@ type ManifestOptions struct {
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
 	MLDiagnosticsEnabled          bool
+	TelemetryCollectorImage       string
+	TelemetryCollectorPort        int
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
@@ -566,6 +612,18 @@ type JobSetStatus struct {
 	} `json:"status"`
 }
 
+type jobSetInfo struct {
+	terminalState string
+	suspended     bool
+	firstJob      string
+	expectedPods  int
+	queried       bool
+}
+
+func (info jobSetInfo) terminal() bool {
+	return info.terminalState == "Completed" || info.terminalState == "Failed"
+}
+
 type ContainerData struct {
 	Name          string
 	ResourcesYAML string
@@ -580,7 +638,10 @@ type EnvVar struct {
 }
 
 type jobSetTemplateData struct {
-	WorkloadName                  string
+	WorkloadName string
+	// Namespace is the namespace resolved for the submission; rendered as metadata.namespace so a saved manifest
+	// applies to the same namespace as the PV/PVC documents appended to it. Empty when unresolved (dry-run offline).
+	Namespace                     string
 	ClusterName                   string
 	Containers                    []ContainerData
 	ProjectID                     string
@@ -591,6 +652,7 @@ type jobSetTemplateData struct {
 	NumSlices                     int
 	NodesPerSlice                 int
 	WorkerBackoffLimit            int
+	WorkerBackoffLimitPerIndex    int
 	PathwaysInstanceType          string
 	CommandToRun                  string
 	ResourcesString               string
@@ -616,6 +678,11 @@ type jobSetTemplateData struct {
 	GCSFuseEnabled                bool
 	HostNetworkEnabled            bool
 	Pathways                      orchestrator.PathwaysJobDefinition
+	PathwaysProxyEnabled          bool   // pathways-head runs pathways-proxy (false for an SPS server)
+	PathwaysWorkloadEnabled       bool   // pathways-head runs the user's workload (false for headless and SPS)
+	PathwaysRMEnabled             bool   // pathways-head runs pathways-rm (false for an SPS client)
+	PathwaysWorkersEnabled        bool   // the JobSet has TPU workers (false for an SPS client)
+	PathwaysRMAddress             string // remote resource manager for the proxy (SPS client); empty means the local head
 	ExclusiveTopologyAnnotation   string
 	Verbose                       bool
 	Env                           []EnvVar
@@ -627,6 +694,21 @@ type jobSetTemplateData struct {
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
 	MLDiagnosticsEnabled          bool
+	TelemetryCollectorImage       string
+	TelemetryCollectorPort        int
+	Subdomain                     string
+	baseBlocks                    map[string]*yamltemplate.Template
+}
+
+type jobSetValidationSpec struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata"`
+	Spec              struct {
+		ReplicatedJobs []struct {
+			Name     string                  `json:"name"`
+			Template batchv1.JobTemplateSpec `json:"template"`
+		} `json:"replicatedJobs"`
+	} `json:"spec"`
 }
 
 // Types for parsing kubectl get nodes -o json
@@ -694,6 +776,35 @@ type kueueWorkloadList struct {
 	Items []kueueWorkload `json:"items"`
 }
 
+type kueueDeployment struct {
+	Metadata struct {
+		Generation int64 `json:"generation"`
+	} `json:"metadata"`
+	Spec struct {
+		Replicas *int32 `json:"replicas"`
+		Paused   bool   `json:"paused"`
+		Template struct {
+			Spec struct {
+				Containers []struct {
+					Name  string `json:"name"`
+					Image string `json:"image"`
+				} `json:"containers"`
+			} `json:"spec"`
+		} `json:"template"`
+	} `json:"spec"`
+	Status struct {
+		ObservedGeneration int64 `json:"observedGeneration"`
+		Replicas           int32 `json:"replicas"`
+		UpdatedReplicas    int32 `json:"updatedReplicas"`
+		AvailableReplicas  int32 `json:"availableReplicas"`
+		Conditions         []struct {
+			Type   string `json:"type"`
+			Status string `json:"status"`
+			Reason string `json:"reason"`
+		} `json:"conditions"`
+	} `json:"status"`
+}
+
 // parsedReservation holds the extracted components of a GCE reservation URI/path.
 type parsedReservation struct {
 	Project  string
@@ -757,4 +868,76 @@ func isPermissionDenied(errStr string) bool {
 		strings.Contains(lower, "permission_denied") ||
 		strings.Contains(lower, "required 'compute.") ||
 		(strings.Contains(lower, "403") && strings.Contains(lower, "forbidden"))
+}
+
+// spsInstanceSummary is what `gcluster job inspect --name <instance> --filter=pathways-sps` writes.
+type spsInstanceSummary struct {
+	Name          string
+	Namespace     string
+	Status        string
+	InstanceType  string // pathways-rm --instance_type, e.g. tpuv6e:2x4
+	InstanceCount int    // pathways-rm --instance_count
+	ReadySlices   string // e.g. "1/1"; empty until pathways-rm logs or JobSet status reports ready slices
+	ServerImage   string
+	SidecarImage  string // empty when the workers run no colocated Python sidecar
+	SidecarName   string // sidecar container name on worker pods
+	SidecarPython string // from running sidecar container or image tag
+	SidecarJAX    string // from running sidecar container or image tag
+}
+
+// spsInstance is what an SPS client needs to know about the instance it runs on.
+type spsInstance struct {
+	Name           string
+	Endpoint       string
+	KueueQueueName string
+	HeadNodePool   string
+	ServerImage    string
+	ProxyImage     string
+	GCSLocation    string
+	InstanceType   string
+	InstanceCount  int
+	HasSidecar     bool
+}
+
+type spsContainerView struct {
+	Name  string   `json:"name"`
+	Image string   `json:"image"`
+	Args  []string `json:"args"`
+}
+
+type spsPodSpecView struct {
+	NodeSelector   map[string]string  `json:"nodeSelector"`
+	InitContainers []spsContainerView `json:"initContainers"`
+	Containers     []spsContainerView `json:"containers"`
+}
+
+type spsJobSetView struct {
+	Metadata struct {
+		Labels map[string]string `json:"labels"`
+	} `json:"metadata"`
+	Spec struct {
+		Suspend        bool `json:"suspend"`
+		ReplicatedJobs []struct {
+			Name     string `json:"name"`
+			Replicas int    `json:"replicas"`
+			Template struct {
+				Spec struct {
+					Template struct {
+						Spec spsPodSpecView `json:"spec"`
+					} `json:"template"`
+				} `json:"spec"`
+			} `json:"template"`
+		} `json:"replicatedJobs"`
+	} `json:"spec"`
+	Status struct {
+		TerminalState string `json:"terminalState"`
+		Conditions    []struct {
+			Type   string `json:"type"`
+			Status string `json:"status"`
+		} `json:"conditions"`
+		ReplicatedJobsStatus []struct {
+			Name  string `json:"name"`
+			Ready int    `json:"ready"`
+		} `json:"replicatedJobsStatus"`
+	} `json:"status"`
 }

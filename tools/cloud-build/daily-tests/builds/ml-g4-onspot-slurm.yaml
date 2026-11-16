@@ -136,10 +136,12 @@ steps:
               cd /workspace
 
               DEPLOYMENT_NAME="g4-onspot-slurm-$$BUILD_ID_SHORT"
+              BLUEPRINT="/workspace/examples/ml-slurm-g4.yaml"
+              BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | awk '{print \$$2}')
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/\$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
@@ -156,7 +158,6 @@ steps:
               set -x
               bash tools/get_binary.sh "${_TEST_PREFIX}"
               REGION="\$${ZONE%-*}"
-              BLUEPRINT="/workspace/examples/ml-slurm-g4.yaml"
 
               ENABLE_SPOT="true"
               SLURM_VARS_FILE="tools/cloud-build/daily-tests/tests/ml-g4-onspot-slurm.yml"
@@ -164,7 +165,7 @@ steps:
                 ENABLE_SPOT="false"
                 sed -i '/instance_labels:/,+1d' "\$$SLURM_VARS_FILE"
                 sed -i '/enable_spot: true/d' "\$$SLURM_VARS_FILE"
-                sed -i '/g4_enable_spot_vm: true/d' "\$$SLURM_VARS_FILE"
+                sed -i '/compute_enable_spot_vm: true/d' "\$$SLURM_VARS_FILE"
               else
                 echo "INFO: Using \$$SLURM_VARS_FILE as it is for SPOT provisioning."
               fi

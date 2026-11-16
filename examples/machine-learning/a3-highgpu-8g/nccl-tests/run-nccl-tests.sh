@@ -31,41 +31,40 @@ set -x
 # This should be set to the squashfs file that you created for your application
 CONTAINER_IMAGE=./nvidia+pytorch+23.10-py3.sqsh
 
-# Only use TCPXO for multi-node jobs.
-[[ "${SLURM_JOB_NUM_NODES}" -gt 1 ]] && export USE_TCPXO=yes || export USE_TCPXO=no
+# Important TCPX environment variables
+UDS_PATH="/run/tcpx-${SLURM_JOB_ID}"
 
-# Only use TCPXO for multi-node jobs.
-if [[ ${USE_TCPXO} = "yes" ]]; then
-	# Sourcing the TCPXO environment profile
-	# shellcheck disable=SC1091
-	NCCL_LIB_DIR="/var/lib/tcpxo/lib64" source /var/lib/tcpxo/lib64/nccl-env-profile.sh
-	export NCCL_FASTRAK_CTRL_DEV=enp0s12
-	# Detect GPU interfaces dynamically to handle both enpXs0 and enpXs0f0 naming schemes
-	gpu_bdfs=("0000:06:00.0" "0000:0c:00.0" "0000:86:00.0" "0000:8c:00.0")
-	gpu_interfaces=()
-	for bdf in "${gpu_bdfs[@]}"; do
-		if [ -d "/sys/bus/pci/devices/$bdf/net" ]; then
-			# shellcheck disable=SC2012
-			ifname=$(ls "/sys/bus/pci/devices/$bdf/net" | head -n 1)
-			if [ -n "$ifname" ]; then
-				gpu_interfaces+=("$ifname")
-			fi
-		fi
-	done
-	if [ ${#gpu_interfaces[@]} -eq 4 ]; then
-		NCCL_FASTRAK_IFNAME=$(
-			IFS=,
-			echo "${gpu_interfaces[*]}"
-		)
-		export NCCL_FASTRAK_IFNAME
-		echo "Detected GPU interfaces: $NCCL_FASTRAK_IFNAME"
-	else
-		echo "WARNING: Could not detect all 4 GPU interfaces. Found: ${gpu_interfaces[*]}"
-		# Fallback to hardcoded names if detection fails
-		export NCCL_FASTRAK_IFNAME=enp6s0f0,enp12s0f0,enp134s0f0,enp140s0f0
-	fi
+# Only use TCPX for multi-node jobs.
+[[ "${SLURM_JOB_NUM_NODES}" -gt 1 ]] && export USE_TCPX=yes || export USE_TCPX=no
+
+# Only use TCPX for multi-node jobs.
+if [[ ${USE_TCPX} = "yes" ]]; then
+	# Set up NCCL Environment variables
+	export NCCL_NET=GPUDirectTCPX_v7
+	# These network interfaces use Ubuntu's consistent naming scheme. See
+	# https://manpages.ubuntu.com/manpages/focal/man7/systemd.net-naming-scheme.7.html
 	export NCCL_SOCKET_IFNAME=enp0s12
-	export NCCL_FASTRAK_LLCM_DEVICE_DIRECTORY=/dev/aperture_devices
+	export NCCL_GPUDIRECTTCPX_CTRL_DEV=enp0s12
+	export NCCL_GPUDIRECTTCPX_SOCKET_IFNAME=enp6s0,enp12s0,enp134s0,enp140s0
+	export NCCL_CROSS_NIC=0
+	export NCCL_ALGO=Ring
+	export NCCL_PROTO=Simple
+	export NCCL_NSOCKS_PERTHREAD=4
+	export NCCL_SOCKET_NTHREADS=1
+	export NCCL_DYNAMIC_CHUNK_SIZE=524288
+	export NCCL_P2P_NET_CHUNKSIZE=524288
+	export NCCL_P2P_PCI_CHUNKSIZE=524288
+	export NCCL_P2P_NVL_CHUNKSIZE=1048576
+	export NCCL_BUFFSIZE=4194304
+	export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+	export NCCL_NET_GDR_LEVEL=PIX
+	export NCCL_P2P_PXN_LEVEL=0
+	export NCCL_GPUDIRECTTCPX_UNIX_CLIENT_PREFIX=${UDS_PATH}
+	export NCCL_GPUDIRECTTCPX_PROGRAM_FLOW_STEERING_WAIT_MICROS=500000
+	export NCCL_GPUDIRECTTCPX_TX_BINDINGS="enp6s0:8-21,112-125;enp12s0:8-21,112-125;enp134s0:60-73,164-177;enp140s0:60-73,164-177"
+	export NCCL_GPUDIRECTTCPX_RX_BINDINGS="enp6s0:22-35,126-139;enp12s0:22-35,126-139;enp134s0:74-87,178-191;enp140s0:74-87,178-191"
+
+	export LD_LIBRARY_PATH=/var/lib/tcpx/lib64:${LD_LIBRARY_PATH}
 else
 	unset NCCL_NET
 fi
@@ -74,8 +73,10 @@ fi
 # export NCCL_DEBUG=INFO
 # export NCCL_DEBUG_SUBSYS=INIT,GRAPH,ENV,TUNING
 
-# Here we grab all the environment variables that need to be passed down into the container.
-HOST_VARS=$(sed 's/ \{1,\}/,/g' <<<"${!NCCL*}")
+# Here we grab all the environment variables that need to be
+# passed down into the container. Slurm would otherwise only pass these env vars
+# to the job environment on the host.
+HOST_VARS=$(sed 's/ \{1,\}/,/g' <<<"${!USE_TCPX*} ${!NCCL*} LD_LIBRARY_PATH")
 
 # Mount /var/tmp to allow the rest of the enroot container to be read-only, and
 # mount current $PWD to /nccl to for accessing nccl-tests binary
@@ -84,32 +85,18 @@ CONTAINER_MOUNTS="/var/tmp:/var/tmp"
 # Mount PWD to /nccl in the enroot container
 CONTAINER_MOUNTS=${CONTAINER_MOUNTS},"$PWD:/nccl"
 
-# Mount required directories for TCPXO functionality
-if [[ ${USE_TCPXO} = "yes" ]]; then
-	CONTAINER_MOUNTS=${CONTAINER_MOUNTS},"/var/lib/tcpxo/lib64:/var/lib/tcpxo/lib64"
-	CONTAINER_MOUNTS=${CONTAINER_MOUNTS},"/dev/aperture_devices:/dev/aperture_devices"
+# Mount required directories for TCPX functionality
+if [[ ${USE_TCPX} = "yes" ]]; then
+	CONTAINER_MOUNTS=${CONTAINER_MOUNTS},"/var/lib/tcpx/lib64:/var/lib/tcpx/lib64"
+	CONTAINER_MOUNTS=${CONTAINER_MOUNTS},${UDS_PATH}:${UDS_PATH}
 fi
 
-# Create a custom config checker file to ignore strict CPU affinity and env var checks
-cat <<'EOF' >"${PWD}/custom_guest_config.textproto"
-env_var_check_level: CHECK_DISABLED
-attention_keyword_check_level: CHECK_DISABLED
-cpu_affinity_check_level: CHECK_DISABLED
-EOF
-
 # Run the workload
-srun -l \
-	-n $((SLURM_JOB_NUM_NODES * 8)) \
-	-N "${SLURM_JOB_NUM_NODES}" \
-	--mpi=pmi2 \
-	--ntasks-per-node=8 \
-	--gpus-per-node=8 \
-	--container-image="${CONTAINER_IMAGE}" \
+srun --mpi=pmi2 \
+	--cpu-bind=verbose \
+	--export=ALL \
 	--container-name=nccl \
+	--container-image="${CONTAINER_IMAGE}" \
 	--container-env="${HOST_VARS}" \
 	--container-mounts="${CONTAINER_MOUNTS}" \
-	sh -c "
-  export NCCL_SHIMNET_GUEST_CONFIG_CHECKER_CONFIG_FILE=/nccl/custom_guest_config.textproto;
-  export LD_LIBRARY_PATH=/var/lib/tcpxo/lib64:/usr/lib/x86_64-linux-gnu:\$LD_LIBRARY_PATH;
-  /nccl/nccl-tests/build/all_reduce_perf -b 1G -e 8G -f 2 -g 1 -w 5 --iters 40
-  "
+	/nccl/nccl-tests/build/all_reduce_perf -b 1G -e 8G -f 2 -g 1 -w 5 --iters 40

@@ -20,5 +20,5 @@
 resource "google_service_account_iam_member" "main" {
   service_account_id = "projects/${var.project_id}/serviceAccounts/${var.service_account_email}"
   role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.namespace}/${var.k8s_service_account_name}]"
+  member             = "serviceAccount:${replace(var.project_id, ":", "/")}.svc.id.goog[${var.namespace}/${var.k8s_service_account_name}]"
 }

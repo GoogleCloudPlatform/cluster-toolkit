@@ -117,7 +117,7 @@ Any job applied to this node pool must meet the following requirements:
 2. Submit the sample test job:
 
     ```sh
-    kubectl apply -f examples/gke-consumption-options/dws-flex-start-compact-placement/dws-flex-start-h4d.yaml
+    kubectl apply -f examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d/test-job.yaml
     ```
 
 3. Monitor the scale-up and execution timeline:

@@ -108,6 +108,22 @@ steps:
               value: "$$TRIAGE_INVOKER_SA"
             - name: TRIAGE_CLOUD_RUN_URL
               value: "$$TRIAGE_CLOUD_RUN_URL"
+            - name: CHECK_LUSTRE
+              value: "true"
+            - name: REQUIRED_LUSTRE_GB
+              value: "18000"
+            - name: MACHINE_TYPE
+              value: "n2d-standard-4"
+            - name: NUM_NODES
+              value: "2"
+            - name: MIN_NODES
+              value: "2"
+            - name: INSTANCE_PREFIX
+              value: "gkeml"
+            - name: OPTIONS_GCS_PATH
+              value: "gs://hpc-ctk1357/lustreoptions.txt"
+            - name: ENABLE_SPOT_FALLBACK
+              value: "true"
             command: ["/bin/bash", "-c"]
             args:
             - |
@@ -116,24 +132,34 @@ steps:
               cd /workspace
 
               DEPLOYMENT_NAME="gke-ml-$$BUILD_ID_SHORT"
+              EXAMPLE_BP="examples/gke-managed-lustre.yaml"
+              BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$EXAMPLE_BP" 2>/dev/null | awk '{print \$$2}')
+
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/\$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
               trap cleanup_pod EXIT SIGTERM SIGINT
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
-              EXAMPLE_BP="examples/gke-managed-lustre.yaml"
+
+              source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              if [ -z "\$${ZONE:-}" ]; then
+                echo "ERROR: No available zone found." >&2
+                exit 1
+              fi
+              REGION="\$${ZONE%-*}"
+              echo "Selected zone: \$$ZONE (region: \$$REGION)"
 
               # Adding vm to act as remote node
               echo '  - id: remote-node'                     >> \$$EXAMPLE_BP
               echo '    source: modules/compute/vm-instance' >> \$$EXAMPLE_BP
               echo '    use: [network]'                      >> \$$EXAMPLE_BP
               echo '    settings:'                           >> \$$EXAMPLE_BP
-              echo '      machine_type: n2d-standard-2'       >> \$$EXAMPLE_BP
-              echo '      zone: $(vars.zone)'                 >> \$$EXAMPLE_BP
+              echo '      machine_type: n2d-standard-2'      >> \$$EXAMPLE_BP
+              echo '      zone: \$(vars.zone)'               >> \$$EXAMPLE_BP
 
               IP=\$(curl ifconfig.me)
               sed -i "s|.*authorized_cidr:.*|  authorized_cidr: \$$IP/32|" \$$EXAMPLE_BP
@@ -148,6 +174,7 @@ steps:
                 --extra-vars="test_prefix=${_TEST_PREFIX}" \
                 --extra-vars="use_fixed_vpc=true" \
                 --extra-vars="@tools/cloud-build/daily-tests/tests/gke-managed-lustre.yml" \
+                --extra-vars="region=\$${REGION} zone=\$${ZONE}" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
                 --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \

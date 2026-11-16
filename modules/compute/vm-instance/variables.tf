@@ -68,6 +68,18 @@ variable "disk_storage_pool" {
   default     = null
 }
 
+variable "disk_provisioned_iops" {
+  description = "Indicates how many IOPS to provision for the boot disk. This sets the number of I/O operations per second that the disk can handle."
+  type        = number
+  default     = null
+}
+
+variable "disk_provisioned_throughput" {
+  description = "Indicates how much throughput to provision for the boot disk, in MB/s. This sets the amount of data that can be read or written from the disk per second."
+  type        = number
+  default     = null
+}
+
 variable "local_ssd_count" {
   description = "The number of local SSDs to attach to each VM. See https://cloud.google.com/compute/docs/disks/local-ssd."
   type        = number
@@ -83,10 +95,14 @@ variable "local_ssd_interface" {
 variable "additional_persistent_disks" {
   description = "Configurations of additional disks to be included on the partition nodes. Note that storage_pool is only supported with Hyperdisk types (balanced or throughput). You must provide an existing storage pool, as this module does not create new ones."
   type = object({
-    count        = optional(number, 0)
-    type         = optional(string, "pd-balanced")
-    size         = optional(number, 200)
-    storage_pool = optional(string)
+    count                       = optional(number, 0)
+    type                        = optional(string, "pd-balanced")
+    size                        = optional(number, 200)
+    storage_pool                = optional(string)
+    disk_provisioned_iops       = optional(number)
+    disk_provisioned_throughput = optional(number)
+    provisioned_iops            = optional(number)
+    provisioned_throughput      = optional(number)
   })
   default  = {}
   nullable = false
@@ -270,6 +286,12 @@ variable "startup_script" {
   default     = null
 }
 
+variable "startup_script_path" {
+  description = "The GCS bucket or bucket path (e.g. 'gs://bucket-name', 'gs://bucket-name/path', or 'bucket-name') to use for startup scripts. If provided, the module will not create a new GCS bucket for startup scripts."
+  type        = string
+  default     = null
+}
+
 variable "guest_accelerator" {
   description = "List of the type and count of accelerator cards attached to the instance."
   type = list(object({
@@ -427,6 +449,10 @@ variable "reservation_name" {
     Name of the reservation to use for VM resources, should be in one of the following formats:
     - projects/PROJECT_ID/reservations/RESERVATION_NAME
     - RESERVATION_NAME
+    - projects/PROJECT_ID/reservations/RESERVATION_NAME/reservationBlocks/BLOCK_NAME
+    - RESERVATION_NAME/reservationBlocks/BLOCK_NAME
+    - projects/PROJECT_ID/reservations/RESERVATION_NAME/reservationBlocks/BLOCK_NAME/reservationSubBlocks/SUB_BLOCK_NAME
+    - RESERVATION_NAME/reservationBlocks/BLOCK_NAME/reservationSubBlocks/SUB_BLOCK_NAME
 
     Must be a "SPECIFIC_RESERVATION"
     Set to empty string if using no reservation or automatically-consumed reservations
@@ -436,8 +462,8 @@ variable "reservation_name" {
   nullable    = false
 
   validation {
-    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+))?$", var.reservation_name)) > 0
-    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME', [...] is an optional part."
+    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+)(/reservationBlocks/[a-z0-9-]+(/reservationSubBlocks/[a-z0-9-]+)?)?)?$", var.reservation_name)) > 0
+    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME[/reservationBlocks/BLOCK_NAME[/reservationSubBlocks/SUB_BLOCK_NAME]]', [...] are optional parts."
   }
 }
 

@@ -31,8 +31,31 @@ user will modify the template after running the Cluster Toolkit.
   outputs: [instructions]
 ```
 
+### Example with custom Cloud Storage bucket for startup scripts
+
+When network storage requires startup script runners to mount, the module by
+default creates a new Cloud Storage bucket for staging the startup scripts. An
+existing bucket or bucket path can be supplied via `startup_script_path`:
+
+```yaml
+- id: startup-bucket
+  source: modules/file-system/cloud-storage-bucket
+  settings:
+    name_prefix: my-startup-scripts
+    random_suffix: true
+
+- id: batch-job
+  source: modules/scheduler/batch-job-template
+  use: [network1, appfs]
+  settings:
+    runnable: "echo 'hello world'"
+    machine_type: n2-standard-4
+    startup_script_path: $(startup-bucket.gcs_bucket_path)
+  outputs: [instructions]
+```
+
 See the
-[Google Cloud Batch Example](../../../../examples/README.md#batchyaml-)
+[Google Cloud Batch Example](../../../examples/README.md#batchyaml-)
 for how to use the `batch-job-template` module with other Cluster Toolkit modules such
 as `filestore` and `startup-script`.
 
@@ -82,10 +105,10 @@ deployment_groups:
   - id: batch-startup-script
     source: modules/scripts/startup-script
     settings:
-      runners: ...
+      runners: []
 
   - id: batch-compute-template
-    source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v7.8.0
+    source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v15.4.1
     use: [batch-startup-script]
     settings:
       # Boiler plate to work with Cloud Foundation Toolkit
@@ -146,7 +169,7 @@ limitations under the License.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 12.1 |
+| <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 15.4 |
 | <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | ../../scripts/startup-script | n/a |
 
 ## Resources
@@ -173,8 +196,10 @@ limitations under the License.
 | <a name="input_job_filename"></a> [job\_filename](#input\_job\_filename) | The filename of the generated job template file. Will default to `<job_id>.yaml` if not specified | `string` | `null` | no |
 | <a name="input_job_id"></a> [job\_id](#input\_job\_id) | An id for the Google Cloud Batch job. Used for output instructions and file naming. Automatically populated by the module id if not set. If setting manually, ensure a unique value across all jobs. | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the Google Cloud Batch compute nodes. Key-value pairs. Ignored if `instance_template` is provided. | `map(string)` | n/a | yes |
+| <a name="input_lifecycle_policies"></a> [lifecycle\_policies](#input\_lifecycle\_policies) | List of lifecycle policies defining task retry or fail actions for specific exit codes (e.g., 50001 for Spot preemption; note that Spot VMs require a custom instance\_template). Note: Cloud Batch currently supports at most 1 lifecycle policy. | <pre>list(object({<br/>    action     = string<br/>    exit_codes = list(number)<br/>  }))</pre> | `[]` | no |
 | <a name="input_log_policy"></a> [log\_policy](#input\_log\_policy) | Create a block to define log policy.<br/>When set to `CLOUD_LOGGING`, logs will be sent to Cloud Logging.<br/>When set to `PATH`, path must be added to generated template.<br/>When set to `DESTINATION_UNSPECIFIED`, logs will not be preserved. | `string` | `"CLOUD_LOGGING"` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for Google Cloud Batch compute nodes. Ignored if `instance_template` is provided. | `string` | `"n2-standard-4"` | no |
+| <a name="input_max_retry_count"></a> [max\_retry\_count](#input\_max\_retry\_count) | Maximum number of automatic retries for each failed task (between 0 and 10). Defaults to null (Batch default is 0). | `number` | `null` | no |
 | <a name="input_mpi_mode"></a> [mpi\_mode](#input\_mpi\_mode) | Sets up barriers before and after each runnable. In addition, sets `permissiveSsh=true`, `requireHostsFile=true`, and `taskCountPerNode=1`. `taskCountPerNode` can be overridden by `task_count_per_node`. | `bool` | `false` | no |
 | <a name="input_native_batch_mounting"></a> [native\_batch\_mounting](#input\_native\_batch\_mounting) | Batch can mount some fs\_type nativly using the 'volumes' block in the job file. If set to false, all mounting will happen through Cluster Toolkit startup scripts. | `bool` | `true` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. Ignored if `instance_template` is provided. | <pre>list(object({<br/>    server_ip             = string<br/>    remote_mount          = string<br/>    local_mount           = string<br/>    fs_type               = string<br/>    mount_options         = string<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  }))</pre> | `[]` | no |
@@ -184,8 +209,9 @@ limitations under the License.
 | <a name="input_region"></a> [region](#input\_region) | The region in which to run the Google Cloud Batch job | `string` | n/a | yes |
 | <a name="input_runnable"></a> [runnable](#input\_runnable) | A simplified form of `var.runnables` that only takes a single script. Use either `runnables` or `runnable`. | `string` | `null` | no |
 | <a name="input_runnables"></a> [runnables](#input\_runnables) | A list of shell scripts to be executed in sequence as the main workload of the Google Batch job. These will be used to populate the generated template. | <pre>list(object({<br/>    script = string<br/>  }))</pre> | `null` | no |
-| <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the Google Cloud Batch compute node. Ignored if `instance_template` is provided. | <pre>object({<br/>    email  = string,<br/>    scopes = set(string)<br/>  })</pre> | <pre>{<br/>  "email": null,<br/>  "scopes": [<br/>    "https://www.googleapis.com/auth/devstorage.read_only",<br/>    "https://www.googleapis.com/auth/logging.write",<br/>    "https://www.googleapis.com/auth/monitoring.write",<br/>    "https://www.googleapis.com/auth/servicecontrol",<br/>    "https://www.googleapis.com/auth/service.management.readonly",<br/>    "https://www.googleapis.com/auth/trace.append"<br/>  ]<br/>}</pre> | no |
+| <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the Google Cloud Batch compute node and Batch job allocationPolicy. If `instance_template` is provided, `scopes` is ignored and `email` must match the service account set in that template. | <pre>object({<br/>    email = string,<br/>    scopes = optional(set(string), [<br/>      "https://www.googleapis.com/auth/devstorage.read_only",<br/>      "https://www.googleapis.com/auth/logging.write",<br/>      "https://www.googleapis.com/auth/monitoring.write",<br/>      "https://www.googleapis.com/auth/servicecontrol",<br/>      "https://www.googleapis.com/auth/service.management.readonly",<br/>      "https://www.googleapis.com/auth/trace.append"<br/>    ])<br/>  })</pre> | <pre>{<br/>  "email": null,<br/>  "scopes": [<br/>    "https://www.googleapis.com/auth/devstorage.read_only",<br/>    "https://www.googleapis.com/auth/logging.write",<br/>    "https://www.googleapis.com/auth/monitoring.write",<br/>    "https://www.googleapis.com/auth/servicecontrol",<br/>    "https://www.googleapis.com/auth/service.management.readonly",<br/>    "https://www.googleapis.com/auth/trace.append"<br/>  ]<br/>}</pre> | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script run before Google Cloud Batch job starts. Ignored if `instance_template` is provided. | `string` | `null` | no |
+| <a name="input_startup_script_path"></a> [startup\_script\_path](#input\_startup\_script\_path) | The GCS bucket or bucket path (e.g. 'gs://bucket-name', 'gs://bucket-name/path', or 'bucket-name') to use for startup scripts. If provided, the module will not create a new GCS bucket for startup scripts. | `string` | `null` | no |
 | <a name="input_submit"></a> [submit](#input\_submit) | When set to true, the generated job file will be submitted automatically to Google Cloud as part of terraform apply. | `bool` | `false` | no |
 | <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | The subnetwork that the Batch job should run on. Defaults to 'default' subnet. Ignored if `instance_template` is provided. | `any` | `null` | no |
 | <a name="input_task_count"></a> [task\_count](#input\_task\_count) | Number of parallel tasks | `number` | `1` | no |

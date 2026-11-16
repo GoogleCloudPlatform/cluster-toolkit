@@ -64,3 +64,6 @@ vars:
   #static_node_count:
   #placement_policy:
   #  type: COMPACT
+
+## --- Optional overrides (defaults shown) ---
+  # system_node_pool_machine_type: n2d-standard-16

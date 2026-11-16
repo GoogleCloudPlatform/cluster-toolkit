@@ -25,6 +25,7 @@ post_deploy_tests:
 - test-validation/test-anywhere-cache.yml
 - test-validation/test-gke-mtc.yml
 - test-validation/test-gke-storage-pool.yml
+- test-validation/test-gcluster-job-storage.yml
 cli_deployment_vars:
   test_name: "{{ test_name }}"
   region: "{{ region }}"

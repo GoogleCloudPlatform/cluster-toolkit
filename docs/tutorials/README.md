@@ -22,8 +22,8 @@ Click the button below to launch the HTCondor tutorial.
 
 ## Application Specific Tutorials
 
-The following three tutorials deploy a cluster, install an hpc application
-(Growmacs, Openfoam, or WRF), and walk through submitting a real workload.
+The following tutorials deploy a cluster, install an HPC application
+(Gromacs or WRF), and walk through submitting a real workload.
 
 By default these tutorials build the applications from source, which takes
 several hours on deployment. If a complete Spack cache is provided using the
@@ -33,10 +33,6 @@ minutes.
 ### Gromacs
 
 [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_git_branch=main&cloudshell_open_in_editor=docs%2Ftutorials%2Fgromacs%2Fspack-gromacs.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fgromacs%2Fspack-gromacs.md)
-
-### Openfoam
-
-[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_git_branch=main&cloudshell_open_in_editor=docs%2Ftutorials%2Fopenfoam%2Fspack-openfoam.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fopenfoam%2Fspack-openfoam.md)
 
 ### Weather Research and Forecasting (WRF) Model
 

@@ -24,15 +24,16 @@ import (
 )
 
 const (
-	clearcutProdURL = "https://play.googleapis.com/log"
-	configDirName   = "cluster-toolkit"
-	apiTimeout      = 15 * time.Second
-	uploadTimeout   = 10 * time.Second
-	shortTimeout    = 2 * time.Second
-	CLUSTER_TOOLKIT = "CLUSTER_TOOLKIT"
-	CONCORD         = "CONCORD"
-	SOURCE          = "SOURCE"
-	BINARY          = "BINARY"
+	clearcutProdURL         = "https://play.googleapis.com/log"
+	telemetryEndpointEnvVar = "GHPC_TELEMETRY_ENDPOINT"
+	configDirName           = "cluster-toolkit"
+	apiTimeout              = 15 * time.Second
+	uploadTimeout           = 10 * time.Second
+	shortTimeout            = 2 * time.Second
+	CLUSTER_TOOLKIT         = "CLUSTER_TOOLKIT"
+	CONCORD                 = "CONCORD"
+	SOURCE                  = "SOURCE"
+	BINARY                  = "BINARY"
 )
 
 // Collector encapsulates the telemetry state (avoids global variables).
@@ -102,6 +103,7 @@ const (
 	TERRAFORM_VERSION       = "CLUSTER_TOOLKIT_TERRAFORM_VERSION"
 	INSTALLATION_MODE       = "CLUSTER_TOOLKIT_INSTALLATION_MODE"
 	IS_AI_ASSISTED          = "CLUSTER_TOOLKIT_IS_AI_ASSISTED"
+	EXPLAIN_TARGET          = "CLUSTER_TOOLKIT_EXPLAIN_TARGET"
 	IS_TEST_DATA            = "CLUSTER_TOOLKIT_IS_TEST_DATA"
 	EXIT_CODE               = "CLUSTER_TOOLKIT_EXIT_CODE"
 	ERROR_TYPE              = "CLUSTER_TOOLKIT_ERROR_TYPE"

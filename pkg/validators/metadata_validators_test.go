@@ -14,10 +14,12 @@
 package validators
 
 import (
-	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/modulereader"
+	"math"
 	"strings"
 	"testing"
+
+	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -1041,6 +1043,109 @@ func TestExclusiveValidator(t *testing.T) {
 			t.Fatalf("unexpected error message: %q", err.Error())
 		}
 	})
+	t.Run("fails_when_enable_flex_start_and_spot_both_true", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"enable_flex_start": cty.True,
+			"spot":              cty.True,
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "exclusive",
+			ErrorMessage: "Both enable_flex_start and spot consumption option cannot be set to true at the same time.",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"enable_flex_start", "spot"},
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected validation error when both enable_flex_start and spot are true, got nil")
+		}
+		if !strings.Contains(err.Error(), "Both enable_flex_start and spot consumption option cannot be set to true at the same time.") {
+			t.Fatalf("unexpected error message: %q", err.Error())
+		}
+	})
+	t.Run("passes_when_spot_true_and_enable_flex_start_false", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"enable_flex_start": cty.False,
+			"spot":              cty.True,
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "exclusive",
+			ErrorMessage: "Both enable_flex_start and spot consumption option cannot be set to true at the same time.",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"enable_flex_start", "spot"},
+			},
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+}
+
+func TestExclusiveValidator_NegativeNumbers(t *testing.T) {
+	validator := ExclusiveValidator{}
+	cases := []struct {
+		name     string
+		settings map[string]cty.Value
+		minSet   interface{}
+		wantErr  bool
+	}{
+		{
+			name: "fails_when_one_positive_and_one_negative",
+			settings: map[string]cty.Value{
+				"var_a": cty.NumberIntVal(1),
+				"var_b": cty.NumberIntVal(-1),
+			},
+			wantErr: true,
+		},
+		{
+			name: "fails_when_both_negative_int_and_float",
+			settings: map[string]cty.Value{
+				"var_a": cty.NumberIntVal(-2),
+				"var_b": cty.NumberFloatVal(-0.5),
+			},
+			wantErr: true,
+		},
+		{
+			name: "passes_when_one_negative_and_one_zero",
+			settings: map[string]cty.Value{
+				"var_a": cty.NumberIntVal(-1),
+				"var_b": cty.NumberIntVal(0),
+			},
+			wantErr: false,
+		},
+		{
+			name: "passes_min_set_with_negative_number",
+			settings: map[string]cty.Value{
+				"var_a": cty.NumberIntVal(-1),
+			},
+			minSet:  1,
+			wantErr: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bp := createBaseTestBlueprint()
+			bp.Groups[0].Modules[0].Settings = config.NewDict(tc.settings)
+			inputs := map[string]interface{}{
+				"vars": []interface{}{"var_a", "var_b"},
+			}
+			if tc.minSet != nil {
+				inputs["min_set"] = tc.minSet
+			}
+			rule := modulereader.ValidationRule{
+				Validator:    "exclusive",
+				ErrorMessage: "Only one of 'var_a' or 'var_b' should be set.",
+				Inputs:       inputs,
+			}
+			err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("Validate() error = %v, wantErr = %v", err, tc.wantErr)
+			}
+		})
+	}
 }
 
 func TestConditionalValidator_Triggers(t *testing.T) {
@@ -1311,6 +1416,50 @@ func TestConditionalValidator_Dependents(t *testing.T) {
 			t.Fatalf("error message format incorrect: %v", err)
 		}
 	})
+
+	t.Run("fails_when_dependent_value_is_null_and_actual_is_negative", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"enable_flex_start": cty.True,
+			"static_node_count": cty.NumberIntVal(-1),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "conditional",
+			ErrorMessage: "enable_flex_start does not work with static_node_count. static_node_count should be set to null.",
+			Inputs: map[string]interface{}{
+				"trigger":         "enable_flex_start",
+				"trigger_value":   true,
+				"dependent":       "static_node_count",
+				"dependent_value": nil,
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil || !strings.Contains(err.Error(), "static_node_count should be set to null") {
+			t.Fatalf("expected error for negative static_node_count against null dependent_value, got: %v", err)
+		}
+	})
+
+	t.Run("fails_when_dependent_value_is_zero_and_actual_is_negative", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"enable_queued_provisioning":  cty.True,
+			"autoscaling_total_min_nodes": cty.NumberIntVal(-5),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "conditional",
+			ErrorMessage: "autoscaling_total_min_nodes should be 0 when enable_queued_provisioning is true.",
+			Inputs: map[string]interface{}{
+				"trigger":         "enable_queued_provisioning",
+				"trigger_value":   true,
+				"dependent":       "autoscaling_total_min_nodes",
+				"dependent_value": 0,
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil || !strings.Contains(err.Error(), "autoscaling_total_min_nodes should be 0") {
+			t.Fatalf("expected error for negative autoscaling_total_min_nodes against 0 dependent_value, got: %v", err)
+		}
+	})
 }
 func TestRequiredValidator(t *testing.T) {
 	baseBP := config.Blueprint{
@@ -1412,6 +1561,88 @@ func TestRequiredValidator(t *testing.T) {
 			t.Fatalf("expected error message to contain 'Custom Error: missing required settings', got: %q", err.Error())
 		}
 	})
+
+	t.Run("fails_when_deprecated_vars_have_zero_false_or_empty_values", func(t *testing.T) {
+		for name, val := range map[string]cty.Value{
+			"false":        cty.False,
+			"zero":         cty.NumberIntVal(0),
+			"negative":     cty.NumberIntVal(-1),
+			"empty_string": cty.StringVal(""),
+			"empty_list":   cty.EmptyTupleVal,
+			"empty_object": cty.EmptyObjectVal,
+		} {
+			bp := createBaseTestBlueprint()
+			bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"old_var": val})
+			rule := modulereader.ValidationRule{
+				Validator: "required",
+				Inputs:    map[string]interface{}{"vars": []interface{}{"old_var"}, "deprecated": true},
+			}
+			if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err == nil {
+				t.Errorf("%s: expected validation error for deprecated variable, got nil", name)
+			}
+		}
+	})
+}
+
+func TestRequiredValidator_NumericValues(t *testing.T) {
+	validator := RequiredValidator{}
+	cases := []struct {
+		name       string
+		val        cty.Value
+		deprecated bool
+		wantErrSub string
+	}{
+		{"required passes with negative int", cty.NumberIntVal(-1), false, ""},
+		{"required passes with small negative float", cty.NumberFloatVal(-1e-12), false, ""},
+		{"required fails with zero", cty.NumberIntVal(0), false, "missing required settings"},
+		{"deprecated fails with negative int", cty.NumberIntVal(-1), true, "unwanted settings"},
+		{"deprecated fails with zero", cty.NumberIntVal(0), true, "unwanted settings"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bp := createBaseTestBlueprint()
+			bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"num_var": tc.val})
+			rule := modulereader.ValidationRule{
+				Validator: "required",
+				Inputs:    map[string]interface{}{"vars": []interface{}{"num_var"}, "deprecated": tc.deprecated},
+			}
+			err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+			if tc.wantErrSub == "" && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.wantErrSub != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErrSub)) {
+				t.Fatalf("expected error containing %q, got: %v", tc.wantErrSub, err)
+			}
+		})
+	}
+}
+
+func TestMatchTrigger(t *testing.T) {
+	cases := []struct {
+		name     string
+		actual   cty.Value
+		expected cty.Value
+		want     bool
+	}{
+		{"nil expected matches negative int", cty.NumberIntVal(-1), cty.NilVal, true},
+		{"null expected matches negative int", cty.NumberIntVal(-1), cty.NullVal(cty.Number), true},
+		{"nil expected matches small negative float", cty.NumberFloatVal(-1e-12), cty.NilVal, true},
+		{"nil expected does not match zero", cty.NumberIntVal(0), cty.NilVal, false},
+		{"null expected does not match zero", cty.NumberIntVal(0), cty.NullVal(cty.Number), false},
+		{"nil actual does not match negative expected", cty.NilVal, cty.NumberIntVal(-1), false},
+		{"null actual does not match negative expected", cty.NullVal(cty.Number), cty.NumberIntVal(-1), false},
+		{"nil actual matches zero expected", cty.NilVal, cty.NumberIntVal(0), true},
+		{"null actual matches zero expected", cty.NullVal(cty.Number), cty.NumberIntVal(0), true},
+		{"equal negative ints match", cty.NumberIntVal(-1), cty.NumberIntVal(-1), true},
+		{"negative int does not match zero expected", cty.NumberIntVal(-1), cty.NumberIntVal(0), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := matchTrigger(tc.actual, tc.expected); got != tc.want {
+				t.Errorf("matchTrigger(%v, %v) = %v, want %v", tc.actual, tc.expected, got, tc.want)
+			}
+		})
+	}
 }
 
 func TestIsVarSet(t *testing.T) {
@@ -1426,10 +1657,33 @@ func TestIsVarSet(t *testing.T) {
 		{"bool false", []cty.Value{cty.BoolVal(false)}, false},
 		{"bool true", []cty.Value{cty.BoolVal(true)}, true},
 		{"num 0", []cty.Value{cty.NumberIntVal(0)}, false},
+		{"num float 0.0", []cty.Value{cty.NumberFloatVal(0.0)}, false},
+		{"num float negative zero", []cty.Value{cty.NumberFloatVal(math.Copysign(0, -1))}, false},
+		{"module-use marked zero", []cty.Value{config.AsProductOfModuleUse(cty.NumberIntVal(0), "mod")}, false},
 		{"num positive", []cty.Value{cty.NumberIntVal(5)}, true},
+		{"num negative int -1", []cty.Value{cty.NumberIntVal(-1)}, true},
+		{"marked negative int -1", []cty.Value{cty.NumberIntVal(-1).Mark("m")}, true},
+		{"module-use marked negative int -1", []cty.Value{config.AsProductOfModuleUse(cty.NumberIntVal(-1), "mod")}, true},
+		{"num negative int -5", []cty.Value{cty.NumberIntVal(-5)}, true},
+		{"num negative float", []cty.Value{cty.NumberFloatVal(-0.5)}, true},
+		{"num small negative float", []cty.Value{cty.NumberFloatVal(-1e-12)}, true},
+		{"num min int64", []cty.Value{cty.NumberIntVal(math.MinInt64)}, true},
+		{"num large arbitrary-precision negative int", []cty.Value{cty.MustParseNumberVal("-99999999999999999999999999999999999999")}, true},
 		{"empty list", []cty.Value{cty.ListValEmpty(cty.String)}, false},
 		{"populated list", []cty.Value{cty.ListVal([]cty.Value{cty.StringVal("a")})}, true},
+		{"list of negative number via evaluateAndFlatten", evaluateAndFlatten(cty.ListVal([]cty.Value{cty.NumberIntVal(-1)})), true},
+		{"list of zero via evaluateAndFlatten", evaluateAndFlatten(cty.ListVal([]cty.Value{cty.NumberIntVal(0)})), false},
+		{"tuple of negative number via evaluateAndFlatten", evaluateAndFlatten(cty.TupleVal([]cty.Value{cty.NumberIntVal(-1)})), true},
+		{"map with negative number via evaluateAndFlatten", evaluateAndFlatten(cty.MapVal(map[string]cty.Value{"k": cty.NumberIntVal(-1)})), true},
 		{"empty object", []cty.Value{cty.EmptyObjectVal}, false},
+		{"all-null object", []cty.Value{cty.ObjectVal(map[string]cty.Value{"type": cty.NullVal(cty.String), "name": cty.NullVal(cty.String)})}, false},
+		{"object with negative number attribute", []cty.Value{cty.ObjectVal(map[string]cty.Value{"suspend_time": cty.NumberIntVal(-1), "name": cty.NullVal(cty.String)})}, true},
+		{"nested object with negative number via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"outer": cty.ObjectVal(map[string]cty.Value{"inner": cty.NumberIntVal(-1)})})), true},
+		{"nested object with zero via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"outer": cty.ObjectVal(map[string]cty.Value{"inner": cty.NumberIntVal(0)})})), false},
+		{"all-null object via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"server_ip": cty.NullVal(cty.String), "port": cty.NullVal(cty.Number)})), false},
+		{"object with ModuleRef attribute via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"server_ip": config.ModuleRef("slurm_db", "server_ip").AsValue(), "port": cty.NullVal(cty.Number)})), true},
+		{"nested object with all-null attribute via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"outer": cty.ObjectVal(map[string]cty.Value{"inner": cty.NullVal(cty.String)})})), false},
+		{"nested object with ModuleRef attribute via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"outer": cty.ObjectVal(map[string]cty.Value{"inner": config.ModuleRef("slurm_db", "server_ip").AsValue()})})), true},
 		{"populated object", []cty.Value{cty.ObjectVal(map[string]cty.Value{"a": cty.True})}, true},
 	}
 	for _, tt := range tests {
@@ -1468,16 +1722,33 @@ func TestConvertToCty(t *testing.T) {
 }
 
 func TestValuesMatch(t *testing.T) {
-	if !ValuesMatch([]cty.Value{cty.NilVal}, []cty.Value{cty.BoolVal(false)}) {
-		t.Error("ValuesMatch: null should equal false")
+	tests := []struct {
+		name     string
+		original []cty.Value
+		expected []cty.Value
+		want     bool
+	}{
+		{"null equals false", []cty.Value{cty.NilVal}, []cty.Value{cty.BoolVal(false)}, true},
+		{"positive numbers match", []cty.Value{cty.NumberIntVal(10)}, []cty.Value{cty.NumberIntVal(10)}, true},
+		{"negative int does not match zero", []cty.Value{cty.NumberIntVal(-5)}, []cty.Value{cty.NumberIntVal(0)}, false},
+		{"negative int does not match NilVal", []cty.Value{cty.NumberIntVal(-1)}, []cty.Value{cty.NilVal}, false},
+		{"equal negative ints match", []cty.Value{cty.NumberIntVal(-1)}, []cty.Value{cty.NumberIntVal(-1)}, true},
+		{"equal negative floats match", []cty.Value{cty.NumberFloatVal(-0.5)}, []cty.Value{cty.NumberFloatVal(-0.5)}, true},
+		{"negative float does not match positive float", []cty.Value{cty.NumberFloatVal(-0.5)}, []cty.Value{cty.NumberFloatVal(0.5)}, false},
+		{"zero int matches zero float", []cty.Value{cty.NumberIntVal(0)}, []cty.Value{cty.NumberFloatVal(0.0)}, true},
+		{
+			"identical lists match",
+			[]cty.Value{cty.TupleVal([]cty.Value{cty.StringVal("a")})},
+			[]cty.Value{cty.TupleVal([]cty.Value{cty.StringVal("a")})},
+			true,
+		},
 	}
-	if !ValuesMatch([]cty.Value{cty.NumberIntVal(10)}, []cty.Value{cty.NumberIntVal(10)}) {
-		t.Error("ValuesMatch: numbers should match")
-	}
-	vList1 := []cty.Value{cty.TupleVal([]cty.Value{cty.StringVal("a")})}
-	vList2 := []cty.Value{cty.TupleVal([]cty.Value{cty.StringVal("a")})}
-	if !ValuesMatch(vList1, vList2) {
-		t.Error("ValuesMatch: identical lists should match")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ValuesMatch(tc.original, tc.expected); got != tc.want {
+				t.Errorf("ValuesMatch(%v, %v) = %v, want %v", tc.original, tc.expected, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -1693,6 +1964,90 @@ func TestConditionalRegexValidator(t *testing.T) {
 	})
 }
 
+func TestConditionalRegexValidator_ReservationAffinity(t *testing.T) {
+	baseBP := config.Blueprint{
+		BlueprintName: "test-bp",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:       "test-module",
+						Source:   "test/module",
+						Kind:     config.TerraformKind,
+						Settings: config.NewDict(map[string]cty.Value{}),
+					},
+				},
+			},
+		},
+	}
+
+	validator := ConditionalRegexValidator{}
+	rule := modulereader.ValidationRule{
+		Validator:    "conditional_regex",
+		ErrorMessage: "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION.",
+		Inputs: map[string]interface{}{
+			"trigger":       "spot",
+			"trigger_value": true,
+			"dependent":     "reservation_affinity.consume_reservation_type",
+			"pattern":       "^NO_RESERVATION$",
+		},
+	}
+
+	t.Run("fails_when_spot_true_and_reservation_specific", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"spot": cty.True,
+			"reservation_affinity": cty.ObjectVal(map[string]cty.Value{
+				"consume_reservation_type": cty.StringVal("SPECIFIC_RESERVATION"),
+			}),
+		})
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil {
+			t.Fatalf("expected error when spot is true and reservation is SPECIFIC_RESERVATION, got nil")
+		}
+		if !strings.Contains(err.Error(), "Spot consumption option only works with reservation_affinity consume_reservation_type NO_RESERVATION.") {
+			t.Fatalf("unexpected error message: %q", err.Error())
+		}
+	})
+
+	t.Run("passes_when_spot_true_and_reservation_none", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"spot": cty.True,
+			"reservation_affinity": cty.ObjectVal(map[string]cty.Value{
+				"consume_reservation_type": cty.StringVal("NO_RESERVATION"),
+			}),
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	t.Run("passes_when_spot_true_and_reservation_omitted", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"spot": cty.True,
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+
+	t.Run("passes_when_spot_false_and_reservation_specific", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"spot": cty.False,
+			"reservation_affinity": cty.ObjectVal(map[string]cty.Value{
+				"consume_reservation_type": cty.StringVal("SPECIFIC_RESERVATION"),
+			}),
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("unexpected validation error: %v", err)
+		}
+	})
+}
+
 func createBaseTestBlueprint() config.Blueprint {
 	return config.Blueprint{
 		BlueprintName: "test-bp",
@@ -1752,4 +2107,379 @@ func TestCIDRValidator(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("scalar_cidr_allows_null_when_configured", func(t *testing.T) {
+		scalarRule := modulereader.ValidationRule{
+			Validator:    "cidr",
+			ErrorMessage: "master_ipv4_cidr_block must be null or a valid CIDR block (e.g. 1.2.3.0/28).",
+			Inputs: map[string]interface{}{
+				"vars":       []interface{}{"master_ipv4_cidr_block"},
+				"allow_null": true,
+			},
+		}
+		disallowNullRule := modulereader.ValidationRule{
+			Validator:    "cidr",
+			ErrorMessage: "master_ipv4_cidr_block must be a valid CIDR block (e.g. 1.2.3.0/28).",
+			Inputs: map[string]interface{}{
+				"vars": []interface{}{"master_ipv4_cidr_block"},
+			},
+		}
+
+		bp := createBaseTestBlueprint()
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"master_ipv4_cidr_block": cty.NullVal(cty.String),
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], scalarRule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("expected null master_ipv4_cidr_block to pass when allow_null is true, got: %v", err)
+		}
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], disallowNullRule, bp.Groups[0], 0); err == nil {
+			t.Fatal("expected null master_ipv4_cidr_block to fail when allow_null is not enabled, got nil")
+		}
+
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"master_ipv4_cidr_block": cty.StringVal("1.2.3.0/28"),
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], scalarRule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("expected valid CIDR master_ipv4_cidr_block to pass, got: %v", err)
+		}
+
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"master_ipv4_cidr_block": cty.StringVal("invalid-cidr"),
+		})
+		if err := validator.Validate(bp, bp.Groups[0].Modules[0], scalarRule, bp.Groups[0], 0); err == nil {
+			t.Fatal("expected invalid CIDR master_ipv4_cidr_block to fail, got nil")
+		}
+	})
+}
+
+func runModuleRules(bp config.Blueprint, rules []modulereader.ValidationRule) error {
+	mod, grp := bp.Groups[0].Modules[0], bp.Groups[0]
+	for _, r := range rules {
+		if v, ok := Registry[r.Validator]; ok {
+			if err := v.Validate(bp, mod, r, grp, 0); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func TestAllowedEnumValidator_NumericAndNestedExpressions(t *testing.T) {
+	v := &AllowedEnumValidator{}
+	numRule := modulereader.ValidationRule{
+		Validator: "allowed_enum",
+		Inputs:    map[string]interface{}{"vars": []interface{}{"per_unit_storage_throughput"}, "allowed": []interface{}{125, 250, 500, 1000}, "allow_null": true},
+	}
+
+	bp := createBaseTestBlueprint()
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"per_unit_storage_throughput": config.AsProductOfModuleUse(cty.NumberIntVal(250), "mod")})
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], numRule, bp.Groups[0], 0); err != nil {
+		t.Fatalf("expected valid numeric enum to pass, got: %v", err)
+	}
+
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"per_unit_storage_throughput": cty.NumberIntVal(300)})
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], numRule, bp.Groups[0], 0); err == nil {
+		t.Fatal("expected invalid numeric enum 300 to fail, got nil")
+	}
+
+	nestedRule := modulereader.ValidationRule{
+		Validator: "allowed_enum",
+		Inputs:    map[string]interface{}{"vars": []interface{}{"placement_policy.type"}, "allowed": []interface{}{"COMPACT"}, "allow_null": true},
+	}
+	bp.Vars = config.NewDict(map[string]cty.Value{"placement_policy": cty.ObjectVal(map[string]cty.Value{"type": cty.StringVal("SPREAD")})})
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"placement_policy": config.GlobalRef("placement_policy").AsValue()})
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], nestedRule, bp.Groups[0], 0); err == nil {
+		t.Fatal("expected invalid nested placement_policy.type via expression to fail, got nil")
+	}
+
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{})
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], nestedRule, bp.Groups[0], 0); err == nil {
+		t.Fatal("expected invalid nested placement_policy.type in global vars to fail, got nil")
+	}
+}
+
+func TestExclusiveValidator_MinSetAndModuleUse(t *testing.T) {
+	v := &ExclusiveValidator{}
+	rule := modulereader.ValidationRule{
+		Validator: "exclusive",
+		Inputs:    map[string]interface{}{"vars": []interface{}{"filestore_id", "lustre_id", "gcs_bucket_name"}, "min_set": 1},
+	}
+
+	bp := createBaseTestBlueprint()
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{})
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err == nil {
+		t.Fatal("expected error when min_set is 1 and no vars are set, got nil")
+	}
+
+	useVal := config.AsProductOfModuleUse(config.ModuleRef("lustre", "lustre_id").AsValue(), "lustre")
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"lustre_id": useVal})
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err != nil {
+		t.Fatalf("expected module use reference to satisfy min_set=1, got: %v", err)
+	}
+
+	bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"lustre_id": useVal, "gcs_bucket_name": cty.StringVal("my-bucket")})
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0); err == nil {
+		t.Fatal("expected error when both lustre_id (via use) and gcs_bucket_name are set, got nil")
+	}
+
+	badRule := modulereader.ValidationRule{Validator: "exclusive", Inputs: map[string]interface{}{"vars": []interface{}{"a", "b"}, "min_set": "not-an-int"}}
+	if err := v.Validate(bp, bp.Groups[0].Modules[0], badRule, bp.Groups[0], 0); err == nil {
+		t.Fatal("expected error for non-integer min_set, got nil")
+	}
+}
+
+func TestModuleMetadataRules_StorageAndNodePool(t *testing.T) {
+	const (
+		lustreMod   = "../../modules/file-system/managed-lustre"
+		pvMod       = "../../modules/file-system/gke-persistent-volume"
+		nodePoolMod = "../../modules/compute/gke-node-pool"
+	)
+	cases := []struct {
+		name     string
+		modPath  string
+		settings map[string]cty.Value
+		wantErr  bool
+	}{
+		{"lustre valid", lustreMod, map[string]cty.Value{"per_unit_storage_throughput": cty.NumberIntVal(500), "import_gcs_bucket_uri": cty.StringVal("gs://my-valid-bucket/dir"), "network_id": cty.StringVal("projects/my-proj/global/networks/my-net")}, false},
+		{"lustre empty gcs uri", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("")}, false},
+		{"lustre null gcs uri", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.NullVal(cty.String)}, false},
+		{"lustre invalid throughput", lustreMod, map[string]cty.Value{"per_unit_storage_throughput": cty.NumberIntVal(300)}, true},
+		{"lustre invalid gcs uri", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("https://storage.googleapis.com/bucket")}, true},
+		{"lustre gcs uri missing scheme", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("my-bucket")}, true},
+		{"lustre gcs uri whitespace", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal(" ")}, true},
+		{"lustre gcs uri single slash", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("gs:/foo")}, true},
+		{"lustre gcs uri newline injection", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("gs://bucket\ninjected")}, true},
+		{"lustre invalid network_id", lustreMod, map[string]cty.Value{"network_id": cty.StringVal("my-net")}, true},
+		{"lustre dynamic tier with module ref throughput", lustreMod, map[string]cty.Value{"enable_dynamic_tier": cty.True, "per_unit_storage_throughput": config.AsProductOfModuleUse(config.ModuleRef("net", "throughput").AsValue(), "net")}, true},
+		{"lustre module ref trigger", lustreMod, map[string]cty.Value{"enable_dynamic_tier": config.ModuleRef("net", "dynamic_tier").AsValue(), "per_unit_storage_throughput": cty.NumberIntVal(500)}, false},
+		{"pv valid filestore", pvMod, map[string]cty.Value{"filestore_id": cty.StringVal("projects/p/locations/us-central1-a/instances/fs"), "gcsfuse_storage_class_name": cty.StringVal("gcsfusecsi-training")}, false},
+		{"pv missing backing storage", pvMod, map[string]cty.Value{}, true},
+		{"pv multiple backing storages", pvMod, map[string]cty.Value{"filestore_id": cty.StringVal("projects/p/locations/us-central1-a/instances/fs"), "gcs_bucket_name": cty.StringVal("my-bucket")}, true},
+		{"pv invalid lustre_id", pvMod, map[string]cty.Value{"lustre_id": cty.StringVal("invalid-lustre-id")}, true},
+		{"pv invalid gcsfuse class", pvMod, map[string]cty.Value{"gcs_bucket_name": cty.StringVal("my-bucket"), "gcsfuse_storage_class_name": cty.StringVal("invalid-class")}, true},
+		{"node-pool valid", nodePoolMod, map[string]cty.Value{"threads_per_core": cty.NumberIntVal(2), "host_maintenance_interval": cty.StringVal("PERIODIC"), "placement_policy": cty.ObjectVal(map[string]cty.Value{"type": cty.StringVal("COMPACT")})}, false},
+		{"node-pool reservation NO_RESERVATION", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.StringVal("NO_RESERVATION")})}, false},
+		{"node-pool reservation ANY_RESERVATION", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.StringVal("ANY_RESERVATION")})}, false},
+		{"node-pool reservation null object", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.NullVal(cty.DynamicPseudoType)}, false},
+		{"node-pool reservation invalid type", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.StringVal("INVALID")})}, true},
+		{"node-pool reservation lowercase type", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.StringVal("specific_reservation")})}, true},
+		{"node-pool reservation null type", nodePoolMod, map[string]cty.Value{"reservation_affinity": cty.ObjectVal(map[string]cty.Value{"consume_reservation_type": cty.NullVal(cty.String)})}, true},
+		{"node-pool invalid threads_per_core", nodePoolMod, map[string]cty.Value{"threads_per_core": cty.NumberIntVal(4)}, true},
+		{"node-pool invalid host_maintenance_interval", nodePoolMod, map[string]cty.Value{"host_maintenance_interval": cty.StringVal("DAILY")}, true},
+		{"node-pool deprecated compact_placement", nodePoolMod, map[string]cty.Value{"compact_placement": cty.True}, true},
+		{"node-pool deprecated compact_placement false", nodePoolMod, map[string]cty.Value{"compact_placement": cty.False}, true},
+		{"node-pool deprecated total_min_nodes zero", nodePoolMod, map[string]cty.Value{"total_min_nodes": cty.NumberIntVal(0)}, true},
+		{"node-pool deprecated compact_placement null", nodePoolMod, map[string]cty.Value{"compact_placement": cty.NullVal(cty.Bool)}, false},
+		{"node-pool exclusive autoscaling min", nodePoolMod, map[string]cty.Value{"autoscaling_total_min_nodes": cty.NumberIntVal(1), "autoscaling_min_node_count": cty.NumberIntVal(1)}, true},
+		{"node-pool exclusive autoscaling min with negative value", nodePoolMod, map[string]cty.Value{"autoscaling_total_min_nodes": cty.NumberIntVal(-1), "autoscaling_min_node_count": cty.NumberIntVal(1)}, true},
+		{"node-pool exclusive local ssd", nodePoolMod, map[string]cty.Value{"local_ssd_count_ephemeral_storage": cty.NumberIntVal(1), "local_ssd_count_nvme_block": cty.NumberIntVal(1)}, true},
+		{"node-pool flex start valid", nodePoolMod, map[string]cty.Value{"enable_flex_start": cty.True, "auto_repair": cty.False}, false},
+		{"node-pool flex start negative static_node_count", nodePoolMod, map[string]cty.Value{"enable_flex_start": cty.True, "auto_repair": cty.False, "static_node_count": cty.NumberIntVal(-1)}, true},
+		{"node-pool queued provisioning valid", nodePoolMod, map[string]cty.Value{"enable_queued_provisioning": cty.True, "enable_flex_start": cty.True, "auto_repair": cty.False, "autoscaling_total_min_nodes": cty.NumberIntVal(0)}, false},
+		{"node-pool queued provisioning negative autoscaling_total_min_nodes", nodePoolMod, map[string]cty.Value{"enable_queued_provisioning": cty.True, "enable_flex_start": cty.True, "auto_repair": cty.False, "autoscaling_total_min_nodes": cty.NumberIntVal(-5)}, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			info, err := modulereader.GetModuleInfo(tc.modPath, "terraform")
+			if err != nil {
+				t.Fatalf("failed to read module info for %s: %v", tc.modPath, err)
+			}
+			bp := createBaseTestBlueprint()
+			bp.Groups[0].Modules[0].Source = tc.modPath
+			bp.Groups[0].Modules[0].Kind = config.TerraformKind
+			bp.Groups[0].Modules[0].Settings = config.NewDict(tc.settings)
+			if err := runModuleRules(bp, info.Metadata.Ghpc.Validators); (err != nil) != tc.wantErr {
+				t.Fatalf("runModuleRules() error = %v, wantErr = %v", err, tc.wantErr)
+			}
+		})
+	}
+
+	nodePoolInfo, err := modulereader.GetModuleInfo(nodePoolMod, "terraform")
+	if err != nil {
+		t.Fatalf("failed to read module info for %s: %v", nodePoolMod, err)
+	}
+	varRefCases := []struct {
+		name    string
+		resType string
+		wantErr bool
+	}{
+		{"node-pool reservation SPECIFIC_RESERVATION via vars", "SPECIFIC_RESERVATION", false},
+		{"node-pool reservation invalid type via vars", "INVALID", true},
+	}
+	for _, tc := range varRefCases {
+		t.Run(tc.name, func(t *testing.T) {
+			bp := createBaseTestBlueprint()
+			bp.Vars = config.NewDict(map[string]cty.Value{
+				"reservation_affinity": cty.ObjectVal(map[string]cty.Value{
+					"consume_reservation_type": cty.StringVal(tc.resType),
+					"specific_reservations": cty.TupleVal([]cty.Value{
+						cty.ObjectVal(map[string]cty.Value{"name": cty.StringVal("my-res")}),
+					}),
+				}),
+			})
+			bp.Groups[0].Modules[0].Source = nodePoolMod
+			bp.Groups[0].Modules[0].Kind = config.TerraformKind
+			bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+				"reservation_affinity": config.GlobalRef("reservation_affinity").AsValue(),
+			})
+			if err := runModuleRules(bp, nodePoolInfo.Metadata.Ghpc.Validators); (err != nil) != tc.wantErr {
+				t.Fatalf("runModuleRules() error = %v, wantErr = %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateBlueprintWithMetadata_BatchesAllErrors(t *testing.T) {
+	const (
+		lustreMod   = "../../modules/file-system/managed-lustre"
+		nodePoolMod = "../../modules/compute/gke-node-pool"
+		vpcMod      = "../../modules/network/vpc"
+	)
+	bp := config.Blueprint{
+		BlueprintName: "batch-test",
+		Groups: []config.Group{
+			{
+				Name: "primary",
+				Modules: []config.Module{
+					{
+						ID:     "pkr-mod",
+						Source: vpcMod,
+						Kind:   config.PackerKind,
+					},
+					{
+						ID:     "lustre",
+						Source: lustreMod,
+						Kind:   config.TerraformKind,
+						Settings: config.NewDict(map[string]cty.Value{
+							"per_unit_storage_throughput": cty.NumberIntVal(300),
+							"import_gcs_bucket_uri":       cty.StringVal("https://bad-uri"),
+							"network_id":                  cty.StringVal("bad-net-id"),
+						}),
+					},
+					{
+						ID:     "pool",
+						Source: nodePoolMod,
+						Kind:   config.TerraformKind,
+						Settings: config.NewDict(map[string]cty.Value{
+							"threads_per_core":          cty.NumberIntVal(4),
+							"host_maintenance_interval": cty.StringVal("DAILY"),
+						}),
+					},
+				},
+			},
+		},
+	}
+
+	err := validateBlueprintWithMetadata(bp)
+	if err == nil {
+		t.Fatal("expected batched metadata validation errors, got nil")
+	}
+	multi, ok := err.(config.Errors)
+	if !ok {
+		t.Fatalf("expected config.Errors value, got %T: %v", err, err)
+	}
+	if len(multi.Errors) != 5 {
+		t.Fatalf("expected 5 batched errors across lustre and pool, got %d: %v", len(multi.Errors), multi.Errors)
+	}
+
+	execErr := Execute(bp)
+	if execErr == nil {
+		t.Fatal("expected Execute to return batched errors, got nil")
+	}
+	execMulti, ok := execErr.(config.Errors)
+	if !ok {
+		t.Fatalf("expected Execute to return flattened config.Errors, got %T: %v", execErr, execErr)
+	}
+	for _, sub := range execMulti.Errors {
+		if _, isNested := sub.(config.Errors); isNested {
+			t.Fatalf("expected Execute to flatten config.Errors, found nested config.Errors: %v", sub)
+		}
+	}
+	for _, sub := range []string{
+		"per_unit_storage_throughput must be one of 125, 250, 500, 1000, or null.",
+		"import_gcs_bucket_uri must be a valid GCS URI starting with gs://.",
+		"network_id must be in the format projects/{project}/global/networks/{network}.",
+		"threads_per_core must be between 0 and 2.",
+		"host_maintenance_interval must be 'PERIODIC', 'AS_NEEDED', empty, or null.",
+	} {
+		if !strings.Contains(execErr.Error(), sub) {
+			t.Errorf("expected batched error output to contain %q, got:\n%s", sub, execErr.Error())
+		}
+	}
+}
+
+func TestModuleMetadataRules_SlurmTopology(t *testing.T) {
+	const (
+		partMod = "../../community/modules/compute/schedmd-slurm-gcp-v6-partition"
+		ctrlMod = "../../community/modules/scheduler/schedmd-slurm-gcp-v6-controller"
+	)
+	useNodeset := config.AsProductOfModuleUse(config.ModuleRef("ns", "nodeset").AsValue(), "ns")
+	useTwoStaticNodesets := config.AsProductOfModuleUse(
+		config.FunctionCallExpression("flatten", cty.TupleVal([]cty.Value{
+			config.ModuleRef("ns2", "nodeset").AsValue(),
+			config.ModuleRef("ns1", "nodeset").AsValue(),
+		})).AsValue(),
+		"ns1", "ns2",
+	)
+	useNodesetDyn := config.AsProductOfModuleUse(config.ModuleRef("ns_dyn", "nodeset_dyn").AsValue(), "ns_dyn")
+	usePartitions := config.AsProductOfModuleUse(config.ModuleRef("part", "partitions").AsValue(), "part")
+	literalObjList := cty.TupleVal([]cty.Value{
+		cty.ObjectVal(map[string]cty.Value{"name": cty.StringVal("item-1")}),
+	})
+	exprAttrObjList := cty.TupleVal([]cty.Value{
+		cty.ObjectVal(map[string]cty.Value{
+			"name": config.ModuleRef("part", "name").AsValue(),
+			"zone": cty.NullVal(cty.String),
+		}),
+	})
+	allNullObjList := cty.TupleVal([]cty.Value{
+		cty.ObjectVal(map[string]cty.Value{
+			"name": cty.NullVal(cty.String),
+			"zone": cty.NullVal(cty.String),
+		}),
+	})
+
+	cases := []struct {
+		name     string
+		modPath  string
+		settings map[string]cty.Value
+		wantErr  bool
+		errSub   string
+	}{
+		{"partition fails when no nodeset provided", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute")}, true, "A partition must contain exactly one type of nodeset (nodeset, nodeset_dyn, or nodeset_tpu)"},
+		{"partition fails when nodeset list is empty", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": cty.EmptyTupleVal}, true, "A partition must contain exactly one type of nodeset (nodeset, nodeset_dyn, or nodeset_tpu)"},
+		{"partition fails when nodeset object has only null attributes", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": allNullObjList}, true, "A partition must contain exactly one type of nodeset (nodeset, nodeset_dyn, or nodeset_tpu)"},
+		{"partition passes with nodeset via use", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": useNodeset}, false, ""},
+		{"partition passes with two nodesets of same type via use", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": useTwoStaticNodesets}, false, ""},
+		{"partition passes with literal nodeset object list", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": literalObjList}, false, ""},
+		{"partition passes with nodeset object containing ModuleRef attribute", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": exprAttrObjList}, false, ""},
+		{"partition fails with two nodeset types", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": useNodeset, "nodeset_dyn": useNodesetDyn}, true, "A partition must contain exactly one type of nodeset (nodeset, nodeset_dyn, or nodeset_tpu): the following are set: nodeset, nodeset_dyn"},
+		{"controller fails when partitions omitted", ctrlMod, map[string]cty.Value{}, true, "At least one partition must be provided to the Slurm controller"},
+		{"controller fails when partitions list is empty", ctrlMod, map[string]cty.Value{"partitions": cty.EmptyTupleVal}, true, "At least one partition must be provided to the Slurm controller"},
+		{"controller fails when partitions object has only null attributes", ctrlMod, map[string]cty.Value{"partitions": allNullObjList}, true, "At least one partition must be provided to the Slurm controller"},
+		{"controller passes with partitions via use", ctrlMod, map[string]cty.Value{"partitions": usePartitions}, false, ""},
+		{"controller passes with literal partitions object list", ctrlMod, map[string]cty.Value{"partitions": literalObjList}, false, ""},
+		{"controller passes with partitions object containing ModuleRef attribute", ctrlMod, map[string]cty.Value{"partitions": exprAttrObjList}, false, ""},
+		{"controller warning rule does not fail validateBlueprintWithMetadata", ctrlMod, map[string]cty.Value{"partitions": usePartitions, "enable_slurm_auth": cty.False}, false, ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := modulereader.GetModuleInfo(tc.modPath, "terraform"); err != nil {
+				t.Fatalf("failed to read module info for %s: %v", tc.modPath, err)
+			}
+			bp := createBaseTestBlueprint()
+			bp.Groups[0].Modules[0].Source = tc.modPath
+			bp.Groups[0].Modules[0].Kind = config.TerraformKind
+			bp.Groups[0].Modules[0].Settings = config.NewDict(tc.settings)
+			err := validateBlueprintWithMetadata(bp)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("validateBlueprintWithMetadata() error = %v, wantErr = %v", err, tc.wantErr)
+			}
+			if tc.errSub != "" && !strings.Contains(err.Error(), tc.errSub) {
+				t.Fatalf("expected error containing %q, got: %v", tc.errSub, err)
+			}
+		})
+	}
 }

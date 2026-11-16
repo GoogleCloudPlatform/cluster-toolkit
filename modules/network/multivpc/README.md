@@ -54,7 +54,6 @@ subnetwork in each VPC.
     use: [network, multinetwork]
     settings:
       machine_type: a3-highgpu-8g
-      ...
 ```
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -419,3 +419,39 @@ def test_generate_topology_for_slurm_24_11(mock_slurm_version, mock_gen_topo_con
     conf_v2411.gen_topology_conf(lkp)
 
     mock_gen_topo_conf.assert_called_once_with(lkp)
+
+
+@pytest.mark.parametrize("by_region", [False, True])
+def test_gen_topology_region_switches(by_region):
+    sub = "https://www.googleapis.com/compute/v1/projects/p/regions/{}/subnetworks/s"
+    cfg = TstCfg(
+        nodeset={
+            "a": TstNodeset("red", node_count_dynamic_max=3, subnetwork=sub.format("us-east1")),
+            "b": TstNodeset("teal", node_count_dynamic_max=2, subnetwork=sub.format("us-east1")),
+            "c": TstNodeset("gold", node_count_dynamic_max=2, subnetwork=sub.format("us-west4")),
+            "d": TstNodeset("nvl", node_count_dynamic_max=2, subnetwork=sub.format("us-east1"),
+                            accelerator_topology="1x72"),
+            "e": TstNodeset("bare", node_count_dynamic_max=1, subnetwork=""),
+        },
+        cloud_parameters={"topology_region_switches": by_region},
+        output_dir=tempfile.mkdtemp(),
+    )
+    lkp = util.Lookup(cfg)
+    lkp.instances = lambda: { n.name: n for n in [ # type: ignore[assignment]
+        tstInstance("m22-red-0"),
+        tstInstance("m22-red-2", physical_host="/a/b/c"),
+    ]}
+    switches = conf.gen_topology(lkp).compress().render_yaml()[0]["tree"]["switches"]
+    leaves = sorted(sw["nodes"] for sw in switches if "nodes" in sw)
+    assert conf._default_switch(lkp.cfg.nodeset["e"], lkp) == "ns_bare"
+    if by_region:
+        expected = ["m22-bare-0", "m22-gold-[0-1]", "m22-nvl-[0-1]", "m22-red-2", "m22-red-[0-1],m22-teal-[0-1]"]
+    else:
+        expected = ["m22-bare-0", "m22-gold-[0-1]", "m22-nvl-[0-1]", "m22-red-2", "m22-red-[0-1]", "m22-teal-[0-1]"]
+    assert leaves == expected
+
+    upd, summary = conf.gen_topology_yaml(lkp)
+    assert upd
+    summary.dump(lkp)
+    upd, _ = conf.gen_topology_yaml(lkp)
+    assert not upd

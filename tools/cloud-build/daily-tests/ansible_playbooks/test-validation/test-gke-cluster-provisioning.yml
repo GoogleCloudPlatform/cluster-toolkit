@@ -21,3 +21,24 @@
 - name: Connect to the GKE cluster using gcloud command
   delegate_to: localhost
   ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
+
+- name: Describe GKE cluster control plane endpoint configuration
+  delegate_to: localhost
+  register: gke_cluster_info
+  changed_when: false
+  until: (gke_cluster_info.stdout | from_json).status == 'RUNNING'
+  retries: 30
+  delay: 10
+  ansible.builtin.command: >-
+    gcloud container clusters describe {{ deployment_name }}
+    --region {{ region }}
+    --project {{ custom_vars.project }}
+    --format=json
+
+- name: Verify GKE cluster is RUNNING with PSC privateEndpoint and no masterIpv4CidrBlock
+  delegate_to: localhost
+  ansible.builtin.assert:
+    that:
+    - (gke_cluster_info.stdout | from_json).status == 'RUNNING'
+    - (gke_cluster_info.stdout | from_json).privateClusterConfig.masterIpv4CidrBlock | default('') == ''
+    - (gke_cluster_info.stdout | from_json).privateClusterConfig.privateEndpoint | default('') | length > 0

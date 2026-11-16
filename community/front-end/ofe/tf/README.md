@@ -69,6 +69,7 @@ limitations under the License.
 | <a name="input_server_instance_type"></a> [server\_instance\_type](#input\_server\_instance\_type) | Instance size to use from HPC Frontend webserver | `string` | `"n2d-standard-2"` | no |
 | <a name="input_static_ip"></a> [static\_ip](#input\_static\_ip) | Optional pre-configured static IP for HPC Frontend. | `string` | `""` | no |
 | <a name="input_subnet"></a> [subnet](#input\_subnet) | Subnet in which to deploy HPC Frontend. | `string` | `""` | no |
+| <a name="input_terraform_state_bucket"></a> [terraform\_state\_bucket](#input\_terraform\_state\_bucket) | Name of the GCS bucket holding Terraform state for resources the front end<br/>provisions, created by the separate tf/state\_bucket root and passed in by<br/>deploy.sh. No default: silently falling back to local state would bring<br/>back the risk this bucket exists to remove. | `string` | n/a | yes |
 | <a name="input_webserver_hostname"></a> [webserver\_hostname](#input\_webserver\_hostname) | DNS Hostname for the webserver | `string` | `""` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | GCP Zone for HPC Frontend deployment. | `string` | n/a | yes |
 

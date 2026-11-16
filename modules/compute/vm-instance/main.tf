@@ -103,6 +103,9 @@ locals {
       network_ip = google_compute_address.compute_ip[i].address
     })
   ]
+
+  additional_disk_provisioned_iops       = var.additional_persistent_disks.disk_provisioned_iops != null ? var.additional_persistent_disks.disk_provisioned_iops : var.additional_persistent_disks.provisioned_iops
+  additional_disk_provisioned_throughput = var.additional_persistent_disks.disk_provisioned_throughput != null ? var.additional_persistent_disks.disk_provisioned_throughput : var.additional_persistent_disks.provisioned_throughput
 }
 
 resource "null_resource" "image" {
@@ -119,12 +122,14 @@ resource "google_compute_disk" "additional_disks" {
   count = var.instance_count * var.additional_persistent_disks.count
 
   # NB: this resource array must be sliced accounting for var.instance_count
-  name         = "${local.resource_prefix}-disk-${count.index}"
-  type         = var.additional_persistent_disks.type
-  size         = var.additional_persistent_disks.size
-  labels       = local.labels
-  zone         = var.zone
-  storage_pool = var.additional_persistent_disks.storage_pool == "" ? null : var.additional_persistent_disks.storage_pool
+  name                   = "${local.resource_prefix}-disk-${count.index}"
+  type                   = var.additional_persistent_disks.type
+  size                   = var.additional_persistent_disks.size
+  labels                 = local.labels
+  zone                   = var.zone
+  storage_pool           = var.additional_persistent_disks.storage_pool == "" ? null : var.additional_persistent_disks.storage_pool
+  provisioned_iops       = local.additional_disk_provisioned_iops
+  provisioned_throughput = local.additional_disk_provisioned_throughput
 }
 
 resource "google_compute_resource_policy" "placement_policy" {
@@ -189,11 +194,13 @@ resource "google_compute_instance" "compute_vm" {
 
   boot_disk {
     initialize_params {
-      image        = data.google_compute_image.compute_image.self_link
-      size         = var.disk_size_gb
-      type         = var.disk_type
-      labels       = local.labels
-      storage_pool = var.disk_storage_pool == "" ? null : var.disk_storage_pool
+      image                  = data.google_compute_image.compute_image.self_link
+      size                   = var.disk_size_gb
+      type                   = var.disk_type
+      labels                 = local.labels
+      storage_pool           = var.disk_storage_pool == "" ? null : var.disk_storage_pool
+      provisioned_iops       = var.disk_provisioned_iops
+      provisioned_throughput = var.disk_provisioned_throughput
     }
 
     device_name = "${local.resource_prefix}-boot-disk-${count.index}"
@@ -348,8 +355,24 @@ resource "google_compute_instance" "compute_vm" {
       error_message = "The minimum capacity for hyperdisk-balanced is 4 GB."
     }
     precondition {
+      condition     = var.disk_provisioned_iops == null || (var.disk_type != null && contains(["hyperdisk-balanced", "pd-extreme"], lower(var.disk_type)))
+      error_message = "disk_provisioned_iops is only supported with hyperdisk-balanced or pd-extreme boot disks."
+    }
+    precondition {
+      condition     = var.disk_provisioned_throughput == null || (var.disk_type != null && lower(var.disk_type) == "hyperdisk-balanced")
+      error_message = "disk_provisioned_throughput is only supported with hyperdisk-balanced boot disks."
+    }
+    precondition {
       condition     = var.additional_persistent_disks.count == 0 || var.additional_persistent_disks.storage_pool == null || var.additional_persistent_disks.storage_pool == "" || contains(["hyperdisk-balanced", "hyperdisk-throughput"], lower(var.additional_persistent_disks.type))
       error_message = "Storage pools are only supported with Hyperdisk types (balanced or throughput)."
+    }
+    precondition {
+      condition     = var.additional_persistent_disks.count == 0 || local.additional_disk_provisioned_iops == null || contains(["hyperdisk-balanced", "hyperdisk-extreme", "pd-extreme"], lower(var.additional_persistent_disks.type))
+      error_message = "disk_provisioned_iops is only supported with hyperdisk-balanced, hyperdisk-extreme, or pd-extreme disk types."
+    }
+    precondition {
+      condition     = var.additional_persistent_disks.count == 0 || local.additional_disk_provisioned_throughput == null || contains(["hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-ml"], lower(var.additional_persistent_disks.type))
+      error_message = "disk_provisioned_throughput is only supported with hyperdisk-balanced, hyperdisk-throughput, or hyperdisk-ml disk types."
     }
   }
 }

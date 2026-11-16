@@ -673,12 +673,12 @@ func TestResolveTPUWorkloadPolicy(t *testing.T) {
 			g.projectID = tt.job.ProjectID
 			g.clusterDesc.NodePools = tt.nodePools
 
-			policy, err := g.resolveTPUWorkloadPolicy(tt.job.MachineType, tt.job.Topology, tt.job.ClusterLocation, tt.job.ProjectID, tt.job.DryRunManifest != "")
+			policy, err := g.resolveWorkloadPolicy(tt.job.MachineType, tt.job.Topology, tt.job.ClusterLocation, tt.job.ProjectID, tt.job.DryRunManifest != "")
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("resolveTPUWorkloadPolicy() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("resolveWorkloadPolicy() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if !tt.wantErr && policy != tt.wantPolicy {
-				t.Errorf("resolveTPUWorkloadPolicy() = %q, want %q", policy, tt.wantPolicy)
+				t.Errorf("resolveWorkloadPolicy() = %q, want %q", policy, tt.wantPolicy)
 			}
 		})
 	}

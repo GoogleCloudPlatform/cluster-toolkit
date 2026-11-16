@@ -354,6 +354,18 @@ variable "disk_storage_pool" {
   default     = null
 }
 
+variable "disk_provisioned_iops" {
+  description = "Indicates how many IOPS to provision for the boot disk. This sets the number of I/O operations per second that the disk can handle."
+  type        = number
+  default     = null
+}
+
+variable "disk_provisioned_throughput" {
+  description = "Indicates how much throughput to provision for the boot disk, in MB/s. This sets the amount of data that can be read or written from the disk per second."
+  type        = number
+  default     = null
+}
+
 variable "disk_size_gb" {
   type        = number
   description = "Boot disk size in GB."
@@ -404,6 +416,8 @@ variable "additional_disks" {
     device_name                         = string
     disk_type                           = optional(string)
     disk_storage_pool                   = optional(string)
+    disk_provisioned_iops               = optional(number)
+    disk_provisioned_throughput         = optional(number)
     disk_size_gb                        = optional(number)
     disk_labels                         = map(string)
     auto_delete                         = bool

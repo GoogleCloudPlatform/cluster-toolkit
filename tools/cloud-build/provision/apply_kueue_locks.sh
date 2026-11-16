@@ -54,6 +54,17 @@ for PROJECT in "${PROJECTS[@]}"; do
 
 			echo "Applying kueue-setup..."
 			kubectl apply -f "$CONFIGS_DIR/kueue-setup.yaml" || ERRORS=1
+
+			echo "Syncing kueue-stale-pr-reaper ConfigMap..."
+			kubectl create configmap kueue-stale-pr-reaper \
+				-n default \
+				--from-file=reap_stale_pr_builds.py="$SCRIPT_DIR/../reap_stale_pr_builds.py" \
+				--dry-run=client -o yaml | kubectl apply -f - || ERRORS=1
+
+			echo "Applying kueue-reaper-pod..."
+			kubectl apply -f "$CONFIGS_DIR/kueue-reaper-pod.yaml" || ERRORS=1
+			# reaper.sh is read once at container start, so restart to pick up ConfigMap edits.
+			kubectl rollout restart deployment/kueue-reaper -n default || ERRORS=1
 		else
 			echo "Failed to get credentials for $CLUSTER_NAME in $PROJECT."
 			ERRORS=1

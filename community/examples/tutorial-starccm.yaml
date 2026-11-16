@@ -21,6 +21,13 @@ vars:
   deployment_name: starccm
   region: us-east4
   zone: us-east4-c
+  # Optional overrides (defaults shown)
+  # Size in GB of the /home Filestore instance.
+  homefs_size_gb: 1024
+  # Machine type for the compute VMs.
+  compute_machine_type: c2-standard-60
+  # Number of compute VMs.
+  compute_instance_count: 4
 
 deployment_groups:
 - group: primary
@@ -48,7 +55,7 @@ deployment_groups:
     id: homefs
     use: [network1]
     settings:
-      size_gb: 1024
+      size_gb: $(vars.homefs_size_gb)
       filestore_tier: "BASIC_HDD"
       local_mount: /home
 
@@ -64,8 +71,8 @@ deployment_groups:
       threads_per_core: 1
       disable_public_ips: true
       bandwidth_tier: "gvnic_enabled"
-      machine_type: c2-standard-60
-      instance_count: 4
+      machine_type: $(vars.compute_machine_type)
+      instance_count: $(vars.compute_instance_count)
       placement_policy:
         vm_count: null
         collocation: "COLLOCATED"

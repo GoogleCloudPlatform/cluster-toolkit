@@ -24,7 +24,7 @@ This blueprint installs and configures several key software components. While th
 * **NVIDIA CUDA Toolkit:** 13.0 (and related `datacenter-gpu-manager` packages)
 * **Mellanox OFED (DOCA):** 3.2.0 for Ubuntu 24.04 arm64-sbsa
 * **Mellanox Firmware Tools (MFT):** 4.34.0-145
-* **Slurm:** Git ref `6.12.3` from `https://github.com/GoogleCloudPlatform/slurm-gcp`
+* **Slurm:** Git ref `6.13.2` from `https://github.com/GoogleCloudPlatform/slurm-gcp`
 * **NCCL Plugin Image:** `us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-gib-a4x-max-arm64` (Version: `v1.1.1`)
 * **ASAPd Image:** `us-docker.pkg.dev/gce-ai-infra/asapd-lite/asapd-lite:v0.0.8`
 
@@ -46,8 +46,21 @@ The image build process includes several custom scripts to prepare the environme
 
 Follow instructions
 [here](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment),
-on how to set up your cluster toolkit environment, including enabling necessary
-APIs and IAM permissions.
+on how to set up your cluster toolkit environment, enable the required GCP APIs, and build `./gcluster` from the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository:
+
+```bash
+gcloud services enable \
+  compute.googleapis.com \
+  iam.googleapis.com \
+  logging.googleapis.com \
+  monitoring.googleapis.com \
+  servicenetworking.googleapis.com \
+  lustre.googleapis.com \
+  storage.googleapis.com \
+  --project=<PROJECT_ID> # logging & monitoring used by Ops Agent (enable_ops_agent: true)
+
+test -x ./gcluster || make
+```
 
 ### (Optional, but recommended) Create a GCS Bucket for storing terraform state
 
@@ -63,19 +76,13 @@ APIs and IAM permissions.
   gcloud storage buckets update gs://${TF_STATE_BUCKET_NAME} --versioning
   ```
 
-### Obtain Filestore Zonal Capacity
-We suggest using a filestore zonal instance for the best NFS performance, which
-may require a quota increase request. See
-[here](https://cloud.google.com/filestore/docs/requesting-quota-increases) for
-more information. The Slurm and VM blueprints below default to 10TiB (10240 GiB)
-instances.
+### Managed Lustre Capacity
 
-## A4X-Max Slurm Cluster Deployment
+This blueprint provisions an **18,000 GiB (~17.6 TiB) Google Cloud Managed Lustre** instance (`lustre_size_gib: 18000`, `per_unit_storage_throughput: 500`) mounted at `/home` across the cluster. See [Managed Lustre supported locations](https://cloud.google.com/managed-lustre/docs/locations) and [performance tiers](https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers) for details.
 
 ### Create/modify the deployment file with your preferred configuration
 
-For example, set the such as size, reservation to be used, etc, as well as the
-name of the bucket that you just created. Below are example contents for `a4xmax-slurm-deployment.yaml`.
+Set your cluster size, reservation, project, region, zone, and Terraform state bucket in `a4xmax-bm-slurm-deployment.yaml`:
 
 ```yaml
 ---
@@ -91,12 +98,11 @@ vars:
   zone: <ZONE> # Replace with your desired zone
   a4x_max_reservation_name: <RESERVATION_NAME> # Optional: Replace with your reservation name
   a4x_max_cluster_size: <RESERVATION_SIZE> # Replace with your desired cluster size
-
 ```
 
 ### Deploy the cluster
 
-``` bash
+```bash
 #!/bin/bash
 ./gcluster deploy -d examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml
 ```
@@ -117,12 +123,12 @@ vars:
 
 **Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
 
-Selective deployment and teardown for this blueprint are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
+Selective deployment and teardown for this blueprint (`image-env`, `image`, `cluster-env`, and `cluster` groups) are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
 
-Example (deploy only the primary group for this blueprint):
+Example (deploy only the `cluster-env` group for this blueprint):
 
 ```bash
-./gcluster deploy -d examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml --only primary
+./gcluster deploy -d examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-deployment.yaml examples/machine-learning/a4x-maxgpu-4g-metal/a4xmax-bm-slurm-blueprint.yaml --only cluster-env
 ```
 
 ### Cloud Storage FUSE

@@ -99,6 +99,149 @@ func TestResolveMachineName_Dynamic(t *testing.T) {
 	}
 }
 
+// A TPU shorthand names a slice size; the cluster's node pools decide the host shape.
+func TestResolveJobMachineType_TPUShorthandFollowsCluster(t *testing.T) {
+	tests := []struct {
+		name        string
+		computeType string
+		nodePools   []string
+		want        string
+		wantErr     string
+	}{
+		{
+			name:        "mapped machine type present in cluster is kept",
+			computeType: "v5litepod-8",
+			nodePools:   []string{"ct5lp-hightpu-8t", "n2-standard-8"},
+			want:        "ct5lp-hightpu-8t",
+		},
+		{
+			name:        "mapped machine type present next to another of its family is kept",
+			computeType: "v5litepod-8",
+			nodePools:   []string{"ct5lp-hightpu-4t", "ct5lp-hightpu-8t"},
+			want:        "ct5lp-hightpu-8t",
+		},
+		{
+			name:        "cluster's machine type of the same family wins",
+			computeType: "v5litepod-8",
+			nodePools:   []string{"ct5lp-hightpu-4t", "n2-standard-8"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "v5e alias follows the cluster too",
+			computeType: "v5e-8",
+			nodePools:   []string{"ct5lp-hightpu-4t"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "shorthand is case-insensitive",
+			computeType: "V5LitePod-8",
+			nodePools:   []string{"ct5lp-hightpu-4t"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "v6e-8 on a 4t cluster",
+			computeType: "v6e-8",
+			nodePools:   []string{"ct6e-standard-4t"},
+			want:        "ct6e-standard-4t",
+		},
+		{
+			name:        "no pools of the family keeps the mapping for node auto-provisioning",
+			computeType: "v5litepod-8",
+			nodePools:   []string{"n2-standard-8"},
+			want:        "ct5lp-hightpu-8t",
+		},
+		{
+			name:        "v5litepod-4 ignores 1t pool and falls back to default 4t for NAP",
+			computeType: "v5litepod-4",
+			nodePools:   []string{"ct5lp-hightpu-1t"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "v5litepod-8 ignores 1t pool and falls back to default 8t for NAP",
+			computeType: "v5litepod-8",
+			nodePools:   []string{"ct5lp-hightpu-1t"},
+			want:        "ct5lp-hightpu-8t",
+		},
+		{
+			name:        "v5litepod-8 ignores 1t pool and selects 4t pool",
+			computeType: "v5litepod-8",
+			nodePools:   []string{"ct5lp-hightpu-1t", "ct5lp-hightpu-4t"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "v5e-16 cannot run on 8t pool and returns error",
+			computeType: "v5e-16",
+			nodePools:   []string{"ct5lp-hightpu-8t"},
+			wantErr:     "no matching machine types found in cluster",
+		},
+		{
+			name:        "explicit machine type is never substituted",
+			computeType: "ct5lp-hightpu-8t",
+			nodePools:   []string{"ct5lp-hightpu-4t"},
+			want:        "ct5lp-hightpu-8t",
+		},
+		{
+			name:        "GPU shorthand is unaffected",
+			computeType: "l4-1",
+			nodePools:   []string{"g2-standard-48"},
+			want:        "g2-standard-12",
+		},
+		{
+			name:        "unmapped multi-host shorthand resolves to cluster pool",
+			computeType: "v5e-16",
+			nodePools:   []string{"ct5lp-hightpu-4t"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "unmapped shorthand with no matching pool returns error",
+			computeType: "v5e-16",
+			nodePools:   []string{"n2-standard-8"},
+			wantErr:     "no matching machine types found in cluster",
+		},
+		{
+			name:        "larger host shape in cluster is not substituted for smaller slice",
+			computeType: "v5e-4",
+			nodePools:   []string{"ct5lp-hightpu-8t"},
+			want:        "ct5lp-hightpu-4t",
+		},
+		{
+			name:        "1-chip slice ignores 4t and 8t pools in cluster",
+			computeType: "v5e-1",
+			nodePools:   []string{"ct5lp-hightpu-4t", "ct5lp-hightpu-8t"},
+			want:        "ct5lp-hightpu-1t",
+		},
+		{
+			name:        "unknown shorthand returns error",
+			computeType: "unknown-8",
+			nodePools:   []string{"n2-standard-8"},
+			wantErr:     "is not a known shorthand",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := newTestGKEOrchestrator(nil)
+			for _, mt := range tt.nodePools {
+				g.clusterDesc.NodePools = append(g.clusterDesc.NodePools, gkeJobNodePool{Config: gkeNodePoolConfig{MachineType: mt}})
+			}
+
+			got, err := g.resolveJobMachineType(tt.computeType)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("resolveJobMachineType() error = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveJobMachineType() unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("resolveJobMachineType() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFetchMachineCapacity_AllZonesFail(t *testing.T) {
 	g := newTestGKEOrchestrator(nil)
 	g.machineTypeClient = &MockMachineTypeClient{FailAll: true}
@@ -148,37 +291,147 @@ func TestFetchMachineCapabilities_Caching(t *testing.T) {
 
 func TestCalculateResourceLimits_CPU(t *testing.T) {
 	tests := []struct {
-		name          string
-		capacityCount int
-		wantCPU       string
+		name           string
+		machineType    string
+		threadsPerCore string
+		capacityCount  int
+		gcsFuse        bool
+		wantAlloc      int64
+		wantCPU        string
 	}{
 		{
-			name:          "Large capacity",
+			name:          "Large capacity (32 vCPU)",
 			capacityCount: 32,
-			wantCPU:       "30",
+			wantAlloc:     31850, // 32000 - (60 + 10 + 10 + 28*2.5)
+			wantCPU:       "30850m",
 		},
 		{
-			name:          "Small capacity (rounds down to 1)",
+			name:          "Large capacity (32 vCPU) with GCSFuse",
+			capacityCount: 32,
+			gcsFuse:       true,
+			wantAlloc:     31850,
+			wantCPU:       "30600m",
+		},
+		{
+			name:          "Medium capacity (4 vCPU)",
+			capacityCount: 4,
+			wantAlloc:     3920, // 4000 - (60 + 10 + 10)
+			wantCPU:       "2920m",
+		},
+		{
+			name:          "Medium capacity (4 vCPU) with GCSFuse",
+			capacityCount: 4,
+			gcsFuse:       true,
+			wantAlloc:     3920,
+			wantCPU:       "2670m",
+		},
+		{
+			name:          "3 vCPU capacity",
+			capacityCount: 3,
+			wantAlloc:     2925, // 3000 - (60 + 10 + 5)
+			wantCPU:       "1925m",
+		},
+		{
+			name:          "Small capacity (2 vCPU)",
 			capacityCount: 2,
-			wantCPU:       "1",
+			wantAlloc:     1930,    // 2000 - (60 + 10)
+			wantCPU:       "1065m", // 1930/2 + 100
 		},
 		{
-			name:          "Capacity 1 (offset < 1, fallback to 1)",
+			name:          "Small capacity (2 vCPU) with GCSFuse",
+			capacityCount: 2,
+			gcsFuse:       true,
+			wantAlloc:     1930,
+			wantCPU:       "815m", // 1065 - 250
+		},
+		{
+			name:          "Shared-core machine type (e2-medium, raw guestCpus=2 -> 1 effective vCPU)",
+			machineType:   "e2-medium",
+			capacityCount: 2,
+			wantAlloc:     1930,
+			wantCPU:       "570m", // 940/2 + 100
+		},
+		{
+			name:          "Shared-core machine type (e2-medium) with GCSFuse",
+			machineType:   "e2-medium",
+			capacityCount: 2,
+			gcsFuse:       true,
+			wantAlloc:     1930,
+			wantCPU:       "320m", // 570 - 250
+		},
+		{
+			name:           "SMT disabled (threads_per_core=1 on n2-standard-4, 4 -> 2 effective vCPUs)",
+			machineType:    "n2-standard-4",
+			threadsPerCore: "1",
+			capacityCount:  4,
+			wantAlloc:      3920,
+			wantCPU:        "1065m", // 2 effective vCPUs -> 1930/2 + 100
+		},
+		{
+			name:           "SMT disabled (threads_per_core=1 on n2-standard-4) with GCSFuse",
+			machineType:    "n2-standard-4",
+			threadsPerCore: "1",
+			capacityCount:  4,
+			gcsFuse:        true,
+			wantAlloc:      3920,
+			wantCPU:        "815m", // 1065 - 250
+		},
+		{
+			name:           "Non-SMT-capable family (t2d-standard-4) ignores threads_per_core=1",
+			machineType:    "t2d-standard-4",
+			threadsPerCore: "1",
+			capacityCount:  4,
+			wantAlloc:      3920,
+			wantCPU:        "2920m",
+		},
+		{
+			name:          "Capacity 1",
 			capacityCount: 1,
-			wantCPU:       "1",
+			wantAlloc:     940,    // 1000 - 60
+			wantCPU:       "570m", // 940/2 + 100
 		},
 		{
-			name:          "Capacity 0 (fallback to 1)",
+			name:          "Capacity 1 with GCSFuse",
+			capacityCount: 1,
+			gcsFuse:       true,
+			wantAlloc:     940,
+			wantCPU:       "320m", // 570 - 250
+		},
+		{
+			name:          "Capacity 0 (floors to 100m)",
 			capacityCount: 0,
-			wantCPU:       "1",
+			wantAlloc:     0,
+			wantCPU:       "100m",
+		},
+		{
+			name:          "Capacity 0 with GCSFuse (floors to 100m)",
+			capacityCount: 0,
+			gcsFuse:       true,
+			wantAlloc:     0,
+			wantCPU:       "100m",
 		},
 	}
 
-	g := newTestGKEOrchestrator(nil)
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := ManifestOptions{ComputeType: "n2-standard-32", MachineType: "n2-standard-32"}
+			if gotAlloc := calculateAllocatableCPUMilli(tt.capacityCount); gotAlloc != tt.wantAlloc {
+				t.Errorf("calculateAllocatableCPUMilli(%d) = %d, want %d", tt.capacityCount, gotAlloc, tt.wantAlloc)
+			}
+
+			g := newTestGKEOrchestrator(nil)
+			mt := tt.machineType
+			if mt == "" {
+				mt = "n2-standard-32"
+			}
+			if tt.threadsPerCore != "" {
+				g.machineTypeToThreadsPerCore = map[string]string{mt: tt.threadsPerCore}
+			}
+
+			opts := ManifestOptions{
+				ComputeType:    mt,
+				MachineType:    mt,
+				GCSFuseEnabled: tt.gcsFuse,
+			}
 			profile := JobProfile{
 				IsCPUMachine:  true,
 				CapacityCount: tt.capacityCount,
@@ -317,10 +570,40 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 		{
 			name:            "TPU shorthand with chip count resolved",
 			acceleratorType: "v6e-256",
-			nodePools:       []string{"ct6e-standard-8t"},
-			wantType:        "ct6e-standard-8t", // Resolves to full machine type
+			nodePools:       []string{"ct6e-standard-4t"},
+			wantType:        "ct6e-standard-4t", // Resolves to full machine type
 			wantTopology:    "16x16",
 			wantErr:         false,
+		},
+		{
+			name:            "v5litepod-8 uses the cluster's 4t hosts for a 2x4 slice",
+			acceleratorType: "v5litepod-8",
+			nodePools:       []string{"ct5lp-hightpu-4t"},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get nodes -o jsonpath": {{ExitCode: 0, Stdout: "2x4\n"}, {ExitCode: 0, Stdout: "2x4\n"}},
+			},
+			wantType:     "ct5lp-hightpu-4t",
+			wantTopology: "2x4",
+		},
+		{
+			name:            "v5e-8 alias resolves like v5litepod-8",
+			acceleratorType: "v5e-8",
+			nodePools:       []string{"ct5lp-hightpu-4t"},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get nodes -o jsonpath": {{ExitCode: 0, Stdout: "2x4\n"}, {ExitCode: 0, Stdout: "2x4\n"}},
+			},
+			wantType:     "ct5lp-hightpu-4t",
+			wantTopology: "2x4",
+		},
+		{
+			name:            "v5e-16 resolves through the cluster's machine type",
+			acceleratorType: "v5e-16",
+			nodePools:       []string{"ct5lp-hightpu-4t"},
+			mockResponses: map[string][]shell.CommandResult{
+				"kubectl get nodes -o jsonpath": {{ExitCode: 0, Stdout: "4x4\n"}, {ExitCode: 0, Stdout: "4x4\n"}},
+			},
+			wantType:     "ct5lp-hightpu-4t",
+			wantTopology: "4x4",
 		},
 		{
 			name:            "TPU shorthand with invalid size (not power of 2)",
@@ -335,8 +618,8 @@ func TestResolveAcceleratorShorthand(t *testing.T) {
 		{
 			name:            "TPU shorthand with valid size >= 16",
 			acceleratorType: "v6e-32",
-			nodePools:       []string{"ct6e-standard-8t"},
-			wantType:        "ct6e-standard-8t",
+			nodePools:       []string{"ct6e-standard-4t"},
+			wantType:        "ct6e-standard-4t",
 			wantTopology:    "4x8",
 			wantErr:         false,
 		},
@@ -1265,6 +1548,134 @@ func TestResolveWorkloadPlacementPolicy(t *testing.T) {
 			}
 			if !tt.wantErr && tt.job.PlacementPolicy != tt.wantPolicy {
 				t.Errorf("resolveWorkloadPlacementPolicy() placementPolicy = %q, want %q", tt.job.PlacementPolicy, tt.wantPolicy)
+			}
+		})
+	}
+}
+
+func TestResolveGPUPlacementPolicy(t *testing.T) {
+	a4xPool := gkeJobNodePool{
+		Name:            "a4x-pool",
+		Config:          gkeNodePoolConfig{MachineType: "a4x-highgpu-4g"},
+		PlacementPolicy: &gkePlacementPolicy{PolicyName: "projects/my-project/regions/us-central1/resourcePolicies/a4x-workload-policy"},
+	}
+	a4xDescribe := "gcloud compute resource-policies describe a4x-workload-policy --region=us-central1 --project=my-project --format=json"
+
+	tests := []struct {
+		name          string
+		job           *orchestrator.JobDefinition
+		nodePools     []gkeJobNodePool
+		mockResponses map[string][]shell.CommandResult
+		wantPolicy    string
+		wantErr       bool
+		wantCreated   bool
+	}{
+		{
+			name:       "non-workload-policy GPU without flag resolves nothing",
+			job:        &orchestrator.JobDefinition{MachineType: "a3-ultragpu-8g", ClusterLocation: "us-central1-c", ProjectID: "my-project"},
+			nodePools:  []gkeJobNodePool{a4xPool},
+			wantPolicy: "",
+		},
+		{
+			name:       "non-workload-policy GPU with explicit policy is sanitized but not described",
+			job:        &orchestrator.JobDefinition{MachineType: "a3-highgpu-8g", ClusterLocation: "us-central1-c", ProjectID: "my-project", PlacementPolicy: "projects/my-project/regions/us-central1/resourcePolicies/h100-compact"},
+			wantPolicy: "h100-compact",
+		},
+		{
+			name:       "A4X static cluster picks the policy attached to its node pool",
+			job:        &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project"},
+			nodePools:  []gkeJobNodePool{{Name: "cpu", Config: gkeNodePoolConfig{MachineType: "n2-standard-8"}}, a4xPool},
+			wantPolicy: "a4x-workload-policy",
+		},
+		{
+			name:       "A4X static cluster without a policy-bearing node pool warns and resolves nothing",
+			job:        &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project"},
+			nodePools:  []gkeJobNodePool{{Name: "a4x-nopolicy", Config: gkeNodePoolConfig{MachineType: "a4x-highgpu-4g"}}},
+			wantPolicy: "",
+		},
+		{
+			name: "A4X explicit policy is validated for HIGH_THROUGHPUT 1x72",
+			job:  &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", PlacementPolicy: "a4x-workload-policy"},
+			mockResponses: map[string][]shell.CommandResult{
+				a4xDescribe: {{ExitCode: 0, Stdout: `{"name":"a4x-workload-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"1x72"}}`}},
+			},
+			wantPolicy: "a4x-workload-policy",
+		},
+		{
+			name: "A4X explicit policy with wrong topology is rejected",
+			job:  &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", PlacementPolicy: "a4x-workload-policy"},
+			mockResponses: map[string][]shell.CommandResult{
+				a4xDescribe: {{ExitCode: 0, Stdout: `{"name":"a4x-workload-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"1x4"}}`}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "A4X explicit policy missing in GCE is rejected",
+			job:  &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", PlacementPolicy: "a4x-workload-policy"},
+			mockResponses: map[string][]shell.CommandResult{
+				a4xDescribe: {{ExitCode: 1, Stderr: "ERROR: The resource 'a4x-workload-policy' was not found"}},
+			},
+			wantErr: true,
+		},
+		{
+			name:       "A4X explicit policy in dry-run skips GCE validation",
+			job:        &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", PlacementPolicy: "a4x-workload-policy", DryRunManifest: "out.yaml"},
+			wantPolicy: "a4x-workload-policy",
+		},
+		{
+			name: "A4X NAP discovers the canonical regional policy",
+			job:  &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", GKENAPProvisioning: "auto"},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe gb200-4-1x72-placement-policy --region=us-central1 --project=my-project --format=json": {
+					{ExitCode: 0, Stdout: `{"name":"gb200-4-1x72-placement-policy","region":"us-central1","workloadPolicy":{"type":"HIGH_THROUGHPUT","acceleratorTopology":"1x72"}}`},
+				},
+			},
+			wantPolicy: "gb200-4-1x72-placement-policy",
+		},
+		{
+			name: "A4X NAP creates the canonical policy when missing",
+			job:  &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", GKENAPProvisioning: "auto"},
+			mockResponses: map[string][]shell.CommandResult{
+				"gcloud compute resource-policies describe gb200-4-1x72-placement-policy --region=us-central1 --project=my-project --format=json":                                                                                                            {{ExitCode: 1, Stderr: "not found"}},
+				"gcloud compute resource-policies list --project=my-project --filter=region:( us-central1 ) AND workloadPolicy.acceleratorTopology=1x72 AND workloadPolicy.type=HIGH_THROUGHPUT --format=value(name,workloadPolicy.acceleratorTopologyMode)": {{ExitCode: 0, Stdout: ""}},
+				"gcloud compute resource-policies create workload-policy gb200-4-1x72-placement-policy --region=us-central1 --project=my-project --type=HIGH_THROUGHPUT --accelerator-topology=1x72":                                                         {{ExitCode: 0}},
+			},
+			wantPolicy:  "gb200-4-1x72-placement-policy",
+			wantCreated: true,
+		},
+		{
+			name:       "A4X NAP reuses the policy of an existing A4X node pool before touching GCE",
+			job:        &orchestrator.JobDefinition{MachineType: "a4x-highgpu-4g", ClusterLocation: "us-central1-c", ProjectID: "my-project", GKENAPProvisioning: "auto"},
+			nodePools:  []gkeJobNodePool{a4xPool},
+			wantPolicy: "a4x-workload-policy",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExecutor := NewMockExecutor(tt.mockResponses)
+			g := newTestGKEOrchestrator(mockExecutor)
+			g.projectID = tt.job.ProjectID
+			g.clusterDesc.NodePools = tt.nodePools
+
+			err := g.resolveGPUPlacementPolicy(tt.job)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("resolveGPUPlacementPolicy() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if tt.job.PlacementPolicy != tt.wantPolicy {
+				t.Errorf("PlacementPolicy = %q, want %q", tt.job.PlacementPolicy, tt.wantPolicy)
+			}
+			created := false
+			for key, n := range mockExecutor.callCount {
+				if n > 0 && strings.Contains(key, "resource-policies create workload-policy") {
+					created = true
+				}
+			}
+			if created != tt.wantCreated {
+				t.Errorf("workload policy created = %v, want %v (calls: %v)", created, tt.wantCreated, mockExecutor.callCount)
 			}
 		})
 	}

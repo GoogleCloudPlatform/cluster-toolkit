@@ -56,7 +56,7 @@ resource "terraform_data" "stage_gcs_directory" {
   ]
 
   provisioner "local-exec" {
-    command = "${path.module}/scripts/stage_to_gcs.sh"
+    command = "bash ${path.module}/scripts/stage_to_gcs.sh"
 
     environment = {
       MODE          = "directory"
@@ -83,7 +83,7 @@ resource "terraform_data" "stage_gcs_file" {
   ]
 
   provisioner "local-exec" {
-    command = "${path.module}/scripts/stage_to_gcs.sh"
+    command = "bash ${path.module}/scripts/stage_to_gcs.sh"
 
     environment = {
       MODE     = "file"

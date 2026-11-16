@@ -1,0 +1,136 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: goog-gpu-bug-report
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    kubernetes.io/hostname: <gke-node-name>  # TODO: Replace with your GKE node name
+  tolerations:
+  - effect: NoSchedule
+    key: nvidia.com/gpu
+    operator: Exists
+  containers:
+  - name: bug-reporter-container
+    resources:
+      limits:
+        nvidia.com/gpu: "<number_of_gpus>"  # TODO: Replace with number of GPUs on this machine type
+      requests:
+        nvidia.com/gpu: "<number_of_gpus>"  # TODO: Replace with number of GPUs on this machine type
+    image: us-central1-docker.pkg.dev/gce-ai-infra/goog-gpu-bug-report-repo/goog-gpu-bug-report:latest
+    imagePullPolicy: Always
+    args:
+    - --gcs_bucket=${GCS_BUCKET}
+    env:
+    - name: SYSTEMD_IGNORE_CHROOT
+      value: "1"
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: host-tmp
+      mountPath: /tmp
+      readOnly: false
+    - name: nvidia
+      mountPath: /home/kubernetes/bin/nvidia
+      readOnly: true
+    - name: host-var-log
+      mountPath: /var/log
+      readOnly: true
+    - name: host-dev
+      mountPath: /dev
+    - name: host-run
+      mountPath: /run
+    - name: host-sys
+      mountPath: /sys
+    # Not same-path: the host's /usr would hide the container's own userland.
+    - name: host-usr
+      mountPath: /host_usr
+      readOnly: true
+    # /usr/src is not mounted because it does not exist on COS, where the pod
+    # would fail to start. Ubuntu nodes therefore use driverless MFT.
+    - name: host-lib-modules
+      mountPath: /lib/modules
+    - name: host-os-release
+      mountPath: /etc/os-release
+      readOnly: true
+    - name: host-lsb-release
+      mountPath: /etc/lsb-release
+      readOnly: true
+    - name: host-machine-id
+      mountPath: /etc/machine-id
+      readOnly: true
+    - name: host-issue
+      mountPath: /etc/issue
+      readOnly: true
+    - name: host-nvidia-imex
+      mountPath: /etc/nvidia-imex
+      readOnly: true
+  hostNetwork: true
+  hostPID: true
+  volumes:
+  - name: host-tmp
+    hostPath:
+      path: /tmp
+      type: Directory
+  - name: nvidia
+    hostPath:
+      path: /home/kubernetes/bin/nvidia
+      type: Directory
+  - name: host-var-log
+    hostPath:
+      path: /var/log
+      type: Directory
+  - name: host-dev
+    hostPath:
+      path: /dev
+      type: Directory
+  - name: host-run
+    hostPath:
+      path: /run
+      type: Directory
+  - name: host-sys
+    hostPath:
+      path: /sys
+      type: Directory
+  - name: host-usr
+    hostPath:
+      path: /usr
+      type: Directory
+  - name: host-lib-modules
+    hostPath:
+      path: /lib/modules
+      type: Directory
+  - name: host-os-release
+    hostPath:
+      path: /etc/os-release
+      type: File
+  - name: host-lsb-release
+    hostPath:
+      path: /etc/lsb-release
+      type: FileOrCreate
+  - name: host-machine-id
+    hostPath:
+      path: /etc/machine-id
+      type: File
+  - name: host-issue
+    hostPath:
+      path: /etc/issue
+      type: File
+  - name: host-nvidia-imex
+    hostPath:
+      path: /etc/nvidia-imex
+      type: DirectoryOrCreate

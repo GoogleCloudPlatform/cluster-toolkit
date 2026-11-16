@@ -26,10 +26,10 @@ output "project_radlab_ds_analytics_id" {
 
 output "notebook_instance_name" {
   description = "Notebook Instance Names"
-  value       = google_notebooks_instance.ai_notebook.name
+  value       = google_workbench_instance.ai_notebook.name
 }
 
 output "notebook_proxy_uri" {
   description = "Notebook Proxy URIs"
-  value       = google_notebooks_instance.ai_notebook.proxy_uri
+  value       = google_workbench_instance.ai_notebook.proxy_uri
 }

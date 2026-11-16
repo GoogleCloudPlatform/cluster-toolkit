@@ -11,39 +11,32 @@
 
 ## Accelerator definition automation
 
-The schedmd-slurm-gcp-v6 modules ([nodeset], [controller] and [login]),
-the [vm-instance] module and any module relying on [vm-instance] (HTCondor) support
-automation for defining the `guest_accelerator` config. If the user supplies any
-value for this setting, the automation will be bypassed.
+The [nodeset] (`schedmd-slurm-gcp-v6-nodeset`), [vm-instance] and [gke-node-pool]
+modules support automation for defining the `guest_accelerator` config via the
+shared internal `modules/internal/gpu-definition` module and `machine_configs`
+injection ([controller], [login] and [htcondor-execute-point] do not receive
+`machine_configs`, so set `guest_accelerator` explicitly on them). If the
+user supplies an explicit value for `guest_accelerator`, the automation is
+bypassed.
 
-The automation is handled primary in the `gpu_definition.tf` files in these
-modules. This file assumes the existence of two input variables in the module:
+The `modules/internal/gpu-definition` module looks up `machine_configs.gpus[var.machine_type]`
+(populated by `gcluster` at expand/create time from the Compute Engine `machineTypes.get` API)
+and automatically attaches the default GPU type and count for any machine type that
+bundles accelerators. For example:
+* `a2-highgpu-4g` -> `type: nvidia-tesla-a100`, `count: 4`
+* `a2-ultragpu-8g` -> `type: nvidia-a100-80gb`, `count: 8`
+* `g2-standard-4` -> `type: nvidia-l4`, `count: 1`
 
-* `guest_accelerator`: A list of terraform objects with the attributes type and
-  count.
-* `machine_type`: Defines the machine type of the VM being created.
+Machine type `n1` can also have guest accelerators attached (`nvidia-tesla-t4`, `nvidia-tesla-v100`, etc.), which must be specified explicitly via `guest_accelerator`.
 
-`gpu_definition.tf` works by checking the `machine_type` and associating it with
-a GPU type and extracting the GPU count. For example, consider the following
-machine types:
-* `a2-high-gpu-4g`
-  * `type` will be set to `nvidia-tesla-a100`
-  * `count` will be set to 4
-* `a2-ultragpu-8g`
-  * `type` will be set to `nvidia-a100-80gb`
-  * `count` will be set to 8.
-
-This automation currently only supports machine type `a2`. Machine type `n1` can
-also have guest accelerators attached, however the type and count
-cannot be determined automatically like with `a2`.
-
-[vm-instance]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/compute/vm-instance
-[nodeset]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-[controller]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-[login]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v6-login
-[htcondor-install]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scripts/htcondor-install
-[htcondor-setup]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/htcondor-setup
-[htcondor-execute-point]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/htcondor-execute-point
+[vm-instance]: ../modules/compute/vm-instance/README.md
+[gke-node-pool]: ../modules/compute/gke-node-pool/README.md
+[nodeset]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md
+[controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
+[login]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
+[htcondor-install]: ../community/modules/scripts/htcondor-install/README.md
+[htcondor-setup]: ../community/modules/scheduler/htcondor-setup/README.md
+[htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 
 ## Troubleshooting and tips
 
@@ -56,20 +49,11 @@ cannot be determined automatically like with `a2`.
 
 ### Slurm on GCP
 
-When deploying a Slurm cluster with GPUs, we highly recommend using the
-modules based on Slurm on GCP version 5 (`schedmd-slurm-gcp-v6-*`). The
-interface is more consistent with Cluster Toolkit standards and more functionality
-is available to support, debug and workaround any issues related to GPU
-resources.
+When deploying a Slurm cluster with GPUs, use the Slurm on GCP v6 modules (`schedmd-slurm-gcp-v6-*`). See [`examples/machine-learning/`](../examples/machine-learning/README.md) for production-ready A3 High, A3 Mega, A3 Ultra, A4, A4X, A4X Max, and TPU 7x Slurm blueprints.
 
 #### Interface Considerations
 
-The Slurm on GCP v6 Cluster Toolkit modules (`schedmd-slurm-gcp-v6-*`) have two
-variables that can be used to define attached GPUs. The variable
-`guest_accelerators` is the recommended option as it is consistent with other
-modules in the Cluster Toolkit. The setting `gpus` can be set as well, which
-provides consistency with the underlying terraform modules from the
-[Slurm on GCP repo][slurm-gcp].
+The Slurm on GCP v6 Cluster Toolkit modules (`schedmd-slurm-gcp-v6-*`) and `vm-instance` use the singular `guest_accelerator` variable (a list of `{ type = string, count = number }` objects) to define attached GPUs when overriding the automatic `machine_type` mapping.
 
 #### Timeouts when deploying a compute VM
 
@@ -86,7 +70,7 @@ See the example below which increases the `resume_timeout` from the default of
 ```yaml
 - id: slurm_controller
   source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-  use: [...]
+  use: [network1]
   settings:
     cloud_parameters:
       resume_rate: 0
@@ -94,7 +78,6 @@ See the example below which increases the `resume_timeout` from the default of
       suspend_rate: 0
       suspend_timeout: 300
       no_comma_params: false
-    ...
 ```
 
 #### Launching Slurm jobs with GPUs

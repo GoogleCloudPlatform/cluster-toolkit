@@ -377,20 +377,22 @@ variable "nodeset_tpu" {
 variable "cloud_parameters" {
   description = "cloud.conf options. Default behavior defined in scripts/conf.py"
   type = object({
-    no_comma_params         = optional(bool, false)
-    private_data            = optional(list(string))
-    scheduler_parameters    = optional(list(string))
-    resume_rate             = optional(number)
-    resume_timeout          = optional(number)
-    suspend_rate            = optional(number)
-    suspend_timeout         = optional(number)
-    slurmd_timeout          = optional(number)
-    unkillable_step_timeout = optional(number)
-    topology_plugin         = optional(string)
-    topology_param          = optional(string)
-    tree_width              = optional(number)
-    prolog_flags            = optional(string)
-    switch_type             = optional(string)
+    no_comma_params          = optional(bool, false)
+    private_data             = optional(list(string))
+    scheduler_parameters     = optional(list(string))
+    resume_rate              = optional(number)
+    resume_timeout           = optional(number)
+    suspend_rate             = optional(number)
+    suspend_timeout          = optional(number)
+    slurmd_timeout           = optional(number)
+    unkillable_step_timeout  = optional(number)
+    topology_plugin          = optional(string)
+    topology_param           = optional(string)
+    tree_width               = optional(number)
+    prolog_flags             = optional(string)
+    switch_type              = optional(string)
+    skip_nodeset_lines       = optional(bool, false)
+    topology_region_switches = optional(bool, false)
   })
   default  = {}
   nullable = false
@@ -430,26 +432,6 @@ EOD
   default     = false
 }
 
-variable "google_app_cred_path" {
-  type        = string
-  description = "Path to Google Application Credentials."
-  default     = null
-}
-
-variable "slurm_bin_dir" {
-  type        = string
-  description = <<EOD
-Path to directory of Slurm binary commands (e.g. scontrol, sinfo). If 'null',
-then it will be assumed that binaries are in $PATH.
-EOD
-  default     = null
-}
-
-variable "slurm_log_dir" {
-  type        = string
-  description = "Directory where Slurm logs to."
-  default     = "/var/log/slurm"
-}
 
 variable "slurm_control_host" {
   type        = string
@@ -486,6 +468,28 @@ SlurmctldHost={var.slurm_control_host}\({var.slurm_control_addr}\)
 See https://slurm.schedmd.com/slurm.conf.html#OPT_SlurmctldHost
 EOD
   default     = null
+}
+
+variable "hybrid_conf" {
+  description = "The hybrid configuration"
+  type = object({
+    slurm_bin_dir           = optional(string)
+    slurm_log_dir           = optional(string)
+    slurm_control_host      = string
+    slurm_control_host_port = optional(string)
+    slurm_control_addr      = optional(string)
+    slurm_uid               = optional(number)
+    slurm_gid               = optional(number)
+    service_account_email   = optional(string)
+    google_app_cred_path    = optional(string)
+    slurm_version           = optional(string)
+  })
+  default = null
+
+  validation {
+    condition     = !var.enable_hybrid || var.hybrid_conf != null
+    error_message = "hybrid_conf must be set when enable_hybrid is true."
+  }
 }
 
 variable "output_dir" {
@@ -544,6 +548,13 @@ variable "slurm_key_mount" {
     mount_options = string
   })
   default = null
+}
+
+variable "universe_domain" {
+  description = "Domain address for alternate API universe"
+  type        = string
+  default     = "googleapis.com"
+  nullable    = false
 }
 
 variable "endpoint_versions" {

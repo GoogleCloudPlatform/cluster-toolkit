@@ -5,24 +5,17 @@ a3-highgpu-8g compute nodes running NVIDIA H100 GPUs.
 
 ## Before starting
 
-> [!NOTE]
-> **TCPXO Availability:** The next-generation TCPXO (FasTrak) networking stack is now enabled by default for `a3-highgpu-8g` (`a3high-slurm-blueprint.yaml`).
-> TCPXO offers improved routing and can currently be used with Spot VMs or On-Demand instances (it is **not supported with reservations**).
+> [!IMPORTANT]
+> Before beginning, submit a request to your Google Cloud representative for
+> access credentials to install the linux-gcp-tcpx kernel for a3-highgpu-8g.
+> This kernel contains patches that significantly enhance the network
+> performance of workloads that span multiple
+> a3-highgpu-8g VMs.
 
 ## Upgrading from the "legacy" solution
 There is no direct path for upgrading the a3-highgpu-8g legacy solution.
-The recommended path requires temporarily bringing down your cluster and
+The recommended path requires temporarily bringing down your cluster (`./gcluster destroy <LEGACY_DEPLOYMENT_FOLDER>`) and
 replacing it with the solution described in this document.
-
-We recommend using `gcluster destroy` to destroy the deployments provisioned by the legacy blueprints:
-
-- ![deprecated-badge] [Legacy v5 image building blueprint](v5-legacy/ml-slurm-a3-1-image-v5-legacy.yaml)
-- ![deprecated-badge] [Legacy v5 cluster provisioning blueprint](v5-legacy/ml-slurm-a3-2-cluster-v5-legacy.yaml)
-- ![deprecated-badge] [Legacy base provisioning blueprint](/examples/machine-learning/a3-highgpu-8g/ml-slurm-a3-0-base.yaml)
-- ![deprecated-badge] [Legacy image provisioning blueprint](/examples/machine-learning/a3-highgpu-8g/ml-slurm-a3-1-image.yaml)
-- ![deprecated-badge] [Legacy cluster provisioning blueprint](/examples/machine-learning/a3-highgpu-8g/ml-slurm-a3-2-cluster.yaml)
-
-Then follow the instructions below.
 
 ## Required setup
 
@@ -31,23 +24,30 @@ Please follow the initial instructions for:
 - Installing Cluster Toolkit [dependencies][tkdeps] (Go, Terraform, Packer)
 - Installing the Cluster [Toolkit][tkinstall]
 
-Verify that your release of the Cluster Toolkit is 1.37.0 or later.
+From the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository, enable the required GCP APIs and build `./gcluster` (if not already built):
 
 ```shell
-gcluster --version
+gcloud services enable \
+  compute.googleapis.com \
+  iam.googleapis.com \
+  logging.googleapis.com \
+  lustre.googleapis.com \
+  servicenetworking.googleapis.com \
+  storage.googleapis.com \
+  --project=<PROJECT_ID>
+
+test -x ./gcluster || make
+./gcluster --version
 ```
 
 ## Top-Level Design of Solution
 
-The blueprint is split into 3 deployment groups:
+The blueprint is split into 4 deployment groups (`base`, `build-script`, `image`, and `cluster`):
 
-1. Group 1 provisions the system network, gpu network and 1 Managed Lustre instance for mounting `/home`
-across the cluster.
-2. Group 2 builds a custom image installing Slurm on an Ubuntu 22.04 image. The image
-runs a custom GCP TCPX kernel patched with performance enhancements for the a3-highgpu-8g VM.
-As part of this build, the Lustre client modules are explicitly compiled via DKMS against the TCPX kernel
-so that the managed Lustre `/home` directory can mount successfully when the nodes boot.
-3. Group 3 provisions Slurm cluster and a3-highgpu-8g nodes using the custom image.
+1. Group 1 (`base`) provisions the system network, GPU network, and 1 Managed Lustre instance (`36000` GiB) for mounting `/home` across the cluster.
+2. Group 2 (`build-script`) generates the startup and Ansible scripts used during custom image creation.
+3. Group 3 (`image`) builds a custom image installing Slurm on an Ubuntu 22.04 image. The image runs a custom GCP TCPX kernel patched with performance enhancements for the a3-highgpu-8g VM. As part of this build, the Lustre client modules are explicitly compiled via DKMS against the TCPX kernel so that the Managed Lustre `/home` directory can mount successfully when the nodes boot.
+4. Group 4 (`cluster`) provisions the Slurm cluster and a3-highgpu-8g nodes using the custom image.
 
 ## First time considerations
 
@@ -79,13 +79,29 @@ terraform_backend_defaults:
 
 ### Deployment variables
 
-Set the values in a3high-slurm-deployment.yaml for your deployment
+Set the values in [`a3high-slurm-deployment.yaml`](a3high-slurm-deployment.yaml) for your deployment:
 
 ```yaml
+---
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: customer-bucket
+
+vars:
   deployment_name: unique-name
   project_id: customer-project
   region: customer-region
   zone: customer-zone
+  tcpx_kernel_login: # use value supplied by Google Cloud staff
+  tcpx_kernel_password: # use value supplied by Google Cloud staff
+  keyserver_ubuntu_key: # use value supplied by Google Cloud staff
+  a3_reservation_name: reservation-name-provided-by-google
+  slurm_cluster_name: a3slurm # lowercase letters, numbers, and hyphens, max 20 chars
+  a3_static_cluster_size: 32
+  a3_partition_name: a3
+  a3_dws_flex_enabled: false
+  a3_enable_spot_vm: false
 ```
 
 #### Set kernel-patched OS image
@@ -102,13 +118,12 @@ Obtain values for `tcpx_kernel_login`, `tcpx_kernel_password` and `keyserver_ubu
 
 > [!IMPORTANT]
 > If you have ***not*** received a VM reservation from Google Cloud staff, then
-> skip this step and proceed to [manual reservation creation](#manual-creation-of-reservation).
+> skip this step and proceed to [manual reservation creation](#manual-creation-of-reservation) or [Using Spot VM or DWS Flex](#using-spot-vm-or-dws-flex).
 
 Set the deployment variable `a3_reservation_name` to the reservation name provided by Google.
 
 ```yaml
-  # a3_reservation_name must be specified; if Google staff have provided you
-  # with a reservation name, use it. Otherwise supply user-created reservation.
+  # Specify a3_reservation_name when using a reservation (leave empty "" when using Spot VMs or DWS Flex):
   a3_reservation_name: reservation-name-provided-by-google
 ```
 
@@ -130,13 +145,12 @@ gcloud compute reservations create ${A3_RESERVATION_NAME} \
     --log-http
 ```
 
-This reservation be must be specified when creating VMs with matching parameters
+This reservation must be specified when creating VMs with matching parameters
 (e.g. a3-highgpu-8g VM in configured zone). Ensure that the reservation name in the
 deployment file matches the name of the user-created reservation.
 
 ```yaml
-  # a3_reservation_name must be specified; if Google staff have provided you
-  # with a reservation name, use it. Otherwise supply user-created reservation.
+  # Specify a3_reservation_name when using a reservation (leave empty "" when using Spot VMs or DWS Flex):
   a3_reservation_name: 
 ```
 
@@ -163,7 +177,7 @@ Similarly to make use of Spot VMs with Slurm, set the `a3_enable_spot_vm` variab
     # the rest of the variables
 ```
 
-To learn more about Spot VM  visit: https://cloud.google.com/compute/docs/instances/spot
+To learn more about Spot VM visit: https://cloud.google.com/compute/docs/instances/spot
 
 #### Set cluster size
 
@@ -196,12 +210,12 @@ Important Restrictions:
 1. This skip option is only valid when recreating the cluster; the initial deployment always requires an image build.
 2. The image build cannot be skipped if the `deployment_name` is changed.
 
-Selective deployment and teardown for this blueprint are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
+Selective deployment and teardown for this blueprint (`base`, `build-script`, `image`, and `cluster` groups) are documented centrally. See [examples/machine-learning/README.md](../README.md) for full details.
 
-Example (deploy only the primary group for this blueprint):
+Example (deploy only the `base` group for this blueprint):
 
 ```bash
-./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --only primary
+./gcluster deploy -d examples/machine-learning/a3-highgpu-8g/a3high-slurm-deployment.yaml examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml --only base
 ```
 
 ## Receive Data Path Manager (RxDM)
@@ -216,10 +230,10 @@ This blueprint includes a Slurm "Prolog" and "Epilog" script that will run
 before and after every job running on more than 1 a3-highgpu-8g compute node.
 The Prolog will perform the following actions:
 
-- Install the NCCL plugin into /var/lib of the host
+- Install the NCCL plugin into `/var/lib/tcpx` of the host
 - Run the RxDM service
   - This is a long-lived service that runs alongside the job
-  - Mounts `/var/lib/nvidia/lib64` into `/usr/lib/nvidia/lib64` of the container
+  - Mounts `/var/lib/nvidia/lib64` from the host into `/usr/local/nvidia/lib64` of the container
   - Mount `/opt/tcpdirect_benchmark/` from the host into the container so that a
   textproto file defining the mapping from GPU to NIC is available. This file
   is present in the images that is used in this solution.
@@ -235,21 +249,12 @@ The Epilog will
 - Prune any stopped containers (freeing up disk space)
 - Remove the directory at `${UDS_PATH}`
 
-## Jobs using TCPXO (FasTrak)
-
-Jobs that are running across multiple a3-highgpu-8g VMs with TCPXO will benefit from the NCCL plugin. An example containerized job is located at `nccl-tests/run-nccl-tests.sh`. In addition to setting standard NCCL configuration values, a job must:
-
-- Set `LD_LIBRARY_PATH` to include `/var/lib/tcpxo/lib64` and `/usr/local/nvidia/lib64`
-
-If job is containerized:
-- Mount `/var/lib/tcpxo/lib64` to `/var/lib/tcpxo/lib64` in the container (to make the NCCL plugin available)
-- Mount `/dev/aperture_devices` to `/dev/aperture_devices` in the container
-
 ## Jobs using the RxDM / TCPx
 
 Jobs that are running across multiple a3-highgpu-8g VMs will benefit from using
-the RxDM and the NCCL plugin. An example containerized job is located at
-`/opt/apps/scripts/run-nccl-tests.sh`. In addition to setting standard NCCL
+the RxDM and the NCCL plugin. Example containerized job scripts are provided in
+[`nccl-tests/run-nccl-tests.sh`](nccl-tests/run-nccl-tests.sh) and
+[`nccl-tests/run-topological-nccl-tests.sh`](nccl-tests/run-topological-nccl-tests.sh). In addition to setting standard NCCL
 configuration values, a job must:
 
 - Set `NCCL_GPUDIRECTTCPX_UNIX_CLIENT_PREFIX` to `${UDS_PATH}`
@@ -305,7 +310,5 @@ sbatch run-nccl-tests.sh
 
 **Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
 
-[consume]: https://cloud.google.com/compute/docs/instances/reservations-consume#consuming_instances_from_any_matching_reservation
 [tkdeps]: https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies
 [tkinstall]: https://github.com/GoogleCloudPlatform/cluster-toolkit/#quickstart
-[deprecated-badge]: https://img.shields.io/badge/-deprecated-%23fea2a2?style=plastic

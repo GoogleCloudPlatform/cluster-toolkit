@@ -19,8 +19,8 @@ locals {
   has_dyn         = length(var.nodeset_dyn) > 0
   has_tpu         = length(var.nodeset_tpu) > 0
   has_flex        = length([for ns in var.nodeset : ns.dws_flex.enabled if ns.dws_flex.enabled]) > 0
-  has_tpu_static  = length([for ns in var.nodeset : ns.nodeset_name if(startswith(ns.machine_type, "ct") || startswith(ns.machine_type, "tpu")) && ns.node_count_static > 0]) > 0
-  has_tpu_dynamic = length([for ns in var.nodeset : ns.nodeset_name if(startswith(ns.machine_type, "ct") || startswith(ns.machine_type, "tpu")) && ns.node_count_dynamic_max > 0]) > 0
+  has_tpu_static  = length([for ns in var.nodeset : ns.nodeset_name if try(startswith(ns.machine_type, "ct") || startswith(ns.machine_type, "tpu"), false) && ns.node_count_static > 0]) > 0
+  has_tpu_dynamic = length([for ns in var.nodeset : ns.nodeset_name if try(startswith(ns.machine_type, "ct") || startswith(ns.machine_type, "tpu"), false) && ns.node_count_dynamic_max > 0]) > 0
   is_any_tpu      = local.has_tpu || local.has_tpu_static || local.has_tpu_dynamic
 }
 

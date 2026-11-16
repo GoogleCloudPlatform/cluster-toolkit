@@ -51,7 +51,7 @@ cleanup_cb() {
 	echo "PIPELINE CANCELLED: The Cloud Build step received a termination signal."
 	echo "Deleting GKE Kueue Job ($JOB_NAME) to force the Pod to clean itself up!"
 	echo "=========================================================================="
-	kubectl delete job "$JOB_NAME" -n default || true
+	kubectl delete job "$JOB_NAME" -n default --wait=false || true
 	exit 1
 }
 trap cleanup_cb SIGTERM SIGINT

@@ -49,6 +49,9 @@ cli_deployment_vars:
   test_name: "{{ test_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
+  tcpx_kernel_login: "{{ tcpx_kernel_login }}"
+  tcpx_kernel_password: "{{ tcpx_kernel_password }}"
+  keyserver_ubuntu_key: "{{ keyserver_ubuntu_key }}"
   slurm_cluster_name: "{{ slurm_cluster_name }}"
   a3_static_cluster_size: 2
   a3_partition_name: "a3"

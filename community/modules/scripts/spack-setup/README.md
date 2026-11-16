@@ -63,7 +63,7 @@ OR
     use: [network1, partition1, spack-setup]
 ```
 
-### Build `starup-script` with `spack-runner` output
+### Build `startup-script` with `spack_runner` output
 
 This will use the generated `spack-setup` script as one step in `startup-script`.
 
@@ -75,7 +75,7 @@ This will use the generated `spack-setup` script as one step in `startup-script`
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack-setup.spack-runner)
+      - $(spack-setup.spack_runner)
       - type: shell
         destination: "my-script.sh"
         content: echo 'hello world'
@@ -255,7 +255,7 @@ breaking changes.
 ```yaml
   # Before
   - id: spack-install
-    source: community/modules/scripts/spack-install
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/spack-install?ref=v1.21.0&depth=1
     settings:
       install_dir: /sw/spack
       compilers:
@@ -263,7 +263,7 @@ breaking changes.
       packages:
       - intel-mpi@2018.4.274%gcc@10.3.0
 
-- id: spack-startup
+  - id: spack-startup
     source: modules/scripts/startup-script
     settings:
       runners:
@@ -288,11 +288,11 @@ breaking changes.
         spack compiler find --scope site
         spack install intel-mpi@2018.4.274%gcc@10.3.0
 
-- id: spack-startup
+  - id: spack-startup
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack-execute.spack-runner)
+      - $(spack-execute.spack_runner)
 ```
 
 Although the old `spack-install` module will no longer be maintained, it is
@@ -301,7 +301,7 @@ version from GitHub. Note the source line in the following example.
 
 ```yaml
   - id: spack-install
-    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/spack-install?ref=v1.22.1&depth=1
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/spack-install?ref=v1.21.0&depth=1
 ```
 
 ## License

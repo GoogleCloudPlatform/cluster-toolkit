@@ -29,3 +29,8 @@ vars:
   # Additional provisioning models (pick only one), can be used to substitute `h4d_reservation_name`:
   # h4d_dws_flex_enabled: false   # Set to true to use Dynamic Workload Scheduler (DWS) Flex-Start, for more info visit: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md
   # h4d_enable_spot_vm: false     # Set to true to use Spot VMs for H4D nodes, for more info visit: https://cloud.google.com/compute/docs/instances/spot
+
+## --- Optional overrides (defaults shown) ---
+  # homefs_size_gb: 2560
+  # h4d_node_count_dynamic_max: 0
+  # login_machine_type: n2-standard-4

@@ -45,6 +45,6 @@ cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   slurm_cluster_name: "{{ slurm_cluster_name }}"
-  disk_size_gb: 100
-  cluster_size: 2
-  g4_enable_spot_vm: true
+  compute_disk_size_gb: 100
+  compute_node_count_static: 2
+  compute_enable_spot_vm: true

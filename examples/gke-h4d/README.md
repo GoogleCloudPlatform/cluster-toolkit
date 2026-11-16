@@ -11,7 +11,19 @@ Follow these steps to configure and deploy the GKE-H4D cluster.
 > [!NOTE]
 > If you create multiple clusters using these blueprints, ensure that all VPC and subnet names are unique per project to avoid resource conflicts.
 
-1. [Set up Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment). We recommend using Cloud Shell to do so because the dependencies are already pre-installed for Cluster Toolkit.
+1. [Set up Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment), enable the required GCP APIs, and from the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository build `./gcluster` (if not already built):
+
+   ```sh
+   gcloud services enable \
+     compute.googleapis.com \
+     container.googleapis.com \
+     file.googleapis.com \
+     iam.googleapis.com \
+     storage.googleapis.com \
+     --project=<PROJECT_ID>
+
+   test -x ./gcluster || make
+   ```
 
 2. Create a Cloud Storage bucket to store the state of the Terraform deployment:
 
@@ -33,7 +45,28 @@ Follow these steps to configure and deploy the GKE-H4D cluster.
    - `authorized_cidr`: The IP CIDR block permitted to access the Kubernetes control plane (e.g., `0.0.0.0/0` to allow all authorized users, or `<YOUR-IP-ADDRESS>/32`).
 
 4. Select a consumption model:
-   In `examples/gke-h4d/gke-h4d-deployment.yaml`, select **ONE** consumption model from the options provided. Option 1 (Specific Reservation) is uncommented by default. To use another consumption model, uncomment the desired option and comment out Option 1.
+   In `examples/gke-h4d/gke-h4d-deployment.yaml`, select **ONE** consumption model from the options provided. Option 1 (Specific Reservation, requiring `reservation_affinity.specific_reservations[0].name` and `static_node_count`) is uncommented by default. To use another consumption model, uncomment the desired option and comment out Option 1.
+
+   ```yaml
+   terraform_backend_defaults:
+     type: gcs
+     configuration:
+       bucket: <BUCKET_NAME>
+
+   vars:
+     project_id: <PROJECT_ID>
+     deployment_name: gke-h4d
+     region: <REGION>
+     zone: <ZONE>
+     authorized_cidr: <YOUR-IP-ADDRESS>/32
+     reservation_affinity:
+       consume_reservation_type: SPECIFIC_RESERVATION
+       specific_reservations:
+       - name: <RESERVATION_NAME>
+     static_node_count: 2
+     placement_policy:
+       type: COMPACT
+   ```
 
 5. Generate Application Default Credentials (ADC) for Terraform:
 
@@ -74,7 +107,7 @@ Any job applied to this node pool must meet the following requirements:
 1. Connect to the GKE cluster:
 
    ```sh
-   gcloud container clusters get-credentials <cluster-name> --region <region> --project <project-id>
+   gcloud container clusters get-credentials DEPLOYMENT_NAME --region=REGION --project=PROJECT_ID
    ```
 
 2. Submit the sample test job:
@@ -148,9 +181,9 @@ The MPI Operator is installed on the cluster during the deployment. To run a tes
 To destroy all resources associated with the deployment, run:
 
 ```sh
-./gcluster destroy CLUSTER_NAME
+./gcluster destroy DEPLOYMENT_NAME
 ```
 
-Replace `CLUSTER_NAME` with the `deployment_name` specified in your deployment file.
+Replace `DEPLOYMENT_NAME` with the `deployment_name` specified in your deployment file (the deployment directory created by `gcluster`).
 
 **Note:** GCS buckets created for Terraform state storage are not deleted by `./gcluster destroy` and must be removed manually if no longer needed.

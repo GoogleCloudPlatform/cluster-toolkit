@@ -24,6 +24,9 @@ resource "time_static" "exclusion_start" {
 }
 
 locals {
+  # Inference Gateway retains its existing prerequisites.
+  enable_gateway_api = var.enable_gateway_api || var.enable_inference_gateway
+
   upgrade_settings = {
     strategy        = var.upgrade_settings.strategy
     max_surge       = coalesce(var.upgrade_settings.max_surge, 0)
@@ -313,7 +316,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   dynamic "gateway_api_config" {
-    for_each = var.enable_inference_gateway ? [1] : []
+    for_each = local.enable_gateway_api ? [1] : []
     content {
       channel = "CHANNEL_STANDARD"
     }
@@ -370,8 +373,11 @@ resource "google_container_cluster" "gke_cluster" {
     gcs_fuse_csi_driver_config {
       enabled = var.enable_gcsfuse_csi
     }
-    high_scale_checkpointing_config {
-      enabled = var.enable_multi_tier_checkpointing
+    dynamic "high_scale_checkpointing_config" {
+      for_each = var.enable_multi_tier_checkpointing ? [1] : []
+      content {
+        enabled = true
+      }
     }
     gce_persistent_disk_csi_driver_config {
       enabled = var.enable_persistent_disk_csi
@@ -389,7 +395,7 @@ resource "google_container_cluster" "gke_cluster" {
       enabled = var.enable_managed_lustre_csi
     }
     dynamic "http_load_balancing" {
-      for_each = var.enable_inference_gateway ? [1] : []
+      for_each = local.enable_gateway_api ? [1] : []
       content {
         disabled = false
       }
@@ -451,6 +457,10 @@ resource "google_container_cluster" "gke_cluster" {
     ignore_changes = [
       node_config,
       min_master_version,
+      # Ignore unmanaged Fleet membership added out-of-band (e.g. Connect Gateway)
+      fleet,
+      # Ignore cluster-level node_locations on regional clusters to prevent fighting GKE regional zone defaults
+      node_locations,
     ]
     precondition {
       condition     = var.default_max_pods_per_node == null || var.networking_mode == "VPC_NATIVE"
@@ -602,6 +612,8 @@ resource "google_container_node_pool" "system_node_pools" {
   lifecycle {
     ignore_changes = [
       node_config[0].labels,
+      # Ignore resource_labels to prevent node pool replacement on blueprint/metadata renames
+      node_config[0].resource_labels,
       node_config[0].taint,
       version,
     ]
@@ -695,6 +707,8 @@ resource "google_container_node_pool" "cpu_np" {
 
   lifecycle {
     ignore_changes = [
+      # Ignore resource_labels to prevent node pool replacement on blueprint/metadata renames
+      node_config[0].resource_labels,
       version,
     ]
   }
@@ -734,7 +748,7 @@ resource "kubernetes_labels" "workload_namespace_labels" {
 module "workload_identity" {
   count   = var.configure_workload_identity_sa ? 1 : 0
   source  = "terraform-google-modules/kubernetes-engine/google//modules/workload-identity"
-  version = ">= 40.0"
+  version = ">= 46.0"
 
   use_existing_gcp_sa = true
   name                = var.k8s_service_account_name
@@ -813,14 +827,4 @@ resource "terraform_data" "validate_ml_diagnostics_version" {
       error_message = "GKE-managed ML Diagnostics requires a GKE version of ${local.mldiagnostics_minimum_version} or higher. Please update 'version_prefix' or 'min_master_version'."
     }
   }
-}
-
-resource "google_service_account_iam_member" "mtc_node_workload_identity" {
-  count              = var.enable_multi_tier_checkpointing ? 1 : 0
-  service_account_id = "projects/${var.project_id}/serviceAccounts/${local.sa_email}"
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${replace(var.project_id, ":", "/")}.svc.id.goog[gke-managed-checkpointing/gke-checkpointing-multitier-node]"
-  depends_on = [
-    google_container_cluster.gke_cluster
-  ]
 }

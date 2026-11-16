@@ -39,8 +39,8 @@ var orc orchestrator.JobOrchestrator
 // JobCmd represents the base command for job-related operations
 var JobCmd = &cobra.Command{
 	Use:   "job",
-	Short: "[EXPERIMENTAL/ALPHA] Manage jobs on the cluster. Alpha version and not yet supported for production use.",
-	Long:  `[EXPERIMENTAL/ALPHA] Manage jobs on the cluster. This is the alpha version of the feature and is under active development. The feature is not yet supported for production use.`,
+	Short: "Manage jobs on the cluster.",
+	Long:  `Submit, monitor, and manage batch and distributed workloads on GKE clusters.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		orc = gkeOrchestratorFactory()
 

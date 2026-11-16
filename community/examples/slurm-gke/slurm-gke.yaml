@@ -44,6 +44,19 @@ vars:
 
   # Namespace where Slurm GKE NodeSet will be created
   slurm_namespace: slurm
+  # Optional overrides (defaults shown)
+  # Machine type of the GKE base node pool (operator components).
+  base_pool_machine_type: n2d-standard-4
+  # Initial node count of the GKE base node pool.
+  base_pool_initial_node_count: 1
+  # Machine type of the GKE compute node pool (Slurm GKE NodeSet).
+  compute_pool_machine_type: c2-standard-16
+  # Maximum number of dynamically provisioned nodes in the GCE debug partition.
+  debug_node_count_dynamic_max: 4
+  # Machine type for the GCE debug partition.
+  debug_machine_type: n2-standard-2
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
 
 deployment_groups:
 - group: primary
@@ -106,9 +119,9 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [gke_cluster, gke_service_account]
     settings:
-      initial_node_count: 1
+      initial_node_count: $(vars.base_pool_initial_node_count)
       disk_type: pd-balanced
-      machine_type: n2d-standard-4
+      machine_type: $(vars.base_pool_machine_type)
       zones: [$(vars.zone)]
 
   - id: gke_compute_pool
@@ -118,7 +131,7 @@ deployment_groups:
       name: gke-compute-pool
       initial_node_count: $(vars.gke_nodeset_replicas)
       disk_type: pd-balanced
-      machine_type: c2-standard-16
+      machine_type: $(vars.compute_pool_machine_type)
       zones: [$(vars.zone)]
 
   - id: gke_ns_manifest
@@ -159,8 +172,8 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      node_count_dynamic_max: 4
-      machine_type: n2-standard-2
+      node_count_dynamic_max: $(vars.debug_node_count_dynamic_max)
+      machine_type: $(vars.debug_machine_type)
       allow_automatic_updates: false
 
   - id: debug_partition
@@ -177,7 +190,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: true
 
   - id: slurm_controller

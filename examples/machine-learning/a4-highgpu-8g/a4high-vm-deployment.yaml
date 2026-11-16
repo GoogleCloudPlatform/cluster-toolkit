@@ -26,3 +26,6 @@ vars:
   a4h_reservation_name: # supply a4-highgpu-8g reservation name
   number_of_vms: # supply number of vms desired
  #a4h_provisioning_model: SPOT
+
+## --- Optional overrides (defaults shown) ---
+  # homefs_size_gb: 10240
