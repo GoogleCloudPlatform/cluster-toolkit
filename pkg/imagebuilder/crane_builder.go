@@ -60,28 +60,51 @@ const InsecureRegistryEnvVar = "GCLUSTER_INSECURE_REGISTRY"
 // defaultContainerWorkdir is set when a base image has no WORKDIR or uses "/".
 const defaultContainerWorkdir = "/workspace"
 
+// defaultOCIRepoPath is the default repository path used on non-GAR OCI registries (matching Harbor's built-in library project).
+const defaultOCIRepoPath = "library/gcluster"
+
+// reproducibleTarModTime is a fixed UTC timestamp >= 1980 so tar digests are deterministic and Python zipfile-compatible across all timezones.
+var reproducibleTarModTime = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+
 // ErrMissingImageRepo indicates that GCLUSTER_IMAGE_REPO is unset and cannot be auto-derived from --base-image.
 var ErrMissingImageRepo = errors.New("GCLUSTER_IMAGE_REPO environment variable is required")
 
 var knownPublicRegistries = map[string]bool{
-	"docker.io":            true,
-	"index.docker.io":      true,
-	"registry-1.docker.io": true,
-	"ghcr.io":              true,
-	"quay.io":              true,
-	"nvcr.io":              true,
-	"mcr.microsoft.com":    true,
-	"public.ecr.aws":       true,
-	"registry.k8s.io":      true,
-	"k8s.gcr.io":           true,
+	"docker.io":                  true,
+	"index.docker.io":            true,
+	"registry-1.docker.io":       true,
+	"ghcr.io":                    true,
+	"quay.io":                    true,
+	"nvcr.io":                    true,
+	"gcr.nvidia.com":             true,
+	"mcr.microsoft.com":          true,
+	"public.ecr.aws":             true,
+	"gallery.ecr.aws":            true,
+	"registry.k8s.io":            true,
+	"k8s.gcr.io":                 true,
+	"cgr.dev":                    true,
+	"registry.access.redhat.com": true,
+	"registry.redhat.io":         true,
+	"registry.gitlab.com":        true,
+	"lscr.io":                    true,
+	"icr.io":                     true,
 }
 
 // DestinationRepo describes the resolved OCI destination repository for a Crane build.
 type DestinationRepo struct {
-	RegistryHost string
-	RepoPrefix   string
-	GARProject   string
-	IsGAR        bool
+	RegistryHost    string
+	RepoPrefix      string
+	GARProject      string
+	IsGAR           bool
+	DerivedFromBase bool
+}
+
+// WrapDerivedRepoError appends a GCLUSTER_IMAGE_REPO configuration hint when err occurs on an auto-derived destination.
+func WrapDerivedRepoError(dest DestinationRepo, err error) error {
+	if err == nil || !dest.DerivedFromBase {
+		return err
+	}
+	return fmt.Errorf("%w (destination %q was auto-derived from --base-image because GCLUSTER_IMAGE_REPO is unset; set GCLUSTER_IMAGE_REPO to push to Artifact Registry or another repository)", err, dest.RepoPrefix)
 }
 
 // DockerPlatform represents the target platform for a Docker image.
@@ -194,13 +217,17 @@ func IsInsecureRegistryEnv(getenv func(string) string) bool {
 	}
 }
 
+func hasRegistryHostPrefix(seg string) bool {
+	return strings.EqualFold(seg, "localhost") || strings.ContainsAny(seg, ".:")
+}
+
 func explicitImageHost(imageRef string) (string, bool) {
 	withoutDigest, _, _ := strings.Cut(strings.TrimSpace(imageRef), "@")
 	first, rest, hasSlash := strings.Cut(withoutDigest, "/")
 	if !hasSlash || rest == "" {
 		return "", false
 	}
-	if first != "localhost" && !strings.ContainsAny(first, ".:") {
+	if !hasRegistryHostPrefix(first) {
 		return "", false
 	}
 	norm, err := NormalizeRegistryHost(first)
@@ -212,24 +239,59 @@ func explicitImageHost(imageRef string) (string, bool) {
 
 func isPublicRegistry(host string) bool {
 	bare := registryBareHost(host)
-	return knownPublicRegistries[bare] || strings.HasSuffix(bare, ".docker.io")
+	return knownPublicRegistries[bare] ||
+		strings.HasSuffix(bare, ".docker.io") ||
+		strings.HasSuffix(bare, ".azurecr.io") ||
+		strings.HasSuffix(bare, ".amazonaws.com") ||
+		strings.HasSuffix(bare, ".amazonaws.com.cn")
 }
 
-// ResolveDestinationRepo resolves the target OCI repository prefix from GCLUSTER_IMAGE_REPO or a private/local --base-image.
+func allowsInsecureRegistryHost(host string) bool {
+	return host != "" && !IsGoogleArtifactRegistry(host) && !isPublicRegistry(host)
+}
+
+func allowsInsecureRegistryRef(ref string, getenv func(string) string) bool {
+	if !IsInsecureRegistryEnv(getenv) {
+		return false
+	}
+	host, ok := explicitImageHost(ref)
+	return ok && allowsInsecureRegistryHost(host)
+}
+
+// ResolveDestinationRepo resolves the target OCI repository prefix from GCLUSTER_IMAGE_REPO or a non-public/non-GAR --base-image.
 func ResolveDestinationRepo(project, location, baseImage, envImageRepo string) (DestinationRepo, error) {
-	trimmedRepo := strings.Trim(stripRegistryScheme(strings.TrimSpace(envImageRepo)), "/")
-	if trimmedRepo != "" {
-		return resolveExplicitRepo(project, location, trimmedRepo)
+	rawRepo := strings.TrimSpace(envImageRepo)
+	if rawRepo != "" {
+		return resolveConfiguredRepo(project, location, envImageRepo, rawRepo)
 	}
 	host, ok := explicitImageHost(baseImage)
 	if ok && !IsGoogleArtifactRegistry(host) && !isPublicRegistry(host) {
-		return DestinationRepo{
-			RegistryHost: host,
-			RepoPrefix:   host + "/gcluster",
-			IsGAR:        false,
-		}, nil
+		return validateDestinationRepo(DestinationRepo{
+			RegistryHost:    host,
+			RepoPrefix:      host + "/" + defaultOCIRepoPath,
+			IsGAR:           false,
+			DerivedFromBase: true,
+		})
 	}
 	return DestinationRepo{}, fmt.Errorf("%w. Please set it in your environment (e.g., export GCLUSTER_IMAGE_REPO=<repo>)", ErrMissingImageRepo)
+}
+
+func resolveConfiguredRepo(project, location, envImageRepo, rawRepo string) (DestinationRepo, error) {
+	lowerRaw := strings.ToLower(rawRepo)
+	hadScheme := strings.HasPrefix(lowerRaw, "http://") || strings.HasPrefix(lowerRaw, "https://")
+	trimmedRepo := strings.Trim(stripRegistryScheme(rawRepo), "/")
+	if trimmedRepo == "" {
+		return DestinationRepo{}, fmt.Errorf("invalid GCLUSTER_IMAGE_REPO %q: repository cannot be empty", envImageRepo)
+	}
+	first, _, _ := strings.Cut(trimmedRepo, "/")
+	if hadScheme && !hasRegistryHostPrefix(first) {
+		return DestinationRepo{}, fmt.Errorf("invalid GCLUSTER_IMAGE_REPO %q: registry host %q must be 'localhost' or contain '.' or ':'", envImageRepo, first)
+	}
+	dest, err := resolveExplicitRepo(project, location, trimmedRepo)
+	if err != nil {
+		return DestinationRepo{}, err
+	}
+	return validateDestinationRepo(dest)
 }
 
 func parseExplicitGARProject(repoPath string) (string, bool) {
@@ -247,8 +309,8 @@ func parseExplicitGARProject(repoPath string) (string, bool) {
 }
 
 func resolveExplicitRepo(project, location, trimmedRepo string) (DestinationRepo, error) {
-	first, rest, hasSlash := strings.Cut(trimmedRepo, "/")
-	if hasSlash || first == "localhost" || strings.ContainsAny(first, ".:") {
+	first, rest, _ := strings.Cut(trimmedRepo, "/")
+	if hasRegistryHostPrefix(first) {
 		host, err := NormalizeRegistryHost(first)
 		if err != nil {
 			return DestinationRepo{}, err
@@ -262,11 +324,14 @@ func resolveExplicitRepo(project, location, trimmedRepo string) (DestinationRepo
 			return DestinationRepo{RegistryHost: host, RepoPrefix: host + "/" + repoPath, GARProject: garProj, IsGAR: true}, nil
 		}
 		if repoPath == "" {
-			repoPath = "gcluster"
+			repoPath = defaultOCIRepoPath
 		}
 		return DestinationRepo{RegistryHost: host, RepoPrefix: host + "/" + repoPath, IsGAR: false}, nil
 	}
 	if strings.TrimSpace(project) == "" || strings.TrimSpace(location) == "" {
+		if strings.Contains(trimmedRepo, "/") {
+			return DestinationRepo{}, fmt.Errorf("GCLUSTER_IMAGE_REPO=%q has no registry host and requires --project and --location for Artifact Registry (or include a registry host such as 'harbor.example.com/%s' or 'docker.io/%s')", trimmedRepo, trimmedRepo, trimmedRepo)
+		}
 		return DestinationRepo{}, fmt.Errorf("GCLUSTER_IMAGE_REPO=%q is a bare Artifact Registry repository name and requires --project and --location (or set GCLUSTER_IMAGE_REPO=<registry-host>/<repository> for a non-Artifact Registry OCI registry)", trimmedRepo)
 	}
 	host := shell.ExtractRegion(location) + "-docker.pkg.dev"
@@ -280,6 +345,71 @@ func resolveExplicitRepo(project, location, trimmedRepo string) (DestinationRepo
 	}, nil
 }
 
+func validateDestinationRepo(dest DestinationRepo) (DestinationRepo, error) {
+	_, repoPath, hasSlash := strings.Cut(dest.RepoPrefix, "/")
+	if !hasSlash || repoPath == "" {
+		return DestinationRepo{}, fmt.Errorf("invalid destination repository %q: repository path cannot be empty", dest.RepoPrefix)
+	}
+	if strings.Contains(repoPath, "//") {
+		return DestinationRepo{}, fmt.Errorf("invalid destination repository %q: repository path cannot contain empty path segments", dest.RepoPrefix)
+	}
+	for _, seg := range strings.Split(repoPath, "/") {
+		if seg == "." || seg == ".." {
+			return DestinationRepo{}, fmt.Errorf("invalid destination repository %q: repository path cannot contain '.' or '..' segments", dest.RepoPrefix)
+		}
+	}
+	if _, err := name.NewRepository(dest.RepoPrefix, nameOptsForRef(dest.RepoPrefix)...); err != nil {
+		return DestinationRepo{}, fmt.Errorf("invalid destination repository %q: %w", dest.RepoPrefix, err)
+	}
+	return dest, nil
+}
+
+func preflightBuildRefs(project, location, namespace, workloadName, baseImage, platformStr string) (v1.Platform, name.Reference, DestinationRepo, error) {
+	platform, err := parsePlatform(platformStr)
+	if err != nil {
+		return v1.Platform{}, nil, DestinationRepo{}, err
+	}
+	baseRef, err := name.ParseReference(baseImage, nameOptsForRef(baseImage)...)
+	if err != nil {
+		return v1.Platform{}, nil, DestinationRepo{}, fmt.Errorf("failed to parse base image reference %q: %w", baseImage, err)
+	}
+	dest, err := ResolveDestinationRepo(project, location, baseImage, os.Getenv("GCLUSTER_IMAGE_REPO"))
+	if err != nil {
+		return v1.Platform{}, nil, DestinationRepo{}, err
+	}
+	preflightName, err := formatImageName(dest, namespace, workloadName, baseImage, "preflight0000")
+	if err != nil {
+		return v1.Platform{}, nil, DestinationRepo{}, err
+	}
+	if _, err := name.ParseReference(preflightName, nameOptsForRef(preflightName)...); err != nil {
+		return v1.Platform{}, nil, DestinationRepo{}, fmt.Errorf("invalid destination image reference %q: %w", preflightName, err)
+	}
+	return platform, baseRef, dest, nil
+}
+
+func baseImageHashInput(baseImage string, baseImg v1.Image) (string, error) {
+	if baseImg == nil {
+		return baseImage, nil
+	}
+	digest, err := baseImg.Digest()
+	if err != nil {
+		return "", fmt.Errorf("failed to compute base image digest: %w", err)
+	}
+	return baseImage + "@" + digest.String(), nil
+}
+
+func pushBuiltImage(img v1.Image, imageName string, platform *v1.Platform) error {
+	imageRef, err := name.ParseReference(imageName, nameOptsForRef(imageName)...)
+	if err != nil {
+		return fmt.Errorf("failed to parse new image reference %q: %w", imageName, err)
+	}
+	logging.Info("Uploading Container Image to %s", imageName)
+	if err := cranePush(img, imageRef.String(), craneOptionsForRef(imageRef.String(), platform)...); err != nil {
+		return fmt.Errorf("failed to push image %q: %w", imageName, err)
+	}
+	return nil
+}
+
 // BuildContainerImageFromBaseImage packages scriptDir onto baseImage aligned to its WORKDIR and pushes the built image.
 func BuildContainerImageFromBaseImage(
 	project string,
@@ -291,24 +421,9 @@ func BuildContainerImageFromBaseImage(
 	platformStr string,
 	ignoreMatcher *patternmatcher.PatternMatcher,
 ) (string, error) {
-	platform, err := parsePlatform(platformStr)
+	platform, baseRef, dest, err := preflightBuildRefs(project, location, namespace, workloadName, baseImage, platformStr)
 	if err != nil {
 		return "", err
-	}
-
-	nameOpts := nameOptsForRef(baseImage)
-	baseRef, err := name.ParseReference(baseImage, nameOpts...)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse base image reference %q: %w", baseImage, err)
-	}
-
-	// Fail fast on invalid destination configuration or reference syntax.
-	preflightName, err := GenerateImageName(project, location, namespace, workloadName, baseImage, "preflight0000")
-	if err != nil {
-		return "", err
-	}
-	if _, err := name.ParseReference(preflightName, nameOptsForRef(preflightName)...); err != nil {
-		return "", fmt.Errorf("invalid destination image reference %q: %w", preflightName, err)
 	}
 
 	logging.Info("Base Image: %s", baseImage)
@@ -320,10 +435,11 @@ func BuildContainerImageFromBaseImage(
 		return "", fmt.Errorf("failed to pull base image %q: %w", baseImage, err)
 	}
 
-	tarPrefix, setDefaultWorkdir, err := resolveWorkdirPrefix(baseImg)
+	tarPrefix, targetWorkdir, overrideWorkdir, err := resolveWorkdirPrefix(baseImg)
 	if err != nil {
 		return "", err
 	}
+	logging.Info("Packaging build context into container WORKDIR %s", targetWorkdir)
 
 	tempTarballPath, contentHash, err := createFilteredTar(scriptDir, tarPrefix, ignoreMatcher)
 	if err != nil {
@@ -335,54 +451,54 @@ func BuildContainerImageFromBaseImage(
 		}
 	}()
 
-	imageName, err := GenerateImageName(project, location, namespace, workloadName, baseImage, mixBuildHash(baseImage, platformStr, contentHash))
+	hashBase, err := baseImageHashInput(baseImage, baseImg)
+	if err != nil {
+		return "", err
+	}
+	imageName, err := formatImageName(dest, namespace, workloadName, baseImage, mixBuildHash(hashBase, platformStr, contentHash))
 	if err != nil {
 		return "", err
 	}
 	logging.Info("Starting image build process for %s", imageName)
 
-	newImg, err := appendLayerAndWorkdir(baseImg, tempTarballPath, setDefaultWorkdir)
+	newImg, err := appendLayerAndWorkdir(baseImg, tempTarballPath, overrideWorkdir)
 	if err != nil {
 		return "", err
 	}
-
-	imageRef, err := name.ParseReference(imageName, nameOptsForRef(imageName)...)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse new image reference %q: %w", imageName, err)
-	}
-
-	logging.Info("Uploading Container Image to %s", imageName)
-	if err := cranePush(newImg, imageRef.String(), craneOptionsForRef(imageRef.String(), &platform)...); err != nil {
-		return "", fmt.Errorf("failed to push image %q: %w", imageName, err)
+	if err := pushBuiltImage(newImg, imageName, &platform); err != nil {
+		return "", WrapDerivedRepoError(dest, err)
 	}
 
 	logging.Info("Image %s built and uploaded successfully.", imageName)
 	return imageName, nil
 }
 
-func resolveWorkdirPrefix(baseImg v1.Image) (tarPrefix string, setDefaultWorkdir bool, err error) {
+func resolveWorkdirPrefix(baseImg v1.Image) (tarPrefix, targetWorkdir, overrideWorkdir string, err error) {
+	defaultPrefix := strings.TrimPrefix(defaultContainerWorkdir, "/") + "/"
 	if baseImg == nil {
-		return strings.TrimPrefix(defaultContainerWorkdir, "/") + "/", false, nil
+		return defaultPrefix, defaultContainerWorkdir, "", nil
 	}
 	cf, err := baseImg.ConfigFile()
 	if err != nil {
-		return "", false, fmt.Errorf("failed to read base image config: %w", err)
+		return "", "", "", fmt.Errorf("failed to read base image config: %w", err)
 	}
 	rawWD := ""
 	if cf != nil {
 		rawWD = strings.TrimSpace(cf.Config.WorkingDir)
 	}
-	if rawWD != "" {
-		// Container paths are strictly POSIX "/"; path.Clean avoids Windows backslash corruption.
-		cleaned := path.Clean(strings.ReplaceAll(rawWD, "\\", "/"))
-		if cleaned != "/" && cleaned != "." {
-			return strings.Trim(cleaned, "/") + "/", false, nil
-		}
+	// Container paths are strictly POSIX "/"; prepending "/" ensures unrooted ".." or "../app" normalize under root.
+	cleaned := path.Clean("/" + strings.ReplaceAll(rawWD, "\\", "/"))
+	if rawWD == "" || cleaned == "/" {
+		return defaultPrefix, defaultContainerWorkdir, defaultContainerWorkdir, nil
 	}
-	return strings.TrimPrefix(defaultContainerWorkdir, "/") + "/", true, nil
+	override := ""
+	if !strings.HasPrefix(rawWD, "/") || strings.Contains(rawWD, "\\") || strings.Contains(rawWD, "..") {
+		override = cleaned
+	}
+	return strings.TrimPrefix(cleaned, "/") + "/", cleaned, override, nil
 }
 
-func appendLayerAndWorkdir(baseImg v1.Image, tempTarballPath string, setDefaultWorkdir bool) (v1.Image, error) {
+func appendLayerAndWorkdir(baseImg v1.Image, tempTarballPath, overrideWorkdir string) (v1.Image, error) {
 	tarLayer, err := layerFromOpener(func() (io.ReadCloser, error) {
 		file, openErr := os.Open(tempTarballPath)
 		if openErr != nil {
@@ -398,7 +514,7 @@ func appendLayerAndWorkdir(baseImg v1.Image, tempTarballPath string, setDefaultW
 	if err != nil {
 		return nil, fmt.Errorf("failed to append layer: %w", err)
 	}
-	if !setDefaultWorkdir || newImg == nil {
+	if overrideWorkdir == "" || newImg == nil {
 		return newImg, nil
 	}
 	cf, err := newImg.ConfigFile()
@@ -409,16 +525,16 @@ func appendLayerAndWorkdir(baseImg v1.Image, tempTarballPath string, setDefaultW
 		return nil, fmt.Errorf("failed to inspect image config for WORKDIR update: config file is nil")
 	}
 	cfg := cf.Config.DeepCopy()
-	cfg.WorkingDir = defaultContainerWorkdir
+	cfg.WorkingDir = overrideWorkdir
 	updatedImg, err := mutate.Config(newImg, *cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to set default WORKDIR %s on image: %w", defaultContainerWorkdir, err)
+		return nil, fmt.Errorf("failed to set WORKDIR %s on image: %w", overrideWorkdir, err)
 	}
 	return updatedImg, nil
 }
 
 func nameOptsForRef(ref string) []name.Option {
-	if IsInsecureRegistryEnv(os.Getenv) {
+	if allowsInsecureRegistryRef(ref, os.Getenv) {
 		return []name.Option{name.Insecure}
 	}
 	if host, ok := explicitImageHost(ref); ok && IsPrivateOrLoopbackHost(host) {
@@ -432,7 +548,7 @@ func craneOptionsForRef(ref string, platform *v1.Platform) []crane.Option {
 		crane.WithPlatform(platform),
 		crane.WithAuthFromKeychain(defaultKeychain),
 	}
-	if IsInsecureRegistryEnv(os.Getenv) {
+	if allowsInsecureRegistryRef(ref, os.Getenv) {
 		return append(opts, crane.Insecure)
 	}
 	if host, ok := explicitImageHost(ref); ok && IsPrivateOrLoopbackHost(host) {
@@ -450,6 +566,10 @@ func GenerateImageName(project, location, namespace, workloadName, baseImage, co
 	if err != nil {
 		return "", err
 	}
+	return formatImageName(dest, namespace, workloadName, baseImage, contentHash)
+}
+
+func formatImageName(dest DestinationRepo, namespace, workloadName, baseImage, contentHash string) (string, error) {
 	if dest.IsGAR {
 		return generateGARImageName(dest.RepoPrefix)
 	}
@@ -594,8 +714,8 @@ func buildTarHeader(entryPath, relPath, tarPrefix string, d fs.DirEntry) (*tar.H
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("failed to create tar header for %q: %w", entryPath, err)
 	}
-	// Normalize timestamps, ownership, and mode bits so tar digests and content hashes are reproducible across OSes and mtimes.
-	header.ModTime = time.Time{}
+	// Normalize timestamps (>= 1980 for ZIP compatibility across UTC- zones), ownership, and mode bits for reproducible digests.
+	header.ModTime = reproducibleTarModTime
 	header.AccessTime = time.Time{}
 	header.ChangeTime = time.Time{}
 	header.Uid = 0

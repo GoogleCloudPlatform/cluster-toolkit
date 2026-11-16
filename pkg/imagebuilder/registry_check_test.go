@@ -56,6 +56,12 @@ func (k errKeychain) Resolve(authn.Resource) (authn.Authenticator, error) {
 	return errAuthenticator{err: k.authErr}, nil
 }
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
 func TestInspectTargetRegistry_OpenAndAuthKeychain(t *testing.T) {
 	t.Parallel()
 
@@ -76,6 +82,28 @@ func TestInspectTargetRegistry_OpenAndAuthKeychain(t *testing.T) {
 		}
 		if err := insp.InspectTargetRegistry(u.Host); err != nil {
 			t.Fatalf("InspectTargetRegistry(%q) unexpected error: %v", u.Host, err)
+		}
+	})
+
+	t.Run("docker.io authority rewrites /v2/ ping to index.docker.io", func(t *testing.T) {
+		var gotURL string
+		insp := &RegistryInspector{
+			Getenv: func(string) string { return "" },
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				gotURL = req.URL.String()
+				return &http.Response{
+					StatusCode: http.StatusUnauthorized,
+					Body:       http.NoBody,
+					Header:     make(http.Header),
+				}, nil
+			}),
+			Keychain: staticTestKeychain{cfg: authn.AuthConfig{Username: "u", Password: "p"}},
+		}
+		if err := insp.InspectTargetRegistry("docker.io"); err != nil {
+			t.Fatalf("InspectTargetRegistry(docker.io) unexpected error: %v", err)
+		}
+		if gotURL != "https://index.docker.io/v2/" {
+			t.Fatalf("pinged URL = %q, want %q", gotURL, "https://index.docker.io/v2/")
 		}
 	})
 
@@ -116,7 +144,7 @@ func TestInspectTargetRegistry_OpenAndAuthKeychain(t *testing.T) {
 func TestInspectTargetRegistry_TLSAndHTTPErrors(t *testing.T) {
 	t.Parallel()
 
-	t.Run("self-signed TLS succeeds when GCLUSTER_INSECURE_REGISTRY=true and fails otherwise", func(t *testing.T) {
+	t.Run("self-signed TLS fails without plain-HTTP fallback noise and succeeds when GCLUSTER_INSECURE_REGISTRY=true", func(t *testing.T) {
 		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
@@ -124,8 +152,12 @@ func TestInspectTargetRegistry_TLSAndHTTPErrors(t *testing.T) {
 		u, _ := url.Parse(srv.URL)
 
 		strictInsp := &RegistryInspector{Getenv: func(string) string { return "" }}
-		if err := strictInsp.InspectTargetRegistry(u.Host); err == nil || !strings.Contains(err.Error(), InsecureRegistryEnvVar+"=true") {
+		err := strictInsp.InspectTargetRegistry(u.Host)
+		if err == nil || !strings.Contains(err.Error(), InsecureRegistryEnvVar+"=true") {
 			t.Fatalf("expected unverified self-signed TLS without %s to fail with hint, got: %v", InsecureRegistryEnvVar, err)
+		}
+		if strings.Contains(err.Error(), "http:") {
+			t.Fatalf("expected TLS verification failure not to send plain-HTTP fallback probe, got: %v", err)
 		}
 
 		insecureInsp := &RegistryInspector{
@@ -141,7 +173,7 @@ func TestInspectTargetRegistry_TLSAndHTTPErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("non-OCI 500 error and invalid host fail fast", func(t *testing.T) {
+	t.Run("plain-HTTP 500 loopback failure omits HTTPS mismatch noise and GCLUSTER_INSECURE_REGISTRY hint", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
@@ -149,11 +181,95 @@ func TestInspectTargetRegistry_TLSAndHTTPErrors(t *testing.T) {
 		u, _ := url.Parse(srv.URL)
 
 		insp := &RegistryInspector{Getenv: func(string) string { return "" }}
-		if err := insp.InspectTargetRegistry(u.Host); err == nil || !strings.Contains(err.Error(), u.Host) {
-			t.Fatalf("expected 500 error naming %q, got: %v", u.Host, err)
+		err := insp.InspectTargetRegistry(u.Host)
+		if err == nil || !strings.Contains(err.Error(), u.Host) || !strings.Contains(err.Error(), "http: unexpected HTTP 500") {
+			t.Fatalf("expected plain-HTTP 500 error naming %q, got: %v", u.Host, err)
+		}
+		if strings.Contains(err.Error(), InsecureRegistryEnvVar) || strings.Contains(err.Error(), "https:") {
+			t.Fatalf("did not expect %s hint or https mismatch error on plain-HTTP 500, got: %v", InsecureRegistryEnvVar, err)
 		}
 		if err := insp.InspectTargetRegistry("   "); err == nil {
 			t.Fatalf("expected empty registry host error, got nil")
 		}
 	})
+}
+
+func TestInspectTargetRegistry_HTTPS500NoFallback(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	u, _ := url.Parse(srv.URL)
+
+	insp := &RegistryInspector{
+		Getenv:    func(string) string { return "" },
+		Transport: srv.Client().Transport,
+	}
+	err := insp.InspectTargetRegistry(u.Host)
+	if err == nil || !strings.Contains(err.Error(), "https: unexpected HTTP 500") {
+		t.Fatalf("expected https 500 error, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "http:") || strings.Contains(err.Error(), InsecureRegistryEnvVar) {
+		t.Fatalf("did not expect plain-HTTP fallback or insecure hint on valid TLS 500, got: %v", err)
+	}
+}
+
+func TestInspectTargetRegistry_InsecureScoping(t *testing.T) {
+	t.Parallel()
+
+	t.Run("plain-HTTP non-private FQDN suggests GCLUSTER_INSECURE_REGISTRY=true", func(t *testing.T) {
+		insp := &RegistryInspector{
+			Getenv: func(string) string { return "" },
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return nil, http.ErrSchemeMismatch
+			}),
+		}
+		err := insp.InspectTargetRegistry("harbor.local:5000")
+		if err == nil || !strings.Contains(err.Error(), InsecureRegistryEnvVar+"=true") {
+			t.Fatalf("expected plain-HTTP non-private FQDN to suggest %s=true, got: %v", InsecureRegistryEnvVar, err)
+		}
+	})
+
+	t.Run("GAR and public registries keep strict TLS even when GCLUSTER_INSECURE_REGISTRY=true", func(t *testing.T) {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+		srvURL, _ := url.Parse(srv.URL)
+
+		baseTransport := http.DefaultTransport.(*http.Transport).Clone()
+		dialRedirect := &http.Transport{
+			TLSClientConfig: baseTransport.TLSClientConfig,
+			DialContext:     baseTransport.DialContext,
+		}
+
+		for _, protectedHost := range []string{"us-central1-docker.pkg.dev", "nvcr.io", "cgr.dev"} {
+			err := inspectProtectedHostAgainstUntrustedTLS(protectedHost, srvURL.Host, dialRedirect)
+			if err == nil {
+				t.Fatalf("expected strict TLS verification failure for %q despite %s=true", protectedHost, InsecureRegistryEnvVar)
+			}
+			if strings.Contains(err.Error(), InsecureRegistryEnvVar) || strings.Contains(err.Error(), "http:") {
+				t.Fatalf("expected no insecure hint or http fallback for %q, got: %v", protectedHost, err)
+			}
+		}
+	})
+}
+
+func inspectProtectedHostAgainstUntrustedTLS(protectedHost, targetAddr string, dialRedirect *http.Transport) error {
+	insp := &RegistryInspector{
+		Getenv: func(k string) string {
+			if k == InsecureRegistryEnvVar {
+				return "true"
+			}
+			return ""
+		},
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			cloned := req.Clone(req.Context())
+			cloned.URL.Host = targetAddr
+			return (&http.Client{Transport: dialRedirect}).Do(cloned)
+		}),
+	}
+	return insp.InspectTargetRegistry(protectedHost)
 }

@@ -69,7 +69,7 @@ func TestBuildContainerImage_NamespacePrecedenceAndPrebuiltHermeticity(t *testin
 			BaseImage:      "10.128.0.68:5000/ml/jax:v5p",
 			DryRunManifest: "/tmp/dry-run.yaml",
 		})
-		if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/gcluster/explicit-flag-ns/train-v5p:") {
+		if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/library/gcluster/explicit-flag-ns/train-v5p:") {
 			t.Fatalf("BuildContainerImage(explicit GKENamespace) = (%q, %v)", got, err)
 		}
 		if orc.namespace != "unchanged-orch-ns" {
@@ -91,7 +91,7 @@ func TestBuildContainerImage_NamespacePrecedenceAndPrebuiltHermeticity(t *testin
 			BaseImage:       "10.128.0.68:5000/ml/jax:v5p",
 			DryRunManifest:  "/tmp/dry-run.yaml",
 		})
-		if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/gcluster/ctx-ns/train-v5p:") {
+		if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/library/gcluster/ctx-ns/train-v5p:") {
 			t.Fatalf("BuildContainerImage(ctx-ns) = (%q, %v)", got, err)
 		}
 		if spy.gotCluster != "clus-a" || spy.gotLocation != "us-central1-a" || spy.gotProject != "proj-a" {
@@ -110,7 +110,7 @@ func TestBuildContainerImage_OfflineDryRunFallbackAndLiveError(t *testing.T) {
 		BaseImage:      "10.128.0.68:5000/ml/jax:v5p",
 		DryRunManifest: "/tmp/dry-run.yaml",
 	})
-	if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/gcluster/default/train-v5p:") {
+	if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/library/gcluster/default/train-v5p:") {
 		t.Fatalf("BuildContainerImage(dry-run offline fallback) = (%q, %v), want default namespace URI", got, err)
 	}
 

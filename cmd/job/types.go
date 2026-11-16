@@ -45,6 +45,7 @@ type PrereqState struct {
 	GKEGCloudAuthPluginInstalled bool      `json:"gke_gcloud_auth_plugin_installed"`
 	ArtifactRegistryAPIEnabled   bool      `json:"artifact_registry_api_enabled"`
 	LastCheckedProjectID         string    `json:"last_checked_project_id"`
+	LastCheckedARProjectID       string    `json:"last_checked_ar_project_id,omitempty"`
 	LastCheckedTimestamp         time.Time `json:"last_checked_timestamp"`
 }
 

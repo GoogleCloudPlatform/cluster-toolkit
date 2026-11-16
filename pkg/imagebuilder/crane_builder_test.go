@@ -27,8 +27,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/crane"
+	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/registry"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -572,6 +574,7 @@ func TestResolveDestinationRepo(t *testing.T) {
 		wantHost    string
 		wantPrefix  string
 		wantIsGAR   bool
+		wantDerived bool
 		wantMissing bool
 		wantErrSub  string
 	}{
@@ -584,6 +587,40 @@ func TestResolveDestinationRepo(t *testing.T) {
 			wantHost:   "us-central1-docker.pkg.dev",
 			wantPrefix: "us-central1-docker.pkg.dev/my-proj/gcluster-repo",
 			wantIsGAR:  true,
+		},
+		{
+			name:       "nested GAR repo/subpath without registry host preserves develop GAR behavior when project and location are set",
+			project:    "my-proj",
+			location:   "us-central1-a",
+			baseImage:  "python:3.11-slim",
+			envRepo:    "gcluster-repo/team-a",
+			wantHost:   "us-central1-docker.pkg.dev",
+			wantPrefix: "us-central1-docker.pkg.dev/my-proj/gcluster-repo/team-a",
+			wantIsGAR:  true,
+		},
+		{
+			name:       "hostless multi-segment GCLUSTER_IMAGE_REPO without project and location fails with Harbor/Docker Hub and GAR guidance",
+			project:    "",
+			location:   "",
+			baseImage:  "python:3.11-slim",
+			envRepo:    "my-proj/my-repo",
+			wantErrSub: "'docker.io/my-proj/my-repo'",
+		},
+		{
+			name:       "scheme-prefixed hostless GCLUSTER_IMAGE_REPO fails fast",
+			project:    "my-proj",
+			location:   "us-central1-a",
+			baseImage:  "python:3.11-slim",
+			envRepo:    "http://my-service/repo",
+			wantErrSub: "registry host",
+		},
+		{
+			name:       "empty scheme or slash-only GCLUSTER_IMAGE_REPO fails fast",
+			project:    "my-proj",
+			location:   "us-central1-a",
+			baseImage:  "python:3.11-slim",
+			envRepo:    "https://",
+			wantErrSub: "cannot be empty",
 		},
 		{
 			name:       "domain-scoped GCP project maps colon to slash in GAR URI",
@@ -636,33 +673,60 @@ func TestResolveDestinationRepo(t *testing.T) {
 			wantIsGAR:  false,
 		},
 		{
-			name:       "bracketed IPv6 host only in GCLUSTER_IMAGE_REPO defaults repo to gcluster",
+			name:       "bracketed IPv6 host only in GCLUSTER_IMAGE_REPO defaults repo to library/gcluster",
 			baseImage:  "ubuntu:24.04",
 			envRepo:    "[fd12:3456::1]:5000",
 			wantHost:   "[fd12:3456::1]:5000",
-			wantPrefix: "[fd12:3456::1]:5000/gcluster",
+			wantPrefix: "[fd12:3456::1]:5000/library/gcluster",
 			wantIsGAR:  false,
 		},
 		{
-			name:       "unset GCLUSTER_IMAGE_REPO auto-derives from IPv4:port base image",
-			baseImage:  "10.128.0.68:5000/ubuntu:24.04",
-			wantHost:   "10.128.0.68:5000",
-			wantPrefix: "10.128.0.68:5000/gcluster",
-			wantIsGAR:  false,
+			name:        "unset GCLUSTER_IMAGE_REPO auto-derives library/gcluster from IPv4:port base image",
+			baseImage:   "10.128.0.68:5000/ubuntu:24.04",
+			wantHost:    "10.128.0.68:5000",
+			wantPrefix:  "10.128.0.68:5000/library/gcluster",
+			wantIsGAR:   false,
+			wantDerived: true,
 		},
 		{
-			name:       "unset GCLUSTER_IMAGE_REPO auto-derives from bracketed IPv6:port base image",
-			baseImage:  "[fd12:3456::1]:5000/tpu/jax:v5p",
-			wantHost:   "[fd12:3456::1]:5000",
-			wantPrefix: "[fd12:3456::1]:5000/gcluster",
-			wantIsGAR:  false,
+			name:        "unset GCLUSTER_IMAGE_REPO auto-derives library/gcluster from bracketed IPv6:port base image",
+			baseImage:   "[fd12:3456::1]:5000/tpu/jax:v5p",
+			wantHost:    "[fd12:3456::1]:5000",
+			wantPrefix:  "[fd12:3456::1]:5000/library/gcluster",
+			wantIsGAR:   false,
+			wantDerived: true,
 		},
 		{
-			name:       "unset GCLUSTER_IMAGE_REPO auto-derives from private Harbor hostname base image",
-			baseImage:  "harbor.internal.example/ml/jax:v5p@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-			wantHost:   "harbor.internal.example",
-			wantPrefix: "harbor.internal.example/gcluster",
-			wantIsGAR:  false,
+			name:        "unset GCLUSTER_IMAGE_REPO auto-derives library/gcluster from private Harbor hostname base image",
+			baseImage:   "harbor.internal.example/ml/jax:v5p@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			wantHost:    "harbor.internal.example",
+			wantPrefix:  "harbor.internal.example/library/gcluster",
+			wantIsGAR:   false,
+			wantDerived: true,
+		},
+		{
+			name:       "malformed GCLUSTER_IMAGE_REPO with tag colon rejected in ResolveDestinationRepo",
+			baseImage:  "python:3.11-slim",
+			envRepo:    "harbor.local/ml-team:latest",
+			wantErrSub: "invalid destination repository",
+		},
+		{
+			name:       "malformed GCLUSTER_IMAGE_REPO with invalid chars rejected in ResolveDestinationRepo",
+			baseImage:  "python:3.11-slim",
+			envRepo:    "harbor.local/invalid!!repo",
+			wantErrSub: "invalid destination repository",
+		},
+		{
+			name:       "malformed GCLUSTER_IMAGE_REPO with empty double-slash segment rejected",
+			baseImage:  "python:3.11-slim",
+			envRepo:    "harbor.local/ml-team//sub",
+			wantErrSub: "empty path segments",
+		},
+		{
+			name:       "malformed GCLUSTER_IMAGE_REPO with dot-dot segment rejected",
+			baseImage:  "python:3.11-slim",
+			envRepo:    "harbor.local/ml-team/../other",
+			wantErrSub: "'.' or '..'",
 		},
 		{
 			name:        "unset GCLUSTER_IMAGE_REPO with Docker Hub shorthand returns ErrMissingImageRepo",
@@ -676,6 +740,41 @@ func TestResolveDestinationRepo(t *testing.T) {
 			project:     "my-proj",
 			location:    "us-central1",
 			baseImage:   "nvcr.io/nvidia/pytorch:24.07-py3",
+			wantMissing: true,
+		},
+		{
+			name:        "unset GCLUSTER_IMAGE_REPO with cgr.dev returns ErrMissingImageRepo",
+			project:     "my-proj",
+			location:    "us-central1",
+			baseImage:   "cgr.dev/chainguard/python:latest",
+			wantMissing: true,
+		},
+		{
+			name:        "unset GCLUSTER_IMAGE_REPO with Red Hat registry returns ErrMissingImageRepo",
+			project:     "my-proj",
+			location:    "us-central1",
+			baseImage:   "registry.access.redhat.com/ubi9/python-311:latest",
+			wantMissing: true,
+		},
+		{
+			name:        "unset GCLUSTER_IMAGE_REPO with GitLab registry returns ErrMissingImageRepo",
+			project:     "my-proj",
+			location:    "us-central1",
+			baseImage:   "registry.gitlab.com/group/img:v1",
+			wantMissing: true,
+		},
+		{
+			name:        "unset GCLUSTER_IMAGE_REPO with Azure Container Registry returns ErrMissingImageRepo",
+			project:     "my-proj",
+			location:    "us-central1",
+			baseImage:   "mycorp.azurecr.io/ml/base:v1",
+			wantMissing: true,
+		},
+		{
+			name:        "unset GCLUSTER_IMAGE_REPO with AWS ECR returns ErrMissingImageRepo",
+			project:     "my-proj",
+			location:    "us-central1",
+			baseImage:   "123456789012.dkr.ecr.us-east-1.amazonaws.com/ml/base:v1",
 			wantMissing: true,
 		},
 		{
@@ -705,8 +804,8 @@ func TestResolveDestinationRepo(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ResolveDestinationRepo() unexpected error: %v", err)
 			}
-			if got.RegistryHost != tc.wantHost || got.RepoPrefix != tc.wantPrefix || got.IsGAR != tc.wantIsGAR {
-				t.Errorf("got %+v, want host=%q prefix=%q isGAR=%v", got, tc.wantHost, tc.wantPrefix, tc.wantIsGAR)
+			if got.RegistryHost != tc.wantHost || got.RepoPrefix != tc.wantPrefix || got.IsGAR != tc.wantIsGAR || got.DerivedFromBase != tc.wantDerived {
+				t.Errorf("got %+v, want host=%q prefix=%q isGAR=%v derived=%v", got, tc.wantHost, tc.wantPrefix, tc.wantIsGAR, tc.wantDerived)
 			}
 		})
 	}
@@ -721,7 +820,7 @@ func TestGenerateImageName_NonGARScopingAndNoUserEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateImageName() unexpected error: %v", err)
 	}
-	want := "[fd12::1]:5000/gcluster/team-alpha/my_job:abcdef012345"
+	want := "[fd12::1]:5000/library/gcluster/team-alpha/my_job:abcdef012345"
 	if got != want {
 		t.Errorf("GenerateImageName() = %q, want %q", got, want)
 	}
@@ -735,12 +834,18 @@ func TestGenerateImageName_NonGARScopingAndNoUserEnv(t *testing.T) {
 	if err != nil || dry1 != dry2 {
 		t.Fatalf("expected deterministic dry-run URI, got %q vs %q (err=%v)", dry1, dry2, err)
 	}
-	if !strings.HasPrefix(dry1, "10.128.0.68:5000/gcluster/default/job-a:") || len(strings.Split(dry1, ":")[2]) != 12 {
+	if !strings.HasPrefix(dry1, "10.128.0.68:5000/library/gcluster/default/job-a:") || len(strings.Split(dry1, ":")[2]) != 12 {
 		t.Errorf("unexpected dry-run URI format: %q", dry1)
+	}
+
+	// Malformed GCLUSTER_IMAGE_REPO must fail in GenerateImageName (--dry-run-out path).
+	t.Setenv("GCLUSTER_IMAGE_REPO", "harbor.local/ml-team:latest")
+	if _, err := GenerateImageName("", "", "default", "job-a", "10.128.0.68:5000/ubuntu:24.04", ""); err == nil {
+		t.Fatalf("expected malformed GCLUSTER_IMAGE_REPO with tag to fail in GenerateImageName")
 	}
 }
 
-func readFirstLayerModes(t *testing.T, img v1.Image) map[string]int64 {
+func readFirstLayerHeaders(t *testing.T, img v1.Image) (map[string]int64, map[string]time.Time) {
 	t.Helper()
 	layers, err := img.Layers()
 	if err != nil || len(layers) != 1 {
@@ -752,6 +857,7 @@ func readFirstLayerModes(t *testing.T, img v1.Image) map[string]int64 {
 	}
 	defer func() { _ = rc.Close() }()
 	modes := map[string]int64{}
+	mtimes := map[string]time.Time{}
 	tr := tar.NewReader(rc)
 	for {
 		hdr, err := tr.Next()
@@ -762,8 +868,9 @@ func readFirstLayerModes(t *testing.T, img v1.Image) map[string]int64 {
 			t.Fatalf("tar.Next(): %v", err)
 		}
 		modes[hdr.Name] = hdr.Mode & 0777
+		mtimes[hdr.Name] = hdr.ModTime.UTC()
 	}
-	return modes
+	return modes, mtimes
 }
 
 func setupWorkdirTestContext(t *testing.T) string {
@@ -796,9 +903,14 @@ func TestBuildContainerImageFromBaseImage_WorkdirAlignmentAndModes(t *testing.T)
 	}{
 		{name: "empty WORKDIR defaults to /workspace and mutates image config", baseWorkingDir: "", wantWorkingDir: "/workspace", wantTarPrefix: "workspace/"},
 		{name: "root WORKDIR / defaults to /workspace and mutates image config", baseWorkingDir: "/", wantWorkingDir: "/workspace", wantTarPrefix: "workspace/"},
+		{name: "unrooted .. WORKDIR defaults to /workspace and mutates image config", baseWorkingDir: "..", wantWorkingDir: "/workspace", wantTarPrefix: "workspace/"},
+		{name: "unrooted ../app WORKDIR normalizes to /app and mutates image config", baseWorkingDir: "../app", wantWorkingDir: "/app", wantTarPrefix: "app/"},
+		{name: "unrooted relative app WORKDIR normalizes to /app and mutates image config", baseWorkingDir: "app", wantWorkingDir: "/app", wantTarPrefix: "app/"},
 		{name: "existing /app WORKDIR preserved", baseWorkingDir: "/app", wantWorkingDir: "/app", wantTarPrefix: "app/"},
 		{name: "nested /opt/maxtext/ WORKDIR preserved without trailing double slash", baseWorkingDir: "/opt/maxtext/", wantWorkingDir: "/opt/maxtext/", wantTarPrefix: "opt/maxtext/"},
 	}
+
+	wantMtime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -820,18 +932,19 @@ func TestBuildContainerImageFromBaseImage_WorkdirAlignmentAndModes(t *testing.T)
 			var pushedImg v1.Image
 			var pushedRef string
 			var modes map[string]int64
+			var mtimes map[string]time.Time
 			cranePull = func(ref string, opts ...crane.Option) (v1.Image, error) {
 				return baseImg, nil
 			}
 			cranePush = func(img v1.Image, ref string, opts ...crane.Option) error {
 				pushedImg = img
 				pushedRef = ref
-				modes = readFirstLayerModes(t, img)
+				modes, mtimes = readFirstLayerHeaders(t, img)
 				return nil
 			}
 
 			gotName, err := BuildContainerImageFromBaseImage("", "", "ml-ns", "jax-train", "10.128.0.68:5000/jax:v5p", srcDir, "linux/amd64", matcher)
-			if err != nil || !strings.HasPrefix(gotName, "10.128.0.68:5000/gcluster/ml-ns/jax-train:") || pushedRef != gotName {
+			if err != nil || !strings.HasPrefix(gotName, "10.128.0.68:5000/library/gcluster/ml-ns/jax-train:") || pushedRef != gotName {
 				t.Fatalf("got image %q (pushed %q, err=%v)", gotName, pushedRef, err)
 			}
 
@@ -842,7 +955,102 @@ func TestBuildContainerImageFromBaseImage_WorkdirAlignmentAndModes(t *testing.T)
 			if modes[tc.wantTarPrefix+"train.py"] != 0644 || modes[tc.wantTarPrefix+"scripts/run.sh"] != 0755 {
 				t.Errorf("unexpected tar entry modes: %v", modes)
 			}
+			if gotMtime := mtimes[tc.wantTarPrefix+"train.py"]; !gotMtime.Equal(wantMtime) {
+				t.Errorf("tar entry ModTime = %v, want %v (ZIP-safe >= 1980)", gotMtime, wantMtime)
+			}
 		})
+	}
+}
+
+func TestBuildContainerImageFromBaseImage_BaseDigestTagInvalidation(t *testing.T) {
+	srcDir := setupWorkdirTestContext(t)
+	matcher, err := patternmatcher.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
+	t.Setenv("USER", "")
+	t.Setenv("USERNAME", "")
+
+	baseV1, err := mutate.Config(empty.Image, v1.Config{WorkingDir: "/workspace", Env: []string{"REV=1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseV2, err := mutate.Config(empty.Image, v1.Config{WorkingDir: "/workspace", Env: []string{"REV=2"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	origPull, origPush := cranePull, cranePush
+	t.Cleanup(func() {
+		cranePull = origPull
+		cranePush = origPush
+	})
+	cranePush = func(v1.Image, string, ...crane.Option) error { return nil }
+
+	var currentBase = baseV1
+	cranePull = func(string, ...crane.Option) (v1.Image, error) { return currentBase, nil }
+
+	tag1a, err := BuildContainerImageFromBaseImage("", "", "default", "train", "10.128.0.68:5000/jax:v5p", srcDir, "linux/amd64", matcher)
+	if err != nil {
+		t.Fatalf("build 1a failed: %v", err)
+	}
+	tag1b, err := BuildContainerImageFromBaseImage("", "", "default", "train", "10.128.0.68:5000/jax:v5p", srcDir, "linux/amd64", matcher)
+	if err != nil || tag1a != tag1b {
+		t.Fatalf("expected identical base digest + context to produce deterministic tag, got %q vs %q (err=%v)", tag1a, tag1b, err)
+	}
+
+	currentBase = baseV2
+	tag2, err := BuildContainerImageFromBaseImage("", "", "default", "train", "10.128.0.68:5000/jax:v5p", srcDir, "linux/amd64", matcher)
+	if err != nil {
+		t.Fatalf("build 2 failed: %v", err)
+	}
+	if tag2 == tag1a {
+		t.Fatalf("expected updated base image digest under same mutable tag to produce a distinct built tag, both were %q", tag2)
+	}
+}
+
+func TestInsecureRegistryScoping(t *testing.T) {
+	t.Setenv(InsecureRegistryEnvVar, "true")
+	platform := &v1.Platform{OS: "linux", Architecture: "amd64"}
+
+	for _, protectedRef := range []string{
+		"python:3.11-slim",
+		"nvcr.io/nvidia/pytorch:24.07",
+		"cgr.dev/chainguard/python:latest",
+		"mycorp.azurecr.io/app:v1",
+		"123456789012.dkr.ecr.us-east-1.amazonaws.com/app:v1",
+		"us-central1-docker.pkg.dev/my-proj/my-repo/img:v1",
+	} {
+		parsed, err := name.ParseReference(protectedRef, nameOptsForRef(protectedRef)...)
+		if err != nil {
+			t.Fatalf("ParseReference(%q): %v", protectedRef, err)
+		}
+		if gotScheme := parsed.Context().Scheme(); gotScheme != "https" {
+			t.Errorf("protected ref %q scheme = %q under %s=true, want https", protectedRef, gotScheme, InsecureRegistryEnvVar)
+		}
+		craneOpts := crane.GetOptions(craneOptionsForRef(protectedRef, platform)...)
+		if tr, ok := craneOpts.Transport.(*http.Transport); ok && tr.TLSClientConfig != nil && tr.TLSClientConfig.InsecureSkipVerify {
+			t.Errorf("protected ref %q enabled InsecureSkipVerify under %s=true", protectedRef, InsecureRegistryEnvVar)
+		}
+	}
+
+	for _, localRef := range []string{
+		"harbor.local/ml/img:v1",
+		"127.0.0.1:5000/ml/img:v1",
+	} {
+		parsed, err := name.ParseReference(localRef, nameOptsForRef(localRef)...)
+		if err != nil {
+			t.Fatalf("ParseReference(%q): %v", localRef, err)
+		}
+		if gotScheme := parsed.Context().Scheme(); gotScheme != "http" {
+			t.Errorf("local ref %q scheme = %q under %s=true, want http", localRef, gotScheme, InsecureRegistryEnvVar)
+		}
+		craneOpts := crane.GetOptions(craneOptionsForRef(localRef, platform)...)
+		tr, ok := craneOpts.Transport.(*http.Transport)
+		if !ok || tr.TLSClientConfig == nil || !tr.TLSClientConfig.InsecureSkipVerify {
+			t.Errorf("expected local ref %q to enable crane.Insecure transport when %s=true", localRef, InsecureRegistryEnvVar)
+		}
 	}
 }
 
@@ -971,8 +1179,7 @@ func TestBuildContainerImageFromBaseImage_PullAndPushErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("cranePush failure bubbles up with destination image reference", func(t *testing.T) {
-		t.Setenv("GCLUSTER_IMAGE_REPO", "")
+	t.Run("cranePush failure on auto-derived destination names GCLUSTER_IMAGE_REPO while explicit destination does not", func(t *testing.T) {
 		origPull, origPush := cranePull, cranePush
 		t.Cleanup(func() {
 			cranePull = origPull
@@ -989,9 +1196,17 @@ func TestBuildContainerImageFromBaseImage_PullAndPushErrors(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(ctxDir, "app.py"), []byte("print(1)\n"), 0644); err != nil {
 			t.Fatal(err)
 		}
+
+		t.Setenv("GCLUSTER_IMAGE_REPO", "")
 		_, err := BuildContainerImageFromBaseImage("", "", "default", "job", "10.128.0.68:5000/jax:v5p", ctxDir, "linux/amd64", nil)
-		if err == nil || !strings.Contains(err.Error(), "simulated registry push error") {
-			t.Fatalf("expected push error propagation, got: %v", err)
+		if err == nil || !strings.Contains(err.Error(), "simulated registry push error") || !strings.Contains(err.Error(), "GCLUSTER_IMAGE_REPO") {
+			t.Fatalf("expected auto-derived push error to include GCLUSTER_IMAGE_REPO hint, got: %v", err)
+		}
+
+		t.Setenv("GCLUSTER_IMAGE_REPO", "10.128.0.68:5000/explicit-repo")
+		_, explicitErr := BuildContainerImageFromBaseImage("", "", "default", "job", "10.128.0.68:5000/jax:v5p", ctxDir, "linux/amd64", nil)
+		if explicitErr == nil || !strings.Contains(explicitErr.Error(), "simulated registry push error") || strings.Contains(explicitErr.Error(), "auto-derived") {
+			t.Fatalf("expected explicit destination push error without auto-derived hint, got: %v", explicitErr)
 		}
 	})
 }

@@ -27,6 +27,7 @@ import (
 	"slices"
 	"time"
 
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
@@ -518,9 +519,12 @@ func validateBuildContext(ctx context.Context, projectID, location string) error
 		}
 		if projectID == "" && location == "" {
 			return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context with base image %q. "+
-				"Set GCLUSTER_IMAGE_REPO=<registry-host>/<repository> (or pass a --base-image hosted in your local/private OCI registry)", baseImage)
+				"Set GCLUSTER_IMAGE_REPO=<registry-host>/<repository> (or pass a --base-image hosted in a custom OCI registry)", baseImage)
 		}
 		return missingGARRepoError(ctx, projectID, location)
+	}
+	if dest.DerivedFromBase {
+		logging.Info("GCLUSTER_IMAGE_REPO is not set; deriving destination repository %s from --base-image", dest.RepoPrefix)
 	}
 	if dest.IsGAR && os.Getenv("USER") == "" && os.Getenv("USERNAME") == "" {
 		return fmt.Errorf("failed to determine user identity from environment (tried USER and USERNAME). This is required to ensure unique image tagging when using --build-context")

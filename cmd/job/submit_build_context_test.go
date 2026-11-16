@@ -86,15 +86,41 @@ func TestValidateBuildContext_OCIRegistries(t *testing.T) {
 		}
 	})
 
-	t.Run("public base-image without project/location or GCLUSTER_IMAGE_REPO gives OCI guidance", func(t *testing.T) {
-		setupBuildContextEnv(t)
-		t.Setenv("GCLUSTER_IMAGE_REPO", "")
-		buildContext = t.TempDir()
-		baseImage = "python:3.11-slim"
+	t.Run("public and cloud base-images without project/location or GCLUSTER_IMAGE_REPO give OCI guidance", func(t *testing.T) {
+		for _, pubBase := range []string{
+			"python:3.11-slim",
+			"cgr.dev/chainguard/python:latest",
+			"registry.access.redhat.com/ubi9/python-311:latest",
+			"mycorp.azurecr.io/ml/base:v1",
+			"123456789012.dkr.ecr.us-east-1.amazonaws.com/ml/base:v1",
+		} {
+			setupBuildContextEnv(t)
+			t.Setenv("GCLUSTER_IMAGE_REPO", "")
+			buildContext = t.TempDir()
+			baseImage = pubBase
 
-		err := validateBuildContext(context.Background(), "", "")
-		if err == nil || !strings.Contains(err.Error(), "<registry-host>/<repository>") {
-			t.Fatalf("expected OCI GCLUSTER_IMAGE_REPO=<registry-host>/<repository> guidance, got: %v", err)
+			err := validateBuildContext(context.Background(), "", "")
+			if err == nil || !strings.Contains(err.Error(), "<registry-host>/<repository>") {
+				t.Fatalf("baseImage=%q: expected OCI GCLUSTER_IMAGE_REPO=<registry-host>/<repository> guidance, got: %v", pubBase, err)
+			}
+		}
+	})
+
+	t.Run("malformed GCLUSTER_IMAGE_REPO fails immediately in validateBuildContext", func(t *testing.T) {
+		for _, badRepo := range []string{
+			"harbor.local/ml-team:latest",
+			"harbor.local/invalid!!repo",
+			"harbor.local/a//b",
+			"harbor.local/a/../b",
+		} {
+			setupBuildContextEnv(t)
+			t.Setenv("GCLUSTER_IMAGE_REPO", badRepo)
+			buildContext = t.TempDir()
+			baseImage = "python:3.11-slim"
+
+			if err := validateBuildContext(context.Background(), "", ""); err == nil {
+				t.Fatalf("expected malformed GCLUSTER_IMAGE_REPO=%q to fail in validateBuildContext", badRepo)
+			}
 		}
 	})
 }

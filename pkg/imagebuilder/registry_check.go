@@ -17,6 +17,7 @@ package imagebuilder
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,36 +44,104 @@ func (r *RegistryInspector) InspectTargetRegistry(registryAuthority string) erro
 	if err != nil {
 		return err
 	}
-	insecureEnv := IsInsecureRegistryEnv(r.getenv())
-	allowHTTPFallback := insecureEnv || IsPrivateOrLoopbackHost(authority)
+	allowsInsecure := allowsInsecureRegistryHost(authority)
+	effectiveInsecure := allowsInsecure && IsInsecureRegistryEnv(r.getenv())
+	allowHTTPFallback := effectiveInsecure || IsPrivateOrLoopbackHost(authority)
 
+	pingHost := authority
+	if pingHost == "docker.io" {
+		pingHost = name.DefaultRegistry
+	}
+
+	errs, suggestInsecure, done, authErr := r.probeRegistrySchemes(
+		r.httpClient(effectiveInsecure),
+		authority,
+		pingHost,
+		allowHTTPFallback,
+		allowsInsecure && !effectiveInsecure,
+	)
+	if done {
+		return authErr
+	}
+	errStr := strings.Join(errs, "; ")
+	if suggestInsecure {
+		return fmt.Errorf("target container registry %q failed TLS/OCI check (%s); if this is a plain-HTTP or self-signed TLS registry, set %s=true", authority, errStr, InsecureRegistryEnvVar)
+	}
+	return fmt.Errorf("target container registry %q is unreachable or failed OCI /v2/ check (%s)", authority, errStr)
+}
+
+func (r *RegistryInspector) probeRegistrySchemes(client *http.Client, authority, pingHost string, allowHTTPFallback, canSuggestInsecure bool) ([]string, bool, bool, error) {
 	schemes := []string{"https"}
 	if allowHTTPFallback {
 		schemes = append(schemes, "http")
 	}
-
-	client := r.httpClient(insecureEnv)
-
 	var errs []string
+	suggestInsecure := false
 	for _, scheme := range schemes {
-		status, pingErr := pingRegistryV2(client, scheme, authority)
+		status, pingErr := pingRegistryV2(client, scheme, pingHost)
 		if pingErr != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", scheme, pingErr))
+			stop, suggest := recordPingError(&errs, scheme, pingErr, allowHTTPFallback, canSuggestInsecure)
+			suggestInsecure = suggestInsecure || suggest
+			if stop {
+				break
+			}
 			continue
 		}
 		if status == http.StatusOK {
-			return nil
+			return nil, false, true, nil
 		}
 		if status == http.StatusUnauthorized {
-			return r.verifyRegistryCredentials(authority, allowHTTPFallback)
+			return nil, false, true, r.verifyRegistryCredentials(authority, allowHTTPFallback)
 		}
 		errs = append(errs, fmt.Sprintf("%s: unexpected HTTP %d", scheme, status))
+		if scheme == "https" {
+			break
+		}
 	}
-	errStr := strings.Join(errs, "; ")
-	if !insecureEnv && (strings.Contains(errStr, "tls:") || strings.Contains(errStr, "x509:") || strings.Contains(errStr, "HTTP response to HTTPS client")) {
-		return fmt.Errorf("target container registry %q failed TLS/OCI check (%s); if this is a plain-HTTP or self-signed TLS registry, set %s=true", authority, errStr, InsecureRegistryEnvVar)
+	return errs, suggestInsecure, false, nil
+}
+
+func recordPingError(errs *[]string, scheme string, pingErr error, allowHTTPFallback, canSuggestInsecure bool) (stop, suggest bool) {
+	if scheme == "https" {
+		if isHTTPSOnPlainHTTPError(pingErr) {
+			if allowHTTPFallback {
+				return false, false
+			}
+			*errs = append(*errs, fmt.Sprintf("%s: %v", scheme, pingErr))
+			return true, canSuggestInsecure
+		}
+		if isTLSServerError(pingErr) {
+			*errs = append(*errs, fmt.Sprintf("%s: %v", scheme, pingErr))
+			return true, canSuggestInsecure
+		}
 	}
-	return fmt.Errorf("target container registry %q is unreachable or failed OCI /v2/ check (%s)", authority, errStr)
+	*errs = append(*errs, fmt.Sprintf("%s: %v", scheme, pingErr))
+	return false, false
+}
+
+func isHTTPSOnPlainHTTPError(err error) bool {
+	if errors.Is(err, http.ErrSchemeMismatch) {
+		return true
+	}
+	var recErr tls.RecordHeaderError
+	if errors.As(err, &recErr) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "HTTP response to HTTPS client") || strings.Contains(msg, "first record does not look like a TLS handshake")
+}
+
+func isTLSServerError(err error) bool {
+	var alertErr tls.AlertError
+	if errors.As(err, &alertErr) {
+		return true
+	}
+	var certVerifyErr *tls.CertificateVerificationError
+	if errors.As(err, &certVerifyErr) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "tls:") || strings.Contains(msg, "x509:")
 }
 
 func pingRegistryV2(client *http.Client, scheme, authority string) (int, error) {

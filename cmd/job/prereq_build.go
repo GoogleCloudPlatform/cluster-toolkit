@@ -61,30 +61,6 @@ func checkArtifactRegistryAPI(projectID string, state *PrereqState, missing *[]m
 	}
 }
 
-func ensureGARBuildAuthPrerequisites(cmd *cobra.Command, state *PrereqState) error {
-	if err := ensureGCloudSDKInstalled(); err != nil {
-		return err
-	}
-	var missing []missingPrereq
-	if err := ensureGCloudAuthenticated(); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			return err
-		}
-		missing = append(missing, missingPrereq{name: "Google Cloud Authentication", commands: []string{"gcloud auth login"}})
-	}
-	if adcCmd := getADCSetupCommandFunc(); adcCmd != "" {
-		missing = append(missing, missingPrereq{name: "Application Default Credentials (ADC)", commands: []string{adcCmd}})
-	}
-	if len(missing) > 0 {
-		printMissingPrereqs(cmd, missing)
-		return fmt.Errorf("some basic prerequisites are missing")
-	}
-	state.GCloudSDKInstalled = true
-	state.GCloudAuthenticated = true
-	state.ADCConfigured = true
-	return nil
-}
-
 // ensureBuildPrerequisites checks what a Crane build needs for the destination registry:
 // Artifact Registry API + Docker gcloud helper for GAR, or a 2s /v2/ ping + Docker keychain check for non-GAR registries.
 func ensureBuildPrerequisites(cmd *cobra.Command, projectID string, location string) error {
@@ -99,7 +75,7 @@ func ensureBuildPrerequisites(cmd *cobra.Command, projectID string, location str
 
 	if !dest.IsGAR {
 		if err := (&imagebuilder.RegistryInspector{}).InspectTargetRegistry(dest.RegistryHost); err != nil {
-			return err
+			return imagebuilder.WrapDerivedRepoError(dest, err)
 		}
 		logging.Info("Prerequisites checked successfully.")
 		return nil
@@ -112,21 +88,30 @@ func ensureBuildPrerequisites(cmd *cobra.Command, projectID string, location str
 	return ensureGARBuildPrerequisites(cmd, effectiveProject, dest.RegistryHost)
 }
 
+func effectiveARProjectID(state PrereqState) string {
+	if state.LastCheckedARProjectID != "" {
+		return state.LastCheckedARProjectID
+	}
+	return state.LastCheckedProjectID
+}
+
+func hasFreshGARBuildState(state PrereqState, arProject string) bool {
+	if isTimestampExpired(state) || !state.ArtifactRegistryAPIEnabled {
+		return false
+	}
+	return state.GCloudSDKInstalled &&
+		state.GCloudAuthenticated &&
+		state.ADCConfigured &&
+		effectiveARProjectID(state) == arProject
+}
+
 func resetProjectScopedPrereqState(state PrereqState, effectiveProject string) PrereqState {
-	if !isStateStale(state, effectiveProject) {
-		return state
+	state = expireStalePrereqState(state)
+	if effectiveARProjectID(state) != effectiveProject {
+		state.ArtifactRegistryAPIEnabled = false
+		state.LastCheckedARProjectID = ""
 	}
-	preserved := PrereqState{
-		GCloudSDKInstalled:           state.GCloudSDKInstalled,
-		KubectlInstalled:             state.KubectlInstalled,
-		GKEGCloudAuthPluginInstalled: state.GKEGCloudAuthPluginInstalled,
-	}
-	if time.Since(state.LastCheckedTimestamp) <= stateFreshness {
-		preserved.GCloudAuthenticated = state.GCloudAuthenticated
-		preserved.ADCConfigured = state.ADCConfigured
-		preserved.LastCheckedTimestamp = state.LastCheckedTimestamp
-	}
-	return preserved
+	return state
 }
 
 func ensureGARBuildPrerequisites(cmd *cobra.Command, effectiveProject, registry string) error {
@@ -134,19 +119,23 @@ func ensureGARBuildPrerequisites(cmd *cobra.Command, effectiveProject, registry 
 
 	// The Docker config is a local file and the registry depends on the target region,
 	// so it is read on every build; only the Artifact Registry API lookup is cached.
-	if !isStateStale(state, effectiveProject) && state.ArtifactRegistryAPIEnabled && isDockerCredsConfigured(registry) {
-		logging.Info("Skipping checks; prerequisites are fresh (project: %s, checked: %v ago).", state.LastCheckedProjectID, time.Since(state.LastCheckedTimestamp).Round(time.Second))
+	if hasFreshGARBuildState(state, effectiveProject) && isDockerCredsConfigured(registry) {
+		logging.Info("Skipping checks; prerequisites are fresh (project: %s, checked: %v ago).", effectiveProject, time.Since(state.LastCheckedTimestamp).Round(time.Second))
 		return nil
 	}
 
 	state = resetProjectScopedPrereqState(state, effectiveProject)
-	if !state.GCloudSDKInstalled || !state.GCloudAuthenticated || !state.ADCConfigured {
-		if err := ensureGARBuildAuthPrerequisites(cmd, &state); err != nil {
-			return err
-		}
-	}
 
 	var missing []missingPrereq
+	checkedAuth, err := ensureGCloudAuthAndADC(&state, &missing)
+	if err != nil {
+		return err
+	}
+	if len(missing) > 0 {
+		printMissingPrereqs(cmd, missing)
+		return fmt.Errorf("some basic prerequisites are missing")
+	}
+
 	checkArtifactRegistryAPI(effectiveProject, &state, &missing)
 	if !isDockerCredsConfigured(registry) {
 		missing = append(missing, missingPrereq{
@@ -160,8 +149,10 @@ func ensureGARBuildPrerequisites(cmd *cobra.Command, effectiveProject, registry 
 		return fmt.Errorf("job could not be submitted because some prerequisites are missing")
 	}
 
-	state.LastCheckedTimestamp = time.Now()
-	state.LastCheckedProjectID = effectiveProject
+	state.LastCheckedARProjectID = effectiveProject
+	if checkedAuth || state.LastCheckedTimestamp.IsZero() {
+		state.LastCheckedTimestamp = time.Now()
+	}
 	store.Save(state)
 
 	logging.Info("Prerequisites checked successfully.")

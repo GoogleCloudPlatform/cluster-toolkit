@@ -10,9 +10,9 @@ Before you begin, ensure you have installed `gcluster` and set up your environme
 
 If you use `--build-context` to build images on-the-fly:
 
-* `GCLUSTER_IMAGE_REPO`: For Artifact Registry, set the repository name (e.g., `gcluster-repo`) and `gcluster` constructs `<region>-docker.pkg.dev/<project>/<GCLUSTER_IMAGE_REPO>/<user>-runner:<tag>`. For Harbor or other OCI registries, set `<registry-host>[/<repository>]` (e.g., `harbor.example.com/ml-team`), or omit `GCLUSTER_IMAGE_REPO` when `--base-image` already comes from a private/local OCI registry to auto-derive `<host>/gcluster/<namespace>/<workload>:<hash>`.
+* `GCLUSTER_IMAGE_REPO`: For Artifact Registry, set the repository name or subpath (e.g., `gcluster-repo` or `gcluster-repo/team-a` when `--project` and `--location` are set) and `gcluster` constructs `<region>-docker.pkg.dev/<project>/<GCLUSTER_IMAGE_REPO>/<user>-runner:<tag>`, or pass an explicit `<region>-docker.pkg.dev/<project>/<repository>` prefix for cross-project/cross-region repositories. For Harbor or other OCI registries, set `<registry-host>[/<repository>]` (e.g., `harbor.example.com/ml-team` or `docker.io/my-org/my-repo`), or omit `GCLUSTER_IMAGE_REPO` when `--base-image` specifies an explicit registry host other than Artifact Registry or known public/cloud registries to auto-derive `<host>/library/gcluster/<namespace>/<workload>:<hash>`.
 * `USER` or `USERNAME`: Used for unique `<user>-runner` image tagging on Artifact Registry builds (usually set automatically by your OS; not required for non-Artifact Registry OCI builds).
-* `GCLUSTER_INSECURE_REGISTRY`: Optional (`true` / `1`) to allow plain-HTTP or self-signed TLS connections when pushing or pulling `--build-context` images against local OCI registries (loopback and RFC 1918 / IPv6 ULA private IP registries automatically support plain-HTTP fallback).
+* `GCLUSTER_INSECURE_REGISTRY`: Optional (`true` / `1`) to allow plain-HTTP or self-signed TLS connections when pushing or pulling `--build-context` images against custom or local OCI registries (loopback and RFC 1918 / IPv6 ULA private IP registries automatically support plain-HTTP fallback). Ignored for Artifact Registry and known public/cloud registries so `gcloud` tokens and public base-image pulls remain TLS-verified.
 
 ### Optional Environment Variables
 
@@ -28,14 +28,15 @@ If you use `--build-context` to build images on-the-fly:
 > * **Gcloud Authentication**: Checks if authenticated and if Application Default Credentials (ADC) are valid.
 > * **`kubectl` Installation**: Checks if `kubectl` is installed.
 > * **GKE Auth Plugin**: Checks if `gke-gcloud-auth-plugin` is installed.
-> * **Artifact Registry API** (Crane builds only): Checks if `artifactregistry.googleapis.com` is enabled in the cluster's project.
-> * **Container Credential Helper** (Crane builds only): Checks that Docker uses `gcloud` credentials for the Artifact Registry host the build pushes to (`<cluster-region>-docker.pkg.dev`).
+> * **Destination Registry & Credentials** (Crane `--build-context` builds only):
+>   * **Artifact Registry**: Checks if `artifactregistry.googleapis.com` is enabled in the target Artifact Registry project (defaulting to the cluster's project, or the explicit project in `GCLUSTER_IMAGE_REPO`) and verifies Docker `gcloud`/`gcr` credentials for the target `<region>-docker.pkg.dev` host.
+>   * **Non-Artifact Registry OCI Registries**: Runs a bounded `2s` `GET /v2/` reachability probe and, when the registry returns `401 Unauthorized`, verifies credentials in your Docker keychain (`~/.docker/config.json`) without invoking Google Cloud APIs.
 >
-> The two Crane-build checks only run when `gcluster` builds and pushes the image itself (`--base-image` with `--build-context`). A pre-built `--image` is pulled by the cluster nodes and needs neither.
+> The destination registry checks only run when `gcluster` builds and pushes the image itself (`--base-image` with `--build-context`). A pre-built `--image` is pulled by the cluster nodes and needs neither.
 >
-> If any required dependencies are missing or unconfigured, `gcluster` will identify them and print the necessary installation or remediation commands directly to your console for review and execution
+> If any required dependencies are missing or unconfigured, `gcluster` will identify them and print the necessary installation or remediation commands directly to your console for review and execution.
 >
-> Successful checks are remembered in `~/.gcluster/job_prereq_state.json` to optimize subsequent runs. Checks are re-run if the state is older than 24 hours or if you switch projects. The Docker credential check is not cached: it reads your local Docker config on every Crane build, because the registry depends on the cluster's region.
+> Successful checks are remembered in `~/.gcluster/job_prereq_state.json` to optimize subsequent runs. Cluster project and Artifact Registry project checks are cached independently for 24 hours; local Docker credential config and non-Artifact Registry `/v2/` checks run on each Crane build.
 >
 > **Bypassing Checks:** If you are running `gcluster` in a complex environment (such as an automated CI/CD pipeline without a human `gcloud` session, a system with custom Docker credential helpers, or an environment with strict least-privilege IAM limits), you can completely bypass these validations by appending the `--skip-prereqs` flag.
 
@@ -69,7 +70,7 @@ print("This is a sample application running on GKE.")
 ```
 
 > [!NOTE]
-> This on-the-fly image build does not execute a Dockerfile. It packages the files from your build context directory directly into the `WORKDIR` of `--base-image` (or sets `WORKDIR /workspace` and extracts there when the base image `WORKDIR` is unset or `/`), preserving file permissions, honoring `.dockerignore`, and skipping 12 hardcoded VCS/build patterns (`.git`, `.terraform`, `.ghpc`, `.ansible`, `vendor`, `bin`, `pkg`, `node_modules`, `*.log`, `tmp/`, `.DS_Store`, and `__pycache__`). Relative commands such as `--command "python app.py"` therefore resolve directly against your packaged files regardless of the base image's `WORKDIR`. If you need to install dependencies, make sure they are already present in your `--base-image`.
+> This on-the-fly image build does not execute a Dockerfile. It packages the files from your build context directory directly into the `WORKDIR` of `--base-image` (or sets `WORKDIR /workspace` and extracts there when the base image `WORKDIR` is unset or `/`), normalizing ownership to `root:root` (`0:0`) and file modes to `0755` for directories and executables or `0644` for regular files for reproducible image tags, honoring `.dockerignore`, and skipping 12 hardcoded VCS/build patterns (`.git`, `.terraform`, `.ghpc`, `.ansible`, `vendor`, `bin`, `pkg`, `node_modules`, `*.log`, `tmp/`, `.DS_Store`, and `__pycache__`). Reference packaged files relative to `WORKDIR` (for example, `--command "python app.py"` rather than `python /app.py`). If you need to install dependencies, make sure they are already present in your `--base-image`.
 
 ## 3. Deploy a GKE Cluster
 
@@ -112,9 +113,10 @@ Deploy the GKE cluster:
 Now that the cluster is deployed and your application code is prepared, you can submit your sample Python script as a JobSet job. `gcluster job submit` will automatically build your container image and push it to Artifact Registry in your project.
 
 > [!IMPORTANT]
-> On Artifact Registry, the image will be pushed to a regional endpoint: `<region>-docker.pkg.dev/<project>/<GCLUSTER_IMAGE_REPO>/<user>-runner:<tag>`. On non-Artifact Registry OCI registries, images are pushed to `<registry-host>/<repo-or-gcluster>/<namespace>/<workload>:<content-hash>`.
+> On Artifact Registry, the image will be pushed to a regional endpoint: `<region>-docker.pkg.dev/<project>/<GCLUSTER_IMAGE_REPO>/<user>-runner:<tag>`. On non-Artifact Registry OCI registries, images are pushed to `<registry-host>/<repo-or-library/gcluster>/<namespace>/<workload>:<content-hash>`.
 
-* When pushing to Artifact Registry (or using a public `--base-image` such as `python:3.9-slim`), you **must** set the `GCLUSTER_IMAGE_REPO` environment variable to specify the repository (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo` for Artifact Registry, or `export GCLUSTER_IMAGE_REPO=harbor.example.com/ml-team` for an OCI registry). When `--base-image` already references a private/local OCI registry, `GCLUSTER_IMAGE_REPO` is optional and defaults to `<host>/gcluster`. For Artifact Registry, the repository **must exist** before submitting the job. If it does not exist, you can create it with:
+* When pushing to Artifact Registry (or using a public/cloud `--base-image` such as `python:3.9-slim`, `nvcr.io/...`, or `cgr.dev/...`), you **must** set the `GCLUSTER_IMAGE_REPO` environment variable to specify the repository (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo` for Artifact Registry, or `export GCLUSTER_IMAGE_REPO=harbor.example.com/ml-team` for an OCI registry). When `--base-image` specifies an explicit registry host other than Artifact Registry or known public/cloud registries, `GCLUSTER_IMAGE_REPO` is optional and defaults to `<host>/library/gcluster`.
+* On project-scoped OCI registries such as Harbor, the target project (`library` by default, or `<project>` when setting `GCLUSTER_IMAGE_REPO=<host>/<project>[/<subpath>]`) **must exist** and grant push permission to your Docker credentials before submitting the job. For Artifact Registry, the repository **must exist** before submitting the job. If it does not exist, you can create it with:
 
     ```bash
     gcloud artifacts repositories create <REPOSITORY_NAME> \
