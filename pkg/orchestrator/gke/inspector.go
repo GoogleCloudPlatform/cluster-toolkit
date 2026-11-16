@@ -196,6 +196,7 @@ type inspectWASState struct {
 }
 
 type wasResourceItem struct {
+	raw        map[string]interface{}
 	APIVersion string `json:"apiVersion,omitempty"`
 	Kind       string `json:"kind,omitempty"`
 	Metadata   struct {
@@ -228,7 +229,26 @@ func (g *GKEOrchestrator) crdExists(crdNames ...string) bool {
 }
 
 func (g *GKEOrchestrator) inspectTPUNodes(writer *inspectWriter) {
-	writer.runAndLogOptional("Kubectl: TPU Node Summary", "kubectl", "get", "nodes", "-l", tpuAcceleratorLabel, "-o", tpuNodeCustomColumns)
+	rawArgs := []string{"get", "nodes", "-l", tpuAcceleratorLabel, "-o", tpuNodeCustomColumns}
+	res := g.kubectl(rawArgs...)
+	if res.ExitCode != 0 || !hasNonHeaderLines(res.Stdout) {
+		return
+	}
+	_, _ = fmt.Fprintf(writer.writer, "Description: Kubectl: TPU Node Summary\nCommand: kubectl %v\nOutput:\n%s\n\n%s\n\n",
+		withKubeContext(g.kubeContext, rawArgs), res.Stdout, spacer)
+}
+
+func hasNonHeaderLines(stdout string) bool {
+	nonEmpty := 0
+	for _, line := range strings.Split(stdout, "\n") {
+		if strings.TrimSpace(line) != "" {
+			nonEmpty++
+			if nonEmpty >= 2 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (g *GKEOrchestrator) inspectSliceAndWAS(writer *inspectWriter) inspectWASState {
@@ -345,7 +365,16 @@ func logOwnedWASResources(w io.Writer, workloadName, workloadNamespace, targetWo
 	allOwned = append(allOwned, ownedPGs...)
 	allOwned = append(allOwned, ownedSlices...)
 
-	yamlBytes, err := k8syaml.Marshal(allOwned)
+	var rawObjects []interface{}
+	for _, item := range allOwned {
+		if item.raw != nil {
+			rawObjects = append(rawObjects, item.raw)
+		} else {
+			rawObjects = append(rawObjects, item)
+		}
+	}
+
+	yamlBytes, err := k8syaml.Marshal(rawObjects)
 	if err != nil {
 		return
 	}
@@ -366,8 +395,11 @@ func filterOwnedWASResources(workloadName, workloadNamespace, targetWorkload str
 	}
 	ownedSliceNames := make(map[string]bool)
 
-	for _, item := range parseWASResourceItems(wasState.compositePodGroupsYAML) {
+	allCPGs := parseWASResourceItems(wasState.compositePodGroupsYAML)
+	matchedCPGIdx := make(map[int]bool)
+	for i, item := range allCPGs {
 		if isPodGroupOwnedByWorkload(item, workloadName, workloadNamespace, targetWorkload, ownedGroupNames) {
+			matchedCPGIdx[i] = true
 			cpgs = append(cpgs, item)
 			recordOwnedGroupAndSliceRefs(item, ownedGroupNames, ownedSliceNames)
 		}
@@ -376,6 +408,14 @@ func filterOwnedWASResources(workloadName, workloadNamespace, targetWorkload str
 	for _, item := range parseWASResourceItems(wasState.podGroupsYAML) {
 		if isPodGroupOwnedByWorkload(item, workloadName, workloadNamespace, targetWorkload, ownedGroupNames) {
 			pgs = append(pgs, item)
+			recordOwnedGroupAndSliceRefs(item, ownedGroupNames, ownedSliceNames)
+		}
+	}
+
+	for i, item := range allCPGs {
+		if !matchedCPGIdx[i] && isPodGroupOwnedByWorkload(item, workloadName, workloadNamespace, targetWorkload, ownedGroupNames) {
+			matchedCPGIdx[i] = true
+			cpgs = append(cpgs, item)
 			recordOwnedGroupAndSliceRefs(item, ownedGroupNames, ownedSliceNames)
 		}
 	}
@@ -393,42 +433,60 @@ func parseWASResourceItems(rawYAML string) []wasResourceItem {
 	if strings.TrimSpace(rawYAML) == "" {
 		return nil
 	}
+	data := []byte(rawYAML)
 	var list wasResourceList
-	if err := k8syaml.Unmarshal([]byte(rawYAML), &list); err == nil && len(list.Items) > 0 {
+	if err := k8syaml.Unmarshal(data, &list); err == nil && len(list.Items) > 0 {
+		var rawList struct {
+			Items []map[string]interface{} `json:"items"`
+		}
+		if err := k8syaml.Unmarshal(data, &rawList); err == nil && len(rawList.Items) == len(list.Items) {
+			for i := range list.Items {
+				list.Items[i].raw = rawList.Items[i]
+			}
+		}
 		return list.Items
 	}
 	var single wasResourceItem
-	if err := k8syaml.Unmarshal([]byte(rawYAML), &single); err == nil && single.Metadata.Name != "" {
+	if err := k8syaml.Unmarshal(data, &single); err == nil && single.Metadata.Name != "" {
+		var rawSingle map[string]interface{}
+		if err := k8syaml.Unmarshal(data, &rawSingle); err == nil {
+			single.raw = rawSingle
+		}
 		return []wasResourceItem{single}
 	}
 	return nil
 }
 
 func matchesWorkloadOrGroup(candidate, workloadName, targetWorkload string, ownedGroupNames map[string]bool) bool {
-	if candidate == "" {
-		return false
-	}
 	if ownedGroupNames[candidate] || strings.HasPrefix(candidate, workloadName+"-") {
 		return true
 	}
 	return targetWorkload != "" && strings.HasPrefix(candidate, targetWorkload+"-")
 }
 
-func recordOwnedGroupAndSliceRefs(item wasResourceItem, ownedGroupNames, ownedSliceNames map[string]bool) {
-	if item.Metadata.Name != "" {
-		ownedGroupNames[item.Metadata.Name] = true
-	}
+func childPodGroupNames(item wasResourceItem) []string {
+	var names []string
 	for _, pgName := range item.Spec.PodGroupNames {
 		if trimmed := strings.TrimSpace(pgName); trimmed != "" {
-			ownedGroupNames[trimmed] = true
+			names = append(names, trimmed)
 		}
 	}
 	if ann := item.Metadata.Annotations["tpuplugin.cloud.google.com/pod-group-names"]; ann != "" {
 		for _, pgName := range strings.Split(ann, ",") {
 			if trimmed := strings.TrimSpace(pgName); trimmed != "" {
-				ownedGroupNames[trimmed] = true
+				names = append(names, trimmed)
 			}
 		}
+	}
+	return names
+}
+
+func recordOwnedGroupAndSliceRefs(item wasResourceItem, ownedGroupNames, ownedSliceNames map[string]bool) {
+	if item.Metadata.Name != "" {
+		ownedGroupNames[item.Metadata.Name] = true
+	}
+	for _, pgName := range childPodGroupNames(item) {
+		ownedGroupNames[pgName] = true
 	}
 	if sliceAnn := item.Metadata.Annotations["tpuplugin.cloud.google.com/slice-name"]; sliceAnn != "" {
 		for _, sName := range strings.Split(sliceAnn, ",") {
@@ -443,26 +501,38 @@ func isPodGroupOwnedByWorkload(item wasResourceItem, workloadName, workloadNames
 	if workloadNamespace != "" && item.Metadata.Namespace != "" && item.Metadata.Namespace != workloadNamespace {
 		return false
 	}
-	if matchesWorkloadOrGroup(item.Metadata.Name, workloadName, targetWorkload, ownedGroupNames) {
-		return true
+	if jsLabel := strings.TrimSpace(item.Metadata.Labels["jobset.sigs.k8s.io/jobset-name"]); jsLabel != "" {
+		return jsLabel == workloadName
 	}
 	for _, ref := range item.Metadata.OwnerReferences {
-		if matchesWorkloadOrGroup(ref.Name, workloadName, targetWorkload, ownedGroupNames) {
+		if strings.EqualFold(ref.Kind, "JobSet") && ref.Name != "" {
+			return ref.Name == workloadName
+		}
+	}
+	for _, pgName := range childPodGroupNames(item) {
+		if ownedGroupNames[pgName] {
 			return true
 		}
 	}
+	if len(item.Metadata.OwnerReferences) > 0 {
+		for _, ref := range item.Metadata.OwnerReferences {
+			if matchesWorkloadOrGroup(ref.Name, workloadName, targetWorkload, ownedGroupNames) {
+				return true
+			}
+		}
+		return false
+	}
 	for _, k := range []string{
-		"jobset.sigs.k8s.io/jobset-name",
 		"batch.kubernetes.io/job-name",
 		"job-name",
 		"kueue.x-k8s.io/job-name",
 		"tpuplugin.cloud.google.com/owner-name",
 	} {
-		if matchesWorkloadOrGroup(item.Metadata.Labels[k], workloadName, targetWorkload, ownedGroupNames) {
-			return true
+		if v := strings.TrimSpace(item.Metadata.Labels[k]); v != "" {
+			return matchesWorkloadOrGroup(v, workloadName, targetWorkload, ownedGroupNames)
 		}
 	}
-	return false
+	return matchesWorkloadOrGroup(item.Metadata.Name, workloadName, targetWorkload, ownedGroupNames)
 }
 
 func isSliceOwnedByWorkload(item wasResourceItem, workloadName, workloadNamespace, targetWorkload string, ownedGroupNames, ownedSliceNames map[string]bool) bool {
@@ -492,15 +562,28 @@ func isSliceOwnedByWorkload(item wasResourceItem, workloadName, workloadNamespac
 	if workloadNamespace != "" && ownerNS != "" && ownerNS != workloadNamespace {
 		return false
 	}
+	hasOwnerLabel := false
 	for _, k := range []string{"tpuplugin.cloud.google.com/owner-name", "kueue.gke.io/tpu-slice-used-by-workload"} {
-		if matchesWorkloadOrGroup(item.Metadata.Labels[k], workloadName, targetWorkload, ownedGroupNames) {
-			return true
+		if v := strings.TrimSpace(item.Metadata.Labels[k]); v != "" {
+			hasOwnerLabel = true
+			if matchesWorkloadOrGroup(v, workloadName, targetWorkload, ownedGroupNames) {
+				return true
+			}
 		}
 	}
-	for _, ref := range item.Metadata.OwnerReferences {
-		if matchesWorkloadOrGroup(ref.Name, workloadName, targetWorkload, ownedGroupNames) {
-			return true
+	if hasOwnerLabel {
+		return false
+	}
+	if len(item.Metadata.OwnerReferences) > 0 {
+		for _, ref := range item.Metadata.OwnerReferences {
+			if strings.EqualFold(ref.Kind, "JobSet") && ref.Name != "" {
+				return ref.Name == workloadName
+			}
+			if matchesWorkloadOrGroup(ref.Name, workloadName, targetWorkload, ownedGroupNames) {
+				return true
+			}
 		}
+		return false
 	}
 	return matchesWorkloadOrGroup(item.Metadata.Name, workloadName, targetWorkload, ownedGroupNames)
 }

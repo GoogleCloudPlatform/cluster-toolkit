@@ -606,6 +606,9 @@ items:
   kind: Slice
   metadata:
     name: slice-test-workload-0
+    deletionTimestamp: "2026-11-16T10:00:00Z"
+    finalizers:
+    - accelerator.gke.io/slice-finalizer
     annotations:
       tpuplugin.cloud.google.com/slice-owner-reference: CompositePodGroup/custom-namespace/test-workload
   spec:
@@ -653,6 +656,9 @@ items:
     ownerReferences:
     - kind: Job
       name: test-workload-worker-0
+  spec:
+    minMember: 4
+    scheduleTimeoutSeconds: 300
 - apiVersion: scheduling.x-k8s.io/v1alpha1
   kind: PodGroup
   metadata:
@@ -755,12 +761,20 @@ items:
 	if nextSpacer := strings.Index(ownedSection, spacer); nextSpacer > 0 {
 		ownedSection = ownedSection[:nextSpacer]
 	}
-	for _, wantOwned := range []string{"test-workload", "test-workload-worker-0", "slice-test-workload-0"} {
+	for _, wantOwned := range []string{
+		"test-workload",
+		"test-workload-worker-0",
+		"slice-test-workload-0",
+		"minMember: 4",
+		"scheduleTimeoutSeconds: 300",
+		"deletionTimestamp: \"2026-11-16T10:00:00Z\"",
+		"accelerator.gke.io/slice-finalizer",
+	} {
 		if !strings.Contains(ownedSection, wantOwned) {
 			t.Errorf("expected owned section to contain %q, got:\n%s", wantOwned, ownedSection)
 		}
 	}
-	for _, unwanted := range []string{"other-workload", "other-workload-worker-0", "slice-other-workload-0"} {
+	for _, unwanted := range []string{"other-workload", "other-workload-worker-0", "slice-other-workload-0", "spec: {}"} {
 		if strings.Contains(ownedSection, unwanted) {
 			t.Errorf("expected owned section to exclude %q, got:\n%s", unwanted, ownedSection)
 		}
@@ -776,6 +790,11 @@ func TestInspectCluster_NoWASOrSliceCRDs(t *testing.T) {
 	responses := defaultMockResponses(clusterName, location, project)
 	// Remove topologies CRD so neither Kueue topologies nor WAS/Slice CRDs exist.
 	delete(responses, "kubectl get crd topologies.kueue.x-k8s.io")
+	// Simulate 0 TPU nodes: kubectl custom-columns exits 0 with only the header row.
+	responses["kubectl get nodes -l cloud.google.com/gke-tpu-accelerator"] = []shell.CommandResult{{
+		ExitCode: 0,
+		Stdout:   "NAME   READY   TAINTS   ACCELERATOR   TOPOLOGY   PARTITION_ID   PARTITION_STATE   SLICE   SLICE_READINESS\n",
+	}}
 
 	mockExec := NewMockExecutor(responses)
 	orc := newTestGKEOrchestrator(mockExec)
@@ -883,16 +902,39 @@ func TestInspectCluster_TPUSchedulerPodLabelFallback(t *testing.T) {
 
 func TestFilterOwnedWASResources_EdgeCases(t *testing.T) {
 	wasState := inspectWASState{
-		compositePodGroupsYAML: `apiVersion: scheduling.k8s.io/v1alpha3
-kind: CompositePodGroup
-metadata:
-  name: custom-cpg
-  namespace: ns-a
-  labels:
-    jobset.sigs.k8s.io/jobset-name: train-job
-  annotations:
-    tpuplugin.cloud.google.com/pod-group-names: leaf-pg-0, leaf-pg-1
-    tpuplugin.cloud.google.com/slice-name: explicit-slice-0
+		compositePodGroupsYAML: `apiVersion: v1
+kind: List
+items:
+- apiVersion: scheduling.k8s.io/v1alpha3
+  kind: CompositePodGroup
+  metadata:
+    name: custom-cpg
+    namespace: ns-a
+    labels:
+      jobset.sigs.k8s.io/jobset-name: train-job
+    annotations:
+      tpuplugin.cloud.google.com/pod-group-names: leaf-pg-0, leaf-pg-1
+      tpuplugin.cloud.google.com/slice-name: explicit-slice-0
+- apiVersion: scheduling.k8s.io/v1alpha3
+  kind: CompositePodGroup
+  metadata:
+    name: parent-cpg-via-child
+    namespace: ns-a
+    annotations:
+      tpuplugin.cloud.google.com/slice-name: parent-cpg-slice
+  spec:
+    podGroupNames:
+    - ownerref-pg
+- apiVersion: scheduling.k8s.io/v1alpha3
+  kind: CompositePodGroup
+  metadata:
+    name: train-job-v2
+    namespace: ns-a
+    labels:
+      jobset.sigs.k8s.io/jobset-name: train-job-v2
+    ownerReferences:
+    - kind: JobSet
+      name: train-job-v2
 `,
 		podGroupsYAML: `apiVersion: v1
 kind: List
@@ -913,6 +955,21 @@ items:
 - apiVersion: scheduling.k8s.io/v1beta1
   kind: PodGroup
   metadata:
+    name: train-job-v2-worker-0
+    namespace: ns-a
+    ownerReferences:
+    - kind: JobSet
+      name: train-job-v2
+- apiVersion: scheduling.k8s.io/v1beta1
+  kind: PodGroup
+  metadata:
+    name: batch-job-pg
+    namespace: ns-a
+    labels:
+      batch.kubernetes.io/job-name: train-job-worker-0
+- apiVersion: scheduling.k8s.io/v1beta1
+  kind: PodGroup
+  metadata:
     name: wrong-ns-pg
     namespace: ns-b
     labels:
@@ -925,6 +982,10 @@ items:
   kind: Slice
   metadata:
     name: explicit-slice-0
+- apiVersion: accelerator.gke.io/v1beta1
+  kind: Slice
+  metadata:
+    name: parent-cpg-slice
 - apiVersion: accelerator.gke.io/v1beta1
   kind: Slice
   metadata:
@@ -952,6 +1013,27 @@ items:
 - apiVersion: accelerator.gke.io/v1beta1
   kind: Slice
   metadata:
+    name: train-job-reused-by-label
+    labels:
+      tpuplugin.cloud.google.com/owner-namespace: ns-a
+      tpuplugin.cloud.google.com/owner-name: other-pg
+- apiVersion: accelerator.gke.io/v1beta1
+  kind: Slice
+  metadata:
+    name: train-job-reused-by-ownerref
+    ownerReferences:
+    - kind: PodGroup
+      name: other-pg
+- apiVersion: accelerator.gke.io/v1beta1
+  kind: Slice
+  metadata:
+    name: train-job-reused-by-jobset-ownerref
+    ownerReferences:
+    - kind: JobSet
+      name: train-job-v2
+- apiVersion: accelerator.gke.io/v1beta1
+  kind: Slice
+  metadata:
     name: labeled-slice
     labels:
       tpuplugin.cloud.google.com/owner-namespace: ns-a
@@ -974,21 +1056,25 @@ items:
 	}
 
 	cpgs, pgs, slices := filterOwnedWASResources("train-job", "ns-a", "jobset-train-job-123", wasState)
-	if len(cpgs) != 1 || cpgs[0].Metadata.Name != "custom-cpg" {
-		t.Errorf("cpgs = %+v, want [custom-cpg]", cpgs)
+	if len(cpgs) != 2 || cpgs[0].Metadata.Name != "custom-cpg" || cpgs[1].Metadata.Name != "parent-cpg-via-child" {
+		t.Errorf("cpgs = %+v, want [custom-cpg parent-cpg-via-child]", cpgs)
 	}
-	if len(pgs) != 2 || pgs[0].Metadata.Name != "leaf-pg-0" || pgs[1].Metadata.Name != "ownerref-pg" {
-		t.Errorf("pgs = %+v, want [leaf-pg-0 ownerref-pg]", pgs)
+	if len(pgs) != 3 || pgs[0].Metadata.Name != "leaf-pg-0" || pgs[1].Metadata.Name != "ownerref-pg" || pgs[2].Metadata.Name != "batch-job-pg" {
+		t.Errorf("pgs = %+v, want [leaf-pg-0 ownerref-pg batch-job-pg]", pgs)
 	}
 	var gotSlices []string
 	for _, s := range slices {
 		gotSlices = append(gotSlices, s.Metadata.Name)
 	}
-	wantSlices := []string{"explicit-slice-0", "two-part-ref-slice", "one-part-ref-slice", "labeled-slice", "ownerref-slice"}
+	wantSlices := []string{"explicit-slice-0", "parent-cpg-slice", "two-part-ref-slice", "one-part-ref-slice", "labeled-slice", "ownerref-slice"}
 	if strings.Join(gotSlices, ",") != strings.Join(wantSlices, ",") {
 		t.Errorf("slices = %v, want %v", gotSlices, wantSlices)
 	}
 
+	singleParsed := parseWASResourceItems("apiVersion: scheduling.k8s.io/v1alpha3\nkind: CompositePodGroup\nmetadata:\n  name: single-cpg\n")
+	if len(singleParsed) != 1 || singleParsed[0].Metadata.Name != "single-cpg" || singleParsed[0].raw == nil {
+		t.Errorf("expected single object YAML to parse with raw map preserved, got %+v", singleParsed)
+	}
 	if emptyCPGs, emptyPGs, emptySlices := filterOwnedWASResources("", "ns-a", "", wasState); emptyCPGs != nil || emptyPGs != nil || emptySlices != nil {
 		t.Errorf("expected nil results for empty workloadName")
 	}
