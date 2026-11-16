@@ -579,3 +579,420 @@ func TestInspectCluster_ReportStartsWithSPSSummary(t *testing.T) {
 		t.Errorf("report should start with the SPS summary (summary at %d, gcloud section at %d):\n%s", summaryAt, gcloudAt, content)
 	}
 }
+
+func TestInspectCluster_WASStandaloneWithoutTopologiesCRD(t *testing.T) {
+	clusterName := "test-cluster-was"
+	location := "us-central1-a"
+	project := "test-project"
+	reportPath := filepath.Join(t.TempDir(), "inspect-was.log")
+
+	responses := defaultMockResponses(clusterName, location, project)
+	// Simulate a standalone WAS cluster where Kueue topologies CRD is absent,
+	// while Slices, PodGroups, and CompositePodGroups CRDs exist.
+	delete(responses, "kubectl get crd topologies.kueue.x-k8s.io")
+	responses["kubectl get crd slices.accelerator.gke.io"] = []shell.CommandResult{{ExitCode: 0, Stdout: "slices.accelerator.gke.io"}}
+	responses["kubectl get crd compositepodgroups.scheduling.x-k8s.io"] = []shell.CommandResult{{ExitCode: 0, Stdout: "compositepodgroups.scheduling.x-k8s.io"}}
+	responses["kubectl get crd podgroups.scheduling.x-k8s.io"] = []shell.CommandResult{{ExitCode: 0, Stdout: "podgroups.scheduling.x-k8s.io"}}
+
+	responses["kubectl get nodes -l cloud.google.com/gke-tpu-accelerator"] = []shell.CommandResult{{
+		ExitCode: 0,
+		Stdout:   "NAME      READY   TAINTS           ACCELERATOR   TOPOLOGY   PARTITION_ID   PARTITION_STATE   SLICE                   SLICE_READINESS\ntpu-n-0   True    google.com/tpu   tpu7x         4x4x4      p4x4x4-1       ACTIVE            slice-test-workload-0   True",
+	}}
+
+	slicesYAML := `apiVersion: v1
+kind: List
+items:
+- apiVersion: accelerator.gke.io/v1beta1
+  kind: Slice
+  metadata:
+    name: slice-test-workload-0
+    annotations:
+      tpuplugin.cloud.google.com/slice-owner-reference: CompositePodGroup/custom-namespace/test-workload
+  spec:
+    type: tpu7x
+    topology: 4x4x4
+    partitionIds:
+    - p4x4x4-1
+- apiVersion: accelerator.gke.io/v1beta1
+  kind: Slice
+  metadata:
+    name: slice-other-workload-0
+    annotations:
+      tpuplugin.cloud.google.com/slice-owner-reference: CompositePodGroup/custom-namespace/other-workload
+`
+	cpgYAML := `apiVersion: v1
+kind: List
+items:
+- apiVersion: scheduling.x-k8s.io/v1alpha1
+  kind: CompositePodGroup
+  metadata:
+    name: test-workload
+    namespace: custom-namespace
+    annotations:
+      tpuplugin.cloud.google.com/slice-name: slice-test-workload-0
+    ownerReferences:
+    - kind: JobSet
+      name: test-workload
+  spec:
+    podGroupNames:
+    - test-workload-worker-0
+- apiVersion: scheduling.x-k8s.io/v1alpha1
+  kind: CompositePodGroup
+  metadata:
+    name: other-workload
+    namespace: custom-namespace
+`
+	pgYAML := `apiVersion: v1
+kind: List
+items:
+- apiVersion: scheduling.x-k8s.io/v1alpha1
+  kind: PodGroup
+  metadata:
+    name: test-workload-worker-0
+    namespace: custom-namespace
+    ownerReferences:
+    - kind: Job
+      name: test-workload-worker-0
+- apiVersion: scheduling.x-k8s.io/v1alpha1
+  kind: PodGroup
+  metadata:
+    name: other-workload-worker-0
+    namespace: custom-namespace
+`
+
+	responses["kubectl get slices.accelerator.gke.io -o yaml"] = []shell.CommandResult{{ExitCode: 0, Stdout: slicesYAML}}
+	responses["kubectl get compositepodgroups -A -o yaml"] = []shell.CommandResult{{ExitCode: 0, Stdout: cpgYAML}}
+	responses["kubectl get podgroups -A -o yaml"] = []shell.CommandResult{{ExitCode: 0, Stdout: pgYAML}}
+	responses["kubectl describe compositepodgroups -n custom-namespace"] = []shell.CommandResult{{ExitCode: 0, Stdout: "cpg-describe-details"}}
+	responses["kubectl describe podgroups -n custom-namespace"] = []shell.CommandResult{{ExitCode: 0, Stdout: "pg-describe-details"}}
+
+	responses["kubectl logs deployment/slice-controller-controller-manager"] = []shell.CommandResult{
+		{ExitCode: 0, Stdout: "slice-current-logs"},
+		{ExitCode: 0, Stdout: "slice-previous-logs"},
+	}
+
+	responses["kubectl describe deployment tpu-scheduler -n kube-system"] = []shell.CommandResult{{ExitCode: 0, Stdout: "tpu-scheduler-dep-details"}}
+	responses["kubectl logs deployment/tpu-scheduler"] = []shell.CommandResult{
+		{ExitCode: 0, Stdout: "tpu-scheduler-current-logs"},
+		{ExitCode: 0, Stdout: "tpu-scheduler-previous-logs"},
+	}
+
+	responses["kubectl describe deployment tpu-workload-controller-controller-manager -n tpu-workload-controller-system"] = []shell.CommandResult{{ExitCode: 0, Stdout: "tpu-wc-dep-details"}}
+	responses["kubectl logs deployment/tpu-workload-controller-controller-manager"] = []shell.CommandResult{
+		{ExitCode: 0, Stdout: "tpu-wc-current-logs"},
+		{ExitCode: 0, Stdout: "tpu-wc-previous-logs"},
+	}
+
+	mockExec := NewMockExecutor(responses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = project
+	orc.kubeClient = &MockKubeClient{
+		Namespace: "custom-namespace",
+		Workloads: []string{"jobset-test-workload-abcde"},
+	}
+
+	err := orc.InspectCluster(orchestrator.InspectOptions{
+		ProjectID:       project,
+		ClusterName:     clusterName,
+		ClusterLocation: location,
+		WorkloadName:    "test-workload",
+		OutputPath:      reportPath,
+	})
+	if err != nil {
+		t.Fatalf("InspectCluster() error = %v", err)
+	}
+
+	contentBytes, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("failed to read report file: %v", err)
+	}
+	content := string(contentBytes)
+
+	expectedSubstrings := []string{
+		"Kubectl: TPU Node Summary",
+		"cloud.google.com/gke-tpu-accelerator",
+		"tpu-n-0",
+		"p4x4x4-1",
+		"Slice Controller: Slices (YAML)",
+		"slice-test-workload-0",
+		"Slice Controller: Deployment Details",
+		"slice-dep-details",
+		"Slice Controller: Logs (tail 100)",
+		"slice-current-logs",
+		"Slice Controller: Previous Logs (tail 100)",
+		"slice-previous-logs",
+		"WAS: CompositePodGroups (YAML)",
+		"WAS: PodGroups (YAML)",
+		"WAS: TPU Scheduler Deployment Details",
+		"tpu-scheduler-dep-details",
+		"WAS: TPU Scheduler Logs (tail 100)",
+		"tpu-scheduler-current-logs",
+		"WAS: TPU Scheduler Previous Logs (tail 100)",
+		"tpu-scheduler-previous-logs",
+		"WAS: TPU Workload Controller Deployment Details",
+		"tpu-wc-dep-details",
+		"WAS: TPU Workload Controller Logs (tail 100)",
+		"tpu-wc-current-logs",
+		"WAS: TPU Workload Controller Previous Logs (tail 100)",
+		"tpu-wc-previous-logs",
+		"WAS: CompositePodGroups for test-workload",
+		"cpg-describe-details",
+		"WAS: PodGroups for test-workload",
+		"pg-describe-details",
+		"WAS: Owned Resources for test-workload",
+	}
+	for _, want := range expectedSubstrings {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected report to contain %q, but it did not:\n%s", want, content)
+		}
+	}
+
+	ownedIdx := strings.Index(content, "Description: WAS: Owned Resources for test-workload")
+	if ownedIdx < 0 {
+		t.Fatalf("missing owned resources section in:\n%s", content)
+	}
+	ownedSection := content[ownedIdx:]
+	if nextSpacer := strings.Index(ownedSection, spacer); nextSpacer > 0 {
+		ownedSection = ownedSection[:nextSpacer]
+	}
+	for _, wantOwned := range []string{"test-workload", "test-workload-worker-0", "slice-test-workload-0"} {
+		if !strings.Contains(ownedSection, wantOwned) {
+			t.Errorf("expected owned section to contain %q, got:\n%s", wantOwned, ownedSection)
+		}
+	}
+	for _, unwanted := range []string{"other-workload", "other-workload-worker-0", "slice-other-workload-0"} {
+		if strings.Contains(ownedSection, unwanted) {
+			t.Errorf("expected owned section to exclude %q, got:\n%s", unwanted, ownedSection)
+		}
+	}
+}
+
+func TestInspectCluster_NoWASOrSliceCRDs(t *testing.T) {
+	clusterName := "test-cluster-no-was"
+	location := "us-central1-a"
+	project := "test-project"
+	reportPath := filepath.Join(t.TempDir(), "inspect-no-was.log")
+
+	responses := defaultMockResponses(clusterName, location, project)
+	// Remove topologies CRD so neither Kueue topologies nor WAS/Slice CRDs exist.
+	delete(responses, "kubectl get crd topologies.kueue.x-k8s.io")
+
+	mockExec := NewMockExecutor(responses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = project
+	orc.kubeClient = &MockKubeClient{
+		Namespace: "custom-namespace",
+		Workloads: []string{"jobset-test-workload-abcde"},
+	}
+
+	err := orc.InspectCluster(orchestrator.InspectOptions{
+		ProjectID:       project,
+		ClusterName:     clusterName,
+		ClusterLocation: location,
+		WorkloadName:    "test-workload",
+		OutputPath:      reportPath,
+	})
+	if err != nil {
+		t.Fatalf("InspectCluster() error = %v", err)
+	}
+
+	contentBytes, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("failed to read report file: %v", err)
+	}
+	content := string(contentBytes)
+
+	unexpectedSections := []string{
+		"Kubectl: TPU Node Summary",
+		"Slice Controller: Slices (YAML)",
+		"Slice Controller: Deployment Details",
+		"Slice Controller: Logs (tail 100)",
+		"Slice Controller: Previous Logs (tail 100)",
+		"WAS: CompositePodGroups",
+		"WAS: PodGroups",
+		"WAS: TPU Scheduler",
+		"WAS: TPU Workload Controller",
+		"WAS: Owned Resources",
+	}
+	for _, unexpected := range unexpectedSections {
+		if strings.Contains(content, unexpected) {
+			t.Errorf("expected report without WAS/Slice CRDs to skip %q, but found it in:\n%s", unexpected, content)
+		}
+	}
+
+	for _, call := range mockExec.calls {
+		for _, forbiddenPrefix := range []string{
+			"kubectl get slices.accelerator.gke.io",
+			"kubectl get compositepodgroups",
+			"kubectl get podgroups",
+			"kubectl describe deployment slice-controller-controller-manager",
+			"kubectl describe compositepodgroups",
+			"kubectl describe podgroups",
+		} {
+			if strings.HasPrefix(call, forbiddenPrefix) {
+				t.Errorf("unexpected kubectl call %q when WAS/Slice CRDs are absent", call)
+			}
+		}
+	}
+}
+
+func TestInspectCluster_TPUSchedulerPodLabelFallback(t *testing.T) {
+	clusterName := "test-cluster-pod-label"
+	location := "us-central1-a"
+	project := "test-project"
+	reportPath := filepath.Join(t.TempDir(), "inspect-pod-label.log")
+
+	responses := defaultMockResponses(clusterName, location, project)
+	// Test k8s.io CRD group fallback and pod-label fallback for tpu-scheduler when deployment is absent.
+	responses["kubectl get crd compositepodgroups.scheduling.k8s.io"] = []shell.CommandResult{{ExitCode: 0, Stdout: "cpg-k8s-crd"}}
+	responses["kubectl get crd podgroups.scheduling.k8s.io"] = []shell.CommandResult{{ExitCode: 0, Stdout: "pg-k8s-crd"}}
+	responses["kubectl get compositepodgroups -A -o yaml"] = []shell.CommandResult{{ExitCode: 0, Stdout: "apiVersion: v1\nkind: List\nitems: []\n"}}
+	responses["kubectl get podgroups -A -o yaml"] = []shell.CommandResult{{ExitCode: 0, Stdout: "apiVersion: v1\nkind: List\nitems: []\n"}}
+	responses["kubectl logs -l component=tpu-scheduler"] = []shell.CommandResult{
+		{ExitCode: 0, Stdout: "tpu-scheduler-pod-current-logs"},
+		{ExitCode: 1, Stderr: "previous terminated container not found"},
+	}
+
+	mockExec := NewMockExecutor(responses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = project
+
+	err := orc.InspectCluster(orchestrator.InspectOptions{
+		ProjectID:       project,
+		ClusterName:     clusterName,
+		ClusterLocation: location,
+		OutputPath:      reportPath,
+	})
+	if err != nil {
+		t.Fatalf("InspectCluster() error = %v", err)
+	}
+
+	contentBytes, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("failed to read report file: %v", err)
+	}
+	content := string(contentBytes)
+
+	if !strings.Contains(content, "tpu-scheduler-pod-current-logs") {
+		t.Errorf("expected fallback pod-label logs for tpu-scheduler, got:\n%s", content)
+	}
+	if strings.Contains(content, "previous terminated container not found") {
+		t.Errorf("expected failed --previous logs to be skipped gracefully without error output, got:\n%s", content)
+	}
+}
+
+func TestFilterOwnedWASResources_EdgeCases(t *testing.T) {
+	wasState := inspectWASState{
+		compositePodGroupsYAML: `apiVersion: scheduling.k8s.io/v1alpha3
+kind: CompositePodGroup
+metadata:
+  name: custom-cpg
+  namespace: ns-a
+  labels:
+    jobset.sigs.k8s.io/jobset-name: train-job
+  annotations:
+    tpuplugin.cloud.google.com/pod-group-names: leaf-pg-0, leaf-pg-1
+    tpuplugin.cloud.google.com/slice-name: explicit-slice-0
+`,
+		podGroupsYAML: `apiVersion: v1
+kind: List
+items:
+- apiVersion: scheduling.k8s.io/v1beta1
+  kind: PodGroup
+  metadata:
+    name: leaf-pg-0
+    namespace: ns-a
+- apiVersion: scheduling.k8s.io/v1beta1
+  kind: PodGroup
+  metadata:
+    name: ownerref-pg
+    namespace: ns-a
+    ownerReferences:
+    - kind: Job
+      name: jobset-train-job-123-worker
+- apiVersion: scheduling.k8s.io/v1beta1
+  kind: PodGroup
+  metadata:
+    name: wrong-ns-pg
+    namespace: ns-b
+    labels:
+      jobset.sigs.k8s.io/jobset-name: train-job
+`,
+		slicesYAML: `apiVersion: v1
+kind: List
+items:
+- apiVersion: accelerator.gke.io/v1beta1
+  kind: Slice
+  metadata:
+    name: explicit-slice-0
+- apiVersion: accelerator.gke.io/v1beta1
+  kind: Slice
+  metadata:
+    name: two-part-ref-slice
+    annotations:
+      tpuplugin.cloud.google.com/slice-owner-reference: ns-a/leaf-pg-1
+- apiVersion: accelerator.gke.io/v1beta1
+  kind: Slice
+  metadata:
+    name: one-part-ref-slice
+    annotations:
+      tpuplugin.cloud.google.com/slice-owner-reference: train-job
+- apiVersion: accelerator.gke.io/v1beta1
+  kind: Slice
+  metadata:
+    name: wrong-ns-ref-slice
+    annotations:
+      tpuplugin.cloud.google.com/slice-owner-reference: PodGroup/ns-b/train-job
+- apiVersion: accelerator.gke.io/v1beta1
+  kind: Slice
+  metadata:
+    name: train-job-reused-by-other
+    annotations:
+      tpuplugin.cloud.google.com/slice-owner-reference: PodGroup/ns-a/other-job
+- apiVersion: accelerator.gke.io/v1beta1
+  kind: Slice
+  metadata:
+    name: labeled-slice
+    labels:
+      tpuplugin.cloud.google.com/owner-namespace: ns-a
+      tpuplugin.cloud.google.com/owner-name: leaf-pg-0
+- apiVersion: accelerator.gke.io/v1beta1
+  kind: Slice
+  metadata:
+    name: kueue-labeled-wrong-ns
+    labels:
+      kueue.gke.io/tpu-slice-used-by-namespace: ns-b
+      kueue.gke.io/tpu-slice-used-by-workload: jobset-train-job-123
+- apiVersion: accelerator.gke.io/v1beta1
+  kind: Slice
+  metadata:
+    name: ownerref-slice
+    ownerReferences:
+    - kind: PodGroup
+      name: leaf-pg-0
+`,
+	}
+
+	cpgs, pgs, slices := filterOwnedWASResources("train-job", "ns-a", "jobset-train-job-123", wasState)
+	if len(cpgs) != 1 || cpgs[0].Metadata.Name != "custom-cpg" {
+		t.Errorf("cpgs = %+v, want [custom-cpg]", cpgs)
+	}
+	if len(pgs) != 2 || pgs[0].Metadata.Name != "leaf-pg-0" || pgs[1].Metadata.Name != "ownerref-pg" {
+		t.Errorf("pgs = %+v, want [leaf-pg-0 ownerref-pg]", pgs)
+	}
+	var gotSlices []string
+	for _, s := range slices {
+		gotSlices = append(gotSlices, s.Metadata.Name)
+	}
+	wantSlices := []string{"explicit-slice-0", "two-part-ref-slice", "one-part-ref-slice", "labeled-slice", "ownerref-slice"}
+	if strings.Join(gotSlices, ",") != strings.Join(wantSlices, ",") {
+		t.Errorf("slices = %v, want %v", gotSlices, wantSlices)
+	}
+
+	if emptyCPGs, emptyPGs, emptySlices := filterOwnedWASResources("", "ns-a", "", wasState); emptyCPGs != nil || emptyPGs != nil || emptySlices != nil {
+		t.Errorf("expected nil results for empty workloadName")
+	}
+	if items := parseWASResourceItems(":::invalid yaml"); items != nil {
+		t.Errorf("expected nil for invalid YAML, got %+v", items)
+	}
+}
