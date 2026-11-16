@@ -27,5 +27,6 @@ use feature:PartitionableSlot
 use feature:CommonCloudAttributesGoogle("-c created-by")
 UPDATE_INTERVAL = 30
 TRUST_UID_DOMAIN = True
+# Windows: run-as-owner needs stored user credentials, which are not configured
 STARTER_ALLOW_RUNAS_OWNER = ${is_windows ? "False" : "True"}
 RUNBENCHMARKS = False
