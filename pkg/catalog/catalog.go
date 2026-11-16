@@ -545,10 +545,11 @@ var controlPlaneModuleSources = []string{
 // helper VMs. They stay in vars (so deployment.yaml can override them) but are
 // excluded from the catalog's machine_types.
 var controlPlaneMachineTypeVars = map[string]bool{
-	"system_node_pool_machine_type": true,
-	"login_machine_type":            true,
-	"controller_machine_type":       true,
-	"image_build_machine_type":      true,
+	"system_node_pool_machine_type":       true,
+	"pathways_cpu_node_pool_machine_type": true,
+	"login_machine_type":                  true,
+	"controller_machine_type":             true,
+	"image_build_machine_type":            true,
 }
 
 func isControlPlaneModule(source string) bool {

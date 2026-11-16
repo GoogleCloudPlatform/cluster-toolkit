@@ -121,7 +121,7 @@ This reference provides a comprehensive mapping of commands, flags, and options 
 | `--sub-slicing` | `enable_dynamic_slicing_for_tpus: true` (TPU 7x `vars:`) | Enables GKE Slice Controller for dynamic sub-slicing topologies. Requires GKE >= 1.35.0-gke.274500 and Kueue/JobSet. Non-7x blueprints fall back to `enable_slice_controller: true` on `gke-cluster`. Cannot be combined with `--spot`/`--flex`/`--on-demand` (see note below). |
 | `--super-slicing` | `enable_dynamic_slicing_for_tpus: true` (TPU 7x `vars:`) | Enables GKE Slice Controller for super-slicing topologies. Requires GKE >= 1.35.0-gke.274500 and Kueue/JobSet. Non-7x blueprints fall back to `enable_slice_controller: true` on `gke-cluster`. Cannot be combined with `--spot`/`--flex`/`--on-demand` (see note below). |
 | `--num-cubes <n>` | `num_slices: <n>` | xpk assigns `num_slices = num_cubes` (`xpk/src/xpk/commands/cluster.py:361`) and rejects the two being different. Only valid with `--super-slicing`. |
-| `--pathways-gce-machine-type <type>` | *(Not supported)* | Pathways CPU pool in Cluster Toolkit is hardcoded to `n4-standard-64` (`modules/scheduler/gke-cluster/main.tf:661`). |
+| `--pathways-gce-machine-type <type>` | `pathways_cpu_node_pool_machine_type: <type>` | Pathways CPU pool (`cpu-np`) in Cluster Toolkit defaults to `n4-standard-64` (`n2d-standard-64` with `enable_confidential_nodes`, or `n2-standard-64` in TPU example blueprints; `modules/scheduler/gke-cluster/variables.tf`) and is configurable via `pathways_cpu_node_pool_machine_type`. |
 
 > [!WARNING]
 > On TPU 7x, dynamic slicing sets `accelerator_topology_mode: PROVISION_ONLY` on the node pool, which Cluster Toolkit only permits when

@@ -17,7 +17,7 @@ metadata:
   name: pathways-flavor
 spec:
   nodeLabels:
-    cloud.google.com/gke-nodepool: cpu-np
+    cloud.google.com/gke-nodepool: ${pathways_node_pool}
 ---
 apiVersion: kueue.x-k8s.io/v1beta2
 kind: ClusterQueue

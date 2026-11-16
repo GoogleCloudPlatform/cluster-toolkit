@@ -773,6 +773,7 @@ def parse_cluster_create(
   parser.add_argument("--mtc-toleration-key", type=str)
   parser.add_argument("--tensorboard-region", type=str)
   parser.add_argument("--tensorboard-name", type=str)
+  parser.add_argument("--pathways-gce-machine-type", type=str)
 
   boolean_flags = [
       "--on-demand",
@@ -1016,22 +1017,41 @@ def parse_cluster_create(
           " specific_reservations: []}` on the node pool module."
       )
 
+  pathways_cpu_mt = (
+      parsed.pathways_gce_machine_type.strip()
+      if parsed.pathways_gce_machine_type
+      else ""
+  )
   if is_pathways or is_flag_true(parsed.enable_pathways):
     blueprint_vars["enable_pathways_for_tpus"] = True
-    warnings.append(
-        "enable_pathways_for_tpus: true automatically provisions the dedicated"
-        " cpu-np CPU node pool with default n4-standard-64 instances."
-    )
-  elif is_tpu_hardware(blueprint_vars.get("compute_machine_type"), device_type):
-    # Canonical TPU blueprints default this to true; without an explicit
-    # false the merge leaves an unrequested cpu-np pool in place.
-    # GPU blueprints do not declare this variable, so emitting it there
-    # would trip testDeploymentVariableNotUsed.
-    blueprint_vars["enable_pathways_for_tpus"] = False
-    warnings.append(
-        "enable_pathways_for_tpus: false emitted explicitly to override the"
-        " `true` default in canonical TPU blueprints."
-    )
+    if pathways_cpu_mt:
+      blueprint_vars["pathways_cpu_node_pool_machine_type"] = pathways_cpu_mt
+      warnings.append(
+          "enable_pathways_for_tpus: true provisions the dedicated cpu-np CPU"
+          " node pool with pathways_cpu_node_pool_machine_type:"
+          f" {pathways_cpu_mt}."
+      )
+    else:
+      warnings.append(
+          "enable_pathways_for_tpus: true automatically provisions the dedicated"
+          " cpu-np CPU node pool with default n2-standard-64 instances."
+      )
+  else:
+    if pathways_cpu_mt:
+      warnings.append(
+          "--pathways-gce-machine-type is only applicable when Pathways is"
+          " enabled (--enable-pathways or create-pathways); flag ignored."
+      )
+    if is_tpu_hardware(blueprint_vars.get("compute_machine_type"), device_type):
+      # Canonical TPU blueprints default this to true; without an explicit
+      # false the merge leaves an unrequested cpu-np pool in place.
+      # GPU blueprints do not declare this variable, so emitting it there
+      # would trip testDeploymentVariableNotUsed.
+      blueprint_vars["enable_pathways_for_tpus"] = False
+      warnings.append(
+          "enable_pathways_for_tpus: false emitted explicitly to override the"
+          " `true` default in canonical TPU blueprints."
+      )
 
   if is_flag_true(parsed.sub_slicing) or is_flag_true(parsed.super_slicing):
     # Only the gke-tpu-7x blueprints declare this variable; emitting it

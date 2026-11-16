@@ -878,7 +878,12 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 		return err
 	}
 	if job.IsPathwaysJob {
-		return g.ensureClusterQueueCoverage(localQueue, ns)
+		if err := g.ensureClusterQueueCoverage(localQueue, ns); err != nil {
+			return err
+		}
+		if err := g.ensurePathwaysFlavorAlignment(localQueue, ns); err != nil {
+			return err
+		}
 	}
 	return nil
 }
