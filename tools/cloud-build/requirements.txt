@@ -16,9 +16,9 @@ argparse==1.4.0 \
     --hash=sha256:62b089a55be1d8949cd2bc7e0df0bddb9e028faefc8c32038cc84862aefdd6e4 \
     --hash=sha256:c31647edb69fd3d465a847ea3157d37bed1f95f19760b11a47aa91c04b666314
     # via -r requirements.in
-certifi==2026.4.22 \
-    --hash=sha256:3cb2210c8f88ba2318d29b0388d1023c8492ff72ecdde4ebdaddbb13a31b1c4a \
-    --hash=sha256:8d455352a37b71bf76a79caa83a3d6c25afee4a385d632127b6afb3963f1c580
+certifi==2026.10.18 \
+    --hash=sha256:73191c47aaa79da394e8fee2dbc2ec827432cab56311122c9e47abf79e390f62 \
+    --hash=sha256:b9995d97b64d0431a5af837d8ca8cd6238104d1f319f04bd93ea43124d6c861e
     # via requests
 cffi==2.0.0 \
     --hash=sha256:00bdf7acc5f795150faa6957054fbbca2439db2f775ce831222b66f192f03beb \
