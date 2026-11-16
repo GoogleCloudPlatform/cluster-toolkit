@@ -209,7 +209,8 @@ type GKEOrchestrator struct {
 	// kubeContext is the context set by configureKubectl; all kubectl and dynamic-client calls use it.
 	kubeContext string
 	// inspectedPVCs caches per-submit PVC metadata inspected during ValidateClusterMounts.
-	inspectedPVCs map[string]pvcInspectResult
+	inspectedPVCs  map[string]pvcInspectResult
+	nfsAuthChecked bool
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -350,13 +351,34 @@ type StorageManager struct {
 	instancesCache  []*filestorepb.Instance
 	preflightClient storagePreflightClient
 	now             func() time.Time // stamps last-claimed-at; nil means time.Now
-	inspectedPVCs   map[string]pvcInspectResult
 }
 
 type pvcInspectResult struct {
 	volumeName       string
 	storageClassName string
 	provisioner      string
+}
+
+type userPVCRequest struct {
+	claim       string
+	firstDest   string
+	firstRWSrc  string
+	firstRWDest string
+	needsRW     bool
+}
+
+type pvcInspectJSON struct {
+	Metadata struct {
+		Annotations map[string]string `json:"annotations"`
+	} `json:"metadata"`
+	Spec struct {
+		VolumeName       string   `json:"volumeName"`
+		StorageClassName string   `json:"storageClassName"`
+		AccessModes      []string `json:"accessModes"`
+	} `json:"spec"`
+	Status struct {
+		AccessModes []string `json:"accessModes"`
+	} `json:"status"`
 }
 
 type storagePreflightClient interface {

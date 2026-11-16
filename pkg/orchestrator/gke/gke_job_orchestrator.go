@@ -99,6 +99,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	logging.Info("Starting gcluster job submit workflow...")
 	g.gkeCustomTemplatesPath = job.GkeCustomTemplatesPath
 	g.inspectedPVCs = make(map[string]pvcInspectResult)
+	g.nfsAuthChecked = false
 
 	sm := &StorageManager{orchestrator: g}
 	if err := g.validateSubmitLocalPreflight(sm, job); err != nil {

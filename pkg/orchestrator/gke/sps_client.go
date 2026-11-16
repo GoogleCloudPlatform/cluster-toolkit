@@ -201,6 +201,9 @@ func (g *GKEOrchestrator) submitSPSClusterWorkload(job orchestrator.JobDefinitio
 	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
 		return err
 	}
+	if err := sm.ValidateClusterMounts(job); err != nil {
+		return err
+	}
 	fullImageName, err := g.BuildContainerImage(job)
 	if err != nil {
 		return err
