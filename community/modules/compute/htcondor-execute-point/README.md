@@ -168,8 +168,6 @@ By default, this module configures a VM shutdown script in instance metadata to
 stop the HTCondor service when an Execute Point is being shut down or deleted:
 
 - **Windows (`windows-shutdown-script-ps1`)**: Runs `Stop-Service condor -Force`
-  to remove the node from the pool and prevent new jobs from starting during VM
-- **Windows (`windows-shutdown-script-ps1`)**: Runs `Stop-Service condor -Force`
   to remove the node from the pool. This reduces the chance of new jobs starting
   during VM termination, but does not fully prevent it.
 - **Linux (`shutdown-script`)**: Runs `condor_off -fast -startd` and stops the
