@@ -58,6 +58,9 @@ const (
 	// spsEndpointFormat is the address SPS clients use to reach an SPS instance's resource manager,
 	// formatted with the instance's workload name.
 	spsEndpointFormat = "%[1]s-pathways-head-0-0.%[1]s:29001"
+
+	// unscheduledPodsJSONPath prints one tab-separated line per pod with name, phase, and PodScheduled condition status/reason/message.
+	unscheduledPodsJSONPath = `{range .items[*]}{.metadata.name}{"\t"}{.status.phase}{"\t"}{.status.conditions[?(@.type=="PodScheduled")].status}{"\t"}{.status.conditions[?(@.type=="PodScheduled")].reason}{"\t"}{.status.conditions[?(@.type=="PodScheduled")].message}{"\n"}{end}`
 )
 
 // logsRetryInterval is the wait between waitForJobPods and fetchLogsWithRetry attempts; tests shorten it.
@@ -262,24 +265,37 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 
 	allContainers := !mainOnly
 	if opts.Follow {
-		logging.Info("Streaming logs for job '%s'...", name)
-		if _, err := g.fetchLogsWithRetry(foundNamespace, name, selector, allContainers, streamCount, 1); err != nil {
-			return "", err
-		}
-		if _, fresh, err := g.getJobPodStreams(foundNamespace, selector); err == nil {
-			streamCount = max(streamCount, fresh) // pods created while the probe waited
-		}
-		args := g.buildKubectlLogsArgs(foundNamespace, selector, allContainers, true, streamCount, -1)
-		return "", g.kubectlStream(args...)
+		return "", g.followJobLogs(foundNamespace, name, selector, allContainers, streamCount)
 	}
 	res, err := g.fetchLogsWithRetry(foundNamespace, name, selector, allContainers, streamCount, -1)
 	if err != nil {
 		return "", err
 	}
 	if strings.TrimSpace(res.Stdout) == "" {
+		if schedMsg := g.checkUnscheduledPods(foundNamespace, name); schedMsg != "" {
+			return fmt.Sprintf("Job pods are waiting to be scheduled (no container logs available yet):\n%s", schedMsg), nil
+		}
 		return "Job exists but has no live logs available (it may have finished or failed to start pods)", nil
 	}
 	return res.Stdout, nil
+}
+
+func (g *GKEOrchestrator) followJobLogs(ns, name, selector string, allContainers bool, streamCount int) error {
+	logging.Info("Streaming logs for job '%s'...", name)
+	res, err := g.fetchLogsWithRetry(ns, name, selector, allContainers, streamCount, 1)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(res.Stdout) == "" {
+		if schedMsg := g.checkUnscheduledPods(ns, name); schedMsg != "" {
+			logging.Warn("Job pods are waiting to be scheduled (no container logs available yet):\n%s", schedMsg)
+		}
+	}
+	if _, fresh, err := g.getJobPodStreams(ns, selector); err == nil {
+		streamCount = max(streamCount, fresh) // pods created while the probe waited
+	}
+	args := g.buildKubectlLogsArgs(ns, selector, allContainers, true, streamCount, -1)
+	return g.kubectlStream(args...)
 }
 
 // buildKubectlLogsArgs leaves the container to kubectl unless allContainers is set. kubectl (1.24+) then reads the
@@ -314,7 +330,11 @@ func (g *GKEOrchestrator) fetchLogsWithRetry(ns, jobsetName, selector string, al
 
 		if strings.Contains(res.Stderr, "is waiting to start") {
 			if i == 0 {
-				logging.Info("Job containers are waiting to start (likely pulling images). Waiting...")
+				if schedMsg := g.checkUnscheduledPods(ns, jobsetName); schedMsg != "" {
+					logging.Warn("Job pods are waiting to be scheduled:\n%s", schedMsg)
+				} else {
+					logging.Info("Job containers are waiting to start (likely pulling images). Waiting...")
+				}
 			}
 			continue
 		}
@@ -322,10 +342,56 @@ func (g *GKEOrchestrator) fetchLogsWithRetry(ns, jobsetName, selector string, al
 		return res, fmt.Errorf("failed to get logs: %s\n%s", res.Stderr, res.Stdout)
 	}
 
+	if schedMsg := g.checkUnscheduledPods(ns, jobsetName); schedMsg != "" {
+		return res, fmt.Errorf("timed out waiting for job to start; unscheduled pods:\n%s\nlatest error: %s\n%s", schedMsg, res.Stderr, res.Stdout)
+	}
 	if warnEvents := g.checkJobSetWarningEvents(ns, jobsetName); warnEvents != "" {
 		return res, fmt.Errorf("timed out waiting for job to start; JobSet reported warning events:\n%s\nlatest error: %s\n%s", warnEvents, res.Stderr, res.Stdout)
 	}
 	return res, fmt.Errorf("timed out waiting for job to start; latest error: %s\n%s", res.Stderr, res.Stdout)
+}
+
+func (g *GKEOrchestrator) checkUnscheduledPods(ns, jobsetName string) string {
+	res := g.kubectl("get", "pods", "-n", ns, "-l", "jobset.sigs.k8s.io/jobset-name="+jobsetName, "-o", "jsonpath="+unscheduledPodsJSONPath)
+	if res.ExitCode != 0 {
+		return ""
+	}
+	var unscheduled []string
+	jobPods := make(map[string]bool)
+	for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) < 3 {
+			continue
+		}
+		podName := parts[0]
+		scheduledStatus := parts[2]
+		if scheduledStatus == "False" {
+			jobPods["pod/"+podName] = true
+			var reason, msg string
+			if len(parts) > 3 {
+				reason = parts[3]
+			}
+			if len(parts) > 4 {
+				msg = parts[4]
+			}
+			if reason != "" || msg != "" {
+				unscheduled = append(unscheduled, fmt.Sprintf("%s (%s: %s)", podName, reason, msg))
+			} else {
+				unscheduled = append(unscheduled, fmt.Sprintf("%s (PodScheduled=False)", podName))
+			}
+		}
+	}
+	if len(unscheduled) == 0 {
+		return ""
+	}
+	if podEvents := g.checkPodWarningEvents(ns, jobPods); podEvents != "" {
+		unscheduled = append(unscheduled, podEvents)
+	}
+	return strings.Join(unscheduled, "\n")
 }
 
 // waitForJobPods polls until the JobSet has at least one pod, or returns 0 pods if the JobSet already finished.
@@ -584,6 +650,9 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 		if g.resolvedHeadNodePool == "" {
 			return fmt.Errorf("failed to auto-detect a suitable CPU node pool (expected 'cpu-np' or 'pathways-np') for Pathways head job. You can explicitly specify your head node pool name using the --pathways-head-np flag")
 		}
+		if err := g.validatePathwaysHeadNodePool(g.resolvedHeadNodePool, job.ClusterName); err != nil {
+			return err
+		}
 		job.Pathways.HeadNodePool = g.resolvedHeadNodePool
 	}
 
@@ -599,12 +668,49 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 }
 
 func (g *GKEOrchestrator) autoDetectCPUNodePool() string {
+	var fallback string
 	for _, np := range g.clusterDesc.NodePools {
-		if (np.Name == "cpu-np" || np.Name == "pathways-np") && len(np.Config.Accelerators) == 0 && !g.isSystemPool(np) {
-			return np.Name
+		if (np.Name == "cpu-np" || np.Name == "pathways-np") && len(np.Config.Accelerators) == 0 && !config.IsTPU(np.Config.MachineType) && !g.isSystemPool(np) {
+			if g.getNodeCount(np) > 0 {
+				return np.Name
+			}
+			if fallback == "" {
+				fallback = np.Name
+			}
 		}
 	}
-	return ""
+	return fallback
+}
+
+func (g *GKEOrchestrator) validatePathwaysHeadNodePool(poolName, clusterName string) error {
+	if len(g.clusterDesc.NodePools) == 0 {
+		return nil
+	}
+	var availablePools []string
+	for _, np := range g.clusterDesc.NodePools {
+		if g.isSystemPool(np) {
+			if np.Name == poolName {
+				return fmt.Errorf("Pathways head node pool '%s' in cluster '%s' is a GKE system node pool. Specify a non-system CPU node pool using --pathways-head-np", poolName, clusterName)
+			}
+			continue
+		}
+		if len(np.Config.Accelerators) == 0 && !config.IsTPU(np.Config.MachineType) && g.getNodeCount(np) > 0 {
+			availablePools = append(availablePools, np.Name)
+		}
+		if np.Name == poolName {
+			if len(np.Config.Accelerators) > 0 || config.IsTPU(np.Config.MachineType) {
+				return fmt.Errorf("Pathways head node pool '%s' in cluster '%s' is not a CPU node pool. The Pathways head pod must run on a CPU-only node pool", poolName, clusterName)
+			}
+			if g.getNodeCount(np) == 0 {
+				return fmt.Errorf("Pathways head node pool '%s' in cluster '%s' has 0 nodes and autoscaling is disabled (or max node count is 0), so the Pathways head pod cannot be scheduled. Enable autoscaling or resize node pool '%s', or specify a different node pool with --pathways-head-np", poolName, clusterName, poolName)
+			}
+			return nil
+		}
+	}
+	if len(availablePools) > 0 {
+		return fmt.Errorf("Pathways head node pool '%s' not found in cluster '%s' (available node pools: %s). Specify an existing CPU node pool using --pathways-head-np", poolName, clusterName, strings.Join(availablePools, ", "))
+	}
+	return fmt.Errorf("Pathways head node pool '%s' not found in cluster '%s'. Specify an existing CPU node pool using --pathways-head-np", poolName, clusterName)
 }
 
 func (g *GKEOrchestrator) isSystemPool(np gkeJobNodePool) bool {
@@ -1709,14 +1815,52 @@ func (g *GKEOrchestrator) checkJobSetWarningEvents(ns, workloadName string) stri
 	if workloadName == "" {
 		return ""
 	}
+	var events []string
 	res := g.kubectl("get", "events", "-n", ns,
 		fmt.Sprintf("--field-selector=involvedObject.name=%s,involvedObject.kind=JobSet,type=Warning", workloadName),
 		"--request-timeout=10s",
 		"--no-headers")
 	if res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != "" {
-		return strings.TrimSpace(res.Stdout)
+		events = append(events, strings.TrimSpace(res.Stdout))
 	}
-	return ""
+	podsRes := g.kubectl("get", "pods", "-n", ns, "-l", "jobset.sigs.k8s.io/jobset-name="+workloadName, "-o", "name")
+	if podsRes.ExitCode == 0 {
+		jobPods := make(map[string]bool)
+		for _, line := range strings.Split(strings.TrimSpace(podsRes.Stdout), "\n") {
+			if name := strings.TrimSpace(line); name != "" {
+				jobPods[name] = true
+			}
+		}
+		if podEvents := g.checkPodWarningEvents(ns, jobPods); podEvents != "" {
+			events = append(events, podEvents)
+		}
+	}
+	return strings.Join(events, "\n")
+}
+
+func (g *GKEOrchestrator) checkPodWarningEvents(ns string, jobPods map[string]bool) string {
+	if len(jobPods) == 0 {
+		return ""
+	}
+	res := g.kubectl("get", "events", "-n", ns,
+		"--field-selector=involvedObject.kind=Pod",
+		"--request-timeout=10s",
+		"--no-headers")
+	if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) == "" {
+		return ""
+	}
+	var matched []string
+	for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
+		line = strings.TrimSpace(line)
+		fields := strings.Fields(line)
+		if len(fields) < 4 || !jobPods[fields[3]] {
+			continue
+		}
+		if fields[1] == "Warning" || fields[2] == "NotTriggerScaleUp" || fields[2] == "FailedScheduling" {
+			matched = append(matched, line)
+		}
+	}
+	return strings.Join(matched, "\n")
 }
 
 func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, jobConsoleLink, workloadName string) error {

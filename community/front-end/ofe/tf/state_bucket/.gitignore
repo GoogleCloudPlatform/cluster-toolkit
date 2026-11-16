@@ -1,0 +1,3 @@
+# Per-deployment working directories created by deploy.sh. They hold each
+# deployment's local state and settings, and links to the .tf files here.
+/deployments/

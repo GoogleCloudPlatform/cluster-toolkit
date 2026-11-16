@@ -20,6 +20,8 @@ tags:
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset-tpu
 - m.schedmd-slurm-gcp-v6-partition
+- m.service-account
+- m.service-account-profiles
 - m.vpc
 
 substitutions:

@@ -14,10 +14,12 @@
 package validators
 
 import (
-	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/modulereader"
+	"math"
 	"strings"
 	"testing"
+
+	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/zclconf/go-cty/cty"
 )
@@ -1081,6 +1083,71 @@ func TestExclusiveValidator(t *testing.T) {
 	})
 }
 
+func TestExclusiveValidator_NegativeNumbers(t *testing.T) {
+	validator := ExclusiveValidator{}
+	cases := []struct {
+		name     string
+		settings map[string]cty.Value
+		minSet   interface{}
+		wantErr  bool
+	}{
+		{
+			name: "fails_when_one_positive_and_one_negative",
+			settings: map[string]cty.Value{
+				"var_a": cty.NumberIntVal(1),
+				"var_b": cty.NumberIntVal(-1),
+			},
+			wantErr: true,
+		},
+		{
+			name: "fails_when_both_negative_int_and_float",
+			settings: map[string]cty.Value{
+				"var_a": cty.NumberIntVal(-2),
+				"var_b": cty.NumberFloatVal(-0.5),
+			},
+			wantErr: true,
+		},
+		{
+			name: "passes_when_one_negative_and_one_zero",
+			settings: map[string]cty.Value{
+				"var_a": cty.NumberIntVal(-1),
+				"var_b": cty.NumberIntVal(0),
+			},
+			wantErr: false,
+		},
+		{
+			name: "passes_min_set_with_negative_number",
+			settings: map[string]cty.Value{
+				"var_a": cty.NumberIntVal(-1),
+			},
+			minSet:  1,
+			wantErr: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bp := createBaseTestBlueprint()
+			bp.Groups[0].Modules[0].Settings = config.NewDict(tc.settings)
+			inputs := map[string]interface{}{
+				"vars": []interface{}{"var_a", "var_b"},
+			}
+			if tc.minSet != nil {
+				inputs["min_set"] = tc.minSet
+			}
+			rule := modulereader.ValidationRule{
+				Validator:    "exclusive",
+				ErrorMessage: "Only one of 'var_a' or 'var_b' should be set.",
+				Inputs:       inputs,
+			}
+			err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("Validate() error = %v, wantErr = %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestConditionalValidator_Triggers(t *testing.T) {
 	baseBP := config.Blueprint{
 		BlueprintName: "test-bp",
@@ -1349,6 +1416,50 @@ func TestConditionalValidator_Dependents(t *testing.T) {
 			t.Fatalf("error message format incorrect: %v", err)
 		}
 	})
+
+	t.Run("fails_when_dependent_value_is_null_and_actual_is_negative", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"enable_flex_start": cty.True,
+			"static_node_count": cty.NumberIntVal(-1),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "conditional",
+			ErrorMessage: "enable_flex_start does not work with static_node_count. static_node_count should be set to null.",
+			Inputs: map[string]interface{}{
+				"trigger":         "enable_flex_start",
+				"trigger_value":   true,
+				"dependent":       "static_node_count",
+				"dependent_value": nil,
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil || !strings.Contains(err.Error(), "static_node_count should be set to null") {
+			t.Fatalf("expected error for negative static_node_count against null dependent_value, got: %v", err)
+		}
+	})
+
+	t.Run("fails_when_dependent_value_is_zero_and_actual_is_negative", func(t *testing.T) {
+		bp := baseBP
+		bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{
+			"enable_queued_provisioning":  cty.True,
+			"autoscaling_total_min_nodes": cty.NumberIntVal(-5),
+		})
+		rule := modulereader.ValidationRule{
+			Validator:    "conditional",
+			ErrorMessage: "autoscaling_total_min_nodes should be 0 when enable_queued_provisioning is true.",
+			Inputs: map[string]interface{}{
+				"trigger":         "enable_queued_provisioning",
+				"trigger_value":   true,
+				"dependent":       "autoscaling_total_min_nodes",
+				"dependent_value": 0,
+			},
+		}
+		err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+		if err == nil || !strings.Contains(err.Error(), "autoscaling_total_min_nodes should be 0") {
+			t.Fatalf("expected error for negative autoscaling_total_min_nodes against 0 dependent_value, got: %v", err)
+		}
+	})
 }
 func TestRequiredValidator(t *testing.T) {
 	baseBP := config.Blueprint{
@@ -1455,6 +1566,7 @@ func TestRequiredValidator(t *testing.T) {
 		for name, val := range map[string]cty.Value{
 			"false":        cty.False,
 			"zero":         cty.NumberIntVal(0),
+			"negative":     cty.NumberIntVal(-1),
 			"empty_string": cty.StringVal(""),
 			"empty_list":   cty.EmptyTupleVal,
 			"empty_object": cty.EmptyObjectVal,
@@ -1472,6 +1584,67 @@ func TestRequiredValidator(t *testing.T) {
 	})
 }
 
+func TestRequiredValidator_NumericValues(t *testing.T) {
+	validator := RequiredValidator{}
+	cases := []struct {
+		name       string
+		val        cty.Value
+		deprecated bool
+		wantErrSub string
+	}{
+		{"required passes with negative int", cty.NumberIntVal(-1), false, ""},
+		{"required passes with small negative float", cty.NumberFloatVal(-1e-12), false, ""},
+		{"required fails with zero", cty.NumberIntVal(0), false, "missing required settings"},
+		{"deprecated fails with negative int", cty.NumberIntVal(-1), true, "unwanted settings"},
+		{"deprecated fails with zero", cty.NumberIntVal(0), true, "unwanted settings"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bp := createBaseTestBlueprint()
+			bp.Groups[0].Modules[0].Settings = config.NewDict(map[string]cty.Value{"num_var": tc.val})
+			rule := modulereader.ValidationRule{
+				Validator: "required",
+				Inputs:    map[string]interface{}{"vars": []interface{}{"num_var"}, "deprecated": tc.deprecated},
+			}
+			err := validator.Validate(bp, bp.Groups[0].Modules[0], rule, bp.Groups[0], 0)
+			if tc.wantErrSub == "" && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.wantErrSub != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErrSub)) {
+				t.Fatalf("expected error containing %q, got: %v", tc.wantErrSub, err)
+			}
+		})
+	}
+}
+
+func TestMatchTrigger(t *testing.T) {
+	cases := []struct {
+		name     string
+		actual   cty.Value
+		expected cty.Value
+		want     bool
+	}{
+		{"nil expected matches negative int", cty.NumberIntVal(-1), cty.NilVal, true},
+		{"null expected matches negative int", cty.NumberIntVal(-1), cty.NullVal(cty.Number), true},
+		{"nil expected matches small negative float", cty.NumberFloatVal(-1e-12), cty.NilVal, true},
+		{"nil expected does not match zero", cty.NumberIntVal(0), cty.NilVal, false},
+		{"null expected does not match zero", cty.NumberIntVal(0), cty.NullVal(cty.Number), false},
+		{"nil actual does not match negative expected", cty.NilVal, cty.NumberIntVal(-1), false},
+		{"null actual does not match negative expected", cty.NullVal(cty.Number), cty.NumberIntVal(-1), false},
+		{"nil actual matches zero expected", cty.NilVal, cty.NumberIntVal(0), true},
+		{"null actual matches zero expected", cty.NullVal(cty.Number), cty.NumberIntVal(0), true},
+		{"equal negative ints match", cty.NumberIntVal(-1), cty.NumberIntVal(-1), true},
+		{"negative int does not match zero expected", cty.NumberIntVal(-1), cty.NumberIntVal(0), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := matchTrigger(tc.actual, tc.expected); got != tc.want {
+				t.Errorf("matchTrigger(%v, %v) = %v, want %v", tc.actual, tc.expected, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestIsVarSet(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1484,11 +1657,29 @@ func TestIsVarSet(t *testing.T) {
 		{"bool false", []cty.Value{cty.BoolVal(false)}, false},
 		{"bool true", []cty.Value{cty.BoolVal(true)}, true},
 		{"num 0", []cty.Value{cty.NumberIntVal(0)}, false},
+		{"num float 0.0", []cty.Value{cty.NumberFloatVal(0.0)}, false},
+		{"num float negative zero", []cty.Value{cty.NumberFloatVal(math.Copysign(0, -1))}, false},
+		{"module-use marked zero", []cty.Value{config.AsProductOfModuleUse(cty.NumberIntVal(0), "mod")}, false},
 		{"num positive", []cty.Value{cty.NumberIntVal(5)}, true},
+		{"num negative int -1", []cty.Value{cty.NumberIntVal(-1)}, true},
+		{"marked negative int -1", []cty.Value{cty.NumberIntVal(-1).Mark("m")}, true},
+		{"module-use marked negative int -1", []cty.Value{config.AsProductOfModuleUse(cty.NumberIntVal(-1), "mod")}, true},
+		{"num negative int -5", []cty.Value{cty.NumberIntVal(-5)}, true},
+		{"num negative float", []cty.Value{cty.NumberFloatVal(-0.5)}, true},
+		{"num small negative float", []cty.Value{cty.NumberFloatVal(-1e-12)}, true},
+		{"num min int64", []cty.Value{cty.NumberIntVal(math.MinInt64)}, true},
+		{"num large arbitrary-precision negative int", []cty.Value{cty.MustParseNumberVal("-99999999999999999999999999999999999999")}, true},
 		{"empty list", []cty.Value{cty.ListValEmpty(cty.String)}, false},
 		{"populated list", []cty.Value{cty.ListVal([]cty.Value{cty.StringVal("a")})}, true},
+		{"list of negative number via evaluateAndFlatten", evaluateAndFlatten(cty.ListVal([]cty.Value{cty.NumberIntVal(-1)})), true},
+		{"list of zero via evaluateAndFlatten", evaluateAndFlatten(cty.ListVal([]cty.Value{cty.NumberIntVal(0)})), false},
+		{"tuple of negative number via evaluateAndFlatten", evaluateAndFlatten(cty.TupleVal([]cty.Value{cty.NumberIntVal(-1)})), true},
+		{"map with negative number via evaluateAndFlatten", evaluateAndFlatten(cty.MapVal(map[string]cty.Value{"k": cty.NumberIntVal(-1)})), true},
 		{"empty object", []cty.Value{cty.EmptyObjectVal}, false},
 		{"all-null object", []cty.Value{cty.ObjectVal(map[string]cty.Value{"type": cty.NullVal(cty.String), "name": cty.NullVal(cty.String)})}, false},
+		{"object with negative number attribute", []cty.Value{cty.ObjectVal(map[string]cty.Value{"suspend_time": cty.NumberIntVal(-1), "name": cty.NullVal(cty.String)})}, true},
+		{"nested object with negative number via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"outer": cty.ObjectVal(map[string]cty.Value{"inner": cty.NumberIntVal(-1)})})), true},
+		{"nested object with zero via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"outer": cty.ObjectVal(map[string]cty.Value{"inner": cty.NumberIntVal(0)})})), false},
 		{"all-null object via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"server_ip": cty.NullVal(cty.String), "port": cty.NullVal(cty.Number)})), false},
 		{"object with ModuleRef attribute via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"server_ip": config.ModuleRef("slurm_db", "server_ip").AsValue(), "port": cty.NullVal(cty.Number)})), true},
 		{"nested object with all-null attribute via evaluateAndFlatten", evaluateAndFlatten(cty.ObjectVal(map[string]cty.Value{"outer": cty.ObjectVal(map[string]cty.Value{"inner": cty.NullVal(cty.String)})})), false},
@@ -1531,16 +1722,33 @@ func TestConvertToCty(t *testing.T) {
 }
 
 func TestValuesMatch(t *testing.T) {
-	if !ValuesMatch([]cty.Value{cty.NilVal}, []cty.Value{cty.BoolVal(false)}) {
-		t.Error("ValuesMatch: null should equal false")
+	tests := []struct {
+		name     string
+		original []cty.Value
+		expected []cty.Value
+		want     bool
+	}{
+		{"null equals false", []cty.Value{cty.NilVal}, []cty.Value{cty.BoolVal(false)}, true},
+		{"positive numbers match", []cty.Value{cty.NumberIntVal(10)}, []cty.Value{cty.NumberIntVal(10)}, true},
+		{"negative int does not match zero", []cty.Value{cty.NumberIntVal(-5)}, []cty.Value{cty.NumberIntVal(0)}, false},
+		{"negative int does not match NilVal", []cty.Value{cty.NumberIntVal(-1)}, []cty.Value{cty.NilVal}, false},
+		{"equal negative ints match", []cty.Value{cty.NumberIntVal(-1)}, []cty.Value{cty.NumberIntVal(-1)}, true},
+		{"equal negative floats match", []cty.Value{cty.NumberFloatVal(-0.5)}, []cty.Value{cty.NumberFloatVal(-0.5)}, true},
+		{"negative float does not match positive float", []cty.Value{cty.NumberFloatVal(-0.5)}, []cty.Value{cty.NumberFloatVal(0.5)}, false},
+		{"zero int matches zero float", []cty.Value{cty.NumberIntVal(0)}, []cty.Value{cty.NumberFloatVal(0.0)}, true},
+		{
+			"identical lists match",
+			[]cty.Value{cty.TupleVal([]cty.Value{cty.StringVal("a")})},
+			[]cty.Value{cty.TupleVal([]cty.Value{cty.StringVal("a")})},
+			true,
+		},
 	}
-	if !ValuesMatch([]cty.Value{cty.NumberIntVal(10)}, []cty.Value{cty.NumberIntVal(10)}) {
-		t.Error("ValuesMatch: numbers should match")
-	}
-	vList1 := []cty.Value{cty.TupleVal([]cty.Value{cty.StringVal("a")})}
-	vList2 := []cty.Value{cty.TupleVal([]cty.Value{cty.StringVal("a")})}
-	if !ValuesMatch(vList1, vList2) {
-		t.Error("ValuesMatch: identical lists should match")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ValuesMatch(tc.original, tc.expected); got != tc.want {
+				t.Errorf("ValuesMatch(%v, %v) = %v, want %v", tc.original, tc.expected, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -2063,7 +2271,12 @@ func TestModuleMetadataRules_StorageAndNodePool(t *testing.T) {
 		{"node-pool deprecated total_min_nodes zero", nodePoolMod, map[string]cty.Value{"total_min_nodes": cty.NumberIntVal(0)}, true},
 		{"node-pool deprecated compact_placement null", nodePoolMod, map[string]cty.Value{"compact_placement": cty.NullVal(cty.Bool)}, false},
 		{"node-pool exclusive autoscaling min", nodePoolMod, map[string]cty.Value{"autoscaling_total_min_nodes": cty.NumberIntVal(1), "autoscaling_min_node_count": cty.NumberIntVal(1)}, true},
+		{"node-pool exclusive autoscaling min with negative value", nodePoolMod, map[string]cty.Value{"autoscaling_total_min_nodes": cty.NumberIntVal(-1), "autoscaling_min_node_count": cty.NumberIntVal(1)}, true},
 		{"node-pool exclusive local ssd", nodePoolMod, map[string]cty.Value{"local_ssd_count_ephemeral_storage": cty.NumberIntVal(1), "local_ssd_count_nvme_block": cty.NumberIntVal(1)}, true},
+		{"node-pool flex start valid", nodePoolMod, map[string]cty.Value{"enable_flex_start": cty.True, "auto_repair": cty.False}, false},
+		{"node-pool flex start negative static_node_count", nodePoolMod, map[string]cty.Value{"enable_flex_start": cty.True, "auto_repair": cty.False, "static_node_count": cty.NumberIntVal(-1)}, true},
+		{"node-pool queued provisioning valid", nodePoolMod, map[string]cty.Value{"enable_queued_provisioning": cty.True, "enable_flex_start": cty.True, "auto_repair": cty.False, "autoscaling_total_min_nodes": cty.NumberIntVal(0)}, false},
+		{"node-pool queued provisioning negative autoscaling_total_min_nodes", nodePoolMod, map[string]cty.Value{"enable_queued_provisioning": cty.True, "enable_flex_start": cty.True, "auto_repair": cty.False, "autoscaling_total_min_nodes": cty.NumberIntVal(-5)}, true},
 	}
 
 	for _, tc := range cases {

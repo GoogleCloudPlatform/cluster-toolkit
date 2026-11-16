@@ -69,6 +69,7 @@ deployment_groups:
       - secretmanager.admin
       - cloudkms.cryptoKeyEncrypterDecrypter
       - iap.tunnelResourceAccessor
+      - iam.roleAdmin
 
   - id: node_pool_sa
     source: modules/project/service-account

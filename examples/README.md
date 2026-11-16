@@ -24,6 +24,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-ha.yaml](#hpc-slurm-hayaml-) ![community-badge]
   * [hpc-slurm-ha-lb.yaml](#hpc-slurm-ha-lbyaml-) ![community-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
+  * [hpc-slurm-service-account-profiles.yaml](#hpc-slurm-service-account-profilesyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-apptainer.yaml](#hpc-slurm6-apptaineryaml--) ![community-badge] ![experimental-badge]
@@ -217,6 +218,7 @@ the experimental badge (![experimental-badge]).
 | [examples/gke-a4/gke-a4.yaml](./gke-a4/gke-a4.yaml) | gke | a4-highgpu-8g | This blueprint uses GKE to provision Kubernetes cluster and a A4 node pool, along with networks and service accounts. Information about a4 machines can be found here. The deployment instructions can be found in the README. |
 | [examples/gke-a4x-max-bm/gke-a4x-max-bm.yaml](./gke-a4x-max-bm/gke-a4x-max-bm.yaml) | gke | a4x-maxgpu-4g-metal | This blueprint uses GKE to provision a Kubernetes cluster and a A4X Max node pool, along with networks and service accounts. Information about A4X Max machines can be found here. The deployment instructions can be found in the README. |
 | [examples/gke-a4x/gke-a4x.yaml](./gke-a4x/gke-a4x.yaml) | gke | a4x-highgpu-4g | This blueprint uses GKE to provision Kubernetes cluster and a A4X node pool, along with networks and service accounts. Information about A4X machines can be found here. The deployment instructions can be found in the README. |
+| [examples/gke-a5x-bm/gke-a5x-bm.yaml](./gke-a5x-bm/gke-a5x-bm.yaml) | gke | a5x-highgpu-4g-metal | This blueprint creates a GKE cluster with A5X Bare Metal nodes (a5x-highgpu-4g-metal: 4 × NVIDIA VR200 GPUs per node, NVLink domains of up to 18 nodes / 72 GPUs) using Cluster Toolkit. |
 | [examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d/gke-h4d.yaml](./gke-consumption-options/dws-flex-start-compact-placement/gke-h4d/gke-h4d.yaml) | gke | h4d-standard-192 | Dynamic Workload Scheduler (DWS) is a resource management and job scheduling platform designed for AI Hypercomputer. Dynamic Workload Scheduler improves your access to AI/ML resources, helps you optimize your spend, and can improve the... |
 | [examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-a3-ultragpu.yaml](./gke-consumption-options/dws-flex-start-queued-provisioning/gke-a3-ultragpu.yaml) | gke | a3-ultragpu-8g | Dynamic Workload Scheduler (DWS) is a resource management and job scheduling platform designed for AI Hypercomputer. Dynamic Workload Scheduler improves your access to AI/ML resources, helps you optimize your spend, and can improve the... |
 | [examples/gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-7x/gke-tpu-7x.yaml](./gke-consumption-options/dws-flex-start-queued-provisioning/gke-tpu-7x/gke-tpu-7x.yaml) | gke | tpu7x-standard-4t | This example demonstrates how to deploy a GKE cluster with TPU 7x nodes using Dynamic Workload Scheduler (DWS) with Queued Provisioning. |
@@ -300,6 +302,7 @@ the experimental badge (![experimental-badge]).
 | [community/examples/hpc-slurm-kms.yaml](../community/examples/hpc-slurm-kms.yaml) | slurm | n2-standard-2, h3-standard-88 | Creates a Slurm cluster with Customer-Managed Encryption Keys (CMEK) enabled for controller, login, and compute nodesets, as well as the Slurm configuration GCS bucket. |
 | [community/examples/hpc-slurm-local-ssd.yaml](../community/examples/hpc-slurm-local-ssd.yaml) | slurm | c2-standard-4 | This blueprint demonstrates the use of Slurm and Filestore, with compute nodes that have local ssd drives deployed. |
 | [community/examples/hpc-slurm-ramble-gromacs.yaml](../community/examples/hpc-slurm-ramble-gromacs.yaml) | slurm | - | Ramble is an experimentation framework which can drive the installation of software with Spack and create, execute, and analyze experiments using the installed software. |
+| [community/examples/hpc-slurm-service-account-profiles.yaml](../community/examples/hpc-slurm-service-account-profiles.yaml) | slurm | n2-standard-2 | Creates a small Slurm cluster -- two debug partitions (debug and debug2) of n2-standard-2 nodes, each running under its own compute account, a login node, and a controller -- whose accounts are created with... |
 | [community/examples/hpc-slurm-sharedvpc.yaml](../community/examples/hpc-slurm-sharedvpc.yaml) | slurm | n2-standard-2 | This blueprint demonstrates the use of the Slurm and Filestore modules in the service project of an existing Shared VPC. Before attempting to deploy the blueprint, one must first complete initial setup for provisioning Filestore in a... |
 | [community/examples/hpc-slurm-ubuntu2204.yaml](../community/examples/hpc-slurm-ubuntu2204.yaml) | slurm | n2-standard-2 | Similar to the hpc-slurm.yaml example, but using Ubuntu 22.04 instead of CentOS 7. Other operating systems are supported by SchedMD for the Slurm on GCP project and images are listed here. Only the examples listed on this page have been... |
 | [community/examples/hpc-slurm6-apptainer.yaml](../community/examples/hpc-slurm6-apptainer.yaml) | slurm | - | This blueprint creates a custom Apptainer enabled image and builds an auto-scaling Slurm cluster using that image. You can deploy containerized workloads on that cluster as described here. |
@@ -389,7 +392,15 @@ Creates a highly available (HA) Slurm cluster. This setup includes a primary con
 and a backup controller to ensure control plane resilience. If the primary controller
 instance fails, the Slurm services can be failed over to the backup controller, minimizing
 downtime. This blueprint configures the necessary shared storage and network settings to
-support the HA configuration.
+support the HA configuration. Its controller, login and compute accounts are created with
+[modules/project/service-account](../modules/project/service-account/README.md) and given
+their permissions with
+[community/modules/iam/service-account-profiles](../community/modules/iam/service-account-profiles/README.md)
+(connected to each account with `use:`)
+instead of broad predefined roles: both HA controllers share one service account holding a
+project-scoped custom IAM role with only the permissions the controller needs (no
+`roles/compute.instanceAdmin.v1`, no project-wide `roles/iam.serviceAccountUser`), since HA
+failover is native Slurm `ctld` failover and requires no additional permissions of its own.
 
 [hpc-slurm-ha.yaml]: ../community/examples/hpc-slurm-ha.yaml
 
@@ -482,6 +493,25 @@ to 256
   _not needed for `n2` partition_
 
 [hpc-enterprise-slurm.yaml]: ./hpc-enterprise-slurm.yaml
+
+### [hpc-slurm-service-account-profiles.yaml] ![community-badge] ![experimental-badge]
+
+Creates a small Slurm cluster -- two debug partitions (`debug` and `debug2`) of
+`n2-standard-2` nodes, each running under its own compute account, a login
+node, and a controller -- whose accounts are created with
+[modules/project/service-account](../modules/project/service-account/README.md) and given
+their permissions with
+[community/modules/iam/service-account-profiles](../community/modules/iam/service-account-profiles/README.md)
+(connected to each account with `use:`),
+rather than broad predefined roles.
+The controller gets a project-scoped custom IAM role holding only the
+permissions it needs, rather than broad predefined roles such as
+`roles/compute.instanceAdmin.v1`; the login and both compute accounts get no
+custom role at all, only the baseline logging and monitoring roles.
+`roles/iam.serviceAccountUser` is granted solely on the two compute accounts the
+controller attaches to the nodes it creates, never project-wide.
+
+[hpc-slurm-service-account-profiles.yaml]: ../community/examples/hpc-slurm-service-account-profiles.yaml
 
 ### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
 
@@ -2421,7 +2451,7 @@ default in the [modules](../modules/README.md) folder.
 To learn more about how to refer to a module in a blueprint file, please consult the
 [modules README file.](../modules/README.md)
 
-For local and embedded `terraform` modules, the optional `reconfigure_ignores` field (`map[string][]string`, keyed by `<resource_type>` or `<resource_type>.<resource_name>`) generates a Terraform `override.tf.json` file that merges the listed attribute names into the target resource's `lifecycle.ignore_changes` list (this operation is additive and cannot remove `ignore_changes` entries already defined by the module; `"all"` is not supported).
+For local and embedded `terraform` modules, the optional `reconfigure_ignores` field (`map[string][]string`, keyed by `<resource_type>` or `<resource_type>.<resource_name>`) generates a Terraform `override.tf.json` file that merges the listed attribute names into the target resource's `lifecycle.ignore_changes` list. Attribute names prefixed with `-` (e.g. `"-node_config[0].labels"`) selectively subtract and un-ignore attributes hardcoded in the module's defaults (`"all"` is not supported).
 
 ## Variables, expressions, and functions
 

@@ -30,6 +30,7 @@ if [ -z "${SERVER_IP_ADDRESS}" ]; then
 fi
 SERVER_HOSTNAME=$(curl --silent --fail http://metadata/computeMetadata/v1/instance/attributes/hostname -H "Metadata-Flavor: Google")
 config_bucket=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/webserver-config-bucket -H "Metadata-Flavor: Google")
+state_bucket=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/terraform-state-bucket -H "Metadata-Flavor: Google")
 c2_topic=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/ghpcfe-c2-topic -H "Metadata-Flavor: Google")
 deploy_mode=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/deploy_mode -H "Metadata-Flavor: Google")
 deployment_name=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/deployment_name -H "Metadata-Flavor: Google")
@@ -233,6 +234,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   echo "    host_type: \"GCP\"" >> configuration.yaml
   echo "    gcp_project: \"$GCP_PROJECT\"" >> configuration.yaml
   echo "    gcs_bucket: \"${config_bucket}\"" >> configuration.yaml
+  echo "    terraform_state_bucket: \"${state_bucket}\"" >> configuration.yaml
   echo "    c2_topic: \"${c2_topic}\"" >> configuration.yaml
   echo "    deployment_name: \"${deployment_name}\"" >> configuration.yaml
 

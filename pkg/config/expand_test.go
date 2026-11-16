@@ -17,6 +17,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"slices"
 	"strings"
@@ -1354,7 +1355,19 @@ func (s *zeroSuite) TestExclusiveRuleHelpers(c *C) {
 	c.Check(IsValueSet(cty.StringVal("")), Equals, false)
 	c.Check(IsValueSet(cty.StringVal("x")), Equals, true)
 	c.Check(IsValueSet(cty.NumberIntVal(0)), Equals, false)
+	c.Check(IsValueSet(cty.NumberFloatVal(0.0)), Equals, false)
+	c.Check(IsValueSet(cty.NumberFloatVal(math.Copysign(0, -1))), Equals, false)
+	c.Check(IsValueSet(cty.NumberIntVal(0).Mark("m")), Equals, false)
+	c.Check(IsValueSet(AsProductOfModuleUse(cty.NumberIntVal(0), "mod")), Equals, false)
+	c.Check(IsValueSet(cty.NullVal(cty.Number).Mark("m")), Equals, false)
 	c.Check(IsValueSet(cty.NumberIntVal(5)), Equals, true)
+	c.Check(IsValueSet(cty.NumberIntVal(-1)), Equals, true)
+	c.Check(IsValueSet(cty.NumberIntVal(-1).Mark("m")), Equals, true)
+	c.Check(IsValueSet(AsProductOfModuleUse(cty.NumberIntVal(-1), "mod")), Equals, true)
+	c.Check(IsValueSet(cty.NumberFloatVal(-0.5)), Equals, true)
+	c.Check(IsValueSet(cty.NumberFloatVal(-1e-12)), Equals, true)
+	c.Check(IsValueSet(cty.NumberIntVal(math.MinInt64)), Equals, true)
+	c.Check(IsValueSet(cty.MustParseNumberVal("-99999999999999999999999999999999999999")), Equals, true)
 	c.Check(IsValueSet(cty.False), Equals, false)
 	c.Check(IsValueSet(cty.True), Equals, true)
 	c.Check(IsValueSet(cty.EmptyObjectVal), Equals, false)
@@ -1363,12 +1376,30 @@ func (s *zeroSuite) TestExclusiveRuleHelpers(c *C) {
 		"name": cty.NullVal(cty.String),
 	})), Equals, false)
 	c.Check(IsValueSet(cty.ObjectVal(map[string]cty.Value{
+		"suspend_time": cty.NumberIntVal(0),
+		"name":         cty.NullVal(cty.String),
+	})), Equals, false)
+	c.Check(IsValueSet(cty.ObjectVal(map[string]cty.Value{
+		"suspend_time": cty.NumberIntVal(-1),
+		"name":         cty.NullVal(cty.String),
+	})), Equals, true)
+	c.Check(IsValueSet(cty.ObjectVal(map[string]cty.Value{
+		"outer": cty.ObjectVal(map[string]cty.Value{"inner": cty.NumberIntVal(-1)}),
+	})), Equals, true)
+	c.Check(IsValueSet(cty.ObjectVal(map[string]cty.Value{
+		"outer": cty.ObjectVal(map[string]cty.Value{"inner": cty.NumberIntVal(0)}),
+	})), Equals, false)
+	c.Check(IsValueSet(cty.ObjectVal(map[string]cty.Value{
 		"type": cty.StringVal("COMPACT"),
 		"name": cty.NullVal(cty.String),
 	})), Equals, true)
 	c.Check(IsValueSet(cty.ObjectVal(map[string]cty.Value{"k": cty.True})), Equals, true)
 	c.Check(IsValueSet(cty.EmptyTupleVal), Equals, false)
 	c.Check(IsValueSet(cty.TupleVal([]cty.Value{cty.StringVal("x")})), Equals, true)
+	c.Check(IsValueSet(cty.TupleVal([]cty.Value{cty.NumberIntVal(-1)})), Equals, true)
+	c.Check(IsValueSet(cty.ListVal([]cty.Value{cty.NumberIntVal(-1)})), Equals, true)
+	c.Check(IsValueSet(cty.MapVal(map[string]cty.Value{"k": cty.NumberIntVal(-1)})), Equals, true)
+	c.Check(IsValueSet(cty.MapValEmpty(cty.Number)), Equals, false)
 
 	bp := Blueprint{Vars: NewDict(map[string]cty.Value{
 		"from_vars": cty.StringVal("val"),
@@ -1398,6 +1429,8 @@ func (s *zeroSuite) TestExclusiveRuleHelpers(c *C) {
 			"type": cty.NullVal(cty.String),
 			"name": cty.NullVal(cty.String),
 		}),
+		"neg_count":  cty.NumberIntVal(-1),
+		"zero_count": cty.NumberIntVal(0),
 	})}
 	c.Check(isConsumerSettingSet(mod, bp, "from_vars"), Equals, true)
 	c.Check(isConsumerSettingSet(mod, bp, "ref_non_empty"), Equals, true)
@@ -1419,6 +1452,8 @@ func (s *zeroSuite) TestExclusiveRuleHelpers(c *C) {
 	c.Check(isConsumerSettingSet(mod, bp, "var_img.family"), Equals, false)
 	c.Check(isConsumerSettingSet(mod, bp, "ref_mod.sub"), Equals, false)
 	c.Check(isConsumerSettingSet(mod, bp, "placement_policy"), Equals, false)
+	c.Check(isConsumerSettingSet(mod, bp, "neg_count"), Equals, true)
+	c.Check(isConsumerSettingSet(mod, bp, "zero_count"), Equals, false)
 	c.Check(violatesConsumerExclusiveRules(modulereader.ModuleInfo{}, Module{ID: "bad"}, bp), Equals, false)
 
 	rule := modulereader.ValidationRule{
@@ -1441,6 +1476,38 @@ func (s *zeroSuite) TestExclusiveRuleHelpers(c *C) {
 	c.Check(ruleViolatesExclusive(rule, modWithGCS, bp, consumerInputs, map[string]bool{
 		"gcs_bucket_name": true,
 		"network_storage": true,
+	}), Equals, false)
+
+	numRule := modulereader.ValidationRule{
+		Validator: "exclusive",
+		Inputs:    map[string]interface{}{"vars": []string{"static_node_count", "initial_node_count"}},
+	}
+	numConsumerInputs := map[string]bool{
+		"static_node_count":  true,
+		"initial_node_count": true,
+	}
+	modWithNegCount := Module{Settings: NewDict(map[string]cty.Value{"static_node_count": cty.NumberIntVal(-1)})}
+	// Candidate outputting a different exclusive variable when consumer already has a negative setting (-1) violates exclusivity (1 + 1 > 1).
+	c.Check(ruleViolatesExclusive(numRule, modWithNegCount, bp, numConsumerInputs, map[string]bool{
+		"initial_node_count": true,
+	}), Equals, true)
+	// Candidate outputting only the same exclusive variable that is already set to -1 does not violate exclusivity (1 + 0 <= 1).
+	c.Check(ruleViolatesExclusive(numRule, modWithNegCount, bp, numConsumerInputs, map[string]bool{
+		"static_node_count": true,
+	}), Equals, false)
+
+	boolRule := modulereader.ValidationRule{
+		Validator: "exclusive",
+		Inputs:    map[string]interface{}{"vars": []string{"enable_flex_start", "spot"}},
+	}
+	boolConsumerInputs := map[string]bool{
+		"enable_flex_start": true,
+		"spot":              true,
+	}
+	modWithSpotFalse := Module{Settings: NewDict(map[string]cty.Value{"spot": cty.False})}
+	// Explicitly disabled boolean setting (spot: false) is unset, so candidate outputting enable_flex_start does not violate exclusivity (0 + 1 <= 1).
+	c.Check(ruleViolatesExclusive(boolRule, modWithSpotFalse, bp, boolConsumerInputs, map[string]bool{
+		"enable_flex_start": true,
 	}), Equals, false)
 }
 

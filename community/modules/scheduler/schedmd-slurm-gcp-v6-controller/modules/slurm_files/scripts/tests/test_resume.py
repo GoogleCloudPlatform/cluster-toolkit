@@ -703,6 +703,32 @@ def test_resume_mig_nodes_stockout_multishard_exclusive(mock_compute_prop, mock_
   assert create_calls[0].kwargs["instanceGroupManager"] == "c-n-mig-0"
 
 
+@unittest.mock.patch("resume.create_placement_request")
+@unittest.mock.patch("resume.ensure_execute")
+@unittest.mock.patch("resume._allocate_nodes_to_placements")
+def test_create_nodeset_placements_failure_logs_error(mock_allocate, mock_execute, mock_request, caplog):
+  from googleapiclient.errors import HttpError  # type: ignore
+  import httplib2
+  import json
+  mock_allocate.return_value = [PlacementAndNodes("c-slurmgcp-managed-n-4-0", ["c-n-0", "c-n-1"])]
+  resp = httplib2.Response({"status": 403})
+  content = json.dumps({"error": {
+      "code": 403,
+      "message": "Required 'compute.resourcePolicies.create' permission for 'projects/p/regions/r/resourcePolicies/c-slurmgcp-managed-n-4-0'",
+      "errors": [{"reason": "forbidden"}],
+  }}).encode()
+  mock_execute.side_effect = HttpError(resp, content)
+  lkp = unittest.mock.MagicMock()
+
+  # A failed placement-policy create must be logged with the API's own message, not crash
+  # the resume with a TypeError that hides the missing permission.
+  placements = resume.create_nodeset_placements(["c-n-0", "c-n-1"], 4, lkp)
+
+  assert placements == [PlacementAndNodes("c-slurmgcp-managed-n-4-0", ["c-n-0", "c-n-1"])]
+  assert "failed to create placement policies" in caplog.text
+  assert "compute.resourcePolicies.create" in caplog.text
+
+
 @unittest.mock.patch("suspend.suspend_mig_nodes")
 @unittest.mock.patch("resume.handle_resume_failure")
 @unittest.mock.patch("resume.ensure_execute")

@@ -557,7 +557,6 @@ class WorkbenchForm(forms.ModelForm):
             "machine_type",
             "boot_disk_type",
             "boot_disk_capacity",
-            "image_family",
             "attached_cluster",
         )
 
