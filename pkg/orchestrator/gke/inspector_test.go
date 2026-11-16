@@ -660,6 +660,25 @@ func TestResolveWorkloadStatus_LifecyclePriorityAndAuxiliaryMessage(t *testing.T
 			wantMsgSubstrs: []string{"insufficient unused quota", "Admitted=False (Pending): workload not admitted"},
 			wantTime:       "2026-07-10T12:00:00Z",
 		},
+		{
+			name: "Only Admitted=False resolves status to QuotaReserved, not Admitted",
+			conditions: []kueueWorkloadCondition{
+				{Type: "Admitted", Status: "False", Reason: "Pending", Message: "waiting for quota", LastTransitionTime: "2026-07-10T12:00:00Z"},
+			},
+			wantStatus:     "QuotaReserved",
+			wantMsgSubstrs: []string{"waiting for quota"},
+			wantTime:       "2026-07-10T12:00:00Z",
+		},
+		{
+			name: "Only auxiliary conditions without lifecycle conditions resolves status to QuotaReserved",
+			conditions: []kueueWorkloadCondition{
+				{Type: "PodsReady", Status: "False", Reason: "WaitForPodsReady", Message: "pods pending", LastTransitionTime: "2026-07-10T12:02:00Z"},
+				{Type: "TPUSliceFailure", Status: "True", Reason: "SliceFailed", Message: "slice error", LastTransitionTime: "2026-07-10T12:03:00Z"},
+			},
+			wantStatus:     "QuotaReserved",
+			wantMsgSubstrs: []string{"slice error", "PodsReady=False (WaitForPodsReady): pods pending"},
+			wantTime:       "2026-07-10T12:03:00Z",
+		},
 	}
 
 	for _, tc := range tests {

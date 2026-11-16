@@ -446,11 +446,13 @@ func resolveWorkloadStatus(wl kueueWorkload) (status, message, statusTime string
 	}
 
 	var primary *kueueWorkloadCondition
+	primaryIdx := -1
 	for _, condType := range kueueLifecyclePriority {
 		for i := len(wl.Status.Conditions) - 1; i >= 0; i-- {
 			c := &wl.Status.Conditions[i]
 			if c.Type == condType && c.Status == "True" {
 				primary = c
+				primaryIdx = i
 				break
 			}
 		}
@@ -459,12 +461,16 @@ func resolveWorkloadStatus(wl kueueWorkload) (status, message, statusTime string
 		}
 	}
 
-	if primary == nil {
+	if primary != nil {
+		status = primary.Type
+	} else {
+		status = "QuotaReserved"
 		for _, condType := range []string{"QuotaReserved", "Admitted", "Evicted", "Finished"} {
 			for i := len(wl.Status.Conditions) - 1; i >= 0; i-- {
 				c := &wl.Status.Conditions[i]
 				if c.Type == condType {
 					primary = c
+					primaryIdx = i
 					break
 				}
 			}
@@ -472,13 +478,12 @@ func resolveWorkloadStatus(wl kueueWorkload) (status, message, statusTime string
 				break
 			}
 		}
+		if primary == nil {
+			primaryIdx = len(wl.Status.Conditions) - 1
+			primary = &wl.Status.Conditions[primaryIdx]
+		}
 	}
 
-	if primary == nil {
-		primary = &wl.Status.Conditions[len(wl.Status.Conditions)-1]
-	}
-
-	status = primary.Type
 	statusTime = primary.LastTransitionTime
 	if statusTime == "" {
 		statusTime = wl.Status.Conditions[len(wl.Status.Conditions)-1].LastTransitionTime
@@ -490,12 +495,12 @@ func resolveWorkloadStatus(wl kueueWorkload) (status, message, statusTime string
 	}
 
 	var auxMessages []string
-	for _, c := range wl.Status.Conditions {
-		if c.Type == primary.Type {
+	for i, c := range wl.Status.Conditions {
+		if i == primaryIdx {
 			continue
 		}
 		if isKueueLifecycleCondition(c.Type) {
-			if c.Status == "False" && (primary.Type == "QuotaReserved" || primary.Type == "Evicted") {
+			if c.Status == "False" && (status == "QuotaReserved" || status == "Evicted") {
 				auxMessages = append(auxMessages, formatAuxiliaryCondition(c))
 			}
 			continue
