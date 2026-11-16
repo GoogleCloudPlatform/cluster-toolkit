@@ -271,11 +271,10 @@ Then redeploy:
 ./gcluster deploy <path-to-blueprint.yaml> -w
 ```
 
-Only that nodeset changes: the plan replaces one instance template and updates
-its nodeset configuration (`1 to add, 1 to change, 1 to destroy`, or `2 to
-change` when the nodeset uses a Managed Instance Group). Nodes created from now
-on use the named image. Nodes that are already running keep theirs; create them
-again as in [section 4.1](#41-always-on-compute-nodes) if needed.
+Only that nodeset's instance template is replaced; no running VM is touched.
+Nodes created from now on use the named image. Nodes that are already running
+keep theirs; create them again as in [section 4.1](#41-always-on-compute-nodes)
+if needed.
 
 To follow the family again, put `family` back and redeploy.
 
