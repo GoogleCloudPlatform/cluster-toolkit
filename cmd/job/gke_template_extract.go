@@ -19,7 +19,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"hpc-toolkit/pkg/orchestrator/gke"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"github.com/spf13/cobra"
@@ -33,6 +33,13 @@ var (
 var gkeTemplateExtractCmd = &cobra.Command{
 	Use:   "gke-template-extract",
 	Short: "Extract all default GKE templates to a local directory",
+	Long: `Extracts embedded GKE manifest templates (including jobset.tmpl, pathways_jobset.tmpl,
+and shared blocks in base.tmpl; note that job.tmpl is not yet used by 'gcluster job submit')
+to a local directory for customization.
+
+Pass the directory to 'gcluster job submit --gke-custom-templates-path=<dir>' to apply overrides.
+Any template file or base.tmpl block omitted from the custom directory falls back to its embedded default.`,
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		parentDir := filepath.Dir(outputDir)
 		if _, err := os.Stat(parentDir); err != nil {
@@ -45,7 +52,7 @@ var gkeTemplateExtractCmd = &cobra.Command{
 				return fmt.Errorf("failed to check directory %s: %w", parentDir, err)
 			}
 		}
-		return gke.ExtractDefaultTemplates(outputDir, overwriteDst)
+		return k8s.ExtractDefaultTemplates(outputDir, overwriteDst)
 	},
 }
 

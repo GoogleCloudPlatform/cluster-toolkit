@@ -24,6 +24,7 @@ tags:
 - m.schedmd-slurm-gcp-v6-nodeset
 - m.schedmd-slurm-gcp-v6-partition
 - m.service-account
+- m.service-account-profiles
 - m.vpc
 
 substitutions:

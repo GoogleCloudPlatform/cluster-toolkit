@@ -50,6 +50,8 @@ deployment_groups:
       task_count: 8
       task_count_per_node: 4
       allow_automatic_updates: false
+      # Optionally reuse an existing Cloud Storage bucket or bucket path for startup scripts:
+      # startup_script_path: gs://my-startup-scripts-bucket
 
   - id: batch-login
     source: modules/scheduler/batch-login-node

@@ -1,0 +1,44 @@
+# Standalone batch/v1 Indexed Job and headless Service template for single-slice workloads.
+# Note: 'gcluster job submit' currently renders jobset.tmpl / pathways_jobset.tmpl; customize those or base.tmpl.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{.WorkloadName}}
+{{- if .Namespace }}
+  namespace: {{.Namespace}}
+{{- end }}
+  labels:
+    gcluster.google.com/workload: {{.WorkloadName}}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    gcluster.google.com/workload: {{.WorkloadName}}
+    batch.kubernetes.io/job-name: {{.WorkloadName}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{.WorkloadName}}
+{{- if .Namespace }}
+  namespace: {{.Namespace}}
+{{- end }}
+  labels:
+{{(StructuralData (.RenderBlock "workload_labels" 4))}}
+spec:
+{{- if .KueueQueueName }}
+  suspend: true
+{{- end }}
+  ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
+  completionMode: Indexed
+  parallelism: {{.NodesPerSlice}}
+  completions: {{.NodesPerSlice}}
+  # Fail fast like the child Job in jobset.tmpl: a batch/v1 Job replaces single indexes and cannot restart the
+  # whole gang, so --restarts is not mapped here; the single-slice caller owns the restart strategy.
+  backoffLimit: 0
+{{- if .PodFailurePolicy }}
+  podFailurePolicy:
+{{reindent 4 (StructuralData .PodFailurePolicy)}}
+{{- end }}
+  template:
+{{(StructuralData (.RenderBlock "pod_template" 4))}}

@@ -183,7 +183,6 @@ deployment_groups:
     settings:
       kueue:
         install: true
-        wait: true
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(g4-pool.static_gpu_count)

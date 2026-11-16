@@ -178,8 +178,10 @@ Modules that are still in development and less stable are labeled with the
 ### IAM
 
 * **[iap-policy]** ![core-badge] : Configures IAM policy for Identity-Aware Proxy (IAP) on a Google Cloud Backend Service.
+* **[service-account-profiles]** ![community-badge] ![experimental-badge] : Applies a named least-privilege permission profile (Slurm controller, login or compute, Packer image builder, or custom) with resource-scoped IAM bindings to an existing keyless service account.
 
 [iap-policy]: iam/iap-policy/README.md
+[service-account-profiles]: ../community/modules/iam/service-account-profiles/README.md
 
 ### Management
 
@@ -255,6 +257,9 @@ Modules that are still in development and less stable are labeled with the
 
 ### Project
 
+* **[aiplatform-predict-iam](../community/modules/project/aiplatform-predict-iam/README.md)** ![community-badge] ![experimental-badge]:
+  Creates a custom role granting only Agent Platform prediction access to a service account.
+
 * **[service-account]** ![core-badge] : Creates [service
   accounts](https://cloud.google.com/iam/docs/service-accounts) for a GCP
   project.
@@ -296,8 +301,16 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 
 * **[chrome-remote-desktop]** ![community-badge] ![experimental-badge] : Creates
   a GPU accelerated Chrome Remote Desktop.
+* **[novnc-runtime]** ![community-badge] ![experimental-badge] : Builds the
+  startup-script runners for a per-user XFCE + noVNC desktop runtime, to be
+  layered onto an existing host such as a Slurm login node.
+* **[novnc-desktop]** ![community-badge] ![experimental-badge] : Creates a
+  standalone VM that serves per-user XFCE desktops through noVNC using the
+  [novnc-runtime] module.
 
 [chrome-remote-desktop]: ../community/modules/remote-desktop/chrome-remote-desktop/README.md
+[novnc-runtime]: ../community/modules/remote-desktop/novnc-runtime/README.md
+[novnc-desktop]: ../community/modules/remote-desktop/novnc-desktop/README.md
 
 ### Scheduler
 
@@ -497,7 +510,7 @@ release of the filestore module:
 ```yaml
   - id: network1
     source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=develop
-  ...
+  # ...
   - id: homefs
     source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/file-system/filestore?ref=v1.22.1&depth=1
 ```
@@ -595,7 +608,7 @@ modules:
   source: modules/compute/vm-instance
   use: [network1]
   settings:
-  ...
+    # ...
 ```
 
 In this snippet, the VM instance `workstation` uses the outputs of vpc
@@ -659,6 +672,29 @@ external_ip_vm = <sensitive>
 internal_ip_vm = [
   "10.128.0.19",
 ]
+```
+
+### Reconfigure Ignores (Optional)
+
+The `reconfigure_ignores` field (`map[string][]string`) specifies Terraform
+resource attributes to add to or subtract from `lifecycle.ignore_changes` via an automatically
+generated `override.tf.json` file in the deployment directory. Keys can be a
+resource type (e.g. `google_compute_instance`, applying to all resources of that
+type in the module) or a specific `type.name` address (e.g.
+`google_compute_instance.controller`), and values are lists of attribute names
+to ignore across subsequent `gcluster deploy` re-runs, or prefixed with `-`
+(e.g. `"-node_config[0].labels"`) to selectively un-ignore attributes hardcoded
+in module defaults (the keyword `"all"` is not supported). `reconfigure_ignores`
+is supported on local and embedded `terraform` modules only:
+
+```yaml
+  - id: workstation
+    source: modules/compute/vm-instance
+    use: [network1]
+    reconfigure_ignores:
+      google_compute_instance:
+      - metadata
+      - boot_disk
 ```
 
 ### Required Services (APIs) (optional)

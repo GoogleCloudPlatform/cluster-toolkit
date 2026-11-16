@@ -93,3 +93,32 @@ To run the unit tests:
 ```bash
 python3 -m unittest tools/tests/test_wait_for_available_reservation.py -v
 ```
+
+## Stale PR Build & Kueue Job Reaper
+
+The in-cluster `kueue-reaper` deployment on `test-kueue-cluster` (`kueue-reaper-pod.yaml`) runs `reap_stale_pr_builds.py` every 5 minutes:
+
+1. Lists ongoing (`QUEUED` and `WORKING`) Cloud Builds that carry a `_PR_NUMBER` substitution.
+2. Fetches the head SHA of every open PR with one paginated GitHub REST call (`GET /pulls?state=open`). Unauthenticated calls, `304 Not Modified` included, count against GitHub's 60 requests/hour per-IP limit; set `GITHUB_TOKEN` to raise it.
+3. Cancels builds whose commit is no longer the PR head, and builds of PRs that GitHub confirms are closed or merged. If GitHub or `gcloud` is unavailable, nothing is cancelled on that run.
+4. Once those Cloud Builds transition to `CANCELLED`, the same pod deletes the matching Kubernetes `Job`s so queued jobs leave Kueue and running pods receive `SIGTERM` to tear down their test infrastructure (`kueue_cleanup_pod.sh`).
+
+> **Note:** A build that a maintainer re-runs on an older commit of an open PR is cancelled on the next run, because it no longer matches the PR head.
+
+You can also invoke it manually as a CLI quick action (for a specific PR or across all open/closed PRs):
+
+```bash
+# Preview stale builds across all PRs without cancelling:
+python3 tools/cloud-build/reap_stale_pr_builds.py --project=hpc-toolkit-dev --dry-run
+
+# Cancel stale builds for a specific PR:
+python3 tools/cloud-build/reap_stale_pr_builds.py --project=hpc-toolkit-dev --pr=6550
+```
+
+> **Note:** To run this manually without `--dry-run`, your authenticated Google Cloud account needs permission to cancel builds (`roles/cloudbuild.builds.editor`).
+
+Unit tests for `reap_stale_pr_builds.py` are located in `tools/tests/test_reap_stale_pr_builds.py`:
+
+```bash
+python3 -m unittest tools/tests/test_reap_stale_pr_builds.py -v
+```

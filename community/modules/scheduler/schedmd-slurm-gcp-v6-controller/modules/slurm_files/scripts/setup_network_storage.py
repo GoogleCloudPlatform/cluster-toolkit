@@ -15,9 +15,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union
+from typing import Iterable, List, Optional, Set, Union
 
 import os
+import posixpath
+import random
+import socket
 import sys
 import stat
 import time
@@ -124,6 +127,114 @@ def is_controller_mount(mount) -> bool:
         ))
     )
 
+
+def _is_controller_nfs_server(server: str, lkp: util.Lookup) -> bool:
+    """Check if an NFS server string refers to the controller without retrying DNS lookups."""
+    if not server:
+        return False
+    srv_fn = getattr(lkp, "controller_mount_server_ip", None)
+    host = getattr(lkp, "control_host", None)
+    addr = getattr(lkp, "control_addr", None)
+    for cand in (srv_fn() if callable(srv_fn) else None, host, addr):
+        if isinstance(cand, str) and cand and server == cand:
+            return True
+    try:
+        server_ip = socket.gethostbyname(server)
+    except OSError:
+        return False
+    if isinstance(addr, str) and addr and server_ip == addr:
+        return True
+    try:
+        return bool(isinstance(host, str) and host and server_ip == socket.gethostbyname(host))
+    except OSError:
+        return False
+
+
+def _probe_tcp_port(host: str, port: int = 2049, timeout: float = 1.0) -> bool:
+    """Check if TCP port is accepting connections (pure Python, IPv4/IPv6 compatible)."""
+    if not host or not host.strip():
+        return False
+    try:
+        with socket.create_connection((host.strip(), port), timeout=timeout):
+            return True
+    except (OSError, TypeError, OverflowError):
+        return False
+
+
+def _is_path_exported(expected_path: str, active_exports: Set[str]) -> bool:
+    """Check if expected_path matches an active export or is a subdirectory of one."""
+    if not expected_path or not expected_path.startswith("/"):
+        return False
+    norm_p = posixpath.normpath("/" + expected_path.lstrip("/"))
+    for exp in active_exports:
+        if exp and exp.startswith("/"):
+            norm_e = posixpath.normpath("/" + exp.lstrip("/"))
+            if norm_p == norm_e or norm_p.startswith(norm_e.rstrip("/") + "/"):
+                return True
+    return False
+
+
+def _check_nfs_exports_showmount(
+    server: str, expected_paths: Set[str], timeout: float = 3.0
+) -> Optional[bool]:
+    """Verify exports via showmount -e if available and port 111 is reachable."""
+    path_env = f"/usr/sbin:/sbin:{os.environ.get('PATH', '')}"
+    showmount_bin = shutil.which("showmount", path=path_env)
+    if not showmount_bin or not _probe_tcp_port(server, port=111, timeout=0.5):
+        return None
+    env = {**os.environ, "LC_ALL": "C", "PATH": path_env}
+    try:
+        res = run([showmount_bin, "--no-headers", "-e", server], timeout=timeout, check=False, env=env)
+        if res.returncode != 0:
+            return None
+        active_exports = {
+            posixpath.normpath("/" + line.split()[0].lstrip("/"))
+            for line in res.stdout.splitlines()
+            if line.strip() and not line.strip().startswith("Export list") and line.split()[0].startswith("/")
+        }
+        missing = {p for p in expected_paths if not _is_path_exported(p, active_exports)}
+        if not missing:
+            log.info(f"showmount confirmed exports {sorted(expected_paths)} on {server}.")
+            return True
+        log.debug(f"showmount exports on {server} missing expected shares: {sorted(missing)}")
+        return False
+    except Exception as e:
+        log.debug(f"showmount query on {server} failed with exception: {e}")
+        return None
+
+
+def wait_for_controller_nfs(
+    server: str, expected_paths: Iterable[Union[str, Path]], timeout: int = 600
+) -> bool:
+    """Wait for controller NFS server to accept TCP 2049 and export expected paths."""
+    if timeout <= 0:
+        log.warning(f"Invalid timeout {timeout}s waiting for controller NFS server '{server}'; skipping wait.")
+        return False
+
+    normalized = {posixpath.normpath("/" + str(p).lstrip("/")) for p in expected_paths if str(p)}
+    log.info(f"Waiting up to {timeout}s for controller NFS '{server}' to export {sorted(normalized)}...")
+    deadline = time.monotonic() + timeout
+    port_open = False
+
+    for wait in util.backoff_delay(min(1.5, float(timeout)), timeout=timeout):
+        if not port_open:
+            port_open = _probe_tcp_port(server, port=2049, timeout=1.0)
+            if port_open:
+                log.info(f"NFS TCP port 2049 is open on {server}.")
+        if port_open:
+            if not normalized or _check_nfs_exports_showmount(server, normalized, timeout=3.0) in (True, None):
+                log.info(f"Controller NFS exports confirmed ready on {server}.")
+                time.sleep(0.5)
+                return True
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(min(wait * random.uniform(0.8, 1.2), max(0.0, deadline - time.monotonic())))
+
+    reason = f"NFS port 2049 on {server}" if not port_open else f"controller '{server}' to export {sorted(normalized)}"
+    log.warning(f"Timed out after {timeout}s waiting for {reason}. Proceeding to standard mount retries.")
+    return False
+
+
 def setup_network_storage():
     """prepare network fs mounts and add them to fstab"""
     log.info("Set up network storage")
@@ -133,6 +244,26 @@ def setup_network_storage():
         mounts, _ = separate(is_controller_mount, all_mounts)
     else:
         mounts = all_mounts
+
+    if not lookup().is_controller:
+        lkp = lookup()
+        key_mnt = lkp.slurm_key_mount if lkp.cfg.enable_slurm_auth else lkp.munge_mount
+        candidates = [*mounts, *([key_mnt] if key_mnt else [])]
+        controller_mounts: dict[str, set[str]] = {}
+        for m in candidates:
+            if (getattr(m, "fs_type", None) or "").lower() == "nfs" and m.server_ip:
+                server = str(m.server_ip).split("@")[0]
+                if _is_controller_nfs_server(server, lkp):
+                    controller_mounts.setdefault(server, set()).add(str(m.remote_mount))
+
+        raw_t = (
+            lkp.cfg.get("controller_startup_scripts_timeout")
+            if isinstance(lkp.cfg, dict)
+            else getattr(lkp.cfg, "controller_startup_scripts_timeout", None)
+        )
+        startup_t = int(raw_t) if isinstance(raw_t, (int, float)) and not isinstance(raw_t, bool) and raw_t > 0 else 300
+        for server, paths in controller_mounts.items():
+            wait_for_controller_nfs(server, paths, timeout=max(600, startup_t + 300))
 
     # Determine fstab entries and write them out
     fstab_entries = []

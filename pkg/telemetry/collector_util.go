@@ -112,6 +112,90 @@ var (
 	}
 )
 
+var (
+	agentEnvVars = []string{
+		"GEMINI_CLI",
+		"CLAUDECODE",
+		"CODEX_SANDBOX",
+		"CODEX_CI",
+		"CURSOR_AGENT",
+	}
+	rawAIAssistedTopLevelRe = regexp.MustCompile(`^ai_assisted\s*:\s*(?:true|"true"|'true')\s*(?:#.*)?$`)
+)
+
+const maxRawYAMLScanBytes = 10 * 1024 * 1024
+
+// IsAgentEnv reports whether the CLI is running inside a recognized AI coding
+// agent environment. Setting GHPC_AI_ASSISTED to "0", "false", "off", "no", or
+// "disable" explicitly disables environment auto-detection, while setting it to
+// any other non-empty value explicitly enables it.
+func IsAgentEnv() bool {
+	if override := strings.TrimSpace(os.Getenv("GHPC_AI_ASSISTED")); override != "" {
+		return !isDisabledEnvVal(override)
+	}
+	for _, key := range agentEnvVars {
+		if val := strings.TrimSpace(os.Getenv(key)); val != "" && !isDisabledEnvVal(val) {
+			return true
+		}
+	}
+	return false
+}
+
+func isDisabledEnvVal(val string) bool {
+	switch strings.ToLower(val) {
+	case "0", "false", "off", "no", "disable":
+		return true
+	}
+	return false
+}
+
+func isAIAssisted(bp config.Blueprint, cmd *cobra.Command, args []string) bool {
+	return bp.AIAssisted || IsAgentEnv() || hasRawAIAssistedInFiles(cmd, args)
+}
+
+func hasRawAIAssistedInFiles(cmd *cobra.Command, args []string) bool {
+	if len(args) > 0 && strings.TrimSpace(args[0]) != "" {
+		if hasRawAIAssistedTrue(resolveBlueprintPath(args[0])) {
+			return true
+		}
+	}
+	if cmd != nil {
+		if flag := cmd.Flag("deployment-file"); flag != nil && strings.TrimSpace(flag.Value.String()) != "" {
+			if hasRawAIAssistedTrue(flag.Value.String()) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasRawAIAssistedTrue(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxRawYAMLScanBytes {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+
+	var partial struct {
+		AIAssisted *bool `yaml:"ai_assisted"`
+	}
+	if err := yaml.Unmarshal(data, &partial); err == nil {
+		return partial.AIAssisted != nil && *partial.AIAssisted
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(strings.TrimPrefix(string(data), "\ufeff")))
+	scanner.Buffer(make([]byte, 0, 64*1024), maxRawYAMLScanBytes)
+	for scanner.Scan() {
+		if rawAIAssistedTopLevelRe.MatchString(strings.TrimRight(scanner.Text(), "\r")) {
+			return true
+		}
+	}
+	return false
+}
+
 func getBlueprint(cmd *cobra.Command, args []string) config.Blueprint {
 	if len(args) == 0 {
 		return config.Blueprint{}
@@ -140,6 +224,9 @@ func resolveBlueprintPath(targetPath string) string {
 }
 
 func mergeDeploymentFileVars(cmd *cobra.Command, bp *config.Blueprint) {
+	if cmd == nil {
+		return
+	}
 	flag := cmd.Flag("deployment-file")
 	if flag == nil || flag.Value.String() == "" {
 		return
@@ -148,6 +235,10 @@ func mergeDeploymentFileVars(cmd *cobra.Command, bp *config.Blueprint) {
 	ds, _, err := config.NewDeploymentSettings(flag.Value.String())
 	if err != nil {
 		return
+	}
+
+	if ds.AIAssisted {
+		bp.AIAssisted = true
 	}
 
 	vars := bp.Vars.Items()

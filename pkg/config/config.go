@@ -400,6 +400,7 @@ func (bp *Blueprint) visitDicts(cb func(dictPath, *Dict)) {
 
 // DeploymentSettings are deployment-specific override settings
 type DeploymentSettings struct {
+	AIAssisted               bool             `yaml:"ai_assisted,omitempty"`
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
 	Vars                     Dict
 }

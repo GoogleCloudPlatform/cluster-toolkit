@@ -5,8 +5,8 @@ This module creates a login node for a Slurm cluster based on the internal
 terraform modules. The login node is used in conjunction with the
 [Slurm controller](../schedmd-slurm-gcp-v6-controller/README.md).
 
-[slurm\_instance]: /community/modules/internal/slurm-gcp/instance/README.md
-[slurm\_instance\_template]: /community/modules/internal/slurm-gcp/instance_template/README.md
+[slurm\_instance]: ../../internal/slurm-gcp/instance/README.md
+[slurm\_instance\_template]: ../../internal/slurm-gcp/instance_template/README.md
 
 ### Example
 
@@ -51,7 +51,7 @@ The Cluster Toolkit team maintains the wrapper around the [slurm-on-gcp] terrafo
 modules. For support with the underlying modules, see the instructions in the
 [slurm-gcp README][slurm-gcp-readme].
 
-[slurm-on-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/7
+[slurm-on-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.13.2
 [slurm-gcp-readme]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.13.2#slurm-on-google-cloud-platform
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

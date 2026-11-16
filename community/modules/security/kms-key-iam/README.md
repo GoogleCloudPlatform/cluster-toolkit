@@ -25,6 +25,7 @@ one) — both publish `crypto_key_id`, so `use` connects them:
     location: $(vars.region)
     key_ring_name: my-keyring
     key_name: my-key
+    deletion_policy: ABANDON
 
 - id: kms_key_iam
   source: community/modules/security/kms-key-iam

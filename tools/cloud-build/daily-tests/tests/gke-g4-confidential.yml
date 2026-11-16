@@ -23,7 +23,7 @@ blueprint_yaml: "{{ workspace }}/examples/gke-g4-confidential/gke-g4-confidentia
 # Using a static network name to prevent VPC exhaustion per reviewer feedback
 network: "gke-g4-conf-net-0"
 region: us-south1
-zone: us-south1-a
+zone: us-south1-b
 remote_node: "{{ deployment_name }}-remote-node-0"
 machine_type: g4-standard-48
 static_node_count: 2

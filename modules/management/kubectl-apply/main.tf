@@ -198,6 +198,12 @@ module "kueue_pods_ready_default_on_check" {
   minimum_version = "0.19.0"
 }
 
+module "kueue_dra_version_check" {
+  source          = "../../internal/semver_compare"
+  current_version = var.kueue.version
+  minimum_version = "0.18.0"
+}
+
 data "http" "manifest_from_url" {
   for_each = local.url_manifests
   url      = each.value.source
@@ -252,8 +258,32 @@ module "install_kueue" {
         ))
       }
     }) : "",
-    local.kueue_controller_cpu != null || local.kueue_controller_memory != null || local.kueue_controller_replicas != null ? yamlencode({
+    local.kueue_controller_cpu != null || local.kueue_controller_memory != null || local.kueue_controller_replicas != null || module.kueue_dra_version_check.is_greater_than_or_equal ? yamlencode({
       controllerManager = merge(
+        module.kueue_dra_version_check.is_greater_than_or_equal ? {
+          featureGates = [
+            {
+              name    = "TopologyAwareScheduling"
+              enabled = true
+            },
+            {
+              name    = "KueueDRAIntegration"
+              enabled = false
+            },
+            {
+              name    = "KueueDRARejectWorkloadsWhenDRADisabled"
+              enabled = false
+            },
+            {
+              name    = "KueueDRAIntegrationExtendedResource"
+              enabled = false
+            },
+            {
+              name    = "KueueDRAIntegrationPartitionableDevices"
+              enabled = false
+            }
+          ]
+        } : {},
         local.kueue_controller_replicas != null ? { replicas = local.kueue_controller_replicas } : {},
         local.kueue_controller_cpu != null || local.kueue_controller_memory != null ? {
           manager = {

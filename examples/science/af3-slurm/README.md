@@ -433,7 +433,7 @@ vars:
   default_inference_partition: $(vars.inference_g2_partition)
   default_inference_timeout: 3600
 
-  ... #more settings, consult the file af3-slurm-deployment.yaml
+  # More settings: consult the file af3-slurm-deployment.yaml
 ```
 
 #### Deploy the cluster

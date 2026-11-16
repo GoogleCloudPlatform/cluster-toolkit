@@ -47,7 +47,7 @@ func (g *GKEOrchestrator) FetchMachineCapacity(machineType, zone string) (int, e
 		return cap.Accelerators[0].Count, nil
 	}
 	if cap.GuestCpus > 0 {
-		return cap.GuestCpus, nil
+		return g.getEffectiveCPUs(machineType, cap.GuestCpus), nil
 	}
 	return 0, fmt.Errorf("no accelerators or guestCpus found for machine type %s in zone %s", machineType, zone)
 }
@@ -423,9 +423,14 @@ func (g *GKEOrchestrator) hasSlicingTopologies() bool {
 
 func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile JobProfile) (cpu, mem, gpu, tpu string, err error) {
 	if profile.IsCPUMachine {
-		logging.Info("Using cached capacity for CPU machine %s during limits calculation: %d", opts.ComputeType, profile.CapacityCount)
-		offsetVCPUs := max(1, int(float64(profile.CapacityCount)*0.95))
-		return fmt.Sprintf("%d", offsetVCPUs), "", "", "", nil
+		machineType := opts.MachineType
+		if machineType == "" {
+			machineType = opts.ComputeType
+		}
+		vCPUs := g.getEffectiveCPUs(machineType, profile.CapacityCount)
+		logging.Info("Using cached capacity for CPU machine %s during limits calculation: %d", opts.ComputeType, vCPUs)
+		cpuMilli := calculateFullNodeCPURequestMilli(vCPUs, opts.GCSFuseEnabled)
+		return fmt.Sprintf("%dm", cpuMilli), "", "", "", nil
 	}
 
 	mapped := g.GenerateGKENodeSelectorLabel(opts.ComputeType)
@@ -857,4 +862,41 @@ func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUM
 	}
 
 	return profile, nil
+}
+
+// calculateAllocatableCPUMilli mirrors modules/compute/gke-node-pool/outputs.tf
+func calculateAllocatableCPUMilli(vCPUs int) int64 {
+	if vCPUs <= 0 {
+		return 0
+	}
+	// GKE CPU reservations: 60m (1st core), 10m (2nd), 10m (3rd & 4th), 2.5m/core (>4)
+	var reserveMilli int64 = 60
+	if vCPUs > 1 {
+		reserveMilli += 10
+	}
+	if vCPUs > 2 {
+		thirdFourth := min(vCPUs-2, 2)
+		reserveMilli += int64(thirdFourth) * 5
+	}
+	if vCPUs > 4 {
+		reserveMilli += int64(vCPUs-4) * 5 / 2 // 2.5m per core
+	}
+	return int64(vCPUs)*1000 - reserveMilli
+}
+
+// calculateFullNodeCPURequestMilli mirrors modules/compute/gke-job-template/main.tf
+func calculateFullNodeCPURequestMilli(vCPUs int, hasGCSFuse bool) int64 {
+	allocatable := calculateAllocatableCPUMilli(vCPUs)
+	var request int64
+	if allocatable > 2000 {
+		// Leave headroom for 1 CPU of system DaemonSets
+		request = allocatable - 1000
+	} else {
+		// On small nodes, take just over half to guarantee scheduling
+		request = allocatable/2 + 100
+	}
+	if hasGCSFuse {
+		request -= 250 // gcsfuse sidecar
+	}
+	return max(100, request)
 }

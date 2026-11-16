@@ -149,7 +149,7 @@ gcloud compute instances list \
 In dedicated sovereign environments, export `GHPC_MOCK_MACHINE_CONFIG` so `gcluster` can resolve machine type CPU/memory specifications offline without calling public GCP APIs:
 
 ```shell
-export GHPC_MOCK_MACHINE_CONFIG='{"cpus": {"c3-standard-4": {"count": 4, "memoryMb": 16384}}, "gpus": {}, "tpus": {}}'
+export GHPC_MOCK_MACHINE_CONFIG='{"cpus": {"c3-standard-4": {"count": 4, "memoryMb": 16384}, "c3-standard-176": {"count": 176, "memoryMb": 720896}}, "gpus": {}, "tpus": {}}'
 ```
 
 ### 2\. Generate Deployment Configuration
