@@ -15,13 +15,13 @@
 package imagebuilder
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -31,22 +31,15 @@ import (
 
 const registryPingTimeout = 2 * time.Second
 
-// RegistryInspector verifies OCI Distribution /v2/ reachability and keychain credentials with injectable test seams.
-type RegistryInspector struct {
-	Getenv    func(string) string
-	Transport http.RoundTripper
-	Keychain  authn.Keychain
-}
-
 // InspectTargetRegistry verifies that a non-GAR OCI registry responds to a 2s GET /v2/ ping and has credentials when required.
 func (r *RegistryInspector) InspectTargetRegistry(registryAuthority string) error {
-	authority, err := NormalizeRegistryHost(registryAuthority)
+	authority, err := normalizeRegistryHost(registryAuthority)
 	if err != nil {
 		return err
 	}
-	allowsInsecure := allowsInsecureRegistryHost(authority)
-	effectiveInsecure := allowsInsecure && IsInsecureRegistryEnv(r.getenv())
-	allowHTTPFallback := effectiveInsecure || IsPrivateOrLoopbackHost(authority)
+	allowsInsecure := isCustomOCIRegistryHost(authority)
+	effectiveInsecure := allowsInsecure && isInsecureRegistryEnv(r.Getenv)
+	allowHTTPFallback := effectiveInsecure || isPrivateOrLoopbackHost(authority)
 
 	pingHost := authority
 	if pingHost == "docker.io" {
@@ -65,7 +58,7 @@ func (r *RegistryInspector) InspectTargetRegistry(registryAuthority string) erro
 	}
 	errStr := strings.Join(errs, "; ")
 	if suggestInsecure {
-		return fmt.Errorf("target container registry %q failed TLS/OCI check (%s); if this is a plain-HTTP or self-signed TLS registry, set %s=true", authority, errStr, InsecureRegistryEnvVar)
+		return fmt.Errorf("target container registry %q failed TLS/OCI check (%s); if this is a plain-HTTP or self-signed TLS registry, set %s=true", authority, errStr, insecureRegistryEnvVar)
 	}
 	return fmt.Errorf("target container registry %q is unreachable or failed OCI /v2/ check (%s)", authority, errStr)
 }
@@ -170,7 +163,7 @@ func (r *RegistryInspector) verifyRegistryCredentials(authority string, allowIns
 	if err != nil {
 		return fmt.Errorf("invalid target registry %q: %w", authority, err)
 	}
-	authenticator, err := r.keychain().Resolve(reg)
+	authenticator, err := cmp.Or[authn.Keychain](r.Keychain, defaultKeychain).Resolve(reg)
 	if err != nil {
 		return fmt.Errorf("failed to resolve Docker credentials for %q: %w", authority, err)
 	}
@@ -184,25 +177,8 @@ func (r *RegistryInspector) verifyRegistryCredentials(authority string, allowIns
 	return nil
 }
 
-func (r *RegistryInspector) getenv() func(string) string {
-	if r.Getenv != nil {
-		return r.Getenv
-	}
-	return os.Getenv
-}
-
-func (r *RegistryInspector) keychain() authn.Keychain {
-	if r.Keychain != nil {
-		return r.Keychain
-	}
-	return defaultKeychain
-}
-
 func (r *RegistryInspector) httpClient(skipVerifyTLS bool) *http.Client {
-	tr := r.Transport
-	if tr == nil {
-		tr = http.DefaultTransport
-	}
+	tr := cmp.Or(r.Transport, http.DefaultTransport)
 	if skipVerifyTLS {
 		tr = cloneTransportWithInsecureTLS(tr)
 	}

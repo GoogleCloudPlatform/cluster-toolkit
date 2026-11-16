@@ -31,13 +31,7 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-type PrereqStore interface {
-	Load() PrereqState
-	Save(PrereqState)
-}
-
-type FilePrereqStore struct{}
-
+// Load reads the persisted prerequisite state from disk, returning a zero value on missing or corrupt files.
 func (f *FilePrereqStore) Load() PrereqState {
 	filePath, err := stateFilePath()
 	if err != nil {
@@ -61,6 +55,7 @@ func (f *FilePrereqStore) Load() PrereqState {
 	return state
 }
 
+// Save writes state as formatted JSON to the user's prerequisite state file.
 func (f *FilePrereqStore) Save(state PrereqState) {
 	filePath, err := stateFilePath()
 	if err != nil {
@@ -101,10 +96,7 @@ func isTimestampExpired(state PrereqState) bool {
 // isStateStale checks if the loaded state is older than the defined freshness threshold
 // or if the project ID has changed.
 func isStateStale(state PrereqState, currentProjectID string) bool {
-	if isTimestampExpired(state) {
-		return true
-	}
-	return state.LastCheckedProjectID != currentProjectID
+	return isTimestampExpired(state) || state.LastCheckedProjectID != currentProjectID
 }
 
 func expireStalePrereqState(state PrereqState) PrereqState {
@@ -261,46 +253,6 @@ func checkK8sDependencies(state *PrereqState, missing *[]missingPrereq) {
 	if !state.GKEGCloudAuthPluginInstalled {
 		checkLocalCLI("gke-gcloud-auth-plugin", []string{"--version"}, &state.GKEGCloudAuthPluginInstalled, missing)
 	}
-}
-
-// isDockerCredsConfigured reports whether Docker is configured to authenticate
-// against the given Artifact Registry host via a GCP credential helper (gcloud or gcr)
-// or an explicit docker login entry in auths.
-func isDockerCredsConfigured(registry string) bool {
-	configDir := os.Getenv("DOCKER_CONFIG")
-	if configDir == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return false
-		}
-		configDir = filepath.Join(homeDir, ".docker")
-	}
-	configPath := filepath.Join(configDir, "config.json")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return false
-	}
-
-	var config dockerConfig
-	if err := json.Unmarshal(data, &config); err != nil {
-		logging.Error("Failed to unmarshal Docker config from %s: %v", configPath, err)
-		return false
-	}
-
-	helper, hasHelper := config.CredHelpers[registry]
-	if !hasHelper {
-		helper = config.CredsStore
-	}
-	if helper == "gcloud" || helper == "gcr" {
-		return true
-	}
-
-	for _, key := range []string{registry, "https://" + registry} {
-		if config.Auths[key] != (dockerAuthEntry{}) {
-			return true
-		}
-	}
-	return false
 }
 
 // isPermissionDeniedError checks if the error indicates a 403 / permission denied response.

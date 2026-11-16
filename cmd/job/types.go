@@ -49,6 +49,15 @@ type PrereqState struct {
 	LastCheckedTimestamp         time.Time `json:"last_checked_timestamp"`
 }
 
+// PrereqStore loads and persists CLI prerequisite check state.
+type PrereqStore interface {
+	Load() PrereqState
+	Save(PrereqState)
+}
+
+// FilePrereqStore persists PrereqState as JSON under the user's home directory.
+type FilePrereqStore struct{}
+
 type dockerAuthEntry struct {
 	Auth          string `json:"auth"`
 	IdentityToken string `json:"identitytoken"`

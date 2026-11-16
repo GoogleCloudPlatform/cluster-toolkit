@@ -153,8 +153,8 @@ func TestInspectTargetRegistry_TLSAndHTTPErrors(t *testing.T) {
 
 		strictInsp := &RegistryInspector{Getenv: func(string) string { return "" }}
 		err := strictInsp.InspectTargetRegistry(u.Host)
-		if err == nil || !strings.Contains(err.Error(), InsecureRegistryEnvVar+"=true") {
-			t.Fatalf("expected unverified self-signed TLS without %s to fail with hint, got: %v", InsecureRegistryEnvVar, err)
+		if err == nil || !strings.Contains(err.Error(), insecureRegistryEnvVar+"=true") {
+			t.Fatalf("expected unverified self-signed TLS without %s to fail with hint, got: %v", insecureRegistryEnvVar, err)
 		}
 		if strings.Contains(err.Error(), "http:") {
 			t.Fatalf("expected TLS verification failure not to send plain-HTTP fallback probe, got: %v", err)
@@ -162,14 +162,14 @@ func TestInspectTargetRegistry_TLSAndHTTPErrors(t *testing.T) {
 
 		insecureInsp := &RegistryInspector{
 			Getenv: func(k string) string {
-				if k == InsecureRegistryEnvVar {
+				if k == insecureRegistryEnvVar {
 					return "true"
 				}
 				return ""
 			},
 		}
 		if err := insecureInsp.InspectTargetRegistry(u.Host); err != nil {
-			t.Fatalf("expected %s=true to accept self-signed TLS, got: %v", InsecureRegistryEnvVar, err)
+			t.Fatalf("expected %s=true to accept self-signed TLS, got: %v", insecureRegistryEnvVar, err)
 		}
 	})
 
@@ -185,8 +185,8 @@ func TestInspectTargetRegistry_TLSAndHTTPErrors(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), u.Host) || !strings.Contains(err.Error(), "http: unexpected HTTP 500") {
 			t.Fatalf("expected plain-HTTP 500 error naming %q, got: %v", u.Host, err)
 		}
-		if strings.Contains(err.Error(), InsecureRegistryEnvVar) || strings.Contains(err.Error(), "https:") {
-			t.Fatalf("did not expect %s hint or https mismatch error on plain-HTTP 500, got: %v", InsecureRegistryEnvVar, err)
+		if strings.Contains(err.Error(), insecureRegistryEnvVar) || strings.Contains(err.Error(), "https:") {
+			t.Fatalf("did not expect %s hint or https mismatch error on plain-HTTP 500, got: %v", insecureRegistryEnvVar, err)
 		}
 		if err := insp.InspectTargetRegistry("   "); err == nil {
 			t.Fatalf("expected empty registry host error, got nil")
@@ -211,7 +211,7 @@ func TestInspectTargetRegistry_HTTPS500NoFallback(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "https: unexpected HTTP 500") {
 		t.Fatalf("expected https 500 error, got: %v", err)
 	}
-	if strings.Contains(err.Error(), "http:") || strings.Contains(err.Error(), InsecureRegistryEnvVar) {
+	if strings.Contains(err.Error(), "http:") || strings.Contains(err.Error(), insecureRegistryEnvVar) {
 		t.Fatalf("did not expect plain-HTTP fallback or insecure hint on valid TLS 500, got: %v", err)
 	}
 }
@@ -227,8 +227,8 @@ func TestInspectTargetRegistry_InsecureScoping(t *testing.T) {
 			}),
 		}
 		err := insp.InspectTargetRegistry("harbor.local:5000")
-		if err == nil || !strings.Contains(err.Error(), InsecureRegistryEnvVar+"=true") {
-			t.Fatalf("expected plain-HTTP non-private FQDN to suggest %s=true, got: %v", InsecureRegistryEnvVar, err)
+		if err == nil || !strings.Contains(err.Error(), insecureRegistryEnvVar+"=true") {
+			t.Fatalf("expected plain-HTTP non-private FQDN to suggest %s=true, got: %v", insecureRegistryEnvVar, err)
 		}
 	})
 
@@ -248,9 +248,9 @@ func TestInspectTargetRegistry_InsecureScoping(t *testing.T) {
 		for _, protectedHost := range []string{"us-central1-docker.pkg.dev", "nvcr.io", "cgr.dev"} {
 			err := inspectProtectedHostAgainstUntrustedTLS(protectedHost, srvURL.Host, dialRedirect)
 			if err == nil {
-				t.Fatalf("expected strict TLS verification failure for %q despite %s=true", protectedHost, InsecureRegistryEnvVar)
+				t.Fatalf("expected strict TLS verification failure for %q despite %s=true", protectedHost, insecureRegistryEnvVar)
 			}
-			if strings.Contains(err.Error(), InsecureRegistryEnvVar) || strings.Contains(err.Error(), "http:") {
+			if strings.Contains(err.Error(), insecureRegistryEnvVar) || strings.Contains(err.Error(), "http:") {
 				t.Fatalf("expected no insecure hint or http fallback for %q, got: %v", protectedHost, err)
 			}
 		}
@@ -260,7 +260,7 @@ func TestInspectTargetRegistry_InsecureScoping(t *testing.T) {
 func inspectProtectedHostAgainstUntrustedTLS(protectedHost, targetAddr string, dialRedirect *http.Transport) error {
 	insp := &RegistryInspector{
 		Getenv: func(k string) string {
-			if k == InsecureRegistryEnvVar {
+			if k == insecureRegistryEnvVar {
 				return "true"
 			}
 			return ""

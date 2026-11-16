@@ -16,9 +16,11 @@ package job
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -61,6 +63,46 @@ func checkArtifactRegistryAPI(projectID string, state *PrereqState, missing *[]m
 	}
 }
 
+// isDockerCredsConfigured reports whether Docker is configured to authenticate
+// against the given Artifact Registry host via a GCP credential helper (gcloud or gcr)
+// or an explicit docker login entry in auths.
+func isDockerCredsConfigured(registry string) bool {
+	configDir := os.Getenv("DOCKER_CONFIG")
+	if configDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return false
+		}
+		configDir = filepath.Join(homeDir, ".docker")
+	}
+	configPath := filepath.Join(configDir, "config.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return false
+	}
+
+	var config dockerConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		logging.Error("Failed to unmarshal Docker config from %s: %v", configPath, err)
+		return false
+	}
+
+	helper, hasHelper := config.CredHelpers[registry]
+	if !hasHelper {
+		helper = config.CredsStore
+	}
+	if helper == "gcloud" || helper == "gcr" {
+		return true
+	}
+
+	for _, key := range []string{registry, "https://" + registry} {
+		if config.Auths[key] != (dockerAuthEntry{}) {
+			return true
+		}
+	}
+	return false
+}
+
 // ensureBuildPrerequisites checks what a Crane build needs for the destination registry:
 // Artifact Registry API + Docker gcloud helper for GAR, or a 2s /v2/ ping + Docker keychain check for non-GAR registries.
 func ensureBuildPrerequisites(cmd *cobra.Command, projectID string, location string) error {
@@ -81,11 +123,7 @@ func ensureBuildPrerequisites(cmd *cobra.Command, projectID string, location str
 		return nil
 	}
 
-	effectiveProject := dest.GARProject
-	if effectiveProject == "" {
-		effectiveProject = projectID
-	}
-	return ensureGARBuildPrerequisites(cmd, effectiveProject, dest.RegistryHost)
+	return ensureGARBuildPrerequisites(cmd, dest.GARProject, dest.RegistryHost)
 }
 
 func effectiveARProjectID(state PrereqState) string {
