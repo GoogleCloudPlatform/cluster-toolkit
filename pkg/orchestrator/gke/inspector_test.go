@@ -842,8 +842,8 @@ func TestRenderWorkloadsTable_RunningPodsAndMultiPodSet(t *testing.T) {
 	}
 	multiPodSet.Status.ReclaimablePods = []kueueWorkloadPodSet{
 		{Name: "pathways-head", Count: 0},
-		{Name: "worker-0", Count: 4},
-		{Name: "worker-1", Count: 2},
+		{Name: "worker-0", Count: 1},
+		{Name: "worker-1", Count: 1},
 	}
 	multiPodSet.Status.Conditions = []kueueWorkloadCondition{
 		{Type: "Admitted", Status: "True", Message: "Admitted", LastTransitionTime: "2026-07-10T12:06:00Z"},
@@ -866,7 +866,7 @@ func TestRenderWorkloadsTable_RunningPodsAndMultiPodSet(t *testing.T) {
 				Phase string `json:"phase"`
 			}{Phase: "Pending"},
 		},
-		// Running pathways-head pod (must be excluded from TPU VM count) + 6 Running/Succeeded worker pods + 1 Pending worker pod for multi-podset
+		// Running pathways-head pod (must be excluded from TPU VM count) + 3 Running/Succeeded worker pods + 1 Pending worker pod for multi-podset
 		{
 			Metadata: struct {
 				Name      string            `json:"name"`
@@ -894,6 +894,20 @@ func TestRenderWorkloadsTable_RunningPodsAndMultiPodSet(t *testing.T) {
 			Status: struct {
 				Phase string `json:"phase"`
 			}{Phase: "Succeeded"},
+		},
+		{
+			Metadata: struct {
+				Name      string            `json:"name"`
+				Namespace string            `json:"namespace"`
+				Labels    map[string]string `json:"labels"`
+			}{
+				Name:      "multi-podset-worker-0-1",
+				Namespace: "default",
+				Labels:    map[string]string{"jobset.sigs.k8s.io/jobset-name": "multi-podset", "jobset.sigs.k8s.io/replicatedjob-name": "worker-0"},
+			},
+			Status: struct {
+				Phase string `json:"phase"`
+			}{Phase: "Running"},
 		},
 		{
 			Metadata: struct {
@@ -937,11 +951,11 @@ func TestRenderWorkloadsTable_RunningPodsAndMultiPodSet(t *testing.T) {
 	if gotNeeded := getWorkloadNeededCount(items[1]); gotNeeded != 12 {
 		t.Errorf("multi-podset Needed = %d, want 12 (4 + 8 across worker PodSets)", gotNeeded)
 	}
-	if gotDone := getWorkloadDoneCount(items[1]); gotDone != 6 {
-		t.Errorf("multi-podset Done = %d, want 6 (4 + 2 across worker PodSets)", gotDone)
+	if gotDone := getWorkloadDoneCount(items[1]); gotDone != 2 {
+		t.Errorf("multi-podset Done = %d, want 2 (1 + 1 across worker PodSets)", gotDone)
 	}
-	if gotRunning := getWorkloadRunningCount(items[1]); gotRunning != 2 {
-		t.Errorf("multi-podset Running/Ran = %d, want 2 (1 Succeeded + 1 Running worker pod, excluding pathways-head)", gotRunning)
+	if gotRunning := getWorkloadRunningCount(items[1]); gotRunning != 3 {
+		t.Errorf("multi-podset Running/Ran = %d, want 3 (1 Succeeded + 2 Running worker pods, excluding pathways-head)", gotRunning)
 	}
 
 	var sb strings.Builder
@@ -950,7 +964,7 @@ func TestRenderWorkloadsTable_RunningPodsAndMultiPodSet(t *testing.T) {
 
 	for _, wantLine := range []string{
 		"admitted-pending  2026-07-10T12:00:00Z  high      4               0                    0             Admitted  Admitted by ClusterQueue [PodsReady=False (WaitForPodsReady): Waiting in PreBind]  2026-07-10T12:01:00Z",
-		"multi-podset      2026-07-10T12:05:00Z  <none>    12              2                    6             Admitted  Admitted                                                                           2026-07-10T12:06:00Z",
+		"multi-podset      2026-07-10T12:05:00Z  <none>    12              3                    2             Admitted  Admitted                                                                           2026-07-10T12:06:00Z",
 	} {
 		if !strings.Contains(out, wantLine) {
 			t.Errorf("renderWorkloadsTable() output missing expected row:\nwant: %s\ngot:\n%s", wantLine, out)
@@ -1130,9 +1144,24 @@ func TestWorkloadStatsAndPodMatchingEdgeCases(t *testing.T) {
 	}
 
 	finishedNoReclaim := wl
+	finishedNoReclaim.RunningPods = &zero
 	finishedNoReclaim.Status.Conditions = finishedWL.Status.Conditions
 	if got := getWorkloadRunningCount(finishedNoReclaim); got != 4 {
-		t.Errorf("getWorkloadRunningCount(Finished without reclaimablePods) = %d, want 4", got)
+		t.Errorf("getWorkloadRunningCount(Finished with RunningPods=&0 and no reclaimablePods) = %d, want 4", got)
+	}
+
+	finishedNilPods := wl
+	finishedNilPods.Status.Conditions = finishedWL.Status.Conditions
+	if got := getWorkloadRunningCount(finishedNilPods); got != 4 {
+		t.Errorf("getWorkloadRunningCount(Finished with RunningPods=nil and no reclaimablePods) = %d, want 4", got)
+	}
+
+	one := 1
+	admittedWithReclaimed := finishedWL
+	admittedWithReclaimed.RunningPods = &one
+	admittedWithReclaimed.Status.Conditions = []kueueWorkloadCondition{{Type: "Admitted", Status: "True"}}
+	if got := getWorkloadRunningCount(admittedWithReclaimed); got != 4 {
+		t.Errorf("getWorkloadRunningCount(Admitted with RunningPods=1 < Done=4) = %d, want 4", got)
 	}
 
 	// 3. NodeSelector accelerator detection and podMatchesWorkload namespace check.

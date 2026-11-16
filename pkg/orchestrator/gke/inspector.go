@@ -689,10 +689,11 @@ func getWorkloadRunningCount(wl kueueWorkload) int {
 	}
 	done := getWorkloadDoneCount(wl)
 	if wl.RunningPods != nil {
-		if status == "Finished" && *wl.RunningPods < done {
-			return done
+		running := max(*wl.RunningPods, done)
+		if status == "Finished" && running == 0 && (hasConditionTrue(wl.Status.Conditions, "Admitted") || wl.Status.Admission != nil) {
+			return getWorkloadAdmittedCount(wl)
 		}
-		return *wl.RunningPods
+		return running
 	}
 	if status == "Finished" {
 		if done > 0 {
