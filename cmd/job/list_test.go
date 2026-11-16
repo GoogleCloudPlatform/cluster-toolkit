@@ -70,3 +70,60 @@ func TestListWorkloadsCmd_InvalidStatus(t *testing.T) {
 		t.Errorf("expected error to contain %q, got %v", expectedErr, err)
 	}
 }
+
+type mockListJobOrchestrator struct {
+	mockJobOrchestrator
+	jobs     []orchestrator.JobStatus
+	lastOpts orchestrator.ListOptions
+}
+
+func (m *mockListJobOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrator.JobStatus, error) {
+	m.lastOpts = opts
+	var out []orchestrator.JobStatus
+	for _, j := range m.jobs {
+		if opts.Status != "" && !strings.EqualFold(j.Status, opts.Status) {
+			continue
+		}
+		if opts.NameContains != "" && !strings.Contains(j.Name, opts.NameContains) {
+			continue
+		}
+		out = append(out, j)
+	}
+	return out, nil
+}
+
+func TestListWorkloadsCmd_StatusPending(t *testing.T) {
+	setupSubmitTestEnv(t)
+
+	oldFactory := gkeOrchestratorFactory
+	defer func() {
+		gkeOrchestratorFactory = oldFactory
+		filterStatus = ""
+		filterName = ""
+	}()
+
+	mockOrc := &mockListJobOrchestrator{
+		jobs: []orchestrator.JobStatus{
+			{Name: "prebind-job", Status: "Pending", CreationTime: "2026-07-10T12:00:00Z"},
+			{Name: "active-job", Status: "Running", CreationTime: "2026-07-10T12:05:00Z"},
+			{Name: "queued-job", Status: "Suspended", CreationTime: "2026-07-10T12:10:00Z"},
+		},
+	}
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+		return mockOrc
+	}
+
+	output, err := executeCommand(JobCmd, "list", "--status", "Pending", "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "test-project")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mockOrc.lastOpts.Status != "Pending" {
+		t.Errorf("ListOptions.Status = %q, want %q", mockOrc.lastOpts.Status, "Pending")
+	}
+	if !strings.Contains(output, "prebind-job") || !strings.Contains(output, "Pending") {
+		t.Errorf("expected output to contain prebind-job with Pending status, got:\n%s", output)
+	}
+	if strings.Contains(output, "active-job") || strings.Contains(output, "queued-job") {
+		t.Errorf("expected output to filter out non-Pending jobs, got:\n%s", output)
+	}
+}

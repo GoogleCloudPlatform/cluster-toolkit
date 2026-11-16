@@ -1406,6 +1406,10 @@ func (g *GKEOrchestrator) getKueueWorkloadStatus(client dynamic.Interface, ns st
 }
 
 func (g *GKEOrchestrator) getPodAggregatedStatus(client dynamic.Interface, ns string, workloadName string) (string, error) {
+	return getPodAggregatedStatus(client, ns, workloadName)
+}
+
+func getPodAggregatedStatus(client dynamic.Interface, ns string, workloadName string) (string, error) {
 	gvrPod := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
 	listOpts := metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("gcluster.google.com/workload=%s", workloadName),
@@ -1419,32 +1423,18 @@ func (g *GKEOrchestrator) getPodAggregatedStatus(client dynamic.Interface, ns st
 		return "Pending", nil
 	}
 
-	allPending := true
-	atLeastOneRunning := false
-
 	for _, p := range podList.Items {
 		podStatus, ok := p.Object["status"].(map[string]interface{})
 		if !ok {
 			continue
 		}
 		phase, _ := podStatus["phase"].(string)
-		if phase == "Running" {
-			atLeastOneRunning = true
-			allPending = false
-			break
-		}
-		if phase != "Pending" {
-			allPending = false
+		if phase == "Running" || phase == "Succeeded" {
+			return "Running", nil
 		}
 	}
 
-	if allPending {
-		return "Pending", nil
-	}
-	if atLeastOneRunning {
-		return "Running", nil
-	}
-	return "Running", nil
+	return "Pending", nil
 }
 
 func (g *GKEOrchestrator) getJobStatus(name string) (string, error) {
@@ -2118,6 +2108,15 @@ func (d *DefaultKubeClient) ListJobSets(namespace string, labelSelector string) 
 		creationTime := creationParams.Format(time.RFC3339)
 
 		statusStr, completionTime := parseJobStatus(item.Object)
+		if statusStr == "Running" {
+			podNs := namespace
+			if podNs == "" {
+				podNs = item.GetNamespace()
+			}
+			if podStatus, err := getPodAggregatedStatus(d.dynClient, podNs, name); err == nil {
+				statusStr = podStatus
+			}
+		}
 
 		jobs = append(jobs, orchestrator.JobStatus{
 			Name:           name,
