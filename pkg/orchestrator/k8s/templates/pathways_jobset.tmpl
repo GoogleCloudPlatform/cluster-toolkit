@@ -57,8 +57,10 @@ spec:
           spec:
             nodeSelector:
               cloud.google.com/gke-nodepool: {{.Pathways.HeadNodePool}}
+{{- if .HostNetworkEnabled }}
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
+{{- end }}
             restartPolicy: Never
 {{- with (.RenderBlock "pod_auth_and_priority" 12) }}{{"\n"}}{{(StructuralData .)}}{{- end }}
 {{- if .PathwaysWorkloadEnabled}}
@@ -244,8 +246,10 @@ spec:
               gke-gcsfuse/volumes: "true"
 {{- end }}
           spec:
+{{- if .HostNetworkEnabled }}
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
+{{- end }}
 {{- if eq .WorkerBackoffLimitPerIndex 0 }}
             restartPolicy: Never
 {{- else }}

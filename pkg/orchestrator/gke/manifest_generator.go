@@ -689,6 +689,7 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 	if err := validateRenderedPathwaysManifest(buf.String(), opts, customHint); err != nil {
 		return "", err
 	}
+	warnPathwaysHostNetworkManifest(buf.String(), opts, data.HostNetworkEnabled)
 
 	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
 	if err := ValidateJobSetManifest(manifest); err != nil {
@@ -795,6 +796,23 @@ func validatePathwaysSPSManifest(jobSet string, opts ManifestOptions) error {
 	return nil
 }
 
+// warnPathwaysHostNetworkManifest logs a warning when hostNetwork was disabled for
+// --service-account, but a custom or stale pathways_jobset.tmpl still renders hostNetwork: true.
+func warnPathwaysHostNetworkManifest(jobSet string, opts ManifestOptions, hostNetworkEnabled bool) bool {
+	if hostNetworkEnabled {
+		return false
+	}
+	workerTmpl, headTmpl, err := extractPathwaysPodTemplates(jobSet)
+	if err != nil {
+		return false
+	}
+	if (headTmpl != nil && headTmpl.Spec.HostNetwork) || (workerTmpl != nil && workerTmpl.Spec.HostNetwork) {
+		logging.Warn("--service-account %q disabled hostNetwork for GKE Workload Identity, but the rendered Pathways manifest still sets hostNetwork: true (pods with hostNetwork: true bypass GKE Workload Identity unless GCS FUSE CSI with hostNetworkPodKSA is used). %s", opts.ServiceAccountName, pathwaysTemplateExtractHint)
+		return true
+	}
+	return false
+}
+
 func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
 	exclusiveTopology := ""
 	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
@@ -831,6 +849,10 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 			ResourcesYAML: resourcesYAML,
 		}
 	}
+
+	proxyEnv, workloadEnv := resolvePathwaysEnv(opts)
+	hostNetworkEnabled := resolveHostNetwork(opts, isTPU, isGPU)
+
 	return jobSetTemplateData{
 		WorkloadName:                  opts.WorkloadName,
 		Namespace:                     g.namespace,
@@ -868,7 +890,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		VolumesYAML:                   opts.VolumesYAML,
 		VolumeMountsYAML:              opts.VolumeMountsYAML,
 		GCSFuseEnabled:                opts.GCSFuseEnabled,
-		HostNetworkEnabled:            isTPU || isGPU,
+		HostNetworkEnabled:            hostNetworkEnabled,
 		Pathways:                      opts.Pathways,
 		PathwaysProxyEnabled:          !opts.Pathways.DeploySPS,
 		PathwaysWorkloadEnabled:       !opts.Pathways.Headless && !opts.Pathways.DeploySPS,
@@ -876,8 +898,8 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		PathwaysWorkersEnabled:        true,
 		ExclusiveTopologyAnnotation:   exclusiveTopology,
 		Verbose:                       opts.Verbose,
-		Env:                           sortedEnvVars(opts.Env),
-		PathwaysProxyEnv:              sortedEnvVars(opts.Pathways.ProxyEnv),
+		Env:                           sortedEnvVars(workloadEnv),
+		PathwaysProxyEnv:              sortedEnvVars(proxyEnv),
 		PathwaysServerEnv:             sortedEnvVars(opts.Pathways.ServerEnv),
 		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
 		IsTPU:                         isTPU,
@@ -962,6 +984,68 @@ func withSidecarNameArg(proxyArgs []string) []string {
 		}
 	}
 	return append(proxyArgs, "--sidecar_name=external")
+}
+
+func resolveHostNetwork(opts ManifestOptions, isTPU, isGPU bool) bool {
+	if opts.IsPathwaysJob || isTPU {
+		if opts.ServiceAccountName != "" {
+			if opts.NumSlices > 1 {
+				logging.Warn("Disabling hostNetwork for --service-account %q (GKE Workload Identity); GKE recommends hostNetwork: true for multi-slice TPU DCN performance.", opts.ServiceAccountName)
+			} else {
+				logging.Info("Disabling hostNetwork for --service-account %q (GKE Workload Identity).", opts.ServiceAccountName)
+			}
+			return false
+		}
+		return true
+	}
+	if isGPU && opts.ServiceAccountName != "" {
+		logging.Warn("--service-account %q is set on a GPU workload, which uses hostNetwork: true. Pods with hostNetwork: true bypass GKE Workload Identity and authenticate to Google Cloud APIs as the node pool IAM service account unless GCS FUSE CSI with hostNetworkPodKSA is used.", opts.ServiceAccountName)
+	}
+	return isGPU
+}
+
+func resolvePathwaysEnv(opts ManifestOptions) (map[string]string, map[string]string) {
+	proxyEnv := opts.Pathways.ProxyEnv
+	workloadEnv := opts.Env
+	if !opts.IsPathwaysJob || opts.Pathways.DeploySPS {
+		return proxyEnv, workloadEnv
+	}
+	const ifrtInsecureEnv = "IFRT_PROXY_USE_INSECURE_GRPC_CREDENTIALS"
+	proxyVal, hasProxy := proxyEnv[ifrtInsecureEnv]
+	workloadVal, hasWorkload := workloadEnv[ifrtInsecureEnv]
+	if !opts.Pathways.Headless && hasProxy && hasWorkload && proxyVal != workloadVal {
+		logging.Warn("%s is set to %q in --pathways-proxy-env and %q in --env; mismatched gRPC credentials between pathways-proxy and the workload container may cause connection failures.", ifrtInsecureEnv, proxyVal, workloadVal)
+	}
+	// When --service-account is set, hostNetwork is disabled so pods can
+	// authenticate via GKE Workload Identity (gke-metadata-server), which does
+	// not expose the GCE VM ALTS handshaker on port 8080. Default IFRT proxy
+	// gRPC credentials to insecure unless overridden, and propagate single-sided
+	// overrides so client and proxy credentials remain matched.
+	defaultVal := "true"
+	if hasProxy {
+		defaultVal = proxyVal
+	} else if !opts.Pathways.Headless && hasWorkload {
+		defaultVal = workloadVal
+	} else if opts.ServiceAccountName == "" {
+		return proxyEnv, workloadEnv
+	}
+	proxyEnv = withDefaultEnvVar(proxyEnv, ifrtInsecureEnv, defaultVal)
+	if !opts.Pathways.Headless {
+		workloadEnv = withDefaultEnvVar(workloadEnv, ifrtInsecureEnv, defaultVal)
+	}
+	return proxyEnv, workloadEnv
+}
+
+func withDefaultEnvVar(env map[string]string, key, defaultVal string) map[string]string {
+	if _, ok := env[key]; ok {
+		return env
+	}
+	cloned := maps.Clone(env)
+	if cloned == nil {
+		cloned = make(map[string]string)
+	}
+	cloned[key] = defaultVal
+	return cloned
 }
 
 func sortedEnvVars(envMap map[string]string) []EnvVar {

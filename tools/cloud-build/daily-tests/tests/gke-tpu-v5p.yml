@@ -49,3 +49,4 @@ instance_type: "tpuv5p"
 scheduler: "gke"
 post_deploy_tests:
 - test-validation/test-gcluster-job-pathways.yml
+- test-validation/test-gcluster-job-sps.yml

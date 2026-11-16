@@ -164,9 +164,13 @@ class TestValidateCloudDocs(unittest.TestCase):
         slug = "/cluster-toolkit/docs/setup/configure-environment"
         stale_html = "<article>gcloud services enable compute.googleapis.com file.googleapis.com</article>"
         errs = vcd.check_configure_environment_page(slug, stale_html)
-        self.assertEqual(len(errs), 2)
-        self.assertTrue(any("lustre.googleapis.com" in e for e in errs))
-        self.assertTrue(any("servicenetworking.googleapis.com" in e for e in errs))
+        self.assertEqual(
+            errs,
+            [
+                f"{slug}: missing required API 'lustre.googleapis.com' in gcloud services enable instructions",
+                f"{slug}: missing required API 'servicenetworking.googleapis.com' in gcloud services enable instructions",
+            ],
+        )
 
     def test_check_cli_reference_page_detects_missing_explain(self):
         slug = "/cluster-toolkit/docs/reference/gcluster"

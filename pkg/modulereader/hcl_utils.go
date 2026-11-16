@@ -22,6 +22,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
+	"sort"
+	"strings"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
@@ -124,6 +127,195 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 	}
 	ret.Outputs = outs
 	return ret, nil
+}
+
+type hclVarMeta struct {
+	deprecated    bool
+	deprecatedMsg string
+	validations   []string
+}
+
+// ApplyVarMeta returns a copy of mi with Deprecated, DeprecatedMsg, and
+// Validations populated from the module's variable blocks. Only `gcluster
+// explain` consumes these fields, keeping the extra HCL parse off the
+// GetModuleInfo path used by create/expand/deploy and catalog-wide scans.
+func ApplyVarMeta(source string, mi ModuleInfo) ModuleInfo {
+	varMeta := extractHCLVarMeta(source)
+	inputs := slices.Clone(mi.Inputs)
+	for i := range inputs {
+		meta := applyDescriptionDeprecation(inputs[i].Description, varMeta[inputs[i].Name])
+		inputs[i].Deprecated = meta.deprecated
+		inputs[i].DeprecatedMsg = meta.deprecatedMsg
+		inputs[i].Validations = meta.validations
+	}
+	mi.Inputs = inputs
+	return mi
+}
+
+func isVarFile(name string) bool {
+	return strings.HasSuffix(name, ".tf") || strings.HasSuffix(name, ".pkr.hcl")
+}
+
+func applyDescriptionDeprecation(desc string, meta hclVarMeta) hclVarMeta {
+	trimmed := strings.TrimSpace(desc)
+	if !meta.deprecated && strings.HasPrefix(strings.ToLower(trimmed), "deprecated") {
+		meta.deprecated = true
+	}
+	if meta.deprecated && meta.deprecatedMsg == "" {
+		meta.deprecatedMsg = strings.Join(strings.Fields(trimmed), " ")
+	}
+	return meta
+}
+
+func extractHCLVarMeta(source string) map[string]hclVarMeta {
+	files := readModuleTFFiles(source)
+	if len(files) == 0 {
+		return nil
+	}
+	out := make(map[string]hclVarMeta)
+	for _, tf := range files {
+		parseFileVarMeta(tf.data, tf.name, out)
+	}
+	return out
+}
+
+type namedTFFile struct {
+	name string
+	data []byte
+}
+
+func readModuleTFFiles(source string) []namedTFFile {
+	if sourcereader.IsEmbeddedPath(source) && sourcereader.ModuleFS != nil {
+		return readEmbeddedTFFiles(sourcereader.ToSlash(source))
+	}
+	return readLocalTFFiles(source)
+}
+
+func readEmbeddedTFFiles(dir string) []namedTFFile {
+	entries, err := sourcereader.ModuleFS.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []namedTFFile
+	for _, e := range entries {
+		if !e.IsDir() && isVarFile(e.Name()) {
+			p := path.Join(dir, e.Name())
+			if b, err := sourcereader.ModuleFS.ReadFile(p); err == nil {
+				out = append(out, namedTFFile{name: e.Name(), data: b})
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].name < out[j].name })
+	return out
+}
+
+func readLocalTFFiles(dir string) []namedTFFile {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []namedTFFile
+	for _, e := range entries {
+		if !e.IsDir() && isVarFile(e.Name()) {
+			p := filepath.Join(dir, e.Name())
+			if b, err := os.ReadFile(p); err == nil {
+				out = append(out, namedTFFile{name: e.Name(), data: b})
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].name < out[j].name })
+	return out
+}
+
+func parseFileVarMeta(src []byte, filename string, out map[string]hclVarMeta) {
+	file, diags := hclsyntax.ParseConfig(src, filename, hcl.Pos{Line: 1, Column: 1})
+	if diags.HasErrors() || file == nil {
+		return
+	}
+	body, ok := file.Body.(*hclsyntax.Body)
+	if !ok {
+		return
+	}
+	for _, block := range body.Blocks {
+		if block.Type == "variable" && len(block.Labels) == 1 {
+			name := block.Labels[0]
+			if meta := parseVariableBlockMeta(src, name, block); meta.deprecated || len(meta.validations) > 0 {
+				out[name] = meta
+			}
+		}
+	}
+}
+
+func parseVariableBlockMeta(src []byte, varName string, block *hclsyntax.Block) hclVarMeta {
+	var meta hclVarMeta
+	for _, sub := range block.Body.Blocks {
+		if sub.Type != "validation" {
+			continue
+		}
+		cond := extractAttrSource(src, sub.Body.Attributes["condition"])
+		errMsg := extractValidationErrorMessage(src, sub.Body.Attributes["error_message"])
+		if isDeprecationCondition(varName, cond) {
+			meta.deprecated = true
+			if errMsg != "" {
+				meta.deprecatedMsg = errMsg
+			}
+		} else if errMsg != "" && !slices.Contains(meta.validations, errMsg) {
+			meta.validations = append(meta.validations, errMsg)
+		}
+	}
+	return meta
+}
+
+func extractAttrSource(src []byte, attr *hclsyntax.Attribute) string {
+	if attr == nil || attr.Expr == nil {
+		return ""
+	}
+	r := attr.Expr.Range()
+	if r.Start.Byte < 0 || r.End.Byte > len(src) || r.Start.Byte >= r.End.Byte {
+		return ""
+	}
+	return string(src[r.Start.Byte:r.End.Byte])
+}
+
+func extractValidationErrorMessage(src []byte, attr *hclsyntax.Attribute) string {
+	if attr == nil || attr.Expr == nil {
+		return ""
+	}
+	if val, diags := attr.Expr.Value(nil); !diags.HasErrors() && val.Type() == cty.String && val.IsKnown() && !val.IsNull() {
+		return strings.Join(strings.Fields(val.AsString()), " ")
+	}
+	if tmpl, ok := attr.Expr.(*hclsyntax.TemplateExpr); ok {
+		return renderHCLTemplate(src, tmpl)
+	}
+	raw := strings.Trim(extractAttrSource(src, attr), `"`)
+	return strings.Join(strings.Fields(raw), " ")
+}
+
+func renderHCLTemplate(src []byte, tmpl *hclsyntax.TemplateExpr) string {
+	var sb strings.Builder
+	for _, part := range tmpl.Parts {
+		sb.WriteString(renderHCLTemplatePart(src, part))
+	}
+	return strings.Join(strings.Fields(sb.String()), " ")
+}
+
+func renderHCLTemplatePart(src []byte, part hclsyntax.Expression) string {
+	if lit, ok := part.(*hclsyntax.LiteralValueExpr); ok && lit.Val.Type() == cty.String && lit.Val.IsKnown() && !lit.Val.IsNull() {
+		return lit.Val.AsString()
+	}
+	if r := part.Range(); r.Start.Byte >= 0 && r.End.Byte <= len(src) && r.Start.Byte < r.End.Byte {
+		return "${" + string(src[r.Start.Byte:r.End.Byte]) + "}"
+	}
+	return ""
+}
+
+func isDeprecationCondition(varName, cond string) bool {
+	compact := strings.NewReplacer(" ", "", "\t", "", "\n", "", "\r", "").Replace(cond)
+	ref := "var." + varName
+	return compact == ref+"==null" ||
+		compact == "null=="+ref ||
+		compact == "length("+ref+")==0" ||
+		compact == "0==length("+ref+")"
 }
 
 // Transforms Terraform type string into cty.Type
