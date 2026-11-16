@@ -1099,6 +1099,21 @@ func TestLogWorkloadList_PopulatesPodCountsFromKubectl(t *testing.T) {
 	if !strings.Contains(allBuf.String(), "active-job") || strings.Contains(allBuf.String(), "prebind-job") {
 		t.Errorf("filtered EVERYTHING table should contain only active-job, got:\n%s", allBuf.String())
 	}
+
+	// Verify logWorkloadList error and invalid JSON handling.
+	mockExecErr := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get workloads -n default -o json": {
+			{ExitCode: 1, Stderr: "workloads forbidden"},
+			{ExitCode: 0, Stdout: "invalid-json"},
+		},
+	})
+	orcErr := newTestGKEOrchestrator(mockExecErr)
+	var errBuf strings.Builder
+	orcErr.logWorkloadList(&errBuf, "EVERYTHING", "", "default")
+	orcErr.logWorkloadList(&errBuf, "EVERYTHING", "", "default")
+	if !strings.Contains(errBuf.String(), "Error listing workloads") || !strings.Contains(errBuf.String(), "Error parsing workloads JSON") {
+		t.Errorf("expected logWorkloadList error messages, got:\n%s", errBuf.String())
+	}
 }
 
 func TestWorkloadStatsAndPodMatchingEdgeCases(t *testing.T) {
@@ -1190,5 +1205,27 @@ func TestWorkloadStatsAndPodMatchingEdgeCases(t *testing.T) {
 	}
 	if podMatchesWorkload(podOtherNS, "", "other-ns") {
 		t.Errorf("expected podMatchesWorkload to reject empty jobsetName")
+	}
+
+	// 4. workloadJobSetName fallback when OwnerReferences is empty, getWorkloadAdmittedCount with nil Admission,
+	// and podSetHasExplicitResources via psa.Flavors / nil resources.
+	if gotName := workloadJobSetName(wl); gotName != "standalone-wl" {
+		t.Errorf("workloadJobSetName() without OwnerReferences = %q, want %q", gotName, "standalone-wl")
+	}
+	if filtered := filterWorkloads([]kueueWorkload{wl}, "RUNNING", "standalone"); len(filtered) != 1 {
+		t.Errorf("filterWorkloads() on workload without OwnerReferences returned %d items, want 1", len(filtered))
+	}
+
+	noAdmissionWL := kueueWorkload{}
+	if got := getWorkloadAdmittedCount(noAdmissionWL); got != 0 {
+		t.Errorf("getWorkloadAdmittedCount(nil Admission) = %d, want 0", got)
+	}
+
+	psaOnlyFlavors := &kueueWorkloadPodSet{Name: "cpu-head", Count: 1, Flavors: map[string]string{"cpu": "default"}}
+	if !podSetHasExplicitResources(kueueWorkloadPodSet{Name: "cpu-head", Count: 1}, psaOnlyFlavors) {
+		t.Errorf("expected podSetHasExplicitResources to return true when psa.Flavors is non-empty")
+	}
+	if podSetHasExplicitResources(kueueWorkloadPodSet{Name: "bare", Count: 1}, nil) {
+		t.Errorf("expected podSetHasExplicitResources to return false when neither ps nor psa has resources")
 	}
 }
