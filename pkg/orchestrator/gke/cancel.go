@@ -97,7 +97,7 @@ func (g *GKEOrchestrator) reclaimStorageGateways(namespace, cancelledJobSet stri
 	if g.kubeClient == nil {
 		return
 	}
-	pvcs, err := g.kubeClient.ListResources(pvcGVR, namespace, managedByLabel+"="+managedByValue)
+	pvcs, err := g.kubeClient.ListResources(pvcGVR, namespace, managedByLabel+"="+managedByValue, "")
 	if err != nil {
 		logging.Warn("Could not list managed storage gateways in namespace '%s': %v", namespace, err)
 		return
@@ -218,7 +218,7 @@ func (g *GKEOrchestrator) deleteStorageGateway(namespace string, pvc *unstructur
 func (g *GKEOrchestrator) namespaceClaimConsumers(namespace, cancelledJobSet string) (map[string]string, error) {
 	consumers := map[string]string{}
 	for _, gvr := range storageConsumerGVRs {
-		objs, err := g.kubeClient.ListResources(gvr, namespace, "")
+		objs, err := g.kubeClient.ListResources(gvr, namespace, "", "")
 		if apierrors.IsNotFound(err) {
 			continue
 		}

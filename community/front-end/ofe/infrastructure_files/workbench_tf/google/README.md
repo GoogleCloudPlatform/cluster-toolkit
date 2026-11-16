@@ -18,7 +18,7 @@ limitations under the License.
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.87.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.4.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | >= 2.0 |
 | <a name="requirement_time"></a> [time](#requirement\_time) | >= 0.7.2 |
 
@@ -26,7 +26,7 @@ limitations under the License.
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | >= 3.87.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 6.4.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | >= 2.0 |
 | <a name="provider_time"></a> [time](#provider\_time) | >= 0.7.2 |
 
@@ -34,8 +34,8 @@ limitations under the License.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| <a name="module_project_radlab_ds_analytics"></a> [project\_radlab\_ds\_analytics](#module\_project\_radlab\_ds\_analytics) | terraform-google-modules/project-factory/google | ~> 11.0 |
-| <a name="module_vpc_ai_notebook"></a> [vpc\_ai\_notebook](#module\_vpc\_ai\_notebook) | terraform-google-modules/network/google | ~> 3.0 |
+| <a name="module_project_radlab_ds_analytics"></a> [project\_radlab\_ds\_analytics](#module\_project\_radlab\_ds\_analytics) | terraform-google-modules/project-factory/google | ~> 18.0 |
+| <a name="module_vpc_ai_notebook"></a> [vpc\_ai\_notebook](#module\_vpc\_ai\_notebook) | terraform-google-modules/network/google | ~> 10.0 |
 | <a name="module_waitforstartup"></a> [waitforstartup](#module\_waitforstartup) | ./wait-for-startup | n/a |
 
 ## Resources
@@ -43,7 +43,6 @@ limitations under the License.
 | Name | Type |
 | ---- | ---- |
 | [google_compute_instance_iam_member.oslogin_permissions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_iam_member) | resource |
-| [google_notebooks_instance.ai_notebook](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/notebooks_instance) | resource |
 | [google_project_iam_member.sa_p_notebook_permissions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
 | [google_project_organization_policy.external_ip_policy](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_organization_policy) | resource |
 | [google_project_organization_policy.shielded_vm_policy](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_organization_policy) | resource |
@@ -52,6 +51,7 @@ limitations under the License.
 | [google_service_account.sa_p_notebook](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account) | resource |
 | [google_service_account_iam_member.sa_ai_notebook_user_iam](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account_iam_member) | resource |
 | [google_storage_bucket_object.startup_script](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
+| [google_workbench_instance.ai_notebook](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/workbench_instance) | resource |
 | [random_id.default](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [time_sleep.wait_120_seconds](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
 | [google_compute_network.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_network) | data source |
@@ -67,11 +67,11 @@ limitations under the License.
 | <a name="input_boot_disk_type"></a> [boot\_disk\_type](#input\_boot\_disk\_type) | Disk types for notebook instances | `string` | `"PD_SSD"` | no |
 | <a name="input_create_network"></a> [create\_network](#input\_create\_network) | If the module has to be deployed in an existing network, set this variable to false. | `bool` | `false` | no |
 | <a name="input_create_project"></a> [create\_project](#input\_create\_project) | Set to true if the module has to create a project.  If you want to deploy in an existing project, set this variable to false. | `bool` | `false` | no |
+| <a name="input_data_disk_size_gb"></a> [data\_disk\_size\_gb](#input\_data\_disk\_size\_gb) | Size in GB, up to 64000, of the instance's data disk (/home/jupyter). Billed in addition to the boot disk. | `number` | `100` | no |
 | <a name="input_enable_services"></a> [enable\_services](#input\_enable\_services) | Enable the necessary APIs on the project.  When using an existing project, this can be set to false. | `bool` | `false` | no |
 | <a name="input_folder_id"></a> [folder\_id](#input\_folder\_id) | Folder ID where the project should be created. It can be skipped if already setting organization\_id. Leave blank if the project should be created directly underneath the Organization node. | `string` | `""` | no |
 | <a name="input_image_family"></a> [image\_family](#input\_image\_family) | DEPRECATED: Image of the AI notebook. | `string` | `null` | no |
 | <a name="input_image_project"></a> [image\_project](#input\_image\_project) | DEPRECATED: Google Cloud project where the image is hosted. | `string` | `null` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Image of the AI notebook.<br/><br/>Expected Fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "family": "tf-latest-cpu",<br/>  "project": "deeplearning-platform-release"<br/>}</pre> | no |
 | <a name="input_ip_cidr_range"></a> [ip\_cidr\_range](#input\_ip\_cidr\_range) | Unique IP CIDR Range for AI Notebooks subnet | `string` | `"10.142.190.0/24"` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Type of VM you would like to spin up | `string` | `"n1-standard-1"` | no |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | Name of the network to be created. | `string` | `"ai-notebook"` | no |

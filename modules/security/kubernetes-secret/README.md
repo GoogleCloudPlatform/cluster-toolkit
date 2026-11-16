@@ -6,7 +6,7 @@ This module creates a Kubernetes secret in a specified namespace on a given GKE 
 
 ```yaml
 - id: k8s_secret
-  source: ./modules/security/kubernetes-secret
+  source: modules/security/kubernetes-secret
   settings:
     cluster_id: "projects/my-project/locations/us-central1/clusters/my-cluster"
     namespace: "default"

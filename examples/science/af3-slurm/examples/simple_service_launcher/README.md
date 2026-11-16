@@ -148,6 +148,7 @@ python your_script.py --bucket-name your-bucket  --run-inference='False'
 `--db-dir`: local directory for databases
 `--model-dir`: local directory for model file (model weight)
 `--pdb-database-path`: local directory for data-pipeline pdb database
+`--jax-compilation-cache-path`: local directory for inference JAX compilation cache
 #### Slurm Partition
 `--data-pipeline-partition-name`: datapipeline slurm partition name
 `--data-pipeline-job-memory-size`: data pipeline slurm job memory size (GB)
@@ -155,7 +156,6 @@ python your_script.py --bucket-name your-bucket  --run-inference='False'
 `--inference-partition-name`: inference slurm partition name
 `--inference-job-memory-size`: inference slurm job memory size (GB)
 `--inference-job-cpu-count`: inference slurm job cpu count
-`--auto-calculate-resource`: calculate required resource based on input sequence length
 #### Scientific Inference Parameters
 `--inference-max-template-date`: Maximum template release date to consider. Format: YYYY-MM-DD
 `--inference-conformer-max-iterations`:  Optional override for maximum number of iterations to run for RDKit conformer search

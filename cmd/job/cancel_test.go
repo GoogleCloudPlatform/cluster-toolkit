@@ -84,7 +84,7 @@ func (m *mockKubeClient) DeleteJobSet(namespace string, name string) error {
 	return m.err
 }
 
-func (m *mockKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector string) ([]unstructured.Unstructured, error) {
+func (m *mockKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector, fieldSelector string) ([]unstructured.Unstructured, error) {
 	return nil, m.err
 }
 

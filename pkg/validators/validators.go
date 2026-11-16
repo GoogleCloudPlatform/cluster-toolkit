@@ -164,6 +164,7 @@ func Execute(bp config.Blueprint) error {
 
 // validateBlueprintWithMetadata runs metadata-based validations.
 func validateBlueprintWithMetadata(bp config.Blueprint) error {
+	errs := config.Errors{}
 	for _, group := range bp.Groups {
 		for j, mod := range group.Modules {
 			if mod.Kind != config.TerraformKind {
@@ -189,12 +190,12 @@ func validateBlueprintWithMetadata(bp config.Blueprint) error {
 						logging.Error("WARNING: validation failed for module %q: %v", mod.ID, err)
 						continue
 					}
-					return err
+					_ = errs.Add(err)
 				}
 			}
 		}
 	}
-	return nil
+	return errs.OrNil()
 }
 
 func checkInputs(inputs config.Dict, required []string) error {

@@ -105,6 +105,7 @@ const llmsTxtMatrixAndDocsSection = `
 | **H4D (Cloud RDMA HPC)** | ` + "`h4d-highmem-192-lssd`" + ` | **GKE** | [examples/gke-h4d/gke-h4d.yaml](examples/gke-h4d/gke-h4d.yaml) | [examples/gke-h4d/gke-h4d-deployment.yaml](examples/gke-h4d/gke-h4d-deployment.yaml) | Cloud RDMA Falcon VPC + Kueue |
 | **TPU 7x (Ironwood)** | ` + "`tpu7x-standard-4t`" + ` | **Slurm** | [examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml](examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml) | [examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml](examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-deployment.yaml) | 36,000 GiB Managed Lustre |
 | **TPU 7x (Ironwood)** | ` + "`tpu7x-standard-4t`" + ` | **GKE** | [examples/gke-tpu-7x/gke-tpu-7x.yaml](examples/gke-tpu-7x/gke-tpu-7x.yaml) | [examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml](examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml) | Kueue + Pathways (MTC & GCS FUSE in ` + "`gke-tpu-7x-advanced.yaml`" + `) |
+| **TPU v5e / v5p / v6e** | ` + "`ct6e-standard-4t`" + ` | **Slurm** | [examples/machine-learning/tpu-v5e-v5p-v6e/tpu-slurm-blueprint.yaml](examples/machine-learning/tpu-v5e-v5p-v6e/tpu-slurm-blueprint.yaml) | [examples/machine-learning/tpu-v5e-v5p-v6e/tpu-slurm-deployment.yaml](examples/machine-learning/tpu-v5e-v5p-v6e/tpu-slurm-deployment.yaml) | 36,000 GiB Managed Lustre (` + "`ct6e-standard-4t`" + `, ` + "`ct5p-hightpu-4t`" + `, ` + "`ct5lp-hightpu-4t`" + `) |
 | **TPU v6e (Trillium)** | ` + "`ct6e-standard-4t`" + ` | **GKE** | [examples/gke-tpu-v6e/gke-tpu-v6e.yaml](examples/gke-tpu-v6e/gke-tpu-v6e.yaml) | [examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml](examples/gke-tpu-v6e/gke-tpu-v6e-deployment.yaml) | Kueue + Pathways + ` + "`./gcluster job submit`" + ` |
 | **TPU v5p** | ` + "`ct5p-hightpu-4t`" + ` | **GKE** | [examples/gke-tpu-v5p/gke-tpu-v5p.yaml](examples/gke-tpu-v5p/gke-tpu-v5p.yaml) | [examples/gke-tpu-v5p/gke-tpu-v5p-deployment.yaml](examples/gke-tpu-v5p/gke-tpu-v5p-deployment.yaml) | Kueue + ` + "`./gcluster job submit`" + ` |
 | **TPU v5e** | ` + "`ct5lp-hightpu-4t`" + ` | **GKE** | [examples/gke-tpu-v5e/gke-tpu-v5e.yaml](examples/gke-tpu-v5e/gke-tpu-v5e.yaml) | [examples/gke-tpu-v5e/gke-tpu-v5e-deployment.yaml](examples/gke-tpu-v5e/gke-tpu-v5e-deployment.yaml) | Kueue + ` + "`./gcluster job submit`" + ` |
@@ -260,11 +261,17 @@ func renderBlueprintFullSection(sb *strings.Builder, bp BlueprintEntry) {
 	if len(bp.MachineTypes) > 0 {
 		mt = strings.Join(bp.MachineTypes, ", ")
 	}
-	deployMeta := ""
-	if bp.DeploymentPath != "" {
-		deployMeta = fmt.Sprintf(" | deployment: `%s`", bp.DeploymentPath)
+	extraMeta := ""
+	if len(bp.Accelerators) > 0 {
+		extraMeta += fmt.Sprintf(" | accelerators: `%s`", strings.Join(bp.Accelerators, ", "))
 	}
-	fmt.Fprintf(sb, "\n### %s (`%s` | scheduler: `%s` | machines: `%s`%s)\n", bp.Path, bp.BlueprintName, bp.Scheduler, mt, deployMeta)
+	if len(bp.Workloads) > 0 {
+		extraMeta += fmt.Sprintf(" | workloads: `%s`", strings.Join(bp.Workloads, ", "))
+	}
+	if bp.DeploymentPath != "" {
+		extraMeta += fmt.Sprintf(" | deployment: `%s`", bp.DeploymentPath)
+	}
+	fmt.Fprintf(sb, "\n### %s (`%s` | scheduler: `%s` | machines: `%s`%s)\n", bp.Path, bp.BlueprintName, bp.Scheduler, mt, extraMeta)
 	if bp.Description != "" {
 		fmt.Fprintf(sb, "- **Description:** %s\n", bp.Description)
 	}

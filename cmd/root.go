@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 
 	"github.com/go-git/go-git/v5"
@@ -123,7 +124,8 @@ Commit info: {{index .Annotations "commitInfo"}}
 		wrapTelemetry(child)
 	}
 
-	err := rootCmd.Execute()
+	executedCmd, err := rootCmd.ExecuteC()
+	initFallbackTelemetryOnError(executedCmd, err)
 
 	// Capture Error Code
 	exitCode := 0
@@ -164,6 +166,33 @@ func initTelemetry(cmd *cobra.Command, args []string) {
 	}
 }
 
+func initFallbackTelemetryOnError(executedCmd *cobra.Command, err error) {
+	if err == nil || telemetryCollector != nil {
+		return
+	}
+	if executedCmd == nil {
+		executedCmd = rootCmd
+	}
+	if shouldSkipFallbackTelemetry(executedCmd) {
+		return
+	}
+	initTelemetry(executedCmd, executedCmd.Flags().Args())
+}
+
+func shouldSkipFallbackTelemetry(cmd *cobra.Command) bool {
+	name := cmd.Name()
+	if name == "help" || strings.HasPrefix(name, "__complete") {
+		return true
+	}
+	return cmd == telemetryCmd || cmd.Parent() == telemetryCmd
+}
+
+func setTelemetryMetadata(key, value string) {
+	if telemetryCollector != nil {
+		telemetryCollector.SetMetadata(key, value)
+	}
+}
+
 // wrapTelemetry recursively traverses the command tree and wraps any command
 // that defines its own PersistentPreRun or PersistentPreRunE hook.
 // This is necessary because Cobra does not execute a parent's PersistentPreRun
@@ -181,18 +210,14 @@ func wrapTelemetry(cmd *cobra.Command) {
 		if cmd.PersistentPreRunE != nil {
 			oldPreRunE := cmd.PersistentPreRunE
 			cmd.PersistentPreRunE = func(c *cobra.Command, args []string) error {
-				err := oldPreRunE(c, args)
-				if err != nil {
-					return err
-				}
 				initTelemetry(c, args)
-				return nil
+				return oldPreRunE(c, args)
 			}
 		} else if cmd.PersistentPreRun != nil {
 			oldPreRun := cmd.PersistentPreRun
 			cmd.PersistentPreRun = func(c *cobra.Command, args []string) {
-				oldPreRun(c, args)
 				initTelemetry(c, args)
+				oldPreRun(c, args)
 			}
 		}
 	}

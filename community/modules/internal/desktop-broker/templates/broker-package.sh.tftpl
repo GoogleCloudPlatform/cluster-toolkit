@@ -1,0 +1,40 @@
+#!/bin/bash
+# Writes the desktop broker Python package.
+#
+# Delivered as one runner rather than one per file because
+# modules/scripts/startup-script keys its staged objects on
+# basename(destination), so several files sharing a basename would collide on
+# that key and Terraform would refuse the plan.
+#
+# Note also that this package has no __init__.py and no __main__.py. gcluster
+# embeds these modules into its binary with go:embed, which silently skips any
+# file whose name begins with an underscore - such a file would never reach a
+# deployed host at all. The package therefore relies on PEP 420 implicit
+# namespace packages, and its entry point is main.py.
+#
+# Each file is embedded base64-encoded. The heredoc delimiter is safe by
+# construction: it contains an underscore, which is not in the base64 alphabet,
+# so it can never appear inside the payload.
+set -euo pipefail
+
+package_dir=${jsonencode(package_dir)}
+
+install -d -m 0755 "$package_dir"
+
+%{ for path, encoded in files ~}
+install -d -m 0755 "$(dirname "$package_dir/${path}")"
+base64 -d >"$package_dir/${path}" <<'EOF_GHPC_BROKER_B64'
+${encoded}
+EOF_GHPC_BROKER_B64
+chmod 0644 "$package_dir/${path}"
+%{ endfor ~}
+
+# Fail loudly here rather than leaving systemd to report an import error.
+for required in main.py app.py config.py oslogin.py; do
+  if [ ! -s "$package_dir/$required" ]; then
+    echo "Broker package is incomplete: $package_dir/$required is missing or empty" >&2
+    exit 1
+  fi
+done
+
+echo "Broker package written to $package_dir ($(find "$package_dir" -name '*.py' | wc -l | tr -d ' ') files)"

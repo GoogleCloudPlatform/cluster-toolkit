@@ -399,6 +399,32 @@ terraform_backend_defaults:
 			}})
 	}
 
+	{ // ai_assisted: true
+		ds, _, err := h(`
+ai_assisted: true
+vars:
+  project_id: ds-ai-project
+`)
+		c.Assert(err, IsNil)
+		c.Check(ds, DeepEquals, DeploymentSettings{
+			AIAssisted: true,
+			Vars:       NewDict(map[string]cty.Value{"project_id": cty.StringVal("ds-ai-project")}),
+		})
+	}
+
+	{ // ai_assisted: false
+		ds, _, err := h(`
+ai_assisted: false
+vars:
+  project_id: ds-manual-project
+`)
+		c.Assert(err, IsNil)
+		c.Check(ds, DeepEquals, DeploymentSettings{
+			AIAssisted: false,
+			Vars:       NewDict(map[string]cty.Value{"project_id": cty.StringVal("ds-manual-project")}),
+		})
+	}
+
 	{ // empty
 		_, _, err := h("")
 		c.Check(err, NotNil)

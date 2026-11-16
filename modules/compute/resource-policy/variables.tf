@@ -25,7 +25,7 @@ variable "region" {
 }
 
 variable "name" {
-  description = "The resource policy's name."
+  description = "The resource policy's name (1-63 characters, or up to 54 characters when random_name_suffix is true)."
   type        = string
 
   validation {

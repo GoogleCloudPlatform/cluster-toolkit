@@ -17,6 +17,7 @@ spec:
   requirements:
     services: [compute.googleapis.com]
 ghpc:
+  has_to_be_used: true
   inject_module_id: name
   validators:
   - validator: allowed_enum

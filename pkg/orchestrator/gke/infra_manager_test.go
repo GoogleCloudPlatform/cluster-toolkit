@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"io"
 	"net/http"
 	"os"
@@ -1776,43 +1777,6 @@ func TestLegacyMTCDriverGSA(t *testing.T) {
 	}
 }
 
-func TestIsForbiddenError(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{
-			name: "Nil error returns false",
-			err:  nil,
-			want: false,
-		},
-		{
-			name: "Typed 403 Forbidden returns true",
-			err:  apierrors.NewForbidden(schema.GroupResource{Resource: "services"}, "test-svc", fmt.Errorf("forbidden")),
-			want: true,
-		},
-		{
-			name: "Generic error with forbidden substring returns true",
-			err:  fmt.Errorf("Error from server (Forbidden): request forbidden"),
-			want: true,
-		},
-		{
-			name: "Other error returns false",
-			err:  fmt.Errorf("connection refused"),
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := isForbiddenError(tt.err); got != tt.want {
-				t.Errorf("isForbiddenError(%v) = %v; want %v", tt.err, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestVerifyCheckpointConfigurationCR(t *testing.T) {
 	const docRemediation = "Please follow the documentation."
 
@@ -2705,5 +2669,167 @@ func assertWantErrSubstr(t *testing.T, err error, wantErr bool, wantErrSubstr st
 		}
 	} else if err != nil {
 		t.Errorf("expected no error, got: %v", err)
+	}
+}
+
+func TestDefaultKubeClient_ListResourcesFieldSelectorAndLazySync(t *testing.T) {
+	setupMockMachineConfig(t)
+	var gotFieldSelector string
+	dyn := &mockDynamicClient{
+		listFunc: func(_ context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+			gotFieldSelector = opts.FieldSelector
+			return &unstructured.UnstructuredList{
+				Items: []unstructured.Unstructured{makeDockerConfigSecret("dyn-sec", "registry.local")},
+			}, nil
+		},
+	}
+
+	if kc := (&GKEOrchestrator{}).usableKubeClient(); kc != nil {
+		t.Fatalf("expected usableKubeClient()=nil when no client, dynamic client, or context is set, got %T", kc)
+	}
+
+	orc := newCachedTestOrchestrator()
+	orc.kubeClient = &DefaultKubeClient{}
+	orc.dynClient = dyn
+	orc.namespace = "lazy-ns"
+
+	kc := orc.usableKubeClient()
+	if kc == nil {
+		t.Fatalf("expected usableKubeClient() to sync d.dynClient from g.dynClient")
+	}
+
+	opts, err := orc.PrepareManifestOptions(orchestrator.JobDefinition{
+		WorkloadName:    "lazy-sec-job",
+		CommandToRun:    "echo hi",
+		ComputeType:     "n2-standard-4",
+		MachineType:     "n2-standard-4",
+		ClusterLocation: "us-central1-a",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+	}, "registry.local/app:v1", JobProfile{IsCPUMachine: true, CapacityCount: 4}, false, false)
+	if err != nil {
+		t.Fatalf("PrepareManifestOptions failed: %v", err)
+	}
+	if gotFieldSelector != "type="+string(corev1.SecretTypeDockerConfigJson) {
+		t.Errorf("fieldSelector = %q, want type=kubernetes.io/dockerconfigjson", gotFieldSelector)
+	}
+	if !strings.Contains(opts.ImagePullSecrets, "dyn-sec") {
+		t.Errorf("expected dyn-sec in ImagePullSecrets, got %q", opts.ImagePullSecrets)
+	}
+	if _, err := kc.ListResources(k8s.SecretGVR, "lazy-ns", "app=demo", ""); err != nil || gotFieldSelector != "" {
+		t.Errorf("expected empty fieldSelector passthrough on generic ListResources, got %q (err=%v)", gotFieldSelector, err)
+	}
+}
+
+const applyManifestTestJobSet = `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: ns-apply
+spec:
+  replicatedJobs:
+  - name: main-job
+    replicas: 1
+    template:
+      spec:
+        template:
+          spec:
+            restartPolicy: Never
+            containers:
+            - name: workload-container
+              image: busybox
+`
+
+// applyManifestTestJobSetWithPVC is the shape SubmitJob produces for a job with a storage mount: an unnamespaced
+// JobSet followed by a PVC document that declares the resolved namespace.
+const applyManifestTestJobSetWithPVC = applyManifestTestJobSet + `---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ns-apply-data
+  namespace: team-a
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 5Gi
+`
+
+// kubectl apply must target the namespace SubmitJob resolved (--gke-namespace or the pinned context's
+// namespace) even when the manifest declares none, which is the case for custom templates extracted before
+// metadata.namespace was rendered; every read path already uses that namespace.
+func TestApplyManifest_AppliesInTargetNamespace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	manifestPath := filepath.Join(home, ".gcluster", "generated", "ns-apply.yaml")
+
+	cases := []struct {
+		name        string
+		namespace   string
+		manifest    string
+		applyResult shell.CommandResult
+		wantCalls   []string
+		wantErr     []string
+	}{
+		{
+			name: "resolved namespace", namespace: "team-a", manifest: applyManifestTestJobSet,
+			applyResult: shell.CommandResult{ExitCode: 0},
+			wantCalls:   []string{"kubectl apply -n team-a -f " + manifestPath},
+		},
+		{
+			name: "no resolved namespace keeps the context default", namespace: "", manifest: applyManifestTestJobSet,
+			applyResult: shell.CommandResult{ExitCode: 0},
+			wantCalls:   []string{"kubectl apply -f " + manifestPath},
+		},
+		{
+			// A multi-document manifest is written verbatim and applied with a single -n; kubectl accepts documents
+			// that declare the same namespace as the flag.
+			name: "multi-document manifest with a namespaced PVC", namespace: "team-a", manifest: applyManifestTestJobSetWithPVC,
+			applyResult: shell.CommandResult{ExitCode: 0},
+			wantCalls:   []string{"kubectl apply -n team-a -f " + manifestPath},
+		},
+		{
+			name: "apply failure names the namespace and trims kubectl output", namespace: "team-a", manifest: applyManifestTestJobSet,
+			applyResult: shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): jobsets.jobset.x-k8s.io is forbidden\n"},
+			wantCalls:   []string{"kubectl apply -n team-a -f " + manifestPath},
+			wantErr:     []string{`kubectl apply in namespace "team-a" failed with exit code 1: Error from server (Forbidden)`},
+		},
+		{
+			name: "apply failure without a namespace keeps the generic message", namespace: "", manifest: applyManifestTestJobSet,
+			applyResult: shell.CommandResult{ExitCode: 1, Stderr: "connection refused"},
+			wantCalls:   []string{"kubectl apply -f " + manifestPath},
+			wantErr:     []string{"kubectl apply failed with exit code 1: connection refused"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{"kubectl apply": {tc.applyResult}})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.kubeContext = jobSetTestKubeContext
+			orc.namespace = tc.namespace
+			err := orc.ApplyManifest(tc.manifest, "", "ns-apply")
+			if len(tc.wantErr) == 0 && err != nil {
+				t.Fatalf("ApplyManifest() error = %v", err)
+			}
+			for _, want := range tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), want) {
+					t.Fatalf("ApplyManifest() error = %v, want substring %q", err, want)
+				}
+			}
+			if err != nil && strings.HasSuffix(err.Error(), "\n") {
+				t.Errorf("error message has a trailing newline: %q", err.Error())
+			}
+			if got := commandsWithPrefix(mockExec, "kubectl apply"); !slices.Equal(got, tc.wantCalls) {
+				t.Errorf("kubectl apply calls = %q, want %q", got, tc.wantCalls)
+			}
+			written, readErr := os.ReadFile(manifestPath)
+			if readErr != nil {
+				t.Fatalf("generated manifest not written: %v", readErr)
+			}
+			if string(written) != tc.manifest {
+				t.Errorf("generated manifest was altered before apply:\n%s", string(written))
+			}
+			assertEveryKubectlCallPinned(t, mockExec, jobSetTestKubeContext)
+		})
 	}
 }

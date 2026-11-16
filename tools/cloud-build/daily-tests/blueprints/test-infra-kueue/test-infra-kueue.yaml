@@ -69,6 +69,7 @@ deployment_groups:
       - secretmanager.admin
       - cloudkms.cryptoKeyEncrypterDecrypter
       - iap.tunnelResourceAccessor
+      - iam.roleAdmin
 
   - id: node_pool_sa
     source: modules/project/service-account
@@ -121,7 +122,7 @@ deployment_groups:
     settings:
       name: reaper
       project_roles:
-      - cloudbuild.builds.viewer
+      - cloudbuild.builds.editor
 
   - id: kueue_reaper_binding
     source: modules/project/workload_identity_binding
