@@ -79,7 +79,7 @@ Always run the parser with **single quotes** so shell variables (`$CLUSTER`, `$Z
 ```bash
 python3 skills/xpk-to-clustertoolkit/scripts/parse_xpk_to_gcluster.py 'xpk ...'
 ```
-*(Adjust the script path if vendored outside the repository root).*
+*(Adjust the script path if vendored outside the repository root).* Do NOT execute `gcluster job submit`, `gcluster deploy`, or `gcluster destroy` (even with `--dry-run-out`), and do NOT search the local repository (`grep` / `find`) for hypothetical cluster or workload names from the user's prompt. `scripts/parse_xpk_to_gcluster.py` is the authoritative offline translator; output the translated command or `[PROPOSED REMEDIATION PLAN]` directly.
 
 > [!IMPORTANT]
 > `parse_xpk_to_gcluster.py` is the authoritative source of truth for flag mappings.
@@ -123,8 +123,12 @@ gcluster job submit --pathways --name my-pw-job --command 'python3 train.py' --p
 
 For `xpk cluster create` and `create-pathways`, generate a declarative Cluster Toolkit blueprint:
 
+> [!IMPORTANT]
+> - **Mandatory `ai_assisted: true` on Disk YAMLs**: Every Cluster Toolkit blueprint or deployment YAML file you create or copy on disk **MUST** include `ai_assisted: true` as a top-level key.
+> - **Conversational / CLI / Architecture Prompts (No Unsolicited Disk Writes)**: When the user asks a conversational CLI translation or storage/architecture question without asking to create files on disk, **do NOT write `.yaml` blueprints or `migration_report.md` to disk**—include the complete answer (including exact blueprint templates `examples/gke-managed-lustre.yaml`, `examples/storage-gke.yaml`, storage modules `modules/file-system/managed-lustre` and `modules/file-system/cloud-storage-bucket` paired with `modules/file-system/gke-persistent-volume`, GCS FUSE CSI, and `gcluster job submit --mount`) directly in your chat response.
+
 1. **Asset Selection & Blueprint Copying**:
-   Never modify files under `examples/` in place — they are shared, CI-tested assets. Copy the canonical example next to the source script and name it `<deployment_name>.yaml`; all edits go to the copy:
+   Never modify files under `examples/` in place — they are shared, CI-tested assets. When answering a CLI translation question, always include the parser's `blueprint_name: <name>`, `vars:`, any `nodepool_module_settings:`, and the `gcluster deploy <blueprint.yaml> --vars ...` command directly in your response (do not replace `--vars` with a separate `-d` deployment file); if the user explicitly asks to write a new or copied Cluster Toolkit blueprint YAML file to disk, name it `<deployment_name>.yaml` and include `ai_assisted: true` at the top level:
    * **TPU v4 / v5e / v5p / v6e**: `examples/gke-tpu-v6e/gke-tpu-v6e.yaml`, `examples/gke-tpu-v4/gke-tpu-v4.yaml`
    * **TPU 7x**: `examples/gke-tpu-7x/gke-tpu-7x.yaml`
    * **NVIDIA GPU (A4 / A3)**: `examples/gke-a4/gke-a4.yaml`, `examples/gke-a3-megagpu/gke-a3-megagpu.yaml`
@@ -142,7 +146,7 @@ For `xpk cluster create` and `create-pathways`, generate a declarative Cluster T
    The parser emits three distinct configuration buckets:
    * **`vars:`**: Global blueprint variables (e.g. `project_id`, `deployment_name`, `reservation`, `enable_pathways_for_tpus`). In modern unified GPU blueprints (`gke-a3-megagpu`, and as of PRs #6276/#6279 `gke-a3-highgpu`, `gke-a3-ultragpu`, `gke-a4`), consumption models are configured directly in `vars:` (e.g. `vars.spot`, `vars.enable_flex_start`, and `vars.reservation_affinity`).
    * **`cluster_module_settings:`**: Module settings applied directly under `modules/scheduler/gke-cluster` `settings:` (e.g. `authorized_cidr`).
-   * **`nodepool_module_settings:`**: Node pool settings applied directly under `modules/compute/gke-node-pool` `settings:` (e.g. `spot`, `enable_flex_start`, `auto_repair`, and for TPU/other blueprints, `reservation_affinity`).
+   * **`nodepool_module_settings:`**: Node pool settings applied directly under `modules/compute/gke-node-pool` `settings:` (e.g. `spot`, `enable_flex_start`, `auto_repair`, and for TPU/other blueprints, `reservation_affinity`). When presenting a translated TPU `xpk cluster create` configuration (`--spot`, `--flex`, or `--reservation`), always include the parser's `nodepool_module_settings:` block (e.g. `spot: true` or `enable_flex_start: true`, `auto_repair: false`, `static_node_count: $(null)`, and `reservation_affinity` with `NO_RESERVATION` or `SPECIFIC_RESERVATION`) in your response alongside the `vars:` block and `gcluster deploy` command.
    * *Reference Pattern*: When an example declares a key in `vars:` and references it in settings as `$(vars.X)` (e.g. `enable_pathways_for_tpus: $(vars.enable_pathways_for_tpus)` or `reservation_affinity.specific_reservations[0].name: $(vars.reservation)`), update the value in `vars:` and leave the reference intact. This keeps values `--vars`-settable at deploy time and prevents `test_deployment_variable_not_used` errors.
    * Do NOT add global variables that the example does not declare; explicit module settings block global propagation and trigger `test_deployment_variable_not_used`.
 
@@ -156,7 +160,7 @@ For `xpk cluster create` and `create-pathways`, generate a declarative Cluster T
 6. **Storage & Persistent Volume Architecture**:
    * A `modules/file-system/*` module provisions storage instances but creates **no** PVC. Always pair it with `modules/file-system/gke-persistent-volume` (`use: [<cluster>, <fs-module>]`).
    * In `examples/gke-managed-lustre.yaml`, the generated PersistentVolumeClaim claim name is **`gke-lustre-instance-pvc`** (not `lustre-pvc`). Workloads mount this claim directly.
-   * `<src>` resolution: Cloud Storage -> `gs://bucket/path`; PVC provisioned by `gke-persistent-volume` -> bare claim name; Filestore -> `filestore://<instance>/<share>`. `<dest>` was set by `xpk storage create --mount-point` and cannot be derived from the submission command; ask the user rather than guessing.
+   * `<src>` resolution: Cloud Storage buckets can be provisioned via `examples/storage-gke.yaml` (`modules/file-system/cloud-storage-bucket` paired with `modules/file-system/gke-persistent-volume`) or mounted via GCS FUSE CSI (`--mount "gs://bucket/path;/mnt/..."`); PVC provisioned by `gke-persistent-volume` -> bare claim name; Filestore -> `filestore://<instance>/<share>`. `<dest>` was set by `xpk storage create --mount-point` and cannot be derived from the submission command; ask the user rather than guessing.
 
 7. **GHPC Template Expressions & HCL Arithmetic**:
    Template expansions inside `$(...)` evaluate as native HCL expressions. Compound arithmetic is fully supported (e.g. `$(vars.num_slices * pool.node_count_static * pool.tpu_chips_per_node)`).
@@ -193,13 +197,16 @@ For `xpk cluster create` and `create-pathways`, generate a declarative Cluster T
 
 ---
 
-# Mandatory Post-Migration Verification & Residual Audit
+# Mandatory Post-Migration Verification & Residual Audit (Workspace File Migrations Only)
+
+> [!IMPORTANT]
+> Apply the disk deliverables below **only** when performing workspace script/repository migrations where the user explicitly asks to create or modify files on disk. When the user asks a conversational CLI translation or storage/architecture question without asking to create files on disk, **do NOT write `.yaml` blueprints or `migration_report.md` to disk**—include the complete answer (including exact blueprint templates `examples/gke-managed-lustre.yaml`, `examples/storage-gke.yaml`, storage modules `modules/file-system/managed-lustre` and `modules/file-system/cloud-storage-bucket` paired with `modules/file-system/gke-persistent-volume`, GCS FUSE CSI, and `gcluster job submit --mount`) directly in your chat response.
 
 1. **Audit for Residual XPK Execution Invocations**:
    Verify that zero residual XPK execution commands remain in migrated workload and deployment scripts. All active runtime entrypoints and submission loops must use `gcluster`. (Comparative documentation and migration guides may retain contextual XPK references for contrast, but operational scripts must be 100% clean).
-2. **Verify Asset & Blueprint Existence**:
-   Verify that all referenced blueprints (e.g. `examples/gke-tpu-v6e/gke-tpu-v6e.yaml`, `examples/gke-managed-lustre.yaml`) exist at the specified relative paths in the workspace.
-3. **Generate Migration Report Deliverable**:
+2. **Verify Asset & Blueprint Existence & `ai_assisted: true`**:
+   Verify that all referenced blueprints (e.g. `examples/gke-tpu-v6e/gke-tpu-v6e.yaml`, `examples/gke-managed-lustre.yaml`, `examples/storage-gke.yaml`) exist at the specified relative paths in the workspace, and that every Cluster Toolkit `.yaml` file written to disk includes top-level `ai_assisted: true`.
+3. **Generate Migration Report Deliverable (When Migrating On-Disk Scripts/Repos)**:
    Provide a markdown artifact (`migration_report.md`) containing:
    - Migration Inventory & Mapping Summary table.
    - Unmapped Flags table with behavioral impacts.

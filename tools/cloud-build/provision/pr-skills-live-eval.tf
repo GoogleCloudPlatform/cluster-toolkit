@@ -20,7 +20,7 @@ variable "skills_eval_service_account" {
 
 resource "google_cloudbuild_trigger" "pr_skills_smoke_eval" {
   name            = "PR-skills-smoke-eval"
-  description     = "Run offline and 5-case live smoke evaluation on skill and evaluation runner changes"
+  description     = "Run offline and live smoke evaluation on modified skills and evaluation runner changes"
   service_account = var.skills_eval_service_account
 
   filename = "tools/cloud-build/pr-skills-live-eval.yaml"
@@ -47,7 +47,7 @@ resource "google_cloudbuild_trigger" "pr_skills_smoke_eval" {
   ]
 
   substitutions = {
-    _EVAL_CASES       = "case_1,case_4,case_6,case_15,case_16"
+    _EVAL_CASES       = "smoke"
     _EVAL_CONCURRENCY = "4"
   }
 

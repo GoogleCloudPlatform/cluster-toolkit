@@ -42,11 +42,11 @@ RUN apt-get -y update && apt-get -y install \
     # install Node.js 22.x and Gemini CLI for live skill evaluations
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get -y install nodejs && \
-    npm install -g @google/gemini-cli@0.66.0 && \
+    npm install -g @google/gemini-cli@0.68.0 && \
     mkdir -p /root/.gemini/policies && \
-    printf '{\n  "security": {"auth": {"selectedType": "vertex-ai"}},\n  "model": {"name": "gemini-3.1-pro-preview"}\n}\n' > /root/.gemini/settings.json && \
+    printf '{\n  "security": {"auth": {"selectedType": "vertex-ai"}},\n  "model": {"name": "gemini-3.1-pro-preview"},\n  "tools": {"exclude": ["activate_skill"]}\n}\n' > /root/.gemini/settings.json && \
     printf '{\n  "/tmp": "TRUST_FOLDER",\n  "/workspace": "TRUST_FOLDER"\n}\n' > /root/.gemini/trustedFolders.json && \
-    printf '[[rule]]\ntoolName = "run_shell_command"\nargsPattern = ".*"\ndecision = "allow"\npriority = 999\nmodes = ["yolo"]\nallowRedirection = true\n' > /root/.gemini/policies/allow-yolo-shell.toml && \
+    printf '[[rule]]\ntoolName = "run_shell_command"\ndecision = "allow"\npriority = 999\nallowRedirection = true\n' > /root/.gemini/policies/allow-yolo-shell.toml && \
     npm cache clean --force && rm -rf ~/.npm && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     # create virtual environment

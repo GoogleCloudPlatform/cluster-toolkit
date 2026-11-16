@@ -41,6 +41,8 @@ Use this playbook when distributed AI/ML training jobs (PyTorchJob, RayCluster, 
 
 ## 1. Diagnostic Triage (Read-Only)
 
+If no live GKE cluster is reachable when running `kubectl`, do not halt on connection errors and do NOT search the local repository (`grep` / `find`) for hypothetical workload or queue manifests—provide the exact diagnostic `kubectl` commands and root-cause analysis (or `[PROPOSED REMEDIATION PLAN]`) directly from this playbook.
+
 ### Step 0: Fast-Path Workload Inspection (SRE First Response)
 If investigating a parent Job, JobSet, or RayCluster, locate its generated Workload name first:
 ```bash
@@ -89,9 +91,11 @@ kubectl get workloads.kueue.x-k8s.io -n <NAMESPACE> -o custom-columns='NAME:.met
 ---
 
 ### Step 2: Verify LocalQueue & Upstream ClusterQueue Binding
-Verify that the LocalQueue exists, routes to an active ClusterQueue, and is not administratively stopped:
+Verify that the LocalQueue exists, routes to an active ClusterQueue, and neither queue is administratively stopped:
 ```bash
 kubectl get localqueue <QUEUE_NAME> -n <NAMESPACE> -o custom-columns='NAME:.metadata.name,CLUSTER_QUEUE:.spec.clusterQueue,STOP_POLICY:.spec.stopPolicy,ACTIVE:.status.conditions[?(@.type=="Active")].status,REASON:.status.conditions[?(@.type=="Active")].reason,PENDING:.status.pendingWorkloads,RESERVING:.status.reservingWorkloads,ADMITTED:.status.admittedWorkloads'
+
+kubectl get clusterqueue <CLUSTER_QUEUE_NAME> -o custom-columns='NAME:.metadata.name,STOP_POLICY:.spec.stopPolicy,ACTIVE:.status.conditions[?(@.type=="Active")].status,REASON:.status.conditions[?(@.type=="Active")].reason'
 ```
 *Root Cause Check:*
 * If `STOP_POLICY` is `Hold` or `HoldAndDrain`, the queue is inactive and will not admit new workloads.
@@ -175,15 +179,18 @@ kubectl get clusterqueue <CLUSTER_QUEUE_NAME> -o jsonpath='{"Preemption: "}{.spe
 ### Step 6: Topology-Aware Scheduling (TAS) & AdmissionCheck Deep-Dive
 
 #### A. Diagnosing Topology-Aware Scheduling (TAS) Failures
-When multi-node distributed training jobs specify compact placement:
+When multi-node distributed training jobs specify compact placement (`kueue.x-k8s.io/podset-required-topology` or `kueue.x-k8s.io/podset-preferred-topology` annotations):
 ```bash
-# 1. Check if the workload requested a specific topology (TopologyRequest or PodSet annotations)
+# 1. Check if the workload requested a specific topology (TopologyRequest or podset-required-topology / podset-preferred-topology annotations)
 kubectl get workload <WORKLOAD_NAME> -n <NAMESPACE> -o jsonpath='{range .spec.podSets[*]}{"PodSet: "}{.name}{" | TopologyRequest: "}{.topologyRequest}{" | Annotations: "}{.template.metadata.annotations}{"\n"}{end}'
 
-# 2. Inspect Topology hierarchy and levels
+# 2. Verify ResourceFlavor .spec.topologyName binding
+kubectl get resourceflavor -o custom-columns='NAME:.metadata.name,TOPOLOGY:.spec.topologyName'
+
+# 3. Inspect Topology hierarchy and .spec.levels (e.g. cloud.google.com/gce-topology-block, gce-topology-subblock, gce-topology-host)
 kubectl get topology -o custom-columns='NAME:.metadata.name,LEVELS:.spec.levels'
 ```
-*If nodes are fragmented across racks/blocks, TAS cannot satisfy contiguous block requirements, leaving the job `Inadmissible`.*
+*If nodes are fragmented across racks/blocks or the `ResourceFlavor` is missing `topologyName`, TAS cannot satisfy contiguous block requirements (`podset-required-topology`), leaving the job `Inadmissible`.*
 
 #### B. Diagnosing GKE Dynamic Workload Scheduler (DWS Flex) Provisioning
 When using DWS Flex-start (`ProvisioningRequest`):
@@ -197,7 +204,7 @@ kubectl get provisioningrequests.autoscaling.x-k8s.io -n <NAMESPACE> -o custom-c
 ## 2. Safety Guidelines & Blast Radius Protocol
 
 * **Safe Commands (Zero Turn Delay)**: Read-only commands (`kubectl get`, `kubectl describe`, `kubectl logs`) execute freely during diagnosis.
-* **Mutating Commands (Confirmation Strictly Required)**: Deleting workloads, evicting pods, restarting controllers, altering ClusterQueue quota, or changing stop policies must **NEVER** execute without presenting a structured remediation plan and obtaining user confirmation.
+* **Mutating Commands (Confirmation Strictly Required)**: Deleting workloads (`kubectl delete`), patching resources (`kubectl patch`), applying manifests (`kubectl apply`), tainting nodes (`kubectl taint`), evicting pods, restarting controllers, altering ClusterQueue quota, or changing stop policies must **NEVER** execute or be emitted as raw runnable commands on read-only diagnostic prompts (`"how do I verify/check/debug/diagnose..."`, `"why is..."`) without presenting a structured remediation plan and obtaining user confirmation.
 
 ### Required Remediation Plan Format:
 ```markdown
@@ -209,7 +216,10 @@ kubectl get provisioningrequests.autoscaling.x-k8s.io -n <NAMESPACE> -o custom-c
 - Confirmation Required: Reply 'yes' to proceed.
 ```
 
-### Canonical Non-Destructive Patch Recipes:
+### Gated Remediation Patch Recipes (ONLY Inside [PROPOSED REMEDIATION PLAN] When Asked to Modify/Unpause):
+
+**On diagnostic or verification questions, output only read-only `kubectl get` / `describe` / `logs` commands; describe potential config fixes conceptually in prose without raw `kubectl patch` / `apply` / `delete` CLI blocks unless presenting a full `[PROPOSED REMEDIATION PLAN]` awaiting `'yes'`.**
+
 * **Unpausing a LocalQueue (`stopPolicy: None`)**:
   ```bash
   kubectl patch localqueue <NAME> -n <NAMESPACE> --type=merge -p '{"spec":{"stopPolicy":"None"}}'
