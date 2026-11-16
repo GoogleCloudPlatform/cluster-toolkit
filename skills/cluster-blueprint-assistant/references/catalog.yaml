@@ -1146,7 +1146,7 @@ blueprints:
   deployment_path: examples/gke-g4-confidential/gke-g4-confidential-deployment.yaml
   blueprint_name: gke-g4-confidential
   scheduler: gke
-  description: "This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV-SNP) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure..."
+  description: "This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure boot-disk..."
   machine_types: [g4-standard-48]
   accelerators: [nvidia-rtx-pro-6000]
   workloads: [ml-training, ml-inference]
