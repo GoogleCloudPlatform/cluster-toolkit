@@ -715,10 +715,11 @@ func splitPVCSource(src string) (claim string, subPath string, err error) {
 		}
 	}
 	subPath = strings.Trim(rawSub, "/")
-	if subPath == "." {
-		subPath = ""
-	} else if subPath != "" {
+	if subPath != "" {
 		subPath = path.Clean(subPath)
+		if subPath == "." {
+			subPath = ""
+		}
 	}
 	return claim, subPath, nil
 }
@@ -749,28 +750,53 @@ func parseNFSSource(src string) (server string, share string, err error) {
 	return server, share, nil
 }
 
-func parseNFSServerHost(src, rawServer string) (string, error) {
-	if strings.Contains(rawServer, "[") || strings.Contains(rawServer, "]") {
-		if h, _, splitErr := net.SplitHostPort(rawServer); splitErr == nil {
-			if net.ParseIP(h) == nil {
-				return "", fmt.Errorf("invalid NFS mount %q: invalid IPv6 server address %q", src, rawServer)
-			}
-			return h, nil
+func validateNFSPort(src, port string) error {
+	if port == "2049" {
+		return nil
+	}
+	return fmt.Errorf(
+		"invalid NFS mount %q: custom or invalid port %q is not supported by static NFS gateways (Kubernetes spec.nfs defaults to port 2049). "+
+			"Pre-provision a PV/PVC with mountOptions (e.g. port=%s) and mount it with --mount <pvc-name>;<dest>",
+		src, port, port)
+}
+
+func parseBracketedIPv6Host(src, rawServer string) (string, error) {
+	if h, port, splitErr := net.SplitHostPort(rawServer); splitErr == nil {
+		if err := validateNFSPort(src, port); err != nil {
+			return "", err
 		}
-		if !strings.HasPrefix(rawServer, "[") || !strings.HasSuffix(rawServer, "]") {
-			return "", fmt.Errorf("invalid NFS mount %q: malformed bracketed IPv6 server address %q", src, rawServer)
-		}
-		inner := rawServer[1 : len(rawServer)-1]
-		if net.ParseIP(inner) == nil {
+		if net.ParseIP(h) == nil {
 			return "", fmt.Errorf("invalid NFS mount %q: invalid IPv6 server address %q", src, rawServer)
 		}
-		return inner, nil
+		return h, nil
 	}
-	server := extractHost(rawServer)
-	if server == "" {
+	if !strings.HasPrefix(rawServer, "[") || !strings.HasSuffix(rawServer, "]") {
+		return "", fmt.Errorf("invalid NFS mount %q: malformed bracketed IPv6 server address %q", src, rawServer)
+	}
+	inner := rawServer[1 : len(rawServer)-1]
+	if net.ParseIP(inner) == nil {
+		return "", fmt.Errorf("invalid NFS mount %q: invalid IPv6 server address %q", src, rawServer)
+	}
+	return inner, nil
+}
+
+func parseNFSServerHost(src, rawServer string) (string, error) {
+	if strings.Contains(rawServer, "[") || strings.Contains(rawServer, "]") {
+		return parseBracketedIPv6Host(src, rawServer)
+	}
+	if h, port, splitErr := net.SplitHostPort(rawServer); splitErr == nil {
+		if err := validateNFSPort(src, port); err != nil {
+			return "", err
+		}
+		if h == "" {
+			return "", fmt.Errorf("invalid NFS mount %q: server host is missing. Expected format: nfs://<server>/<export_path>;<dest>", src)
+		}
+		return h, nil
+	}
+	if rawServer == "" {
 		return "", fmt.Errorf("invalid NFS mount %q: server host is missing. Expected format: nfs://<server>/<export_path>;<dest>", src)
 	}
-	return server, nil
+	return rawServer, nil
 }
 
 func extractHost(hostStr string) string {
@@ -875,7 +901,7 @@ func (sm *StorageManager) generateNFSResources(pm parsedMount, idx int, job orch
 		return MountInfo{}, "", err
 	}
 
-	if err := sm.checkNFSPVCreatePermission(pm.Src, job.DryRunManifest != "", state); err != nil {
+	if err := sm.checkNFSPVCreatePermission(pm.Src, job.DryRunManifest != ""); err != nil {
 		return MountInfo{}, "", err
 	}
 
@@ -895,11 +921,7 @@ func (sm *StorageManager) generateNFSResources(pm parsedMount, idx int, job orch
 func nfsGatewayPVCName(server, share string) string {
 	prefix := nfsGatewayPrefix + "-"
 	budget := maxGeneratedPVCNameLength - len(prefix)
-	raw := server + "-" + share
-	name := sanitizePVCName(raw)
-	if name != raw || len(name) > budget {
-		name = shortenWithDigest(name, server+"/"+share, budget)
-	}
+	name := shortenWithDigest(sanitizePVCName(server+"-"+share), server+"/"+share, budget)
 	return sanitizePVCName(prefix + name)
 }
 
@@ -956,28 +978,38 @@ func (sm *StorageManager) renderFilestoreGateway(pvcName, serverIP, share, capac
 	return info, pvYAML, pvName, ns, nil
 }
 
-func (sm *StorageManager) checkNFSPVCreatePermission(src string, dryRun bool, state *mountBuildState) error {
-	if dryRun || sm.orchestrator == nil || sm.orchestrator.executor == nil || sm.orchestrator.nfsAuthChecked || (state != nil && state.nfsAuthChecked) {
+func (sm *StorageManager) checkNFSPVCreatePermission(src string, dryRun bool) error {
+	if src == "" || dryRun || sm.orchestrator == nil || sm.orchestrator.executor == nil || sm.orchestrator.nfsAuthChecked {
 		return nil
 	}
-	res := sm.orchestrator.kubectl("auth", "can-i", "create", "persistentvolumes", kubectlReadTimeout)
+	res := sm.orchestrator.kubectl("auth", "can-i", "create", "persistentvolumes", "--all-namespaces", kubectlReadTimeout)
 	stdout, stderr := strings.TrimSpace(res.Stdout), strings.TrimSpace(res.Stderr)
 	if res.ExitCode == 0 && strings.EqualFold(stdout, "yes") {
-		if state != nil {
-			state.nfsAuthChecked = true
-		}
 		sm.orchestrator.nfsAuthChecked = true
 		return nil
 	}
-	detail := stderr
-	if detail == "" && !strings.EqualFold(stdout, "no") {
-		detail = stdout
+	return nfsPVPermissionError(src, stdout, stderr)
+}
+
+func nfsPVPermissionError(src, stdout, stderr string) error {
+	lowerOut := strings.ToLower(stdout)
+	isDenial := lowerOut == "no" || strings.HasPrefix(lowerOut, "no ") || strings.HasPrefix(lowerOut, "no-")
+	if !isDenial {
+		detail := stderr
+		if detail == "" {
+			detail = stdout
+		}
+		return fmt.Errorf("failed to verify cluster-scoped PersistentVolume create permission for mount %q (`kubectl auth can-i create persistentvolumes --all-namespaces`): %s", src, detail)
+	}
+	detail := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(stdout[len("no"):]), "-"))
+	if detail == "" {
+		detail = stderr
 	}
 	if detail != "" {
 		detail = fmt.Sprintf(" (%s)", detail)
 	}
 	return fmt.Errorf(
-		"mount %q requires cluster-scoped permission to create PersistentVolumes (`kubectl auth can-i create persistentvolumes` returned no%s). "+
+		"mount %q requires cluster-scoped permission to create PersistentVolumes (`kubectl auth can-i create persistentvolumes --all-namespaces` returned no%s). "+
 			"gcluster does not fall back to inline PodSpec NFS volumes on restricted clusters. "+
 			"Ask a cluster administrator to provision a PersistentVolumeClaim for this NFS export (or use an existing StorageClass) "+
 			"and mount it with --mount <pvc-name>;<dest> (or --mount <pvc-name>/<sub-path>;<dest>)",
@@ -1166,13 +1198,17 @@ func (sm *StorageManager) checkExistingGatewayPV(pvName, pvcName, ns, renderedYA
 	}
 
 	if !reflect.DeepEqual(existing.Spec, rendered.Spec) {
+		targetDesc, dataDesc := "this bucket/profile", "Bucket data"
+		if rendered.Spec.NFS != nil {
+			targetDesc, dataDesc = "this NFS export", "NFS export data"
+		}
 		return fmt.Errorf(
 			"gateway PV %q already exists with different settings (created by an older gcluster version or a custom template). "+
-				"It is shared by every job in namespace %q that mounts this bucket/profile. To replace it: cancel those jobs "+
+				"It is shared by every job in namespace %q that mounts %s. To replace it: cancel those jobs "+
 				"(`kubectl describe pvc %s -n %s` lists them under Used By), then run "+
 				"`kubectl delete pvc %s -n %s && kubectl delete pv %s`, and resubmit. "+
-				"Bucket data is not affected (reclaimPolicy: Retain)",
-			pvName, ns, pvcName, ns, pvcName, ns, pvName)
+				"%s is not affected (reclaimPolicy: Retain)",
+			pvName, ns, targetDesc, pvcName, ns, pvcName, ns, pvName, dataDesc)
 	}
 	return nil
 }
@@ -1582,7 +1618,7 @@ func (sm *StorageManager) ValidateClusterMounts(job orchestrator.JobDefinition) 
 		return err
 	}
 
-	if err := sm.checkNFSPVCreatePermission(firstNFSMount, firstNFSMount == "", nil); err != nil {
+	if err := sm.checkNFSPVCreatePermission(firstNFSMount, false); err != nil {
 		return err
 	}
 
@@ -1595,9 +1631,9 @@ func (sm *StorageManager) ValidateClusterMounts(job orchestrator.JobDefinition) 
 		return err
 	}
 
-	totalNodes, numSlices, nodesPerSlice := effectiveWorkloadNodes(job)
+	totalNodes, breakdown := effectiveWorkloadNodes(job)
 	for _, req := range pvcReqs {
-		if err := sm.validateSingleUserPVC(req, ns, totalNodes, numSlices, nodesPerSlice); err != nil {
+		if err := sm.validateSingleUserPVC(req, ns, totalNodes, breakdown); err != nil {
 			return err
 		}
 	}
@@ -1605,17 +1641,17 @@ func (sm *StorageManager) ValidateClusterMounts(job orchestrator.JobDefinition) 
 	return nil
 }
 
-func effectiveWorkloadNodes(job orchestrator.JobDefinition) (totalNodes, numSlices, nodesPerSlice int) {
-	numSlices = max(1, job.NumSlices)
-	nodesPerSlice = max(1, job.NodesPerSlice)
+func effectiveWorkloadNodes(job orchestrator.JobDefinition) (totalNodes int, breakdown string) {
+	numSlices, nodesPerSlice := max(1, job.NumSlices), max(1, job.NodesPerSlice)
 	if job.Pathways.RunSPSWorkload != "" {
-		return 1, numSlices, nodesPerSlice
+		return 1, fmt.Sprintf("numSlices=%d, nodesPerSlice=%d", numSlices, nodesPerSlice)
 	}
 	totalNodes = numSlices * nodesPerSlice
-	if job.IsPathwaysJob && !job.Pathways.Headless && !job.Pathways.DeploySPS {
+	if job.IsPathwaysJob {
 		totalNodes++
+		return totalNodes, fmt.Sprintf("numSlices=%d, nodesPerSlice=%d, plus 1 Pathways head node", numSlices, nodesPerSlice)
 	}
-	return totalNodes, numSlices, nodesPerSlice
+	return totalNodes, fmt.Sprintf("numSlices=%d, nodesPerSlice=%d", numSlices, nodesPerSlice)
 }
 
 func (sm *StorageManager) collectClusterMountTargets(rawMounts []string) (pvcReqs []userPVCRequest, firstGCS, firstFilestore, firstNFS string, err error) {
@@ -1701,7 +1737,7 @@ func (sm *StorageManager) validateCSIDriverInstalled(mountSrc, driverName string
 	return nil
 }
 
-func (sm *StorageManager) validateSingleUserPVC(req userPVCRequest, ns string, totalNodes, numSlices, nodesPerSlice int) error {
+func (sm *StorageManager) validateSingleUserPVC(req userPVCRequest, ns string, totalNodes int, breakdown string) error {
 	res := sm.orchestrator.kubectl("get", "pvc", req.claim, "-n", ns, "--ignore-not-found", kubectlReadTimeout, "-o", "json")
 	if res.ExitCode != 0 {
 		errMsg := strings.TrimSpace(res.Stderr)
@@ -1744,16 +1780,16 @@ func (sm *StorageManager) validateSingleUserPVC(req userPVCRequest, ns string, t
 		if !hasRWX && !hasROX {
 			return fmt.Errorf(
 				"PersistentVolumeClaim %q (mounted at %q) has accessModes %v, which only allows mounting on a single node, "+
-					"but this job requests %d nodes (numSlices=%d, nodesPerSlice=%d). "+
+					"but this job requests %d nodes (%s). "+
 					"Single-node volumes (ReadWriteOnce / ReadWriteOncePod) cannot be attached to multiple hosts simultaneously and will fail with Multi-Attach errors. "+
 					"Use a ReadWriteMany PVC, mount an NFS share with --mount nfs://<server>/<export>;%s, or use a node-local path with --mount /host/path;%s",
-				req.claim, req.firstDest, modes, totalNodes, numSlices, nodesPerSlice, req.firstDest, req.firstDest)
+				req.claim, req.firstDest, modes, totalNodes, breakdown, req.firstDest, req.firstDest)
 		}
 		if req.needsRW && !hasRWX {
 			return fmt.Errorf(
-				"PersistentVolumeClaim %q (mounted read-write at %q) has accessModes %v and does not support ReadWriteMany across %d nodes (numSlices=%d, nodesPerSlice=%d). "+
+				"PersistentVolumeClaim %q (mounted read-write at %q) has accessModes %v and does not support ReadWriteMany across %d nodes (%s). "+
 					"Mount the PVC read-only (--mount %s;%s;ro) or use a ReadWriteMany PVC or --mount nfs://<server>/<export>;%s;rw",
-				req.claim, req.firstRWDest, modes, totalNodes, numSlices, nodesPerSlice, req.firstRWSrc, req.firstRWDest, req.firstRWDest)
+				req.claim, req.firstRWDest, modes, totalNodes, breakdown, req.firstRWSrc, req.firstRWDest, req.firstRWDest)
 		}
 	}
 	return nil

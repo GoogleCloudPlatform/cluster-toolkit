@@ -125,10 +125,10 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err != nil {
 		return err
 	}
-	if err := g.pinTelemetryAndValidate(&job); err != nil {
+	if err := sm.ValidateClusterMounts(job); err != nil {
 		return err
 	}
-	if err := sm.ValidateClusterMounts(job); err != nil {
+	if err := g.pinTelemetryAndValidate(&job); err != nil {
 		return err
 	}
 

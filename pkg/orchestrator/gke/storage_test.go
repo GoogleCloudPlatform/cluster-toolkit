@@ -1083,10 +1083,10 @@ func verifyFilestoreManifest(t *testing.T, manifest, name, server, path, capacit
 	if !strings.Contains(manifest, "volumeName: "+expectedPVName) {
 		t.Errorf("manifest missing expected volumeName binding %s: %s", expectedPVName, manifest)
 	}
-	if !strings.Contains(manifest, "server: "+server) {
+	if !strings.Contains(manifest, fmt.Sprintf("server: %q", server)) {
 		t.Errorf("manifest missing expected server IP: %s", manifest)
 	}
-	if !strings.Contains(manifest, "path: "+path) {
+	if !strings.Contains(manifest, fmt.Sprintf("path: %q", path)) {
 		t.Errorf("manifest missing expected path: %s", manifest)
 	}
 	if !strings.Contains(manifest, "storage: "+capacity) {
@@ -1134,8 +1134,8 @@ spec:
   accessModes:
   - ReadWriteMany
   nfs:
-    path: /share
-    server: 10.0.0.2
+    path: "/share"
+    server: "10.0.0.2"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -4292,15 +4292,52 @@ func TestPVCSubPathMounts_VolumeDeduplication(t *testing.T) {
 	}
 }
 
+func assertNFSGatewayManifest(t *testing.T, manifest, wantPV, wantPVC, wantServer, wantPath, wantWorkload, wantClaimedAt string) {
+	t.Helper()
+	if err := ValidateJobSetManifest(manifest); err != nil {
+		t.Fatalf("ValidateJobSetManifest() failed for NFS gateway manifest: %v\n%s", err, manifest)
+	}
+	docs := splitManifestDocs(t, manifest)
+	pv := findDoc(t, docs, "PersistentVolume")
+	pvc := findDoc(t, docs, "PersistentVolumeClaim")
+	if got := nested(t, pv, "metadata", "name"); got != wantPV {
+		t.Errorf("PV metadata.name = %v, want %q", got, wantPV)
+	}
+	if got := nested(t, pv, "spec", "nfs", "server"); got != wantServer {
+		t.Errorf("PV spec.nfs.server = %v, want %q", got, wantServer)
+	}
+	if got := nested(t, pv, "spec", "nfs", "path"); got != wantPath {
+		t.Errorf("PV spec.nfs.path = %v, want %q", got, wantPath)
+	}
+	if got := nested(t, pv, "spec", "capacity", "storage"); got != "1Ti" {
+		t.Errorf("PV spec.capacity.storage = %v, want 1Ti", got)
+	}
+	if got := nested(t, pvc, "metadata", "name"); got != wantPVC {
+		t.Errorf("PVC metadata.name = %v, want %q", got, wantPVC)
+	}
+	if got := nested(t, pvc, "spec", "volumeName"); got != wantPV {
+		t.Errorf("PVC spec.volumeName = %v, want %q", got, wantPV)
+	}
+	if got := nested(t, pvc, "metadata", "annotations", lastClaimedAtAnnotation); got != wantClaimedAt {
+		t.Errorf("PVC %s = %v, want %q", lastClaimedAtAnnotation, got, wantClaimedAt)
+	}
+	if got := nested(t, pvc, "metadata", "annotations", lastClaimedByAnnotation); got != wantWorkload {
+		t.Errorf("PVC %s = %v, want %q", lastClaimedByAnnotation, got, wantWorkload)
+	}
+}
+
 func TestProcessMounts_NFSGatewayRendering(t *testing.T) {
 	fixedTime := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	const wantTime = "2026-04-14T12:00:00Z"
 	trainPVC := nfsGatewayPVCName("10.0.0.1", "exports/train")
 	trainPV := trainPVC + "-default"
 	ipv6PVC := nfsGatewayPVCName("fd12::1", "share")
 	ipv6PV := ipv6PVC + "-default"
+	trailingIPv6PVC := nfsGatewayPVCName("fd12:1::", "share")
+	trailingIPv6PV := trailingIPv6PVC + "-default"
 
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
-		"kubectl auth can-i create persistentvolumes --request-timeout=10s": {
+		"kubectl auth can-i create persistentvolumes --all-namespaces --request-timeout=10s": {
 			{ExitCode: 0, Stdout: "yes\n"},
 		},
 		"kubectl get pv " + trainPV + " --ignore-not-found --request-timeout=10s -o json": {
@@ -4309,113 +4346,123 @@ func TestProcessMounts_NFSGatewayRendering(t *testing.T) {
 		"kubectl get pv " + ipv6PV + " --ignore-not-found --request-timeout=10s -o json": {
 			{ExitCode: 0, Stdout: ""},
 		},
+		"kubectl get pv " + trailingIPv6PV + " --ignore-not-found --request-timeout=10s -o json": {
+			{ExitCode: 0, Stdout: ""},
+		},
 	})
 	orc := newTestGKEOrchestrator(mockExec)
 	sm := &StorageManager{
 		orchestrator: orc,
 		now:          func() time.Time { return fixedTime },
 	}
-	job := orchestrator.JobDefinition{WorkloadName: "bloom-job"}
+	job := orchestrator.JobDefinition{WorkloadName: "train-job"}
 
 	mounts := []string{
 		"nfs://10.0.0.1/exports/train;/mnt/train;rw",
 		"nfs://10.0.0.1/exports/train;/mnt/train-ro;ro",
 		"nfs://[fd12::1]:2049/share;/mnt/ipv6",
+		"nfs://[fd12::1]/share;/mnt/ipv6-portless",
+		"nfs://[fd12:1::]/share;/mnt/ipv6-trailing",
 	}
 	infos, manifests, err := sm.ProcessMounts(mounts, job)
 	if err != nil {
 		t.Fatalf("ProcessMounts() unexpected error: %v", err)
 	}
-	if len(manifests) != 2 {
-		t.Fatalf("expected 2 gateway manifests (deduplicated first two), got %d", len(manifests))
+	if len(manifests) != 3 {
+		t.Fatalf("expected 3 gateway manifests, got %d", len(manifests))
 	}
-	if infos[0].Name != "vol-0" || infos[1].Name != "vol-0" || infos[2].Name != "vol-2" {
+	if infos[0].Name != "vol-0" || infos[1].Name != "vol-0" || infos[2].Name != "vol-2" || infos[3].Name != "vol-2" || infos[4].Name != "vol-4" {
 		t.Errorf("unexpected MountInfo results: %+v", infos)
 	}
-	for _, wantSub := range []string{
-		"name: " + trainPV,
-		"gcluster.google.com/storage-type: nfs",
-		"path: /exports/train",
-		"server: 10.0.0.1",
-		"storage: 1Ti",
-	} {
-		if !strings.Contains(manifests[0], wantSub) {
-			t.Errorf("NFS gateway manifest[0] missing %q:\n%s", wantSub, manifests[0])
-		}
-	}
-	if !strings.Contains(manifests[1], "server: fd12::1") || !strings.Contains(manifests[1], "path: /share") {
-		t.Errorf("unexpected IPv6 NFS gateway manifest[1]:\n%s", manifests[1])
-	}
+	assertNFSGatewayManifest(t, manifests[0], trainPV, trainPVC, "10.0.0.1", "/exports/train", "train-job", wantTime)
+	assertNFSGatewayManifest(t, manifests[1], ipv6PV, ipv6PVC, "fd12::1", "/share", "train-job", wantTime)
+	assertNFSGatewayManifest(t, manifests[2], trailingIPv6PV, trailingIPv6PVC, "fd12:1::", "/share", "train-job", wantTime)
 }
 
 func TestProcessMounts_NFSGatewayReuseAndCollisions(t *testing.T) {
 	fixedTime := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	trainPVC := nfsGatewayPVCName("10.0.0.1", "exports/train")
 	trainPV := trainPVC + "-default"
-	job := orchestrator.JobDefinition{WorkloadName: "bloom-job"}
+	job := orchestrator.JobDefinition{WorkloadName: "train-job"}
 
-	t.Run("distinct exports with lossy separators do not collide", func(t *testing.T) {
-		if a, b := nfsGatewayPVCName("10.0.0.1", "exports/train_v1"), nfsGatewayPVCName("10.0.0.1", "exports/train/v1"); a == b {
-			t.Errorf("expected distinct PVC names for train_v1 vs train/v1, both got %q", a)
-		}
-		if a, b := nfsGatewayPVCName("fd12::1", "share"), nfsGatewayPVCName("fd12:1::", "share"); a == b {
-			t.Errorf("expected distinct PVC names for fd12::1 vs fd12:1::, both got %q", a)
+	t.Run("distinct exports with lossy separators or hyphens do not collide", func(t *testing.T) {
+		for _, pair := range [][4]string{
+			{"10.0.0.1", "exports/train_v1", "10.0.0.1", "exports/train/v1"},
+			{"fd12::1", "share", "fd12:1::", "share"},
+			{"nfs-prod", "data", "nfs", "prod-data"},
+		} {
+			a := nfsGatewayPVCName(pair[0], pair[1])
+			b := nfsGatewayPVCName(pair[2], pair[3])
+			if a == b {
+				t.Errorf("expected distinct PVC names for (%q,%q) vs (%q,%q), both got %q", pair[0], pair[1], pair[2], pair[3], a)
+			}
 		}
 	})
 
 	t.Run("reuses existing Bound NFS gateway PV with canonical 1Ti capacity and rejects conflicting path", func(t *testing.T) {
 		existingBoundJSON := `{"metadata":{"labels":{"gcluster.google.com/managed-by":"cluster-toolkit"}},"spec":{"capacity":{"storage":"1Ti"},"nfs":{"path":"/exports/train","server":"10.0.0.1"}},"status":{"phase":"Bound"}}`
+		canICmd := "kubectl auth can-i create persistentvolumes --all-namespaces --request-timeout=10s"
+		getPVCmd := "kubectl get pv " + trainPV + " --ignore-not-found --request-timeout=10s -o json"
 		mockReuse := NewMockExecutor(map[string][]shell.CommandResult{
-			"kubectl auth can-i create persistentvolumes --request-timeout=10s": {
-				{ExitCode: 0, Stdout: "yes\n"},
-			},
-			"kubectl get pv " + trainPV + " --ignore-not-found --request-timeout=10s -o json": {
-				{ExitCode: 0, Stdout: existingBoundJSON},
-			},
+			canICmd:  {{ExitCode: 0, Stdout: "yes\n"}},
+			getPVCmd: {{ExitCode: 0, Stdout: existingBoundJSON}},
 		})
-		smReuse := &StorageManager{
-			orchestrator: newTestGKEOrchestrator(mockReuse),
-			now:          func() time.Time { return fixedTime },
-		}
+		smReuse := &StorageManager{orchestrator: newTestGKEOrchestrator(mockReuse), now: func() time.Time { return fixedTime }}
 		if _, _, err := smReuse.ProcessMounts([]string{"nfs://10.0.0.1/exports/train;/mnt/train;rw"}, job); err != nil {
 			t.Fatalf("expected existing Bound NFS gateway PV with 1Ti capacity to be reused, got: %v", err)
 		}
 
 		conflictingJSON := strings.Replace(existingBoundJSON, `"/exports/train"`, `"/exports/other"`, 1)
 		mockConflict := NewMockExecutor(map[string][]shell.CommandResult{
-			"kubectl auth can-i create persistentvolumes --request-timeout=10s": {
-				{ExitCode: 0, Stdout: "yes\n"},
-			},
-			"kubectl get pv " + trainPV + " --ignore-not-found --request-timeout=10s -o json": {
-				{ExitCode: 0, Stdout: conflictingJSON},
-			},
+			canICmd:  {{ExitCode: 0, Stdout: "yes\n"}},
+			getPVCmd: {{ExitCode: 0, Stdout: conflictingJSON}},
 		})
-		smConflict := &StorageManager{
-			orchestrator: newTestGKEOrchestrator(mockConflict),
-			now:          func() time.Time { return fixedTime },
-		}
-		if _, _, err := smConflict.ProcessMounts([]string{"nfs://10.0.0.1/exports/train;/mnt/train;rw"}, job); err == nil || !strings.Contains(err.Error(), "already exists with different settings") {
-			t.Fatalf("expected conflicting NFS PV spec to be rejected, got: %v", err)
+		smConflict := &StorageManager{orchestrator: newTestGKEOrchestrator(mockConflict), now: func() time.Time { return fixedTime }}
+		_, _, err := smConflict.ProcessMounts([]string{"nfs://10.0.0.1/exports/train;/mnt/train;rw"}, job)
+		if err == nil || !strings.Contains(err.Error(), "this NFS export") || !strings.Contains(err.Error(), "NFS export data") {
+			t.Fatalf("expected NFS-specific conflict error, got: %v", err)
 		}
 	})
 }
 
 func TestProcessMounts_NFSRBACAndValidation(t *testing.T) {
 	fixedTime := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
+	const canICmd = "kubectl auth can-i create persistentvolumes --all-namespaces --request-timeout=10s"
 
-	t.Run("fails fast with actionable guidance when RBAC denies creating PersistentVolumes", func(t *testing.T) {
-		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
-			"kubectl auth can-i create persistentvolumes --request-timeout=10s": {
-				{ExitCode: 1, Stdout: "no\n"},
+	t.Run("fails fast on RBAC denial and distinguishes non-RBAC errors", func(t *testing.T) {
+		for _, tc := range []struct {
+			name      string
+			res       shell.CommandResult
+			wantSub   string
+			forbidSub string
+		}{
+			{
+				name:      "plain no denial",
+				res:       shell.CommandResult{ExitCode: 1, Stdout: "no\n"},
+				wantSub:   "--mount <pvc-name>;<dest>",
+				forbidSub: "returned no (no)",
 			},
-		})
-		sm := &StorageManager{orchestrator: newTestGKEOrchestrator(mockExec)}
-		err := sm.ValidateClusterMounts(orchestrator.JobDefinition{RawMounts: []string{"nfs://nfs.corp.local/datasets;/data"}})
-		if err == nil || !strings.Contains(err.Error(), "kubectl auth can-i create persistentvolumes") || !strings.Contains(err.Error(), "--mount <pvc-name>;<dest>") {
-			t.Fatalf("unexpected error when RBAC denies PV creation: %v", err)
-		}
-		if strings.Contains(err.Error(), "returned no (no)") {
-			t.Errorf("error should not duplicate 'no (no)': %v", err)
+			{
+				name:      "no with authorizer reason",
+				res:       shell.CommandResult{ExitCode: 1, Stdout: "no - user lacks cluster role\n"},
+				wantSub:   "returned no (user lacks cluster role)",
+				forbidSub: "returned no (no -",
+			},
+			{
+				name:      "non-RBAC connectivity error",
+				res:       shell.CommandResult{ExitCode: 1, Stderr: "Unable to connect to the server: i/o timeout"},
+				wantSub:   "failed to verify cluster-scoped PersistentVolume create permission",
+				forbidSub: "returned no",
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				mockExec := NewMockExecutor(map[string][]shell.CommandResult{canICmd: {tc.res}})
+				sm := &StorageManager{orchestrator: newTestGKEOrchestrator(mockExec)}
+				err := sm.ValidateClusterMounts(orchestrator.JobDefinition{RawMounts: []string{"nfs://nfs.corp.local/datasets;/data"}})
+				if err == nil || !strings.Contains(err.Error(), tc.wantSub) || strings.Contains(err.Error(), tc.forbidSub) {
+					t.Fatalf("got err=%v, want %q and not %q", err, tc.wantSub, tc.forbidSub)
+				}
+			})
 		}
 	})
 
@@ -4430,20 +4477,30 @@ func TestProcessMounts_NFSRBACAndValidation(t *testing.T) {
 			t.Fatalf("dry-run got err=%v manifests=%d calls=%v", err, len(manifests), mockExec.calls)
 		}
 	})
+}
 
-	t.Run("rejects malformed nfs URIs", func(t *testing.T) {
-		sm := &StorageManager{}
-		for _, bad := range []string{
-			"nfs://10.0.0.1/;/data",
-			"nfs:///export;/data",
-			"nfs://10.0.0.1/export/../secret;/data",
-			"nfs://[bad-ipv6]/export;/data",
-		} {
-			if _, err := sm.parseSingleVolume(bad); err == nil {
-				t.Errorf("parseSingleVolume(%q) succeeded, want error", bad)
-			}
+func TestParseSingleVolume_NFSAndSubPathEdgeCases(t *testing.T) {
+	sm := &StorageManager{}
+	for _, tc := range []struct {
+		raw     string
+		wantSub string
+	}{
+		{"nfs://10.0.0.1/;/data", "Expected format: nfs://<server>/<export_path>;<dest>"},
+		{"nfs:///export;/data", "Expected format: nfs://<server>/<export_path>;<dest>"},
+		{"nfs://10.0.0.1/export/../secret;/data", "must not contain '..'"},
+		{"nfs://[bad-ipv6]/export;/data", "invalid IPv6 server address"},
+		{"nfs://[fd12::1/export;/data", "malformed bracketed IPv6 server address"},
+		{"nfs://10.0.0.1:20490/exports/train;/data", `custom or invalid port "20490"`},
+		{"nfs://[fd12::1]:abc/share;/data", `custom or invalid port "abc"`},
+	} {
+		if _, err := sm.parseSingleVolume(tc.raw); err == nil || !strings.Contains(err.Error(), tc.wantSub) {
+			t.Errorf("parseSingleVolume(%q) = %v, want substring %q", tc.raw, err, tc.wantSub)
 		}
-	})
+	}
+	pm, err := sm.parseSingleVolume("shared-pvc/./.;/data")
+	if err != nil || pm.Src != "shared-pvc" || pm.SubPath != "" {
+		t.Errorf("parseSingleVolume(shared-pvc/./.) = (%+v, %v), want empty SubPath", pm, err)
+	}
 }
 
 func TestValidateClusterMounts_PVCExistenceAndSingleNodeCache(t *testing.T) {
@@ -4465,27 +4522,49 @@ func TestValidateClusterMounts_PVCExistenceAndSingleNodeCache(t *testing.T) {
 		}
 	})
 
-	t.Run("single-node job allows ReadWriteOnce PVC and caches inspection for ProcessMounts", func(t *testing.T) {
+	t.Run("403 Forbidden fails open for PVC and CSIDriver checks", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			pvcJSONCmd: {{ExitCode: 1, Stderr: `Error from server (Forbidden): persistentvolumeclaims "train-pvc" is forbidden`}},
+			"kubectl get csidriver gcsfuse.csi.storage.gke.io --ignore-not-found --request-timeout=10s -o name": {
+				{ExitCode: 1, Stderr: `Error from server (Forbidden): csidrivers.storage.k8s.io "gcsfuse.csi.storage.gke.io" is forbidden`},
+			},
+		})
+		sm := &StorageManager{orchestrator: newTestGKEOrchestrator(mockExec)}
+		if err := sm.ValidateClusterMounts(orchestrator.JobDefinition{
+			ProjectID:     "my-proj",
+			RawMounts:     []string{"gs://my-bkt;/gcs", "train-pvc;/data"},
+			NumSlices:     1,
+			NodesPerSlice: 2,
+		}); err != nil {
+			t.Fatalf("expected 403 Forbidden to fail open, got: %v", err)
+		}
+	})
+
+	t.Run("single-node job allows ReadWriteOnce PVC and caches inspection and nfsAuthChecked for ProcessMounts", func(t *testing.T) {
+		canICmd := "kubectl auth can-i create persistentvolumes --all-namespaces --request-timeout=10s"
+		nfsPVC := nfsGatewayPVCName("10.0.0.1", "exports")
 		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 			pvcJSONCmd: {{
 				ExitCode: 0,
 				Stdout:   `{"metadata":{"annotations":{"volume.kubernetes.io/storage-provisioner":"gcsfuse.csi.storage.gke.io"}},"spec":{"volumeName":"pv-1","storageClassName":"standard-rwo","accessModes":["ReadWriteOnce"]},"status":{"accessModes":["ReadWriteOnce"]}}`,
 			}},
+			canICmd: {{ExitCode: 0, Stdout: "yes\n"}},
+			"kubectl get pv " + nfsPVC + "-default --ignore-not-found --request-timeout=10s -o json": {{ExitCode: 0, Stdout: ""}},
 		})
 		orc := newTestGKEOrchestrator(mockExec)
 		sm := &StorageManager{orchestrator: orc}
 		job := orchestrator.JobDefinition{
-			RawMounts:     []string{"train-pvc/sub1;/data"},
+			RawMounts:     []string{"train-pvc/sub1;/data", "nfs://10.0.0.1/exports;/nfs"},
 			NumSlices:     1,
 			NodesPerSlice: 1,
 		}
 		if err := sm.ValidateClusterMounts(job); err != nil {
-			t.Fatalf("ValidateClusterMounts() unexpected error for single-node RWO PVC: %v", err)
+			t.Fatalf("ValidateClusterMounts() unexpected error: %v", err)
 		}
 		sm2 := &StorageManager{orchestrator: orc}
 		infos, _, err := sm2.ProcessMounts(job.RawMounts, job)
-		if err != nil || !infos[0].NeedsGCSFuseSidecar || len(mockExec.calls) != 1 {
-			t.Fatalf("ProcessMounts() got err=%v sidecar=%v calls=%d", err, infos[0].NeedsGCSFuseSidecar, len(mockExec.calls))
+		if err != nil || !infos[0].NeedsGCSFuseSidecar || len(mockExec.calls) != 3 {
+			t.Fatalf("ProcessMounts() got err=%v sidecar=%v calls=%v", err, infos[0].NeedsGCSFuseSidecar, mockExec.calls)
 		}
 	})
 }
@@ -4493,33 +4572,65 @@ func TestValidateClusterMounts_PVCExistenceAndSingleNodeCache(t *testing.T) {
 func TestValidateClusterMounts_MultiHostAccessModes(t *testing.T) {
 	pvcJSONCmd := "kubectl get pvc train-pvc -n default --ignore-not-found --request-timeout=10s -o json"
 
-	t.Run("multi-host job rejects ReadWriteOnce PVC across NodesPerSlice > 1 or NumSlices > 1", func(t *testing.T) {
-		for _, job := range []orchestrator.JobDefinition{
-			{RawMounts: []string{"train-pvc;/data"}, NumSlices: 1, NodesPerSlice: 2},
-			{RawMounts: []string{"train-pvc;/data"}, NumSlices: 2, NodesPerSlice: 1},
-			{RawMounts: []string{"train-pvc;/data"}, NumSlices: 1, NodesPerSlice: 1, IsPathwaysJob: true},
+	t.Run("multi-host and Pathways jobs reject ReadWriteOnce PVC including unbound spec fallback", func(t *testing.T) {
+		for _, tc := range []struct {
+			job     orchestrator.JobDefinition
+			pvcJSON string
+			wantSub string
+		}{
+			{
+				job:     orchestrator.JobDefinition{RawMounts: []string{"train-pvc;/data"}, NumSlices: 1, NodesPerSlice: 2},
+				pvcJSON: `{"spec":{"accessModes":["ReadWriteOnce"]}}`,
+				wantSub: "2 nodes (numSlices=1, nodesPerSlice=2)",
+			},
+			{
+				job:     orchestrator.JobDefinition{RawMounts: []string{"train-pvc;/data"}, NumSlices: 2, NodesPerSlice: 1},
+				pvcJSON: `{"spec":{"accessModes":["ReadWriteOnce"]},"status":{"accessModes":["ReadWriteOnce"]}}`,
+				wantSub: "2 nodes (numSlices=2, nodesPerSlice=1)",
+			},
+			{
+				job:     orchestrator.JobDefinition{RawMounts: []string{"train-pvc;/data"}, NumSlices: 1, NodesPerSlice: 1, IsPathwaysJob: true},
+				pvcJSON: `{"spec":{"accessModes":["ReadWriteOnce"]},"status":{"accessModes":["ReadWriteOnce"]}}`,
+				wantSub: "2 nodes (numSlices=1, nodesPerSlice=1, plus 1 Pathways head node)",
+			},
+			{
+				job:     orchestrator.JobDefinition{RawMounts: []string{"train-pvc;/data"}, NumSlices: 1, NodesPerSlice: 1, IsPathwaysJob: true, Pathways: orchestrator.PathwaysJobDefinition{Headless: true}},
+				pvcJSON: `{"spec":{"accessModes":["ReadWriteOnce"]}}`,
+				wantSub: "plus 1 Pathways head node",
+			},
+			{
+				job:     orchestrator.JobDefinition{RawMounts: []string{"train-pvc;/data"}, NumSlices: 1, NodesPerSlice: 1, IsPathwaysJob: true, Pathways: orchestrator.PathwaysJobDefinition{DeploySPS: true}},
+				pvcJSON: `{"spec":{"accessModes":["ReadWriteOnce"]}}`,
+				wantSub: "plus 1 Pathways head node",
+			},
 		} {
-			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
-				pvcJSONCmd: {{
-					ExitCode: 0,
-					Stdout:   `{"spec":{"accessModes":["ReadWriteOnce"]},"status":{"accessModes":["ReadWriteOnce"]}}`,
-				}},
-			})
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{pvcJSONCmd: {{ExitCode: 0, Stdout: tc.pvcJSON}}})
 			sm := &StorageManager{orchestrator: newTestGKEOrchestrator(mockExec)}
-			err := sm.ValidateClusterMounts(job)
-			if err == nil || !strings.Contains(err.Error(), "Multi-Attach") || !strings.Contains(err.Error(), "ReadWriteMany") {
-				t.Fatalf("ValidateClusterMounts(slices=%d, nodes=%d, pathways=%v) = %v, want Multi-Attach RWO error", job.NumSlices, job.NodesPerSlice, job.IsPathwaysJob, err)
+			err := sm.ValidateClusterMounts(tc.job)
+			if err == nil || !strings.Contains(err.Error(), "Multi-Attach") || !strings.Contains(err.Error(), tc.wantSub) {
+				t.Fatalf("ValidateClusterMounts(%+v) = %v, want Multi-Attach + %q", tc.job, err, tc.wantSub)
 			}
 		}
 
-		// SPS client job creates a single head pod even when NumSlices > 1.
-		mockSPS := NewMockExecutor(map[string][]shell.CommandResult{
-			pvcJSONCmd: {{
-				ExitCode: 0,
-				Stdout:   `{"spec":{"accessModes":["ReadWriteOnce"]},"status":{"accessModes":["ReadWriteOnce"]}}`,
-			}},
+		// submitSPSClusterWorkload validates cluster mounts and allows RWO for single-pod SPS client jobs,
+		// while rejecting missing PVCs before building images.
+		mockSPSMissing := NewMockExecutor(map[string][]shell.CommandResult{pvcJSONCmd: {{ExitCode: 0, Stdout: ""}}})
+		orcSPS := newTestGKEOrchestrator(mockSPSMissing)
+		err := orcSPS.submitSPSClusterWorkload(orchestrator.JobDefinition{
+			RawMounts:     []string{"train-pvc;/data"},
+			NumSlices:     2,
+			NodesPerSlice: 1,
+			IsPathwaysJob: true,
+			Pathways:      orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-inst"},
+		}, spsInstance{Name: "sps-inst"})
+		if err == nil || !strings.Contains(err.Error(), `PersistentVolumeClaim "train-pvc"`) {
+			t.Fatalf("submitSPSClusterWorkload() with missing PVC = %v, want missing PVC error", err)
+		}
+
+		mockSPSRWO := NewMockExecutor(map[string][]shell.CommandResult{
+			pvcJSONCmd: {{ExitCode: 0, Stdout: `{"spec":{"accessModes":["ReadWriteOnce"]}}`}},
 		})
-		smSPS := &StorageManager{orchestrator: newTestGKEOrchestrator(mockSPS)}
+		smSPS := &StorageManager{orchestrator: newTestGKEOrchestrator(mockSPSRWO)}
 		if err := smSPS.ValidateClusterMounts(orchestrator.JobDefinition{
 			RawMounts:     []string{"train-pvc;/data"},
 			NumSlices:     2,

@@ -11,8 +11,8 @@ spec:
   accessModes:
   - ReadWriteMany
   nfs:
-    path: /{{.Share}}
-    server: {{.IP}}
+    path: {{ printf "%q" (printf "/%s" .Share) }}
+    server: {{ printf "%q" .IP }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

@@ -441,7 +441,6 @@ type mountSegments struct {
 type mountBuildState struct {
 	gatewayVolumeNames map[string]string
 	pvcNeedsSidecar    map[string]bool
-	nfsAuthChecked     bool
 }
 
 // MountInfo represents parsed volume mount options
