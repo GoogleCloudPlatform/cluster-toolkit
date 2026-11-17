@@ -29,20 +29,26 @@ func DefaultKubeconfigLoader() (*clientcmdapi.Config, error) {
 	return clientcmd.NewDefaultClientConfigLoadingRules().Load()
 }
 
-// FindContextByCluster resolves a kubeconfig context matching the given cluster name.
+// FindContextByCluster resolves a kubeconfig context for name by checking, in order:
+// an exact context-name match, current-context if its cluster matches name, and the
+// first matching context.cluster entry in sorted context-name order.
 func FindContextByCluster(cfg *clientcmdapi.Config, name string) (string, *clientcmdapi.Context, bool) {
+	name = strings.TrimSpace(name)
 	if cfg == nil || name == "" {
 		return "", nil, false
 	}
-	if kubeCtx, ok := cfg.Contexts[name]; ok && kubeCtx != nil {
+	if kubeCtx := cfg.Contexts[name]; kubeCtx != nil {
 		return name, kubeCtx, true
 	}
-	if curName, curCtx, curCluster, ok := ResolveCurrentContext(cfg); ok && curCluster == name {
+	if curName, curCtx, _, ok := ResolveCurrentContext(cfg); ok && strings.TrimSpace(curCtx.Cluster) == name {
 		return curName, curCtx, true
 	}
 	for _, ctxName := range slices.Sorted(maps.Keys(cfg.Contexts)) {
+		if strings.TrimSpace(ctxName) == "" {
+			continue
+		}
 		kubeCtx := cfg.Contexts[ctxName]
-		if kubeCtx != nil && kubeCtx.Cluster == name {
+		if kubeCtx != nil && strings.TrimSpace(kubeCtx.Cluster) == name {
 			return ctxName, kubeCtx, true
 		}
 	}
@@ -51,16 +57,16 @@ func FindContextByCluster(cfg *clientcmdapi.Config, name string) (string, *clien
 
 // ResolveCurrentContext returns the active context, its entry, and its target cluster name.
 func ResolveCurrentContext(cfg *clientcmdapi.Config) (string, *clientcmdapi.Context, string, bool) {
-	if cfg == nil || cfg.CurrentContext == "" {
+	if cfg == nil || strings.TrimSpace(cfg.CurrentContext) == "" {
 		return "", nil, "", false
 	}
 	kubeCtx := cfg.Contexts[cfg.CurrentContext]
 	if kubeCtx == nil {
 		return "", nil, "", false
 	}
-	clusterName := kubeCtx.Cluster
+	clusterName := strings.TrimSpace(kubeCtx.Cluster)
 	if clusterName == "" {
-		clusterName = cfg.CurrentContext
+		clusterName = strings.TrimSpace(cfg.CurrentContext)
 	}
 	return cfg.CurrentContext, kubeCtx, clusterName, true
 }
@@ -76,15 +82,26 @@ func ExecPluginBaseName(auth *clientcmdapi.AuthInfo) string {
 		return ""
 	}
 	base := strings.ToLower(path.Base(cmdPath))
-	if base == "." || base == "/" {
+	if base == "." || base == ".." || base == "/" {
 		return ""
 	}
 	return strings.TrimSuffix(base, ".exe")
 }
 
-// WithContext prepends --context <kubeContext> to args when kubeContext is non-empty.
+// ContextNamespace returns kubeCtx's trimmed namespace, or "default" when unset or blank.
+func ContextNamespace(kubeCtx *clientcmdapi.Context) string {
+	if kubeCtx != nil {
+		if ns := strings.TrimSpace(kubeCtx.Namespace); ns != "" {
+			return ns
+		}
+	}
+	return "default"
+}
+
+// WithContext prepends --context <kubeContext> to args when kubeContext is non-blank,
+// preserving kubeContext verbatim so kubectl and client-go resolve the same map key.
 func WithContext(kubeContext string, args []string) []string {
-	if kubeContext == "" {
+	if strings.TrimSpace(kubeContext) == "" {
 		return args
 	}
 	return append([]string{"--context", kubeContext}, args...)

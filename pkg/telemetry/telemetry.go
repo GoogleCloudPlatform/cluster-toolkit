@@ -24,7 +24,7 @@ import (
 )
 
 func (c *Collector) Execute(exitCode int, err error) {
-	if shell.IsKnownAirGapped() {
+	if c == nil || shell.IsKnownAirGapped() {
 		return
 	}
 	c.CollectMetrics(exitCode, err)

@@ -173,7 +173,8 @@ func (c DefaultMachineTypeClient) GetMachineType(project, zone, machineType stri
 
 // DefaultKubeClient implements KubeClient using the actual dynamic client.
 type DefaultKubeClient struct {
-	dynClient dynamic.Interface
+	dynClient        dynamic.Interface
+	kubeconfigLoader k8s.KubeconfigLoader
 }
 
 type DefaultExecutor struct{}
@@ -556,7 +557,7 @@ type gkeCluster struct {
 	Autoscaling                 gkeClusterAutoscaling        `json:"autoscaling"`
 	ControlPlaneEndpointsConfig *controlPlaneEndpointsConfig `json:"controlPlaneEndpointsConfig,omitempty"`
 	AddonsConfig                *gkeAddonsConfig             `json:"addonsConfig,omitempty"`
-	// Endpoint is the legacy top-level control-plane IP (public, or private for private clusters).
+	// Endpoint is the legacy top-level control-plane endpoint (IP, or DNS host when IP endpoints are disabled).
 	Endpoint             string                   `json:"endpoint,omitempty"`
 	MasterAuth           *gkeMasterAuth           `json:"masterAuth,omitempty"`
 	PrivateClusterConfig *gkePrivateClusterConfig `json:"privateClusterConfig,omitempty"`
@@ -586,6 +587,7 @@ type controlPlaneEndpointsConfig struct {
 }
 
 type ipEndpointsConfig struct {
+	Enabled              *bool  `json:"enabled,omitempty"`
 	EnablePublicEndpoint bool   `json:"enablePublicEndpoint,omitempty"`
 	PublicEndpoint       string `json:"publicEndpoint,omitempty"`
 	PrivateEndpoint      string `json:"privateEndpoint,omitempty"`
@@ -967,5 +969,6 @@ const (
 	probeForbidden                 // reachable and authenticated; RBAC denies /version
 	probeConnectivity              // this endpoint is unreachable or untrusted from here
 	probeAuth                      // credentials are broken; another endpoint will not help
+	probeInvalid                   // empty/blank context name refused before running kubectl
 	probeUnknown
 )

@@ -20,36 +20,32 @@ import (
 	"sync/atomic"
 )
 
-// AirGappedEnvVar controls Layer-2 air-gap behavior ("true" skips external probes and Clearcut telemetry).
+// AirGappedEnvVar names the environment variable ("GCLUSTER_AIR_GAPPED") that disables CLI telemetry collection and uploads in air-gapped environments.
 const AirGappedEnvVar = "GCLUSTER_AIR_GAPPED"
 
 var defaultAirGap atomic.Bool
 
-// IsKnownAirGapped reports whether air-gapped mode is active from GCLUSTER_AIR_GAPPED or default state without probing.
+// IsKnownAirGapped reports whether air-gapped mode is active from GCLUSTER_AIR_GAPPED or the process default without performing network or subprocess I/O.
 func IsKnownAirGapped() bool {
 	return IsAirGappedEnv(os.Getenv)
 }
 
-// IsAirGappedEnv reports whether the environment is air-gapped.
+// IsAirGappedEnv reports whether air-gapped mode is active. An explicit boolean value in GCLUSTER_AIR_GAPPED
+// from getenv (or os.Getenv if nil) overrides the process default; unset, blank, or unrecognized values fall back to the default.
 func IsAirGappedEnv(getenv func(string) string) bool {
 	if getenv == nil {
 		getenv = os.Getenv
 	}
 	switch strings.ToLower(strings.TrimSpace(getenv(AirGappedEnvVar))) {
-	case "1", "true", "yes":
+	case "1", "true", "yes", "on":
 		return true
-	case "0", "false", "no":
+	case "0", "false", "no", "off":
 		return false
 	}
 	return defaultAirGap.Load()
 }
 
-// SetDefaultAirGapped marks the process environment as air-gapped unless GCLUSTER_AIR_GAPPED=false is explicitly set.
-func SetDefaultAirGapped() {
-	SetDefaultAirGappedState(true)
-}
-
-// SetDefaultAirGappedState sets or clears the process-default air-gapped state.
-func SetDefaultAirGappedState(v bool) {
+// SetDefaultAirGapped sets or clears the process-default air-gapped state used when GCLUSTER_AIR_GAPPED is unset, blank, or unrecognized.
+func SetDefaultAirGapped(v bool) {
 	defaultAirGap.Store(v)
 }

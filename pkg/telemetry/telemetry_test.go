@@ -17,24 +17,16 @@ package telemetry
 import (
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
 
 	"github.com/spf13/cobra"
 )
-
-// telemetryMockTransport implements http.RoundTripper to intercept HTTP calls
-// triggered by the Flush() function inside Execute()
-type telemetryMockTransport struct {
-	roundTripFunc func(req *http.Request) (*http.Response, error)
-}
-
-func (m *telemetryMockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	return m.roundTripFunc(req)
-}
 
 func TestBuildPayload(t *testing.T) {
 	// Create a dummy ConcordEvent
@@ -88,30 +80,46 @@ func TestBuildPayload(t *testing.T) {
 	}
 }
 
-func TestExecute(t *testing.T) {
+func isolateTelemetryTestEnv(t *testing.T) (httpCalls, tfCalls *atomic.Int32) {
+	t.Helper()
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+	t.Setenv("HOME", tempDir)
+	t.Setenv("AppData", tempDir)
+	t.Setenv("LocalAppData", tempDir)
+	t.Setenv("CLOUDSDK_CONFIG", filepath.Join(tempDir, "gcloud"))
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+	t.Setenv(telemetryEndpointEnvVar, "")
 	t.Setenv(shell.AirGappedEnvVar, "")
-	shell.SetDefaultAirGappedState(false)
-
-	// Save original globals and restore them after tests run
-	// to prevent Flush() or CollectMetrics() from triggering real network/subprocess calls
+	shell.SetDefaultAirGapped(false)
+	if err := config.InitUserConfig(); err != nil {
+		t.Fatalf("failed to initialize isolated user config: %v", err)
+	}
 	origTransport := http.DefaultTransport
 	origTfVersion := tfVersionFunc
 	t.Cleanup(func() {
 		http.DefaultTransport = origTransport
 		tfVersionFunc = origTfVersion
+		shell.SetDefaultAirGapped(false)
 	})
-	tfVersionFunc = func() (string, error) { return "1.5.0", nil }
 
-	var calls atomic.Int32
-	http.DefaultTransport = &telemetryMockTransport{
+	var httpCount, tfCount atomic.Int32
+	tfVersionFunc = func() (string, error) {
+		tfCount.Add(1)
+		return "1.5.0", nil
+	}
+	http.DefaultTransport = &mockTransport{
 		roundTripFunc: func(req *http.Request) (*http.Response, error) {
-			calls.Add(1)
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       http.NoBody,
-			}, nil
+			httpCount.Add(1)
+			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
 	}
+	return &httpCount, &tfCount
+}
+
+func TestExecute(t *testing.T) {
+	calls, tfCalls := isolateTelemetryTestEnv(t)
 
 	cmd := &cobra.Command{Use: "test-execute"}
 	c := NewCollector(cmd, nil, SOURCE)
@@ -119,45 +127,38 @@ func TestExecute(t *testing.T) {
 	if got := calls.Load(); got != 1 {
 		t.Fatalf("expected 1 Clearcut HTTP call when not air-gapped, got %d", got)
 	}
+	if got := tfCalls.Load(); got != 1 {
+		t.Fatalf("expected CollectMetrics to invoke tfVersionFunc once when not air-gapped, got %d", got)
+	}
 }
 
 func TestExecute_AirGappedSkipsClearcut(t *testing.T) {
-	origTransport := http.DefaultTransport
-	origTfVersion := tfVersionFunc
-	t.Cleanup(func() {
-		http.DefaultTransport = origTransport
-		tfVersionFunc = origTfVersion
-		shell.SetDefaultAirGappedState(false)
-	})
-	tfVersionFunc = func() (string, error) { return "1.5.0", nil }
-
-	var calls atomic.Int32
-	http.DefaultTransport = &telemetryMockTransport{
-		roundTripFunc: func(req *http.Request) (*http.Response, error) {
-			calls.Add(1)
-			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
-		},
-	}
-
+	calls, tfCalls := isolateTelemetryTestEnv(t)
 	cmd := &cobra.Command{Use: "test-airgapped"}
 
+	var nilCollector *Collector
+	nilCollector.Execute(0, nil)
+	if calls.Load() != 0 || tfCalls.Load() != 0 {
+		t.Fatalf("expected nil collector Execute to be a no-op, got http=%d tf=%d", calls.Load(), tfCalls.Load())
+	}
+
 	t.Setenv(shell.AirGappedEnvVar, "true")
-	shell.SetDefaultAirGappedState(false)
+	shell.SetDefaultAirGapped(false)
 	NewCollector(cmd, nil, SOURCE).Execute(0, nil)
-	if got := calls.Load(); got != 0 {
-		t.Fatalf("expected 0 Clearcut HTTP calls when GCLUSTER_AIR_GAPPED=true, got %d", got)
+	if calls.Load() != 0 || tfCalls.Load() != 0 || config.GetIsGoogler() != nil {
+		t.Fatalf("expected 0 HTTP, 0 CollectMetrics, and nil IsGoogler when GCLUSTER_AIR_GAPPED=true, got http=%d tf=%d isGoogler=%v", calls.Load(), tfCalls.Load(), config.GetIsGoogler())
 	}
 
 	t.Setenv(shell.AirGappedEnvVar, "")
-	shell.SetDefaultAirGappedState(true)
+	shell.SetDefaultAirGapped(true)
 	NewCollector(cmd, nil, SOURCE).Execute(0, nil)
-	if got := calls.Load(); got != 0 {
-		t.Fatalf("expected 0 Clearcut HTTP calls when SetDefaultAirGapped is active, got %d", got)
+	if calls.Load() != 0 || tfCalls.Load() != 0 || config.GetIsGoogler() != nil {
+		t.Fatalf("expected 0 HTTP, 0 CollectMetrics, and nil IsGoogler when SetDefaultAirGapped(true) is active, got http=%d tf=%d isGoogler=%v", calls.Load(), tfCalls.Load(), config.GetIsGoogler())
 	}
 
 	t.Setenv(shell.AirGappedEnvVar, "false")
 	NewCollector(cmd, nil, SOURCE).Execute(0, nil)
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("expected 1 Clearcut HTTP call when GCLUSTER_AIR_GAPPED=false overrides default, got %d", got)
+	if calls.Load() != 1 || tfCalls.Load() != 1 || config.GetIsGoogler() == nil {
+		t.Fatalf("expected 1 HTTP, 1 CollectMetrics, and populated IsGoogler when GCLUSTER_AIR_GAPPED=false overrides default, got http=%d tf=%d isGoogler=%v", calls.Load(), tfCalls.Load(), config.GetIsGoogler())
 	}
 }

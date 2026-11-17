@@ -20,18 +20,17 @@ import (
 )
 
 func TestAirGappedPrecedenceAndConcurrency(t *testing.T) {
-	t.Cleanup(func() { SetDefaultAirGappedState(false) })
-	SetDefaultAirGappedState(false)
+	t.Cleanup(func() { SetDefaultAirGapped(false) })
+	SetDefaultAirGapped(false)
 
-	for _, truthy := range []string{"1", "true", "TRUE", " yes "} {
-		val := truthy
+	for _, truthy := range []string{"1", "true", "TRUE", " yes ", "on", "ON"} {
 		if !IsAirGappedEnv(func(k string) string {
 			if k == AirGappedEnvVar {
-				return val
+				return truthy
 			}
 			return ""
 		}) {
-			t.Errorf("IsAirGappedEnv(%q) = false, want true", val)
+			t.Errorf("IsAirGappedEnv(%q) = false, want true", truthy)
 		}
 	}
 
@@ -45,22 +44,22 @@ func TestAirGappedPrecedenceAndConcurrency(t *testing.T) {
 		t.Fatalf("expected unset %s with defaultAirGap=false to return false", AirGappedEnvVar)
 	}
 
-	SetDefaultAirGapped()
+	SetDefaultAirGapped(true)
 	if !IsKnownAirGapped() {
-		t.Fatalf("expected SetDefaultAirGapped() to turn on IsKnownAirGapped()")
+		t.Fatalf("expected SetDefaultAirGapped(true) to turn on IsKnownAirGapped()")
 	}
 
-	for _, falsy := range []string{"0", "false", "FALSE", "no"} {
+	for _, falsy := range []string{"0", " 0 ", "false", " false ", "FALSE", "no", "off", "OFF"} {
 		t.Setenv(AirGappedEnvVar, falsy)
 		if IsKnownAirGapped() {
-			t.Errorf("expected explicit %s=%q to override SetDefaultAirGapped()", AirGappedEnvVar, falsy)
+			t.Errorf("expected explicit %s=%q to override SetDefaultAirGapped(true)", AirGappedEnvVar, falsy)
 		}
 	}
 
 	t.Setenv(AirGappedEnvVar, "")
-	SetDefaultAirGappedState(false)
+	SetDefaultAirGapped(false)
 	if IsKnownAirGapped() {
-		t.Fatalf("expected SetDefaultAirGappedState(false) to clear default air-gap state")
+		t.Fatalf("expected SetDefaultAirGapped(false) to clear default air-gap state")
 	}
 
 	var wg sync.WaitGroup
@@ -68,9 +67,28 @@ func TestAirGappedPrecedenceAndConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			SetDefaultAirGappedState(idx%2 == 0)
-			_ = IsKnownAirGapped()
+			for j := 0; j < 50; j++ {
+				SetDefaultAirGapped((idx+j)%2 == 0)
+				_ = IsKnownAirGapped()
+			}
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestIsAirGappedEnv_UnrecognizedValueFallsBackToDefault(t *testing.T) {
+	t.Cleanup(func() { SetDefaultAirGapped(false) })
+	for _, raw := range []string{"invalid-value", "   "} {
+		t.Setenv(AirGappedEnvVar, raw)
+
+		SetDefaultAirGapped(false)
+		if IsKnownAirGapped() {
+			t.Fatalf("expected %s=%q with defaultAirGap=false to return false", AirGappedEnvVar, raw)
+		}
+
+		SetDefaultAirGapped(true)
+		if !IsKnownAirGapped() {
+			t.Fatalf("expected %s=%q with defaultAirGap=true to fall back to true", AirGappedEnvVar, raw)
+		}
+	}
 }

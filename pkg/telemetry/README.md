@@ -5,14 +5,14 @@ The `pkg/telemetry` package provides a robust telemetry system for the Google Cl
 This helps the product development team assess module adoption, prioritize features, and identify recurring deployment issues based on real usage insights to make customer experience better.
 
 > [!WARNING]
-> Users are requested to NOT modify any part of this package to avoid tampering with telemetry data collection. In the case of wanting to disable telemetry, run this command: `./gcluster telemetry off` (or set `GCLUSTER_AIR_GAPPED=true` in disconnected/air-gapped environments to skip uploads for the current session).
+> Users are requested to NOT modify any part of this package to avoid tampering with telemetry data collection. In the case of wanting to disable telemetry, run this command: `./gcluster telemetry off` (or set `GCLUSTER_AIR_GAPPED=true` in disconnected/air-gapped environments to skip telemetry collection and uploads for the current process).
 
 ## Architecture & Flow
 
 The execution flow of the telemetry lifecycle follows these steps:
 
-1. **Initialization**: A `Collector` is initialized at the start of a CLI command using `NewCollector(cmd, args)`. This records the start time to calculate latency and other state variables.
-2. **Metrics Collection**: Upon command completion, `CollectMetrics(errorCode)` is invoked to capture the exit code and event metadata (short-circuiting immediately when `shell.IsKnownAirGapped()` is `true`).
+1. **Initialization**: A `Collector` is initialized at the start of a CLI command using `NewCollector(cmd, args, installationMode)`. This records the start time to calculate latency and other state variables.
+2. **Metrics Collection**: Upon command completion, `Collector.Execute(exitCode, err)` runs. When `shell.IsKnownAirGapped()` is `true`, `Execute()` returns immediately here (skipping steps 2–5); otherwise it invokes `CollectMetrics(exitCode, err)` to capture the exit code and event metadata.
 3. **Event Construction**: The toolkit state is formatted into a `ConcordEvent` which includes the toolkit version, command name, latency, and metadata.
 4. **Payload Building**: The `ConcordEvent` is marshaled into a `SourceExtensionJson` string and wrapped in a `LogRequest` payload.
 5. **Uploading (Flush)**: The `LogRequest` is sent via an HTTP POST request to the Clearcut production endpoint (`https://play.googleapis.com/log`).

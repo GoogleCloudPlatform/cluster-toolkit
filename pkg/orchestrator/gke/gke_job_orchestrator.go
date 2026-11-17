@@ -1633,9 +1633,12 @@ func (g *GKEOrchestrator) generateImagePullSecrets(secrets string) string {
 
 func (g *GKEOrchestrator) syncKubeClient() {
 	if g.kubeClient == nil {
-		g.kubeClient = &DefaultKubeClient{dynClient: g.dynClient}
+		g.kubeClient = &DefaultKubeClient{dynClient: g.dynClient, kubeconfigLoader: g.kubeconfigLoader}
 	} else if defaultClient, ok := g.kubeClient.(*DefaultKubeClient); ok {
 		defaultClient.dynClient = g.dynClient
+		if g.kubeconfigLoader != nil {
+			defaultClient.kubeconfigLoader = g.kubeconfigLoader
+		}
 	}
 }
 
@@ -2172,21 +2175,26 @@ func (d *DefaultExecutor) ExecuteCommandStream(name string, args ...string) erro
 
 // GetCurrentNamespace resolves the target Kubernetes namespace from kubeconfig for the specified cluster.
 func (d *DefaultKubeClient) GetCurrentNamespace(clusterName, location, projectID string) (string, error) {
-	config, err := k8s.DefaultKubeconfigLoader()
+	loader := d.kubeconfigLoader
+	if loader == nil {
+		loader = k8s.DefaultKubeconfigLoader
+	}
+	config, err := loader()
 	if err != nil {
 		return "", fmt.Errorf("failed to load kubeconfig: %w. You can explicitly specify the namespace using the --gke-namespace flag", err)
 	}
 
-	// Standard GKE context naming convention first, then bare cluster name or current-context fallback.
+	// Standard GKE context naming convention (with zone-to-region fallback) first, then bare cluster name or current-context fallback.
 	_, kubeCtx, _, ok := resolveGKEContext(config, clusterName, location, projectID)
 	if !ok {
-		if strings.TrimSpace(clusterName) == "" {
+		trimmedCluster := strings.TrimSpace(clusterName)
+		if trimmedCluster == "" {
+			if config != nil && strings.TrimSpace(config.CurrentContext) != "" {
+				return "", fmt.Errorf("current-context %q was not found in kubeconfig and no cluster specified. You can explicitly specify the namespace using the --gke-namespace flag", config.CurrentContext)
+			}
 			return "", fmt.Errorf("no current-context set in kubeconfig and no cluster specified. You can explicitly specify the namespace using the --gke-namespace flag")
 		}
-		return "", fmt.Errorf("no matching context found for cluster %q in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag", clusterName)
+		return "", fmt.Errorf("no matching context found for cluster %q in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag", trimmedCluster)
 	}
-	if kubeCtx.Namespace != "" {
-		return kubeCtx.Namespace, nil
-	}
-	return "default", nil
+	return k8s.ContextNamespace(kubeCtx), nil
 }
