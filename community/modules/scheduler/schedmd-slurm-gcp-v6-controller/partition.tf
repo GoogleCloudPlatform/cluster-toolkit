@@ -16,9 +16,6 @@ locals {
   nodeset_map_ell = { for x in var.nodeset : x.nodeset_name => x... }
   nodeset_map     = { for k, vs in local.nodeset_map_ell : k => vs[0] }
 
-  nodeset_tpu_map_ell = { for x in var.nodeset_tpu : x.nodeset_name => x... }
-  nodeset_tpu_map     = { for k, vs in local.nodeset_tpu_map_ell : k => vs[0] }
-
   nodeset_dyn_map_ell = { for x in var.nodeset_dyn : x.nodeset_name => x... }
   nodeset_dyn_map     = { for k, vs in local.nodeset_dyn_map_ell : k => vs[0] }
 
@@ -247,6 +244,7 @@ resource "google_compute_resource_policy" "nodeset_workload_policy" {
 }
 
 resource "google_compute_region_instance_group_manager" "nodeset_mig" {
+  provider           = google-beta
   for_each           = local.nodeset_migs
   name               = each.value.mig_name
   base_instance_name = each.value.base_instance_name
@@ -365,50 +363,6 @@ locals {
   }]
 }
 
-# NODESET TPU
-module "slurm_nodeset_tpu" {
-  source   = "../../internal/slurm-gcp/nodeset_tpu"
-  for_each = local.nodeset_tpu_map
-
-  project_id             = var.project_id
-  node_count_dynamic_max = each.value.node_count_dynamic_max
-  node_count_static      = each.value.node_count_static
-  nodeset_name           = each.value.nodeset_name
-  zone                   = each.value.zone
-  node_type              = each.value.node_type
-  accelerator_config     = each.value.accelerator_config
-  tf_version             = each.value.tf_version
-  preemptible            = each.value.preemptible
-  preserve_tpu           = each.value.preserve_tpu
-  enable_public_ip       = each.value.enable_public_ip
-  service_account        = each.value.service_account
-  data_disks             = each.value.data_disks
-  docker_image           = each.value.docker_image
-  subnetwork             = each.value.subnetwork
-}
-
-module "nodeset_cleanup_tpu" {
-  source   = "./modules/cleanup_tpu"
-  for_each = local.nodeset_tpu_map
-
-  nodeset = {
-    nodeset_name = each.value.nodeset_name
-    zone         = each.value.zone
-  }
-
-  project_id             = var.project_id
-  slurm_cluster_name     = local.slurm_cluster_name
-  enable_cleanup_compute = var.enable_cleanup_compute
-  universe_domain        = var.universe_domain
-  endpoint_versions      = var.endpoint_versions
-  gcloud_path_override   = var.gcloud_path_override
-
-  depends_on = [
-    # Depend on controller network, as a best effort to avoid
-    # subnetwork resourceInUseByAnotherResource error
-    var.subnetwork_self_link
-  ]
-}
 
 resource "google_storage_bucket_object" "partition_config" {
   for_each = { for p in var.partitions : p.partition_name => p }

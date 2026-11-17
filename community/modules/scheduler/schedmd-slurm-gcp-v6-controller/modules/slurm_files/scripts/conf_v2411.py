@@ -96,8 +96,6 @@ class TopologyBuilder:
 
 def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
     bldr = TopologyBuilder()
-    for ns in lkp.cfg.nodeset_tpu.values():
-        conf.add_tpu_nodeset_topology(ns, bldr, lkp)
     for ns in lkp.cfg.nodeset.values():
         conf.add_nodeset_topology(ns, bldr, lkp)
     return bldr

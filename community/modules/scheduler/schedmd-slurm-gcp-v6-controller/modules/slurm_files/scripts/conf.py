@@ -25,7 +25,6 @@ from pathlib import Path
 import uuid
 import util
 from util import dirs, slurmdirs
-import tpu
 from util import NSDict
 import yaml
 import socket
@@ -121,12 +120,6 @@ class SlurmConfigGenerator:
             for nodeset in self.lkp.cfg.nodeset.values()
         )
 
-        any_tpu = any(
-            tpu_nodeset is not None
-            for part in self.lkp.cfg.partitions.values()
-            for tpu_nodeset in part.partition_nodeset_tpu
-        )
-
         any_gke = any(
             self.lkp.nodeset_is_gke(nodeset)
             for nodeset in self.lkp.cfg.nodeset.values()
@@ -139,7 +132,7 @@ class SlurmConfigGenerator:
                 "use_interactive_step",
             ],
             "SlurmctldParameters": [
-                "cloud_dns" if not(any_dynamic or any_tpu or any_gke or self.lkp.cfg.hybrid) else None,
+                "cloud_dns" if not(any_dynamic or any_gke or self.lkp.cfg.hybrid) else None,
                 "enable_configless",
                 "idle_on_node_suspend",
             ],
@@ -179,7 +172,6 @@ class SlurmConfigGenerator:
             "SlurmdTimeout": get("slurmd_timeout", 300),
             "UnkillableStepTimeout": get("unkillable_step_timeout", 300),
             "TreeWidth": get("tree_width", default_tree_width),
-            "JobSubmitPlugins": "lua" if any_tpu else None,
             "TopologyPlugin": topology_plugin(self.lkp) if self.lkp.cfg.nodeset else None,
             "TopologyParam": get("topology_param", "SwitchAsNodeRank"),
         }
@@ -195,7 +187,6 @@ class SlurmConfigGenerator:
             self.conflines(),
             *(nodeset_lines(n, self.lkp) for n in self.lkp.cfg.nodeset.values()),
             *(nodeset_dyn_lines(n) for n in self.lkp.cfg.nodeset_dyn.values()),
-            *(nodeset_tpu_lines(n, self.lkp) for n in self.lkp.cfg.nodeset_tpu.values()),
             *(self.partitionlines(p) for p in self.lkp.cfg.partitions.values()),
             *(suspend_exc_lines(self.lkp)),
         ]
@@ -215,9 +206,6 @@ class SlurmConfigGenerator:
             _, summary = self.generate_topology_data()
             summary.dump(self.lkp)
             install_topology_yaml(self.lkp)
-
-    def install_jobsubmit_lua(self) -> None:
-        install_jobsubmit_lua(self.lkp)
 
     def install_slurm_conf(self) -> None:
         install_slurm_conf(self.lkp)
@@ -264,14 +252,12 @@ class SlurmConfigGenerator:
             chain(
                 regular,
                 partition.partition_nodeset_dyn,
-                partition.partition_nodeset_tpu,
             )
         )
 
-        is_tpu = len(partition.partition_nodeset_tpu) > 0
         is_dyn = len(partition.partition_nodeset_dyn) > 0
 
-        oversub_exlusive = partition.enable_job_exclusive or is_tpu
+        oversub_exlusive = partition.enable_job_exclusive
         power_down_on_idle = partition.enable_job_exclusive and not is_dyn
 
         line_elements = {
@@ -344,7 +330,6 @@ class SlurmConfigGenerator:
         self.gen_cloud_gres_conf()
         self.install_gres_conf()
         self.install_cgroup_conf()
-        self.install_jobsubmit_lua()
         self.generate_topology()
 
 def get_generator(lkp: util.Lookup) -> SlurmConfigGenerator:
@@ -400,19 +385,6 @@ def nodeset_lines(nodeset, lkp: util.Lookup) -> str:
     if not cloud_param(lkp, "skip_nodeset_lines", False):
         lines.append({"NodeSet": nodeset.nodeset_name, "Nodes": nodelist})
     return "\n".join(map(dict_to_conf, lines))
-
-
-def nodeset_tpu_lines(nodeset, lkp: util.Lookup) -> str:
-    nodelist = lkp.nodelist(nodeset)
-    return "\n".join(
-        map(
-            dict_to_conf,
-            [
-                {"NodeName": nodelist, "State": "CLOUD", **nodeset.node_conf},
-                {"NodeSet": nodeset.nodeset_name, "Nodes": nodelist},
-            ],
-        )
-    )
 
 
 def nodeset_dyn_lines(nodeset):
@@ -586,26 +558,6 @@ def install_cgroup_conf(lkp: util.Lookup) -> None:
     conf_file = lkp.etc_dir / "cgroup.conf"
     conf_file.write_text(lkp.cfg.cgroup_conf_tpl)
     util.chown_slurm(conf_file, mode=0o600)
-
-
-def install_jobsubmit_lua(lkp: util.Lookup) -> None:
-    """install job_submit.lua if there are tpu nodes in the cluster"""
-    if not any(
-        tpu_nodeset is not None
-        for part in lkp.cfg.partitions.values()
-        for tpu_nodeset in part.partition_nodeset_tpu
-    ):
-        return # No TPU partitions, no need for job_submit.lua
-
-    scripts_dir = lkp.cfg.slurm_scripts_dir or dirs.scripts
-    tpl = (scripts_dir / "job_submit.lua.tpl").read_text()
-    conf = tpl.format(scripts_dir=scripts_dir)
-
-    conf_file = lkp.etc_dir / "job_submit.lua"
-    conf_file.write_text(conf)
-    util.chown_slurm(conf_file, 0o600)
-
-
 
 
 def install_gres_conf(lkp: util.Lookup) -> None:
@@ -823,26 +775,6 @@ class TopologyBuilder:
         return compressed
 
 
-def add_tpu_nodeset_topology(nodeset: NSDict, bldr: TopologyBuilder|Any, lkp: util.Lookup):
-    tpuobj = tpu.TPU.make(nodeset.nodeset_name, lkp)
-    static, dynamic = lkp.nodenames(nodeset)
-
-    pref = ["tpu-root",  f"ns_{nodeset.nodeset_name}"]
-    if tpuobj.vmcount == 1:  # Put all nodes in one switch
-        all_nodes = list(chain(static, dynamic))
-        bldr.add(pref, all_nodes)
-        bldr.summary.tpu_nodes.update(all_nodes)
-        return
-
-    # Chunk nodes into sub-switches of size `vmcount`
-    chunk_num = 0
-    for nodenames in (static, dynamic):
-        for nodeschunk in util.chunked(nodenames, n=tpuobj.vmcount):
-            chunk_name = f"{nodeset.nodeset_name}-{chunk_num}"
-            chunk_num += 1
-            bldr.add([*pref, chunk_name], nodeschunk)
-            bldr.summary.tpu_nodes.update(nodeschunk)
-
 def _make_physical_path(physical_host: str) -> List[str]:
     assert physical_host.startswith("/"), f"Unexpected physicalHost: {physical_host}"
     parts = physical_host[1:].split("/")
@@ -893,8 +825,6 @@ def add_nodeset_topology(
 
 def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
     bldr = TopologyBuilder()
-    for ns in lkp.cfg.nodeset_tpu.values():
-        add_tpu_nodeset_topology(ns, bldr, lkp)
     for ns in lkp.cfg.nodeset.values():
         add_nodeset_topology(ns, bldr, lkp)
     return bldr

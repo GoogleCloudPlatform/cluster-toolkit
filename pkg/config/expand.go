@@ -64,7 +64,6 @@ var integrationInputNames = map[string]bool{
 	"partitions":                true,
 	"nodeset":                   true,
 	"nodeset_dyn":               true,
-	"nodeset_tpu":               true,
 	"login_nodes":               true,
 	"runners":                   true,
 	"startup_script":            true,

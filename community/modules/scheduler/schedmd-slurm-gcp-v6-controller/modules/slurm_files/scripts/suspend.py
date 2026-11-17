@@ -27,7 +27,6 @@ from util import (
     separate,
 )
 from util import lookup
-import tpu
 import mig_flex
 import watch_delete_vm_op
 
@@ -214,8 +213,7 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
 
 def suspend_nodes(nodes: List[str]) -> None:
     lkp = lookup()
-    other_nodes, tpu_nodes = util.separate(lkp.node_is_tpu, nodes)
-    other_nodes, gce_tpu_nodes = util.separate(lkp.is_tpu_node, other_nodes)
+    other_nodes, gce_tpu_nodes = util.separate(lkp.is_tpu_node, nodes)
     bulk_nodes, flex_nodes = util.separate(lkp.is_flex_node, other_nodes)
 
     if gce_tpu_nodes:
@@ -242,12 +240,6 @@ def suspend_nodes(nodes: List[str]) -> None:
             delete_instances(non_mig_nodes)
         except Exception:
             log.exception(f"Failed to suspend bulk nodes {non_mig_nodes}")
-
-    if tpu_nodes:
-        try:
-            tpu.delete_tpu_instances(tpu_nodes)
-        except Exception:
-            log.exception(f"Failed to delete TPU instances {tpu_nodes}")
 
 
 def main(nodelist):

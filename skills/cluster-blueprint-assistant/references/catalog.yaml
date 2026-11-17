@@ -6080,106 +6080,6 @@ blueprints:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network, compute_partition]
     settings: [enable_hybrid, enable_slurm_auth, hybrid_conf, install_dir, output_dir, slurm_cluster_name, slurm_key_mount]
-- path: community/examples/hpc-slurm6-tpu-maxtext.yaml
-  blueprint_name: slurm6-tpu-v4
-  scheduler: slurm
-  description: "Creates an auto-scaling Slurm cluster with TPU nodes."
-  accelerators: [tpu]
-  workloads: [ml-training, ml-inference]
-  required_services: [compute.googleapis.com, iam.googleapis.com, storage.googleapis.com]
-  vars:
-    compute_node_count_dynamic_max: 20
-    controller_machine_type: n2-standard-16
-    deployment_name: slurm6-tpu-v4
-    login_machine_type: n2-standard-16
-    project_id: null
-    region: us-central2
-    tpu_node_count_dynamic_max: 1
-    zone: us-central2-b
-  modules:
-  - id: network
-    source: modules/network/vpc
-  - id: script
-    source: modules/scripts/startup-script
-    settings: [runners]
-  - id: tpu_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
-    use: [network]
-    settings: [node_count_dynamic_max, node_type, preemptible, preserve_tpu, tf_version]
-  - id: tpu_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [tpu_nodeset]
-    settings: [partition_name]
-  - id: compute_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
-    settings: [allow_automatic_updates, bandwidth_tier, name, node_count_dynamic_max]
-  - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [compute_nodeset]
-    settings: [is_default, partition_name]
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
-    settings: [enable_login_public_ips, machine_type]
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [tpu_partition, compute_partition, slurm_login, network]
-    settings: [enable_controller_public_ips, login_startup_script, machine_type]
-- path: community/examples/hpc-slurm6-tpu.yaml
-  blueprint_name: slurm6-tpu
-  scheduler: slurm
-  description: "Creates an auto-scaling Slurm cluster with TPU nodes."
-  accelerators: [tpu]
-  workloads: [ml-training, ml-inference]
-  required_services: [cloudresourcemanager.googleapis.com, compute.googleapis.com, iam.googleapis.com, storage.googleapis.com]
-  vars:
-    deployment_name: slurm6-tpu
-    login_machine_type: n2-standard-4
-    project_id: null
-    region: us-central1
-    tpu_node_count_dynamic_max: 1
-    zone: us-central1-a
-  modules:
-  - id: network
-    source: modules/network/vpc
-  - id: controller_sa
-    source: modules/project/service-account
-    settings: [name, project_roles]
-  - id: controller_profile
-    source: community/modules/iam/service-account-profiles
-    use: [controller_sa]
-    settings: [act_as_service_accounts, enable_placement_policies, enable_tpu, name, profile]
-  - id: login_sa
-    source: modules/project/service-account
-    settings: [name, project_roles]
-  - id: login_profile
-    source: community/modules/iam/service-account-profiles
-    use: [login_sa]
-    settings: [name, profile]
-  - id: tpu_sa
-    source: modules/project/service-account
-    settings: [name, project_roles]
-  - id: tpu_profile
-    source: community/modules/iam/service-account-profiles
-    use: [tpu_sa]
-    settings: [name, profile]
-  - id: tpu_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
-    use: [network]
-    settings: [node_count_dynamic_max, node_type, preemptible, preserve_tpu, service_account_email, tf_version]
-  - id: tpu_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [tpu_nodeset]
-    settings: [partition_name, resume_timeout]
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network, login_profile]
-    settings: [enable_login_public_ips, machine_type]
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [tpu_partition, slurm_login, network, controller_profile]
-    settings: [enable_controller_public_ips]
 - path: community/examples/htc-htcondor.yaml
   blueprint_name: htc-htcondor
   scheduler: htcondor
@@ -7044,15 +6944,6 @@ module_wiring:
     consumed_by:
     - community/modules/compute/schedmd-slurm-gcp-v6-partition
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-  community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu:
-    required_inputs: [subnetwork_self_link]
-    recommended_use:
-    - modules/network/pre-existing-subnetwork
-    - modules/network/pre-existing-vpc
-    - modules/network/vpc
-    consumed_by:
-    - community/modules/compute/schedmd-slurm-gcp-v6-partition
-    - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
   community/modules/compute/schedmd-slurm-gcp-v6-partition:
     required_inputs: [partition_name]
     consumed_by:
@@ -7099,7 +6990,6 @@ module_wiring:
     - community/modules/compute/notebook
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
-    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     - community/modules/compute/schedmd-slurm-gcp-v6-partition
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
@@ -7402,7 +7292,6 @@ module_wiring:
     - community/modules/compute/notebook
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
-    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     - community/modules/compute/schedmd-slurm-gcp-v6-partition
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
@@ -7432,7 +7321,6 @@ module_wiring:
     - community/modules/compute/notebook
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
-    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     - community/modules/compute/schedmd-slurm-gcp-v6-partition
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
@@ -7480,7 +7368,6 @@ module_wiring:
     - community/modules/compute/htcondor-execute-point
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
-    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     - community/modules/compute/schedmd-slurm-gcp-v6-partition
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
@@ -7514,7 +7401,6 @@ module_wiring:
     - community/modules/compute/notebook
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
-    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     - community/modules/compute/schedmd-slurm-gcp-v6-partition
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
@@ -7541,7 +7427,6 @@ module_wiring:
     - community/modules/compute/htcondor-execute-point
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
-    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     - community/modules/compute/schedmd-slurm-gcp-v6-partition
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
@@ -7563,7 +7448,6 @@ module_wiring:
     - community/modules/compute/notebook
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
-    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     - community/modules/compute/schedmd-slurm-gcp-v6-partition
     - community/modules/container/apptainer-app
     - community/modules/container/apptainer-runtime
@@ -7629,7 +7513,6 @@ module_wiring:
     - community/modules/compute/gke-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
-    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     - community/modules/network/int-app-lb
     - community/modules/scheduler/htcondor-setup
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -7642,7 +7525,6 @@ module_wiring:
     - community/modules/compute/gke-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
-    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     - community/modules/database/slurm-cloudsql-federation
     - community/modules/file-system/nfs-server
     - community/modules/network/int-app-lb
@@ -7679,7 +7561,6 @@ module_wiring:
     - community/modules/compute/htcondor-execute-point
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic
-    - community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     - community/modules/database/slurm-cloudsql-federation
     - community/modules/file-system/nfs-server
     - community/modules/network/int-app-lb

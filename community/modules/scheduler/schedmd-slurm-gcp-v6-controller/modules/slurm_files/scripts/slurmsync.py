@@ -45,7 +45,6 @@ from util import (
 )
 from util import lookup
 from suspend import suspend_nodes
-import tpu
 import conf
 import watch_delete_vm_op
 import repair
@@ -171,19 +170,9 @@ def start_instance_op(node: str) -> Any:
 
 def start_instances(node_list):
     log.info("{} instances to start ({})".format(len(node_list), ",".join(node_list)))
-    lkp = lookup()
-    # TODO: use code from resume.py to assign proper placement
-    normal, tpu_nodes = separate(lkp.node_is_tpu, node_list)
-    ops = {node: start_instance_op(node) for node in normal}
+    ops = {node: start_instance_op(node) for node in node_list}
 
     done, failed = batch_execute(ops)
-
-    tpu_start_data = []
-    for ns, nodes in util.groupby_unsorted(tpu_nodes, lkp.node_nodeset_name):
-        tpuobj = tpu.TPU.make(ns, lkp)
-        for snodes in chunked(nodes, n=tpuobj.vmcount):
-            tpu_start_data.append({"tpu": tpuobj, "node": snodes})
-    execute_with_futures(tpu.start_tpu, tpu_start_data)
 
 
 def _find_dynamic_node_status() -> NodeAction:
@@ -207,65 +196,6 @@ def get_fr_action(fr: FutureReservation, state:Optional[NodeState]) -> Optional[
         msg = f"Reservation:{fr.name} is after its end-time"
     return NodeActionDown(reason=msg)
 
-def _find_tpu_node_action(nodename, state) -> NodeAction:
-    lkp = lookup()
-    tpuobj = tpu.TPU.make(lkp.node_nodeset_name(nodename), lkp)
-    inst = tpuobj.get_node(nodename)
-    # If we do not find the node but it is from a Tpu that has multiple vms look for the master node
-    if inst is None and tpuobj.vmcount > 1:
-        # Get the tpu slurm nodelist of the nodes in the same tpu group as nodename
-        nodelist = run(
-            f"{lkp.scontrol} show topo {nodename}"
-            + " | awk -F'=' '/Level=0/ { print $NF }'",
-            shell=True,
-        ).stdout
-        l_nodelist = util.to_hostnames(nodelist)
-        group_names = set(l_nodelist)
-        # get the list of all the existing tpus in the nodeset
-        tpus_list = set(tpuobj.list_node_names())
-        # In the intersection there must be only one node that is the master
-        tpus_int = list(group_names.intersection(tpus_list))
-        if len(tpus_int) > 1:
-            log.error(
-                f"More than one cloud tpu node for tpu group {nodelist}, there should be only one that should be {l_nodelist[0]}, but we have found {tpus_int}"
-            )
-            return NodeActionUnknown(slurm_state=state, instance_state=None)
-        if len(tpus_int) == 1:
-            inst = tpuobj.get_node(tpus_int[0])
-        # if len(tpus_int ==0) this case is not relevant as this would be the case always that a TPU group is not running
-    if inst is None:
-        if state.base == "DOWN" and "POWERED_DOWN" in state.flags:
-            return NodeActionIdle()
-        if "POWERING_DOWN" in state.flags:
-            return NodeActionIdle()
-        if "COMPLETING" in state.flags:
-            return NodeActionDown(reason="Unbacked instance")
-        if state.base != "DOWN" and not (
-            set(("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN"))
-            & state.flags
-        ):
-            return NodeActionDown(reason="Unbacked instance")
-        if lkp.is_static_node(nodename):
-            return NodeActionPowerUp()
-    elif (
-        state is not None
-        and "POWERED_DOWN" not in state.flags
-        and "POWERING_DOWN" not in state.flags
-        and inst.state == tpu.TPU.State.STOPPED
-    ):
-        if tpuobj.preemptible:
-            return NodeActionPrempt()
-        if state.base != "DOWN":
-            return NodeActionDown(reason="Instance terminated")
-    elif (
-        state is None or "POWERED_DOWN" in state.flags
-    ) and inst.state == tpu.TPU.State.READY:
-        return NodeActionDelete()
-    elif state is None:
-        # if state is None here, the instance exists but it's not in Slurm
-        return NodeActionUnknown(slurm_state=state, instance_state=inst.status)
-
-    return NodeActionUnchanged()
 
 def get_node_reason(nodename: str) -> Optional[str]:
     """Get the reason for a node's state using JSON output."""
@@ -304,9 +234,6 @@ def get_node_action(nodename: str) -> NodeAction:
 
     if lkp.node_is_dyn(nodename):
         return _find_dynamic_node_status()
-
-    if lkp.node_is_tpu(nodename):
-        return _find_tpu_node_action(nodename, state)
 
     # split below is workaround for VMs whose hostname is FQDN
     short_nodename = nodename.split(".")[0]

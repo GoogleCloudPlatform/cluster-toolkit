@@ -1085,7 +1085,7 @@ func (s *zeroSuite) TestValidateModuleInputs_OutputFiltering(c *C) {
 
 	// All integration inputs: root echo is suppressed, true producer without matching input is included
 	for _, name := range []string{
-		"network_storage", "partitions", "nodeset", "nodeset_dyn", "nodeset_tpu",
+		"network_storage", "partitions", "nodeset", "nodeset_dyn",
 		"login_nodes", "runners", "startup_script", "compute_startup_script", "controller_startup_script",
 	} {
 		echoRoot := tMod("echo_" + ModuleID(name)).inputs(modulereader.VarInfo{Name: name, Type: cty.String}).outputs(name).build()
