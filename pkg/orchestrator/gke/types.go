@@ -739,12 +739,31 @@ type kubernetesNodeCondition struct {
 type kueueWorkloadCondition struct {
 	Type               string `json:"type"`
 	Status             string `json:"status"`
+	Reason             string `json:"reason"`
 	Message            string `json:"message"`
 	LastTransitionTime string `json:"lastTransitionTime"`
 }
 
+type kueueWorkloadContainer struct {
+	Name      string `json:"name"`
+	Resources struct {
+		Requests map[string]string `json:"requests"`
+		Limits   map[string]string `json:"limits"`
+	} `json:"resources"`
+}
+
 type kueueWorkloadPodSet struct {
-	Count int `json:"count"`
+	Name     string `json:"name"`
+	Count    int    `json:"count"`
+	Template struct {
+		Spec struct {
+			NodeSelector   map[string]string        `json:"nodeSelector"`
+			InitContainers []kueueWorkloadContainer `json:"initContainers"`
+			Containers     []kueueWorkloadContainer `json:"containers"`
+		} `json:"spec"`
+	} `json:"template"`
+	Flavors       map[string]string `json:"flavors"`
+	ResourceUsage map[string]string `json:"resourceUsage"`
 }
 
 type kueueWorkloadOwnerRef struct {
@@ -770,10 +789,27 @@ type kueueWorkload struct {
 		ReclaimablePods []kueueWorkloadPodSet    `json:"reclaimablePods"`
 		Conditions      []kueueWorkloadCondition `json:"conditions"`
 	} `json:"status"`
+	// RunningPods holds the actual Running or Succeeded accelerator pod count when pods are queried.
+	RunningPods *int `json:"-"`
 }
 
 type kueueWorkloadList struct {
 	Items []kueueWorkload `json:"items"`
+}
+
+type inspectPod struct {
+	Metadata struct {
+		Name      string            `json:"name"`
+		Namespace string            `json:"namespace"`
+		Labels    map[string]string `json:"labels"`
+	} `json:"metadata"`
+	Status struct {
+		Phase string `json:"phase"`
+	} `json:"status"`
+}
+
+type inspectPodList struct {
+	Items []inspectPod `json:"items"`
 }
 
 type kueueDeployment struct {

@@ -16,6 +16,7 @@ package gke
 
 import (
 	"context"
+	"encoding/json"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 	"os"
@@ -577,5 +578,654 @@ func TestInspectCluster_ReportStartsWithSPSSummary(t *testing.T) {
 	gcloudAt := strings.Index(string(content), "Local Setup: gcloud version")
 	if summaryAt < 0 || gcloudAt < 0 || summaryAt > gcloudAt {
 		t.Errorf("report should start with the SPS summary (summary at %d, gcloud section at %d):\n%s", summaryAt, gcloudAt, content)
+	}
+}
+
+func TestResolveWorkloadStatus_LifecyclePriorityAndAuxiliaryMessage(t *testing.T) {
+	tests := []struct {
+		name           string
+		conditions     []kueueWorkloadCondition
+		wantStatus     string
+		wantMsgSubstrs []string
+		wantTime       string
+	}{
+		{
+			name: "Finished takes priority over Admitted and QuotaReserved",
+			conditions: []kueueWorkloadCondition{
+				{Type: "QuotaReserved", Status: "True", Message: "Quota reserved", LastTransitionTime: "2026-07-10T12:00:00Z"},
+				{Type: "Admitted", Status: "True", Message: "Admitted", LastTransitionTime: "2026-07-10T12:01:00Z"},
+				{Type: "PodsReady", Status: "True", Message: "All pods ready", LastTransitionTime: "2026-07-10T12:02:00Z"},
+				{Type: "Finished", Status: "True", Message: "JobSet finished successfully", LastTransitionTime: "2026-07-10T12:30:00Z"},
+			},
+			wantStatus:     "Finished",
+			wantMsgSubstrs: []string{"JobSet finished successfully"},
+			wantTime:       "2026-07-10T12:30:00Z",
+		},
+		{
+			name: "Evicted takes priority over trailing Requeued condition",
+			conditions: []kueueWorkloadCondition{
+				{Type: "QuotaReserved", Status: "False", Message: "Prev quota", LastTransitionTime: "2026-07-10T12:00:00Z"},
+				{Type: "Evicted", Status: "True", Reason: "Preempted", Message: "Preempted by higher-priority workload", LastTransitionTime: "2026-07-10T12:10:00Z"},
+				{Type: "Admitted", Status: "False", Reason: "Evicted", Message: "Workload evicted", LastTransitionTime: "2026-07-10T12:10:00Z"},
+				{Type: "Requeued", Status: "True", Reason: "Reactivated", Message: "Workload was requeued", LastTransitionTime: "2026-07-10T12:11:00Z"},
+			},
+			wantStatus:     "Evicted",
+			wantMsgSubstrs: []string{"Preempted by higher-priority workload", "Requeued=True (Reactivated): Workload was requeued"},
+			wantTime:       "2026-07-10T12:10:00Z",
+		},
+		{
+			name: "Admitted preserved when PodsReady=False is last",
+			conditions: []kueueWorkloadCondition{
+				{Type: "QuotaReserved", Status: "True", Message: "Quota reserved", LastTransitionTime: "2026-07-10T12:00:00Z"},
+				{Type: "Admitted", Status: "True", Message: "Admitted by ClusterQueue", LastTransitionTime: "2026-07-10T12:01:00Z"},
+				{Type: "PodsReady", Status: "False", Reason: "WaitForPodsReady", Message: "Not all pods are ready or succeeded", LastTransitionTime: "2026-07-10T12:02:00Z"},
+			},
+			wantStatus:     "Admitted",
+			wantMsgSubstrs: []string{"Admitted by ClusterQueue", "PodsReady=False (WaitForPodsReady): Not all pods are ready or succeeded"},
+			wantTime:       "2026-07-10T12:01:00Z",
+		},
+		{
+			name: "Admitted preserved when TPUSliceFailure and TPUSlicesProvisioned are last",
+			conditions: []kueueWorkloadCondition{
+				{Type: "QuotaReserved", Status: "True", Message: "Quota reserved", LastTransitionTime: "2026-07-10T12:00:00Z"},
+				{Type: "Admitted", Status: "True", Message: "The workload is admitted", LastTransitionTime: "2026-07-10T12:01:00Z"},
+				{Type: "TPUSlicesProvisioned", Status: "False", Reason: "ProvisioningInProgress", Message: "Waiting for TPU Slice creation", LastTransitionTime: "2026-07-10T12:02:00Z"},
+				{Type: "TPUSliceFailure", Status: "True", Reason: "SliceCreationFailed", Message: "GCE stockout in zone", LastTransitionTime: "2026-07-10T12:03:00Z"},
+			},
+			wantStatus: "Admitted",
+			wantMsgSubstrs: []string{
+				"The workload is admitted",
+				"TPUSlicesProvisioned=False (ProvisioningInProgress): Waiting for TPU Slice creation",
+				"TPUSliceFailure=True (SliceCreationFailed): GCE stockout in zone",
+			},
+			wantTime: "2026-07-10T12:01:00Z",
+		},
+		{
+			name: "QuotaReserved=True preserved when Admitted=False is last",
+			conditions: []kueueWorkloadCondition{
+				{Type: "QuotaReserved", Status: "True", Message: "Quota reserved in ClusterQueue", LastTransitionTime: "2026-07-10T12:00:00Z"},
+				{Type: "Admitted", Status: "False", Reason: "UnsatisfiedChecks", Message: "Waiting for admission checks", LastTransitionTime: "2026-07-10T12:01:00Z"},
+			},
+			wantStatus:     "QuotaReserved",
+			wantMsgSubstrs: []string{"Quota reserved in ClusterQueue", "Admitted=False (UnsatisfiedChecks): Waiting for admission checks"},
+			wantTime:       "2026-07-10T12:00:00Z",
+		},
+		{
+			name: "QuotaReserved=False and Admitted=False resolves to QuotaReserved",
+			conditions: []kueueWorkloadCondition{
+				{Type: "QuotaReserved", Status: "False", Reason: "Pending", Message: "insufficient unused quota for google.com/tpu", LastTransitionTime: "2026-07-10T12:00:00Z"},
+				{Type: "Admitted", Status: "False", Reason: "Pending", Message: "workload not admitted", LastTransitionTime: "2026-07-10T12:00:00Z"},
+			},
+			wantStatus:     "QuotaReserved",
+			wantMsgSubstrs: []string{"insufficient unused quota", "Admitted=False (Pending): workload not admitted"},
+			wantTime:       "2026-07-10T12:00:00Z",
+		},
+		{
+			name: "Only Admitted=False resolves status to QuotaReserved, not Admitted",
+			conditions: []kueueWorkloadCondition{
+				{Type: "Admitted", Status: "False", Reason: "Pending", Message: "waiting for quota", LastTransitionTime: "2026-07-10T12:00:00Z"},
+			},
+			wantStatus:     "QuotaReserved",
+			wantMsgSubstrs: []string{"waiting for quota"},
+			wantTime:       "2026-07-10T12:00:00Z",
+		},
+		{
+			name: "Only auxiliary conditions without lifecycle conditions resolves status to QuotaReserved",
+			conditions: []kueueWorkloadCondition{
+				{Type: "PodsReady", Status: "False", Reason: "WaitForPodsReady", Message: "pods pending", LastTransitionTime: "2026-07-10T12:02:00Z"},
+				{Type: "TPUSliceFailure", Status: "True", Reason: "SliceFailed", Message: "slice error", LastTransitionTime: "2026-07-10T12:03:00Z"},
+			},
+			wantStatus:     "QuotaReserved",
+			wantMsgSubstrs: []string{"slice error", "PodsReady=False (WaitForPodsReady): pods pending"},
+			wantTime:       "2026-07-10T12:03:00Z",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			wl := kueueWorkload{}
+			wl.Status.Conditions = tc.conditions
+			gotStatus, gotMsg, gotTime := resolveWorkloadStatus(wl)
+			if gotStatus != tc.wantStatus {
+				t.Errorf("resolveWorkloadStatus() status = %q, want %q", gotStatus, tc.wantStatus)
+			}
+			for _, sub := range tc.wantMsgSubstrs {
+				if !strings.Contains(gotMsg, sub) {
+					t.Errorf("resolveWorkloadStatus() message = %q, missing %q", gotMsg, sub)
+				}
+			}
+			if gotTime != tc.wantTime {
+				t.Errorf("resolveWorkloadStatus() time = %q, want %q", gotTime, tc.wantTime)
+			}
+		})
+	}
+}
+
+func TestFilterWorkloads_AuxiliaryConditionsAndPendingPods(t *testing.T) {
+	intPtr := func(n int) *int { return &n }
+
+	makeWL := func(name string, admitted int, runningPods *int, conds ...kueueWorkloadCondition) kueueWorkload {
+		wl := kueueWorkload{RunningPods: runningPods}
+		wl.Metadata.Name = "jobset-" + name
+		wl.Metadata.OwnerReferences = []kueueWorkloadOwnerRef{{Kind: "JobSet", Name: name}}
+		wl.Spec.PodSets = []kueueWorkloadPodSet{{Name: "main-job", Count: admitted}}
+		if admitted > 0 {
+			wl.Status.Admission = &struct {
+				PodSetAssignments []kueueWorkloadPodSet `json:"podSetAssignments"`
+			}{
+				PodSetAssignments: []kueueWorkloadPodSet{{Name: "main-job", Count: admitted}},
+			}
+		}
+		wl.Status.Conditions = conds
+		return wl
+	}
+
+	workloads := []kueueWorkload{
+		// 1. Admitted in PreBind with 0 running pods and PodsReady=False as last condition -> QUEUED
+		makeWL("prebind-pods-not-ready", 4, intPtr(0),
+			kueueWorkloadCondition{Type: "QuotaReserved", Status: "True"},
+			kueueWorkloadCondition{Type: "Admitted", Status: "True"},
+			kueueWorkloadCondition{Type: "PodsReady", Status: "False", Reason: "WaitForPodsReady", Message: "Waiting for pods"},
+		),
+		// 2. Admitted with 0 running pods and TPUSliceFailure=True as last condition -> QUEUED
+		makeWL("prebind-slice-failure", 4, intPtr(0),
+			kueueWorkloadCondition{Type: "Admitted", Status: "True"},
+			kueueWorkloadCondition{Type: "TPUSliceFailure", Status: "True", Message: "Slice creation failed"},
+		),
+		// 3. Evicted with Requeued=True and Preempted=True as trailing conditions -> QUEUED
+		makeWL("evicted-requeued", 4, intPtr(0),
+			kueueWorkloadCondition{Type: "Evicted", Status: "True", Message: "Preempted"},
+			kueueWorkloadCondition{Type: "Preempted", Status: "True", Message: "Preempted in ClusterQueue"},
+			kueueWorkloadCondition{Type: "Requeued", Status: "True", Message: "Requeued"},
+		),
+		// 4. QuotaReserved=True with Admitted=False as last condition (even with Admission set) -> QUEUED
+		makeWL("quota-reserved-admitted-false", 4, nil,
+			kueueWorkloadCondition{Type: "QuotaReserved", Status: "True"},
+			kueueWorkloadCondition{Type: "Admitted", Status: "False", Message: "Waiting on check"},
+		),
+		// 5. Only Admitted=False -> QUEUED
+		makeWL("only-admitted-false", 0, nil,
+			kueueWorkloadCondition{Type: "Admitted", Status: "False", Message: "Pending quota"},
+		),
+		// 6. Admitted with running pods > 0 and PodsReady=True as last condition -> RUNNING
+		makeWL("running-pods-ready", 4, intPtr(4),
+			kueueWorkloadCondition{Type: "QuotaReserved", Status: "True"},
+			kueueWorkloadCondition{Type: "Admitted", Status: "True"},
+			kueueWorkloadCondition{Type: "PodsReady", Status: "True"},
+		),
+		// 7. Admitted with running pods > 0 and TPUSliceFailure=False / TPUSlicesProvisioned=True as last condition -> RUNNING
+		makeWL("running-with-tpu-cond", 4, intPtr(2),
+			kueueWorkloadCondition{Type: "Admitted", Status: "True"},
+			kueueWorkloadCondition{Type: "TPUSlicesProvisioned", Status: "True"},
+			kueueWorkloadCondition{Type: "TPUSliceFailure", Status: "False"},
+		),
+		// 8. Finished workload -> neither QUEUED nor RUNNING
+		makeWL("finished-job", 4, intPtr(0),
+			kueueWorkloadCondition{Type: "Admitted", Status: "True"},
+			kueueWorkloadCondition{Type: "Finished", Status: "True"},
+		),
+	}
+
+	queued := filterWorkloads(workloads, "QUEUED", "")
+	var queuedNames []string
+	for _, wl := range queued {
+		queuedNames = append(queuedNames, workloadJobSetName(wl))
+	}
+	wantQueued := []string{
+		"prebind-pods-not-ready",
+		"prebind-slice-failure",
+		"evicted-requeued",
+		"quota-reserved-admitted-false",
+		"only-admitted-false",
+	}
+	if strings.Join(queuedNames, ",") != strings.Join(wantQueued, ",") {
+		t.Errorf("filterWorkloads(QUEUED) = %v, want %v", queuedNames, wantQueued)
+	}
+
+	running := filterWorkloads(workloads, "RUNNING", "")
+	var runningNames []string
+	for _, wl := range running {
+		runningNames = append(runningNames, workloadJobSetName(wl))
+	}
+	wantRunning := []string{
+		"running-pods-ready",
+		"running-with-tpu-cond",
+	}
+	if strings.Join(runningNames, ",") != strings.Join(wantRunning, ",") {
+		t.Errorf("filterWorkloads(RUNNING) = %v, want %v", runningNames, wantRunning)
+	}
+
+	everything := filterWorkloads(workloads, "EVERYTHING", "")
+	if len(everything) != len(workloads) {
+		t.Errorf("filterWorkloads(EVERYTHING) returned %d workloads, want %d", len(everything), len(workloads))
+	}
+}
+
+func TestRenderWorkloadsTable_RunningPodsAndMultiPodSet(t *testing.T) {
+	// 1. Admitted workload with 0 Running pods (all pods Pending) shows Running/Ran = 0.
+	admittedZeroRunning := kueueWorkload{}
+	admittedZeroRunning.Metadata.Name = "jobset-admitted-pending"
+	admittedZeroRunning.Metadata.Namespace = "default"
+	admittedZeroRunning.Metadata.CreationTimestamp = "2026-07-10T12:00:00Z"
+	admittedZeroRunning.Metadata.OwnerReferences = []kueueWorkloadOwnerRef{{Kind: "JobSet", Name: "admitted-pending"}}
+	admittedZeroRunning.Spec.PriorityClassName = "high"
+	admittedZeroRunning.Spec.PodSets = []kueueWorkloadPodSet{{Name: "main-job", Count: 4}}
+	admittedZeroRunning.Status.Admission = &struct {
+		PodSetAssignments []kueueWorkloadPodSet `json:"podSetAssignments"`
+	}{
+		PodSetAssignments: []kueueWorkloadPodSet{{Name: "main-job", Count: 4}},
+	}
+	admittedZeroRunning.Status.Conditions = []kueueWorkloadCondition{
+		{Type: "Admitted", Status: "True", Message: "Admitted by ClusterQueue", LastTransitionTime: "2026-07-10T12:01:00Z"},
+		{Type: "PodsReady", Status: "False", Reason: "WaitForPodsReady", Message: "Waiting in PreBind", LastTransitionTime: "2026-07-10T12:01:05Z"},
+	}
+
+	// 2. Multi-PodSet workload summing Needed and Done across accelerator PodSets (excluding pathways-head).
+	multiPodSet := kueueWorkload{}
+	multiPodSet.Metadata.Name = "jobset-multi-podset"
+	multiPodSet.Metadata.Namespace = "default"
+	multiPodSet.Metadata.CreationTimestamp = "2026-07-10T12:05:00Z"
+	multiPodSet.Metadata.OwnerReferences = []kueueWorkloadOwnerRef{{Kind: "JobSet", Name: "multi-podset"}}
+	multiPodSet.Spec.PodSets = []kueueWorkloadPodSet{
+		{Name: "pathways-head", Count: 1},
+		{Name: "worker-0", Count: 4},
+		{Name: "worker-1", Count: 8},
+	}
+	multiPodSet.Status.Admission = &struct {
+		PodSetAssignments []kueueWorkloadPodSet `json:"podSetAssignments"`
+	}{
+		PodSetAssignments: []kueueWorkloadPodSet{
+			{Name: "pathways-head", Count: 1},
+			{Name: "worker-0", Count: 4},
+			{Name: "worker-1", Count: 8},
+		},
+	}
+	multiPodSet.Status.ReclaimablePods = []kueueWorkloadPodSet{
+		{Name: "pathways-head", Count: 0},
+		{Name: "worker-0", Count: 1},
+		{Name: "worker-1", Count: 1},
+	}
+	multiPodSet.Status.Conditions = []kueueWorkloadCondition{
+		{Type: "Admitted", Status: "True", Message: "Admitted", LastTransitionTime: "2026-07-10T12:06:00Z"},
+	}
+
+	items := []kueueWorkload{admittedZeroRunning, multiPodSet}
+	pods := []inspectPod{
+		// Pending pods for admitted-pending
+		{
+			Metadata: struct {
+				Name      string            `json:"name"`
+				Namespace string            `json:"namespace"`
+				Labels    map[string]string `json:"labels"`
+			}{
+				Name:      "admitted-pending-main-job-0-0",
+				Namespace: "default",
+				Labels:    map[string]string{"jobset.sigs.k8s.io/jobset-name": "admitted-pending", "jobset.sigs.k8s.io/replicatedjob-name": "main-job"},
+			},
+			Status: struct {
+				Phase string `json:"phase"`
+			}{Phase: "Pending"},
+		},
+		// Running pathways-head pod (must be excluded from TPU VM count) + 3 Running/Succeeded worker pods + 1 Pending worker pod for multi-podset
+		{
+			Metadata: struct {
+				Name      string            `json:"name"`
+				Namespace string            `json:"namespace"`
+				Labels    map[string]string `json:"labels"`
+			}{
+				Name:      "multi-podset-pathways-head-0-0",
+				Namespace: "default",
+				Labels:    map[string]string{"jobset.sigs.k8s.io/jobset-name": "multi-podset", "jobset.sigs.k8s.io/replicatedjob-name": "pathways-head"},
+			},
+			Status: struct {
+				Phase string `json:"phase"`
+			}{Phase: "Running"},
+		},
+		{
+			Metadata: struct {
+				Name      string            `json:"name"`
+				Namespace string            `json:"namespace"`
+				Labels    map[string]string `json:"labels"`
+			}{
+				Name:      "multi-podset-worker-0-0",
+				Namespace: "default",
+				Labels:    map[string]string{"jobset.sigs.k8s.io/jobset-name": "multi-podset", "jobset.sigs.k8s.io/replicatedjob-name": "worker-0"},
+			},
+			Status: struct {
+				Phase string `json:"phase"`
+			}{Phase: "Succeeded"},
+		},
+		{
+			Metadata: struct {
+				Name      string            `json:"name"`
+				Namespace string            `json:"namespace"`
+				Labels    map[string]string `json:"labels"`
+			}{
+				Name:      "multi-podset-worker-0-1",
+				Namespace: "default",
+				Labels:    map[string]string{"jobset.sigs.k8s.io/jobset-name": "multi-podset", "jobset.sigs.k8s.io/replicatedjob-name": "worker-0"},
+			},
+			Status: struct {
+				Phase string `json:"phase"`
+			}{Phase: "Running"},
+		},
+		{
+			Metadata: struct {
+				Name      string            `json:"name"`
+				Namespace string            `json:"namespace"`
+				Labels    map[string]string `json:"labels"`
+			}{
+				Name:      "multi-podset-worker-1-0",
+				Namespace: "default",
+				Labels:    map[string]string{"jobset.sigs.k8s.io/jobset-name": "multi-podset", "jobset.sigs.k8s.io/replicatedjob-name": "worker-1"},
+			},
+			Status: struct {
+				Phase string `json:"phase"`
+			}{Phase: "Running"},
+		},
+		{
+			Metadata: struct {
+				Name      string            `json:"name"`
+				Namespace string            `json:"namespace"`
+				Labels    map[string]string `json:"labels"`
+			}{
+				Name:      "multi-podset-worker-1-1",
+				Namespace: "default",
+				Labels:    map[string]string{"jobset.sigs.k8s.io/jobset-name": "multi-podset", "jobset.sigs.k8s.io/replicatedjob-name": "worker-1"},
+			},
+			Status: struct {
+				Phase string `json:"phase"`
+			}{Phase: "Pending"},
+		},
+	}
+
+	applyPodCountsToWorkloads(items, pods)
+
+	if gotNeeded := getWorkloadNeededCount(items[0]); gotNeeded != 4 {
+		t.Errorf("admitted-pending Needed = %d, want 4", gotNeeded)
+	}
+	if gotRunning := getWorkloadRunningCount(items[0]); gotRunning != 0 {
+		t.Errorf("admitted-pending Running/Ran = %d, want 0", gotRunning)
+	}
+
+	if gotNeeded := getWorkloadNeededCount(items[1]); gotNeeded != 12 {
+		t.Errorf("multi-podset Needed = %d, want 12 (4 + 8 across worker PodSets)", gotNeeded)
+	}
+	if gotDone := getWorkloadDoneCount(items[1]); gotDone != 2 {
+		t.Errorf("multi-podset Done = %d, want 2 (1 + 1 across worker PodSets)", gotDone)
+	}
+	if gotRunning := getWorkloadRunningCount(items[1]); gotRunning != 3 {
+		t.Errorf("multi-podset Running/Ran = %d, want 3 (1 Succeeded + 2 Running worker pods, excluding pathways-head)", gotRunning)
+	}
+
+	var sb strings.Builder
+	renderWorkloadsTable(&sb, items)
+	out := sb.String()
+
+	for _, wantLine := range []string{
+		"admitted-pending  2026-07-10T12:00:00Z  high      4               0                    0             Admitted  Admitted by ClusterQueue [PodsReady=False (WaitForPodsReady): Waiting in PreBind]  2026-07-10T12:01:00Z",
+		"multi-podset      2026-07-10T12:05:00Z  <none>    12              3                    2             Admitted  Admitted                                                                           2026-07-10T12:06:00Z",
+	} {
+		if !strings.Contains(out, wantLine) {
+			t.Errorf("renderWorkloadsTable() output missing expected row:\nwant: %s\ngot:\n%s", wantLine, out)
+		}
+	}
+}
+
+func TestNonAcceleratorPodSets_ExplicitContainerResources(t *testing.T) {
+	var wl kueueWorkload
+	rawJSON := `{
+		"spec": {
+			"podSets": [
+				{
+					"name": "coordinator",
+					"count": 1,
+					"template": {
+						"spec": {
+							"containers": [
+								{"name": "coord", "resources": {"requests": {"cpu": "4", "memory": "16Gi"}}}
+							]
+						}
+					}
+				},
+				{
+					"name": "tpu-slice-0",
+					"count": 4,
+					"template": {
+						"spec": {
+							"containers": [
+								{"name": "worker", "resources": {"requests": {"google.com/tpu": "4"}}}
+							]
+						}
+					}
+				},
+				{
+					"name": "tpu-slice-1",
+					"count": 4,
+					"template": {
+						"spec": {
+							"containers": [
+								{"name": "worker", "resources": {"limits": {"google.com/tpu": "4"}}}
+							]
+						}
+					}
+				}
+			]
+		},
+		"status": {
+			"reclaimablePods": [
+				{"name": "coordinator", "count": 1},
+				{"name": "tpu-slice-0", "count": 4},
+				{"name": "tpu-slice-1", "count": 4}
+			]
+		}
+	}`
+	if err := json.Unmarshal([]byte(rawJSON), &wl); err != nil {
+		t.Fatalf("failed to unmarshal workload: %v", err)
+	}
+	if got := getWorkloadNeededCount(wl); got != 8 {
+		t.Errorf("getWorkloadNeededCount() = %d, want 8", got)
+	}
+	if got := getWorkloadDoneCount(wl); got != 8 {
+		t.Errorf("getWorkloadDoneCount() = %d, want 8", got)
+	}
+}
+
+func TestLogWorkloadList_PopulatesPodCountsFromKubectl(t *testing.T) {
+	workloadsJSON := `{"items": [
+		{
+			"metadata": {"name": "jobset-prebind-job", "namespace": "default", "creationTimestamp": "2026-07-10T12:00:00Z", "ownerReferences": [{"kind": "JobSet", "name": "prebind-job"}]},
+			"spec": {"priorityClassName": "high", "podSets": [{"name": "main-job", "count": 4}]},
+			"status": {
+				"admission": {"podSetAssignments": [{"name": "main-job", "count": 4}]},
+				"conditions": [
+					{"type": "QuotaReserved", "status": "True", "lastTransitionTime": "2026-07-10T12:00:10Z"},
+					{"type": "Admitted", "status": "True", "message": "Admitted", "lastTransitionTime": "2026-07-10T12:00:10Z"},
+					{"type": "PodsReady", "status": "False", "reason": "WaitForPodsReady", "message": "Waiting for Slices", "lastTransitionTime": "2026-07-10T12:00:11Z"}
+				]
+			}
+		},
+		{
+			"metadata": {"name": "jobset-active-job", "namespace": "default", "creationTimestamp": "2026-07-10T12:00:00Z", "ownerReferences": [{"kind": "JobSet", "name": "active-job"}]},
+			"spec": {"priorityClassName": "high", "podSets": [{"name": "main-job", "count": 2}]},
+			"status": {
+				"admission": {"podSetAssignments": [{"name": "main-job", "count": 2}]},
+				"conditions": [
+					{"type": "Admitted", "status": "True", "message": "Admitted", "lastTransitionTime": "2026-07-10T12:00:10Z"}
+				]
+			}
+		}
+	]}`
+	podsJSON := `{"items": [
+		{"metadata": {"name": "prebind-job-0", "namespace": "default", "labels": {"gcluster.google.com/workload": "prebind-job"}}, "status": {"phase": "Pending"}},
+		{"metadata": {"name": "active-job-0", "namespace": "default", "labels": {"gcluster.google.com/workload": "active-job"}}, "status": {"phase": "Running"}},
+		{"metadata": {"name": "active-job-1", "namespace": "default", "labels": {"gcluster.google.com/workload": "active-job"}}, "status": {"phase": "Running"}}
+	]}`
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get workloads -n default -o json": {
+			{ExitCode: 0, Stdout: workloadsJSON},
+			{ExitCode: 0, Stdout: workloadsJSON},
+		},
+		"kubectl get pods -n default -o json": {
+			{ExitCode: 0, Stdout: podsJSON},
+			{ExitCode: 0, Stdout: podsJSON},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	var queuedBuf strings.Builder
+	orc.logWorkloadList(&queuedBuf, "QUEUED", "", "default")
+	queuedOut := queuedBuf.String()
+	if !strings.Contains(queuedOut, "prebind-job") || strings.Contains(queuedOut, "active-job") {
+		t.Errorf("QUEUED table should contain prebind-job and not active-job, got:\n%s", queuedOut)
+	}
+
+	var runningBuf strings.Builder
+	orc.logWorkloadList(&runningBuf, "RUNNING", "", "default")
+	runningOut := runningBuf.String()
+	if !strings.Contains(runningOut, "active-job") || strings.Contains(runningOut, "prebind-job") {
+		t.Errorf("RUNNING table should contain active-job and not prebind-job, got:\n%s", runningOut)
+	}
+
+	// Also verify all-namespaces (-A) path and malformed pod JSON fallback.
+	mockExecAllNS := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get workloads -A -o json": {{ExitCode: 0, Stdout: workloadsJSON}},
+		"kubectl get pods -A -o json":      {{ExitCode: 0, Stdout: "not-json"}},
+	})
+	orcAllNS := newTestGKEOrchestrator(mockExecAllNS)
+	var allBuf strings.Builder
+	orcAllNS.logWorkloadList(&allBuf, "EVERYTHING", "active-job", "")
+	if !strings.Contains(allBuf.String(), "active-job") || strings.Contains(allBuf.String(), "prebind-job") {
+		t.Errorf("filtered EVERYTHING table should contain only active-job, got:\n%s", allBuf.String())
+	}
+
+	// Verify logWorkloadList error and invalid JSON handling.
+	mockExecErr := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get workloads -n default -o json": {
+			{ExitCode: 1, Stderr: "workloads forbidden"},
+			{ExitCode: 0, Stdout: "invalid-json"},
+		},
+	})
+	orcErr := newTestGKEOrchestrator(mockExecErr)
+	var errBuf strings.Builder
+	orcErr.logWorkloadList(&errBuf, "EVERYTHING", "", "default")
+	orcErr.logWorkloadList(&errBuf, "EVERYTHING", "", "default")
+	if !strings.Contains(errBuf.String(), "Error listing workloads") || !strings.Contains(errBuf.String(), "Error parsing workloads JSON") {
+		t.Errorf("expected logWorkloadList error messages, got:\n%s", errBuf.String())
+	}
+}
+
+func TestWorkloadStatsAndPodMatchingEdgeCases(t *testing.T) {
+	// 1. Workload without OwnerReferences falls back to metadata.name, andPodsReady=True without pod list uses admitted count.
+	wl := kueueWorkload{}
+	wl.Metadata.Name = "standalone-wl"
+	wl.Spec.PodSets = []kueueWorkloadPodSet{
+		{Name: "cpu-head", Count: 1, Flavors: map[string]string{"cpu": "default-flavor"}},
+		{Name: "tpu-worker", Count: 4, Flavors: map[string]string{"google.com/tpu": "tpu-v6e"}},
+	}
+	wl.Status.Admission = &struct {
+		PodSetAssignments []kueueWorkloadPodSet `json:"podSetAssignments"`
+	}{
+		PodSetAssignments: []kueueWorkloadPodSet{
+			{Name: "cpu-head", Count: 1, ResourceUsage: map[string]string{"cpu": "2"}},
+			{Name: "tpu-worker", Count: 4, ResourceUsage: map[string]string{"google.com/tpu": "16"}},
+		},
+	}
+	wl.Status.Conditions = []kueueWorkloadCondition{
+		{Type: "Admitted", Status: "True", Reason: "Admitted"},
+		{Type: "PodsReady", Status: "True", Reason: "PodsReady"},
+	}
+
+	running, status := getWorkloadStats(wl)
+	if status != "Admitted" || running != 4 {
+		t.Errorf("getWorkloadStats(PodsReady=True without pod list) = (%d, %q), want (4, \"Admitted\")", running, status)
+	}
+
+	// 2. Finished workload falls back to ReclaimablePods or Admitted count when pods already garbage-collected.
+	zero := 0
+	finishedWL := wl
+	finishedWL.RunningPods = &zero
+	finishedWL.Status.ReclaimablePods = []kueueWorkloadPodSet{
+		{Name: "cpu-head", Count: 1},
+		{Name: "tpu-worker", Count: 4},
+	}
+	finishedWL.Status.Conditions = []kueueWorkloadCondition{
+		{Type: "Admitted", Status: "True"},
+		{Type: "Finished", Status: "True", Reason: "Succeeded"},
+	}
+	if got := getWorkloadRunningCount(finishedWL); got != 4 {
+		t.Errorf("getWorkloadRunningCount(Finished with reclaimed pods) = %d, want 4", got)
+	}
+
+	finishedNoReclaim := wl
+	finishedNoReclaim.RunningPods = &zero
+	finishedNoReclaim.Status.Conditions = finishedWL.Status.Conditions
+	if got := getWorkloadRunningCount(finishedNoReclaim); got != 4 {
+		t.Errorf("getWorkloadRunningCount(Finished with RunningPods=&0 and no reclaimablePods) = %d, want 4", got)
+	}
+
+	finishedNilPods := wl
+	finishedNilPods.Status.Conditions = finishedWL.Status.Conditions
+	if got := getWorkloadRunningCount(finishedNilPods); got != 4 {
+		t.Errorf("getWorkloadRunningCount(Finished with RunningPods=nil and no reclaimablePods) = %d, want 4", got)
+	}
+
+	one := 1
+	admittedWithReclaimed := finishedWL
+	admittedWithReclaimed.RunningPods = &one
+	admittedWithReclaimed.Status.Conditions = []kueueWorkloadCondition{{Type: "Admitted", Status: "True"}}
+	if got := getWorkloadRunningCount(admittedWithReclaimed); got != 4 {
+		t.Errorf("getWorkloadRunningCount(Admitted with RunningPods=1 < Done=4) = %d, want 4", got)
+	}
+
+	// 3. NodeSelector accelerator detection and podMatchesWorkload namespace check.
+	gpuPodSet := kueueWorkloadPodSet{
+		Name:  "gpu-worker",
+		Count: 2,
+	}
+	gpuPodSet.Template.Spec.NodeSelector = map[string]string{"cloud.google.com/gke-accelerator": "nvidia-h100-80gb"}
+	if !podSetRequestsAccelerator(gpuPodSet, nil) {
+		t.Errorf("expected gpuPodSet with cloud.google.com/gke-accelerator nodeSelector to be detected as accelerator")
+	}
+	tpuPodSet := kueueWorkloadPodSet{
+		Name:  "tpu-worker",
+		Count: 2,
+	}
+	tpuPodSet.Template.Spec.NodeSelector = map[string]string{"cloud.google.com/gke-tpu-accelerator": "tpu-v6e-slice"}
+	if !podSetRequestsAccelerator(tpuPodSet, nil) {
+		t.Errorf("expected tpuPodSet with cloud.google.com/gke-tpu-accelerator nodeSelector to be detected as accelerator")
+	}
+
+	podOtherNS := inspectPod{}
+	podOtherNS.Metadata.Namespace = "other-ns"
+	podOtherNS.Metadata.Labels = map[string]string{"gcluster.google.com/workload": "standalone-wl"}
+	if podMatchesWorkload(podOtherNS, "standalone-wl", "default") {
+		t.Errorf("expected podMatchesWorkload to reject pod from different namespace")
+	}
+	if podMatchesWorkload(podOtherNS, "", "other-ns") {
+		t.Errorf("expected podMatchesWorkload to reject empty jobsetName")
+	}
+
+	// 4. workloadJobSetName fallback when OwnerReferences is empty, getWorkloadAdmittedCount with nil Admission,
+	// and podSetHasExplicitResources via psa.Flavors / nil resources.
+	if gotName := workloadJobSetName(wl); gotName != "standalone-wl" {
+		t.Errorf("workloadJobSetName() without OwnerReferences = %q, want %q", gotName, "standalone-wl")
+	}
+	if filtered := filterWorkloads([]kueueWorkload{wl}, "RUNNING", "standalone"); len(filtered) != 1 {
+		t.Errorf("filterWorkloads() on workload without OwnerReferences returned %d items, want 1", len(filtered))
+	}
+
+	noAdmissionWL := kueueWorkload{}
+	if got := getWorkloadAdmittedCount(noAdmissionWL); got != 0 {
+		t.Errorf("getWorkloadAdmittedCount(nil Admission) = %d, want 0", got)
+	}
+
+	psaOnlyFlavors := &kueueWorkloadPodSet{Name: "cpu-head", Count: 1, Flavors: map[string]string{"cpu": "default"}}
+	if !podSetHasExplicitResources(kueueWorkloadPodSet{Name: "cpu-head", Count: 1}, psaOnlyFlavors) {
+		t.Errorf("expected podSetHasExplicitResources to return true when psa.Flavors is non-empty")
+	}
+	if podSetHasExplicitResources(kueueWorkloadPodSet{Name: "bare", Count: 1}, nil) {
+		t.Errorf("expected podSetHasExplicitResources to return false when neither ps nor psa has resources")
 	}
 }
