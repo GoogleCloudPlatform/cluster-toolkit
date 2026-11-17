@@ -26,6 +26,7 @@ vars:
   authorized_cidr: <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
   enable_ray_operator: false
+  compute_spot: false
 
 deployment_groups:
 - group: primary
@@ -70,6 +71,8 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network1, workload_service_account]
     settings:
+      system_node_pool_machine_type: n2d-standard-4
+      system_node_pool_zones: $(vars.zones)
       enable_ray_operator: $(vars.enable_ray_operator)
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
@@ -86,6 +89,7 @@ deployment_groups:
       name: g2-latest-driver
       machine_type: g2-standard-4
       static_node_count: 1
+      spot: $(vars.compute_spot)
       guest_accelerator:
       - gpu_driver_installation_config:
           gpu_driver_version: "LATEST"
@@ -119,6 +123,7 @@ deployment_groups:
       disk_type: pd-balanced
       machine_type: n1-standard-4
       static_node_count: 1
+      spot: $(vars.compute_spot)
       guest_accelerator:
       - type: nvidia-tesla-t4
         count: 2
@@ -148,6 +153,7 @@ deployment_groups:
       disk_type: pd-balanced
       machine_type: n1-standard-4
       static_node_count: 1
+      spot: $(vars.compute_spot)
       guest_accelerator:
       - type: nvidia-tesla-t4
         count: 2
@@ -181,6 +187,7 @@ deployment_groups:
     settings:
       name: default-settings-pool
       static_node_count: 1
+      spot: $(vars.compute_spot)
 
   - id: job_default_settings_pool
     source: modules/compute/gke-job-template

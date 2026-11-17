@@ -22,6 +22,7 @@ tags:
 - gke
 
 substitutions:
+  _PROVISIONING_MODEL: ""
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 86400s
@@ -73,6 +74,7 @@ steps:
     spec:
       suspend: true # Required for Kueue: the job must be created in suspended state for Kueue to manage it
       backoffLimit: 0
+      activeDeadlineSeconds: 14400
       template:
         metadata:
           annotations:
@@ -86,6 +88,32 @@ steps:
           - name: runner
             image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
             env:
+            - name: BUILD_ID
+              value: "$BUILD_ID"
+            - name: PROJECT_ID
+              value: "$PROJECT_ID"
+            - name: PROVISIONING_MODEL
+              value: "$_PROVISIONING_MODEL"
+            - name: NUM_NODES
+              value: "1"
+            - name: MIN_NODES
+              value: "1"
+            - name: MACHINE_TYPE
+              value: "g2-standard-4"
+            - name: INSTANCE_PREFIX
+              value: "mlgkee2e"
+            - name: REQUIRED_MACHINE_TYPES
+              value: "g2-standard-4,n1-standard-4,c2-standard-60,n2d-standard-4,n2d-standard-2"
+            - name: REQUIRED_ACCELERATOR_TYPES
+              value: "nvidia-tesla-t4"
+            - name: ADDITIONAL_VM_CHECKS
+              value: "n1-standard-4:2:2:type=nvidia-tesla-t4,count=2;c2-standard-60:1:1"
+            - name: ENABLE_SPOT_FALLBACK
+              value: "true"
+            - name: REQUIRED_CPU_QUOTA
+              value: "12"
+            - name: CPU_QUOTA_METRIC
+              value: "N2D_CPUS"
             - name: ANSIBLE_HOST_KEY_CHECKING
               value: "false"
             - name: ANSIBLE_CONFIG
@@ -121,6 +149,21 @@ steps:
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
               trap cleanup_pod EXIT SIGTERM SIGINT
 
+              set -e -u -o pipefail
+              echo "Sourcing wait_for_available_zone.sh to determine zone and provisioning model."
+              source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              if [ -z "\$${ZONE:-}" ]; then
+                echo "ERROR: ZONE not found" >&2
+                exit 1
+              fi
+              REGION="\$${ZONE%-*}"
+              ENABLE_SPOT="true"
+              if [[ "\$${PROVISIONING_MODEL:-}" == "STANDARD" ]]; then
+                ENABLE_SPOT="false"
+              fi
+              echo "Selected ZONE=\$$ZONE, REGION=\$$REGION, PROVISIONING_MODEL=\$${PROVISIONING_MODEL:-}, ENABLE_SPOT=\$$ENABLE_SPOT"
+              set -x
+
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
               # adding vm to act as remote node
@@ -129,20 +172,21 @@ steps:
               echo '    use: [network1]'                     >> \$$SG_EXAMPLE
               echo '    settings:'                           >> \$$SG_EXAMPLE
               echo '      machine_type: n2d-standard-2'       >> \$$SG_EXAMPLE
-              echo '      zone: asia-southeast1-b'           >> \$$SG_EXAMPLE
+              echo "      zone: \$$ZONE"                     >> \$$SG_EXAMPLE
 
               echo '  - id: ubuntu_pool'                                         >> \$$SG_EXAMPLE
               echo '    source: modules/compute/gke-node-pool'         >> \$$SG_EXAMPLE
               echo '    use: [gke_cluster]'                                      >> \$$SG_EXAMPLE
               echo '    settings: {name: ubuntu, image_type: UBUNTU_CONTAINERD}' >> \$$SG_EXAMPLE
 
-              IP=\$(curl ifconfig.me)
+              IP=\$(curl -s --retry 3 ifconfig.me || dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | tr -d '"')
               sed -i "s|.*authorized_cidr:.*|  authorized_cidr: \$$IP/32|" \$$SG_EXAMPLE
               bash tools/add_ttl_label.sh \$$SG_EXAMPLE
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
                 --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
                 --extra-vars="@tools/cloud-build/daily-tests/tests/ml-gke-e2e.yml" \
+                --extra-vars="region=\$$REGION zone=\$$ZONE enable_spot=\$$ENABLE_SPOT" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
                 --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \

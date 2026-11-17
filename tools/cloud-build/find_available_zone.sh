@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+REQUESTED_PROVISIONING_MODEL="${PROVISIONING_MODEL:-}"
 BUILD_ID_SHORT="${BUILD_ID:0:6}"
 PROVISIONING_MODEL="SPOT"
 TERMINATION_ACTION="DELETE"
@@ -116,12 +117,17 @@ check_tpu_capacity() {
 	[[ "${success}" == "true" ]]
 }
 
-check_vm_capacity() {
+check_single_vm_capacity() {
 	local zone=$1
 	local provisioning_model=$2
+	local machine_type=$3
+	local num_nodes=$4
+	local min_nodes=$5
+	local instance_prefix=$6
+	local accelerator=${7:-}
 	local success=false
 
-	readarray -t instance_names_array < <(generate_instance_names "${FULL_INSTANCE_PREFIX}" "${NUM_NODES}")
+	readarray -t instance_names_array < <(generate_instance_names "${instance_prefix}" "${num_nodes}")
 	local instance_names_str
 	instance_names_str=$(
 		IFS=,
@@ -133,52 +139,88 @@ check_vm_capacity() {
 		--predefined-names="${instance_names_str}"
 		--project="${PROJECT_ID}"
 		--zone="${zone}"
-		--machine-type="${MACHINE_TYPE}"
+		--machine-type="${machine_type}"
 		--provisioning-model="${provisioning_model}"
 		--no-address
 		--quiet
-		--min-count="${MIN_NODES}"
+		--min-count="${min_nodes}"
 	)
+
+	if [[ -n "${accelerator}" ]]; then
+		gcloud_cmd+=(--accelerator="${accelerator}")
+	fi
 
 	if [[ "${provisioning_model}" == "SPOT" ]]; then
 		gcloud_cmd+=(--instance-termination-action="${TERMINATION_ACTION}")
+		if [[ -n "${accelerator}" ]]; then
+			gcloud_cmd+=(--on-host-maintenance="TERMINATE")
+		fi
 	else
 		gcloud_cmd+=(--on-host-maintenance="TERMINATE")
 	fi
 
-	echo "INFO: Attempting to bulk create ${NUM_NODES} VMs in ${zone} (Model: ${provisioning_model})..."
+	echo "INFO: Attempting to bulk create ${num_nodes} ${machine_type} VMs in ${zone} (Model: ${provisioning_model})..."
 	if create_output=$("${gcloud_cmd[@]}" 2>&1); then
 		if instance_list_output=$(gcloud compute instances list --project="${PROJECT_ID}" --zones="${zone}" \
-			--filter="name ~ ^${FULL_INSTANCE_PREFIX}" --format='value(name)'); then
+			--filter="name ~ ^${instance_prefix}" --format='value(name)'); then
 			if [[ -n "${instance_list_output}" ]]; then
 				readarray -t created_instances < <(echo "${instance_list_output}")
 				local num_created=${#created_instances[@]}
-				cleanup_vm_instances "${PROJECT_ID}" "${zone}" "${FULL_INSTANCE_PREFIX}"
+				cleanup_vm_instances "${PROJECT_ID}" "${zone}" "${instance_prefix}"
 
-				if [[ "${num_created}" -ge "${MIN_NODES}" ]]; then
-					echo "INFO: Found sufficient VM capacity in ${zone}."
+				if [[ "${num_created}" -ge "${min_nodes}" ]]; then
+					echo "INFO: Found sufficient ${machine_type} VM capacity in ${zone}."
 					success=true
 				else
-					echo "ERROR: Bulk create & list succeeded in ${zone}, but only ${num_created} instances found, less than min_count ${MIN_NODES}." >&2
+					echo "ERROR: Bulk create & list succeeded in ${zone}, but only ${num_created} instances found, less than min_count ${min_nodes}." >&2
 				fi
 			else
 				echo "ERROR: Bulk create command apparently succeeded in ${zone}, but LIST command found no instances with the prefix." >&2
-				cleanup_vm_instances "${PROJECT_ID}" "${zone}" "${FULL_INSTANCE_PREFIX}"
+				cleanup_vm_instances "${PROJECT_ID}" "${zone}" "${instance_prefix}"
 			fi
 		else
 			echo "ERROR: Bulk create command succeeded in ${zone}, but the command to list instances failed." >&2
-			cleanup_vm_instances "${PROJECT_ID}" "${zone}" "${FULL_INSTANCE_PREFIX}"
+			cleanup_vm_instances "${PROJECT_ID}" "${zone}" "${instance_prefix}"
 		fi
 	else
 		if [[ "${create_output}" != *"INSUFFICIENT_CAPACITY"* && "${create_output}" != *"ZONE_RESOURCE_POOL_EXHAUSTED"* ]]; then
 			echo "ERROR: Unexpected error during bulk create in ${zone}: ${create_output}" >&2
 		else
-			echo "INFO: Insufficient VM capacity for bulk create in ${zone} (Model: ${provisioning_model})."
+			echo "INFO: Insufficient ${machine_type} VM capacity for bulk create in ${zone} (Model: ${provisioning_model})."
 		fi
-		cleanup_vm_instances "${PROJECT_ID}" "${zone}" "${FULL_INSTANCE_PREFIX}"
+		cleanup_vm_instances "${PROJECT_ID}" "${zone}" "${instance_prefix}"
 	fi
 
 	[[ "${success}" == "true" ]]
+}
+
+check_vm_capacity() {
+	local zone=$1
+	local provisioning_model=$2
+
+	if ! check_single_vm_capacity "${zone}" "${provisioning_model}" "${MACHINE_TYPE}" "${NUM_NODES}" "${MIN_NODES}" "${FULL_INSTANCE_PREFIX}" "${GUEST_ACCELERATOR:-}"; then
+		return 1
+	fi
+
+	if [[ -n "${ADDITIONAL_VM_CHECKS:-}" ]]; then
+		local extra_specs=()
+		IFS=';' read -r -a extra_specs <<<"${ADDITIONAL_VM_CHECKS}"
+		local idx=0
+		for spec in "${extra_specs[@]}"; do
+			[[ -z "${spec}" ]] && continue
+			idx=$((idx + 1))
+			local extra_mtype="" extra_num="" extra_min="" extra_accel=""
+			IFS=':' read -r extra_mtype extra_num extra_min extra_accel <<<"${spec}"
+			extra_num="${extra_num:-1}"
+			extra_min="${extra_min:-${extra_num}}"
+			local extra_prefix="${INSTANCE_PREFIX}x${idx}-${BUILD_ID_SHORT}-"
+			if ! check_single_vm_capacity "${zone}" "${provisioning_model}" "${extra_mtype}" "${extra_num}" "${extra_min}" "${extra_prefix}" "${extra_accel}"; then
+				return 1
+			fi
+		done
+	fi
+
+	return 0
 }
 
 declare -A FILESTORE_QUOTA_CACHE
@@ -316,33 +358,38 @@ check_lustre_quota() {
 		return 1
 	fi
 }
+declare -A REGION_QUOTAS_JSON_CACHE
 declare -A CPU_QUOTA_CACHE
 check_cpu_quota() {
 	local region=$1
-	local required_cpus=${REQUIRED_CPU_QUOTA:-0}
-	local metric=${CPU_QUOTA_METRIC:-"N2D_CPUS"}
+	local metric=${2:-${CPU_QUOTA_METRIC:-"N2D_CPUS"}}
+	local required_cpus=${3:-${REQUIRED_CPU_QUOTA:-0}}
 	if [[ "${required_cpus}" -le 0 ]]; then
 		return 0
 	fi
 
-	if [[ -n "${CPU_QUOTA_CACHE[$region]:-}" ]]; then
-		return "${CPU_QUOTA_CACHE[$region]}"
+	local cache_key="${region}:${metric}:${required_cpus}"
+	if [[ -n "${CPU_QUOTA_CACHE[${cache_key}]:-}" ]]; then
+		return "${CPU_QUOTA_CACHE[${cache_key}]}"
+	fi
+
+	if [[ -z "${REGION_QUOTAS_JSON_CACHE[${region}]+x}" ]]; then
+		REGION_QUOTAS_JSON_CACHE["${region}"]=$(gcloud compute regions describe "${region}" \
+			--project="${PROJECT_ID}" --format="json(quotas)" 2>/dev/null || true)
 	fi
 
 	local quota_info limit usage
-	quota_info=$(gcloud compute regions describe "${region}" \
-		--project="${PROJECT_ID}" --format="json(quotas)" 2>/dev/null |
-		jq -r --arg m "${metric}" '.quotas[]? | select(.metric == $m) | "\(.limit | if . >= 1e15 then -1 else floor end) \((.usage // 0) | floor)"' 2>/dev/null || true)
+	quota_info=$(jq -r --arg m "${metric}" '.quotas[]? | select(.metric == $m) | "\(.limit | if . >= 1e15 then -1 else floor end) \((.usage // 0) | floor)"' <<<"${REGION_QUOTAS_JSON_CACHE[${region}]}" 2>/dev/null || true)
 	read -r limit usage <<<"${quota_info}"
 
 	if [[ ! "${limit}" =~ ^-?[0-9]+$ ]]; then
 		echo "WARN: Could not fetch ${metric} quota for ${region}. Failing-open and assuming capacity exists."
-		CPU_QUOTA_CACHE[$region]=0
+		CPU_QUOTA_CACHE["${cache_key}"]=0
 		return 0
 	fi
 
 	if [[ "${limit}" -lt 0 ]]; then
-		CPU_QUOTA_CACHE[$region]=0
+		CPU_QUOTA_CACHE["${cache_key}"]=0
 		return 0
 	fi
 
@@ -350,37 +397,179 @@ check_cpu_quota() {
 
 	local remaining=$((limit - usage))
 	if [[ "${remaining}" -ge "${required_cpus}" ]]; then
-		CPU_QUOTA_CACHE[$region]=0
+		CPU_QUOTA_CACHE["${cache_key}"]=0
 		return 0
 	else
 		echo "INFO: Insufficient ${metric} quota in ${region} (Limit: ${limit}, Usage: ${usage}, Required: ${required_cpus})."
-		CPU_QUOTA_CACHE[$region]=1
+		CPU_QUOTA_CACHE["${cache_key}"]=1
 		return 1
 	fi
 }
 
-if ! GCS_CONTENT=$(gcloud storage cat "${OPTIONS_GCS_PATH}"); then
-	echo "ERROR: Failed to read ${OPTIONS_GCS_PATH}." >&2
+discover_candidate_zones() {
+	local cache_file="${DISCOVERED_ZONES_CACHE_FILE:-/tmp/discovered_zones_${INSTANCE_PREFIX:-ctk}_${BUILD_ID_SHORT:-default}.txt}"
+	if [[ -s "${cache_file}" ]]; then
+		cat "${cache_file}"
+		return 0
+	fi
+
+	local req_machines_str="${REQUIRED_MACHINE_TYPES//,/ }"
+	local req_accels_str="${REQUIRED_ACCELERATOR_TYPES:-}"
+	req_accels_str="${req_accels_str//,/ }"
+
+	local -a req_machines=()
+	read -r -a req_machines <<<"${req_machines_str}"
+	if [[ "${#req_machines[@]}" -eq 0 ]]; then
+		echo "ERROR: REQUIRED_MACHINE_TYPES is empty during dynamic zone discovery." >&2
+		return 1
+	fi
+
+	echo "INFO: Dynamically discovering zones supporting machine types [${req_machines_str}]${req_accels_str:+ and accelerators [${req_accels_str}]}..." >&2
+
+	local -A candidate_map=()
+	local initialized=false
+	local mtype z_out z_line z_name
+
+	for mtype in "${req_machines[@]}"; do
+		[[ -z "${mtype}" ]] && continue
+		if ! z_out=$(gcloud compute machine-types list --project="${PROJECT_ID}" \
+			--filter="name=${mtype}" --format="value(zone)" 2>&1); then
+			echo "ERROR: Failed to list zones for machine type ${mtype}: ${z_out}" >&2
+			return 1
+		fi
+		local -A current_zones=()
+		while IFS= read -r z_line; do
+			z_line="${z_line//$'\r'/}"
+			[[ -z "${z_line}" ]] && continue
+			z_name="${z_line##*/}"
+			current_zones["${z_name}"]=1
+		done <<<"${z_out}"
+
+		if [[ "${initialized}" == "false" ]]; then
+			for z_name in "${!current_zones[@]}"; do
+				candidate_map["${z_name}"]=1
+			done
+			initialized=true
+		else
+			for z_name in "${!candidate_map[@]}"; do
+				if [[ -z "${current_zones[${z_name}]:-}" ]]; then
+					unset "candidate_map[${z_name}]"
+				fi
+			done
+		fi
+	done
+
+	if [[ -n "${req_accels_str}" ]]; then
+		local -a req_accels=()
+		read -r -a req_accels <<<"${req_accels_str}"
+		local accel
+		for accel in "${req_accels[@]}"; do
+			[[ -z "${accel}" ]] && continue
+			if ! z_out=$(gcloud compute accelerator-types list --project="${PROJECT_ID}" \
+				--filter="name=${accel}" --format="value(zone)" 2>&1); then
+				echo "ERROR: Failed to list zones for accelerator type ${accel}: ${z_out}" >&2
+				return 1
+			fi
+			local -A accel_zones=()
+			while IFS= read -r z_line; do
+				z_line="${z_line//$'\r'/}"
+				[[ -z "${z_line}" ]] && continue
+				z_name="${z_line##*/}"
+				accel_zones["${z_name}"]=1
+			done <<<"${z_out}"
+
+			for z_name in "${!candidate_map[@]}"; do
+				if [[ -z "${accel_zones[${z_name}]:-}" ]]; then
+					unset "candidate_map[${z_name}]"
+				fi
+			done
+		done
+	fi
+
+	if [[ "${#candidate_map[@]}" -eq 0 ]]; then
+		echo "ERROR: No zones support all required hardware (machines: ${req_machines_str}, accelerators: ${req_accels_str})." >&2
+		return 1
+	fi
+
+	local -a sorted_all=()
+	readarray -t sorted_all < <(printf '%s\n' "${!candidate_map[@]}" | sort)
+
+	local pref_regions_str="${PREFERRED_REGIONS:-us-central1 us-east4 us-west1 us-east1 us-west4 europe-west4 europe-west1 asia-southeast1}"
+	pref_regions_str="${pref_regions_str//,/ }"
+	local -a pref_regions=()
+	read -r -a pref_regions <<<"${pref_regions_str}"
+
+	local -a ordered_zones=()
+	local -A emitted=()
+	local reg z
+	for reg in "${pref_regions[@]}"; do
+		[[ -z "${reg}" ]] && continue
+		for z in "${sorted_all[@]}"; do
+			if [[ "${z%-*}" == "${reg}" && -z "${emitted[${z}]:-}" ]]; then
+				ordered_zones+=("${z}")
+				emitted["${z}"]=1
+			fi
+		done
+	done
+	for z in "${sorted_all[@]}"; do
+		if [[ -z "${emitted[${z}]:-}" ]]; then
+			ordered_zones+=("${z}")
+			emitted["${z}"]=1
+		fi
+	done
+
+	echo "INFO: Discovered ${#ordered_zones[@]} candidate zones: ${ordered_zones[*]}" >&2
+	printf '%s\n' "${ordered_zones[@]}" | tee "${cache_file}"
+}
+
+if [[ -n "${OPTIONS_FILE:-}" ]]; then
+	OPTIONS_SOURCE="${OPTIONS_FILE}"
+	if [[ ! -f "${OPTIONS_FILE}" ]] || ! GCS_CONTENT=$(cat "${OPTIONS_FILE}"); then
+		echo "ERROR: Failed to read local OPTIONS_FILE ${OPTIONS_FILE}." >&2
+		exit 1
+	fi
+elif [[ -n "${OPTIONS_GCS_PATH:-}" ]]; then
+	OPTIONS_SOURCE="${OPTIONS_GCS_PATH}"
+	if ! GCS_CONTENT=$(gcloud storage cat "${OPTIONS_GCS_PATH}"); then
+		echo "ERROR: Failed to read ${OPTIONS_GCS_PATH}." >&2
+		exit 1
+	fi
+elif [[ -n "${REQUIRED_MACHINE_TYPES:-}" ]]; then
+	OPTIONS_SOURCE="REQUIRED_MACHINE_TYPES(${REQUIRED_MACHINE_TYPES})"
+	if ! GCS_CONTENT=$(discover_candidate_zones); then
+		echo "ERROR: Failed to dynamically discover candidate zones." >&2
+		exit 1
+	fi
+else
+	echo "ERROR: One of OPTIONS_FILE, OPTIONS_GCS_PATH, or REQUIRED_MACHINE_TYPES must be set." >&2
 	exit 1
 fi
 
 declare -a ZONES_ARRAY=()
 while IFS= read -r line; do
+	line="${line//$'\r'/}"
 	if [[ -n "${line}" ]]; then
 		ZONES_ARRAY+=("${line}")
 	fi
 done <<<"${GCS_CONTENT}"
 if [[ "${#ZONES_ARRAY[@]}" -eq 0 ]]; then
-	echo "ERROR: No valid zones found in ${OPTIONS_GCS_PATH}" >&2
+	echo "ERROR: No valid zones found in ${OPTIONS_SOURCE}" >&2
 	exit 1
 fi
 
 SELECTED_ZONE=""
 SUCCESS=false
 
-declare -a PROVISIONING_MODELS=("SPOT")
-if [[ "${ENABLE_SPOT_FALLBACK:-false}" == "true" ]]; then
-	PROVISIONING_MODELS+=("STANDARD")
+declare -a PROVISIONING_MODELS=()
+if [[ "${REQUESTED_PROVISIONING_MODEL}" == "STANDARD" ]]; then
+	PROVISIONING_MODELS=("STANDARD")
+elif [[ "${REQUESTED_PROVISIONING_MODEL}" == "SPOT" ]]; then
+	PROVISIONING_MODELS=("SPOT")
+else
+	PROVISIONING_MODELS=("SPOT")
+	if [[ "${ENABLE_SPOT_FALLBACK:-false}" == "true" ]]; then
+		PROVISIONING_MODELS+=("STANDARD")
+	fi
 fi
 
 FILESTORE_ZONES=""
@@ -448,6 +637,24 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 		if ! check_cpu_quota "${REGION}"; then
 			echo "INFO: Skipping ${ZONE} - CPU quota check failed in region ${REGION}."
 			continue
+		fi
+
+		if [[ -n "${ADDITIONAL_CPU_QUOTAS:-}" ]]; then
+			EXTRA_QUOTA_OK=true
+			EXTRA_QUOTAS_STR="${ADDITIONAL_CPU_QUOTAS//,/ }"
+			read -r -a EXTRA_QUOTA_SPECS <<<"${EXTRA_QUOTAS_STR}"
+			for quota_spec in "${EXTRA_QUOTA_SPECS[@]}"; do
+				[[ -z "${quota_spec}" ]] && continue
+				IFS=':' read -r extra_q_metric extra_q_req <<<"${quota_spec}"
+				if ! check_cpu_quota "${REGION}" "${extra_q_metric}" "${extra_q_req}"; then
+					echo "INFO: Skipping ${ZONE} - Additional CPU quota check (${extra_q_metric}) failed in region ${REGION}."
+					EXTRA_QUOTA_OK=false
+					break
+				fi
+			done
+			if [[ "${EXTRA_QUOTA_OK}" == "false" ]]; then
+				continue
+			fi
 		fi
 
 		if [[ "${MACHINE_TYPE}" == "tpu" ]]; then

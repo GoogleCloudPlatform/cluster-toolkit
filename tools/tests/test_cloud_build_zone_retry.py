@@ -768,6 +768,335 @@ spec:
         self.assertIsNotNone(entry)
         self.assertEqual(entry["value"], "us-west1-b us-central1-a")
 
+    def _create_mock_gcloud(self, body: str) -> str:
+        """Create an executable mock gcloud script in self.test_dir/bin."""
+        bin_dir = os.path.join(self.test_dir, "bin")
+        os.makedirs(bin_dir, exist_ok=True)
+        gcloud_path = os.path.join(bin_dir, "gcloud")
+        with open(gcloud_path, "w", encoding="utf-8") as f:
+            f.write("#!/bin/bash\nset -e\n" + body + "\n")
+        os.chmod(gcloud_path, 0o755)
+        return bin_dir
+
+    def test_find_available_zone_options_file_and_spot_fallback(self):
+        """Test OPTIONS_FILE reading, SPOT->STANDARD fallback, and STANDARD override."""
+        find_script = os.path.abspath(
+            os.path.join(
+                os.path.dirname(__file__), "../cloud-build/find_available_zone.sh"
+            )
+        )
+        options_file = os.path.join(self.test_dir, "zones.txt")
+        with open(options_file, "w", encoding="utf-8") as f:
+            f.write("asia-southeast1-a\nasia-southeast1-b\n")
+
+        state_dir = os.path.join(self.test_dir, "state")
+        os.makedirs(state_dir, exist_ok=True)
+
+        bin_dir = self._create_mock_gcloud(
+            f"""
+ARGS="$*"
+if [[ "$ARGS" == *"instances bulk create"* ]]; then
+    if [[ "$ARGS" == *"--provisioning-model=SPOT"* ]]; then
+        echo "ZONE_RESOURCE_POOL_EXHAUSTED" >&2
+        exit 1
+    fi
+    if [[ "$ARGS" == *"--zone=asia-southeast1-b"* && "$ARGS" == *"--provisioning-model=STANDARD"* ]]; then
+        echo "mlgke-23a04d-01" > "{state_dir}/created"
+        exit 0
+    fi
+    echo "ZONE_RESOURCE_POOL_EXHAUSTED" >&2
+    exit 1
+elif [[ "$ARGS" == *"instances list"* ]]; then
+    if [[ -f "{state_dir}/created" ]]; then
+        cat "{state_dir}/created"
+    fi
+    exit 0
+elif [[ "$ARGS" == *"instances delete"* ]]; then
+    rm -f "{state_dir}/created"
+    exit 0
+elif [[ "$ARGS" == *"regions describe"* ]]; then
+    echo '{{"quotas":[{{"metric":"N2D_CPUS","limit":64,"usage":8}}]}}'
+    exit 0
+fi
+exit 0
+"""
+        )
+
+        env = dict(
+            os.environ,
+            PATH=f"{bin_dir}:{os.environ.get('PATH', '')}",
+            BUILD_ID="23a04dd2-7559-4b0c-9a86-1828f628d07e",
+            PROJECT_ID="test-proj",
+            INSTANCE_PREFIX="mlgke",
+            MACHINE_TYPE="g2-standard-4",
+            NUM_NODES="1",
+            MIN_NODES="1",
+            OPTIONS_FILE=options_file,
+            ENABLE_SPOT_FALLBACK="true",
+            REQUIRED_CPU_QUOTA="12",
+            CPU_QUOTA_METRIC="N2D_CPUS",
+            EXCLUDE_ZONES="asia-southeast1-a",
+        )
+        res = subprocess.run(
+            [
+                "bash",
+                "-c",
+                f'set -e -u -o pipefail; source "{find_script}"; '
+                'echo "RESULT=$ZONE|$PROVISIONING_MODEL"',
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertIn("Skipping asia-southeast1-a", res.stdout)
+        self.assertIn("RESULT=asia-southeast1-b|STANDARD", res.stdout)
+
+        # Also verify explicit PROVISIONING_MODEL=STANDARD skips SPOT probing
+        env_std = dict(env, PROVISIONING_MODEL="STANDARD")
+        res_std = subprocess.run(
+            [
+                "bash",
+                "-c",
+                f'set -e -u -o pipefail; source "{find_script}"; '
+                'echo "RESULT=$ZONE|$PROVISIONING_MODEL"',
+            ],
+            env=env_std,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertNotIn("Trying provisioning model: SPOT", res_std.stdout)
+        self.assertIn("RESULT=asia-southeast1-b|STANDARD", res_std.stdout)
+
+    def test_find_available_zone_dynamic_discovery_and_additional_vm_checks(self):
+        """Test REQUIRED_MACHINE_TYPES, REQUIRED_ACCELERATOR_TYPES, and ADDITIONAL_VM_CHECKS."""
+        find_script = os.path.abspath(
+            os.path.join(
+                os.path.dirname(__file__), "../cloud-build/find_available_zone.sh"
+            )
+        )
+        state_dir = os.path.join(self.test_dir, "multi_state")
+        os.makedirs(state_dir, exist_ok=True)
+        cache_file = os.path.join(self.test_dir, "discovered_zones.txt")
+        calls_log = os.path.join(self.test_dir, "gcloud_calls.log")
+
+        bin_dir = self._create_mock_gcloud(
+            f"""
+ARGS="$*"
+echo "$ARGS" >> "{calls_log}"
+if [[ "$ARGS" == *"machine-types list"* ]]; then
+    if [[ "$ARGS" == *"name=g2-standard-4"* ]]; then
+        printf "southamerica-east1-a\\nus-central1-a\\nus-east4-a\\nasia-southeast1-b\\n"
+    elif [[ "$ARGS" == *"name=c2-standard-60"* ]]; then
+        # southamerica-east1-a lacks c2-standard-60 -> should be intersected out
+        printf "us-central1-a\\nus-east4-a\\nasia-southeast1-b\\n"
+    else
+        printf "southamerica-east1-a\\nus-central1-a\\nus-east4-a\\nasia-southeast1-b\\n"
+    fi
+    exit 0
+elif [[ "$ARGS" == *"accelerator-types list"* ]]; then
+    # asia-southeast1-b and us-east4-a and us-central1-a have T4, but suppose us-central1-a has T4 stockout at runtime
+    printf "us-central1-a\\nus-east4-a\\n"
+    exit 0
+elif [[ "$ARGS" == *"regions describe"* ]]; then
+    echo '{{"quotas":[{{"metric":"N2D_CPUS","limit":64,"usage":4}}]}}'
+    exit 0
+elif [[ "$ARGS" == *"instances bulk create"* ]]; then
+    # In us-central1-a: g2-standard-4 succeeds, but n1-standard-4 + T4 is stocked out!
+    if [[ "$ARGS" == *"--zone=us-central1-a"* && "$ARGS" == *"--machine-type=n1-standard-4"* ]]; then
+        echo "ZONE_RESOURCE_POOL_EXHAUSTED" >&2
+        exit 1
+    fi
+    # Extract predefined names and save them for instances list
+    NAMES=$(echo "$ARGS" | sed -n 's/.*--predefined-names=\\([^ ]*\\).*/\\1/p' | tr ',' '\\n')
+    echo "$NAMES" > "{state_dir}/current_instances"
+    exit 0
+elif [[ "$ARGS" == *"instances list"* ]]; then
+    if [[ -f "{state_dir}/current_instances" ]]; then
+        cat "{state_dir}/current_instances"
+    fi
+    exit 0
+elif [[ "$ARGS" == *"instances delete"* ]]; then
+    rm -f "{state_dir}/current_instances"
+    exit 0
+fi
+exit 0
+"""
+        )
+
+        env = dict(
+            os.environ,
+            PATH=f"{bin_dir}:{os.environ.get('PATH', '')}",
+            BUILD_ID="23a04dd2-7559-4b0c-9a86-1828f628d07e",
+            PROJECT_ID="test-proj",
+            INSTANCE_PREFIX="mlgkee2e",
+            MACHINE_TYPE="g2-standard-4",
+            NUM_NODES="1",
+            MIN_NODES="1",
+            REQUIRED_MACHINE_TYPES=(
+                "g2-standard-4,n1-standard-4,c2-standard-60,n2d-standard-4,n2d-standard-2"
+            ),
+            REQUIRED_ACCELERATOR_TYPES="nvidia-tesla-t4",
+            ADDITIONAL_VM_CHECKS=(
+                "n1-standard-4:2:2:type=nvidia-tesla-t4,count=2;c2-standard-60:1:1"
+            ),
+            DISCOVERED_ZONES_CACHE_FILE=cache_file,
+            ENABLE_SPOT_FALLBACK="true",
+            REQUIRED_CPU_QUOTA="12",
+            CPU_QUOTA_METRIC="N2D_CPUS",
+        )
+        res = subprocess.run(
+            [
+                "bash",
+                "-c",
+                f'set -e -u -o pipefail; source "{find_script}"; '
+                'echo "RESULT=$ZONE|$PROVISIONING_MODEL"',
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        # us-central1-a had T4 stockout, asia-southeast1-b lacked T4 in catalog,
+        # southamerica-east1-a lacked c2-standard-60 -> us-east4-a must win!
+        self.assertIn("RESULT=us-east4-a|SPOT", res.stdout)
+
+        with open(cache_file, "r", encoding="utf-8") as f:
+            cached = f.read().strip().splitlines()
+        self.assertEqual(cached, ["us-central1-a", "us-east4-a"])
+
+        with open(calls_log, "r", encoding="utf-8") as f:
+            calls_text = f.read()
+        self.assertIn("--accelerator=type=nvidia-tesla-t4,count=2", calls_text)
+        self.assertIn("--on-host-maintenance=TERMINATE", calls_text)
+
+    def test_check_retriable_error_matches_spot_preemption_events(self):
+        """Test check_retriable_error.sh matches Spot preemption logs."""
+        cloud_build_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../cloud-build")
+        )
+        check_script = os.path.join(cloud_build_dir, "check_retriable_error.sh")
+        log_file = os.path.join(self.test_dir, "preempt_log.txt")
+        with open(log_file, "w", encoding="utf-8") as f:
+            f.write("Preemption Events Found in the last 4 hours: [{'id': '123'}]\n")
+
+        res = subprocess.run(
+            ["bash", check_script, log_file],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(res.returncode, 0)
+
+    def test_ml_gke_and_ml_gke_e2e_job_manifest_rendering_and_exclude_injection(self):
+        """Render ml-gke.yaml and ml-gke-e2e.yaml job manifests and validate bash & retry injection."""
+        repo_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+        build_files = [
+            os.path.join(
+                repo_dir, "tools/cloud-build/daily-tests/builds/ml-gke.yaml"
+            ),
+            os.path.join(
+                repo_dir, "tools/cloud-build/daily-tests/builds/ml-gke-e2e.yaml"
+            ),
+        ]
+
+        bin_dir = self._create_mock_gcloud(
+            'if [[ "$*" == *"iam service-accounts describe"* ]]; then echo "1122334455"; fi'
+        )
+
+        for build_path in build_files:
+            with self.subTest(os.path.basename(build_path)):
+                with open(build_path, "r", encoding="utf-8") as f:
+                    cb_data = yaml.safe_load(f)
+
+                gen_step = next(
+                    s for s in cb_data["steps"] if s["id"] == "generate-job-manifest"
+                )
+                raw_script = gen_step["args"][1]
+                # Simulate Cloud Build substitution expansion
+                expanded_script = (
+                    raw_script.replace("$PROJECT_ID", "hpc-toolkit-dev-2")
+                    .replace("${PROJECT_ID}", "hpc-toolkit-dev-2")
+                    .replace("$BUILD_ID", "23a04dd2-7559-4b0c-9a86-1828f628d07e")
+                    .replace("${_TEST_PREFIX}", "")
+                    .replace("$_PROVISIONING_MODEL", "")
+                    .replace("$$", "$")
+                )
+
+                step_dir = tempfile.mkdtemp(dir=self.test_dir)
+                env = dict(
+                    os.environ,
+                    PATH=f"{bin_dir}:{os.environ.get('PATH', '')}",
+                    SA_EMAIL="runner@hpc-toolkit-dev-2.iam.gserviceaccount.com",
+                    GCLUSTER_GCS_PATH="gs://gcluster-bucket",
+                    TRIAGE_GCS_BUCKET="triage-bucket",
+                    TRIAGE_PROJECT_NUMBER="123456",
+                    TRIAGE_INVOKER_SA="invoker@proj.iam.gserviceaccount.com",
+                    TRIAGE_CLOUD_RUN_URL="https://triage.run.app",
+                )
+                subprocess.run(
+                    ["bash", "-c", expanded_script],
+                    cwd=step_dir,
+                    env=env,
+                    check=True,
+                )
+
+                job_yaml_path = os.path.join(step_dir, "job.yaml")
+                with open(job_yaml_path, "r", encoding="utf-8") as f:
+                    job_doc = yaml.safe_load(f)
+
+                self.assertEqual(job_doc["spec"]["activeDeadlineSeconds"], 14400)
+                runner = next(
+                    c
+                    for c in job_doc["spec"]["template"]["spec"]["containers"]
+                    if c["name"] == "runner"
+                )
+                env_names = {e["name"] for e in runner["env"]}
+                self.assertIn("REQUIRED_MACHINE_TYPES", env_names)
+                self.assertIn("ENABLE_SPOT_FALLBACK", env_names)
+
+                # Validate bash syntax of the rendered runner pod script!
+                runner_script = runner["args"][0]
+                subprocess.run(
+                    ["bash", "-n"],
+                    input=runner_script,
+                    text=True,
+                    check=True,
+                )
+                self.assertNotIn("asia-southeast1-b", runner_script)
+                self.assertIn("wait_for_available_zone.sh", runner_script)
+
+                # Validate update_job_exclude_zones.py cleanly injects EXCLUDE_ZONES
+                subprocess.run(
+                    [
+                        "python3",
+                        UPDATE_SCRIPT,
+                        "--inject",
+                        "--file",
+                        job_yaml_path,
+                        "--zones",
+                        "asia-southeast1-a us-central1-a",
+                    ],
+                    check=True,
+                )
+                with open(job_yaml_path, "r", encoding="utf-8") as f:
+                    updated_doc = yaml.safe_load(f)
+                updated_runner = next(
+                    c
+                    for c in updated_doc["spec"]["template"]["spec"]["containers"]
+                    if c["name"] == "runner"
+                )
+                excl = next(
+                    (
+                        e
+                        for e in updated_runner["env"]
+                        if e["name"] == "EXCLUDE_ZONES"
+                    ),
+                    None,
+                )
+                self.assertIsNotNone(excl)
+                self.assertEqual(excl["value"], "asia-southeast1-a us-central1-a")
+
 
 if __name__ == "__main__":
     unittest.main()
