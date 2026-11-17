@@ -312,6 +312,10 @@ func TestReclaimStorageGateways_Ownership(t *testing.T) {
 			pvcs:     []unstructured.Unstructured{gatewayPVC(testClaim, "custom-pv-name", time.Hour)},
 			pvs:      []unstructured.Unstructured{*managedStorageObject("PersistentVolume", "custom-pv-name")},
 			wantPVCs: []string{testClaim}, wantPVs: []string{"custom-pv-name"}},
+		{name: "unused NFS gateway PVC and bound PV pair is reclaimed",
+			pvcs:     []unstructured.Unstructured{gatewayPVC(nfsGatewayPVCName("10.0.0.1", "exports/train"), nfsGatewayPVCName("10.0.0.1", "exports/train")+"-default", time.Hour)},
+			pvs:      []unstructured.Unstructured{*managedStorageObject("PersistentVolume", nfsGatewayPVCName("10.0.0.1", "exports/train")+"-default")},
+			wantPVCs: []string{nfsGatewayPVCName("10.0.0.1", "exports/train")}, wantPVs: []string{nfsGatewayPVCName("10.0.0.1", "exports/train") + "-default"}},
 		{name: "unlabelled bound PV blocks the whole gateway",
 			pvcs: []unstructured.Unstructured{gatewayPVC(testClaim, testPV, time.Hour)},
 			pvs:  []unstructured.Unstructured{*unmanagedStorageObject("PersistentVolume", testPV)}},
@@ -453,13 +457,16 @@ func TestWithinGracePeriod(t *testing.T) {
 }
 
 func TestToolkitGatewayClaimPrefixMatchesGenerator(t *testing.T) {
-	name := gcsFuseGatewayPVCName("bucket", "training", "abc123")
-	if !isToolkitGatewayClaimName(name) {
-		t.Errorf("generated claim %q does not match isToolkitGatewayClaimName()", name)
+	cases := []string{
+		gcsFuseGatewayPVCName("bucket", "training", "abc123"),
+		filestoreGatewayPrefix + "-my-fs-share",
+		nfsGatewayPVCName("10.0.0.1", "export"),
+		nfsGatewayPVCName("nfs-server.example.internal", strings.Repeat("segment/", 30)+"leaf"),
 	}
-	nfsClaim := nfsGatewayPVCName("10.0.0.1", "export")
-	if !isToolkitGatewayClaimName(nfsClaim) {
-		t.Errorf("generated NFS gateway claim %q does not match isToolkitGatewayClaimName()", nfsClaim)
+	for _, claim := range cases {
+		if !isToolkitGatewayClaimName(claim) {
+			t.Errorf("generated claim %q does not match isToolkitGatewayClaimName()", claim)
+		}
 	}
 }
 

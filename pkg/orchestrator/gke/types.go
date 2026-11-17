@@ -456,22 +456,25 @@ type MountInfo struct {
 	Attributes          map[string]string
 }
 
-type filestoreTemplateParams struct {
-	PVName           string
-	PVCName          string
-	Namespace        string
-	Share            string
-	IP               string
-	Capacity         string
-	ManagedByLabel   string
-	ManagedByValue   string
-	StorageTypeLabel string
-	StorageType      string
-
+type GatewayMetadataParams struct {
+	ManagedByLabel          string
+	ManagedByValue          string
+	StorageTypeLabel        string
+	StorageType             string
 	LastClaimedAtAnnotation string
 	LastClaimedAt           string
 	LastClaimedByAnnotation string
 	LastClaimedBy           string
+}
+
+type filestoreTemplateParams struct {
+	PVName    string
+	PVCName   string
+	Namespace string
+	Share     string
+	IP        string
+	Capacity  string
+	GatewayMetadataParams
 }
 
 type GCSFusePVPVCTemplateParams struct {
@@ -483,15 +486,7 @@ type GCSFusePVPVCTemplateParams struct {
 	VolumeHandle     string
 	MountOptions     []string
 	VolumeAttributes map[string]string
-	ManagedByLabel   string
-	ManagedByValue   string
-	StorageTypeLabel string
-	StorageType      string
-
-	LastClaimedAtAnnotation string
-	LastClaimedAt           string
-	LastClaimedByAnnotation string
-	LastClaimedBy           string
+	GatewayMetadataParams
 }
 
 type existingGatewayPV struct {

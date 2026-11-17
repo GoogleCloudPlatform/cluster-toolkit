@@ -92,14 +92,19 @@ func (g *GKEOrchestrator) SetKubeClient(c KubeClient) {
 	g.kubeClient = c
 }
 
+func (g *GKEOrchestrator) resetStorageCaches() {
+	g.inspectedPVCs = make(map[string]pvcInspectResult)
+	g.nfsAuthChecked = false
+}
+
 // SubmitJob submits a job to the GKE cluster. It processes the job definition,
 // creates the required Kubernetes manifests (JobSet), and applies them to the cluster.
 func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
+	job.GKENamespace = strings.TrimSpace(job.GKENamespace)
 	g.namespace = job.GKENamespace
 	logging.Info("Starting gcluster job submit workflow...")
 	g.gkeCustomTemplatesPath = job.GkeCustomTemplatesPath
-	g.inspectedPVCs = make(map[string]pvcInspectResult)
-	g.nfsAuthChecked = false
+	g.resetStorageCaches()
 
 	sm := &StorageManager{orchestrator: g}
 	if err := g.validateSubmitLocalPreflight(sm, job); err != nil {
@@ -113,10 +118,6 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 
-	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
-		return err
-	}
-
 	if err := g.fetchClusterState(&job); err != nil {
 		return err
 	}
@@ -126,6 +127,9 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 	if err := sm.ValidateClusterMounts(job); err != nil {
+		return err
+	}
+	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
 		return err
 	}
 	if err := g.pinTelemetryAndValidate(&job); err != nil {

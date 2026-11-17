@@ -6,10 +6,17 @@ metadata:
     {{.ManagedByLabel}}: {{.ManagedByValue}}
     {{.StorageTypeLabel}}: {{.StorageType}}
 spec:
+  storageClassName: ""
   capacity:
     storage: {{.Capacity}}
   accessModes:
   - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+{{- if .Namespace }}
+  claimRef:
+    namespace: {{ printf "%q" .Namespace }}
+    name: {{ printf "%q" .PVCName }}
+{{- end }}
   nfs:
     path: {{ printf "%q" (printf "/%s" .Share) }}
     server: {{ printf "%q" .IP }}
