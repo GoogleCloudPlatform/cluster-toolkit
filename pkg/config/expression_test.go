@@ -128,6 +128,14 @@ echo "Hello $(vars.project_id)"
 		{`$("${vars.green}_${vars.sleeve}")`, `"${var.green}_${var.sleeve}"`, false},
 		{"$(fun(vars.green))", "fun(var.green)", false},
 
+		// Same reference used more than once, or as a prefix of another one
+		{"$(vars.green + vars.green)", "var.green+var.green", false},
+		{"$(amber.blue + amber.blue)", "module.amber.blue+module.amber.blue", false},
+		{"$(amber.blue + amber.blue.sky)", "module.amber.blue+module.amber.blue.sky", false},
+		{"$(amber.blue.sky + amber.blue)", "module.amber.blue.sky+module.amber.blue", false},
+		{`$(amber.blue != "" ? amber.blue : "red")`, `module.amber.blue!=""?module.amber.blue:"red"`, false},
+		{"$(amber.blue[0] + amber.blue[1])", "module.amber.blue[0]+module.amber.blue[1]", false},
+
 		// Untranslatable expressions
 		{"$(vars)", "", true},
 		{"$(sleeve)", "", true},
