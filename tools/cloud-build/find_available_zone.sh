@@ -413,6 +413,11 @@ discover_candidate_zones() {
 		return 0
 	fi
 
+	declare -A candidate_map=()
+	declare -A current_zones=()
+	declare -A accel_zones=()
+	declare -A emitted=()
+
 	local req_machines_str="${REQUIRED_MACHINE_TYPES//,/ }"
 	local req_accels_str="${REQUIRED_ACCELERATOR_TYPES:-}"
 	req_accels_str="${req_accels_str//,/ }"
@@ -426,7 +431,6 @@ discover_candidate_zones() {
 
 	echo "INFO: Dynamically discovering zones supporting machine types [${req_machines_str}]${req_accels_str:+ and accelerators [${req_accels_str}]}..." >&2
 
-	local -A candidate_map=()
 	local initialized=false
 	local mtype z_out z_line z_name
 
@@ -437,7 +441,7 @@ discover_candidate_zones() {
 			echo "ERROR: Failed to list zones for machine type ${mtype}: ${z_out}" >&2
 			return 1
 		fi
-		local -A current_zones=()
+		current_zones=()
 		while IFS= read -r z_line; do
 			z_line="${z_line//$'\r'/}"
 			[[ -z "${z_line}" ]] && continue
@@ -470,7 +474,7 @@ discover_candidate_zones() {
 				echo "ERROR: Failed to list zones for accelerator type ${accel}: ${z_out}" >&2
 				return 1
 			fi
-			local -A accel_zones=()
+			accel_zones=()
 			while IFS= read -r z_line; do
 				z_line="${z_line//$'\r'/}"
 				[[ -z "${z_line}" ]] && continue
@@ -500,7 +504,6 @@ discover_candidate_zones() {
 	read -r -a pref_regions <<<"${pref_regions_str}"
 
 	local -a ordered_zones=()
-	local -A emitted=()
 	local reg z
 	for reg in "${pref_regions[@]}"; do
 		[[ -z "${reg}" ]] && continue
