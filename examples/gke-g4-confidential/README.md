@@ -1,6 +1,6 @@
 # Deploy a GKE G4 Confidential Computing cluster for ML workloads
 
-This blueprint provisions a Google Kubernetes Engine (GKE) cluster with G4 nodes running on Confidential VMs (`g4-standard-48`) powered by AMD SEV-SNP memory encryption and NVIDIA Blackwell GPUs.
+This blueprint provisions a Google Kubernetes Engine (GKE) cluster with G4 nodes running on Confidential VMs (`g4-standard-48`) powered by AMD SEV memory encryption and NVIDIA Blackwell GPUs.
 
 Confidential VMs protect data in-use by keeping memory encrypted in hardware during processing. GKE Confidential Nodes extend this security by isolating node memory from the host hypervisor using AMD SEV (Secure Encrypted Virtualization) technology. Additionally, G4 instances support **Confidential GPUs** which secure memory transfers between the CPU and GPU using hardware-based PCIe encryption (Secure Passthrough).
 
@@ -401,7 +401,7 @@ SUCCESS: G4 GPU computation completed successfully!
 This test measures the secure PCIe link speed between the CPU and GPU using the NVIDIA `nvbandwidth` tool, operating via driver-managed secure bounce buffers, to verify functional data path execution and collect baseline transfer speeds.
 
 **Significance of the Test:**
-On G4 Confidential VMs (which support 1 GPU max and do not support multi-node clustering), standard multi-node collective communication libraries like NCCL are not applicable. Instead, running `nvbandwidth` is the primary way to stress-test the secure hardware path between the AMD SEV-SNP encrypted CPU and the NVIDIA CC-enabled Blackwell GPU, ensuring that the PCIe hardware encryption engine does not cause data bottlenecks or driver hangs under heavy memory load.
+On G4 Confidential VMs (which support 1 GPU max and do not support multi-node clustering), standard multi-node collective communication libraries like NCCL are not applicable. Instead, running `nvbandwidth` is the primary way to stress-test the secure hardware path between the AMD SEV encrypted CPU and the NVIDIA CC-enabled Blackwell GPU, ensuring that the PCIe hardware encryption engine does not cause data bottlenecks or driver hangs under heavy memory load.
 
 > [!NOTE]
 > The test job is pre-configured with the `-s` / `--skipVerification` flag. Because CPU host memory is encrypted, the tool's data verification step (which attempts to copy results directly to standard CPU stack memory) will trigger a security boundary violation and halt the GPU. Leaving this flag active is required for the test to execute cleanly.
