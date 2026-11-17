@@ -204,7 +204,7 @@ Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;profile=<profile>][
 **Supported volume sources (`<src>`):**
 * **Cloud Storage**: `gs://<bucket-name>[/<sub-path>]` (mounts via GCS Fused Driver)
 * **Filestore**: `filestore://<instance-name-or-ip>/<share-name>` (auto-provisions PV and PVC)
-* **NFS Server**: `nfs://<server-host-or-ip>/<export-path>` (auto-provisions a static NFS PV and PVC after checking `kubectl auth can-i create persistentvolumes`)
+* **NFS Server**: `nfs://<server-host-or-ip>/<export-path>` (auto-provisions a static NFS PV and PVC after checking `kubectl auth can-i create persistentvolumes --all-namespaces`)
 * **Existing PVC**: `<pvc-name>[/<sub-path>]` (the PersistentVolumeClaim must already exist in the target Kubernetes namespace and support `ReadWriteMany`/`ReadOnlyMany` when mounted across multiple nodes; if the PVC is backed by the GKE Cloud Storage FUSE CSI driver, `gcluster` auto-detects it via `kubectl get pvc`—and, for statically provisioned PVs or custom StorageClasses without a PVC provisioner annotation, `kubectl get pv` or `kubectl get storageclass`—to inject the required `gke-gcsfuse/volumes: "true"` pod annotation)
 * **Host Path**: `/host/path/on/node` (mounts a directory directly from the host node)
 

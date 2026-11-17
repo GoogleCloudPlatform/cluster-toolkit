@@ -456,6 +456,24 @@ type MountInfo struct {
 	Attributes          map[string]string
 }
 
+type filestoreTemplateParams struct {
+	PVName           string
+	PVCName          string
+	Namespace        string
+	Share            string
+	IP               string
+	Capacity         string
+	ManagedByLabel   string
+	ManagedByValue   string
+	StorageTypeLabel string
+	StorageType      string
+
+	LastClaimedAtAnnotation string
+	LastClaimedAt           string
+	LastClaimedByAnnotation string
+	LastClaimedBy           string
+}
+
 type GCSFusePVPVCTemplateParams struct {
 	PVName           string
 	PVCName          string

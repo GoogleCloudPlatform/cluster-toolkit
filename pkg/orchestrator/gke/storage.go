@@ -105,6 +105,12 @@ const (
 	storageAPITimeout = 30 * time.Second
 )
 
+func isToolkitGatewayClaimName(claim string) bool {
+	return strings.HasPrefix(claim, gcsFuseGatewayPrefix+"-") ||
+		strings.HasPrefix(claim, filestoreGatewayPrefix+"-") ||
+		strings.HasPrefix(claim, nfsGatewayPrefix+"-")
+}
+
 func newMountBuildState() *mountBuildState {
 	return &mountBuildState{
 		gatewayVolumeNames: map[string]string{},
@@ -690,7 +696,7 @@ func resolveMountSourceAndSubPath(pm *parsedMount) error {
 		pm.SubPath = subPath
 		return nil
 	}
-	if !strings.HasPrefix(pm.Src, "/") && !strings.Contains(pm.Src, "://") && !strings.Contains(pm.Src, ":") {
+	if !strings.HasPrefix(pm.Src, "/") && !strings.Contains(pm.Src, ":") {
 		claim, subPath, err := splitPVCSource(pm.Src)
 		if err != nil {
 			return err
@@ -709,10 +715,8 @@ func splitPVCSource(src string) (claim string, subPath string, err error) {
 	if claim == "" || claim == "." || claim == ".." {
 		return "", "", fmt.Errorf("invalid PVC mount %q: PVC claim name is invalid. Expected format: <pvc-name>[/<sub-path>];<dest>", src)
 	}
-	for _, seg := range strings.Split(rawSub, "/") {
-		if seg == ".." {
-			return "", "", fmt.Errorf("invalid PVC mount %q: sub-path %q must not contain '..' path traversal segments", src, rawSub)
-		}
+	if slices.Contains(strings.Split(rawSub, "/"), "..") {
+		return "", "", fmt.Errorf("invalid PVC mount %q: sub-path %q must not contain '..' path traversal segments", src, rawSub)
 	}
 	subPath = strings.Trim(rawSub, "/")
 	if subPath != "" {
@@ -739,13 +743,8 @@ func parseNFSSource(src string) (server string, share string, err error) {
 	}
 
 	share = strings.Trim(parts[1], "/")
-	if share == "" {
-		return "", "", fmt.Errorf("invalid NFS mount %q: export path is missing. Expected format: nfs://<server>/<export_path>;<dest>", src)
-	}
-	for _, seg := range strings.Split(share, "/") {
-		if seg == ".." {
-			return "", "", fmt.Errorf("invalid NFS mount %q: export path %q must not contain '..' path traversal segments", src, share)
-		}
+	if slices.Contains(strings.Split(share, "/"), "..") {
+		return "", "", fmt.Errorf("invalid NFS mount %q: export path %q must not contain '..' path traversal segments", src, share)
 	}
 	return server, share, nil
 }
@@ -756,47 +755,32 @@ func validateNFSPort(src, port string) error {
 	}
 	return fmt.Errorf(
 		"invalid NFS mount %q: custom or invalid port %q is not supported by static NFS gateways (Kubernetes spec.nfs defaults to port 2049). "+
-			"Pre-provision a PV/PVC with mountOptions (e.g. port=%s) and mount it with --mount <pvc-name>;<dest>",
-		src, port, port)
-}
-
-func parseBracketedIPv6Host(src, rawServer string) (string, error) {
-	if h, port, splitErr := net.SplitHostPort(rawServer); splitErr == nil {
-		if err := validateNFSPort(src, port); err != nil {
-			return "", err
-		}
-		if net.ParseIP(h) == nil {
-			return "", fmt.Errorf("invalid NFS mount %q: invalid IPv6 server address %q", src, rawServer)
-		}
-		return h, nil
-	}
-	if !strings.HasPrefix(rawServer, "[") || !strings.HasSuffix(rawServer, "]") {
-		return "", fmt.Errorf("invalid NFS mount %q: malformed bracketed IPv6 server address %q", src, rawServer)
-	}
-	inner := rawServer[1 : len(rawServer)-1]
-	if net.ParseIP(inner) == nil {
-		return "", fmt.Errorf("invalid NFS mount %q: invalid IPv6 server address %q", src, rawServer)
-	}
-	return inner, nil
+			"Pre-provision a PV/PVC with mountOptions (e.g. port=20490) and mount it with --mount <pvc-name>;<dest>",
+		src, port)
 }
 
 func parseNFSServerHost(src, rawServer string) (string, error) {
-	if strings.Contains(rawServer, "[") || strings.Contains(rawServer, "]") {
-		return parseBracketedIPv6Host(src, rawServer)
-	}
-	if h, port, splitErr := net.SplitHostPort(rawServer); splitErr == nil {
+	bracketed := strings.ContainsAny(rawServer, "[]")
+	host, port, splitErr := net.SplitHostPort(rawServer)
+	if splitErr == nil {
 		if err := validateNFSPort(src, port); err != nil {
 			return "", err
 		}
-		if h == "" {
-			return "", fmt.Errorf("invalid NFS mount %q: server host is missing. Expected format: nfs://<server>/<export_path>;<dest>", src)
+	} else if bracketed {
+		if !strings.HasPrefix(rawServer, "[") || !strings.HasSuffix(rawServer, "]") {
+			return "", fmt.Errorf("invalid NFS mount %q: malformed bracketed IPv6 server address %q", src, rawServer)
 		}
-		return h, nil
+		host = rawServer[1 : len(rawServer)-1]
+	} else {
+		host = rawServer
 	}
-	if rawServer == "" {
+	if bracketed && net.ParseIP(host) == nil {
+		return "", fmt.Errorf("invalid NFS mount %q: invalid IPv6 server address %q", src, rawServer)
+	}
+	if host == "" {
 		return "", fmt.Errorf("invalid NFS mount %q: server host is missing. Expected format: nfs://<server>/<export_path>;<dest>", src)
 	}
-	return rawServer, nil
+	return host, nil
 }
 
 func extractHost(hostStr string) string {
@@ -864,7 +848,7 @@ func (sm *StorageManager) resolveNamespace(job orchestrator.JobDefinition) (stri
 }
 
 func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, job orchestrator.JobDefinition, state *mountBuildState) (MountInfo, string, error) {
-	src, dest, readOnly := pm.Src, pm.Dest, pm.ReadOnly
+	src := pm.Src
 	trimmed := strings.TrimPrefix(src, "filestore://")
 	trimmed = strings.TrimRight(trimmed, "/")
 	parts := strings.SplitN(trimmed, "/", 2)
@@ -888,10 +872,17 @@ func (sm *StorageManager) generateFilestoreResources(pm parsedMount, idx int, jo
 	}
 	capacityStr := fmt.Sprintf("%dGi", capacityGb)
 
-	pvcName := fmt.Sprintf("gcluster-filestore-%s-%s", resolvedName, share)
+	pvcName := fmt.Sprintf("%s-%s-%s", filestoreGatewayPrefix, resolvedName, share)
 	pvcName = truncatePVCName(sanitizePVCName(pvcName), maxGeneratedPVCNameLength)
 
-	info, pvYAML, _, _, err := sm.renderFilestoreGateway(pvcName, ip, share, capacityStr, storageTypeFilestore, dest, readOnly, idx, job, state)
+	params := filestoreTemplateParams{
+		PVCName:     pvcName,
+		IP:          ip,
+		Share:       share,
+		Capacity:    capacityStr,
+		StorageType: storageTypeFilestore,
+	}
+	info, pvYAML, _, _, err := sm.renderFilestoreGateway(params, pm, idx, job, state)
 	return info, pvYAML, err
 }
 
@@ -906,7 +897,14 @@ func (sm *StorageManager) generateNFSResources(pm parsedMount, idx int, job orch
 	}
 
 	pvcName := nfsGatewayPVCName(server, share)
-	info, pvYAML, pvName, ns, err := sm.renderFilestoreGateway(pvcName, server, share, nfsGatewayCapacity, storageTypeNFS, pm.Dest, pm.ReadOnly, idx, job, state)
+	params := filestoreTemplateParams{
+		PVCName:     pvcName,
+		IP:          server,
+		Share:       share,
+		Capacity:    nfsGatewayCapacity,
+		StorageType: storageTypeNFS,
+	}
+	info, pvYAML, pvName, ns, err := sm.renderFilestoreGateway(params, pm, idx, job, state)
 	if err != nil || pvYAML == "" {
 		return info, pvYAML, err
 	}
@@ -925,18 +923,21 @@ func nfsGatewayPVCName(server, share string) string {
 	return sanitizePVCName(prefix + name)
 }
 
-func (sm *StorageManager) renderFilestoreGateway(pvcName, serverIP, share, capacity, storageType, dest string, readOnly bool, idx int, job orchestrator.JobDefinition, state *mountBuildState) (MountInfo, string, string, string, error) {
+func (sm *StorageManager) renderFilestoreGateway(
+	params filestoreTemplateParams, pm parsedMount, idx int,
+	job orchestrator.JobDefinition, state *mountBuildState,
+) (MountInfo, string, string, string, error) {
 	ns, err := sm.resolveNamespace(job)
 	if err != nil {
 		return MountInfo{}, "", "", "", err
 	}
-	pvName := sanitizePVCName(pvcName + "-" + ns)
+	pvName := sanitizePVCName(params.PVCName + "-" + ns)
 
 	info := MountInfo{
-		Source:    pvcName,
-		MountPath: dest,
+		Source:    params.PVCName,
+		MountPath: pm.Dest,
 		Type:      "pvc",
-		ReadOnly:  readOnly,
+		ReadOnly:  pm.ReadOnly,
 	}
 
 	name, reused := state.volumeNameFor(pvName, idx)
@@ -950,24 +951,18 @@ func (sm *StorageManager) renderFilestoreGateway(pvcName, serverIP, share, capac
 		return MountInfo{}, "", "", "", fmt.Errorf("failed to parse filestore template: %w", err)
 	}
 
-	var buf bytes.Buffer
-	err = filestoreTmpl.Execute(&buf, map[string]string{
-		"PVName":           pvName,
-		"PVCName":          pvcName,
-		"Share":            share,
-		"IP":               serverIP,
-		"Capacity":         capacity,
-		"ManagedByLabel":   managedByLabel,
-		"ManagedByValue":   managedByValue,
-		"StorageTypeLabel": storageTypeLabel,
-		"StorageType":      storageType,
+	params.PVName = pvName
+	params.Namespace = ns
+	params.ManagedByLabel = managedByLabel
+	params.ManagedByValue = managedByValue
+	params.StorageTypeLabel = storageTypeLabel
+	params.LastClaimedAtAnnotation = lastClaimedAtAnnotation
+	params.LastClaimedAt = sm.claimedAt()
+	params.LastClaimedByAnnotation = lastClaimedByAnnotation
+	params.LastClaimedBy = job.WorkloadName
 
-		"LastClaimedAtAnnotation": lastClaimedAtAnnotation,
-		"LastClaimedAt":           sm.claimedAt(),
-		"LastClaimedByAnnotation": lastClaimedByAnnotation,
-		"LastClaimedBy":           job.WorkloadName,
-	})
-	if err != nil {
+	var buf bytes.Buffer
+	if err := filestoreTmpl.Execute(&buf, params); err != nil {
 		return MountInfo{}, "", "", "", fmt.Errorf("failed to execute filestore template: %w", err)
 	}
 	pvYAML := buf.String()
@@ -1614,7 +1609,7 @@ func (sm *StorageManager) ValidateClusterMounts(job orchestrator.JobDefinition) 
 		return err
 	}
 
-	if err := sm.validateCloudMountSchemes(job.ProjectID, firstGCSMount, firstFilestoreMount); err != nil {
+	if err := sm.validateCloudMountSchemes(job, firstGCSMount, firstFilestoreMount); err != nil {
 		return err
 	}
 
@@ -1697,9 +1692,12 @@ func isUserPVCMountSource(src string) bool {
 	return !strings.HasPrefix(src, "/") && !strings.Contains(src, ":") && !isToolkitGatewayClaimName(src)
 }
 
-func (sm *StorageManager) validateCloudMountSchemes(projectID, firstGCSMount, firstFilestoreMount string) error {
-	hasProject := strings.TrimSpace(projectID) != ""
-	if (firstGCSMount != "" || firstFilestoreMount != "") && !hasProject {
+func (sm *StorageManager) validateCloudMountSchemes(job orchestrator.JobDefinition, firstGCSMount, firstFilestoreMount string) error {
+	isGKE := strings.TrimSpace(job.ProjectID) != ""
+	if sm.orchestrator != nil {
+		isGKE = sm.orchestrator.isGKE(job)
+	}
+	if (firstGCSMount != "" || firstFilestoreMount != "") && !isGKE {
 		cloudMount := firstGCSMount
 		if cloudMount == "" {
 			cloudMount = firstFilestoreMount
@@ -1712,19 +1710,19 @@ func (sm *StorageManager) validateCloudMountSchemes(projectID, firstGCSMount, fi
 		)
 	}
 	if firstGCSMount != "" {
-		return sm.validateCSIDriverInstalled(firstGCSMount, gcsFuseCSIDriver)
+		return sm.validateGCSFuseCSIDriverInstalled(firstGCSMount)
 	}
 	return nil
 }
 
-func (sm *StorageManager) validateCSIDriverInstalled(mountSrc, driverName string) error {
+func (sm *StorageManager) validateGCSFuseCSIDriverInstalled(mountSrc string) error {
 	if sm.orchestrator == nil || sm.orchestrator.executor == nil {
 		return nil
 	}
-	res := sm.orchestrator.kubectl("get", "csidriver", driverName, "--ignore-not-found", kubectlReadTimeout, "-o", "name")
+	res := sm.orchestrator.kubectl("get", "csidriver", gcsFuseCSIDriver, "--ignore-not-found", kubectlReadTimeout, "-o", "name")
 	if res.ExitCode != 0 {
 		logging.Warn("Could not verify CSI driver %q for mount %q (%s); proceeding with job submission.",
-			driverName, mountSrc, strings.TrimSpace(res.Stderr))
+			gcsFuseCSIDriver, mountSrc, strings.TrimSpace(res.Stderr))
 		return nil
 	}
 	if strings.TrimSpace(res.Stdout) == "" {
@@ -1732,7 +1730,7 @@ func (sm *StorageManager) validateCSIDriverInstalled(mountSrc, driverName string
 			"mount %q requires CSI driver %q, which is not installed on this cluster. "+
 				"On clusters without Cloud Storage FUSE, mount storage using --mount <pvc-name>;<dest>, "+
 				"--mount nfs://<server>/<export>;<dest>, or --mount /host/path;<dest>",
-			mountSrc, driverName)
+			mountSrc, gcsFuseCSIDriver)
 	}
 	return nil
 }
@@ -1741,12 +1739,13 @@ func (sm *StorageManager) validateSingleUserPVC(req userPVCRequest, ns string, t
 	res := sm.orchestrator.kubectl("get", "pvc", req.claim, "-n", ns, "--ignore-not-found", kubectlReadTimeout, "-o", "json")
 	if res.ExitCode != 0 {
 		errMsg := strings.TrimSpace(res.Stderr)
-		if strings.Contains(errMsg, "Forbidden") {
+		err := fmt.Errorf("failed to inspect PersistentVolumeClaim %q in namespace %q: %s", req.claim, ns, errMsg)
+		if k8s.IsForbiddenError(err) {
 			logging.Warn("Permission denied inspecting PersistentVolumeClaim %q in namespace %q (%s); skipping pre-submit PVC existence and accessMode check.",
 				req.claim, ns, errMsg)
 			return nil
 		}
-		return fmt.Errorf("failed to inspect PersistentVolumeClaim %q in namespace %q: %s", req.claim, ns, errMsg)
+		return err
 	}
 	if strings.TrimSpace(res.Stdout) == "" {
 		return fmt.Errorf(

@@ -15,6 +15,7 @@
 package gke
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -411,6 +412,61 @@ func TestRunSPSWorkload_Validation(t *testing.T) {
 		err := orc.runSPSWorkload(job)
 		if err == nil || !strings.Contains(err.Error(), `--num-slices 3 is more than the 2 slices of SPS instance "sps-j6080103"`) {
 			t.Errorf("got err = %v, want slice count error", err)
+		}
+	})
+}
+
+func TestSubmitSPSClusterWorkload_ValidatesClusterMounts(t *testing.T) {
+	const pvcJSONCmd = "kubectl get pvc train-pvc -n default --ignore-not-found --request-timeout=10s -o json"
+	inst := spsInstance{
+		Name:         "sps-inst",
+		HeadNodePool: "cpu-np",
+		ServerImage:  "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest",
+		ProxyImage:   "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest",
+		GCSLocation:  "gs://my-bucket/sps",
+	}
+
+	t.Run("missing PVC fails fast before BuildContainerImage", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{pvcJSONCmd: {{ExitCode: 0, Stdout: ""}}})
+		orc := newTestGKEOrchestrator(mockExec)
+		err := orc.submitSPSClusterWorkload(orchestrator.JobDefinition{
+			WorkloadName:  "sps-missing-pvc",
+			BaseImage:     "python:3.11-slim",
+			BuildContext:  filepath.Join(t.TempDir(), "missing-build-ctx"),
+			RawMounts:     []string{"train-pvc;/data"},
+			NumSlices:     2,
+			NodesPerSlice: 1,
+			IsPathwaysJob: true,
+			Pathways:      orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-inst"},
+		}, inst)
+		if err == nil || !strings.Contains(err.Error(), `PersistentVolumeClaim "train-pvc"`) {
+			t.Fatalf("submitSPSClusterWorkload() = %v, want missing PVC error", err)
+		}
+		if len(mockExec.calls) != 1 {
+			t.Errorf("expected exactly 1 kubectl call before fast-fail, got %d: %v", len(mockExec.calls), mockExec.calls)
+		}
+	})
+
+	t.Run("single-pod SPS client allows ReadWriteOnce PVC past ValidateClusterMounts", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			pvcJSONCmd: {{ExitCode: 0, Stdout: `{"spec":{"accessModes":["ReadWriteOnce"]}}`}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		err := orc.submitSPSClusterWorkload(orchestrator.JobDefinition{
+			WorkloadName:  "sps-rwo-ok",
+			BaseImage:     "python:3.11-slim",
+			BuildContext:  filepath.Join(t.TempDir(), "missing-build-ctx"),
+			RawMounts:     []string{"train-pvc;/data"},
+			NumSlices:     2,
+			NodesPerSlice: 1,
+			IsPathwaysJob: true,
+			Pathways:      orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-inst"},
+		}, inst)
+		if err == nil || strings.Contains(err.Error(), "Multi-Attach") {
+			t.Fatalf("submitSPSClusterWorkload() should allow RWO PVC on single-pod SPS client and proceed to build, got: %v", err)
+		}
+		if len(mockExec.calls) != 1 {
+			t.Errorf("expected 1 PVC inspection call, got %d: %v", len(mockExec.calls), mockExec.calls)
 		}
 	})
 }

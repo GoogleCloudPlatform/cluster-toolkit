@@ -4336,6 +4336,73 @@ func TestSubmitJob_TelemetryAndTemplateFastFailBeforeImageBuild(t *testing.T) {
 	})
 }
 
+func TestSubmitJob_ClusterMountsResetCacheAndFailFastBeforePinTelemetry(t *testing.T) {
+	setupMockMachineConfig(t)
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud container clusters describe": {
+			{ExitCode: 0, Stdout: `{"locations":["us-central1-a"],"nodePools":[{"name":"gpu-pool","initialNodeCount":2,"config":{"machineType":"g2-standard-48","accelerators":[{"acceleratorCount":4,"acceleratorType":"nvidia-l4"}]}}]}`},
+		},
+		"gcloud container clusters get-credentials": {{ExitCode: 0}},
+		"kubectl get --raw /version":                {{ExitCode: 0, Stdout: `{}`}, {ExitCode: 0, Stdout: `{}`}},
+		"kubectl get crd": {
+			{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\n"},
+			{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\n"},
+		},
+		"kubectl get service":       {{ExitCode: 0, Stdout: "service/jobset-webhook-service\n"}},
+		"kubectl get endpointslice": {{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}, {ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}},
+		"kubectl get endpoints ":    {{ExitCode: 0, Stdout: "10.0.0.1\n"}},
+		"kubectl get deployment kueue-controller-manager": {
+			{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.16.0"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`},
+		},
+		"kubectl get resourceflavors":           {{ExitCode: 0, Stdout: ""}},
+		"kubectl get localqueue":                {{ExitCode: 0, Stdout: "lq-default"}},
+		"gcloud compute machine-types describe": {{ExitCode: 0, Stdout: `{"guestCpus": 48, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "nvidia-l4"}]}`}},
+		"kubectl get pvc": {
+			{ExitCode: 0, Stdout: `{"spec":{"volumeName":"pv-rwo","accessModes":["ReadWriteOnce"]},"status":{"accessModes":["ReadWriteOnce"]}}`},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.dynClient = &mockDynamicClient{
+		getFunc: func(_ context.Context, _ string, _ metav1.GetOptions, _ ...string) (*unstructured.Unstructured, error) {
+			return &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Namespace"}}, nil
+		},
+	}
+	orc.inspectedPVCs = map[string]pvcInspectResult{"default/stale": {volumeName: "old"}}
+	orc.nfsAuthChecked = true
+	kc := &MockKubeClient{Namespace: "default", Workloads: []string{"rwo-fast-fail"}}
+	orc.SetKubeClient(kc)
+
+	err := orc.SubmitJob(orchestrator.JobDefinition{
+		WorkloadName:    "rwo-fast-fail",
+		ProjectID:       "test-project",
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		GKENamespace:    "default",
+		ComputeType:     "g2-standard-48",
+		NumSlices:       1,
+		NodesPerSlice:   2,
+		BaseImage:       "python:3.11-slim",
+		BuildContext:    filepath.Join(t.TempDir(), "missing-build-ctx"),
+		CommandToRun:    "python3 train.py",
+		RawMounts:       []string{"train-pvc;/data"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "Multi-Attach") {
+		t.Fatalf("SubmitJob() = %v, want Multi-Attach error before pinTelemetryAndValidate/BuildContainerImage", err)
+	}
+	if kc.WorkloadCallCount != 0 {
+		t.Errorf("pinTelemetryAndValidate called ListJobSets %d times before ValidateClusterMounts failed", kc.WorkloadCallCount)
+	}
+	if orc.nfsAuthChecked {
+		t.Errorf("SubmitJob() did not reset nfsAuthChecked")
+	}
+	if _, stale := orc.inspectedPVCs["default/stale"]; stale {
+		t.Errorf("SubmitJob() did not clear stale inspectedPVCs entry")
+	}
+	if got := orc.inspectedPVCs["default/train-pvc"].volumeName; got != "pv-rwo" {
+		t.Errorf("inspectedPVCs[default/train-pvc].volumeName = %q, want pv-rwo", got)
+	}
+}
+
 func TestSubmitJob_TPUTelemetryNodeCachePinning(t *testing.T) {
 	newTPUSubmitOrc := func(t *testing.T, kc *MockKubeClient) *GKEOrchestrator {
 		t.Helper()
