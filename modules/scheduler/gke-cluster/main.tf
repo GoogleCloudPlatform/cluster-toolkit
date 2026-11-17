@@ -513,8 +513,8 @@ resource "google_container_cluster" "gke_cluster" {
     }
 
     precondition {
-      condition     = !var.enable_pathways_for_tpus || !var.enable_confidential_nodes || can(regex("^(n2d-|c2d-|c3d?-|t2d-|g4-)", local.cpu_np_machine_type))
-      error_message = "The pathways_cpu_node_pool_machine_type must be a confidential-compatible machine type (e.g., n2d, c2d, c3d, c3, t2d, g4) when enable_confidential_nodes and enable_pathways_for_tpus are true."
+      condition     = !var.enable_pathways_for_tpus || !var.enable_confidential_nodes || can(regex("^(n2d-|c2d-|c3d?-|g4-)", local.cpu_np_machine_type))
+      error_message = "The pathways_cpu_node_pool_machine_type must be a confidential-compatible machine type (e.g., n2d, c2d, c3d, c3, g4) when enable_confidential_nodes and enable_pathways_for_tpus are true."
     }
 
     precondition {

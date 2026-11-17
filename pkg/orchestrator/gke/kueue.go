@@ -292,12 +292,18 @@ func (g *GKEOrchestrator) ensurePathwaysFlavorAlignment(localQueueName, ns strin
 		return err
 	}
 
-	rg, flavors, firstAccelIdx := findCPUResourceGroup(cq, rfLabels)
-	if rg == nil || len(flavors) == 0 {
+	cpuGroups := findCPUResourceGroups(cq, rfLabels)
+	if len(cpuGroups) == 0 {
 		return nil
 	}
 
-	if hasMatchingPreAcceleratorFlavor(flavors[:firstAccelIdx], rfLabels, g.resolvedHeadNodePool) {
+	var unalignedGroups []cpuResourceGroupMatch
+	for _, group := range cpuGroups {
+		if !hasMatchingPreAcceleratorFlavor(group.flavors[:group.firstAccelIdx], rfLabels, g.resolvedHeadNodePool) {
+			unalignedGroups = append(unalignedGroups, group)
+		}
+	}
+	if len(unalignedGroups) == 0 {
 		return nil
 	}
 
@@ -306,7 +312,7 @@ func (g *GKEOrchestrator) ensurePathwaysFlavorAlignment(localQueueName, ns strin
 		return err
 	}
 
-	if err := g.applyPathwaysFlavorToClusterQueue(cqName, cq, rg, flavors, firstAccelIdx, targetFlavor); err != nil {
+	if err := g.applyPathwaysFlavorToClusterQueue(cqName, cq, unalignedGroups, targetFlavor); err != nil {
 		return err
 	}
 
@@ -378,9 +384,16 @@ func (g *GKEOrchestrator) fetchResourceFlavorLabels() (map[string]map[string]str
 	return labelsByFlavor, true, nil
 }
 
-func findCPUResourceGroup(cq map[string]interface{}, rfLabels map[string]map[string]string) (map[string]interface{}, []interface{}, int) {
+type cpuResourceGroupMatch struct {
+	rg            map[string]interface{}
+	flavors       []interface{}
+	firstAccelIdx int
+}
+
+func findCPUResourceGroups(cq map[string]interface{}, rfLabels map[string]map[string]string) []cpuResourceGroupMatch {
 	spec, _ := cq["spec"].(map[string]interface{})
 	rgList, _ := spec["resourceGroups"].([]interface{})
+	var matches []cpuResourceGroupMatch
 	for _, rgItem := range rgList {
 		rg, ok := rgItem.(map[string]interface{})
 		if !ok || !coversCPUOrMemory(rg) {
@@ -402,9 +415,13 @@ func findCPUResourceGroup(cq map[string]interface{}, rfLabels map[string]map[str
 				break
 			}
 		}
-		return rg, flavors, firstAccelIdx
+		matches = append(matches, cpuResourceGroupMatch{
+			rg:            rg,
+			flavors:       flavors,
+			firstAccelIdx: firstAccelIdx,
+		})
 	}
-	return nil, nil, 0
+	return matches
 }
 
 func coversCPUOrMemory(rg map[string]interface{}) bool {
@@ -480,7 +497,8 @@ func (g *GKEOrchestrator) resolveTargetPathwaysFlavor(rfLabels map[string]map[st
 		return "pathways-flavor", nil
 	}
 
-	if existingPool == "" || !g.hasClusterNodePool(existingPool) {
+	// Only overwrite 'pathways-flavor' in place when node pool inventory is populated and confirms existingPool is gone.
+	if existingPool == "" || (len(g.clusterDesc.NodePools) > 0 && !g.hasClusterNodePool(existingPool)) {
 		logging.Info("Updating Kueue ResourceFlavor 'pathways-flavor' from stale node pool %q to %q...", existingPool, g.resolvedHeadNodePool)
 		if err := g.ensureNodePoolResourceFlavor("pathways-flavor", existingPool, g.resolvedHeadNodePool); err != nil {
 			return "", err
@@ -514,36 +532,17 @@ func (g *GKEOrchestrator) ensureNodePoolResourceFlavor(flavorName, existingPool,
 	return nil
 }
 
-func (g *GKEOrchestrator) applyPathwaysFlavorToClusterQueue(cqName string, cq, rg map[string]interface{}, flavors []interface{}, firstAccelIdx int, targetFlavor string) error {
-	targetIdx := -1
-	for i, fItem := range flavors {
-		fMap, ok := fItem.(map[string]interface{})
-		if ok && fMap["name"] == targetFlavor {
-			targetIdx = i
-			break
+func (g *GKEOrchestrator) applyPathwaysFlavorToClusterQueue(cqName string, cq map[string]interface{}, cpuGroups []cpuResourceGroupMatch, targetFlavor string) error {
+	updated := false
+	for _, group := range cpuGroups {
+		if g.prependFlavorToResourceGroup(group, targetFlavor) {
+			updated = true
 		}
 	}
-
-	if targetIdx >= 0 && targetIdx < firstAccelIdx {
+	if !updated {
 		return nil
 	}
 
-	var targetEntry map[string]interface{}
-	var updatedFlavors []interface{}
-	if targetIdx >= 0 {
-		targetEntry = flavors[targetIdx].(map[string]interface{})
-		for i, fItem := range flavors {
-			if i != targetIdx {
-				updatedFlavors = append(updatedFlavors, fItem)
-			}
-		}
-	} else {
-		targetEntry = g.buildPathwaysFlavorEntry(rg, flavors, targetFlavor)
-		updatedFlavors = append(updatedFlavors, flavors...)
-	}
-
-	// Prepend the Pathways head flavor so CPU-only head pods match it before any TPU/GPU flavor.
-	rg["flavors"] = append([]interface{}{targetEntry}, updatedFlavors...)
 	stripServerManagedCQFields(cq)
 
 	cqBytes, err := yaml.Marshal(cq)
@@ -554,6 +553,39 @@ func (g *GKEOrchestrator) applyPathwaysFlavorToClusterQueue(cqName string, cq, r
 		return fmt.Errorf("failed to update ClusterQueue %s with Pathways flavor %q for node pool %q: %w", cqName, targetFlavor, g.resolvedHeadNodePool, err)
 	}
 	return nil
+}
+
+func (g *GKEOrchestrator) prependFlavorToResourceGroup(group cpuResourceGroupMatch, targetFlavor string) bool {
+	targetIdx := -1
+	for i, fItem := range group.flavors {
+		fMap, ok := fItem.(map[string]interface{})
+		if ok && fMap["name"] == targetFlavor {
+			targetIdx = i
+			break
+		}
+	}
+
+	if targetIdx >= 0 && targetIdx < group.firstAccelIdx {
+		return false
+	}
+
+	var targetEntry map[string]interface{}
+	var updatedFlavors []interface{}
+	if targetIdx >= 0 {
+		targetEntry = group.flavors[targetIdx].(map[string]interface{})
+		for i, fItem := range group.flavors {
+			if i != targetIdx {
+				updatedFlavors = append(updatedFlavors, fItem)
+			}
+		}
+	} else {
+		targetEntry = g.buildPathwaysFlavorEntry(group.rg, group.flavors, targetFlavor)
+		updatedFlavors = append(updatedFlavors, group.flavors...)
+	}
+
+	// Prepend the Pathways head flavor so CPU-only head pods match it before any TPU/GPU flavor.
+	group.rg["flavors"] = append([]interface{}{targetEntry}, updatedFlavors...)
+	return true
 }
 
 func (g *GKEOrchestrator) buildPathwaysFlavorEntry(rg map[string]interface{}, existingFlavors []interface{}, targetFlavor string) map[string]interface{} {
@@ -630,7 +662,14 @@ func decodeJSONMap(raw string) (map[string]interface{}, error) {
 	if err := dec.Decode(&parsed); err != nil {
 		return nil, err
 	}
-	return normalizeJSONValue(parsed).(map[string]interface{}), nil
+	if parsed == nil {
+		return nil, fmt.Errorf("expected JSON object, got null")
+	}
+	normalized, ok := normalizeJSONValue(parsed).(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("expected JSON object, got %T", normalized)
+	}
+	return normalized, nil
 }
 
 func normalizeJSONValue(v interface{}) interface{} {
