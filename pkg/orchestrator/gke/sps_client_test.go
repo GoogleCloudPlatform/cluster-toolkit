@@ -416,7 +416,7 @@ func TestRunSPSWorkload_Validation(t *testing.T) {
 }
 
 func TestSubmitSPSClusterWorkload_ValidatesClusterMounts(t *testing.T) {
-	const pvcJSONCmd = "kubectl get pvc train-pvc -n default --ignore-not-found --request-timeout=10s -o json"
+	const pvcJSONCmd = "kubectl get pvc -n default --ignore-not-found --request-timeout=10s -o json -- train-pvc"
 	inst := spsInstance{Name: "sps-inst"}
 	baseJob := orchestrator.JobDefinition{
 		WorkloadName:  "sps-mount-check",

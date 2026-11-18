@@ -369,14 +369,17 @@ type userPVCRequest struct {
 
 type pvcInspectJSON struct {
 	Metadata struct {
-		Annotations map[string]string `json:"annotations"`
+		Annotations       map[string]string `json:"annotations"`
+		DeletionTimestamp string            `json:"deletionTimestamp"`
 	} `json:"metadata"`
 	Spec struct {
 		VolumeName       string   `json:"volumeName"`
 		StorageClassName string   `json:"storageClassName"`
 		AccessModes      []string `json:"accessModes"`
+		VolumeMode       string   `json:"volumeMode"`
 	} `json:"spec"`
 	Status struct {
+		Phase       string   `json:"phase"`
 		AccessModes []string `json:"accessModes"`
 	} `json:"status"`
 }
@@ -505,8 +508,9 @@ type existingGatewayPV struct {
 			VolumeAttributes map[string]string `yaml:"volumeAttributes"`
 		} `yaml:"csi"`
 		NFS *struct {
-			Path   string `yaml:"path" json:"path,omitempty"`
-			Server string `yaml:"server" json:"server,omitempty"`
+			Path     string `yaml:"path" json:"path,omitempty"`
+			Server   string `yaml:"server" json:"server,omitempty"`
+			ReadOnly bool   `yaml:"readOnly" json:"readOnly,omitempty"`
 		} `yaml:"nfs" json:"nfs,omitempty"`
 	} `yaml:"spec"`
 	Status struct {

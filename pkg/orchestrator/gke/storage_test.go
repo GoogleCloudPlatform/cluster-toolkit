@@ -586,7 +586,7 @@ func TestParseSingleVolume(t *testing.T) {
 			name:       "nfs missing server host",
 			input:      "nfs:///export;/data",
 			wantErr:    true,
-			wantErrSub: "Expected format: nfs://<server>/<export_path>;<dest>",
+			wantErrSub: "server host is missing",
 		},
 		{
 			name:       "nfs empty host with port 2049",
@@ -4304,7 +4304,7 @@ func TestVerifyStorageGateways_NoGatewaysIsANoOp(t *testing.T) {
 
 func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 	pvcCmd := func(name, ns string) string {
-		return fmt.Sprintf("kubectl get pvc %s -n %s --ignore-not-found --request-timeout=10s -o %s", name, ns, pvcGCSFuseJSONPath)
+		return fmt.Sprintf("kubectl get pvc -n %s --ignore-not-found --request-timeout=10s -o %s -- %s", ns, pvcGCSFuseJSONPath, name)
 	}
 	pvCmd := func(name string) string {
 		return fmt.Sprintf("kubectl get pv %s --ignore-not-found --request-timeout=10s -o %s", name, pvCSIDriverTemplate)
@@ -4484,7 +4484,7 @@ func TestProcessMounts_GCSFuseBackedPVC(t *testing.T) {
 
 const (
 	testNFSCanICmd      = "kubectl auth can-i create persistentvolumes --all-namespaces --request-timeout=10s"
-	testTrainPVCJSONCmd = "kubectl get pvc train-pvc -n default --ignore-not-found --request-timeout=10s -o json"
+	testTrainPVCJSONCmd = "kubectl get pvc -n default --ignore-not-found --request-timeout=10s -o json -- train-pvc"
 )
 
 func TestValidateMounts_SubPathAndCanonicalNFSDuplicates(t *testing.T) {
@@ -4501,7 +4501,7 @@ func TestValidateMounts_SubPathAndCanonicalNFSDuplicates(t *testing.T) {
 }
 
 func TestPVCSubPathMounts_VolumeDeduplication(t *testing.T) {
-	pvcCmd := "kubectl get pvc shared-pvc -n default --ignore-not-found --request-timeout=10s -o " + pvcGCSFuseJSONPath
+	pvcCmd := "kubectl get pvc -n default --ignore-not-found --request-timeout=10s -o " + pvcGCSFuseJSONPath + " -- shared-pvc"
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 		pvcCmd: {{ExitCode: 0, Stdout: "pv-shared\tstandard-rwx\tpd.csi.storage.gke.io\t"}},
 	})
@@ -4875,11 +4875,11 @@ func TestValidateClusterMounts_PVCExistenceAndForbidden(t *testing.T) {
 				wantSub:   `failed to inspect PersistentVolumeClaim "train-pvc" in namespace "default"`,
 			},
 			{
-				name:      "timeout on PVC/namespace named 'forbidden' is NOT misclassified as 403",
+				name:      "server timeout echoing PVC named 'forbidden' is NOT misclassified as 403",
 				mount:     "forbidden-pvc;/data",
 				namespace: "forbidden-ns",
-				res:       shell.CommandResult{ExitCode: 1, Stderr: "Unable to connect to the server: i/o timeout"},
-				wantSub:   `failed to inspect PersistentVolumeClaim "forbidden-pvc" in namespace "forbidden-ns": Unable to connect to the server: i/o timeout`,
+				res:       shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Timeout): request did not complete (get persistentvolumeclaims forbidden-pvc)"},
+				wantSub:   `failed to inspect PersistentVolumeClaim "forbidden-pvc" in namespace "forbidden-ns": Error from server (Timeout)`,
 			},
 			{
 				name:      "malformed PVC JSON",
@@ -4891,7 +4891,7 @@ func TestValidateClusterMounts_PVCExistenceAndForbidden(t *testing.T) {
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				claim := strings.Split(tc.mount, ";")[0]
-				cmd := fmt.Sprintf("kubectl get pvc %s -n %s --ignore-not-found --request-timeout=10s -o json", claim, tc.namespace)
+				cmd := fmt.Sprintf("kubectl get pvc -n %s --ignore-not-found --request-timeout=10s -o json -- %s", tc.namespace, claim)
 				mockExec := NewMockExecutor(map[string][]shell.CommandResult{cmd: {tc.res}})
 				orc := newTestGKEOrchestrator(mockExec)
 				orc.kubeContext = tc.kubeContext
@@ -5101,5 +5101,220 @@ func TestValidateClusterMounts_GCSFuseCSIDriverCheck(t *testing.T) {
 	}
 	if len(mockInstalled.calls) != 1 {
 		t.Errorf("expected exactly 1 CSIDriver check call, got %d: %v", len(mockInstalled.calls), mockInstalled.calls)
+	}
+}
+
+func TestPVCSourceValidation_DNS1123ColonsAndControlChars(t *testing.T) {
+	sm := &StorageManager{}
+
+	// Colons in PVC subPath (e.g., ISO-8601 checkpoint directories) and hostPath are valid.
+	if err := sm.ValidateMounts([]string{"shared-pvc/checkpoints/2026-04-14T12:00:00Z;/ckpt", "/host/path:with:colon;/host-dst"}); err != nil {
+		t.Fatalf("expected PVC subPath and hostPath containing ':' to pass, got: %v", err)
+	}
+	pm, err := sm.parseSingleVolume("shared-pvc/checkpoints/2026-04-14T12:00:00Z;/ckpt")
+	if err != nil || pm.Src != "shared-pvc" || pm.SubPath != "checkpoints/2026-04-14T12:00:00Z" {
+		t.Fatalf("parseSingleVolume(colon subPath) = (%+v, %v)", pm, err)
+	}
+
+	// Flag-shaped, non-DNS-1123, unsupported-scheme, and control-char PVC inputs are rejected locally.
+	invalidCases := []struct {
+		mount   string
+		wantSub string
+	}{
+		{"-A;/data", "DNS-1123 subdomain"},
+		{"--all-namespaces;/data", "DNS-1123 subdomain"},
+		{"-l=;/data", "DNS-1123 subdomain"},
+		{"--context=other-ctx;/data", "DNS-1123 subdomain"},
+		{"--kubeconfig=evil.yaml;/data", "DNS-1123 subdomain"},
+		{"--insecure-skip-tls-verify;/data", "DNS-1123 subdomain"},
+		{"My_Invalid_PVC;/data", "DNS-1123 subdomain"},
+		{"shared-pvc/sub\x00dir;/data", "must not contain control characters"},
+		{"shared-pvc/sub\ndir;/data", "must not contain control characters"},
+		{"s3://bucket/path;/data", "unsupported scheme: s3"},
+		{"bad:pvc/sub;/data", "unsupported scheme: bad"},
+	}
+	for _, tc := range invalidCases {
+		if err := sm.ValidateMounts([]string{tc.mount}); err == nil || !strings.Contains(err.Error(), tc.wantSub) {
+			t.Errorf("ValidateMounts(%q) = %v, want substring %q", tc.mount, err, tc.wantSub)
+		}
+	}
+}
+
+func TestNFSValidation_UnbracketedIPv6CanonicalizationAndHostShare(t *testing.T) {
+	sm := &StorageManager{}
+
+	// Canonical IPv6 and case-insensitive hostnames deduplicate as duplicates, while share stays case-sensitive.
+	if err := sm.ValidateMounts([]string{"nfs://[2001:0db8::1]/export;/d1", "nfs://[2001:db8::1]/export;/d2"}); err == nil || !strings.Contains(err.Error(), "duplicate volume source: nfs://[2001:db8::1]/export") {
+		t.Errorf("expected canonical IPv6 duplicate rejection, got: %v", err)
+	}
+	if err := sm.ValidateMounts([]string{"nfs://NFS.Example.Com/Export;/d1", "nfs://nfs.example.com/Export;/d2"}); err == nil || !strings.Contains(err.Error(), "duplicate volume source: nfs://nfs.example.com/Export") {
+		t.Errorf("expected case-insensitive hostname duplicate rejection, got: %v", err)
+	}
+	if err := sm.ValidateMounts([]string{"nfs://nfs.example.com/Export;/d1", "nfs://nfs.example.com/export;/d2"}); err != nil {
+		t.Errorf("expected case-sensitive shares Export vs export to stay distinct, got: %v", err)
+	}
+	if pm, err := sm.parseSingleVolume("nfs://NFS.Example.Com./Export;/d1"); err != nil || pm.Src != "nfs://nfs.example.com./Export" {
+		t.Errorf("trailing-dot canonicalization = (%+v, %v), want nfs://nfs.example.com./Export", pm, err)
+	}
+
+	invalidCases := []struct {
+		mount   string
+		wantSub string
+	}{
+		{"nfs://fd12::1:8080/export;/data", "unbracketed colon"},
+		{"nfs://fd12::1:2049/export;/data", "unbracketed colon"},
+		{"nfs://fd12::1/export;/data", "unbracketed colon"},
+		{"nfs://[bad:ipv6]/export;/data", "invalid IPv6 server address"},
+		{"nfs://[2001:db8:::1]/export;/data", "invalid IPv6 server address"},
+		{"nfs://[fe80::1%eth0]/export;/data", "invalid IPv6 server address"},
+		{"nfs://[::ffff:10.0.0.1]/export;/data", "invalid IPv6 server address"},
+		{"nfs://010.0.0.1/export;/data", "invalid server host"},
+		{"nfs://10.0.0.256/export;/data", "invalid server host"},
+		{"nfs://10.0.0.1./export;/data", "invalid server host"},
+		{"nfs://user@host/export;/data", "invalid server host"},
+		{"nfs://host?q=1/export;/data", "invalid server host"},
+		{"nfs://host#frag/export;/data", "invalid server host"},
+		{"nfs://10.0.0.1/bad\\share;/data", "must use forward slashes"},
+		{"nfs://10.0.0.1/bad\nshare;/data", "must not contain control characters"},
+		{"nfs://10.0.0.1:+2049/export;/data", "invalid port"},
+		{"nfs://10.0.0.1:02049/export;/data", "invalid port"},
+	}
+	for _, tc := range invalidCases {
+		if err := sm.ValidateMounts([]string{tc.mount}); err == nil || !strings.Contains(err.Error(), tc.wantSub) {
+			t.Errorf("ValidateMounts(%q) = %v, want substring %q", tc.mount, err, tc.wantSub)
+		}
+	}
+}
+
+func TestCheckExistingGatewayPV_NFSReadOnlyQuantityAndPinnedContext(t *testing.T) {
+	const pvName = "gcluster-nfs-10-0-0-1-export-abc123-default"
+	const pvcName = "gcluster-nfs-10-0-0-1-export-abc123"
+	const getPVCmd = "kubectl get pv " + pvName + " --ignore-not-found --request-timeout=10s -o json"
+
+	renderedYAML := `apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ` + pvName + `
+spec:
+  storageClassName: ""
+  capacity:
+    storage: 1Ti
+  nfs:
+    path: /export
+    server: 10.0.0.1
+`
+
+	// Equivalent capacity ("1024Gi" vs "1Ti") passes cleanly.
+	mockEquiv := NewMockExecutor(map[string][]shell.CommandResult{
+		getPVCmd: {{ExitCode: 0, Stdout: `{"spec":{"storageClassName":"","capacity":{"storage":"1024Gi"},"nfs":{"path":"/export","server":"10.0.0.1"}}}`}},
+	})
+	smEquiv := &StorageManager{orchestrator: newTestGKEOrchestrator(mockEquiv)}
+	if err := smEquiv.checkExistingGatewayPV(pvName, pvcName, "default", renderedYAML, false); err != nil {
+		t.Fatalf("expected 1024Gi vs 1Ti gateway PV capacity to match, got: %v", err)
+	}
+
+	// Existing PV with spec.nfs.readOnly: true conflicts and formats remediation commands with pinned --context.
+	mockRO := NewMockExecutor(map[string][]shell.CommandResult{
+		getPVCmd: {{ExitCode: 0, Stdout: `{"spec":{"storageClassName":"","capacity":{"storage":"1Ti"},"nfs":{"path":"/export","server":"10.0.0.1","readOnly":true}}}`}},
+	})
+	orc := newTestGKEOrchestrator(mockRO)
+	orc.kubeContext = "gke_proj_loc_clus"
+	smRO := &StorageManager{orchestrator: orc}
+	err := smRO.checkExistingGatewayPV(pvName, pvcName, "default", renderedYAML, false)
+	if err == nil || !strings.Contains(err.Error(), "already exists with different settings") || !strings.Contains(err.Error(), "--context gke_proj_loc_clus") {
+		t.Fatalf("expected spec.nfs.readOnly conflict with pinned --context, got: %v", err)
+	}
+}
+
+func TestValidateClusterMounts_PVCStatesAndAccessModePriority(t *testing.T) {
+	tests := []struct {
+		name    string
+		pvcJSON string
+		nodes   int
+		wantSub string
+	}{
+		{
+			name:    "Terminating PVC rejected even while Bound",
+			pvcJSON: `{"metadata":{"deletionTimestamp":"2026-11-18T00:00:00Z"},"spec":{"accessModes":["ReadWriteMany"]},"status":{"phase":"Bound","accessModes":["ReadWriteMany"]}}`,
+			nodes:   1,
+			wantSub: "is Terminating",
+		},
+		{
+			name:    "Lost PVC rejected",
+			pvcJSON: `{"spec":{"accessModes":["ReadWriteMany"]},"status":{"phase":"Lost"}}`,
+			nodes:   1,
+			wantSub: "is in Lost phase",
+		},
+		{
+			name:    "Block volumeMode PVC rejected",
+			pvcJSON: `{"spec":{"volumeMode":"Block","accessModes":["ReadWriteMany"]},"status":{"phase":"Bound","accessModes":["ReadWriteMany"]}}`,
+			nodes:   1,
+			wantSub: `volumeMode "Block"`,
+		},
+		{
+			name:    "Pending WaitForFirstConsumer PVC allowed",
+			pvcJSON: `{"spec":{"accessModes":["ReadWriteMany"]},"status":{"phase":"Pending"}}`,
+			nodes:   2,
+		},
+		{
+			name:    "status.accessModes takes precedence over spec.accessModes",
+			pvcJSON: `{"spec":{"accessModes":["ReadWriteMany"]},"status":{"phase":"Bound","accessModes":["ReadWriteOnce"]}}`,
+			nodes:   2,
+			wantSub: "ReadWriteOnce",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+				testTrainPVCJSONCmd: {{ExitCode: 0, Stdout: tc.pvcJSON}},
+			})
+			sm := &StorageManager{orchestrator: newTestGKEOrchestrator(mockExec)}
+			err := sm.ValidateClusterMounts(orchestrator.JobDefinition{
+				RawMounts:     []string{"train-pvc;/data"},
+				NumSlices:     1,
+				NodesPerSlice: tc.nodes,
+			})
+			if tc.wantSub == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantSub) {
+				t.Fatalf("ValidateClusterMounts() = %v, want substring %q", err, tc.wantSub)
+			}
+		})
+	}
+}
+
+func TestValidateToProcessMounts_StaticGCSFusePVCCacheHandoff(t *testing.T) {
+	pvCmd := fmt.Sprintf("kubectl get pv static-gcs-pv --ignore-not-found --request-timeout=10s -o %s", pvCSIDriverTemplate)
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		testTrainPVCJSONCmd: {{ExitCode: 0, Stdout: `{"spec":{"volumeName":"static-gcs-pv","storageClassName":"","accessModes":["ReadWriteMany"]},"status":{"phase":"Bound","accessModes":["ReadWriteMany"]}}`}},
+		pvCmd:               {{ExitCode: 0, Stdout: gcsFuseCSIDriver}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	sm := &StorageManager{orchestrator: orc}
+	job := orchestrator.JobDefinition{
+		WorkloadName:  "static-gcs-job",
+		RawMounts:     []string{"train-pvc/datasets;/mnt/data;ro", "train-pvc/checkpoints;/mnt/ckpt;rw"},
+		NumSlices:     1,
+		NodesPerSlice: 2,
+	}
+
+	if err := sm.ValidateClusterMounts(job); err != nil {
+		t.Fatalf("ValidateClusterMounts() failed: %v", err)
+	}
+	mounts, _, err := sm.ProcessMounts(job.RawMounts, job)
+	if err != nil {
+		t.Fatalf("ProcessMounts() failed: %v", err)
+	}
+	if len(mounts) != 2 || !mounts[0].NeedsGCSFuseSidecar || !mounts[1].NeedsGCSFuseSidecar {
+		t.Errorf("expected both subPath mounts to set NeedsGCSFuseSidecar=true from cached static PV handoff, got %+v", mounts)
+	}
+	// Exactly 2 kubectl calls total: 1 get pvc (in ValidateClusterMounts) + 1 get pv (in ProcessMounts; 2nd subPath hits cache).
+	if len(mockExec.calls) != 2 {
+		t.Errorf("expected exactly 2 kubectl calls (1 get pvc + 1 get pv), got %d: %v", len(mockExec.calls), mockExec.calls)
 	}
 }
