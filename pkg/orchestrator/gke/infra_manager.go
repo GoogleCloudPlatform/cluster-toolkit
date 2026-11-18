@@ -746,17 +746,14 @@ func (g *GKEOrchestrator) pinnedContextNamespace() (string, bool) {
 		return "", false
 	}
 	cfg, err := g.loadKubeconfig()
-	if err != nil {
+	if err != nil || cfg == nil {
 		return "", false
 	}
 	kubeCtx := cfg.Contexts[g.kubeContext]
 	if kubeCtx == nil {
 		return "", false
 	}
-	if kubeCtx.Namespace == "" {
-		return "default", true
-	}
-	return kubeCtx.Namespace, true
+	return k8s.ContextNamespace(kubeCtx), true
 }
 
 func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, projectID string) error {
