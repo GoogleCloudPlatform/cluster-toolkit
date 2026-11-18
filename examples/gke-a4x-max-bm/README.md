@@ -31,7 +31,8 @@ The following requirements apply to an AI-optimized A4X-Max Bare Metal GKE clust
         --default-storage-class=STANDARD \
         --project=PROJECT_ID \
         --location=COMPUTE_REGION_TERRAFORM_STATE \
-        --uniform-bucket-level-access
+        --uniform-bucket-level-access \
+        --public-access-prevention
     gcloud storage buckets update gs://BUCKET_NAME --versioning
     ```
 

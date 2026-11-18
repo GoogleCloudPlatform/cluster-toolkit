@@ -243,7 +243,7 @@ func createGcsBucketsIfMissing(ctx context.Context, bp config.Blueprint) error {
 
 		if errors.Is(err, storage.ErrBucketNotExist) {
 			if !flagAutoApprove {
-				prompt := fmt.Sprintf("The required Terraform state bucket '%s' is missing. We can create it now, but for data safety, 'gcluster destroy' will not delete it later. You must delete it manually when done.\nAlternatively, you can create it manually via `gcloud storage buckets create gs://%s` and then re-run this command.\nCreate it automatically? [y/N]: ", bucketName, bucketName)
+				prompt := fmt.Sprintf("The required Terraform state bucket '%s' is missing. We can create it now, but for data safety, 'gcluster destroy' will not delete it later. You must delete it manually when done.\nAlternatively, you can create it manually via `gcloud storage buckets create gs://%s --public-access-prevention` and then re-run this command.\nCreate it automatically? [y/N]: ", bucketName, bucketName)
 				if !confirmActionFunc(prompt) {
 					return fmt.Errorf("user aborted")
 				}
@@ -257,9 +257,12 @@ func createGcsBucketsIfMissing(ctx context.Context, bp config.Blueprint) error {
 			}
 
 			region := config.GetKeyFromBlueprint("region", bp)
-			var bucketAttrs *storage.BucketAttrs
+			// Create the state bucket with Public Access Prevention enforced
+			bucketAttrs := &storage.BucketAttrs{
+				PublicAccessPrevention: storage.PublicAccessPreventionEnforced,
+			}
 			if region != "" {
-				bucketAttrs = &storage.BucketAttrs{Location: region}
+				bucketAttrs.Location = region
 			}
 
 			ctxCreate, cancelCreate := context.WithTimeout(ctx, 30*time.Second)

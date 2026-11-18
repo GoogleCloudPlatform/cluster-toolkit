@@ -76,7 +76,7 @@
 
 - name: Create ML Diagnostics GCS bucket
   delegate_to: localhost
-  ansible.builtin.command: gcloud storage buckets create gs://{{ custom_vars.gcs_bucket }} --project {{ custom_vars.project }} --location {{ region | default('us-central1') }}
+  ansible.builtin.command: gcloud storage buckets create gs://{{ custom_vars.gcs_bucket }} --project {{ custom_vars.project }} --location {{ region | default('us-central1') }} --public-access-prevention
   when: bucket_check.rc != 0
 
 # ==========================================

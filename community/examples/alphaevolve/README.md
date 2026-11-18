@@ -98,7 +98,8 @@ export USER_EMAIL=<YOUR_USER_EMAIL>     # Google Cloud user email (e.g. user@exa
 And then create your GCS bucket (or skip if your bucket already exists):
 
 ```bash
-gcloud storage buckets create gs://${BUCKET_NAME} --project=${PROJECT_ID} --location=${REGION}
+gcloud storage buckets create gs://${BUCKET_NAME} --project=${PROJECT_ID} --location=${REGION} \
+    --public-access-prevention
 ```
 
 **IMPORTANT**: The bucket name has to be globally unique. If your first attempt fails, try another name.
