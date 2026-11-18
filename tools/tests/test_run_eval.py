@@ -1996,6 +1996,7 @@ class TestLiveBackend(unittest.TestCase):
         b_js = self._backend(judge_sandbox_exec, llm_judge=True)
         b_js.run_case("s", "p", {"name": "c_js", "_active_scorers": ["skill_triggering", "expectations"], "expectations": ["e0"]})
         self.assertIn("run_shell_command", judge_snap["settings"]["tools"]["exclude"])
+        self.assertNotIn("core", judge_snap["settings"]["tools"])
         self.assertIn('decision = "deny"', judge_snap["policy"])
         self.assertEqual(judge_snap["shim_rc"], 1)
 

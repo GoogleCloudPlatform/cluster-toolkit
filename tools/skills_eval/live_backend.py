@@ -1116,15 +1116,16 @@ class LiveCLIEvaluatorBackend:
                 jp = os.path.join(judge_shims, jb)
                 _write_file(jp, "#!/usr/bin/env bash\nexit 1\n")
                 os.chmod(jp, 0o755)
+            # Do not set tools.core=[] here: Gemini CLI 0.68.0 still sends tools=[{functionDeclarations:[]}]
+            # when core is empty, which Vertex AI rejects with HTTP 400 (POSIX exit code 400 & 0xFF == 144).
+            # deny-all-tools.toml + tool_calls_total > 0 enforce zero tool execution at runtime.
             _write_file(
                 os.path.join(judge_dir, ".gemini", "settings.json"),
                 json.dumps(
                     {
                         "tools": {
-                            "core": [],
                             "exclude": ["run_shell_command", "write_file", "replace", "activate_skill", "web_fetch", "google_web_search"],
                         },
-                        "mcpServers": {},
                     },
                     indent=2,
                 )
@@ -1148,8 +1149,11 @@ class LiveCLIEvaluatorBackend:
             finally:
                 self._set_folder_trust(judge_dir, False)
         if res.returncode != 0 or int(judge_tel.get("tool_calls_total", 0) or 0) > 0:
+            err_detail = re.sub(r"\s+", " ", (res.stderr or res.stdout or "").strip())[-200:]
             oracles.failed_expectations.append(
-                f"LLM judge exited with code {res.returncode}" if res.returncode != 0 else f"LLM judge invoked {judge_tel['tool_calls_total']} tool call(s)"
+                (f"LLM judge exited with code {res.returncode}" + (f": {err_detail}" if err_detail else ""))
+                if res.returncode != 0
+                else f"LLM judge invoked {judge_tel['tool_calls_total']} tool call(s)"
             )
             return
         parsed_obj = _extract_first_json_dict(text, lambda c: isinstance(c.get("results"), list))
