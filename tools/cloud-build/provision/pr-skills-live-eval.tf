@@ -46,6 +46,7 @@ locals {
   skills_eval_ignored_files = [
     "skills/README.md",
     "skills/**/references/catalog.yaml",
+    "tools/skills_eval/README.md",
     "tools/cloud-build/provision/README.md",
   ]
 }

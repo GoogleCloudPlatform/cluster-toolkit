@@ -1747,14 +1747,15 @@ class TestLiveBackend(unittest.TestCase):
             for cs in ("xpk-to-clustertoolkit", "s-other"):
                 _make_skill(os.path.join(gr, "custom_skills"), cs, f"name: {cs}\ndescription: d\nstatus: stable")
             _g = self._init_git_repo(gr, {"AGENTS.md": "# R\n", "llms.txt": "l\n", "llms-full.txt": "lf\n", "skills/README.md": "# D\n", "skills/s-ro/references/catalog.yaml": "modules: []\n",
-                                          "docs/migration/xpk_to_clustertoolkit.md": "# X\n", "tools/cloud-build/provision/README.md": "# P\n", "cmd/root.go": "package cmd\n"})
+                                          "docs/migration/xpk_to_clustertoolkit.md": "# X\n", "tools/skills_eval/README.md": "# SE\n", "tools/cloud-build/provision/README.md": "# P\n", "cmd/root.go": "package cmd\n"})
             _g("checkout", "-b", "feat-one")
             self._write(os.path.join(gr, "skills", "s-ro", "SKILL.md"), "---\nname: s-ro\ndescription: d2\ncompatibility: c\nmetadata:\n  status: stable\nallowed-tools: Bash(kubectl:*)\n---\n")
             _g("commit", "-am", "touch s-ro")
             self.assertEqual(resolve_changed_skills("main", skills_dir="skills", repo_root=gr), ["skills/s-ro"])
 
             _g("checkout", "-B", "feat-skip", "main")
-            for rel, body in (("skills/README.md", "# D2\n"), ("skills/s-ro/references/catalog.yaml", "modules: [a]\n"), ("tools/cloud-build/provision/README.md", "# P2\n"), ("cmd/root.go", "package cmd // 2\n")):
+            for rel, body in (("skills/README.md", "# D2\n"), ("skills/s-ro/references/catalog.yaml", "modules: [a]\n"),
+                              ("tools/skills_eval/README.md", "# SE2\n"), ("tools/cloud-build/provision/README.md", "# P2\n"), ("cmd/root.go", "package cmd // 2\n")):
                 self._write(os.path.join(gr, rel), body)
             _g("commit", "-am", "skip")
             self.assertEqual(resolve_changed_skills("main", skills_dir="skills", repo_root=gr), [])
@@ -1785,6 +1786,9 @@ class TestLiveBackend(unittest.TestCase):
         m_inc = re.search(r"skills_eval_included_files\s*=\s*\[(.*?)\]", tf_text, re.DOTALL)
         tf_included = set(re.findall(r'"([^"]+)"', m_inc.group(1) if m_inc else ""))
         self.assertEqual(tf_included, set(_GLOBAL_EVAL_TRIGGERS) | {f"{p}**" for p in _GLOBAL_EVAL_TRIGGER_PREFIXES} | {"skills/**", "docs/migration/xpk_to_clustertoolkit.md"})
+        m_ign = re.search(r"skills_eval_ignored_files\s*=\s*\[(.*?)\]", tf_text, re.DOTALL)
+        self.assertEqual(set(re.findall(r'"([^"]+)"', m_ign.group(1) if m_ign else "")),
+                         {"skills/README.md", "skills/**/references/catalog.yaml", "tools/skills_eval/README.md", "tools/cloud-build/provision/README.md"})
         wf_data = yaml.safe_load(Path(REPO_ROOT, ".github", "workflows", "skills-lint.yml").read_text(encoding="utf-8"))
         wf_on = wf_data.get("on") or wf_data.get(True)
         non_cb = {p for p in tf_included if not p.startswith("tools/cloud-build/")}

@@ -233,7 +233,12 @@ def resolve_changed_skills(base_ref: str, skills_dir: str = "skills", repo_root:
         return None
     impacted: Set[str] = set()
     for p in changed:
-        if p in (f"{skills_prefix}README.md", "skills/README.md", "tools/cloud-build/provision/README.md") or (
+        if p in (
+            f"{skills_prefix}README.md",
+            "skills/README.md",
+            "tools/skills_eval/README.md",
+            "tools/cloud-build/provision/README.md",
+        ) or (
             p.startswith(skills_prefix) and p.endswith("/references/catalog.yaml")
         ):
             continue
