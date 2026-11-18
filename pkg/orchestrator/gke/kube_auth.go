@@ -412,6 +412,37 @@ func (g *GKEOrchestrator) kubectlStream(args ...string) error {
 	return g.executor.ExecuteCommandStream("kubectl", k8s.WithContext(g.kubeContext, args)...)
 }
 
+// HasAPIGroupVersion checks whether the Kubernetes apiserver serves /apis/<groupVersion>
+// via the non-privileged API discovery endpoint.
+func (g *GKEOrchestrator) HasAPIGroupVersion(groupVersion string) (bool, error) {
+	gv := strings.Trim(strings.TrimSpace(groupVersion), "/")
+	if gv == "" {
+		return false, nil
+	}
+	res := g.kubectl("get", "--raw", "/apis/"+gv, kubectlReadTimeout)
+	if res.ExitCode == 0 {
+		return true, nil
+	}
+	errText := strings.TrimSpace(res.Stderr)
+	if errText == "" {
+		errText = strings.TrimSpace(res.Stdout)
+	}
+	if errText == "" && res.Err != nil {
+		errText = strings.TrimSpace(res.Err.Error())
+	}
+	if isAPIGroupNotFoundText(errText) {
+		return false, nil
+	}
+	return false, fmt.Errorf("failed to query Kubernetes API group %q: %s", gv, firstLine(errText))
+}
+
+func isAPIGroupNotFoundText(text string) bool {
+	lower := strings.ToLower(text)
+	return strings.Contains(lower, "error from server (notfound)") ||
+		strings.Contains(lower, "the server could not find the requested resource") ||
+		strings.Contains(lower, "404 page not found")
+}
+
 // inspectExistingContext loads the kubeconfig and statically validates the cluster's entry.
 func (g *GKEOrchestrator) inspectExistingContext(clusterName, location, projectID string) kubeContextCheck {
 	cfg, err := g.loadKubeconfig()

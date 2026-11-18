@@ -99,6 +99,28 @@ func TestInspectCmd_Success(t *testing.T) {
 	}
 }
 
+func TestInspectCmd_NameShorthand(t *testing.T) {
+	oldFactory := gkeOrchestratorFactory
+	defer func() { gkeOrchestratorFactory = oldFactory }()
+
+	mockOrc := &mockJobOrchestrator{}
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+
+	clusterName, location, projectID = "test-cluster", "us-central1-a", "test-project"
+	inspectWorkloadName, inspectOutputPath, inspectShow, inspectFilter = "", "", false, ""
+	defer func() {
+		clusterName, location, projectID = "", "", ""
+		inspectWorkloadName, inspectOutputPath, inspectShow, inspectFilter = "", "", false, ""
+	}()
+
+	if _, err := executeCommand(JobCmd, "inspect", "-n", "short-workload", "-s"); err != nil {
+		t.Fatalf("unexpected error using -n shorthand: %v", err)
+	}
+	if !mockOrc.inspectCalled || mockOrc.inspectOpts.WorkloadName != "short-workload" || !mockOrc.inspectOpts.Show {
+		t.Fatalf("InspectOptions = %+v (called=%v), want WorkloadName=short-workload Show=true", mockOrc.inspectOpts, mockOrc.inspectCalled)
+	}
+}
+
 func TestInspectCmd_SPS(t *testing.T) {
 	oldFactory := gkeOrchestratorFactory
 	defer func() { gkeOrchestratorFactory = oldFactory }()

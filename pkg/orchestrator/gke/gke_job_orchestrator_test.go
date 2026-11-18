@@ -16,6 +16,7 @@ package gke
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -4913,4 +4914,60 @@ func TestBuildContainerImage_OfflineDryRunFallbackAndLiveError(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "broken kubeconfig") {
 		t.Fatalf("expected live Crane build to fail fast on broken kubeconfig, got: %v", err)
 	}
+}
+
+func TestHasAPIGroupVersion(t *testing.T) {
+	const testGroupVersion = "kueue.x-k8s.io"
+	const rawCmd = "kubectl get --raw /apis/kueue.x-k8s.io --request-timeout=10s"
+
+	t.Run("present API group returns true and pins context", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			rawCmd: {{ExitCode: 0, Stdout: `{"kind":"APIGroup"}`}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.kubeContext = "k8s-ctx"
+
+		ok, err := orc.HasAPIGroupVersion(testGroupVersion)
+		if err != nil || !ok {
+			t.Fatalf("HasAPIGroupVersion = (%v, %v), want (true, nil)", ok, err)
+		}
+		mockExec.assertAllKubectlPinned(t, "k8s-ctx")
+	})
+
+	t.Run("404 NotFound returns false without error", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			rawCmd: {{ExitCode: 1, Stderr: "Error from server (NotFound): the server could not find the requested resource"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.kubeContext = "generic-ctx"
+
+		ok, err := orc.HasAPIGroupVersion(testGroupVersion)
+		if err != nil || ok {
+			t.Fatalf("HasAPIGroupVersion = (%v, %v), want (false, nil)", ok, err)
+		}
+	})
+
+	t.Run("non-404 errors including port 4040, missing kubectl, Forbidden, and empty-stderr fallbacks propagate", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			res  shell.CommandResult
+		}{
+			{name: "port 4040 connection refused", res: shell.CommandResult{ExitCode: 1, Stderr: "dial tcp 127.0.0.1:4040: connect: connection refused"}},
+			{name: "kubectl not in PATH", res: shell.CommandResult{ExitCode: 1, Err: errors.New(`exec: "kubectl": executable file not found in $PATH`)}},
+			{name: "RBAC Forbidden", res: shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): forbidden"}},
+			{name: "stdout error fallback", res: shell.CommandResult{ExitCode: 1, Stdout: "gateway 502 bad gateway"}},
+		} {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+				rawCmd: {tc.res},
+			})
+			orc := newTestGKEOrchestrator(mockExec)
+			if ok, err := orc.HasAPIGroupVersion(testGroupVersion); err == nil || ok {
+				t.Errorf("%s: expected error from HasAPIGroupVersion, got (%v, %v)", tc.name, ok, err)
+			}
+		}
+		orcBlank := newTestGKEOrchestrator(NewMockExecutor(nil))
+		if ok, err := orcBlank.HasAPIGroupVersion("  "); err != nil || ok {
+			t.Fatalf("blank HasAPIGroupVersion = (%v, %v), want (false, nil)", ok, err)
+		}
+	})
 }

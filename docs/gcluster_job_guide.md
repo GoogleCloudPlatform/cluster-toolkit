@@ -338,7 +338,7 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
     ./gcluster job inspect --name my-python-app-job --show
     ```
 
-    The tool will create a timestamped log file `gcluster-inspect-<cluster>-<timestamp>.log` in your current working directory containing:
+    The tool will create a timestamped log file `gcluster-inspect-<cluster>-<timestamp>.log` in your current working directory (falling back to `~/.gcluster/logs/` or the system temporary directory if the current directory is not writable) containing:
 
   * **Local Setup**: Gcloud version and active configuration.
   * **GKE Infra**: GKE cluster descriptions, node-pool listings, and metadata/resources ConfigMaps.
@@ -1419,7 +1419,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `--name` | `string` | Specific workload name to inspect. |
+| `-n, --name` | `string` | Specific workload name to inspect. |
 | `-o, --output` | `string` | Custom path/filename to write logs to. |
 | `-s, --show` | `flag` | Print output to terminal in addition to file. |
 | `--filter` | `string` | Filter inspect output to a specific component (allowed values: `pathways-sps`; requires `--name`). Writes to `gcluster-inspect-<cluster>-<timestamp>-sps.log` by default. |
