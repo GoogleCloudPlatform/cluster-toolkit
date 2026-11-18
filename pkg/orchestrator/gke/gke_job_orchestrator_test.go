@@ -27,6 +27,7 @@ import (
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"github.com/google/go-cmp/cmp"
@@ -76,6 +77,7 @@ func setupMockMachineConfig(t *testing.T) {
 	config.ClearMachineTypeCache()
 	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", mockJSON)
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	t.Setenv("GCLUSTER_LABEL_SCHEME", "")
 	t.Cleanup(config.ClearMachineTypeCache)
 }
 
@@ -5050,4 +5052,100 @@ func TestHasAPIGroupVersion(t *testing.T) {
 			t.Fatalf("blank HasAPIGroupVersion = (%v, %v), want (false, nil)", ok, err)
 		}
 	})
+}
+
+func TestDiscoverK8sInventory_NodeConstraintInvariant(t *testing.T) {
+	t.Setenv(shell.AirGappedEnvVar, "")
+	t.Setenv(k8s.LabelSchemeEnvVar, "")
+	shell.SetDefaultAirGapped(false)
+	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
+
+	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("forbidden"))
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get --raw /apis/slice.tpu.google.com/v1alpha1 --request-timeout=10s": {{ExitCode: 1, Stderr: "Error from server (NotFound): 404 page not found"}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.kubeContext = "generic-ctx"
+	orc.kubeClient = &MockKubeClient{
+		ListErrs: map[string]error{"nodes": forbidden},
+	}
+
+	// Passing a job whose --node-constraint carries tpu.google.com/* and --compute-type is tpu7x
+	// must never influence LabelScheme discovery.
+	job := orchestrator.JobDefinition{
+		ComputeType:    "tpu7x",
+		NodeConstraint: map[string]string{k8s.BloomSliceNameLabel: "some-slice"},
+	}
+	sm := &StorageManager{orchestrator: orc}
+	if err := orc.validateSubmitLocalPreflight(sm, job); err != nil {
+		t.Fatalf("validateSubmitLocalPreflight failed: %v", err)
+	}
+	inv, err := orc.DiscoverK8sInventory(job.K8sLabelScheme)
+	if err != nil {
+		t.Fatalf("DiscoverK8sInventory failed: %v", err)
+	}
+	if !inv.ExplicitMode || inv.LabelScheme != k8s.SchemeGeneric {
+		t.Fatalf("got ExplicitMode=%v LabelScheme=%q, want (true, generic)", inv.ExplicitMode, inv.LabelScheme)
+	}
+	if orc.Inventory() != inv {
+		t.Errorf("Inventory() did not return cached inventory")
+	}
+}
+
+func TestDiscoverK8sInventory_BloomAndErrors(t *testing.T) {
+	t.Setenv(shell.AirGappedEnvVar, "")
+	t.Setenv(k8s.LabelSchemeEnvVar, "")
+	shell.SetDefaultAirGapped(false)
+	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
+
+	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("forbidden"))
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get --raw /apis/slice.tpu.google.com/v1alpha1 --request-timeout=10s": {{ExitCode: 0, Stdout: "{}"}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.kubeContext = "bloom-ctx"
+	orc.kubeClient = &MockKubeClient{
+		ListErrs: map[string]error{
+			"nodes":          forbidden,
+			"slices":         forbidden,
+			"partitiontrees": forbidden,
+		},
+	}
+
+	inv, err := orc.DiscoverK8sInventory("")
+	if err != nil {
+		t.Fatalf("DiscoverK8sInventory failed: %v", err)
+	}
+	if !inv.ExplicitMode || inv.LabelScheme != k8s.SchemeBloom || !shell.IsKnownAirGapped() {
+		t.Fatalf("got ExplicitMode=%v LabelScheme=%q airgap=%v, want (true, bloom, true)", inv.ExplicitMode, inv.LabelScheme, shell.IsKnownAirGapped())
+	}
+
+	// SubmitJob with invalid K8sLabelScheme fails in local preflight and clears stale cached inventory.
+	err = orc.SubmitJob(orchestrator.JobDefinition{K8sLabelScheme: "invalid-scheme"})
+	if err == nil || !strings.Contains(err.Error(), "invalid --k8s-label-scheme") {
+		t.Fatalf("expected local preflight error for invalid K8sLabelScheme, got: %v", err)
+	}
+	if orc.Inventory() != nil {
+		t.Errorf("expected SubmitJob to reset stale orc.inventory")
+	}
+}
+
+func TestDiscoverK8sInventory_ErrorPropagation(t *testing.T) {
+	t.Setenv(k8s.LabelSchemeEnvVar, "")
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	if _, err := orc.DiscoverK8sInventory("invalid"); err == nil {
+		t.Errorf("expected error for invalid label scheme")
+	}
+
+	orcNoClient := NewGKEOrchestrator()
+	if _, err := orcNoClient.DiscoverK8sInventory(""); err == nil || !strings.Contains(err.Error(), "not initialized") {
+		t.Errorf("expected uninitialized client error, got: %v", err)
+	}
+
+	orc.kubeClient = &MockKubeClient{
+		ListErrs: map[string]error{"nodes": errors.New("dial tcp: connection refused")},
+	}
+	if _, err := orc.DiscoverK8sInventory(""); err == nil || !strings.Contains(err.Error(), "connection refused") {
+		t.Errorf("expected non-403 list error to propagate, got: %v", err)
+	}
 }

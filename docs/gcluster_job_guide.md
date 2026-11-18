@@ -19,6 +19,7 @@ If you use `--build-context` to build images on-the-fly:
 * `GCLUSTER_REFRESH_CREDENTIALS`: Set to `1` to make every `gcluster job` command re-run `gcloud container clusters get-credentials` instead of reusing an existing, verified `kubeconfig` context for the cluster. See [Cluster connectivity and kubeconfig reuse](#101-cluster-connectivity-and-kubeconfig-reuse) for when this is useful.
 * `GCLUSTER_TELEMETRY_IMAGE`: Container image URI for the ML Diagnostics collector native sidecar on Kubernetes 1.29+ TPU workloads when `--enable-ml-diagnostics` is passed without `--ml-diagnostics-image` (switches GKE jobs from the managed webhook to native sidecar injection). Pass `--ml-diagnostics-image=""` to ignore it for one submission.
 * `GCLUSTER_AIR_GAPPED`: Set to `true` (or `1` / `yes` / `on`) in disconnected or air-gapped environments to skip CLI telemetry collection and uploads for the current process without changing your saved telemetry preference. Setting `false` / `0` / `no` / `off` does not override `gcluster telemetry off`.
+* `GCLUSTER_LABEL_SCHEME`: Overrides automatic Kubernetes TPU node label-scheme detection (`bloom`, `gke`, or `generic`) when `--k8s-label-scheme` is not specified. Useful on multi-tenant clusters where RBAC denies `list nodes` and you want to force a specific scheme.
 
 > [!NOTE]
 > ### Automated Prerequisite Checks Overview
@@ -1410,6 +1411,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--gke-nap-provisioning` | `string` | Compute provisioning model for GKE NAP. Allowed values: `on-demand`, `spot`, `reservation`. |
 | `--gke-nap-reservation` | `string` | Name of the Google Cloud Reservation for GKE NAP (required if `--gke-nap-provisioning=reservation`). |
 | `--gke-custom-templates-path` | `string` | Path to a local directory containing custom GKE manifest template overrides. |
+| `--k8s-label-scheme` | `string` | Override automatic Kubernetes TPU node label scheme detection (`bloom`, `gke`, or `generic`; overrides `GCLUSTER_LABEL_SCHEME`). |
 
 ### 9.4 `list` Flags
 *Use these flags to filter the list of jobs.*
