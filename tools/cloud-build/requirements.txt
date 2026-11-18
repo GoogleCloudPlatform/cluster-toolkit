@@ -7,7 +7,7 @@
 ansible==13.6.0 \
     --hash=sha256:5141552c1bd37f56839eb5b11ef0d93e92391295c97947d507b8daf7265b12b8 \
     --hash=sha256:d011ee5f895ca68b4670e39b910cee447b416a00a3e8d1bd599f4a6dff32ff12
-    # via -r tools/cloud-build/requirements.in
+    # via -r requirements.in
 ansible-core==2.20.7rc1 \
     --hash=sha256:a863f8edc2651dd29f3f4dcb369ca50217bf8dabc5a12485d27a7b86fa808c48 \
     --hash=sha256:daa7aa3c99da1a66508838becf92bdcfefa4dc5e5b831ce13596038d28441de2
@@ -367,7 +367,7 @@ coverage==7.17.0 \
     --hash=sha256:f72640e02a470b57b15cd655820133f6892760209283a363a60e2df932d5f0fe \
     --hash=sha256:f8bc2cd4c6aa58be1ca243fb8cddb6c3c42031fe4403991ad9cf2b3baed03d9f \
     --hash=sha256:fb5745048ee20f796b0e3ab61831049e749acff188563e2af32f58ede957ac1b
-    # via -r tools/cloud-build/requirements.in
+    # via -r requirements.in
 cryptography==50.0.0 \
     --hash=sha256:031e2d5dd4bb9caa3ca9c82e5a197fd8ae680232cee62603d1a813f3f07e3d03 \
     --hash=sha256:06a32a980526a6ab9a4b9bf8f7385800791e2bb960903cb6b530e4817509a3b7 \
@@ -441,7 +441,7 @@ google-auth==2.53.0 \
 google-cloud-build==3.36.0 \
     --hash=sha256:4a350eb90c384a8ce08649a3384c3813bf4708590e02353f953cc57b1aa2e15f \
     --hash=sha256:f70de0882ffd0f48ff39b7fcb8b543c2eaeda06c2f067b8aa61125b9427d3ffc
-    # via -r tools/cloud-build/requirements.in
+    # via -r requirements.in
 googleapis-common-protos[grpc]==1.75.0 \
     --hash=sha256:53a062ff3c32552fbd62c11fe23768b78e4ddf0494d5e5fd97d3f4689c75fbbd \
     --hash=sha256:961ed60399c457ceb0ee8f285a84c870aabc9c6a832b9d37bb281b5bebde43ed
@@ -540,7 +540,7 @@ jinja2==3.1.6 \
 jsonschema==4.26.0 \
     --hash=sha256:0c26707e2efad8aa1bfc5b7ce170f3fccc2e4918ff85989ba9ffa9facb2be326 \
     --hash=sha256:d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce
-    # via -r tools/cloud-build/requirements.in
+    # via -r requirements.in
 jsonschema-specifications==2025.9.1 \
     --hash=sha256:98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe \
     --hash=sha256:b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d
@@ -653,7 +653,7 @@ platformdirs==4.9.6 \
 pre-commit==4.6.0 \
     --hash=sha256:718d2208cef53fdc38206e40524a6d4d9576d103eb16f0fec11c875e7716e9d9 \
     --hash=sha256:e2cf246f7299edcabcf15f9b0571fdce06058527f0a06535068a86d38089f29b
-    # via -r tools/cloud-build/requirements.in
+    # via -r requirements.in
 proto-plus==1.28.0 \
     --hash=sha256:38e5696342835b08fc116f30a25665b29531cda9d5d5643e9b81fc312385abd9 \
     --hash=sha256:a630604310899e73c59ec302e5765c058d412b2f090b9c79c8822589f14955b8
@@ -678,9 +678,9 @@ protobuf==6.33.6 \
     #   grpc-google-iam-v1
     #   grpcio-status
     #   proto-plus
-pyasn1==0.6.4 \
-    --hash=sha256:9c447d8431c947fe4c8febc4ed9e760bc29011a5b01e5c74b67025bd9fb8ce81 \
-    --hash=sha256:deda9277cfd454080ec40b207fb6df82206a3a2688735233cdcd8d3d565f088b
+pyasn1==0.6.5 \
+    --hash=sha256:4017b0fce125096b8573b39c989fdb1a4b19cf761e683398184550fea0e66587 \
+    --hash=sha256:6b11616a6bcf3a40e635f082bb232fa57b5e0dd7f517bd7ddd69ec3794508a47
     # via pyasn1-modules
 pyasn1-modules==0.4.2 \
     --hash=sha256:29253a9207ce32b64c3ac6600edc75368f98473906e8fd1043bd6b5b1de2c14a \
@@ -769,7 +769,7 @@ pyyaml==6.0.3 \
     --hash=sha256:fa160448684b4e94d80416c0fa4aac48967a969efe22931448d853ada8baf926 \
     --hash=sha256:fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0
     # via
-    #   -r tools/cloud-build/requirements.in
+    #   -r requirements.in
     #   ansible-core
     #   pre-commit
 referencing==0.37.0 \
