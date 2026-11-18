@@ -2,13 +2,13 @@
 
 This file is read by coding agents (Gemini CLI, Claude Code, Codex, Cursor, Copilot, etc.).
 
-> **Scope:** The mandatory first-turn skill routing and operator safety invariants below apply to Cluster Toolkit **user and operator tasks** (creating/customizing blueprints and deployments, debugging GKE/Kueue workloads, and migrating XPK workflows). Repository maintainers explicitly tasked with developing or refactoring Cluster Toolkit internals under `cmd/`, `pkg/`, `modules/`, or `tools/` may read and edit `.tf` and Go source files normally.
+> **Scope:** The mandatory first-turn skill routing and operator safety invariants below apply to Cluster Toolkit **user and operator tasks** (creating/customizing blueprints and deployments, inspecting module inputs, outputs, `use:` wiring, and required GCP APIs under `modules/` or `community/modules/`, debugging GKE/Kueue workloads, and migrating XPK workflows). Repository maintainers explicitly tasked with authoring or refactoring Cluster Toolkit Go source (`cmd/`, `pkg/`, `tools/`) or editing module `.tf` implementation code when explicitly requested may read and edit `.tf` and Go source files normally.
 
 ## Mandatory First-Turn Skill Read (No Exceptions, Including Refusals & Confirmation Gates)
 
 **BEFORE** answering, running any shell command, editing files, refusing an unsafe request, or emitting a `[PROPOSED REMEDIATION PLAN]` on an operator/user task, you **MUST** read the matching `SKILL.md` on Turn 1 using `read_file`:
 
-1. **Cluster blueprints & deployments** (`examples/`, `community/examples/`, `deployment.yaml`, `gcluster create/expand/explain/deploy/destroy`, Terraform or validator errors, deleting deployment folders) -> [`skills/cluster-blueprint-assistant/SKILL.md`](skills/cluster-blueprint-assistant/SKILL.md)
+1. **Cluster blueprints, modules & deployments** (`examples/`, `community/examples/`, `modules/`, `community/modules/`, module inputs/outputs/wiring/GCP APIs, `deployment.yaml`, `gcluster create/expand/explain/deploy/destroy`, Terraform or validator errors, deleting deployment folders) -> [`skills/cluster-blueprint-assistant/SKILL.md`](skills/cluster-blueprint-assistant/SKILL.md)
 2. **Stuck GKE/Kueue workloads** (`Workload`, `ClusterQueue`, `LocalQueue`, `ResourceFlavor`, `Admitted: False`, `Inadmissible`, cohort borrowing, TAS, DWS `ProvisioningRequest`, queue/workload deletion) -> [`skills/gke-kueue-debugging/SKILL.md`](skills/gke-kueue-debugging/SKILL.md)
 3. **XPK migration & GKE TPU/GPU job/cluster operations** (`xpk cluster`, `xpk workload`, `gcluster job submit`, failed `xpk` jobs, or emergency `xpk` pod/cluster deletion) -> [`skills/xpk-to-clustertoolkit/SKILL.md`](skills/xpk-to-clustertoolkit/SKILL.md)
 

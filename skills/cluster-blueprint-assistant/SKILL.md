@@ -15,10 +15,10 @@
 
 name: cluster-blueprint-assistant
 description: >
-  Create, customize, validate and troubleshoot Cluster Toolkit blueprints with
-  gcluster. Use when asked to set up or modify a Slurm/GKE cluster blueprint,
-  change node counts, machine types, zones, Spot or reservations, add storage
-  like Lustre or Filestore, or fix gcluster expand/create/deploy errors.
+  Create, customize, validate, and debug Cluster Toolkit Slurm/GKE blueprints
+  and modules with gcluster: inspect modules/ or community/modules/ inputs,
+  outputs, use: wiring, and GCP APIs; tune nodes, machine types, zones,
+  Spot/reservations, Lustre/Filestore; or fix expand/create/deploy errors.
 compatibility: "Requires the gcluster binary (built from this repo via `make`) and a Cluster Toolkit checkout."
 metadata:
   author: GoogleCloudPlatform
@@ -40,7 +40,7 @@ allowed_read_only_commands:
 > [!WARNING]
 > This skill is experimental. Read-only inspection and validation commands (`./gcluster explain`, `./gcluster expand`, `./gcluster create`) may run directly; always halt with a `[PROPOSED REMEDIATION PLAN]` and wait for explicit user confirmation before deploying, destroying, or deleting files or cloud resources.
 
-> **Scope:** These rules apply to Cluster Toolkit user and operator blueprint workflows; repository maintainers explicitly developing or refactoring Cluster Toolkit internals under `cmd/`, `pkg/`, `modules/`, or `tools/` may read and edit `.tf` and Go source files normally.
+> **Scope:** These rules apply to Cluster Toolkit user and operator workflows (including inspecting module inputs, outputs, `use:` wiring, and required GCP APIs under `modules/` or `community/modules/`); repository maintainers explicitly authoring or refactoring Cluster Toolkit Go source (`cmd/`, `pkg/`, `tools/`) or editing module `.tf` implementation code when explicitly requested may read and edit `.tf` and Go source files normally.
 
 ## Core rules (read before touching any YAML)
 
@@ -50,9 +50,11 @@ allowed_read_only_commands:
    [`llms-full.txt`](../../llms-full.txt)) to find an existing
    blueprint under `examples/` or `community/examples/` that already matches the
    request. **Never open, read, `cat`, or `grep` any `.tf` file (`variables.tf`,
-   `outputs.tf`, `main.tf`) under `modules/` or `community/modules/`.** Do not run
-   `ls`, `find`, or `grep` across `examples/` or `.tf` files to
-   discover templates or modules; run `./gcluster explain <module>` (e.g.
+   `outputs.tf`, `main.tf`), and never run recursive directory searches (`grep -r`,
+   `rg`, `find`, or shell/Python directory walks) across `modules/` or
+   `community/modules/`** (even to look up `metadata.yaml` or module outputs, because
+   recursive scans open `.tf` files). Do not run `ls`, `find`, or `grep` across
+   `examples/` or `.tf` files to discover templates or modules; run `./gcluster explain <module>` (e.g.
    `./gcluster explain modules/file-system/managed-lustre`) or
    `./gcluster explain <module> -f yaml` (which prints full optional input types,
    default values, and descriptions), or check the catalog's
@@ -126,7 +128,8 @@ allowed_read_only_commands:
    list, and check `module_wiring.<source>.required_inputs` (or run
    `./gcluster explain <module>`) to confirm every required input is
    satisfied by a module in `use:`. **Never open, read, `cat`, or `grep` any `.tf`
-   file (`variables.tf`, `outputs.tf`, `main.tf`) under `modules/` or
+   file (`variables.tf`, `outputs.tf`, `main.tf`), and never run recursive searches
+   (`grep -r`, `rg`, `find`, or shell/Python directory walks) across `modules/` or
    `community/modules/`**—run `./gcluster expand <blueprint.yaml> --vars project_id=<project>`
    to validate all module inputs and `use:` wiring.
 4. **Mark agent-authored blueprints and deployment files.** Add `ai_assisted: true` at the top level
@@ -411,7 +414,7 @@ YAML — fix it there.
 
 | Symptom | Fix location |
 | :--- | :--- |
-| `a required setting "X" is missing from a module "Y"` | Add the module that outputs `X` to `Y`'s `use:` list (see `module_wiring.<source>.recommended_use` in the catalog, or run `./gcluster explain <module> -f yaml` and `./gcluster expand <blueprint.yaml> --vars project_id=<project>`). |
+| `a required setting "X" is missing from a module "Y"` | Read and follow the actionable `Hint:` line printed directly by `./gcluster expand <blueprint.yaml> --vars project_id=<project>` (e.g., `Consider adding module "private_service_access" to the "use" list`), check `module_wiring.<source>.recommended_use` in `references/catalog.yaml`, or run `./gcluster explain <module>` (or `-f yaml`) and add that module to `Y`'s `use:` list—never run `grep -r`, `rg`, `find`, or shell/Python directory walks across `modules/` or `community/modules/` to search for `X`. |
 | `module "X" was not used` | Add `X` to the `use:` list of its consumer (e.g. `private_service_access` → filestore / lustre). |
 | `module "X" references unknown global variable "Y"` | Add `Y` under `vars:` in the blueprint or `deployment.yaml`. |
 | `deployment variable "X" was not set` | A null value (`X:` with nothing after it) in **your** `-d` file or `--vars`, even though the location printed is the blueprint's `vars:` line. Set the value in `deployment.yaml`; do not edit the template. |
@@ -421,7 +424,7 @@ YAML — fix it there.
 
 #### Module Wiring & Validation Discovery
 
-Run `./gcluster explain <module>` (or `./gcluster explain <module> -f yaml`) to inspect required/optional inputs, `use:` wiring snippets, object schemas, deprecated settings, and input validation constraints (do not pass `--detail`, which is not a valid flag). Run `./gcluster expand <blueprint.yaml> --vars project_id=<project>` to surface all module, graph, and cross-field validation errors and hints directly—never read `.tf` files under `modules/` or `community/modules/`.
+Run `./gcluster explain <module>` (or `./gcluster explain <module> -f yaml`) to inspect required/optional inputs, `use:` wiring snippets, object schemas, deprecated settings, and input validation constraints (do not pass `--detail`, which is not a valid flag). Run `./gcluster expand <blueprint.yaml> --vars project_id=<project>` to surface all module, graph, and cross-field validation errors and `Hint:` suggestions directly—never read `.tf` files or run recursive searches (`grep -r`, `rg`, `find`, or shell/Python walks) across `modules/` or `community/modules/`.
 
 ### Day-2 Drift & reconfigure_ignores
 
