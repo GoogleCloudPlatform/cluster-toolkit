@@ -101,6 +101,7 @@ steps:
               value: "g2-standard-4"
             - name: INSTANCE_PREFIX
               value: "mlgke"
+            # ubuntu_pool appended below defaults to c2-standard-60 in modules/compute/gke-node-pool
             - name: REQUIRED_MACHINE_TYPES
               value: "g2-standard-4,n2d-standard-4,n2d-standard-2,c2-standard-60"
             - name: ENABLE_SPOT_FALLBACK
@@ -174,7 +175,7 @@ steps:
               echo '    use: [gke_cluster]'                            >> \$$SG_EXAMPLE
               echo '    settings: {name: ubuntu, image_type: UBUNTU_CONTAINERD, host_maintenance_interval: AS_NEEDED}' >> \$$SG_EXAMPLE
 
-              IP=\$(curl -s --retry 3 ifconfig.me || dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | tr -d '"')
+              IP=\$(curl -s --retry 3 ifconfig.me || curl -s --retry 3 api.ipify.org || curl -s --retry 3 icanhazip.com)
               sed -i "s|.*authorized_cidr:.*|  authorized_cidr: \$$IP/32|" \$$SG_EXAMPLE
               bash tools/add_ttl_label.sh \$$SG_EXAMPLE
 

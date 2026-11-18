@@ -118,16 +118,19 @@ check_tpu_capacity() {
 }
 
 check_single_vm_capacity() {
-	local zone=$1
-	local provisioning_model=$2
-	local machine_type=$3
-	local num_nodes=$4
-	local min_nodes=$5
-	local instance_prefix=$6
-	local accelerator=${7:-}
+	local target_zone=$1
+	local model=$2
+	local vm_type=$3
+	local node_count=$4
+	local min_count=$5
+	local name_prefix=$6
+	local accel_spec=${7:-}
 	local success=false
+	local create_output=""
+	local instance_list_output=""
 
-	readarray -t instance_names_array < <(generate_instance_names "${instance_prefix}" "${num_nodes}")
+	local -a instance_names_array=()
+	readarray -t instance_names_array < <(generate_instance_names "${name_prefix}" "${node_count}")
 	local instance_names_str
 	instance_names_str=$(
 		IFS=,
@@ -138,57 +141,58 @@ check_single_vm_capacity() {
 		gcloud compute instances bulk create
 		--predefined-names="${instance_names_str}"
 		--project="${PROJECT_ID}"
-		--zone="${zone}"
-		--machine-type="${machine_type}"
-		--provisioning-model="${provisioning_model}"
+		--zone="${target_zone}"
+		--machine-type="${vm_type}"
+		--provisioning-model="${model}"
 		--no-address
 		--quiet
-		--min-count="${min_nodes}"
+		--min-count="${min_count}"
 	)
 
-	if [[ -n "${accelerator}" ]]; then
-		gcloud_cmd+=(--accelerator="${accelerator}")
+	if [[ -n "${accel_spec}" ]]; then
+		gcloud_cmd+=(--accelerator="${accel_spec}")
 	fi
 
-	if [[ "${provisioning_model}" == "SPOT" ]]; then
+	if [[ "${model}" == "SPOT" ]]; then
 		gcloud_cmd+=(--instance-termination-action="${TERMINATION_ACTION}")
-		if [[ -n "${accelerator}" ]]; then
+		if [[ -n "${accel_spec}" ]]; then
 			gcloud_cmd+=(--on-host-maintenance="TERMINATE")
 		fi
 	else
 		gcloud_cmd+=(--on-host-maintenance="TERMINATE")
 	fi
 
-	echo "INFO: Attempting to bulk create ${num_nodes} ${machine_type} VMs in ${zone} (Model: ${provisioning_model})..."
+	echo "INFO: Attempting to bulk create ${node_count} ${vm_type} VMs in ${target_zone} (Model: ${model})..."
 	if create_output=$("${gcloud_cmd[@]}" 2>&1); then
-		if instance_list_output=$(gcloud compute instances list --project="${PROJECT_ID}" --zones="${zone}" \
-			--filter="name ~ ^${instance_prefix}" --format='value(name)'); then
+		if instance_list_output=$(gcloud compute instances list --project="${PROJECT_ID}" --zones="${target_zone}" \
+			--filter="name ~ ^${name_prefix}" --format='value(name)'); then
 			if [[ -n "${instance_list_output}" ]]; then
+				local -a created_instances=()
 				readarray -t created_instances < <(echo "${instance_list_output}")
 				local num_created=${#created_instances[@]}
-				cleanup_vm_instances "${PROJECT_ID}" "${zone}" "${instance_prefix}"
+				cleanup_vm_instances "${PROJECT_ID}" "${target_zone}" "${name_prefix}"
 
-				if [[ "${num_created}" -ge "${min_nodes}" ]]; then
-					echo "INFO: Found sufficient ${machine_type} VM capacity in ${zone}."
+				if [[ "${num_created}" -ge "${min_count}" ]]; then
+					echo "INFO: Found sufficient ${vm_type} VM capacity in ${target_zone}."
 					success=true
 				else
-					echo "ERROR: Bulk create & list succeeded in ${zone}, but only ${num_created} instances found, less than min_count ${min_nodes}." >&2
+					echo "ERROR: Bulk create & list succeeded in ${target_zone}, but only ${num_created} instances found, less than min_count ${min_count}." >&2
 				fi
 			else
-				echo "ERROR: Bulk create command apparently succeeded in ${zone}, but LIST command found no instances with the prefix." >&2
-				cleanup_vm_instances "${PROJECT_ID}" "${zone}" "${instance_prefix}"
+				echo "ERROR: Bulk create command apparently succeeded in ${target_zone}, but LIST command found no instances with the prefix." >&2
+				cleanup_vm_instances "${PROJECT_ID}" "${target_zone}" "${name_prefix}"
 			fi
 		else
-			echo "ERROR: Bulk create command succeeded in ${zone}, but the command to list instances failed." >&2
-			cleanup_vm_instances "${PROJECT_ID}" "${zone}" "${instance_prefix}"
+			echo "ERROR: Bulk create command succeeded in ${target_zone}, but the command to list instances failed." >&2
+			cleanup_vm_instances "${PROJECT_ID}" "${target_zone}" "${name_prefix}"
 		fi
 	else
 		if [[ "${create_output}" != *"INSUFFICIENT_CAPACITY"* && "${create_output}" != *"ZONE_RESOURCE_POOL_EXHAUSTED"* ]]; then
-			echo "ERROR: Unexpected error during bulk create in ${zone}: ${create_output}" >&2
+			echo "ERROR: Unexpected error during bulk create in ${target_zone}: ${create_output}" >&2
 		else
-			echo "INFO: Insufficient ${machine_type} VM capacity for bulk create in ${zone} (Model: ${provisioning_model})."
+			echo "INFO: Insufficient ${vm_type} VM capacity for bulk create in ${target_zone} (Model: ${model})."
 		fi
-		cleanup_vm_instances "${PROJECT_ID}" "${zone}" "${instance_prefix}"
+		cleanup_vm_instances "${PROJECT_ID}" "${target_zone}" "${name_prefix}"
 	fi
 
 	[[ "${success}" == "true" ]]
@@ -197,15 +201,17 @@ check_single_vm_capacity() {
 check_vm_capacity() {
 	local zone=$1
 	local provisioning_model=$2
+	local IFS
 
 	if ! check_single_vm_capacity "${zone}" "${provisioning_model}" "${MACHINE_TYPE}" "${NUM_NODES}" "${MIN_NODES}" "${FULL_INSTANCE_PREFIX}" "${GUEST_ACCELERATOR:-}"; then
 		return 1
 	fi
 
 	if [[ -n "${ADDITIONAL_VM_CHECKS:-}" ]]; then
-		local extra_specs=()
+		local -a extra_specs=()
 		IFS=';' read -r -a extra_specs <<<"${ADDITIONAL_VM_CHECKS}"
 		local idx=0
+		local spec
 		for spec in "${extra_specs[@]}"; do
 			[[ -z "${spec}" ]] && continue
 			idx=$((idx + 1))
@@ -364,6 +370,9 @@ check_cpu_quota() {
 	local region=$1
 	local metric=${2:-${CPU_QUOTA_METRIC:-"N2D_CPUS"}}
 	local required_cpus=${3:-${REQUIRED_CPU_QUOTA:-0}}
+	if [[ ! "${required_cpus}" =~ ^[0-9]+$ ]]; then
+		required_cpus=0
+	fi
 	if [[ "${required_cpus}" -le 0 ]]; then
 		return 0
 	fi
@@ -442,7 +451,7 @@ discover_candidate_zones() {
 			return 1
 		fi
 		current_zones=()
-		while IFS= read -r z_line; do
+		while IFS= read -r z_line || [[ -n "${z_line}" ]]; do
 			z_line="${z_line//$'\r'/}"
 			[[ -z "${z_line}" ]] && continue
 			z_name="${z_line##*/}"
@@ -475,7 +484,7 @@ discover_candidate_zones() {
 				return 1
 			fi
 			accel_zones=()
-			while IFS= read -r z_line; do
+			while IFS= read -r z_line || [[ -n "${z_line}" ]]; do
 				z_line="${z_line//$'\r'/}"
 				[[ -z "${z_line}" ]] && continue
 				z_name="${z_line##*/}"
@@ -549,7 +558,7 @@ else
 fi
 
 declare -a ZONES_ARRAY=()
-while IFS= read -r line; do
+while IFS= read -r line || [[ -n "${line}" ]]; do
 	line="${line//$'\r'/}"
 	if [[ -n "${line}" ]]; then
 		ZONES_ARRAY+=("${line}")
@@ -648,7 +657,12 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 			read -r -a EXTRA_QUOTA_SPECS <<<"${EXTRA_QUOTAS_STR}"
 			for quota_spec in "${EXTRA_QUOTA_SPECS[@]}"; do
 				[[ -z "${quota_spec}" ]] && continue
-				IFS=':' read -r extra_q_metric extra_q_req <<<"${quota_spec}"
+				if [[ "${quota_spec}" != *:* ]]; then
+					echo "WARN: Malformed quota spec '${quota_spec}' in ADDITIONAL_CPU_QUOTAS (expected METRIC:COUNT); skipping." >&2
+					continue
+				fi
+				extra_q_metric="${quota_spec%%:*}"
+				extra_q_req="${quota_spec#*:}"
 				if ! check_cpu_quota "${REGION}" "${extra_q_metric}" "${extra_q_req}"; then
 					echo "INFO: Skipping ${ZONE} - Additional CPU quota check (${extra_q_metric}) failed in region ${REGION}."
 					EXTRA_QUOTA_OK=false

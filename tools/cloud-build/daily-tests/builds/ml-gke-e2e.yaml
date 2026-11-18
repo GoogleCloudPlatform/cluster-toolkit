@@ -179,7 +179,7 @@ steps:
               echo '    use: [gke_cluster]'                                      >> \$$SG_EXAMPLE
               echo '    settings: {name: ubuntu, image_type: UBUNTU_CONTAINERD}' >> \$$SG_EXAMPLE
 
-              IP=\$(curl -s --retry 3 ifconfig.me || dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | tr -d '"')
+              IP=\$(curl -s --retry 3 ifconfig.me || curl -s --retry 3 api.ipify.org || curl -s --retry 3 icanhazip.com)
               sed -i "s|.*authorized_cidr:.*|  authorized_cidr: \$$IP/32|" \$$SG_EXAMPLE
               bash tools/add_ttl_label.sh \$$SG_EXAMPLE
 
