@@ -15,7 +15,10 @@
 package orchestrator_test
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +26,7 @@ import (
 	"hpc-toolkit/pkg/orchestrator/gke"
 	"hpc-toolkit/pkg/shell"
 
+	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
@@ -58,25 +62,29 @@ func TestRegisteredTypes_IncludesGKEAndK8s(t *testing.T) {
 func TestDetect_FourStepPrecedenceMatrix(t *testing.T) {
 	gke.RegisterProviders()
 	tests := []struct {
-		name           string
-		env            map[string]string
-		cfg            *clientcmdapi.Config
-		clusterName    string
-		location       string
-		projectID      string
-		versionResult  shell.CommandResult
-		wantType       orchestrator.Type
-		wantContext    string
-		wantCluster    string
-		wantSubprocess int
+		name             string
+		env              map[string]string
+		cfg              *clientcmdapi.Config
+		clusterName      string
+		location         string
+		projectID        string
+		versionResult    shell.CommandResult
+		wantType         orchestrator.Type
+		wantForced       bool
+		wantContext      string
+		wantCluster      string
+		wantReasonSubstr string
+		wantSubprocess   int
 	}{
 		{
-			name:        "step1_env_override_gke",
-			env:         map[string]string{"GCLUSTER_ORCHESTRATOR": "gke"},
-			cfg:         buildSingleContextConfig("kubernetes-admin@kubernetes", "kubernetes", "https://10.128.0.68:6443", &clientcmdapi.AuthInfo{ClientCertificateData: []byte("cert")}),
-			wantType:    orchestrator.TypeGKE,
-			wantContext: "kubernetes-admin@kubernetes",
-			wantCluster: "kubernetes",
+			name:             "step1_env_override_gke",
+			env:              map[string]string{"GCLUSTER_ORCHESTRATOR": "gke"},
+			cfg:              buildSingleContextConfig("kubernetes-admin@kubernetes", "kubernetes", "https://10.128.0.68:6443", &clientcmdapi.AuthInfo{ClientCertificateData: []byte("cert")}),
+			wantType:         orchestrator.TypeGKE,
+			wantForced:       true,
+			wantContext:      "kubernetes-admin@kubernetes",
+			wantCluster:      "kubernetes",
+			wantReasonSubstr: "forced by GCLUSTER_ORCHESTRATOR=gke",
 		},
 		{
 			name: "step1_env_override_gke_resolves_canonical_gke_context",
@@ -86,85 +94,113 @@ func TestDetect_FourStepPrecedenceMatrix(t *testing.T) {
 				c.CurrentContext = ""
 				return c
 			}(),
-			clusterName: "clus",
-			location:    "us-central1-a",
-			projectID:   "proj",
-			wantType:    orchestrator.TypeGKE,
-			wantContext: "gke_proj_us-central1_clus",
-			wantCluster: "clus",
+			clusterName:      "clus",
+			location:         "us-central1-a",
+			projectID:        "proj",
+			wantType:         orchestrator.TypeGKE,
+			wantForced:       true,
+			wantContext:      "gke_proj_us-central1_clus",
+			wantCluster:      "clus",
+			wantReasonSubstr: "forced by GCLUSTER_ORCHESTRATOR=gke",
 		},
 		{
-			name:        "step1_env_override_k8s",
-			env:         map[string]string{"GCLUSTER_ORCHESTRATOR": "k8s"},
-			cfg:         buildSingleContextConfig("gke_proj_us-central1_clus", "gke_proj_us-central1_clus", "https://34.118.224.10", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin"}}),
-			wantType:    orchestrator.TypeK8s,
-			wantContext: "gke_proj_us-central1_clus",
-			wantCluster: "gke_proj_us-central1_clus",
+			name:             "step1_env_override_k8s",
+			env:              map[string]string{"GCLUSTER_ORCHESTRATOR": "k8s"},
+			cfg:              buildSingleContextConfig("gke_proj_us-central1_clus", "gke_proj_us-central1_clus", "https://34.118.224.10", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin"}}),
+			wantType:         orchestrator.TypeK8s,
+			wantForced:       true,
+			wantContext:      "gke_proj_us-central1_clus",
+			wantCluster:      "gke_proj_us-central1_clus",
+			wantReasonSubstr: "forced by GCLUSTER_ORCHESTRATOR=k8s",
 		},
 		{
-			name:        "step2_posix_gke_auth_plugin",
-			cfg:         buildSingleContextConfig("gke_proj_us-central1_clus", "gke_proj_us-central1_clus", "https://34.118.224.10", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: "/usr/bin/gke-gcloud-auth-plugin"}}),
-			clusterName: "clus",
-			location:    "us-central1",
-			projectID:   "proj",
-			wantType:    orchestrator.TypeGKE,
-			wantContext: "gke_proj_us-central1_clus",
-			wantCluster: "clus",
+			name:             "step2_posix_gke_auth_plugin_on_non_canonical_alias",
+			cfg:              buildSingleContextConfig("prod-gpu-alias", "prod-gpu-cluster", "https://34.118.224.10", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: "/usr/bin/gke-gcloud-auth-plugin"}}),
+			clusterName:      "prod-gpu-cluster",
+			location:         "us-central1",
+			projectID:        "proj",
+			wantType:         orchestrator.TypeGKE,
+			wantContext:      "prod-gpu-alias",
+			wantCluster:      "prod-gpu-cluster",
+			wantReasonSubstr: "authenticates via gke-gcloud-auth-plugin",
 		},
 		{
-			name:        "step2_windows_gke_auth_plugin_exe_and_zonal_to_regional",
-			cfg:         buildSingleContextConfig("gke_proj_us-central1_clus", "gke_proj_us-central1_clus", "https://34.118.224.10", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: `C:\Program Files\Google\Cloud SDK\gke-gcloud-auth-plugin.EXE`}}),
-			clusterName: "clus",
-			location:    "us-central1-a",
-			projectID:   "proj",
-			wantType:    orchestrator.TypeGKE,
-			wantContext: "gke_proj_us-central1_clus",
-			wantCluster: "clus",
+			name:             "step2_windows_gke_auth_plugin_exe_on_non_canonical_alias",
+			cfg:              buildSingleContextConfig("win-gpu-alias", "win-gpu-cluster", "https://34.118.224.10", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: `C:\Program Files\Google\Cloud SDK\gke-gcloud-auth-plugin.EXE`}}),
+			wantType:         orchestrator.TypeGKE,
+			wantContext:      "win-gpu-alias",
+			wantCluster:      "win-gpu-cluster",
+			wantReasonSubstr: "authenticates via gke-gcloud-auth-plugin",
 		},
 		{
-			name:        "step2_legacy_gcp_auth_provider_selects_gke_offline",
-			cfg:         buildSingleContextConfig("legacy-ctx", "legacy-clus", "https://34.118.224.10", &clientcmdapi.AuthInfo{AuthProvider: &clientcmdapi.AuthProviderConfig{Name: "gcp"}}),
-			clusterName: "legacy-clus",
-			location:    "us-central1",
-			projectID:   "proj",
-			wantType:    orchestrator.TypeGKE,
-			wantContext: "legacy-ctx",
-			wantCluster: "legacy-clus",
+			name:             "step2_windows_gke_auth_plugin_exe_and_zonal_to_regional",
+			cfg:              buildSingleContextConfig("gke_proj_us-central1_clus", "gke_proj_us-central1_clus", "https://34.118.224.10", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: `C:\Program Files\Google\Cloud SDK\gke-gcloud-auth-plugin.EXE`}}),
+			clusterName:      "clus",
+			location:         "us-central1-a",
+			projectID:        "proj",
+			wantType:         orchestrator.TypeGKE,
+			wantContext:      "gke_proj_us-central1_clus",
+			wantCluster:      "clus",
+			wantReasonSubstr: "authenticates via gke-gcloud-auth-plugin",
 		},
 		{
-			name:        "step2_canonical_gke_context_with_expired_static_token_selects_gke_offline",
-			cfg:         buildSingleContextConfig("gke_proj_us-central1_my_clus", "gke_proj_us-central1_my_clus", "https://34.118.224.10", &clientcmdapi.AuthInfo{Token: "expired-oauth"}),
-			clusterName: "my_clus",
-			location:    "us-central1",
-			projectID:   "proj",
-			wantType:    orchestrator.TypeGKE,
-			wantContext: "gke_proj_us-central1_my_clus",
-			wantCluster: "my_clus",
+			name:             "step2_legacy_gcp_auth_provider_selects_gke_offline",
+			cfg:              buildSingleContextConfig("legacy-ctx", "legacy-clus", "https://34.118.224.10", &clientcmdapi.AuthInfo{AuthProvider: &clientcmdapi.AuthProviderConfig{Name: "gcp"}}),
+			clusterName:      "legacy-clus",
+			location:         "us-central1",
+			projectID:        "proj",
+			wantType:         orchestrator.TypeGKE,
+			wantContext:      "legacy-ctx",
+			wantCluster:      "legacy-clus",
+			wantReasonSubstr: "uses legacy gcp auth-provider",
 		},
 		{
-			name:        "step2_renamed_context_with_canonical_gke_cluster_entry",
-			cfg:         buildSingleContextConfig("prod-alias", "gke_proj_us-central1_my_clus", "https://34.118.224.10", &clientcmdapi.AuthInfo{Token: "expired-oauth"}),
-			wantType:    orchestrator.TypeGKE,
-			wantContext: "prod-alias",
-			wantCluster: "gke_proj_us-central1_my_clus",
+			name:             "step2_canonical_gke_context_with_non_canonical_cluster_entry_selects_gke_offline",
+			cfg:              buildSingleContextConfig("gke_proj_us-central1_my_clus", "custom-cluster-entry", "https://34.118.224.10", &clientcmdapi.AuthInfo{Token: "expired-oauth"}),
+			clusterName:      "my_clus",
+			location:         "us-central1",
+			projectID:        "proj",
+			wantType:         orchestrator.TypeGKE,
+			wantContext:      "gke_proj_us-central1_my_clus",
+			wantCluster:      "my_clus",
+			wantReasonSubstr: "matches gke_* naming",
 		},
 		{
-			name:        "step2_refresh_credentials_env_with_gke_flags_forces_gke",
-			env:         map[string]string{"GCLUSTER_REFRESH_CREDENTIALS": "1"},
-			cfg:         buildSingleContextConfig("custom-gke-alias", "custom-gke-clus", "https://34.118.224.10", &clientcmdapi.AuthInfo{Token: "expired-oauth"}),
-			clusterName: "custom-gke-alias",
-			location:    "us-central1",
-			projectID:   "proj",
-			wantType:    orchestrator.TypeGKE,
-			wantContext: "custom-gke-alias",
-			wantCluster: "custom-gke-alias",
+			name:             "step2_renamed_context_with_canonical_gke_cluster_entry",
+			cfg:              buildSingleContextConfig("prod-alias", "gke_proj_us-central1_my_clus", "https://34.118.224.10", &clientcmdapi.AuthInfo{Token: "expired-oauth"}),
+			wantType:         orchestrator.TypeGKE,
+			wantContext:      "prod-alias",
+			wantCluster:      "gke_proj_us-central1_my_clus",
+			wantReasonSubstr: "matches gke_* naming",
 		},
 		{
-			name:        "step3_gke_goog_dns_endpoint_with_trailing_dot",
-			cfg:         buildSingleContextConfig("dns-ctx", "dns-cluster", "https://gke-123456.us-central1.gke.goog.:443/", &clientcmdapi.AuthInfo{Token: "test-bearer-token"}),
-			wantType:    orchestrator.TypeGKE,
-			wantContext: "dns-ctx",
-			wantCluster: "dns-cluster",
+			name:             "step2_refresh_credentials_env_with_gke_flags_forces_gke",
+			env:              map[string]string{"GCLUSTER_REFRESH_CREDENTIALS": "1"},
+			cfg:              buildSingleContextConfig("custom-gke-alias", "custom-gke-clus", "https://34.118.224.10", &clientcmdapi.AuthInfo{Token: "expired-oauth"}),
+			clusterName:      "custom-gke-alias",
+			location:         "us-central1",
+			projectID:        "proj",
+			wantType:         orchestrator.TypeGKE,
+			wantContext:      "custom-gke-alias",
+			wantCluster:      "custom-gke-alias",
+			wantReasonSubstr: "credential refresh requested via GCLUSTER_REFRESH_CREDENTIALS",
+		},
+		{
+			name:             "step2_refresh_credentials_env_without_gke_flags_does_not_hijack_k8s",
+			env:              map[string]string{"GCLUSTER_REFRESH_CREDENTIALS": "1"},
+			cfg:              buildSingleContextConfig("onprem-ctx", "onprem-k8s", "https://10.128.0.68:6443", &clientcmdapi.AuthInfo{ClientCertificateData: []byte("cert-pem")}),
+			wantType:         orchestrator.TypeK8s,
+			wantContext:      "onprem-ctx",
+			wantCluster:      "onprem-k8s",
+			wantReasonSubstr: `kubeconfig context "onprem-ctx"`,
+		},
+		{
+			name:             "step3_gke_goog_dns_endpoint_with_trailing_dot",
+			cfg:              buildSingleContextConfig("dns-ctx", "dns-cluster", "https://gke-123456.us-central1.gke.goog.:443/", &clientcmdapi.AuthInfo{Token: "test-bearer-token"}),
+			wantType:         orchestrator.TypeGKE,
+			wantContext:      "dns-ctx",
+			wantCluster:      "dns-cluster",
+			wantReasonSubstr: "targets GKE endpoint gke-123456.us-central1.gke.goog",
 		},
 		{
 			name: "step4_static_token_ip_endpoint_with_gke_server_version",
@@ -173,10 +209,11 @@ func TestDetect_FourStepPrecedenceMatrix(t *testing.T) {
 				ExitCode: 0,
 				Stdout:   `{"clientVersion":{"gitVersion":"v1.32.0"},"serverVersion":{"gitVersion":"v1.32.2-gke.1182000"}}`,
 			},
-			wantType:       orchestrator.TypeGKE,
-			wantContext:    "static-gke-ctx",
-			wantCluster:    "static-gke",
-			wantSubprocess: 1,
+			wantType:         orchestrator.TypeGKE,
+			wantContext:      "static-gke-ctx",
+			wantCluster:      "static-gke",
+			wantReasonSubstr: "reported GKE version v1.32.2-gke.1182000",
+			wantSubprocess:   1,
 		},
 		{
 			name: "step4_cloud_sdk_client_version_against_kubeadm_server_stays_k8s",
@@ -185,10 +222,11 @@ func TestDetect_FourStepPrecedenceMatrix(t *testing.T) {
 				ExitCode: 0,
 				Stdout:   `{"clientVersion":{"gitVersion":"v1.32.1-gke.1200"},"serverVersion":{"gitVersion":"v1.32.13"}}`,
 			},
-			wantType:       orchestrator.TypeK8s,
-			wantContext:    "token-k8s-ctx",
-			wantCluster:    "token-k8s",
-			wantSubprocess: 1,
+			wantType:         orchestrator.TypeK8s,
+			wantContext:      "token-k8s-ctx",
+			wantCluster:      "token-k8s",
+			wantReasonSubstr: `kubeconfig context "token-k8s-ctx"`,
+			wantSubprocess:   1,
 		},
 		{
 			name: "step4_unreachable_server_nil_server_version_with_gke_client_version_stays_k8s",
@@ -228,10 +266,11 @@ func TestDetect_FourStepPrecedenceMatrix(t *testing.T) {
 				ExitCode: 0,
 				Stdout:   `{"clientVersion":{"gitVersion":"v1.32.0"},"serverVersion":{"gitVersion":"v1.32.2-gke.1182000"}}`,
 			},
-			wantType:       orchestrator.TypeGKE,
-			wantContext:    "gcloud-cmd-ctx",
-			wantCluster:    "gcloud-cmd-clus",
-			wantSubprocess: 1,
+			wantType:         orchestrator.TypeGKE,
+			wantContext:      "gcloud-cmd-ctx",
+			wantCluster:      "gcloud-cmd-clus",
+			wantReasonSubstr: "reported GKE version v1.32.2-gke.1182000",
+			wantSubprocess:   1,
 		},
 		{
 			name:        "step4_skipped_under_air_gapped_env",
@@ -251,18 +290,63 @@ func TestDetect_FourStepPrecedenceMatrix(t *testing.T) {
 			wantCluster: "kubernetes",
 		},
 		{
-			name:        "gkemulticloud_aws_and_attached_contexts_stay_k8s",
-			cfg:         buildSingleContextConfig("gke_aws_my-proj_us-west-2_eks-prod", "gke_aws_my-proj_us-west-2_eks-prod", "https://10.128.0.68:6443", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: "aws"}}),
+			name:        "gkemulticloud_aws_connect_gateway_with_gke_auth_plugin_stays_k8s",
+			env:         map[string]string{"GCLUSTER_REFRESH_CREDENTIALS": "1"},
+			cfg:         buildSingleContextConfig("gke_aws_my-proj_us-west-2_eks-prod", "gke_aws_my-proj_us-west-2_eks-prod", "https://us-west-2-connectgateway.googleapis.com/v1/projects/123/locations/us-west-2/gkeMultiCloudClusters/eks-prod", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin"}}),
+			projectID:   "my-proj",
+			location:    "us-west-2",
 			wantType:    orchestrator.TypeK8s,
 			wantContext: "gke_aws_my-proj_us-west-2_eks-prod",
 			wantCluster: "gke_aws_my-proj_us-west-2_eks-prod",
 		},
 		{
-			name:        "gke_attached_cluster_context_stays_k8s",
-			cfg:         buildSingleContextConfig("gke_attached_my-proj_us-west2_onprem", "gke_attached_my-proj_us-west2_onprem", "https://10.128.0.68:6443", &clientcmdapi.AuthInfo{ClientCertificateData: []byte("cert-pem")}),
+			name: "gkemulticloud_azure_private_endpoint_gcloud_print_access_token_stays_k8s",
+			cfg: buildSingleContextConfig("gke_azure_my-proj_eastus_aks-prod", "gke_azure_my-proj_eastus_aks-prod", "https://10.0.0.10:443", &clientcmdapi.AuthInfo{
+				Exec: &clientcmdapi.ExecConfig{Command: "gcloud", Args: []string{"container", "azure", "clusters", "print-access-token", "aks-prod"}},
+			}),
+			versionResult: shell.CommandResult{
+				ExitCode: 0,
+				Stdout:   `{"clientVersion":{"gitVersion":"v1.32.0"},"serverVersion":{"gitVersion":"v1.32.2-gke.1182000"}}`,
+			},
+			wantType:    orchestrator.TypeK8s,
+			wantContext: "gke_azure_my-proj_eastus_aks-prod",
+			wantCluster: "gke_azure_my-proj_eastus_aks-prod",
+		},
+		{
+			name: "renamed_multicloud_private_endpoint_gcloud_print_access_token_stays_k8s",
+			cfg: buildSingleContextConfig("aks-private-alias", "aks-private-clus", "https://10.0.0.10:443", &clientcmdapi.AuthInfo{
+				Exec: &clientcmdapi.ExecConfig{Command: "gcloud", Args: []string{"container", "azure", "clusters", "print-access-token", "aks-prod"}},
+			}),
+			versionResult: shell.CommandResult{
+				ExitCode: 0,
+				Stdout:   `{"clientVersion":{"gitVersion":"v1.32.0"},"serverVersion":{"gitVersion":"v1.32.2-gke.1182000"}}`,
+			},
+			wantType:    orchestrator.TypeK8s,
+			wantContext: "aks-private-alias",
+			wantCluster: "aks-private-clus",
+		},
+		{
+			name:        "gke_attached_mtls_connect_gateway_with_legacy_gcp_auth_provider_stays_k8s",
+			cfg:         buildSingleContextConfig("gke_attached_my-proj_us-west2_onprem", "gke_attached_my-proj_us-west2_onprem", "https://connectgateway.mtls.googleapis.com/v1/projects/123/locations/us-west2/gkeAttachedClusters/onprem", &clientcmdapi.AuthInfo{AuthProvider: &clientcmdapi.AuthProviderConfig{Name: "gcp"}}),
 			wantType:    orchestrator.TypeK8s,
 			wantContext: "gke_attached_my-proj_us-west2_onprem",
 			wantCluster: "gke_attached_my-proj_us-west2_onprem",
+		},
+		{
+			name:        "fleet_connectgateway_context_with_gke_auth_plugin_stays_k8s",
+			cfg:         buildSingleContextConfig("connectgateway_my-proj_global_member-1", "connectgateway_my-proj_global_member-1", "https://connectgateway.googleapis.com/v1/projects/123/locations/global/memberships/member-1", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin"}}),
+			wantType:    orchestrator.TypeK8s,
+			wantContext: "connectgateway_my-proj_global_member-1",
+			wantCluster: "connectgateway_my-proj_global_member-1",
+		},
+		{
+			name: "gdce_edgecontainer_and_use_edge_cloud_stay_k8s",
+			cfg: buildSingleContextConfig("edge-alias", "edgecontainer_my-proj_us-central1_edge-1", "https://192.168.1.10:443", &clientcmdapi.AuthInfo{
+				Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin", Args: []string{"--use_edge_cloud"}},
+			}),
+			wantType:    orchestrator.TypeK8s,
+			wantContext: "edge-alias",
+			wantCluster: "edgecontainer_my-proj_us-central1_edge-1",
 		},
 		{
 			name: "userless_kubectl_proxy_context_with_project_and_location_stays_k8s",
@@ -282,21 +366,23 @@ func TestDetect_FourStepPrecedenceMatrix(t *testing.T) {
 			wantCluster: "local-proxy",
 		},
 		{
-			name:        "fresh_workstation_empty_kubeconfig_with_gke_flags_bootstraps_gke",
-			cfg:         clientcmdapi.NewConfig(),
-			clusterName: "fresh-gke",
-			location:    "us-central1",
-			projectID:   "my-proj",
-			wantType:    orchestrator.TypeGKE,
-			wantContext: "",
-			wantCluster: "fresh-gke",
+			name:             "fresh_workstation_empty_kubeconfig_with_gke_flags_bootstraps_gke",
+			cfg:              clientcmdapi.NewConfig(),
+			clusterName:      "fresh-gke",
+			location:         "us-central1",
+			projectID:        "my-proj",
+			wantType:         orchestrator.TypeGKE,
+			wantContext:      "",
+			wantCluster:      "fresh-gke",
+			wantReasonSubstr: "no existing kubeconfig context",
 		},
 		{
-			name:        "empty_kubeconfig_and_zero_flags_returns_empty_k8s_detection",
-			cfg:         clientcmdapi.NewConfig(),
-			wantType:    orchestrator.TypeK8s,
-			wantContext: "",
-			wantCluster: "",
+			name:             "empty_kubeconfig_and_zero_flags_returns_empty_k8s_detection",
+			cfg:              clientcmdapi.NewConfig(),
+			wantType:         orchestrator.TypeK8s,
+			wantContext:      "",
+			wantCluster:      "",
+			wantReasonSubstr: "no matching kubeconfig context found",
 		},
 	}
 
@@ -312,8 +398,11 @@ func TestDetect_FourStepPrecedenceMatrix(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Detect(%q, %q, %q) err = %v, want nil", tc.clusterName, tc.location, tc.projectID, err)
 			}
-			if got.Type != tc.wantType || got.KubeContext != tc.wantContext || got.ClusterName != tc.wantCluster {
-				t.Errorf("Detect(%q, %q, %q) = %+v, want Type=%q KubeContext=%q ClusterName=%q", tc.clusterName, tc.location, tc.projectID, got, tc.wantType, tc.wantContext, tc.wantCluster)
+			if got.Type != tc.wantType || got.Forced != tc.wantForced || got.KubeContext != tc.wantContext || got.ClusterName != tc.wantCluster {
+				t.Errorf("Detect(%q, %q, %q) = %+v, want Type=%q Forced=%v KubeContext=%q ClusterName=%q", tc.clusterName, tc.location, tc.projectID, got, tc.wantType, tc.wantForced, tc.wantContext, tc.wantCluster)
+			}
+			if tc.wantReasonSubstr != "" && !strings.Contains(got.Reason, tc.wantReasonSubstr) {
+				t.Errorf("Detect(%q, %q, %q) Reason = %q, want substring %q", tc.clusterName, tc.location, tc.projectID, got.Reason, tc.wantReasonSubstr)
 			}
 			if len(runner.calls) != tc.wantSubprocess {
 				t.Fatalf("Detect(%q, %q, %q) subprocess calls = %v (len %d), want %d", tc.clusterName, tc.location, tc.projectID, runner.calls, len(runner.calls), tc.wantSubprocess)
@@ -325,6 +414,70 @@ func TestDetect_FourStepPrecedenceMatrix(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDetect_MultiFileKubeconfigPartialLoadErrorFailsFast(t *testing.T) {
+	gke.RegisterProviders()
+	dir := t.TempDir()
+	corruptPath := filepath.Join(dir, "prod-corrupt.yaml")
+	if err := os.WriteFile(corruptPath, []byte("clusters: [unclosed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	validCfg := buildSingleContextConfig("dev-k8s-ctx", "dev-k8s", "https://10.128.0.68:6443", &clientcmdapi.AuthInfo{ClientCertificateData: []byte("cert")})
+	validRaw, err := clientcmd.Write(*validCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validPath := filepath.Join(dir, "dev-valid.yaml")
+	if err := os.WriteFile(validPath, validRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("KUBECONFIG", corruptPath+string(os.PathListSeparator)+validPath)
+
+	det := &orchestrator.Detector{
+		Getenv: func(string) string { return "" },
+		Runner: (&recordingRunner{}).run,
+	}
+	if got, err := det.Detect("", "", ""); err == nil || !strings.Contains(err.Error(), "failed to load kubeconfig") {
+		t.Fatalf("Detect() with corrupt+valid KUBECONFIG = (%+v, %v), want failed to load kubeconfig error", got, err)
+	}
+
+	detForcedK8s := &orchestrator.Detector{
+		Getenv: func(k string) string {
+			if k == orchestrator.EnvVar {
+				return "k8s"
+			}
+			return ""
+		},
+		Runner: (&recordingRunner{}).run,
+	}
+	if got, err := detForcedK8s.Detect("", "", ""); err == nil || !strings.Contains(err.Error(), "failed to load kubeconfig") {
+		t.Fatalf("Detect() with %s=k8s and corrupt+valid KUBECONFIG = (%+v, %v), want failed to load kubeconfig error", orchestrator.EnvVar, got, err)
+	}
+
+	// Flag-only GKE bootstrap still succeeds so gcloud get-credentials can run or report cleanly.
+	gotGKE, err := det.Detect("fresh-gke", "us-central1", "my-proj")
+	if err != nil || gotGKE.Type != orchestrator.TypeGKE || gotGKE.KubeContext != "" {
+		t.Fatalf("Detect(flag-only GKE) with corrupt+valid KUBECONFIG = (%+v, %v), want TypeGKE bootstrap with empty KubeContext", gotGKE, err)
+	}
+	assertCorruptMultiFileGKEDoesNotSwallowLoadError(t, dir, corruptPath, det)
+}
+
+func assertCorruptMultiFileGKEDoesNotSwallowLoadError(t *testing.T, dir, corruptPath string, det *orchestrator.Detector) {
+	t.Helper()
+	gkeFallback := buildSingleContextConfig("gke_proj_us-central1_clus", "gke_proj_us-central1_clus", "https://34.118.224.10", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin"}})
+	gkeRaw, err := clientcmd.Write(*gkeFallback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gkePath := filepath.Join(dir, "fallback-gke.yaml")
+	if err := os.WriteFile(gkePath, gkeRaw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("KUBECONFIG", corruptPath+string(os.PathListSeparator)+gkePath)
+	if got, err := det.Detect("", "", ""); err == nil || !strings.Contains(err.Error(), "failed to load kubeconfig") {
+		t.Fatalf("Detect() with corrupt+fallback-GKE KUBECONFIG = (%+v, %v), want failed to load kubeconfig error", got, err)
 	}
 }
 

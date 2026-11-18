@@ -176,7 +176,7 @@ func (g *GKEOrchestrator) checkResourceExists(kind, name, namespace string) (exi
 
 func (g *GKEOrchestrator) installJobSetOnFreshCluster() error {
 	if shell.IsKnownAirGapped() {
-		return fmt.Errorf("JobSet is not installed, and automatic installation is disabled when %s is enabled; pre-install JobSet %s on the cluster before running in air-gapped mode", shell.AirGappedEnvVar, defaultJobSetVersion)
+		return fmt.Errorf("JobSet is not installed and cannot be downloaded when %s is enabled; pre-install JobSet %s on the cluster first", shell.AirGappedEnvVar, defaultJobSetVersion)
 	}
 	logging.Info("JobSet CRD %s and Service %s/%s not found. Checking the permissions needed to install JobSet...", jobSetCRDName, jobSetNamespace, jobSetWebhookServiceName)
 	if missing := g.missingPermissions(jobSetInstallPermissionChecks); len(missing) > 0 {
@@ -502,7 +502,7 @@ func (g *GKEOrchestrator) getHTTPClient() HTTPClient {
 
 func (g *GKEOrchestrator) downloadManifests(url string) ([]byte, error) {
 	if shell.IsKnownAirGapped() {
-		return nil, fmt.Errorf("cannot download manifests from %s when %s is enabled; pre-install the controller manifests on the cluster before running in air-gapped mode", url, shell.AirGappedEnvVar)
+		return nil, fmt.Errorf("cannot download %s when %s is enabled; pre-install the controller manifests on the cluster first", url, shell.AirGappedEnvVar)
 	}
 	logging.Info("Downloading manifests from %s", url)
 	resp, err := g.getHTTPClient().Get(url)

@@ -17,6 +17,7 @@ package gke
 import (
 	"context"
 	"encoding/base64"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -51,6 +52,8 @@ import (
 
 func TestMain(m *testing.M) {
 	_ = os.Unsetenv(refreshCredentialsEnv)
+	_ = os.Unsetenv(shell.AirGappedEnvVar)
+	shell.SetDefaultAirGapped(false)
 	os.Exit(m.Run())
 }
 
@@ -77,6 +80,7 @@ const (
 type exactExecutor struct {
 	responses map[string][]shell.CommandResult
 	calls     []string
+	timeouts  []time.Duration
 	callCount map[string]int
 }
 
@@ -85,8 +89,17 @@ func newExactExecutor(responses map[string][]shell.CommandResult) *exactExecutor
 }
 
 func (e *exactExecutor) ExecuteCommand(name string, args ...string) shell.CommandResult {
+	return e.execute(0, name, args...)
+}
+
+func (e *exactExecutor) ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) shell.CommandResult {
+	return e.execute(timeout, name, args...)
+}
+
+func (e *exactExecutor) execute(timeout time.Duration, name string, args ...string) shell.CommandResult {
 	key := name + " " + strings.Join(args, " ")
 	e.calls = append(e.calls, key)
+	e.timeouts = append(e.timeouts, timeout)
 	results, ok := e.responses[key]
 	if !ok {
 		return shell.CommandResult{ExitCode: 1, Stderr: "exactExecutor: unexpected command: " + key}
@@ -97,10 +110,6 @@ func (e *exactExecutor) ExecuteCommand(name string, args ...string) shell.Comman
 	}
 	e.callCount[key]++
 	return results[idx]
-}
-
-func (e *exactExecutor) ExecuteCommandWithTimeout(_ time.Duration, name string, args ...string) shell.CommandResult {
-	return e.ExecuteCommand(name, args...)
 }
 
 func (e *exactExecutor) ExecuteCommandStream(name string, args ...string) error { return nil }
@@ -542,9 +551,21 @@ func TestClassifyProbeFailure(t *testing.T) {
 		{"getting credentials: exec: executable kubelogin failed with exit code 1", probeAuth},
 		{"exec: executable gke-gcloud-auth-plugin failed with exit code 1", probeAuth},
 		{"oauth2: cannot fetch token: 400 Bad Request", probeAuth},
+		{`Unable to connect to the server: failed to refresh token: oauth2: "invalid_grant"`, probeAuth},
+		{"Unable to connect to the server: No valid id-token, and cannot refresh without refresh-token", probeAuth},
+		{"Unable to connect to the server: token response did not contain an id_token", probeAuth},
+		{"Unable to connect to the server: could not persist new tokens: permission denied", probeAuth},
+		{"error: The azure auth plugin has been removed.", probeAuth},
+		{`error: No Auth Provider found for name "openstack"`, probeAuth},
+		{`error: exec plugin: invalid apiVersion "client.authentication.k8s.io/v1alpha1"`, probeAuth},
+		{"Unable to connect to the server: failed to refresh token: Post \"https://idp.example.com/token\": dial tcp 192.0.2.10:443: i/o timeout", probeConnectivity},
 		{"could not get token from provider", probeAuth},
 		{"google: could not find default credentials (application default credentials)", probeAuth},
 		{"oauth2/google: status code 400: reauthentication required", probeAuth},
+		{"error: unable to read certificate-authority /missing/ca.crt for local-k8s due to open /missing/ca.crt: no such file or directory", probeInvalid},
+		{"error: unable to read client-cert /missing/client.crt for admin due to open /missing/client.crt: no such file or directory", probeInvalid},
+		{"error: unable to read token file /missing/token: open /missing/token: no such file or directory", probeInvalid},
+		{`error: error loading config file "/tmp/corrupt.yaml": yaml: line 2: did not find expected key`, probeInvalid},
 		{"Error from server (Forbidden): forbidden: User cannot get path \"/version\"", probeForbidden},
 		// GKE's DNS endpoint returns HTTP 403 when external traffic is disabled, IAM denies clusters.connect, or VPC-SC blocks access.
 		{"Error from server (Forbidden): control_plane_endpoints_config.dns_endpoint_config.allow_external_traffic is disabled, external access via DNS endpoint is not allowed", probeConnectivity},
@@ -1362,6 +1383,85 @@ func TestRestConfig_UsesPinnedContext(t *testing.T) {
 	}
 }
 
+func TestRestConfig_PersistsRotatedOIDCTokensToKubeconfig(t *testing.T) {
+	freshPayload := base64.RawURLEncoding.EncodeToString([]byte(`{"exp":4102444800}`))
+	freshIDToken := "eyJhbGciOiJub25lIn0." + freshPayload + ".sig"
+
+	var idpURL string
+	idpSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/.well-known/openid-configuration" {
+			_, _ = fmt.Fprintf(w, `{"issuer":%q,"token_endpoint":%q}`, idpURL, idpURL+"/token")
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"access_token":"acc-2","token_type":"Bearer","refresh_token":"rotated-rt-2","id_token":%q}`, freshIDToken)
+	}))
+	t.Cleanup(idpSrv.Close)
+	idpURL = idpSrv.URL
+
+	var gotBearer atomic.Value
+	apiSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBearer.Store(r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"apiVersion":"jobset.x-k8s.io/v1alpha2","kind":"JobSetList","items":[]}`))
+	}))
+	t.Cleanup(apiSrv.Close)
+
+	idpCAPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: idpSrv.Certificate().Raw})
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters["oidc-clus"] = &clientcmdapi.Cluster{Server: apiSrv.URL, InsecureSkipTLSVerify: true}
+	cfg.AuthInfos["oidc-user"] = &clientcmdapi.AuthInfo{
+		AuthProvider: &clientcmdapi.AuthProviderConfig{
+			Name: "oidc",
+			Config: map[string]string{
+				"idp-issuer-url":                 idpSrv.URL,
+				"client-id":                      "test-client",
+				"refresh-token":                  "single-use-rt-1",
+				"idp-certificate-authority-data": base64.StdEncoding.EncodeToString(idpCAPEM),
+			},
+		},
+	}
+	cfg.Contexts["oidc-ctx"] = &clientcmdapi.Context{Cluster: "oidc-clus", AuthInfo: "oidc-user", Namespace: "ml-ns"}
+	cfg.CurrentContext = "oidc-ctx"
+
+	raw, err := clientcmd.Write(*cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kcFile := filepath.Join(t.TempDir(), "kubeconfig")
+	if err := os.WriteFile(kcFile, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("KUBECONFIG", kcFile)
+
+	rawOrc, err := orchestrator.NewJobOrchestrator(orchestrator.Detection{
+		Type:        orchestrator.TypeK8s,
+		KubeContext: "oidc-ctx",
+		ClusterName: "oidc-clus",
+	})
+	if err != nil {
+		t.Fatalf("NewJobOrchestrator error = %v", err)
+	}
+	orc := rawOrc.(*GKEOrchestrator)
+	orc.SetExecutor(NewMockExecutor(nil))
+
+	if _, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: "oidc-clus"}); err != nil {
+		t.Fatalf("ListJobs(OIDC) error = %v", err)
+	}
+	if got, _ := gotBearer.Load().(string); got != "Bearer "+freshIDToken {
+		t.Errorf("API Authorization header = %q, want %q", got, "Bearer "+freshIDToken)
+	}
+
+	persisted, err := clientcmd.LoadFromFile(kcFile)
+	if err != nil {
+		t.Fatalf("LoadFromFile(%s): %v", kcFile, err)
+	}
+	persistedCfg := persisted.AuthInfos["oidc-user"].AuthProvider.Config
+	if persistedCfg["refresh-token"] != "rotated-rt-2" || persistedCfg["id-token"] != freshIDToken {
+		t.Fatalf("persisted OIDC config = %v, want rotated refresh-token=\"rotated-rt-2\" and refreshed id-token", persistedCfg)
+	}
+}
+
 // With a pinned context the namespace comes from that context, not from a cluster-name lookup.
 func TestGetCurrentNamespace_PrefersPinnedContext(t *testing.T) {
 	cfg := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), "other") // testContext has namespace team-ns
@@ -1707,8 +1807,11 @@ func other() { exec.CommandContext(ctx, "kubectl", "port-forward") }`,
 func TestKubectlIn_RefusesEmptyContextAndPinsNonEmpty(t *testing.T) {
 	execErr := errors.New("exec: kubectl: executable file not found in $PATH")
 	exec := newExactExecutor(map[string][]shell.CommandResult{
-		"kubectl --context pinned-ctx get pods":                                  {{ExitCode: 0, Stdout: "ok"}},
-		"kubectl --context exec-err-ctx get --raw /version --request-timeout=5s": {{ExitCode: -1, Err: execErr}},
+		"kubectl --context pinned-ctx get pods":                                     {{ExitCode: 0, Stdout: "ok"}},
+		"kubectl --context exec-err-ctx get --raw /version --request-timeout=5s":    {{ExitCode: -1, Err: execErr}},
+		"kubectl --context hung-silent-ctx get --raw /version --request-timeout=5s": {{ExitCode: -1, Err: context.DeadlineExceeded}},
+		"kubectl --context hung-plugin-ctx get --raw /version --request-timeout=5s": {{ExitCode: -1, Stderr: "fetching token from STS...", Err: context.DeadlineExceeded}},
+		"kubectl --context hung-reauth-ctx get --raw /version --request-timeout=5s": {{ExitCode: -1, Stderr: "reauthentication prompt waiting on stdin", Err: context.DeadlineExceeded}},
 	})
 	orc := newTestGKEOrchestrator(exec)
 
@@ -1726,10 +1829,27 @@ func TestKubectlIn_RefusesEmptyContextAndPinsNonEmpty(t *testing.T) {
 	if res.ExitCode != 0 || len(exec.calls) != 1 || exec.calls[0] != "kubectl --context pinned-ctx get pods" {
 		t.Fatalf("kubectlIn(pinned-ctx) = %+v (calls=%v)", res, exec.calls)
 	}
+	if exec.timeouts[0] != shell.DefaultLocalCommandTimeout {
+		t.Fatalf("kubectlIn timeout = %v, want %v", exec.timeouts[0], shell.DefaultLocalCommandTimeout)
+	}
 
 	outcome, stderr = orc.probeContext("exec-err-ctx")
 	if outcome != probeUnknown || !strings.Contains(stderr, "executable file not found") {
 		t.Fatalf("probeContext(exec-err) = (%v, %q), want probeUnknown surfacing res.Err when Stderr is empty", outcome, stderr)
+	}
+	assertProbeContextTimeoutOutcomes(t, orc)
+}
+
+func assertProbeContextTimeoutOutcomes(t *testing.T, orc *GKEOrchestrator) {
+	t.Helper()
+	if outcome, stderr := orc.probeContext("hung-silent-ctx"); outcome != probeConnectivity || !strings.Contains(stderr, "timed out") {
+		t.Fatalf("probeContext(hung-silent) = (%v, %q), want (probeConnectivity, timed out)", outcome, stderr)
+	}
+	if outcome, stderr := orc.probeContext("hung-plugin-ctx"); outcome != probeConnectivity || !strings.Contains(stderr, "fetching token from STS...") || !strings.Contains(stderr, "timed out") {
+		t.Fatalf("probeContext(hung-plugin) = (%v, %q), want (probeConnectivity, plugin stderr + timed out)", outcome, stderr)
+	}
+	if outcome, _ := orc.probeContext("hung-reauth-ctx"); outcome != probeAuth {
+		t.Fatalf("probeContext(hung-reauth) = %v, want probeAuth", outcome)
 	}
 }
 
@@ -1990,6 +2110,21 @@ func TestRestoreNamespaceContext(t *testing.T) {
 	}
 }
 
+func newTypeK8sInspectMockExecutor() *MockExecutor {
+	okDescribe := shell.CommandResult{ExitCode: 0, Stdout: "ok"}
+	okWorkloads := shell.CommandResult{ExitCode: 0, Stdout: `{"items":[]}`}
+	return NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get --raw /version":                {{ExitCode: 0, Stdout: `{"major":"1","minor":"32"}`}},
+		"kubectl get --raw /apis/kueue.x-k8s.io":    {{ExitCode: 0, Stdout: "{}"}},
+		"kubectl get nodes -o wide":                 {{ExitCode: 0, Stdout: "NAME STATUS\n"}},
+		"kubectl get nodes -o json":                 {{ExitCode: 0, Stdout: `{"items":[]}`}},
+		"kubectl describe ":                         {okDescribe, okDescribe, okDescribe, okDescribe, okDescribe},
+		"kubectl logs ":                             {{ExitCode: 0, Stdout: "controller ok"}, {ExitCode: 0, Stdout: "controller ok"}},
+		"kubectl get crd topologies.kueue.x-k8s.io": {{ExitCode: 1, Stderr: "NotFound"}},
+		"kubectl get workloads ":                    {okWorkloads, okWorkloads, okWorkloads},
+	})
+}
+
 func TestTypeK8s_ZeroGCloudAcrossLifecycle(t *testing.T) {
 	cfg := clientcmdapi.NewConfig()
 	cfg.Clusters["local-k8s"] = &clientcmdapi.Cluster{Server: "https://10.128.0.68:6443"}
@@ -2007,19 +2142,22 @@ func TestTypeK8s_ZeroGCloudAcrossLifecycle(t *testing.T) {
 	orc := rawOrc.(*GKEOrchestrator)
 	orc.kubeconfigLoader = staticLoader(cfg)
 
-	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
-		"kubectl": {{ExitCode: 0, Stdout: ""}},
-	})
+	mockExec := newTypeK8sInspectMockExecutor()
 	orc.SetExecutor(mockExec)
 
 	submitErr := orc.SubmitJob(orchestrator.JobDefinition{
-		WorkloadName: "blocked-job",
-		ImageName:    "busybox:latest",
-		CommandToRun: "echo hi",
+		WorkloadName:           "blocked-job",
+		ImageName:              "busybox:latest",
+		CommandToRun:           "echo hi",
+		GKENamespace:           "should-not-mutate",
+		GkeCustomTemplatesPath: "/should-not-mutate",
 	})
 	wantSubmitErr := orchestrator.UnsupportedK8sSubmitError().Error()
 	if submitErr == nil || submitErr.Error() != wantSubmitErr {
 		t.Fatalf("SubmitJob(TypeK8s) error = %v, want %q", submitErr, wantSubmitErr)
+	}
+	if orc.namespace != "" || orc.gkeCustomTemplatesPath != "" {
+		t.Fatalf("SubmitJob(TypeK8s) mutated state: namespace=%q customTemplatesPath=%q, want both empty", orc.namespace, orc.gkeCustomTemplatesPath)
 	}
 	if len(mockExec.calls) != 0 {
 		t.Fatalf("SubmitJob(TypeK8s) calls = %v, want 0 subprocess calls", mockExec.calls)
@@ -2061,6 +2199,9 @@ func assertTypeK8sInspectClean(t *testing.T, mockExec *MockExecutor, outPath str
 	if strings.Contains(string(inspectBytes), "console.cloud.google.com") {
 		t.Errorf("TypeK8s InspectCluster output must not emit broken Google Cloud Console URLs")
 	}
+	if strings.Contains(string(inspectBytes), "mock error:") {
+		t.Errorf("TypeK8s InspectCluster output contained unmocked command failure:\n%s", string(inspectBytes))
+	}
 }
 
 func assertInspectSanitizesClusterFilename(t *testing.T, orc *GKEOrchestrator) {
@@ -2074,9 +2215,7 @@ func assertInspectSanitizesClusterFilename(t *testing.T, orc *GKEOrchestrator) {
 	orc.kubeconfigLoader = staticLoader(cfg)
 	orc.kubeContext = eksARN
 	orc.k8sCluster = eksARN
-	orc.SetExecutor(NewMockExecutor(map[string][]shell.CommandResult{
-		"kubectl": {{ExitCode: 0, Stdout: ""}},
-	}))
+	orc.SetExecutor(newTypeK8sInspectMockExecutor())
 
 	if err := orc.InspectCluster(orchestrator.InspectOptions{ClusterName: eksARN}); err != nil {
 		t.Fatalf("InspectCluster(EKS ARN default output) error = %v", err)
@@ -2084,6 +2223,10 @@ func assertInspectSanitizesClusterFilename(t *testing.T, orc *GKEOrchestrator) {
 	matches, err := filepath.Glob(filepath.Join(tmpDir, "gcluster-inspect-arn-aws-eks-us-west-2-123456789012-cluster-prod-ml-*.log"))
 	if err != nil || len(matches) != 1 {
 		t.Fatalf("sanitized inspect output matches = %v (err=%v), want 1 file", matches, err)
+	}
+	inspectBytes, err := os.ReadFile(matches[0])
+	if err != nil || strings.Contains(string(inspectBytes), "mock error:") {
+		t.Fatalf("sanitized inspect output err=%v or contained mock error:\n%s", err, string(inspectBytes))
 	}
 	for _, degenerate := range []string{"", "../..", ":::", "___"} {
 		if got := sanitizeInspectFileSegment(degenerate); got != "cluster" {
@@ -2167,6 +2310,7 @@ func TestTypeK8s_ConfigureKubectlReResolutionSyncsDynamicClient(t *testing.T) {
 		t.Fatalf("NewJobOrchestrator error = %v", err)
 	}
 	orc := rawOrc.(*GKEOrchestrator)
+	orc.SetExecutor(NewMockExecutor(nil))
 	orc.kubeconfigLoader = staticLoader(cfg)
 
 	if _, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: "cluster-a"}); err != nil {
@@ -2176,8 +2320,11 @@ func TestTypeK8s_ConfigureKubectlReResolutionSyncsDynamicClient(t *testing.T) {
 		t.Fatalf("hits after cluster-a = (%d, %d), want (1, 0)", hitsA.Load(), hitsB.Load())
 	}
 
-	if err := orc.configureKubectl("cluster-b", "", ""); err != nil || orc.kubeContext != "ctx-b" {
-		t.Fatalf("configureKubectl(cluster-b) = (%v, %q), want (nil, ctx-b)", err, orc.kubeContext)
+	if _, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: "cluster-b"}); err != nil {
+		t.Fatalf("ListJobs(cluster-b) error = %v", err)
+	}
+	if hitsA.Load() != 1 || hitsB.Load() != 1 {
+		t.Fatalf("hits after direct ListJobs(cluster-b) = (%d, %d), want (1, 1)", hitsA.Load(), hitsB.Load())
 	}
 	kc := orc.usableKubeClient()
 	if kc == nil {
@@ -2186,11 +2333,57 @@ func TestTypeK8s_ConfigureKubectlReResolutionSyncsDynamicClient(t *testing.T) {
 	if _, err := kc.ListJobSets("ns-b", ""); err != nil {
 		t.Fatalf("usableKubeClient().ListJobSets(ns-b) error = %v", err)
 	}
-	if hitsA.Load() != 1 || hitsB.Load() != 1 {
-		t.Fatalf("hits after cluster-b usableKubeClient = (%d, %d), want (1, 1)", hitsA.Load(), hitsB.Load())
+	if hitsA.Load() != 1 || hitsB.Load() != 2 {
+		t.Fatalf("hits after cluster-b usableKubeClient = (%d, %d), want (1, 2)", hitsA.Load(), hitsB.Load())
 	}
 	assertUnseededClusterAndErrorInvalidation(t, cfg)
+	assertSameContextGKERegenerateInvalidatesDynamicClient(t, srvA.URL, srvB.URL, &hitsA, &hitsB)
 	assertInjectedDynamicClientPreserved(t, orc)
+}
+
+func assertSameContextGKERegenerateInvalidatesDynamicClient(t *testing.T, urlA, urlB string, hitsA, hitsB *atomic.Int32) {
+	t.Helper()
+	activeURL := urlA
+	exec := newExactExecutor(map[string][]shell.CommandResult{
+		getCredsIP: {{ExitCode: 0}},
+		setNSCmd:   {{ExitCode: 0}},
+		probeCmd:   {{ExitCode: 0}},
+	})
+	orc := newTestGKEOrchestrator(exec)
+	orc.mode = orchestrator.TypeGKE
+	orc.kubeClient = nil
+	orc.clusterDesc = testClusterDesc(false, true)
+	orc.kubeconfigLoader = func() (*clientcmdapi.Config, error) {
+		c := clientcmdapi.NewConfig()
+		c.Clusters[testContext] = &clientcmdapi.Cluster{Server: activeURL}
+		c.Contexts[testContext] = &clientcmdapi.Context{Cluster: testContext, Namespace: "team-ns"}
+		return c, nil
+	}
+	orc.kubeContext = testContext
+
+	beforeA, beforeB := hitsA.Load(), hitsB.Load()
+	if kc := orc.usableKubeClient(); kc == nil {
+		t.Fatal("initial GKE usableKubeClient() = nil")
+	} else if _, err := kc.ListJobSets("team-ns", ""); err != nil {
+		t.Fatalf("initial GKE ListJobSets error = %v", err)
+	}
+	if hitsA.Load() != beforeA+1 || hitsB.Load() != beforeB {
+		t.Fatalf("hits before same-context regenerate = (%d, %d), want (%d, %d)", hitsA.Load(), hitsB.Load(), beforeA+1, beforeB)
+	}
+
+	activeURL = urlB
+	if err := orc.regenerateKubeContext(testCluster, testLocation, testProject, endpointModeUnknown); err != nil {
+		t.Fatalf("regenerateKubeContext error = %v", err)
+	}
+	if _, err := orc.getDynamicClient(); err != nil {
+		t.Fatalf("getDynamicClient after same-context regenerate error = %v", err)
+	}
+	if _, err := orc.kubeClient.ListJobSets("team-ns", ""); err != nil {
+		t.Fatalf("ListJobSets after same-context regenerate error = %v", err)
+	}
+	if hitsA.Load() != beforeA+1 || hitsB.Load() != beforeB+1 {
+		t.Fatalf("hits after same-context regenerate = (%d, %d), want (%d, %d)", hitsA.Load(), hitsB.Load(), beforeA+1, beforeB+1)
+	}
 }
 
 func assertUnseededClusterAndErrorInvalidation(t *testing.T, cfg *clientcmdapi.Config) {
@@ -2206,6 +2399,7 @@ func assertUnseededClusterAndErrorInvalidation(t *testing.T, cfg *clientcmdapi.C
 		t.Fatalf("NewJobOrchestrator(empty ClusterName) error = %v", err)
 	}
 	orc := rawOrc.(*GKEOrchestrator)
+	orc.SetExecutor(NewMockExecutor(nil))
 	orc.kubeconfigLoader = staticLoader(cfgWithCurrent)
 
 	if err := orc.configureKubectl("cluster-b", "", ""); err != nil || orc.kubeContext != "ctx-b" || orc.k8sCluster != "cluster-b" {
@@ -2215,8 +2409,11 @@ func assertUnseededClusterAndErrorInvalidation(t *testing.T, cfg *clientcmdapi.C
 		t.Fatal("usableKubeClient() after cluster-b resolution = nil, want initialized client")
 	}
 
-	if err := orc.configureKubectl("unknown-cluster", "", ""); err == nil {
-		t.Fatal("configureKubectl(unknown-cluster) = nil, want error")
+	if err := orc.configureKubectl("unknown-cluster", "", ""); err == nil || !strings.Contains(err.Error(), "was not found") {
+		t.Fatalf("configureKubectl(unknown-cluster) = %v, want error containing \"was not found\"", err)
+	}
+	if orc.dynClient != nil {
+		t.Fatalf("dynClient after failed configureKubectl = %v, want nil", orc.dynClient)
 	}
 	if orc.kubeContext != "" || orc.k8sCluster != "" {
 		t.Fatalf("after failed configureKubectl: kubeContext=%q k8sCluster=%q, want both empty", orc.kubeContext, orc.k8sCluster)
@@ -2238,6 +2435,61 @@ func assertInjectedDynamicClientPreserved(t *testing.T, orc *GKEOrchestrator) {
 	if err != nil || gotDyn != injected {
 		t.Fatalf("getDynamicClient() with injected client = (%v, %v), want (%v, nil)", gotDyn, err, injected)
 	}
+}
+
+func assertStorageCachesReset(t *testing.T, orc *GKEOrchestrator, step string) {
+	t.Helper()
+	if len(orc.inspectedPVCs) != 0 || orc.nfsAuthChecked {
+		t.Fatalf("after %s: inspectedPVCs=%v nfsAuthChecked=%v, want empty and false", step, orc.inspectedPVCs, orc.nfsAuthChecked)
+	}
+}
+
+func TestTypeK8s_ConfigureKubectlResetsStorageCaches(t *testing.T) {
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters["cluster-a"] = &clientcmdapi.Cluster{Server: "https://10.0.0.1:6443"}
+	cfg.Clusters["cluster-b"] = &clientcmdapi.Cluster{Server: "https://10.0.0.2:6443"}
+	cfg.Contexts["ctx-a"] = &clientcmdapi.Context{Cluster: "cluster-a", Namespace: "ns-a"}
+	cfg.Contexts["ctx-b"] = &clientcmdapi.Context{Cluster: "cluster-b", Namespace: "ns-b"}
+
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.mode = orchestrator.TypeK8s
+	orc.kubeconfigLoader = staticLoader(cfg)
+	orc.kubeContext = "ctx-a"
+	orc.k8sCluster = "cluster-a"
+
+	seedCaches := func() {
+		orc.inspectedPVCs = map[string]pvcInspectResult{"ns-a/stale": {volumeName: "pv-old"}}
+		orc.nfsAuthChecked = true
+	}
+
+	// 1. Context switch ("cluster-a" -> "cluster-b") clears storage caches.
+	seedCaches()
+	if err := orc.configureKubectl("cluster-b", "", ""); err != nil || orc.kubeContext != "ctx-b" {
+		t.Fatalf("configureKubectl(cluster-b) = (%v, %q), want (nil, ctx-b)", err, orc.kubeContext)
+	}
+	assertStorageCachesReset(t, orc, "context switch")
+
+	// 2. Same-context short-circuit reuse ("cluster-b" -> "cluster-b") also clears storage caches.
+	seedCaches()
+	if err := orc.configureKubectl("cluster-b", "", ""); err != nil || orc.kubeContext != "ctx-b" {
+		t.Fatalf("configureKubectl(same cluster-b) = (%v, %q), want (nil, ctx-b)", err, orc.kubeContext)
+	}
+	assertStorageCachesReset(t, orc, "same-context reuse")
+
+	// 3. Failed context lookup ("unknown-cluster") clears storage caches alongside kubeContext.
+	seedCaches()
+	if err := orc.configureKubectl("unknown-cluster", "", ""); err == nil || !strings.Contains(err.Error(), "was not found") {
+		t.Fatalf("configureKubectl(unknown-cluster) = %v, want error containing \"was not found\"", err)
+	}
+	assertStorageCachesReset(t, orc, "failed lookup")
+
+	// 4. Kubeconfig loader failure also clears storage caches before configureK8sKubectl returns.
+	orc.kubeconfigLoader = func() (*clientcmdapi.Config, error) { return nil, errors.New("load fault") }
+	seedCaches()
+	if err := orc.configureKubectl("cluster-a", "", ""); err == nil || !strings.Contains(err.Error(), "load fault") {
+		t.Fatalf("configureKubectl(load fault) = %v, want load fault error", err)
+	}
+	assertStorageCachesReset(t, orc, "kubeconfig load fault")
 }
 
 func TestTypeK8s_LogsAllPodsHintsAndBatchedStreamScaling(t *testing.T) {
@@ -2455,6 +2707,16 @@ func TestTypeK8s_InspectClusterFailsFastOnUnreachableOrUnauthorizedContext(t *te
 			stderr:     "error: You must be logged in to the server (Unauthorized)",
 			wantSubstr: "authentication to Kubernetes context",
 		},
+		{
+			name:       "expired_oidc_id_token",
+			stderr:     "Unable to connect to the server: No valid id-token, and cannot refresh without refresh-token",
+			wantSubstr: "authentication to Kubernetes context",
+		},
+		{
+			name:       "missing_certificate_authority_file",
+			stderr:     "error: unable to read certificate-authority /missing/ca.crt for local-k8s due to open /missing/ca.crt: no such file or directory",
+			wantSubstr: "cannot verify Kubernetes context",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
@@ -2479,14 +2741,61 @@ func TestTypeK8s_InspectClusterFailsFastOnUnreachableOrUnauthorizedContext(t *te
 			}
 		})
 	}
+
+	assertTypeK8sInspectProceedsOnForbiddenAndUnknownProbe(t, cfg)
+}
+
+func assertTypeK8sInspectProceedsOnForbiddenAndUnknownProbe(t *testing.T, cfg *clientcmdapi.Config) {
+	t.Helper()
+	for _, tc := range []struct {
+		name     string
+		stderr   string
+		wantWarn bool
+	}{
+		{
+			name:   "rbac_forbidden_on_version_proceeds",
+			stderr: `Error from server (Forbidden): forbidden: User "dev" cannot get path "/version"`,
+		},
+		{
+			name:     "unknown_probe_error_warns_and_proceeds",
+			stderr:   "custom apiserver banner error",
+			wantWarn: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := newTypeK8sInspectMockExecutor()
+			mockExec.responses["kubectl get --raw /version"] = []shell.CommandResult{{ExitCode: 1, Stderr: tc.stderr}}
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.mode = orchestrator.TypeK8s
+			orc.kubeconfigLoader = staticLoader(cfg)
+			orc.kubeContext = "k8s-ctx"
+			orc.k8sCluster = "local-k8s"
+			outPath := filepath.Join(t.TempDir(), "inspect-ok.log")
+
+			snapLogs, restoreLogs := logging.CaptureForTesting()
+			defer restoreLogs()
+			if err := orc.InspectCluster(orchestrator.InspectOptions{ClusterName: "local-k8s", OutputPath: outPath}); err != nil {
+				t.Fatalf("InspectCluster(%s) error = %v, want nil", tc.name, err)
+			}
+			_, warnErrOut := snapLogs()
+			if tc.wantWarn != strings.Contains(warnErrOut, "Could not verify Kubernetes context") {
+				t.Errorf("InspectCluster(%s) warn output = %q, wantWarn=%v", tc.name, warnErrOut, tc.wantWarn)
+			}
+			if _, statErr := os.Stat(outPath); statErr != nil {
+				t.Errorf("InspectCluster(%s) did not create %s: %v", tc.name, outPath, statErr)
+			}
+		})
+	}
 }
 
 func TestDetectGKE_IncompleteContextSelfHealing(t *testing.T) {
 	cfg := clientcmdapi.NewConfig()
 	cfg.Contexts["half-written-ctx"] = &clientcmdapi.Context{Cluster: "missing-cluster", AuthInfo: "missing-user"}
 	cfg.Clusters["empty-server-clus"] = &clientcmdapi.Cluster{Server: "   "}
+	cfg.Clusters["valid-server-clus"] = &clientcmdapi.Cluster{Server: "https://34.118.224.10"}
 	cfg.AuthInfos["valid-user"] = &clientcmdapi.AuthInfo{Token: "tok"}
 	cfg.Contexts["empty-server-ctx"] = &clientcmdapi.Context{Cluster: "empty-server-clus", AuthInfo: "valid-user"}
+	cfg.Contexts["missing-user-ctx"] = &clientcmdapi.Context{Cluster: "valid-server-clus", AuthInfo: "missing-user"}
 	cfg.CurrentContext = "half-written-ctx"
 
 	runnerCalls := 0
@@ -2498,7 +2807,7 @@ func TestDetectGKE_IncompleteContextSelfHealing(t *testing.T) {
 	if det, ok := detectGKE(orchestrator.ProbeInput{Config: cfg, Runner: runner}); ok || runnerCalls != 0 {
 		t.Fatalf("detectGKE(incomplete context without GKE flags) = (%+v, %v), runnerCalls=%d, want (_, false, 0)", det, ok, runnerCalls)
 	}
-	for _, ctxName := range []string{"half-written-ctx", "empty-server-ctx"} {
+	for _, ctxName := range []string{"half-written-ctx", "empty-server-ctx", "missing-user-ctx"} {
 		det, ok := detectGKE(orchestrator.ProbeInput{
 			Config:      cfg,
 			ClusterName: ctxName,

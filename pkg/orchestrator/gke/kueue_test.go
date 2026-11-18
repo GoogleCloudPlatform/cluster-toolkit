@@ -20,6 +20,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -1802,18 +1804,22 @@ func TestAirGapAndSafeReinstall_DownloadBeforeDelete(t *testing.T) {
 		}
 	})
 
-	t.Run("reinstall_aborts_before_delete_on_air_gap_or_download_failure", func(t *testing.T) {
+	t.Run("reinstall_aborts_before_delete_on_download_validation_or_write_failure", func(t *testing.T) {
 		assertReinstallAbortsBeforeDelete(t)
+	})
+
+	t.Run("air_gap_fast_fails_before_rbac_or_prompt", func(t *testing.T) {
 		assertAirGapFastFailBeforeRBAC(t)
 	})
 
-	t.Run("reinstall_downloads_before_delete_and_logs_target_version", func(t *testing.T) {
+	t.Run("reinstall_downloads_and_writes_before_delete_and_logs_target_version", func(t *testing.T) {
 		assertHappyPathKueueReinstallOrder(t)
 	})
 }
 
 func assertReinstallAbortsBeforeDelete(t *testing.T) {
 	t.Helper()
+	t.Setenv(shell.AirGappedEnvVar, "")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -1846,38 +1852,103 @@ func assertReinstallAbortsBeforeDelete(t *testing.T) {
 		t.Fatal("DeleteAllKueueResources ran before manifest download succeeded")
 	}
 
+	assertInvalidManifestBodiesAbortBeforeDelete(t, orc, &deleteCalled)
+	assertUnwritableHomeAbortsBeforeDelete(t, orc, &deleteCalled)
+}
+
+func assertInvalidManifestBodiesAbortBeforeDelete(t *testing.T, orc *GKEOrchestrator, deleteCalled *bool) {
+	t.Helper()
+	for _, tc := range []struct {
+		name       string
+		body       string
+		wantSubstr string
+	}{
+		{
+			name:       "html_scalar_body",
+			body:       "<html>proxy error</html>",
+			wantSubstr: "expected Kubernetes manifest object with apiVersion and kind",
+		},
+		{
+			name:       "json_map_missing_apiversion_and_kind",
+			body:       `{"message":"API rate limit exceeded"}`,
+			wantSubstr: "expected Kubernetes manifest object with apiVersion and kind",
+		},
+		{
+			name:       "yaml_map_missing_kind",
+			body:       "apiVersion: v1\nmetadata:\n  name: incomplete\n",
+			wantSubstr: "expected Kubernetes manifest object with apiVersion and kind",
+		},
+		{
+			name:       "empty_document_stream",
+			body:       "---\n# comments only\n---\n",
+			wantSubstr: "manifest stream is empty",
+		},
+	} {
+		orc.httpClient = &mockHTTPClient{
+			getFunc: func(string) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(strings.NewReader(tc.body)),
+				}, nil
+			},
+		}
+		err := orc.handleKueueReinstallation("v0.15.2", "incomplete")
+		if err == nil || !strings.Contains(err.Error(), tc.wantSubstr) {
+			t.Fatalf("handleKueueReinstallation(%s) = %v, want substring %q", tc.name, err, tc.wantSubstr)
+		}
+		if *deleteCalled {
+			t.Fatalf("DeleteAllKueueResources ran despite invalid manifest (%s)", tc.name)
+		}
+	}
+}
+
+func assertUnwritableHomeAbortsBeforeDelete(t *testing.T, orc *GKEOrchestrator, deleteCalled *bool) {
+	t.Helper()
+	blockedHome := t.TempDir()
+	// Placing a regular file at ~/.gcluster fails MkdirAll(~/.gcluster/generated) deterministically even when running as root.
+	if err := os.WriteFile(filepath.Join(blockedHome, ".gcluster"), []byte("blocker"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", blockedHome)
+	t.Setenv("USERPROFILE", blockedHome)
 	orc.httpClient = &mockHTTPClient{
 		getFunc: func(string) (*http.Response, error) {
 			return &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader("<html>proxy error</html>")),
+				Body:       io.NopCloser(strings.NewReader("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: kueue-system\n")),
 			}, nil
 		},
 	}
-	if err := orc.handleKueueReinstallation("v0.15.2", "incomplete"); err == nil || !strings.Contains(err.Error(), "failed to decode YAML document") {
-		t.Fatalf("handleKueueReinstallation(non-manifest body) = %v, want YAML decode error", err)
+	err := orc.handleKueueReinstallation("v0.15.2", "incomplete")
+	if err == nil || !strings.Contains(err.Error(), "failed to create directory for generated manifests") {
+		t.Fatalf("handleKueueReinstallation(unwritable HOME) = %v, want directory creation error", err)
 	}
-	if deleteCalled {
-		t.Fatal("DeleteAllKueueResources ran despite non-manifest HTTP response")
-	}
-
-	t.Setenv(shell.AirGappedEnvVar, "true")
-	promptCalled := false
-	shell.PromptYesNo = func(string) bool { promptCalled = true; return true }
-	if err := orc.handleKueueReinstallation("v0.15.2", "incomplete"); err == nil || !strings.Contains(err.Error(), shell.AirGappedEnvVar) {
-		t.Fatalf("handleKueueReinstallation(air-gapped) = %v, want %s error", err, shell.AirGappedEnvVar)
-	}
-	if promptCalled || deleteCalled {
-		t.Fatalf("air-gapped reinstall prompted=%v deleted=%v, want both false", promptCalled, deleteCalled)
+	if *deleteCalled {
+		t.Fatal("DeleteAllKueueResources ran before local kueue.yaml manifest write succeeded")
 	}
 }
 
 func assertAirGapFastFailBeforeRBAC(t *testing.T) {
 	t.Helper()
+	t.Setenv(shell.AirGappedEnvVar, "true")
+	origPrompt := shell.PromptYesNo
+	t.Cleanup(func() { shell.PromptYesNo = origPrompt })
+	promptCalled := false
+	shell.PromptYesNo = func(string) bool {
+		promptCalled = true
+		return true
+	}
+
 	canICalled := false
 	airGapOrc := &GKEOrchestrator{
 		kubeContext: "gke-ctx",
 		kubeClient:  &MockKubeClient{},
+		httpClient: &mockHTTPClient{
+			getFunc: func(string) (*http.Response, error) {
+				t.Errorf("unexpected outbound HTTP call while %s=true", shell.AirGappedEnvVar)
+				return nil, errors.New("forbidden outbound HTTP")
+			},
+		},
 		executor: &mockExecutor{
 			executeCommandFunc: func(name string, args ...string) shell.CommandResult {
 				full := name + " " + strings.Join(args, " ")
@@ -1900,13 +1971,14 @@ func assertAirGapFastFailBeforeRBAC(t *testing.T) {
 	if err := airGapOrc.CheckAndInstallKueue("v0.15.2", "clus", "us-central1"); err == nil || !strings.Contains(err.Error(), shell.AirGappedEnvVar) {
 		t.Fatalf("CheckAndInstallKueue(air-gapped) = %v, want %s error", err, shell.AirGappedEnvVar)
 	}
-	if canICalled {
-		t.Fatal("kubectl auth can-i must not run when GCLUSTER_AIR_GAPPED=true blocks installation")
+	if canICalled || promptCalled {
+		t.Fatalf("air-gapped installation ran can-i=%v prompt=%v, want both false", canICalled, promptCalled)
 	}
 }
 
 func assertHappyPathKueueReinstallOrder(t *testing.T) {
 	t.Helper()
+	t.Setenv(shell.AirGappedEnvVar, "")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -1914,12 +1986,22 @@ func assertHappyPathKueueReinstallOrder(t *testing.T) {
 	t.Cleanup(func() { shell.PromptYesNo = origPrompt })
 	shell.PromptYesNo = func(string) bool { return true }
 
+	manifestPath := filepath.Join(home, ".gcluster", "generated", "kueue.yaml")
 	var events []string
+	applyMustFail := false
 	mock := &mockExecutor{
 		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
 			full := name + " " + strings.Join(args, " ")
 			if name == "kubectl" && !strings.HasPrefix(strings.Join(args, " "), "--context gke-ctx ") {
 				t.Errorf("unpinned kubectl call in handleKueueReinstallation: %q", full)
+			}
+			if strings.Contains(full, "delete crd") {
+				if _, statErr := os.Stat(manifestPath); statErr != nil {
+					t.Errorf("kueue.yaml not written to disk before DeleteAllKueueResources: %v", statErr)
+				}
+			}
+			if applyMustFail && strings.Contains(full, "apply -f") {
+				return shell.CommandResult{ExitCode: 1, Stderr: "apiserver webhook timeout"}
 			}
 			recordKueueReinstallEvent(full, &events)
 			return mockKueueReinstallReadResult(full)
@@ -1950,6 +2032,13 @@ func assertHappyPathKueueReinstallOrder(t *testing.T) {
 	infoOut, _ := snapLogs()
 	if !strings.Contains(infoOut, "Installing Kueue version v0.15.2...") {
 		t.Errorf("info logs missing target version message; got:\n%s", infoOut)
+	}
+
+	applyMustFail = true
+	applyErr := orc.handleKueueReinstallation("v0.15.2", "incomplete")
+	wantRecovery := "kubectl --context gke-ctx apply -f"
+	if applyErr == nil || !strings.Contains(applyErr.Error(), wantRecovery) {
+		t.Fatalf("handleKueueReinstallation(apply failure) = %v, want recovery hint %q", applyErr, wantRecovery)
 	}
 }
 

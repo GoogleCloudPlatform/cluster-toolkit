@@ -249,7 +249,11 @@ func checkK8sDependencies(state *PrereqState, missing *[]missingPrereq) {
 		checkLocalCLI("kubectl", []string{"version", "--client", "--output=json"}, nil, &state.KubectlInstalled, missing)
 	}
 	if !state.GKEGCloudAuthPluginInstalled {
-		checkLocalCLI("gke-gcloud-auth-plugin", []string{"--version"}, nil, &state.GKEGCloudAuthPluginInstalled, missing)
+		pluginHints := []string{
+			"gcloud components install gke-gcloud-auth-plugin --quiet   # gcloud from Google's installer, Homebrew, or Windows SDK",
+			"# or install google-cloud-cli-gke-gcloud-auth-plugin with apt/dnf on Linux if gcloud came from a system package",
+		}
+		checkLocalCLI("gke-gcloud-auth-plugin", []string{"--version"}, pluginHints, &state.GKEGCloudAuthPluginInstalled, missing)
 	}
 }
 
@@ -355,7 +359,7 @@ func ensureGKEBasicPrerequisites(cmd *cobra.Command, projectID string) error {
 func ensureK8sOnlyBasicPrerequisites(cmd *cobra.Command) error {
 	state := store.Load()
 	if !isTimestampExpired(state) && state.KubectlInstalled {
-		logging.Info("Skipping basic checks; kubectl prerequisite is fresh (checked: %v ago).", time.Since(state.LastCheckedTimestamp).Round(time.Second))
+		logging.Info("Skipping basic checks; cached kubectl prerequisite is fresh.")
 		return nil
 	}
 	state = expireStalePrereqState(state)

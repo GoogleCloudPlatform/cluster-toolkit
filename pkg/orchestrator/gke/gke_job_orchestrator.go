@@ -1708,7 +1708,11 @@ func (g *GKEOrchestrator) restConfig() (*rest.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	return clientcmd.NewNonInteractiveClientConfig(*cfg, g.kubeContext, &clientcmd.ConfigOverrides{}, nil).ClientConfig()
+	var configAccess clientcmd.ConfigAccess
+	if g.kubeconfigLoader == nil {
+		configAccess = clientcmd.NewDefaultPathOptions()
+	}
+	return clientcmd.NewNonInteractiveClientConfig(*cfg, g.kubeContext, &clientcmd.ConfigOverrides{}, configAccess).ClientConfig()
 }
 
 func (g *GKEOrchestrator) awaitJobCompletion(workloadName, clusterName, clusterLocation, projectID, timeout string) error {

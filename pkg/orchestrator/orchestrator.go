@@ -131,7 +131,7 @@ func NewJobOrchestrator(det Detection) (JobOrchestrator, error) {
 
 // UnsupportedK8sSubmitError returns the error reported when workload submission is attempted in TypeK8s mode.
 func UnsupportedK8sSubmitError() error {
-	return fmt.Errorf("workload submission ('gcluster job submit') in generic Kubernetes (k8s) mode is not yet supported (supported commands today are 'list', 'logs', 'cancel', and 'inspect'); to submit to a GKE cluster, unset %[1]s (or set %[1]s=gke) and pass --cluster, --location, and --project", EnvVar)
+	return fmt.Errorf("gcluster job submit is not yet supported in Kubernetes (k8s) mode (supported: list, logs, cancel, inspect); for GKE, pass --cluster, --location, and --project (with %s=gke if needed)", EnvVar)
 }
 
 var ValidPriorityClasses = []string{"very-low", "low", "medium", "high", "very-high"}

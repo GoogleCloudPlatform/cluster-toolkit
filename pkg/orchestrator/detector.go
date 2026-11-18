@@ -53,11 +53,15 @@ func (d *Detector) Detect(clusterName, location, projectID string) (Detection, e
 	}
 
 	cfg, loadErr := d.loadKubeconfig()
+	probeCfg := cfg
+	if loadErr != nil {
+		probeCfg = nil
+	}
 	input := ProbeInput{
 		ClusterName: clusterName,
 		Location:    location,
 		ProjectID:   projectID,
-		Config:      cfg,
+		Config:      probeCfg,
 		AirGapped:   shell.IsAirGappedEnv(getenv),
 		Getenv:      getenv,
 		Runner:      d.runner(),
@@ -70,6 +74,9 @@ func (d *Detector) Detect(clusterName, location, projectID string) (Detection, e
 			return det, nil
 		}
 	}
+	if loadErr != nil {
+		return Detection{}, fmt.Errorf("failed to load kubeconfig: %w", loadErr)
+	}
 
 	ctxName, _, resolvedCluster, ok := k8s.ResolveContext(cfg, clusterName)
 	if !ok {
@@ -79,7 +86,7 @@ func (d *Detector) Detect(clusterName, location, projectID string) (Detection, e
 		Type:        TypeK8s,
 		KubeContext: ctxName,
 		ClusterName: resolvedCluster,
-		Reason:      fmt.Sprintf("kubeconfig context %q selected for Kubernetes mode", ctxName),
+		Reason:      fmt.Sprintf("kubeconfig context %q", ctxName),
 	}, nil
 }
 
@@ -89,6 +96,12 @@ func (d *Detector) detectFromOverride(target Type, clusterName, location, projec
 		return Detection{}, fmt.Errorf("invalid %s=%q; supported values: %s", EnvVar, target, formatQuotedTypes(supported))
 	}
 	cfg, loadErr := d.loadKubeconfig()
+	if target == TypeK8s && loadErr != nil {
+		return Detection{}, fmt.Errorf("failed to load kubeconfig: %w", loadErr)
+	}
+	if loadErr != nil {
+		cfg = nil
+	}
 	reason := fmt.Sprintf("forced by %s=%s", EnvVar, target)
 	ctxName, resolvedCluster, resolved := resolveOverrideContext(cfg, target, clusterName, location, projectID, providers)
 	if !resolved {

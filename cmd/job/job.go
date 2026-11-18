@@ -45,36 +45,61 @@ var JobCmd = &cobra.Command{
 	Use:   "job",
 	Short: "Manage jobs on the cluster.",
 	Long: `Submit batch and distributed workloads on GKE clusters, and monitor or manage workloads (list, logs, cancel, inspect) across GKE and Kubernetes clusters.
-Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic KUBECONFIG detection, or GCLUSTER_AIR_GAPPED=true in disconnected environments.`,
+Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic kubeconfig detection, or GCLUSTER_AIR_GAPPED=true in disconnected environments.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Name() == "gke-template-extract" {
 			return nil
 		}
 
-		usedSaved, err := applySavedContextDefaults(cmd)
+		savedCluster, savedGKE, err := applySavedContextDefaults(cmd)
 		if err != nil {
 			return err
 		}
 
-		det, err := (&orchestrator.Detector{}).Detect(clusterName, location, projectID)
+		det, err := detectJobOrchestrator(cmd, savedGKE)
 		if err != nil {
 			return err
 		}
-		if clusterName == "" && (location != "" || projectID != "") && (!det.Forced || det.Type != orchestrator.TypeK8s) {
+		if isMissingClusterWithGKEFlags(det) {
+			logSavedDefaultsIfActive(orchestrator.TypeGKE, savedCluster, savedGKE)
 			return validateTypeGKEFlags(cmd.Name(), det, clusterName, location, projectID)
 		}
 		reconcileTypeK8sFlags(cmd, det)
+		logSavedDefaultsIfActive(det.Type, savedCluster, savedGKE)
 
 		if err := validateOrchestratorFlags(cmd.Name(), det, clusterName, location, projectID); err != nil {
 			return err
-		}
-		if usedSaved && det.Type == orchestrator.TypeGKE {
-			logging.Info("Using saved job config defaults (run 'gcluster job config show' to view or 'gcluster job config unset all' to clear).")
 		}
 		logging.Info("Orchestrator: %s (%s)", det.Type, det.Reason)
 
 		return initCommandOrchestrator(cmd, det)
 	},
+}
+
+func detectJobOrchestrator(cmd *cobra.Command, savedGKE bool) (orchestrator.Detection, error) {
+	d := &orchestrator.Detector{}
+	if strings.TrimSpace(os.Getenv(orchestrator.EnvVar)) == "" &&
+		cmd.Flags().Changed("cluster") && clusterName != "" &&
+		!cmd.Flags().Changed("location") && !cmd.Flags().Changed("project") && savedGKE {
+		det, err := d.Detect(clusterName, "", "")
+		if err != nil {
+			return orchestrator.Detection{}, err
+		}
+		if det.Type != orchestrator.TypeK8s || det.KubeContext != "" {
+			return det, nil
+		}
+	}
+	return d.Detect(clusterName, location, projectID)
+}
+
+func isMissingClusterWithGKEFlags(det orchestrator.Detection) bool {
+	return clusterName == "" && (location != "" || projectID != "") && (!det.Forced || det.Type != orchestrator.TypeK8s)
+}
+
+func logSavedDefaultsIfActive(detType orchestrator.Type, savedCluster, savedGKE bool) {
+	if savedCluster || (detType == orchestrator.TypeGKE && savedGKE) {
+		logging.Info("Using saved job config defaults (run 'gcluster job config show' to view or 'gcluster job config unset all' to clear).")
+	}
 }
 
 func initCommandOrchestrator(cmd *cobra.Command, det orchestrator.Detection) error {
@@ -102,29 +127,33 @@ func initCommandOrchestrator(cmd *cobra.Command, det orchestrator.Detection) err
 	return nil
 }
 
-func applySavedContextDefaults(cmd *cobra.Command) (bool, error) {
+func applySavedContextDefaults(cmd *cobra.Command) (bool, bool, error) {
 	var ctx Context
 	if override := strings.TrimSpace(os.Getenv(orchestrator.EnvVar)); override == "" || strings.EqualFold(override, string(orchestrator.TypeGKE)) {
 		var err error
 		ctx, err = loadContext()
 		if err != nil {
-			return false, err
+			return false, false, err
 		}
 	}
-	usedSaved := false
+	savedCluster := false
+	savedGKE := false
 	if !cmd.Flags().Changed("cluster") {
 		clusterName = ctx.ClusterName
-		usedSaved = usedSaved || ctx.ClusterName != ""
+		savedCluster = strings.TrimSpace(ctx.ClusterName) != ""
 	}
 	if !cmd.Flags().Changed("location") {
 		location = ctx.Location
-		usedSaved = usedSaved || ctx.Location != ""
+		savedGKE = savedGKE || strings.TrimSpace(ctx.Location) != ""
 	}
 	if !cmd.Flags().Changed("project") {
 		projectID = ctx.ProjectID
-		usedSaved = usedSaved || ctx.ProjectID != ""
+		savedGKE = savedGKE || strings.TrimSpace(ctx.ProjectID) != ""
 	}
-	return usedSaved, nil
+	clusterName = strings.TrimSpace(clusterName)
+	location = strings.TrimSpace(location)
+	projectID = strings.TrimSpace(projectID)
+	return savedCluster, savedGKE, nil
 }
 
 func reconcileTypeK8sFlags(cmd *cobra.Command, det orchestrator.Detection) {
@@ -159,17 +188,17 @@ func validateTypeK8sFlags(det orchestrator.Detection, cluster string) error {
 	if det.KubeContext == "" {
 		if cluster != "" {
 			if det.Forced {
-				return fmt.Errorf("kubeconfig context or cluster %q was not found in KUBECONFIG; check 'kubectl config get-contexts'", cluster)
+				return fmt.Errorf("kubeconfig context or cluster %q not found; run 'kubectl config get-contexts'", cluster)
 			}
-			return fmt.Errorf("kubeconfig context or cluster %q was not found in KUBECONFIG (for a Kubernetes cluster, check 'kubectl config get-contexts'; for a GKE cluster, also specify --location and --project)", cluster)
+			return fmt.Errorf("kubeconfig context or cluster %q not found (run 'kubectl config get-contexts', or add --location and --project for GKE)", cluster)
 		}
 		if det.DanglingContext != "" {
-			return fmt.Errorf("kubeconfig current-context %q was not found in KUBECONFIG; run 'kubectl config get-contexts' or pass --cluster <context>", det.DanglingContext)
+			return fmt.Errorf("kubeconfig current-context %q not found; run 'kubectl config get-contexts' or pass --cluster <context>", det.DanglingContext)
 		}
 		if det.Forced {
-			return fmt.Errorf("no Kubernetes current-context is configured in KUBECONFIG; run 'kubectl config use-context <context>' or pass --cluster <context>")
+			return fmt.Errorf("no current-context set in kubeconfig; run 'kubectl config use-context <context>' or pass --cluster <context>")
 		}
-		return fmt.Errorf("no Kubernetes context found in KUBECONFIG and no GKE --cluster/--location/--project flags were provided; configure KUBECONFIG (see 'kubectl config current-context') or pass --cluster, --location, and --project for GKE")
+		return fmt.Errorf("no kubeconfig context found and no GKE flags provided; set a kubeconfig context ('kubectl config use-context <context>') or pass --cluster, --location, and --project")
 	}
 	return nil
 }
@@ -177,7 +206,7 @@ func validateTypeK8sFlags(det orchestrator.Detection, cluster string) error {
 func validateTypeGKEFlags(cmdName string, det orchestrator.Detection, cluster, loc, proj string) error {
 	var k8sHint string
 	if det.KubeContext != "" && cmdName != SubmitCmd.Name() && (!det.Forced || det.Type != orchestrator.TypeGKE) {
-		k8sHint = fmt.Sprintf(" (or set %s=k8s to use KUBECONFIG context %q directly without gcloud)", orchestrator.EnvVar, det.KubeContext)
+		k8sHint = fmt.Sprintf(" (or set %s=k8s to use kubeconfig context %q directly)", orchestrator.EnvVar, det.KubeContext)
 	}
 	if cluster == "" {
 		return fmt.Errorf("cluster name is required; please specify it using the --cluster flag or set a default value using 'gcluster job config set cluster <value>'%s", k8sHint)

@@ -398,7 +398,7 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 			return fmt.Errorf("automatic Kueue installation/modification blocked: cluster %s is set up for Dynamic-Slicing (found 'PROVISION_ONLY' in node pool placementPolicy). Automatic installation or modification of Kueue could conflict with custom topology configurations. Please install Kueue and required CRDs manually", clusterName)
 		}
 		if shell.IsKnownAirGapped() {
-			return fmt.Errorf("cannot automatically re-install Kueue (%s) when %s is enabled; pre-install Kueue %s manually on the cluster", reinstallReason, shell.AirGappedEnvVar, version)
+			return fmt.Errorf("cannot re-install Kueue (%s) when %s is enabled; install Kueue %s on the cluster first", reinstallReason, shell.AirGappedEnvVar, version)
 		}
 
 		if err := g.checkKueueInstallPermissions(version); err != nil {
@@ -429,9 +429,6 @@ func (g *GKEOrchestrator) evaluateKueueReinstall(crdInstalled, depInstalled bool
 }
 
 func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason string) error {
-	if shell.IsKnownAirGapped() {
-		return fmt.Errorf("cannot automatically re-install Kueue (%s) when %s is enabled; pre-install Kueue %s manually on the cluster", reason, shell.AirGappedEnvVar, targetVersion)
-	}
 	promptMsg := fmt.Sprintf("%s\nKueue requires re-installation using %s.\nWARNING: This deletes all queued and suspended workloads in this cluster before proceeding.\nReplying 'no' will cause an immediate exit and you will have to do the re-installation manually. Proceed?", reason, targetVersion)
 	if !shell.PromptYesNo(promptMsg) {
 		return fmt.Errorf("user declined to re-install Kueue")
@@ -446,6 +443,10 @@ func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason
 	if err != nil {
 		return err
 	}
+	manifestPath, err := writeGeneratedManifest(cleanedManifests, "kueue.yaml")
+	if err != nil {
+		return err
+	}
 
 	logging.Info("Proceeding with clean re-installation of Kueue...")
 	if err := g.DeleteAllKueueResources(); err != nil {
@@ -453,8 +454,9 @@ func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason
 	}
 
 	logging.Info("Installing Kueue version %s...", targetVersion)
-	if err := g.applyManifests(cleanedManifests, "kueue.yaml", ""); err != nil {
-		return err
+	if err := g.applyManifestFile(manifestPath, ""); err != nil {
+		return fmt.Errorf("%w\nTo finish reinstalling Kueue %s from the saved manifest, run:\n  %s",
+			err, targetVersion, kubectlCommandLine(g.kubeContext, "apply", "-f", manifestPath))
 	}
 	logging.Info("Kueue components applied successfully.")
 	if err := g.waitForKueueWebhook(); err != nil {

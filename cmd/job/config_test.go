@@ -316,7 +316,7 @@ func TestConfigUnsetCmd(t *testing.T) {
 			name:    "unset_single_key_on_corrupt_context_fails_cleanly",
 			corrupt: true,
 			args:    []string{"project"},
-			wantErr: "invalid character",
+			wantErr: "gcluster job config unset all",
 		},
 		{
 			name:    "missing_key_arg_fails",

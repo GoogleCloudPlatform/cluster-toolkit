@@ -68,6 +68,7 @@ func (g *GKEOrchestrator) configureK8sKubectl(clusterName string) error {
 	if err != nil {
 		g.kubeContext = ""
 		g.k8sCluster = ""
+		g.resetManagedDynamicClient()
 		return fmt.Errorf("failed to load kubeconfig: %w", err)
 	}
 	if name, _, resolvedCluster, ok := k8s.ResolveContext(cfg, trimmed); ok {
@@ -81,6 +82,7 @@ func (g *GKEOrchestrator) configureK8sKubectl(clusterName string) error {
 	}
 	g.kubeContext = ""
 	g.k8sCluster = ""
+	g.resetManagedDynamicClient()
 	if trimmed != "" {
 		return fmt.Errorf("kubeconfig context or cluster %q was not found; check 'kubectl config get-contexts'", trimmed)
 	}
@@ -91,18 +93,24 @@ func (g *GKEOrchestrator) configureK8sKubectl(clusterName string) error {
 }
 
 func (g *GKEOrchestrator) verifyK8sClusterReachable() error {
-	switch outcome, stderr := g.probeContext(g.kubeContext); outcome {
+	outcome, stderr := g.probeContext(g.kubeContext)
+	detail := firstLine(stderr)
+	switch outcome {
 	case probeOK, probeForbidden:
 		return nil
 	case probeAuth:
-		return fmt.Errorf("authentication to Kubernetes context %q failed: %s; refresh or update your KUBECONFIG credentials", g.kubeContext, firstLine(stderr))
+		return fmt.Errorf("authentication to Kubernetes context %q failed: %s; refresh or update your kubeconfig credentials", g.kubeContext, detail)
 	case probeConnectivity:
-		return fmt.Errorf("kubeconfig context %q is unreachable: %s; verify cluster connectivity and KUBECONFIG server/CA settings", g.kubeContext, firstLine(stderr))
+		return fmt.Errorf("kubeconfig context %q is unreachable: %s; verify cluster connectivity and kubeconfig server and CA settings", g.kubeContext, detail)
 	case probeUnknown:
-		logging.Warn("Could not verify Kubernetes context %q (%s). Proceeding with inspection.", g.kubeContext, firstLine(stderr))
+		if detail != "" {
+			logging.Warn("Could not verify Kubernetes context %q (%s). Proceeding with inspection.", g.kubeContext, detail)
+		} else {
+			logging.Warn("Could not verify Kubernetes context %q. Proceeding with inspection.", g.kubeContext)
+		}
 		return nil
 	default:
-		return fmt.Errorf("cannot verify Kubernetes context %q: %s", g.kubeContext, firstLine(stderr))
+		return fmt.Errorf("cannot verify Kubernetes context %q: %s", g.kubeContext, detail)
 	}
 }
 

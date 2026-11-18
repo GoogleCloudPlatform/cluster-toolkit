@@ -272,7 +272,7 @@ func TestJobCmd_MissingContextAndRequiredGKEFlags(t *testing.T) {
 		{
 			name:       "empty_kubeconfig_and_zero_flags",
 			args:       []string{"list"},
-			wantSubstr: []string{"no Kubernetes context found in KUBECONFIG"},
+			wantSubstr: []string{"no kubeconfig context found and no GKE flags provided"},
 		},
 		{
 			name: "dangling_current_context_names_missing_context",
@@ -282,13 +282,13 @@ func TestJobCmd_MissingContextAndRequiredGKEFlags(t *testing.T) {
 				return c
 			},
 			args:       []string{"list"},
-			wantSubstr: []string{`"deleted-ctx"`, "was not found"},
+			wantSubstr: []string{`"deleted-ctx"`, "not found"},
 		},
 		{
 			name:        "forced_k8s_empty_kubeconfig_omits_gke_flag_advice",
 			envOverride: "k8s",
 			args:        []string{"list"},
-			wantSubstr:  []string{"no Kubernetes current-context is configured in KUBECONFIG"},
+			wantSubstr:  []string{"no current-context set in kubeconfig"},
 			forbid:      "--location",
 		},
 		{
@@ -430,25 +430,65 @@ func TestJobCmd_MissingClusterNotMaskedByActiveGKEContext(t *testing.T) {
 	}
 
 	// Symmetry check: an active non-GKE current-context (e.g. kind-kind) must also NOT mask missing --cluster
-	// when --project/--location are passed on cancel/list or submit.
+	// when --project, --location, or whitespace --cluster is passed on cancel/list or submit.
+	assertNonGKECurrentContextDoesNotMaskMissingCluster(t)
+}
+
+func assertNonGKECurrentContextDoesNotMaskMissingCluster(t *testing.T) {
+	t.Helper()
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "project_and_location", args: []string{"cancel", "my-job", "--project", "my-proj", "--location", "us-central1"}},
+		{name: "project_only", args: []string{"cancel", "my-job", "--project", "my-proj"}},
+		{name: "location_only", args: []string{"cancel", "my-job", "--location", "us-central1"}},
+		{name: "whitespace_cluster_with_project", args: []string{"cancel", "my-job", "--cluster", "   ", "--project", "my-proj", "--location", "us-central1"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+			t.Setenv("KUBECONFIG", writeTestKubeconfigFile(t, "kind-kind", "kind-kind", "https://127.0.0.1:6443"))
+			cancelCalled := false
+			gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+				return &mockOrchestrator{
+					cancelJobFunc: func(string, orchestrator.CancelOptions) error {
+						cancelCalled = true
+						return nil
+					},
+				}
+			}
+			if _, err := executeCommand(JobCmd, tc.args...); err == nil || !strings.Contains(err.Error(), "cluster name is required") || !strings.Contains(err.Error(), "GCLUSTER_ORCHESTRATOR=k8s") {
+				t.Fatalf("executeCommand(%v) err = %v, want 'cluster name is required' + k8s hint", tc.args, err)
+			}
+			if cancelCalled {
+				t.Fatalf("cancel executed against unrelated non-GKE current-context for %v", tc.args)
+			}
+		})
+	}
+
+	setupSubmitTestEnv(t)
 	t.Setenv("KUBECONFIG", writeTestKubeconfigFile(t, "kind-kind", "kind-kind", "https://127.0.0.1:6443"))
-	cancelCalled := false
+	if _, err := executeCommand(JobCmd, "submit", "--project", "my-proj", "--location", "us-central1", "--name", "j1", "--image", "busybox", "--command", "echo hi", "--compute-type", "n2-standard-4"); err == nil || !strings.Contains(err.Error(), "cluster name is required") || strings.Contains(err.Error(), "not yet supported") {
+		t.Fatalf("executeCommand(submit -p -l with non-GKE current-context) err = %v, want 'cluster name is required' (not UnsupportedK8sSubmitError)", err)
+	}
+
+	// Forced GCLUSTER_ORCHESTRATOR=k8s with --project and no --cluster uses current-context without requiring --cluster.
+	setupSubmitTestEnv(t)
+	stubUnexpectedSubprocesses(t, true)
+	t.Setenv("KUBECONFIG", writeTestKubeconfigFile(t, "kind-kind", "kind-kind", "https://127.0.0.1:6443"))
+	t.Setenv(orchestrator.EnvVar, "k8s")
+	useFileStore(t)
+	var forcedCancelCluster string
 	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 		return &mockOrchestrator{
-			cancelJobFunc: func(string, orchestrator.CancelOptions) error {
-				cancelCalled = true
+			cancelJobFunc: func(_ string, opts orchestrator.CancelOptions) error {
+				forcedCancelCluster = opts.ClusterName
 				return nil
 			},
 		}
 	}
-	if _, err := executeCommand(JobCmd, "cancel", "my-job", "--project", "my-proj", "--location", "us-central1"); err == nil || !strings.Contains(err.Error(), "cluster name is required") || !strings.Contains(err.Error(), "GCLUSTER_ORCHESTRATOR=k8s") {
-		t.Fatalf("executeCommand(cancel -p -l with non-GKE current-context) err = %v, want 'cluster name is required' + k8s hint", err)
-	}
-	if cancelCalled {
-		t.Fatal("cancel executed against unrelated non-GKE current-context when --cluster was omitted")
-	}
-	if _, err := executeCommand(JobCmd, "submit", "--project", "my-proj", "--location", "us-central1", "--name", "j1", "--image", "busybox", "--command", "echo hi", "--compute-type", "n2-standard-4"); err == nil || !strings.Contains(err.Error(), "cluster name is required") || strings.Contains(err.Error(), "not yet supported") {
-		t.Fatalf("executeCommand(submit -p -l with non-GKE current-context) err = %v, want 'cluster name is required' (not UnsupportedK8sSubmitError)", err)
+	if _, err := executeCommand(JobCmd, "cancel", "my-job", "--project", "ar-proj"); err != nil || forcedCancelCluster != "kind-kind" {
+		t.Fatalf("executeCommand(forced k8s cancel -p) = (%v, %q), want (nil, \"kind-kind\")", err, forcedCancelCluster)
 	}
 }
 
@@ -469,12 +509,14 @@ func TestJobCmd_SavedGKEConfigDoesNotBreakTypeK8sOrEnvOverride(t *testing.T) {
 	tests := []struct {
 		name         string
 		envOverride  string
+		refreshEnv   bool
 		withK8sCfg   bool
 		args         []string
 		wantType     orchestrator.Type
 		wantCluster  string
 		wantLocation string
 		wantProject  string
+		wantSavedLog bool
 	}{
 		{
 			name:        "env_override_k8s_ignores_saved_gke_context",
@@ -492,6 +534,24 @@ func TestJobCmd_SavedGKEConfigDoesNotBreakTypeK8sOrEnvOverride(t *testing.T) {
 			wantCluster: "onprem-k8s",
 		},
 		{
+			name:        "explicit_k8s_cluster_with_refresh_credentials_env_stays_k8s",
+			refreshEnv:  true,
+			withK8sCfg:  true,
+			args:        []string{"list", "--cluster", "onprem-k8s"},
+			wantType:    orchestrator.TypeK8s,
+			wantCluster: "onprem-k8s",
+		},
+		{
+			name:         "explicit_uncached_gke_cluster_falls_back_to_saved_project_and_location",
+			withK8sCfg:   true,
+			args:         []string{"list", "--cluster", "other-gke-cluster"},
+			wantType:     orchestrator.TypeGKE,
+			wantCluster:  "other-gke-cluster",
+			wantLocation: "us-central1-c",
+			wantProject:  "saved-gke-proj",
+			wantSavedLog: true,
+		},
+		{
 			name:         "explicit_project_and_location_preserved_in_k8s_mode",
 			withK8sCfg:   true,
 			args:         []string{"list", "--cluster", "onprem-k8s", "--location", "europe-north1", "--project", "explicit-gar-proj"},
@@ -507,6 +567,7 @@ func TestJobCmd_SavedGKEConfigDoesNotBreakTypeK8sOrEnvOverride(t *testing.T) {
 			wantCluster:  "saved-gke-cluster",
 			wantLocation: "us-central1-c",
 			wantProject:  "saved-gke-proj",
+			wantSavedLog: true,
 		},
 		{
 			name:         "env_override_gke_preserves_saved_gke_context",
@@ -517,13 +578,14 @@ func TestJobCmd_SavedGKEConfigDoesNotBreakTypeK8sOrEnvOverride(t *testing.T) {
 			wantCluster:  "saved-gke-cluster",
 			wantLocation: "us-central1-c",
 			wantProject:  "saved-gke-proj",
+			wantSavedLog: true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			setupSubmitTestEnv(t)
-			stubUnexpectedSubprocesses(t, false)
+			stubUnexpectedSubprocesses(t, tc.wantType == orchestrator.TypeK8s)
 			writeSavedGKEContext(t, t.TempDir())
 			if tc.withK8sCfg {
 				t.Setenv("KUBECONFIG", writeTestKubeconfigFile(t, "admin@onprem-k8s", "onprem-k8s", "https://10.128.0.68:6443"))
@@ -531,11 +593,20 @@ func TestJobCmd_SavedGKEConfigDoesNotBreakTypeK8sOrEnvOverride(t *testing.T) {
 			if tc.envOverride != "" {
 				t.Setenv(orchestrator.EnvVar, tc.envOverride)
 			}
+			if tc.refreshEnv {
+				t.Setenv("GCLUSTER_REFRESH_CREDENTIALS", "1")
+			}
 
 			store = &MockPrereqStore{
 				State: PrereqState{
-					LastCheckedTimestamp: time.Now(),
-					LastCheckedProjectID: "saved-gke-proj",
+					GCloudSDKInstalled:           true,
+					GCloudProjectConfigured:      true,
+					GCloudAuthenticated:          true,
+					ADCConfigured:                true,
+					KubectlInstalled:             true,
+					GKEGCloudAuthPluginInstalled: true,
+					LastCheckedTimestamp:         time.Now(),
+					LastCheckedProjectID:         "saved-gke-proj",
 				},
 			}
 			mockOrc := &mockOrchestrator{}
@@ -551,6 +622,9 @@ func TestJobCmd_SavedGKEConfigDoesNotBreakTypeK8sOrEnvOverride(t *testing.T) {
 			if !strings.Contains(infoOut, wantLog) {
 				t.Errorf("executeCommand(%v) info logs = %q, want %q", tc.args, infoOut, wantLog)
 			}
+			if strings.Contains(infoOut, "Using saved job config defaults") != tc.wantSavedLog {
+				t.Errorf("executeCommand(%v) saved-defaults log present = %v, want %v (logs=%q)", tc.args, !tc.wantSavedLog, tc.wantSavedLog, infoOut)
+			}
 			if mockOrc.InitClusterName != tc.wantCluster || mockOrc.InitLocation != tc.wantLocation || mockOrc.InitProjectID != tc.wantProject {
 				t.Errorf("executeCommand(%v) init = (%q, %q, %q), want (%q, %q, %q)",
 					tc.args,
@@ -558,6 +632,58 @@ func TestJobCmd_SavedGKEConfigDoesNotBreakTypeK8sOrEnvOverride(t *testing.T) {
 					tc.wantCluster, tc.wantLocation, tc.wantProject)
 			}
 		})
+	}
+
+	assertPartialAndK8sSavedDefaultsNotice(t)
+}
+
+func assertPartialAndK8sSavedDefaultsNotice(t *testing.T) {
+	t.Helper()
+	// 1. Partial saved GKE defaults (cluster unset, project/location saved) must emit the saved-defaults notice
+	// before failing with "cluster name is required" so users see how to clear ~/.gcluster/context.json.
+	setupSubmitTestEnv(t)
+	t.Setenv("KUBECONFIG", writeTestKubeconfigFile(t, "kind-kind", "kind-kind", "https://127.0.0.1:6443"))
+	if err := saveContext(Context{ProjectID: "saved-proj", Location: "us-central1"}); err != nil {
+		t.Fatalf("saveContext(partial): %v", err)
+	}
+	snapPartial, restorePartial := logging.CaptureForTesting()
+	_, err := executeCommand(JobCmd, "list")
+	partialInfo, _ := snapPartial()
+	restorePartial()
+	if err == nil || !strings.Contains(err.Error(), "cluster name is required") {
+		t.Fatalf("partial saved config list err = %v, want 'cluster name is required'", err)
+	}
+	if !strings.Contains(partialInfo, "Using saved job config defaults") {
+		t.Errorf("partial saved config info logs = %q, want saved-defaults notice before error", partialInfo)
+	}
+
+	// 2. Saved cluster pointing to a K8s context overrides current-context and must emit the saved-defaults notice.
+	setupSubmitTestEnv(t)
+	stubUnexpectedSubprocesses(t, true)
+	useFileStore(t)
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters["active-clus"] = &clientcmdapi.Cluster{Server: "https://127.0.0.1:6443"}
+	cfg.Clusters["saved-k8s-clus"] = &clientcmdapi.Cluster{Server: "https://10.0.0.2:6443"}
+	cfg.AuthInfos["u"] = &clientcmdapi.AuthInfo{ClientCertificateData: []byte("cert")}
+	cfg.Contexts["active-ctx"] = &clientcmdapi.Context{Cluster: "active-clus", AuthInfo: "u"}
+	cfg.Contexts["saved-k8s-ctx"] = &clientcmdapi.Context{Cluster: "saved-k8s-clus", AuthInfo: "u"}
+	cfg.CurrentContext = "active-ctx"
+	t.Setenv("KUBECONFIG", writeKubeconfig(t, cfg))
+	if err := saveContext(Context{ClusterName: "saved-k8s-ctx"}); err != nil {
+		t.Fatalf("saveContext(k8s cluster): %v", err)
+	}
+	mockOrc := &mockOrchestrator{}
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+
+	snapK8s, restoreK8s := logging.CaptureForTesting()
+	if _, err := executeCommand(JobCmd, "list"); err != nil {
+		restoreK8s()
+		t.Fatalf("saved K8s cluster list err = %v, want nil", err)
+	}
+	k8sInfo, _ := snapK8s()
+	restoreK8s()
+	if mockOrc.InitClusterName != "saved-k8s-ctx" || !strings.Contains(k8sInfo, "Using saved job config defaults") {
+		t.Errorf("saved K8s cluster init=%q logs=%q, want saved-k8s-ctx + saved-defaults notice", mockOrc.InitClusterName, k8sInfo)
 	}
 }
 
