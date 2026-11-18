@@ -69,8 +69,6 @@ install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit ch
 	$(info *********** installing developer dependencies *********)
 	tfdocs=$$(grep -m 1 -oE 'github\.com/terraform-docs/terraform-docs@v[0-9A-Za-z.+-]+' .pre-commit-config.yaml) && \
 		go install "$$tfdocs"
-	go install github.com/go-critic/go-critic/cmd/gocritic@v0.15.0
-	go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
 	go install github.com/jstemmer/go-junit-report/v2@latest
 	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements-dev.txt
 	pip install mypy==1.18.2

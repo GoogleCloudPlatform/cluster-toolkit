@@ -193,20 +193,13 @@ repos:
     files: ^community/cluster-health-check/(go\.mod|go\.sum|.*\.go)$
     pass_filenames: false
 
-- repo: https://github.com/dnephin/pre-commit-golang
-  rev: v0.5.1
-  hooks:
-  - id: go-fmt
-  - id: go-vet
-    exclude: ^community/cluster-health-check/
-- repo: local
-  hooks:
   - id: go-imports
     name: go imports
     language: golang
     additional_dependencies: [golang.org/x/tools/cmd/goimports@v0.50.0]
     entry: goimports -l -w
     files: '\.go$'
+
   - id: go-cyclo
     name: go-cyclo
     language: golang
@@ -214,9 +207,21 @@ repos:
     entry: gocyclo
     args: [-over=13]
     files: '\.go$'
+
+  - id: shfmt
+    name: shfmt
+    language: golang
+    additional_dependencies: [mvdan.cc/sh/v3/cmd/shfmt@v3.14.1]
+    entry: shfmt -w
+    types: [shell]
+    exclude: ".*tpl|.*unlinted"
+
 - repo: https://github.com/dnephin/pre-commit-golang
   rev: v0.5.1
   hooks:
+  - id: go-fmt
+  - id: go-vet
+    exclude: ^community/cluster-health-check/
   - id: go-mod-tidy
 # Disabled temporarily due to https://github.com/go-critic/go-critic/issues/1388
 # - repo: https://github.com/tekwizely/pre-commit-golang
@@ -259,15 +264,6 @@ repos:
     args: [-e, SC1091]
     require_serial: false
     exclude: ".*unlinted"
-- repo: local
-  hooks:
-  - id: shfmt
-    name: shfmt
-    language: golang
-    additional_dependencies: [mvdan.cc/sh/v3/cmd/shfmt@v3.14.1]
-    entry: shfmt -w
-    types: [shell]
-    exclude: ".*tpl|.*unlinted"
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.5.0
   hooks:
