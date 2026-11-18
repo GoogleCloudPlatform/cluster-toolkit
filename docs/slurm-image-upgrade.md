@@ -137,8 +137,13 @@ Keep a reason of your own in the command. The reasons `XID`, `SDC`,
 `PERFORMANCE` and `unspecified` are reserved: they report the host to Google
 Cloud as faulty.
 
-Creating a node again releases its capacity for a moment. Without a reservation,
-a node may not come back if the zone has no capacity left for that machine type.
+Creating a node again deletes its boot disk and any Local SSDs (such as local
+scratch or Enroot container caches). Shared storage such as Filestore, Managed
+Lustre, or Cloud Storage FUSE is not touched.
+
+Creating a node again also releases its capacity for a moment. Without a
+reservation, a node may not come back if the zone has no capacity left for that
+machine type.
 
 ### 4.2 Login nodes
 
@@ -179,9 +184,10 @@ Replace the controller in a maintenance window. Read this list before you start.
 
 * **The scheduler is unavailable** for 3 to 7 minutes.
 * **Every login node is replaced** together with the controller.
-* **Kept:** queued jobs, node drain states, and the accounting history. They
-  are stored on the controller state disk, which is created by default
-  (`controller_state_disk`).
+* **Kept:** queued jobs, node drain states, and the accounting history, when
+  `controller_state_disk` is enabled (the default). If your blueprint sets
+  `controller_state_disk: null`, these live on the controller boot disk instead
+  and are lost when the controller is replaced.
 * **Lost:** everything stored on the controller boot disk. That is `/opt/apps`,
   and also `/home` unless your blueprint mounts other storage at `/home`. Copy
   what you need before you start. Storage outside the controller, such as
@@ -280,15 +286,19 @@ To follow the family again, put `family` back and redeploy.
 
 Two things to know:
 
-* **If the blueprint sets `instance_image` under `vars`, move it into the
-  `settings` of each module first.** A `name` in one module cannot be combined
-  with a `family` under `vars`; the blueprint fails validation with
-  `at most one of the "family" or "name" fields can be set`. Moving the setting
-  into each module changes nothing in the deployed cluster. Do not add
-  `family: null` to get past the error: it passes validation, but points the
-  instance template at a non-existent image family named after the image.
-* **Changing the image of the controller or a login node replaces that VM** on
-  the next deploy. Prepare as in [section 4.3](#43-controller).
+* **When `instance_image` is set under `vars`:** To hold the whole cluster on
+  one image, replace `family` with `name` directly under `vars` (this also
+  updates the controller and login templates; see the next point). To hold only
+  one nodeset on one image, move `instance_image` out of `vars` and into the
+  `settings` of each module first: a `name` in one module cannot be combined
+  with a `family` under `vars` (`at most one of the "family" or "name" fields
+  can be set`). Moving the setting into each module changes nothing in the
+  deployed cluster. Do not add `family: null` to get past the error: it passes
+  validation, but points the instance template at a non-existent image family
+  named after the image.
+* **Changing `instance_image` on the controller or a login node replaces that
+  VM** on the next deploy—even when switching from `family` to `name` for the
+  image it is already running. Prepare as in [section 4.3](#43-controller).
 
 ## 6. Move to a different image family
 
