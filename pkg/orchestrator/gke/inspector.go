@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 	"io"
 	"os"
 	"path/filepath"
@@ -28,9 +29,35 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	k8syaml "sigs.k8s.io/yaml"
 )
 
-const spacer = "========================================================"
+const (
+	spacer = "========================================================"
+
+	slicesCRDName                = "slices.accelerator.gke.io"
+	topologiesCRDName            = "topologies.kueue.x-k8s.io"
+	compositePodGroupsCRDName    = "compositepodgroups.scheduling.x-k8s.io"
+	compositePodGroupsK8sCRDName = "compositepodgroups.scheduling.k8s.io"
+	podGroupsCRDName             = "podgroups.scheduling.x-k8s.io"
+	podGroupsK8sCRDName          = "podgroups.scheduling.k8s.io"
+
+	sliceControllerNamespace  = "slice-controller-system"
+	sliceControllerDeployment = "slice-controller-controller-manager"
+
+	tpuSchedulerNamespace  = "kube-system"
+	tpuSchedulerDeployment = "tpu-scheduler"
+	tpuSchedulerContainer  = "kube-scheduler"
+	tpuSchedulerPodLabel   = "component=tpu-scheduler"
+
+	tpuWorkloadControllerNamespace  = "tpu-workload-controller-system"
+	tpuWorkloadControllerDeployment = "tpu-workload-controller-controller-manager"
+	tpuWorkloadControllerContainer  = "manager"
+
+	tpuAcceleratorLabel  = "cloud.google.com/gke-tpu-accelerator"
+	tpuNodeCustomColumns = `custom-columns=NAME:.metadata.name,READY:.status.conditions[?(@.type=="Ready")].status,TAINTS:.spec.taints[*].key,ACCELERATOR:.metadata.labels.cloud\.google\.com/gke-tpu-accelerator,TOPOLOGY:.metadata.labels.cloud\.google\.com/gke-tpu-topology,PARTITION_ID:.metadata.labels.cloud\.google\.com/gke-tpu-partition-id,PARTITION_STATE:.metadata.labels.cloud\.google\.com/gke-tpu-partition-state,SLICE:.metadata.labels.cloud\.google\.com/gke-tpu-slice,SLICE_READINESS:.metadata.labels.cloud\.google\.com/gke-tpu-slice-Readiness`
+)
 
 type inspectWriter struct {
 	writer io.Writer
@@ -38,7 +65,7 @@ type inspectWriter struct {
 }
 
 // runAndLog pins kubectl to the chosen context before logging so the report shows the command that ran.
-func (w *inspectWriter) runAndLog(description string, command string, args ...string) {
+func (w *inspectWriter) runAndLog(description string, command string, args ...string) shell.CommandResult {
 	if command == "kubectl" {
 		args = withKubeContext(w.orc.kubeContext, args)
 	}
@@ -55,6 +82,22 @@ func (w *inspectWriter) runAndLog(description string, command string, args ...st
 	}
 	divider := fmt.Sprintf("\n%s\n\n", spacer)
 	_, _ = fmt.Fprint(w.writer, divider)
+	return res
+}
+
+// runAndLogOptional runs the command and logs the section only when it succeeds with non-empty output.
+// Optional WAS/Slice components and --previous container logs use this so absent resources are skipped cleanly.
+func (w *inspectWriter) runAndLogOptional(description string, command string, args ...string) (shell.CommandResult, bool) {
+	if command == "kubectl" {
+		args = withKubeContext(w.orc.kubeContext, args)
+	}
+	res := w.orc.executor.ExecuteCommand(command, args...)
+	if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) == "" {
+		return res, false
+	}
+	_, _ = fmt.Fprintf(w.writer, "Description: %s\nCommand: %s %v\nOutput:\n%s\n\n%s\n\n",
+		description, command, args, res.Stdout, spacer)
+	return res, true
 }
 
 // InspectCluster runs diagnostic checks on the GKE cluster and writes them to a log file.
@@ -113,6 +156,7 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 
 	// Count nodes per pool (healthy and total)
 	g.logNodeCounts(outputTarget)
+	g.inspectTPUNodes(writer)
 
 	// --- 4. Kueue & JobSet Resources ---
 	writer.runAndLog("Kueue: ClusterQueue Details", "kubectl", "describe", "ClusterQueue")
@@ -124,19 +168,15 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	writer.runAndLog("JobSet: Deployment Details", "kubectl", "describe", "Deployment", "jobset-controller-manager", "-n", "jobset-system")
 	writer.runAndLog("JobSet: JobSet Controller Manager Logs (tail 100)", "kubectl", "logs", "deployment/jobset-controller-manager", "-n", "jobset-system", "-c", "manager", "--tail=100")
 
-	// --- 5. Slice Controller (Dynamic Slicing) ---
-	cResult := g.kubectl("get", "crd", "topologies.kueue.x-k8s.io")
-	if cResult.ExitCode == 0 {
-		writer.runAndLog("Slice Controller: Deployment Details", "kubectl", "describe", "deployment", "slice-controller-controller-manager", "-n", "slice-controller-system")
-		writer.runAndLog("Slice Controller: Logs (tail 100)", "kubectl", "logs", "deployment/slice-controller-controller-manager", "-n", "slice-controller-system", "-c", "manager", "--tail=100")
-	}
+	// --- 5. Slice Controller & WAS (Dynamic Slicing / Workload-Aware Scheduling) ---
+	wasState := g.inspectSliceAndWAS(writer)
 
 	// --- 6. Workloads ---
 	g.logWorkloadList(outputTarget, "EVERYTHING", "", targetNamespace)
 	g.logWorkloadList(outputTarget, "QUEUED", "", targetNamespace)
 	g.logWorkloadList(outputTarget, "RUNNING", "", targetNamespace)
 
-	g.inspectWorkload(writer, opts.WorkloadName, targetNamespace)
+	g.inspectWorkload(writer, opts.WorkloadName, targetNamespace, wasState)
 
 	// --- 7. Console Links ---
 	logConsoleLinks(outputTarget, opts, targetNamespace)
@@ -145,7 +185,137 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	return nil
 }
 
-func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, workloadNamespace string) {
+type inspectWASState struct {
+	hasSlicesCRD             bool
+	hasTopologiesCRD         bool
+	hasCompositePodGroupsCRD bool
+	hasPodGroupsCRD          bool
+	slicesYAML               string
+	compositePodGroupsYAML   string
+	podGroupsYAML            string
+}
+
+type wasResourceItem struct {
+	raw        map[string]interface{}
+	APIVersion string `json:"apiVersion,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+	Metadata   struct {
+		Name            string                  `json:"name"`
+		Namespace       string                  `json:"namespace,omitempty"`
+		Labels          map[string]string       `json:"labels,omitempty"`
+		Annotations     map[string]string       `json:"annotations,omitempty"`
+		OwnerReferences []kueueWorkloadOwnerRef `json:"ownerReferences,omitempty"`
+	} `json:"metadata"`
+	Spec struct {
+		PodGroupNames []string `json:"podGroupNames,omitempty"`
+		Topology      string   `json:"topology,omitempty"`
+		Type          string   `json:"type,omitempty"`
+		PartitionIDs  []string `json:"partitionIds,omitempty"`
+	} `json:"spec,omitempty"`
+	Status map[string]interface{} `json:"status,omitempty"`
+}
+
+type wasResourceList struct {
+	Items []wasResourceItem `json:"items"`
+}
+
+func (g *GKEOrchestrator) crdExists(crdNames ...string) bool {
+	for _, name := range crdNames {
+		if g.kubectl("get", "crd", name).ExitCode == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *GKEOrchestrator) inspectTPUNodes(writer *inspectWriter) {
+	rawArgs := []string{"get", "nodes", "-l", tpuAcceleratorLabel, "-o", tpuNodeCustomColumns}
+	res := g.kubectl(rawArgs...)
+	if res.ExitCode != 0 || !hasNonHeaderLines(res.Stdout) {
+		return
+	}
+	_, _ = fmt.Fprintf(writer.writer, "Description: Kubectl: TPU Node Summary\nCommand: kubectl %v\nOutput:\n%s\n\n%s\n\n",
+		withKubeContext(g.kubeContext, rawArgs), res.Stdout, spacer)
+}
+
+func hasNonHeaderLines(stdout string) bool {
+	nonEmpty := 0
+	for _, line := range strings.Split(stdout, "\n") {
+		if strings.TrimSpace(line) != "" {
+			nonEmpty++
+			if nonEmpty >= 2 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (g *GKEOrchestrator) inspectSliceAndWAS(writer *inspectWriter) inspectWASState {
+	state := inspectWASState{
+		hasSlicesCRD:             g.crdExists(slicesCRDName),
+		hasTopologiesCRD:         g.crdExists(topologiesCRDName),
+		hasCompositePodGroupsCRD: g.crdExists(compositePodGroupsCRDName, compositePodGroupsK8sCRDName),
+		hasPodGroupsCRD:          g.crdExists(podGroupsCRDName, podGroupsK8sCRDName),
+	}
+
+	if state.hasSlicesCRD {
+		res := writer.runAndLog("Slice Controller: Slices (YAML)", "kubectl", "get", slicesCRDName, "-o", "yaml")
+		if res.ExitCode == 0 {
+			state.slicesYAML = res.Stdout
+		}
+	}
+
+	if state.hasSlicesCRD || state.hasTopologiesCRD {
+		g.inspectSliceController(writer)
+	}
+
+	if state.hasCompositePodGroupsCRD {
+		res := writer.runAndLog("WAS: CompositePodGroups (YAML)", "kubectl", "get", "compositepodgroups", "-A", "-o", "yaml")
+		if res.ExitCode == 0 {
+			state.compositePodGroupsYAML = res.Stdout
+		}
+	}
+
+	if state.hasPodGroupsCRD {
+		res := writer.runAndLog("WAS: PodGroups (YAML)", "kubectl", "get", "podgroups", "-A", "-o", "yaml")
+		if res.ExitCode == 0 {
+			state.podGroupsYAML = res.Stdout
+		}
+	}
+
+	g.inspectWASControllers(writer)
+	return state
+}
+
+func (g *GKEOrchestrator) inspectSliceController(writer *inspectWriter) {
+	writer.runAndLog("Slice Controller: Deployment Details", "kubectl", "describe", "deployment", sliceControllerDeployment, "-n", sliceControllerNamespace)
+	writer.runAndLog("Slice Controller: Logs (tail 100)", "kubectl", "logs", "deployment/"+sliceControllerDeployment, "-n", sliceControllerNamespace, "-c", "manager", "--tail=100")
+	writer.runAndLogOptional("Slice Controller: Previous Logs (tail 100)", "kubectl", "logs", "deployment/"+sliceControllerDeployment, "-n", sliceControllerNamespace, "-c", "manager", "--previous", "--tail=100")
+}
+
+func (g *GKEOrchestrator) inspectWASControllers(writer *inspectWriter) {
+	g.inspectTPUScheduler(writer)
+	g.inspectTPUWorkloadController(writer)
+}
+
+func (g *GKEOrchestrator) inspectTPUScheduler(writer *inspectWriter) {
+	writer.runAndLogOptional("WAS: TPU Scheduler Deployment Details", "kubectl", "describe", "deployment", tpuSchedulerDeployment, "-n", tpuSchedulerNamespace)
+	_, curOK := writer.runAndLogOptional("WAS: TPU Scheduler Logs (tail 100)", "kubectl", "logs", "deployment/"+tpuSchedulerDeployment, "-n", tpuSchedulerNamespace, "-c", tpuSchedulerContainer, "--tail=100")
+	_, prevOK := writer.runAndLogOptional("WAS: TPU Scheduler Previous Logs (tail 100)", "kubectl", "logs", "deployment/"+tpuSchedulerDeployment, "-n", tpuSchedulerNamespace, "-c", tpuSchedulerContainer, "--previous", "--tail=100")
+	if !curOK && !prevOK {
+		writer.runAndLogOptional("WAS: TPU Scheduler Logs (tail 100)", "kubectl", "logs", "-l", tpuSchedulerPodLabel, "-n", tpuSchedulerNamespace, "-c", tpuSchedulerContainer, "--tail=100")
+		writer.runAndLogOptional("WAS: TPU Scheduler Previous Logs (tail 100)", "kubectl", "logs", "-l", tpuSchedulerPodLabel, "-n", tpuSchedulerNamespace, "-c", tpuSchedulerContainer, "--previous", "--tail=100")
+	}
+}
+
+func (g *GKEOrchestrator) inspectTPUWorkloadController(writer *inspectWriter) {
+	writer.runAndLogOptional("WAS: TPU Workload Controller Deployment Details", "kubectl", "describe", "deployment", tpuWorkloadControllerDeployment, "-n", tpuWorkloadControllerNamespace)
+	writer.runAndLogOptional("WAS: TPU Workload Controller Logs (tail 100)", "kubectl", "logs", "deployment/"+tpuWorkloadControllerDeployment, "-n", tpuWorkloadControllerNamespace, "-c", tpuWorkloadControllerContainer, "--tail=100")
+	writer.runAndLogOptional("WAS: TPU Workload Controller Previous Logs (tail 100)", "kubectl", "logs", "deployment/"+tpuWorkloadControllerDeployment, "-n", tpuWorkloadControllerNamespace, "-c", tpuWorkloadControllerContainer, "--previous", "--tail=100")
+}
+
+func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, workloadNamespace string, wasState ...inspectWASState) {
 	if workloadName == "" {
 		return
 	}
@@ -168,6 +338,254 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, w
 	podSelector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", workloadName)
 	writer.runAndLog(fmt.Sprintf("Pods: Status for %s", workloadName), "kubectl", "get", "pods", "-l", podSelector, "-n", workloadNamespace, "-o", "wide")
 	writer.runAndLog(fmt.Sprintf("Pods: Config and Events for %s", workloadName), "kubectl", "describe", "pods", "-l", podSelector, "-n", workloadNamespace)
+
+	if len(wasState) > 0 {
+		g.inspectWorkloadWAS(writer, workloadName, workloadNamespace, targetWorkload, wasState[0])
+	}
+}
+
+func (g *GKEOrchestrator) inspectWorkloadWAS(writer *inspectWriter, workloadName, workloadNamespace, targetWorkload string, wasState inspectWASState) {
+	if wasState.hasCompositePodGroupsCRD {
+		writer.runAndLogOptional(fmt.Sprintf("WAS: CompositePodGroups for %s", workloadName), "kubectl", "describe", "compositepodgroups", "-n", workloadNamespace)
+	}
+	if wasState.hasPodGroupsCRD {
+		writer.runAndLogOptional(fmt.Sprintf("WAS: PodGroups for %s", workloadName), "kubectl", "describe", "podgroups", "-n", workloadNamespace)
+	}
+	logOwnedWASResources(writer.writer, workloadName, workloadNamespace, targetWorkload, wasState)
+}
+
+func logOwnedWASResources(w io.Writer, workloadName, workloadNamespace, targetWorkload string, wasState inspectWASState) {
+	ownedCPGs, ownedPGs, ownedSlices := filterOwnedWASResources(workloadName, workloadNamespace, targetWorkload, wasState)
+	if len(ownedCPGs) == 0 && len(ownedPGs) == 0 && len(ownedSlices) == 0 {
+		return
+	}
+
+	var allOwned []wasResourceItem
+	allOwned = append(allOwned, ownedCPGs...)
+	allOwned = append(allOwned, ownedPGs...)
+	allOwned = append(allOwned, ownedSlices...)
+
+	var rawObjects []interface{}
+	for _, item := range allOwned {
+		if item.raw != nil {
+			rawObjects = append(rawObjects, item.raw)
+		} else {
+			rawObjects = append(rawObjects, item)
+		}
+	}
+
+	yamlBytes, err := k8syaml.Marshal(rawObjects)
+	if err != nil {
+		return
+	}
+
+	desc := fmt.Sprintf("WAS: Owned Resources for %s", workloadName)
+	_, _ = fmt.Fprintf(w, "Description: %s\nOutput:\n%s\n%s\n\n", desc, string(yamlBytes), spacer)
+}
+
+func filterOwnedWASResources(workloadName, workloadNamespace, targetWorkload string, wasState inspectWASState) (cpgs, pgs, slices []wasResourceItem) {
+	if workloadName == "" {
+		return nil, nil, nil
+	}
+	ownedGroupNames := map[string]bool{
+		workloadName: true,
+	}
+	if targetWorkload != "" {
+		ownedGroupNames[targetWorkload] = true
+	}
+	ownedSliceNames := make(map[string]bool)
+
+	allCPGs := parseWASResourceItems(wasState.compositePodGroupsYAML)
+	matchedCPGIdx := make(map[int]bool)
+	for i, item := range allCPGs {
+		if isPodGroupOwnedByWorkload(item, workloadName, workloadNamespace, targetWorkload, ownedGroupNames) {
+			matchedCPGIdx[i] = true
+			cpgs = append(cpgs, item)
+			recordOwnedGroupAndSliceRefs(item, ownedGroupNames, ownedSliceNames)
+		}
+	}
+
+	for _, item := range parseWASResourceItems(wasState.podGroupsYAML) {
+		if isPodGroupOwnedByWorkload(item, workloadName, workloadNamespace, targetWorkload, ownedGroupNames) {
+			pgs = append(pgs, item)
+			recordOwnedGroupAndSliceRefs(item, ownedGroupNames, ownedSliceNames)
+		}
+	}
+
+	for i, item := range allCPGs {
+		if !matchedCPGIdx[i] && isPodGroupOwnedByWorkload(item, workloadName, workloadNamespace, targetWorkload, ownedGroupNames) {
+			matchedCPGIdx[i] = true
+			cpgs = append(cpgs, item)
+			recordOwnedGroupAndSliceRefs(item, ownedGroupNames, ownedSliceNames)
+		}
+	}
+
+	for _, item := range parseWASResourceItems(wasState.slicesYAML) {
+		if isSliceOwnedByWorkload(item, workloadName, workloadNamespace, targetWorkload, ownedGroupNames, ownedSliceNames) {
+			slices = append(slices, item)
+		}
+	}
+
+	return cpgs, pgs, slices
+}
+
+func parseWASResourceItems(rawYAML string) []wasResourceItem {
+	if strings.TrimSpace(rawYAML) == "" {
+		return nil
+	}
+	data := []byte(rawYAML)
+	var list wasResourceList
+	if err := k8syaml.Unmarshal(data, &list); err == nil && len(list.Items) > 0 {
+		var rawList struct {
+			Items []map[string]interface{} `json:"items"`
+		}
+		if err := k8syaml.Unmarshal(data, &rawList); err == nil && len(rawList.Items) == len(list.Items) {
+			for i := range list.Items {
+				list.Items[i].raw = rawList.Items[i]
+			}
+		}
+		return list.Items
+	}
+	var single wasResourceItem
+	if err := k8syaml.Unmarshal(data, &single); err == nil && single.Metadata.Name != "" {
+		var rawSingle map[string]interface{}
+		if err := k8syaml.Unmarshal(data, &rawSingle); err == nil {
+			single.raw = rawSingle
+		}
+		return []wasResourceItem{single}
+	}
+	return nil
+}
+
+func matchesWorkloadOrGroup(candidate, workloadName, targetWorkload string, ownedGroupNames map[string]bool) bool {
+	if ownedGroupNames[candidate] || strings.HasPrefix(candidate, workloadName+"-") {
+		return true
+	}
+	return targetWorkload != "" && strings.HasPrefix(candidate, targetWorkload+"-")
+}
+
+func childPodGroupNames(item wasResourceItem) []string {
+	var names []string
+	for _, pgName := range item.Spec.PodGroupNames {
+		if trimmed := strings.TrimSpace(pgName); trimmed != "" {
+			names = append(names, trimmed)
+		}
+	}
+	if ann := item.Metadata.Annotations["tpuplugin.cloud.google.com/pod-group-names"]; ann != "" {
+		for _, pgName := range strings.Split(ann, ",") {
+			if trimmed := strings.TrimSpace(pgName); trimmed != "" {
+				names = append(names, trimmed)
+			}
+		}
+	}
+	return names
+}
+
+func recordOwnedGroupAndSliceRefs(item wasResourceItem, ownedGroupNames, ownedSliceNames map[string]bool) {
+	if item.Metadata.Name != "" {
+		ownedGroupNames[item.Metadata.Name] = true
+	}
+	for _, pgName := range childPodGroupNames(item) {
+		ownedGroupNames[pgName] = true
+	}
+	if sliceAnn := item.Metadata.Annotations["tpuplugin.cloud.google.com/slice-name"]; sliceAnn != "" {
+		for _, sName := range strings.Split(sliceAnn, ",") {
+			if trimmed := strings.TrimSpace(sName); trimmed != "" {
+				ownedSliceNames[trimmed] = true
+			}
+		}
+	}
+}
+
+func isPodGroupOwnedByWorkload(item wasResourceItem, workloadName, workloadNamespace, targetWorkload string, ownedGroupNames map[string]bool) bool {
+	if workloadNamespace != "" && item.Metadata.Namespace != "" && item.Metadata.Namespace != workloadNamespace {
+		return false
+	}
+	if jsLabel := strings.TrimSpace(item.Metadata.Labels["jobset.sigs.k8s.io/jobset-name"]); jsLabel != "" {
+		return jsLabel == workloadName
+	}
+	for _, ref := range item.Metadata.OwnerReferences {
+		if strings.EqualFold(ref.Kind, "JobSet") && ref.Name != "" {
+			return ref.Name == workloadName
+		}
+	}
+	for _, pgName := range childPodGroupNames(item) {
+		if ownedGroupNames[pgName] {
+			return true
+		}
+	}
+	if len(item.Metadata.OwnerReferences) > 0 {
+		for _, ref := range item.Metadata.OwnerReferences {
+			if matchesWorkloadOrGroup(ref.Name, workloadName, targetWorkload, ownedGroupNames) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, k := range []string{
+		"batch.kubernetes.io/job-name",
+		"job-name",
+		"kueue.x-k8s.io/job-name",
+		"tpuplugin.cloud.google.com/owner-name",
+	} {
+		if v := strings.TrimSpace(item.Metadata.Labels[k]); v != "" {
+			return matchesWorkloadOrGroup(v, workloadName, targetWorkload, ownedGroupNames)
+		}
+	}
+	return matchesWorkloadOrGroup(item.Metadata.Name, workloadName, targetWorkload, ownedGroupNames)
+}
+
+func isSliceOwnedByWorkload(item wasResourceItem, workloadName, workloadNamespace, targetWorkload string, ownedGroupNames, ownedSliceNames map[string]bool) bool {
+	if ownedSliceNames[item.Metadata.Name] {
+		return true
+	}
+	if ownerRefAnn := strings.TrimSpace(item.Metadata.Annotations["tpuplugin.cloud.google.com/slice-owner-reference"]); ownerRefAnn != "" {
+		parts := strings.Split(ownerRefAnn, "/")
+		var ownerNS, ownerName string
+		switch len(parts) {
+		case 3:
+			ownerNS, ownerName = parts[1], parts[2]
+		case 2:
+			ownerNS, ownerName = parts[0], parts[1]
+		case 1:
+			ownerName = parts[0]
+		}
+		if workloadNamespace != "" && ownerNS != "" && ownerNS != workloadNamespace {
+			return false
+		}
+		return matchesWorkloadOrGroup(ownerName, workloadName, targetWorkload, ownedGroupNames)
+	}
+	ownerNS := item.Metadata.Labels["tpuplugin.cloud.google.com/owner-namespace"]
+	if ownerNS == "" {
+		ownerNS = item.Metadata.Labels["kueue.gke.io/tpu-slice-used-by-namespace"]
+	}
+	if workloadNamespace != "" && ownerNS != "" && ownerNS != workloadNamespace {
+		return false
+	}
+	hasOwnerLabel := false
+	for _, k := range []string{"tpuplugin.cloud.google.com/owner-name", "kueue.gke.io/tpu-slice-used-by-workload"} {
+		if v := strings.TrimSpace(item.Metadata.Labels[k]); v != "" {
+			hasOwnerLabel = true
+			if matchesWorkloadOrGroup(v, workloadName, targetWorkload, ownedGroupNames) {
+				return true
+			}
+		}
+	}
+	if hasOwnerLabel {
+		return false
+	}
+	if len(item.Metadata.OwnerReferences) > 0 {
+		for _, ref := range item.Metadata.OwnerReferences {
+			if strings.EqualFold(ref.Kind, "JobSet") && ref.Name != "" {
+				return ref.Name == workloadName
+			}
+			if matchesWorkloadOrGroup(ref.Name, workloadName, targetWorkload, ownedGroupNames) {
+				return true
+			}
+		}
+		return false
+	}
+	return matchesWorkloadOrGroup(item.Metadata.Name, workloadName, targetWorkload, ownedGroupNames)
 }
 
 func (g *GKEOrchestrator) logNodeCounts(w io.Writer) {
