@@ -65,6 +65,7 @@ var (
 	serviceAccountName     string
 	topology               string
 	gkeCustomTemplatesPath string
+	k8sLabelScheme         string
 	gkeScheduler           string
 	platform               string
 
@@ -138,6 +139,10 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 		}
 
 		if err := validateMLDiagnosticsFlags(cmd); err != nil {
+			return err
+		}
+
+		if _, err := k8s.ResolveLabelSchemeOverride(k8sLabelScheme, nil); err != nil {
 			return err
 		}
 
@@ -215,6 +220,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&mlDiagnosticsImage, "ml-diagnostics-image", "", "Container image for the ML Diagnostics telemetry collector native sidecar on Kubernetes 1.29+ TPU workloads (requires --enable-ml-diagnostics; overrides GCLUSTER_TELEMETRY_IMAGE, and --ml-diagnostics-image=\"\" ignores it so GKE uses the managed webhook).")
 	SubmitCmd.Flags().IntVar(&mlDiagnosticsTelemetryPort, "ml-diagnostics-telemetry-port", k8s.DefaultTelemetryCollectorPort, "Prometheus metrics port exposed by the ML Diagnostics collector sidecar (requires --enable-ml-diagnostics with --ml-diagnostics-image or GCLUSTER_TELEMETRY_IMAGE on GKE; ports 8431-8438, 8471, 8476-8479, and 13133 are reserved).")
 	SubmitCmd.Flags().StringVar(&gkeCustomTemplatesPath, "gke-custom-templates-path", "", "Path to a local directory containing custom GKE templates overrides.")
+	SubmitCmd.Flags().StringVar(&k8sLabelScheme, "k8s-label-scheme", "", "Override automatic Kubernetes TPU node label scheme detection (allowed values: bloom, gke, generic; overrides GCLUSTER_LABEL_SCHEME).")
 
 	_ = SubmitCmd.MarkFlagRequired("name")
 }
@@ -250,6 +256,10 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	jobTopology := strings.ToLower(strings.TrimSpace(topology))
+	resolvedLabelScheme, err := k8s.ResolveLabelSchemeOverride(k8sLabelScheme, nil)
+	if err != nil {
+		return err
+	}
 	applyPathwaysSubmitDefaults(cmd)
 	resolvedMLDiagImg, resolvedMLDiagPort := resolveSubmitMLDiagnostics(cmd)
 
@@ -292,6 +302,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		GKEMTCEnabled:                 gkeMtcEnabled,
 		GKEMTCRamdiskDirectory:        gkeMtcRamdiskDirectory,
 		GkeCustomTemplatesPath:        gkeCustomTemplatesPath,
+		K8sLabelScheme:                string(resolvedLabelScheme),
 		GKENAPProvisioning:            gkeNapProvisioning,
 		GKENAPReservation:             gkeNapReservation,
 		IsPathwaysJob:                 isPathwaysJob,

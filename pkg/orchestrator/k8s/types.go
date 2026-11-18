@@ -24,11 +24,28 @@ import (
 // KubeconfigLoader loads the merged client-go kubeconfig; injectable for hermetic tests.
 type KubeconfigLoader func() (*clientcmdapi.Config, error)
 
+// BloomSliceAPIGroupVersion is the Kubernetes API group/version exposed by the tpu.google.com slice controller.
+const BloomSliceAPIGroupVersion = "slice.tpu.google.com/v1alpha1"
+
 // NodeGVR identifies core/v1 Node resources for dynamic Kubernetes queries.
 var NodeGVR = schema.GroupVersionResource{
 	Group:    "",
 	Version:  "v1",
 	Resource: "nodes",
+}
+
+// BloomSliceGVR identifies Bloom slice.tpu.google.com/v1alpha1 Slice resources.
+var BloomSliceGVR = schema.GroupVersionResource{
+	Group:    "slice.tpu.google.com",
+	Version:  "v1alpha1",
+	Resource: "slices",
+}
+
+// BloomPartitionTreeGVR identifies Bloom slice.tpu.google.com/v1alpha1 PartitionTree resources.
+var BloomPartitionTreeGVR = schema.GroupVersionResource{
+	Group:    "slice.tpu.google.com",
+	Version:  "v1alpha1",
+	Resource: "partitiontrees",
 }
 
 // SecretGVR identifies core/v1 Secret resources for dynamic Kubernetes queries.
@@ -54,6 +71,12 @@ type ResourceLister interface {
 type ResourceReader interface {
 	ResourceLister
 	GetResource(gvr schema.GroupVersionResource, namespace, name string) (*unstructured.Unstructured, error)
+}
+
+// APIGroupChecker reports whether the Kubernetes API server serves a given API group or group/version
+// (for example via the non-privileged GET /apis/<group>[/<version>] discovery endpoint).
+type APIGroupChecker interface {
+	HasAPIGroupVersion(groupVersion string) (bool, error)
 }
 
 // dockerConfigJSON is a .dockerconfigjson payload. authn.AuthConfig decodes "auth" with the kubelet's own rules

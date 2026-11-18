@@ -217,6 +217,8 @@ type GKEOrchestrator struct {
 	// inspectedPVCs caches per-submit PVC metadata inspected during ValidateClusterMounts.
 	inspectedPVCs  map[string]pvcInspectResult
 	nfsAuthChecked bool
+	// inventory caches pure-Kubernetes node, slice, and label-scheme discovery results for the current run.
+	inventory *k8s.Inventory
 }
 
 // Types for GetClusterInfo unmarshaling
