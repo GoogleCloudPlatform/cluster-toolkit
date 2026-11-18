@@ -56,6 +56,15 @@ hpc-slurm-login-001  login       aci-cpu-rocky-linux-9-slurm-2605-amd64-v2026100
 hpc-staticset-0      compute     aci-cpu-rocky-linux-9-slurm-2605-amd64-v20261008-1  2026-11-16T04:09:05.000-08:00
 ```
 
+To find the family of an image, use the `IMAGE` value and the project that
+publishes it (`advanced-compute-images` for the public images, or the `project`
+of `instance_image` in your blueprint):
+
+```shell
+gcloud compute images describe IMAGE \
+    --project IMAGE_PROJECT --format="value(family)"
+```
+
 Then find the newest image in the family:
 
 ```shell
@@ -184,10 +193,10 @@ Replace the controller in a maintenance window. Read this list before you start.
 
 * **The scheduler is unavailable** for 3 to 7 minutes.
 * **Every login node is replaced** together with the controller.
-* **Kept:** queued jobs, node drain states, and the accounting history, when
-  `controller_state_disk` is enabled (the default). If your blueprint sets
-  `controller_state_disk: null`, these live on the controller boot disk instead
-  and are lost when the controller is replaced.
+* **Kept:** queued jobs, node drain states, the reservation from step 1, and the
+  accounting history, when `controller_state_disk` is enabled (the default). If
+  your blueprint sets `controller_state_disk: null`, these live on the
+  controller boot disk instead and are lost when the controller is replaced.
 * **Lost:** everything stored on the controller boot disk. That is `/opt/apps`,
   and also `/home` unless your blueprint mounts other storage at `/home`. Copy
   what you need before you start. Storage outside the controller, such as
@@ -206,9 +215,14 @@ df -h /home /opt/apps
 
 Steps:
 
-1. On the controller, stop new jobs from starting:
+1. On the controller, stop new jobs from starting. The reservation keeps new
+   jobs off nodes that are created per job: such a node leaves the drain when it
+   powers down. Running jobs are not affected.
 
    ```shell
+   sudo $(which scontrol) create reservation reservationname=controller-update \
+       starttime=now duration=infinite nodes=ALL users=root \
+       flags=maint,ignore_jobs
    sudo $(which scontrol) update nodename=ALL \
        state=drain reason="controller-update"
    ```
@@ -219,8 +233,8 @@ Steps:
    squeue --states=RUNNING
    ```
 
-   Nodes show `drain` (always-on) or `drain~` (powered-down per-job nodes) in
-   `sinfo -N`.
+   Always-on nodes show `drain$` in `sinfo -N`; per-job nodes show `drain$` or
+   `maint`.
 
 1. Find the controller address as in [section 4.2](#42-login-nodes), then
    replace the controller:
@@ -240,12 +254,17 @@ Steps:
    scontrol ping
    ```
 
-1. Clear the drain and create the always-on nodes again:
+1. Clear the drain, create the always-on nodes again, and remove the
+   reservation:
 
    ```shell
    sudo $(which scontrol) update nodename=ALL \
        state=power_down_force reason="controller-update"
+   sudo $(which scontrol) delete reservationname=controller-update
    ```
+
+   With `controller_state_disk: null` the reservation is already gone, and the
+   second command reports `Requested reservation is invalid`.
 
    Watch the nodes with `sinfo -N`. Always-on nodes go through `idle%`, `idle~`
    and `idle#` and return to `idle` on their own (no separate `state=resume`
@@ -298,7 +317,8 @@ Two things to know:
   named after the image.
 * **Changing `instance_image` on the controller or a login node replaces that
   VM** on the next deploy—even when switching from `family` to `name` for the
-  image it is already running. Prepare as in [section 4.3](#43-controller).
+  image it is already running. Prepare as in [section 4.2](#42-login-nodes) for
+  a login node, or [section 4.3](#43-controller) for the controller.
 
 ## 6. Move to a different image family
 
@@ -309,14 +329,16 @@ The families and their support dates are listed in the
 
 1. Change `instance_image` for the controller, the login nodes and the nodesets
    in the same blueprint edit, so that all of them move together.
-1. Drain the cluster and wait for running jobs to finish as in
+1. Stop new jobs and wait for running jobs to finish as in
    [section 4.3](#43-controller), steps 1 and 2: changing the controller image
    replaces the controller and the login nodes.
 1. Redeploy with `./gcluster deploy <path-to-blueprint.yaml> -w`. At the
    `[d,a,s,c]` prompt, press `d` to inspect the full Terraform plan before
    pressing `a` to apply.
-1. Clear the drain and create the always-on compute nodes again as in
-   [section 4.3](#43-controller), step 5.
+1. Wait until the new controller answers, then clear the drain, create the
+   always-on compute nodes again, and remove the reservation as in
+   [section 4.3](#43-controller), steps 4 and 5.
+1. Check the images as in [section 2](#2-check-which-image-each-node-runs).
 
 When the new family contains a different Slurm version:
 
