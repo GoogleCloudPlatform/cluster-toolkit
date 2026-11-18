@@ -36,4 +36,4 @@ if [ -z "$bp_name" ]; then
 fi
 
 echo "Clearing leaked locks under gs://$BUCKET/$bp_name/$DEPLOYMENT_NAME/ ..."
-gcloud storage rm "gs://$BUCKET/$bp_name/$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+gcloud storage rm -r "gs://$BUCKET/$bp_name/$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true

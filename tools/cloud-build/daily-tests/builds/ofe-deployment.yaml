@@ -38,7 +38,7 @@ steps:
     set -ex
     cd /workspace
     bash tools/get_binary.sh "${_TEST_PREFIX}"
-    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+    BUILD_ID_SHORT=$${BUILD_ID:0:6}
 
     git init . # ofe deploymemt requires some git repo to figure out top level directory
 
