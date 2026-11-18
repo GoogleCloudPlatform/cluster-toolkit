@@ -29,9 +29,16 @@ on:
     - hotfix-*
     paths:
     - "AGENTS.md"
+    - "CLAUDE.md"
+    - "GEMINI.md"
+    - "llms.txt"
+    - "llms-full.txt"
+    - "docs/migration/xpk_to_clustertoolkit.md"
     - "skills/**"
     - "tools/run_eval.py"
+    - "tools/skills_eval/**"
     - "tools/tests/test_run_eval.py"
+    - "tools/validate_readme_snippets.py"
     - ".github/workflows/skills-lint.yml"
     - ".pre-commit-config.yaml"
     - "Makefile"
@@ -41,9 +48,16 @@ on:
     - develop
     paths:
     - "AGENTS.md"
+    - "CLAUDE.md"
+    - "GEMINI.md"
+    - "llms.txt"
+    - "llms-full.txt"
+    - "docs/migration/xpk_to_clustertoolkit.md"
     - "skills/**"
     - "tools/run_eval.py"
+    - "tools/skills_eval/**"
     - "tools/tests/test_run_eval.py"
+    - "tools/validate_readme_snippets.py"
     - ".github/workflows/skills-lint.yml"
     - ".pre-commit-config.yaml"
     - "Makefile"
@@ -72,8 +86,7 @@ jobs:
         python3 -m pip install --upgrade pip
         python3 -m pip install 'pyyaml>=6.0.1'
 
-    - name: Run Skills Test Runner Unit Tests
-      run: python3 tools/tests/test_run_eval.py
-
-    - name: Run Skills Lint and Deterministic Evaluation
-      run: python3 tools/run_eval.py --all
+    - name: Run Skills Unit Tests, Lint, and Deterministic Evaluation
+      run: |
+        make test-skills
+        python3 tools/validate_readme_snippets.py

@@ -35,6 +35,8 @@ allowed_read_only_commands:
 > [!WARNING]
 > This skill is **experimental** and under active validation for Cluster Toolkit. Diagnostic queries are read-only, but remediation plans must be reviewed carefully by cluster operators before execution.
 
+> **Scope:** These rules apply to Cluster Toolkit and GKE Kueue operator debugging workflows; repository maintainers explicitly developing or refactoring Cluster Toolkit internals under `cmd/`, `pkg/`, `modules/`, or `tools/` may read and edit source files normally.
+
 Use this playbook when distributed AI/ML training jobs (PyTorchJob, RayCluster, JobSet, Job, LeaderWorkerSet) submitted to GKE remain indefinitely in `Pending`, `Inadmissible`, `Admitted: False`, or experience unexpected evictions.
 
 ---
@@ -44,9 +46,12 @@ Use this playbook when distributed AI/ML training jobs (PyTorchJob, RayCluster, 
 If no live GKE cluster is reachable when running `kubectl`, do not halt on connection errors and do NOT search the local repository (`grep` / `find`) for hypothetical workload or queue manifests—provide the exact diagnostic `kubectl` commands and root-cause analysis (or `[PROPOSED REMEDIATION PLAN]`) directly from this playbook.
 
 ### Step 0: Fast-Path Workload Inspection (SRE First Response)
-If investigating a parent Job, JobSet, or RayCluster, locate its generated Workload name first:
+If investigating a parent Job, JobSet, or RayCluster, check namespace workloads first without `2>/dev/null` (so cluster reachability errors surface immediately), then locate its generated Workload name:
 ```bash
-# Method A: Direct lookup via owner UID (safely queries installed controllers without failing on missing CRDs)
+# Method A: Universal filter by parent job name prefix (verifies cluster connectivity first)
+kubectl get workloads -n <NAMESPACE> | grep <PARENT_JOB_NAME>
+
+# Method B: Direct lookup via owner UID (safely queries installed controllers without failing on missing CRDs)
 JOB_UID=$(kubectl get job <PARENT_JOB_NAME> -n <NAMESPACE> -o jsonpath='{.metadata.uid}' 2>/dev/null)
 if [ -z "$JOB_UID" ]; then
   for kind in jobset raycluster rayjob pytorchjob mpijob leaderworkerset; do
@@ -55,9 +60,6 @@ if [ -z "$JOB_UID" ]; then
   done
 fi
 [ -n "$JOB_UID" ] && kubectl get workloads -n <NAMESPACE> -l "kueue.x-k8s.io/job-uid=$JOB_UID"
-
-# Method B: Universal filter by parent job name prefix
-kubectl get workloads -n <NAMESPACE> | grep <PARENT_JOB_NAME>
 ```
 Always inspect high-level workload events and conditions:
 ```bash
@@ -209,11 +211,11 @@ kubectl get provisioningrequests.autoscaling.x-k8s.io -n <NAMESPACE> -o custom-c
 ### Required Remediation Plan Format:
 ```markdown
 [PROPOSED REMEDIATION PLAN]
-- Target Resource: <ClusterQueue|LocalQueue|Workload>/<RESOURCE_NAME>
-- Root Cause Identified: <Precise diagnostic finding>
-- Proposed Action: <Exact command to be executed>
-- Blast Radius: <Affected workloads, namespaces, and cohort tenants>
-- Confirmation Required: Reply 'yes' to proceed.
+- **Target Resource**: <ClusterQueue|LocalQueue|Workload>/<RESOURCE_NAME>
+- **Root Cause Identified**: <Precise diagnostic finding>
+- **Proposed Action**: <Exact command to be executed>
+- **Blast Radius**: <Affected workloads, namespaces, and cohort tenants>
+- **Confirmation Required**: Reply 'yes' to proceed.
 ```
 
 ### Gated Remediation Patch Recipes (ONLY Inside [PROPOSED REMEDIATION PLAN] When Asked to Modify/Unpause):

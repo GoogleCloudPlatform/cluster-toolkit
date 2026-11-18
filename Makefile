@@ -268,7 +268,8 @@ lint-skills:
 
 test-skills:
 	$(info **************** running skills unit tests and evals ***************)
-	@python3 tools/tests/test_run_eval.py
+	@python3 -m unittest discover -s tools/tests -p 'test_*.py'
+	@python3 skills/xpk-to-clustertoolkit/scripts/parse_xpk_to_gcluster_test.py
 	@python3 tools/run_eval.py --all
 
 generate-docs:
@@ -279,15 +280,19 @@ generate-docs:
 # PR-test-skills-full-eval): drives a real agent CLI against EVAL.yaml prompts
 # in throwaway git worktrees. Requires the agent CLI installed + logged in and a
 # GCP project for gcluster validators. Example:
-#   make test-skills-live LIVE_PROJECT=my-sandbox LIVE_AGENT=gemini
+#   make test-skills-live LIVE_PROJECT=my-sandbox LIVE_CASES=smoke
 LIVE_AGENT ?= gemini
-LIVE_SKILL ?= skills/cluster-blueprint-assistant
+LIVE_SKILL ?=
+LIVE_CASES ?=
 LIVE_CONCURRENCY ?= 4
 LIVE_RETRIES ?= 0
-test-skills-live: gcluster
-	$(info **************** running LIVE skills evals ($(LIVE_SKILL)) against $(LIVE_AGENT) ***************)
+LIVE_SKILL_ARGS = $(if $(strip $(LIVE_SKILL)),--skill $(LIVE_SKILL),--all)
+LIVE_CASES_ARGS = $(if $(strip $(LIVE_CASES)),--cases $(LIVE_CASES),)
+test-skills-live:
+	$(info **************** running LIVE skills evals ($(if $(strip $(LIVE_SKILL)),$(LIVE_SKILL),all skills)) against $(LIVE_AGENT) ***************)
 	@test -n "$(LIVE_PROJECT)" || { echo "LIVE_PROJECT=<gcp-project> is required"; exit 2; }
-	@python3 tools/run_eval.py --skill $(LIVE_SKILL) --live --agent $(LIVE_AGENT) --project $(LIVE_PROJECT) --concurrency $(LIVE_CONCURRENCY) --retries $(LIVE_RETRIES) --json-output live-eval-results.json --markdown-output live-eval-summary.md
+	@if python3 tools/run_eval.py $(LIVE_SKILL_ARGS) $(LIVE_CASES_ARGS) --check-needs-gcluster; then test -x ./gcluster || $(MAKE) gcluster; fi
+	@python3 tools/run_eval.py $(LIVE_SKILL_ARGS) $(LIVE_CASES_ARGS) --live --agent $(LIVE_AGENT) --project $(LIVE_PROJECT) --concurrency $(LIVE_CONCURRENCY) --retries $(LIVE_RETRIES) --json-output live-eval-results.json --markdown-output live-eval-summary.md
 
 validate-docs:
 	$(info **************** validating README snippets and links ***************)
