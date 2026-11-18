@@ -838,6 +838,9 @@ spec:
         with open(gcloud_mock, "w", encoding="utf-8") as f:
             f.write(
                 """#!/bin/bash
+if [[ -n "${GCLOUD_CALL_LOG:-}" ]]; then
+    echo "$*" >> "${GCLOUD_CALL_LOG}"
+fi
 if [[ "$1 $2" == "storage cat" ]]; then
     if [[ "$3" == *"lustre"* ]]; then
         printf "europe-west1-b\\nus-west3-a\\nus-central1-a\\nus-central1-b\\nus-central1-c\\n"
@@ -853,7 +856,8 @@ elif [[ "$1 $2 $3" == "compute instances delete" ]]; then
     exit 0
 elif [[ "$1 $2 $3" == "beta quotas info" ]]; then
     # us-west3-a: 18000, us-central1-a/c: 36000, us-west3-b/europe-west1-b: 0
-    cat <<'JSON'
+    # us-central1-b defaults to 0 unless US_CENTRAL1_B_LUSTRE_QUOTA is set
+    cat <<JSON
 [
   {
     "dimensionsInfos": [
@@ -861,7 +865,7 @@ elif [[ "$1 $2 $3" == "beta quotas info" ]]; then
       {"dimensions": {"zone": "us-west3-b"}, "details": {"value": "0"}},
       {"dimensions": {"zone": "us-west3-a"}, "details": {"value": "18000"}},
       {"dimensions": {"zone": "us-central1-a"}, "details": {"value": "36000"}},
-      {"dimensions": {"zone": "us-central1-b"}, "details": {"value": "0"}},
+      {"dimensions": {"zone": "us-central1-b"}, "details": {"value": "${US_CENTRAL1_B_LUSTRE_QUOTA:-0}"}},
       {"dimensions": {"zone": "us-central1-c"}, "details": {"value": "36000"}}
     ]
   }
@@ -934,6 +938,151 @@ fi
         )
         self.assertIn("OUT_ZONE=us-central1-c", res.stdout)
         self.assertIn("OUT_LUSTRE_ZONE=us-central1-c", res.stdout)
+
+    def test_same_zone_preferred_for_lustre_over_earlier_zone_in_list(self):
+        """When compute ZONE itself has Lustre quota, prefer it over earlier zones in the region."""
+        res = self._run_find_available_zone_with_mock(
+            {
+                "EXCLUDE_ZONES": "europe-west1-b us-west3-b",
+                "US_CENTRAL1_B_LUSTRE_QUOTA": "18000",
+            }
+        )
+        self.assertIn("OUT_ZONE=us-central1-b", res.stdout)
+        self.assertIn("OUT_LUSTRE_ZONE=us-central1-b", res.stdout)
+
+    def test_lustre_precheck_runs_before_compute_capacity_check(self):
+        """Regions without Lustre availability skip compute bulk probing."""
+        call_log = os.path.join(self.test_dir, "gcloud_calls.log")
+        res = self._run_find_available_zone_with_mock({"GCLOUD_CALL_LOG": call_log})
+        self.assertIn("OUT_ZONE=us-west3-b", res.stdout)
+
+        with open(call_log, "r", encoding="utf-8") as f:
+            calls = f.read()
+
+        # europe-west1-b has 0 Lustre across europe-west1, so compute bulk probing must not run there.
+        self.assertNotIn("--zone=europe-west1-b", calls)
+        # us-west3 has Lustre in us-west3-a, so compute bulk probing does run for us-west3-b.
+        self.assertIn("--zone=us-west3-b", calls)
+
+    def _run_submit_script_e2e(self, job_yaml_content, attempt1_log_content):
+        """Run submit_and_monitor_kueue_job.sh end-to-end with mocked monitor/CLI."""
+        repo_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+        cb_dir = os.path.join(repo_dir, "tools", "cloud-build")
+
+        script_dir = os.path.join(self.test_dir, "scripts")
+        mock_bin = os.path.join(self.test_dir, "mock_bin")
+        os.makedirs(script_dir, exist_ok=True)
+        os.makedirs(mock_bin, exist_ok=True)
+
+        for fname in (
+            "submit_and_monitor_kueue_job.sh",
+            "check_retriable_error.sh",
+            "update_job_exclude_zones.py",
+        ):
+            shutil.copy(os.path.join(cb_dir, fname), os.path.join(script_dir, fname))
+            os.chmod(os.path.join(script_dir, fname), 0o755)
+
+        attempt_file = os.path.join(self.test_dir, "attempt_count")
+        log_payload_file = os.path.join(self.test_dir, "attempt1_payload.log")
+        with open(log_payload_file, "w", encoding="utf-8") as f:
+            f.write(attempt1_log_content)
+
+        monitor_mock = os.path.join(script_dir, "monitor_kueue_job.sh")
+        with open(monitor_mock, "w", encoding="utf-8") as f:
+            f.write(
+                f"""#!/bin/bash
+COUNT=0
+if [ -f "{attempt_file}" ]; then
+    COUNT=$(cat "{attempt_file}")
+fi
+COUNT=$((COUNT + 1))
+echo "$COUNT" > "{attempt_file}"
+if [ "$COUNT" -eq 1 ]; then
+    cat "{log_payload_file}"
+    exit 1
+fi
+echo "Attempt 2 succeeded"
+exit 0
+"""
+            )
+        os.chmod(monitor_mock, 0o755)
+
+        for cli in ("gcloud", "kubectl"):
+            cli_path = os.path.join(mock_bin, cli)
+            with open(cli_path, "w", encoding="utf-8") as f:
+                f.write("#!/bin/bash\nexit 0\n")
+            os.chmod(cli_path, 0o755)
+
+        job_file = os.path.join(self.test_dir, "job.yaml")
+        job_logs = os.path.join(self.test_dir, "job_logs.txt")
+        with open(job_file, "w", encoding="utf-8") as f:
+            f.write(job_yaml_content)
+
+        env = dict(os.environ)
+        env["PATH"] = f"{mock_bin}:{env['PATH']}"
+        env.update(
+            {
+                "JOB_FILE": job_file,
+                "JOB_LOGS": job_logs,
+                "MAX_RETRIES": "2",
+                "RETRY_DELAY": "0",
+            }
+        )
+
+        res = subprocess.run(
+            ["bash", os.path.join(script_dir, "submit_and_monitor_kueue_job.sh"), "test-job", "123456"],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        with open(job_file, "r", encoding="utf-8") as f:
+            updated_job = yaml.safe_load(f)
+        runner = next(
+            c
+            for c in updated_job["spec"]["template"]["spec"]["containers"]
+            if c["name"] == "runner"
+        )
+        env_map = {e["name"]: e["value"] for e in runner.get("env", [])}
+        return res, env_map
+
+    def test_submit_script_e2e_routes_lustre_exhaustion_without_excluding_compute_zone(self):
+        """E2E: Lustre stockout adds LUSTRE_EXCLUDE_ZONES without adding EXCLUDE_ZONES."""
+        attempt1_log = (
+            "Deploying in ZONE: us-central1-b\n"
+            "LUSTRE_ZONE: us-central1-a\n"
+            "Error: Error creating Instance: googleapi: Error 400: "
+            "resource exhausted: not enough resources available to fulfill the request in us-central1-a\n"
+        )
+        res, env_map = self._run_submit_script_e2e(SAMPLE_JOB_YAML, attempt1_log)
+        self.assertIn("Job succeeded!", res.stdout)
+        self.assertEqual(env_map.get("LUSTRE_EXCLUDE_ZONES"), "us-central1-a")
+        self.assertNotIn("EXCLUDE_ZONES", env_map)
+
+    def test_submit_script_e2e_skips_exclude_zones_when_lustre_only_true(self):
+        """E2E: When LUSTRE_ONLY=true, generic stockout fallback does not inject EXCLUDE_ZONES."""
+        job_yaml = """apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: runner
+        env:
+        - name: LUSTRE_ONLY
+          value: "true"
+        - name: ZONE
+          value: "us-central1-b"
+"""
+        attempt1_log = (
+            "Deploying in ZONE: us-central1-b\n"
+            "Error: ZONE_RESOURCE_POOL_EXHAUSTED: generic capacity error\n"
+        )
+        res, env_map = self._run_submit_script_e2e(job_yaml, attempt1_log)
+        self.assertIn("Job succeeded!", res.stdout)
+        self.assertNotIn("EXCLUDE_ZONES", env_map)
 
     def test_submit_script_routes_lustre_exhaustion_to_lustre_exclude_zones(self):
         """Verify submit_and_monitor_kueue_job.sh separates Lustre vs compute exclusions."""

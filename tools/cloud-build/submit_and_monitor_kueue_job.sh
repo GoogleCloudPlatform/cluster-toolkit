@@ -56,8 +56,8 @@ cleanup_cb() {
 }
 trap cleanup_cb SIGTERM SIGINT
 
-MAX_RETRIES=3
-RETRY_DELAY=300
+MAX_RETRIES="${MAX_RETRIES:-3}"
+RETRY_DELAY="${RETRY_DELAY:-300}"
 ATTEMPT=1
 ACCUMULATED_EXCLUDE_ZONES=""
 ACCUMULATED_LUSTRE_EXCLUDE_ZONES=""
@@ -117,7 +117,7 @@ while true; do
 		exit 1
 	fi
 
-	if [ $ATTEMPT -ge $MAX_RETRIES ]; then
+	if [ "$ATTEMPT" -ge "$MAX_RETRIES" ]; then
 		echo "ERROR: Job failed to find zone capacity after $MAX_RETRIES attempts." >&2
 		exit 1
 	fi
@@ -142,25 +142,31 @@ while true; do
 		echo "INFO: Injecting LUSTRE_EXCLUDE_ZONES='${ACCUMULATED_LUSTRE_EXCLUDE_ZONES}' into ${JOB_FILE} for attempt $((ATTEMPT + 1))..."
 		python3 "${SCRIPT_DIR}/update_job_exclude_zones.py" --inject --file "$JOB_FILE" --zones "$ACCUMULATED_LUSTRE_EXCLUDE_ZONES" --env-var LUSTRE_EXCLUDE_ZONES
 	else
-		FAILED_ZONE=""
-		# Only fall back to deployed zone if the logs confirm a VM/TPU capacity or stockout error
-		if grep -q -i -E "ZONE_RESOURCE_POOL_EXHAUSTED|not enough resources available|resource exhausted|stockout" "$JOB_LOGS"; then
-			FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
+		IS_LUSTRE_ONLY=""
+		if [ -f "$JOB_FILE" ]; then
+			IS_LUSTRE_ONLY=$(python3 "${SCRIPT_DIR}/update_job_exclude_zones.py" --extract --file "$JOB_FILE" --env-var LUSTRE_ONLY 2>/dev/null || true)
 		fi
-
-		if [ -n "$FAILED_ZONE" ] && [ -f "$JOB_FILE" ]; then
-			echo "INFO: Detected capacity/resource exhaustion in zone: ${FAILED_ZONE}"
-			if [ -z "$ACCUMULATED_EXCLUDE_ZONES" ]; then
-				ACCUMULATED_EXCLUDE_ZONES="${FAILED_ZONE}"
-			elif [[ ! " ${ACCUMULATED_EXCLUDE_ZONES} " == *" ${FAILED_ZONE} "* ]]; then
-				ACCUMULATED_EXCLUDE_ZONES="${ACCUMULATED_EXCLUDE_ZONES} ${FAILED_ZONE}"
+		if [ "$IS_LUSTRE_ONLY" != "true" ]; then
+			FAILED_ZONE=""
+			# Only fall back to deployed zone if the logs confirm a VM/TPU capacity or stockout error
+			if grep -q -i -E "ZONE_RESOURCE_POOL_EXHAUSTED|not enough resources available|resource exhausted|stockout" "$JOB_LOGS"; then
+				FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
 			fi
 
-			echo "INFO: Injecting EXCLUDE_ZONES='${ACCUMULATED_EXCLUDE_ZONES}' into ${JOB_FILE} for attempt $((ATTEMPT + 1))..."
-			python3 "${SCRIPT_DIR}/update_job_exclude_zones.py" --inject --file "$JOB_FILE" --zones "$ACCUMULATED_EXCLUDE_ZONES"
+			if [ -n "$FAILED_ZONE" ] && [ -f "$JOB_FILE" ]; then
+				echo "INFO: Detected capacity/resource exhaustion in zone: ${FAILED_ZONE}"
+				if [ -z "$ACCUMULATED_EXCLUDE_ZONES" ]; then
+					ACCUMULATED_EXCLUDE_ZONES="${FAILED_ZONE}"
+				elif [[ ! " ${ACCUMULATED_EXCLUDE_ZONES} " == *" ${FAILED_ZONE} "* ]]; then
+					ACCUMULATED_EXCLUDE_ZONES="${ACCUMULATED_EXCLUDE_ZONES} ${FAILED_ZONE}"
+				fi
+
+				echo "INFO: Injecting EXCLUDE_ZONES='${ACCUMULATED_EXCLUDE_ZONES}' into ${JOB_FILE} for attempt $((ATTEMPT + 1))..."
+				python3 "${SCRIPT_DIR}/update_job_exclude_zones.py" --inject --file "$JOB_FILE" --zones "$ACCUMULATED_EXCLUDE_ZONES"
+			fi
 		fi
 	fi
 
-	sleep $RETRY_DELAY
+	sleep "$RETRY_DELAY"
 	ATTEMPT=$((ATTEMPT + 1))
 done

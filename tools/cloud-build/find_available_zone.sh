@@ -360,11 +360,23 @@ check_cpu_quota() {
 
 select_lustre_zone() {
 	local region=$1
+	local preferred_zone=${2:-}
 	local candidates
 	candidates=$(echo "${LUSTRE_GCS_CONTENT}" | tr -d '\r' | grep -E "^${region}-[a-z]$" || true)
 	if [[ -z "${candidates}" ]]; then
 		echo "INFO: No Managed Lustre candidate zones found in region ${region}."
 		return 1
+	fi
+
+	# Prefer the compute zone itself first when available in the region to minimize cross-zone latency.
+	if [[ -n "${preferred_zone}" ]] && echo "${candidates}" | grep -x -q "${preferred_zone}"; then
+		local others
+		others=$(echo "${candidates}" | grep -v -x "${preferred_zone}" || true)
+		if [[ -n "${others}" ]]; then
+			candidates=$(printf "%s\n%s\n" "${preferred_zone}" "${others}")
+		else
+			candidates="${preferred_zone}"
+		fi
 	fi
 
 	local l_zone
@@ -509,6 +521,16 @@ else
 				continue
 			fi
 
+			# Pre-check that at least one Managed Lustre zone exists in this region before probing compute capacity.
+			if [[ "${CHECK_LUSTRE:-false}" == "true" && -n "${LUSTRE_OPTIONS_GCS_PATH:-}" ]]; then
+				if ! select_lustre_zone "${REGION}" "${ZONE}"; then
+					echo "INFO: No Managed Lustre zone available in region ${REGION} for compute zone ${ZONE}. Skipping ${ZONE}."
+					continue
+				fi
+			else
+				SELECTED_LUSTRE_ZONE="${ZONE}"
+			fi
+
 			local_compute_ok=false
 			if [[ "${MACHINE_TYPE}" == "tpu" ]]; then
 				if check_tpu_capacity "${ZONE}" "${PROVISIONING_MODEL}"; then
@@ -522,15 +544,6 @@ else
 
 			if [[ "${local_compute_ok}" != "true" ]]; then
 				continue
-			fi
-
-			if [[ "${CHECK_LUSTRE:-false}" == "true" && -n "${LUSTRE_OPTIONS_GCS_PATH:-}" ]]; then
-				if ! select_lustre_zone "${REGION}"; then
-					echo "INFO: No Managed Lustre zone available in region ${REGION} for compute zone ${ZONE}. Skipping ${ZONE}."
-					continue
-				fi
-			else
-				SELECTED_LUSTRE_ZONE="${ZONE}"
 			fi
 
 			SELECTED_ZONE="${ZONE}"

@@ -172,6 +172,10 @@ steps:
               sed -i -e '/reason:/d' \$$BLUEPRINT
               sed -i 's/^  lustre_size_gib:.*/  lustre_size_gib: 18000/' \$$BLUEPRINT
               sed -i "s/remote_mount: lustrefs/remote_mount: lustrefs\n      zone: \$$LUSTRE_ZONE/" \$$BLUEPRINT
+              if ! grep -q "zone: \$$LUSTRE_ZONE" \$$BLUEPRINT; then
+                echo "ERROR: Failed to inject LUSTRE_ZONE into \$$BLUEPRINT" >&2
+                exit 1
+              fi
 
               # Calculate Time-To-Live label (Current UTC time + 4 hours)
               TTL_LABEL=\$(date -u -d '+4 hours' +'%Y-%m-%d_%H-%M')
