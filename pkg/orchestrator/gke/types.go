@@ -210,6 +210,9 @@ type GKEOrchestrator struct {
 	kubeconfigLoader k8s.KubeconfigLoader
 	// kubeContext is the context set by configureKubectl; all kubectl and dynamic-client calls use it.
 	kubeContext string
+	// inspectedPVCs caches per-submit PVC metadata inspected during ValidateClusterMounts.
+	inspectedPVCs  map[string]pvcInspectResult
+	nfsAuthChecked bool
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -352,6 +355,37 @@ type StorageManager struct {
 	now             func() time.Time // stamps last-claimed-at; nil means time.Now
 }
 
+type pvcInspectResult struct {
+	volumeName       string
+	storageClassName string
+	provisioner      string
+}
+
+type userPVCRequest struct {
+	claim       string
+	firstDest   string
+	firstRWSrc  string
+	firstRWDest string
+	needsRW     bool
+}
+
+type pvcInspectJSON struct {
+	Metadata struct {
+		Annotations       map[string]string `json:"annotations"`
+		DeletionTimestamp string            `json:"deletionTimestamp"`
+	} `json:"metadata"`
+	Spec struct {
+		VolumeName       string   `json:"volumeName"`
+		StorageClassName string   `json:"storageClassName"`
+		AccessModes      []string `json:"accessModes"`
+		VolumeMode       string   `json:"volumeMode"`
+	} `json:"spec"`
+	Status struct {
+		Phase       string   `json:"phase"`
+		AccessModes []string `json:"accessModes"`
+	} `json:"status"`
+}
+
 type storagePreflightClient interface {
 	projectNumber(ctx context.Context, projectID string) (int64, error)
 	projectIAMBindings(ctx context.Context, projectID string) ([]iamBinding, error)
@@ -408,9 +442,10 @@ type mountSegments struct {
 	ProfileSet bool
 }
 
-// mountBuildState maps generated PV name -> Pod volume name to de-duplicate gateways within a job.
+// mountBuildState maps generated PV/PVC keys -> Pod volume name to de-duplicate volumes within a job.
 type mountBuildState struct {
 	gatewayVolumeNames map[string]string
+	pvcNeedsSidecar    map[string]bool
 }
 
 // MountInfo represents parsed volume mount options
@@ -426,6 +461,27 @@ type MountInfo struct {
 	Attributes          map[string]string
 }
 
+type GatewayMetadataParams struct {
+	ManagedByLabel          string
+	ManagedByValue          string
+	StorageTypeLabel        string
+	StorageType             string
+	LastClaimedAtAnnotation string
+	LastClaimedAt           string
+	LastClaimedByAnnotation string
+	LastClaimedBy           string
+}
+
+type filestoreTemplateParams struct {
+	PVName    string
+	PVCName   string
+	Namespace string
+	Share     string
+	IP        string
+	Capacity  string
+	GatewayMetadataParams
+}
+
 type GCSFusePVPVCTemplateParams struct {
 	PVName           string
 	PVCName          string
@@ -435,15 +491,7 @@ type GCSFusePVPVCTemplateParams struct {
 	VolumeHandle     string
 	MountOptions     []string
 	VolumeAttributes map[string]string
-	ManagedByLabel   string
-	ManagedByValue   string
-	StorageTypeLabel string
-	StorageType      string
-
-	LastClaimedAtAnnotation string
-	LastClaimedAt           string
-	LastClaimedByAnnotation string
-	LastClaimedBy           string
+	GatewayMetadataParams
 }
 
 type existingGatewayPV struct {
@@ -461,6 +509,11 @@ type existingGatewayPV struct {
 			VolumeHandle     string            `yaml:"volumeHandle"`
 			VolumeAttributes map[string]string `yaml:"volumeAttributes"`
 		} `yaml:"csi"`
+		NFS *struct {
+			Path     string `yaml:"path" json:"path,omitempty"`
+			Server   string `yaml:"server" json:"server,omitempty"`
+			ReadOnly bool   `yaml:"readOnly" json:"readOnly,omitempty"`
+		} `yaml:"nfs" json:"nfs,omitempty"`
 	} `yaml:"spec"`
 	Status struct {
 		Phase string `yaml:"phase"`

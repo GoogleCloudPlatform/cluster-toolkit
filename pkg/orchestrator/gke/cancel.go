@@ -87,11 +87,6 @@ func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions
 	return nil
 }
 
-func isToolkitGatewayClaimName(claim string) bool {
-	return strings.HasPrefix(claim, gcsFuseGatewayPrefix+"-") ||
-		strings.HasPrefix(claim, filestoreGatewayPrefix+"-")
-}
-
 // reclaimStorageGateways deletes unused toolkit gateways in the namespace. Failures only warn.
 func (g *GKEOrchestrator) reclaimStorageGateways(namespace, cancelledJobSet string, ownClaims []string) {
 	if g.kubeClient == nil {

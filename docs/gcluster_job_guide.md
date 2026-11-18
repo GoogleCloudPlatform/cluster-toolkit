@@ -195,7 +195,7 @@ If you want to run a job across multiple groups of GPU nodes (e.g., 2 groups of 
 
 ### 4.4 Example: Submit Job with Persistent Storage
 
-You can mount Cloud Storage buckets, Filestore instances, existing PVCs (e.g., for Lustre), or host paths using the `--mount` flag.
+You can mount Cloud Storage buckets, Filestore instances, NFS servers, existing PVCs (e.g., for Lustre), or host paths using the `--mount` flag.
 
 Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]"`
 * `mode` is optional and defaults to `ro` (read-only). To allow writes, append `;rw`.
@@ -206,9 +206,10 @@ Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;profile=<profile>][
   * **With `profile=`**: Overrides default [storage profile StorageClass parameters](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#storageclass_configuration_reference) on the generated PVs.
 
 **Supported volume sources (`<src>`):**
-* **Cloud Storage**: `gs://<bucket-name>` (mounts via GCS Fused Driver)
+* **Cloud Storage**: `gs://<bucket-name>[/<sub-path>]` (mounts via the Cloud Storage FUSE CSI driver)
 * **Filestore**: `filestore://<instance-name-or-ip>/<share-name>` (auto-provisions PV and PVC)
-* **Existing PVC**: `<pvc-name>` (the PersistentVolumeClaim must already exist in the target Kubernetes namespace; if the PVC is backed by the GKE Cloud Storage FUSE CSI driver, `gcluster` auto-detects it via `kubectl get pvc`—and, for statically provisioned PVs or custom StorageClasses without a PVC provisioner annotation, `kubectl get pv` or `kubectl get storageclass`—to inject the required `gke-gcsfuse/volumes: "true"` pod annotation)
+* **NFS Server**: `nfs://<server-host-or-ip>/<export-path>` (auto-provisions a shared static NFS PV and PVC after checking `kubectl auth can-i create persistentvolumes --all-namespaces`, and `gcluster job cancel` auto-reclaims unused NFS gateways once no other workload references them; uses default NFS port 2049—custom ports and NFSv4 root exports `nfs://<server>/` require a pre-provisioned PV/PVC—and supports bracketed IPv6 hosts such as `nfs://[fd12::1]/export`)
+* **Existing PVC**: `<pvc-name>[/<sub-path>]` (the PersistentVolumeClaim must already exist in the target Kubernetes namespace; `ReadOnlyMany` PVCs are rejected with `;rw`, multi-node jobs require `ReadWriteMany` or `ReadOnlyMany` to avoid Multi-Attach errors, and Pathways jobs count `pathways-head` as an extra node so even single-host TPU slices reject `ReadWriteOnce` PVCs; if the PVC is backed by the GKE Cloud Storage FUSE CSI driver, `gcluster` auto-detects it via `kubectl get pvc`—and, for statically provisioned PVs or custom StorageClasses without a PVC provisioner annotation, `kubectl get pv` or `kubectl get storageclass`—to inject the required `gke-gcsfuse/volumes: "true"` pod annotation)
 * **Host Path**: `/host/path/on/node` (mounts a directory directly from the host node)
 
 > [!NOTE]
@@ -250,7 +251,7 @@ Mounting GCS buckets with storage profiles:
 
 *(Note: Replace `<YOUR_DATASET_BUCKET>` and `<YOUR_CHECKPOINT_BUCKET>` with the names of your own buckets).*
 
-Mounting an existing PVC named `lustre-pvc` (read-only):
+Mounting an existing PVC named `lustre-pvc` (read-only) and a PVC sub-directory (read-write):
 
 ```bash
 ./gcluster job submit \
@@ -259,7 +260,20 @@ Mounting an existing PVC named `lustre-pvc` (read-only):
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --mount "lustre-pvc;/data"
+  --mount "lustre-pvc;/data" \
+  --mount "lustre-pvc/checkpoints/run-1;/checkpoints;rw"
+```
+
+Mounting an NFS export (read-write):
+
+```bash
+./gcluster job submit \
+  --name my-nfs-job \
+  --command "python /app.py" \
+  --compute-type n2-standard-32 \
+  --base-image python:3.9-slim \
+  --build-context job_details \
+  --mount "nfs://10.0.0.10/exports/datasets;/data;rw"
 ```
 
 #### GCS FUSE storage profiles (`profile=`)
@@ -1247,7 +1261,7 @@ Open the extracted `.tmpl` files in your preferred editor. Workload manifests ar
 * `pathways_jobset.tmpl`: Pathways (`--pathways`) `JobSet` manifest. Defines `pathways-head` and `worker` pod specs inline while reusing `workload_labels`, `jobset_network`, `pod_auth_and_priority`, `pod_placement`, and `telemetry_sidecar` from `base.tmpl`.
 * `base.tmpl`: Shared named `{{- define "<block>" -}}` blocks rendered at a target YAML column width via `{{(StructuralData (.RenderBlock "<block>" <indent>))}}`. To add custom sidecars, pod annotations, or volumes to standard workloads, edit `pod_template` in `base.tmpl`.
 * `job.tmpl`: Standalone `batch/v1` Indexed `Job` and headless `Service` template (reserved for upcoming single-slice `Job` support; `gcluster job submit` does not render `job.tmpl` yet).
-* `filestore.tmpl` & `gcs_fuse_pv_pvc.tmpl`: Storage templates used when provisioning Filestore and Cloud Storage FUSE storage-profile `PersistentVolume` / `PersistentVolumeClaim` resources.
+* `filestore.tmpl` & `gcs_fuse_pv_pvc.tmpl`: Storage templates used when provisioning Filestore, generic NFS (`nfs://`), and Cloud Storage FUSE storage-profile `PersistentVolume` / `PersistentVolumeClaim` resources.
 * `local_queue.tmpl` & `priority_classes.tmpl`: Kueue templates used when bootstrapping default `LocalQueue` and `PriorityClass` resources.
 
 > [!NOTE]
@@ -1331,7 +1345,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--num-nodes` | `int` | Number of nodes to use per group/slice (Default: `1`). Auto-calculated for TPUs based on topology. |
 | `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. Supports pipe separator (`\|`) for multiple values. |
 | `--restarts` | `int` | Maximum number of restarts allowed for the JobSet before marked as failed (Default: `1`, or `30` when `--pathways-deploy-sps` is set). |
-| `--mount` | `stringArray` | Mount storage volumes, buckets, filestore instances, or PVCs using the `<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]` format. Examples of `<src>`: `gs://my-bucket`, `filestore://my-instance/share`, `my-pvc` (for Lustre/etc), or `/host/path`. `profile=` (`training`, `checkpointing`, `serving`) is GCS-only and provisions a shared GCS FUSE storage-profile PV/PVC gateway instead of an inline CSI volume. |
+| `--mount` | `stringArray` | Mount storage volumes, buckets, filestore/NFS shares, or PVCs using the `<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]` format. Examples of `<src>`: `gs://my-bucket[/<sub-path>]`, `filestore://my-instance/share`, `nfs://10.0.0.1/export`, `my-pvc` or `my-pvc/sub-dir` (for Lustre/NFS PVCs), or `/host/path`. `profile=` (`training`, `checkpointing`, `serving`) is GCS-only and provisions a shared GCS FUSE storage-profile PV/PVC gateway instead of an inline CSI volume. |
 | `--env` | `stringArray` | Custom environment variables to pass exclusively to the user's workload container in KEY=VALUE format (e.g. `--env KEY=VALUE`). Applies to both standard and Pathways workloads and can be specified multiple times. For standard JobSet workloads, `WORKERS_0_HOSTNAME` and `MASTER_ADDR` are preset to `<name>-main-job-0-0.<name>` unless overridden via `--env`. |
 | `--await-job-completion` | `bool` | If true, the CLI waits for the job to complete before exiting. |
 | `--timeout` | `string` | Time to wait for job completion (e.g., `1h`, `10m`). Used with `--await-job-completion`. |

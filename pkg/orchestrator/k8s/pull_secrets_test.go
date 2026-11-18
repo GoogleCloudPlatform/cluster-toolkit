@@ -189,6 +189,9 @@ func TestIsForbiddenError(t *testing.T) {
 		{"nil", nil, false},
 		{"typed 403", apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "", errors.New("forbidden")), true},
 		{"kubectl stderr", errors.New("Error from server (Forbidden): secrets is forbidden: User cannot list"), true},
+		{"wrapped 403 Forbidden", errors.New(`insufficient RBAC permissions to read ClusterQueue "default" (403 Forbidden)`), true},
+		{"structured is forbidden suffix", errors.New(`persistentvolumeclaims "pvc" is forbidden`), true},
+		{"non-403 server timeout echoing forbidden resource name", errors.New("Error from server (Timeout): request did not complete (get persistentvolumeclaims forbidden-pvc)"), false},
 		{"other error", errors.New("connection refused"), false},
 	}
 	for _, tc := range cases {

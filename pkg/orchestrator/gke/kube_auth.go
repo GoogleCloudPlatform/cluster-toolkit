@@ -563,6 +563,7 @@ func (g *GKEOrchestrator) endpointConnectivityError(clusterName string, attempts
 // GCLUSTER_REFRESH_CREDENTIALS=1 skips reuse.
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
 	g.kubeContext = ""
+	g.resetStorageCaches()
 	avoid := endpointModeUnknown
 
 	if forceCredentialRefresh() {

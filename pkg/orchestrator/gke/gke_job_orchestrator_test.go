@@ -4726,6 +4726,85 @@ func TestSubmitJob_TelemetryAndTemplateFastFailBeforeImageBuild(t *testing.T) {
 	})
 }
 
+func TestSubmitJob_ClusterMountsResetCacheAndFailFastBeforePinTelemetry(t *testing.T) {
+	setupMockMachineConfig(t)
+	tpuCap := `{"guestCpus": 112, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v6e-slice"}]}`
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud container clusters describe": {
+			{ExitCode: 0, Stdout: `{"locations":["us-central1-a"],"nodePools":[{"name":"tpu-pool","initialNodeCount":2,"config":{"machineType":"ct6e-standard-4t"}}]}`},
+		},
+		"gcloud container clusters get-credentials": {{ExitCode: 0}},
+		"kubectl get --raw /version":                {{ExitCode: 0, Stdout: `{}`}, {ExitCode: 0, Stdout: `{}`}},
+		"kubectl get crd": {
+			{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+			{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+		},
+		"kubectl get service":       {{ExitCode: 0, Stdout: "service/jobset-webhook-service\n"}},
+		"kubectl get endpointslice": {{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}, {ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}},
+		"kubectl get endpoints ":    {{ExitCode: 0, Stdout: "10.0.0.1\n"}},
+		"kubectl get deployment kueue-controller-manager": {
+			{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.16.0"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`},
+		},
+		"kubectl get resourceflavors":           {{ExitCode: 0, Stdout: ""}},
+		"kubectl get localqueue":                {{ExitCode: 0, Stdout: "lq-default"}},
+		"kubectl get nodes":                     {{ExitCode: 0, Stdout: "2x4\n"}},
+		"gcloud compute machine-types list":     {{ExitCode: 0, Stdout: `[{"name":"ct6e-standard-4t"}]`}},
+		"gcloud compute machine-types describe": {{ExitCode: 0, Stdout: tpuCap}, {ExitCode: 0, Stdout: tpuCap}, {ExitCode: 0, Stdout: tpuCap}},
+		"kubectl get pvc": {
+			{ExitCode: 0, Stdout: `{"spec":{"volumeName":"pv-rwo","accessModes":["ReadWriteOnce"]},"status":{"accessModes":["ReadWriteOnce"]}}`},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	var dynListCalls int
+	orc.dynClient = &mockDynamicClient{
+		getFunc: func(_ context.Context, _ string, _ metav1.GetOptions, _ ...string) (*unstructured.Unstructured, error) {
+			return &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Namespace"}}, nil
+		},
+		listFunc: func(_ context.Context, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+			dynListCalls++
+			return &unstructured.UnstructuredList{}, nil
+		},
+	}
+	orc.inspectedPVCs = map[string]pvcInspectResult{"default/stale": {volumeName: "old"}}
+	orc.nfsAuthChecked = true
+
+	// NodesPerSlice starts at 1; resolveHardwareRequirements derives NodesPerSlice=2
+	// for v6e-8/2x4 on ct6e-standard-4t before ValidateClusterMounts rejects RWO.
+	err := orc.SubmitJob(orchestrator.JobDefinition{
+		WorkloadName:    "rwo-fast-fail",
+		ProjectID:       "test-project",
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		GKENamespace:    " default ",
+		ComputeType:     "v6e-8",
+		Topology:        "2x4",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+		BaseImage:       "python:3.11-slim",
+		BuildContext:    filepath.Join(t.TempDir(), "missing-build-ctx"),
+		CommandToRun:    "python3 train.py",
+		RawMounts:       []string{"train-pvc;/data"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "Multi-Attach") {
+		t.Fatalf("SubmitJob() = %v, want Multi-Attach error after resolveHardwareRequirements and before pinTelemetryAndValidate", err)
+	}
+	if orc.namespace != "default" {
+		t.Errorf("SubmitJob() stored untrimmed namespace %q, want %q", orc.namespace, "default")
+	}
+	if dynListCalls != 0 {
+		t.Errorf("pinTelemetryAndValidate called dynamic List %d times before ValidateClusterMounts failed", dynListCalls)
+	}
+	if orc.nfsAuthChecked {
+		t.Errorf("SubmitJob() did not reset nfsAuthChecked")
+	}
+	if _, stale := orc.inspectedPVCs["default/stale"]; stale {
+		t.Errorf("SubmitJob() did not clear stale inspectedPVCs entry")
+	}
+	if got := orc.inspectedPVCs["default/train-pvc"].volumeName; got != "pv-rwo" {
+		t.Errorf("inspectedPVCs[default/train-pvc].volumeName = %q, want pv-rwo", got)
+	}
+}
+
 func TestSubmitJob_TPUTelemetryNodeCachePinning(t *testing.T) {
 	newTPUSubmitOrc := func(t *testing.T, kc *MockKubeClient) *GKEOrchestrator {
 		t.Helper()
