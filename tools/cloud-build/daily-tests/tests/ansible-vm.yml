@@ -16,10 +16,12 @@
 
 test_name: test-workstation-ansible
 deployment_name: "ansible-vm-{{ build }}"
-zone: us-central1-a
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/ansible-vm.yaml"
 network: "default"
 remote_node: "{{ deployment_name }}-rocky8-0"
+cli_deployment_vars:
+  region: "{{ region }}"
+  zone: "{{ zone }}"
 post_deploy_tests:
 - test-validation/test-ansible-vm.yml
