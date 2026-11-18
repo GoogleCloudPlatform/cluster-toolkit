@@ -108,7 +108,7 @@ steps:
             - name: MIN_NODES
               value: "2"
             - name: INSTANCE_PREFIX
-              value: "gkeml"
+              value: "gkehd"
             - name: OPTIONS_GCS_PATH
               value: "gs://hpc-ctk1357/lustreoptions.txt"
             - name: ENABLE_SPOT_FALLBACK

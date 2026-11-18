@@ -99,13 +99,13 @@ steps:
             - name: REQUIRED_LUSTRE_GB
               value: "18000"
             - name: MACHINE_TYPE
-              value: "n2-standard-2"
+              value: "c4a-standard-4"
             - name: NUM_NODES
               value: "2"
             - name: MIN_NODES
               value: "2"
             - name: INSTANCE_PREFIX
-              value: "gkeml"
+              value: "ansvm"
             - name: OPTIONS_GCS_PATH
               value: "gs://hpc-ctk1357/ansiblevmoptions.txt"
             - name: ENABLE_SPOT_FALLBACK
