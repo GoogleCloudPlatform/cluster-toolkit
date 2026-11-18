@@ -4956,13 +4956,14 @@ func TestHasAPIGroupVersion(t *testing.T) {
 			{name: "kubectl not in PATH", res: shell.CommandResult{ExitCode: 1, Err: errors.New(`exec: "kubectl": executable file not found in $PATH`)}},
 			{name: "RBAC Forbidden", res: shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): forbidden"}},
 			{name: "stdout error fallback", res: shell.CommandResult{ExitCode: 1, Stdout: "gateway 502 bad gateway"}},
+			{name: "empty output falls back to exit status", res: shell.CommandResult{ExitCode: 2}},
 		} {
 			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 				rawCmd: {tc.res},
 			})
 			orc := newTestGKEOrchestrator(mockExec)
-			if ok, err := orc.HasAPIGroupVersion(testGroupVersion); err == nil || ok {
-				t.Errorf("%s: expected error from HasAPIGroupVersion, got (%v, %v)", tc.name, ok, err)
+			if ok, err := orc.HasAPIGroupVersion(testGroupVersion); err == nil || ok || strings.HasSuffix(err.Error(), ": ") {
+				t.Errorf("%s: expected informative error from HasAPIGroupVersion, got (%v, %v)", tc.name, ok, err)
 			}
 		}
 		orcBlank := newTestGKEOrchestrator(NewMockExecutor(nil))

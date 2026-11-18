@@ -430,6 +430,9 @@ func (g *GKEOrchestrator) HasAPIGroupVersion(groupVersion string) (bool, error) 
 	if errText == "" && res.Err != nil {
 		errText = strings.TrimSpace(res.Err.Error())
 	}
+	if errText == "" {
+		errText = fmt.Sprintf("exit status %d", res.ExitCode)
+	}
 	if isAPIGroupNotFoundText(errText) {
 		return false, nil
 	}
