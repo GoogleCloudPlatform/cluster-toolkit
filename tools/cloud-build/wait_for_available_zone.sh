@@ -40,7 +40,8 @@ while true; do
 		source /workspace/tools/cloud-build/find_available_zone.sh
 		# If it succeeds, these lines will execute and save the exports.
 		echo "export ZONE=\"${ZONE}\"" >"$ZONE_EXPORT"
-		echo "export PROVISIONING_MODEL=\"${PROVISIONING_MODEL}\"" >>"$ZONE_EXPORT"
+		echo "export LUSTRE_ZONE=\"${LUSTRE_ZONE:-}\"" >>"$ZONE_EXPORT"
+		echo "export PROVISIONING_MODEL=\"${PROVISIONING_MODEL:-}\"" >>"$ZONE_EXPORT"
 	) 2>&1 | tee "$ZONE_OUTPUT"
 
 	EXIT_CODE=${PIPESTATUS[0]}

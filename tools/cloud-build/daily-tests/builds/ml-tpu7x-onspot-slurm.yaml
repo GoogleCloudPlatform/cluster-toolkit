@@ -89,6 +89,14 @@ steps:
           - name: runner
             image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
             env:
+            - name: CHECK_LUSTRE
+              value: "true"
+            - name: REQUIRED_LUSTRE_GB
+              value: "18000"
+            - name: LUSTRE_ONLY
+              value: "true"
+            - name: LUSTRE_OPTIONS_GCS_PATH
+              value: "gs://hpc-ctk1357/managedlustreoptions.txt"
             - name: ANSIBLE_HOST_KEY_CHECKING
               value: "false"
             - name: ANSIBLE_CONFIG
@@ -146,8 +154,14 @@ steps:
               cd /workspace
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
-              REGION="us-central1"
-              ZONE="us-central1-c"
+              export REGION="us-central1"
+              export ZONE="us-central1-c"
+              echo "Sourcing wait_for_available_zone.sh to determine Lustre zone."
+              source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              if [ -z "\$${LUSTRE_ZONE:-}" ]; then
+                echo "ERROR: LUSTRE_ZONE not found" >&2
+                exit 1
+              fi
 
               sed -i "s/^  project_id:.*/  project_id: \$$PROJECT_ID/" \$$BLUEPRINT
               sed -i "s/^  deployment_name:.*/  deployment_name: \$$DEPLOYMENT_NAME/" \$$BLUEPRINT
@@ -157,7 +171,7 @@ steps:
               sed -i 's/^  tpu_dynamic_max_nodes:.*/  tpu_dynamic_max_nodes: 1/' \$$BLUEPRINT
               sed -i 's/^  tpu_accelerator_topology:.*/  tpu_accelerator_topology: 2x2x1/' \$$BLUEPRINT
               sed -i 's/^  lustre_size_gib:.*/  lustre_size_gib: 18000/' \$$BLUEPRINT
-              sed -i 's/remote_mount: lustrefs/remote_mount: lustrefs\n      zone: us-central1-a/' \$$BLUEPRINT
+              sed -i "s/remote_mount: lustrefs/remote_mount: lustrefs\n      zone: \$$LUSTRE_ZONE/" \$$BLUEPRINT
               sed -i 's/machine_type: n2d-standard-4/machine_type: c2-standard-4/g' \$$BLUEPRINT
 
 

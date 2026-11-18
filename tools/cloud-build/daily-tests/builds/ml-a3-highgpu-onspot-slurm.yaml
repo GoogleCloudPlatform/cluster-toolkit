@@ -96,7 +96,9 @@ steps:
             - name: CHECK_LUSTRE
               value: "true"
             - name: REQUIRED_LUSTRE_GB
-              value: "36000"
+              value: "18000"
+            - name: LUSTRE_OPTIONS_GCS_PATH
+              value: "gs://hpc-ctk1357/managedlustreoptions.txt"
             - name: EXCLUDE_ZONES
               value: "europe-west2-c us-west1-b us-west1-c us-west1-a"
             - name: ANSIBLE_HOST_KEY_CHECKING
@@ -162,10 +164,16 @@ steps:
                 echo "ERROR: ZONE not found" >&2
                 exit 1
               fi
+              if [ -z "\$${LUSTRE_ZONE:-}" ]; then
+                echo "ERROR: LUSTRE_ZONE not found" >&2
+                exit 1
+              fi
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
               REGION="\$${ZONE%-*}"
               BUILD_ID_SHORT="\$${BUILD_ID:0:6}"
+              sed -i 's/^  lustre_size_gib:.*/  lustre_size_gib: 18000/' \$$BLUEPRINT
+              sed -i "s/remote_mount: lustrefs/remote_mount: lustrefs\n      zone: \$$LUSTRE_ZONE/" \$$BLUEPRINT
 
 
               ENABLE_SPOT="true"

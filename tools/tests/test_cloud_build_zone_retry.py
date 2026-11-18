@@ -768,6 +768,185 @@ spec:
         self.assertIsNotNone(entry)
         self.assertEqual(entry["value"], "us-west1-b us-central1-a")
 
+    def test_update_job_lustre_exclude_zones_independent_from_exclude_zones(self):
+        """Test --env-var LUSTRE_EXCLUDE_ZONES does not collide with EXCLUDE_ZONES."""
+        job_file = os.path.join(self.test_dir, "job.yaml")
+        with open(job_file, "w", encoding="utf-8") as f:
+            f.write(SAMPLE_JOB_YAML)
+
+        subprocess.run(
+            [
+                "python3",
+                UPDATE_SCRIPT,
+                "--inject",
+                "--file",
+                job_file,
+                "--zones",
+                "us-central1-b",
+                "--env-var",
+                "EXCLUDE_ZONES",
+            ],
+            check=True,
+        )
+        subprocess.run(
+            [
+                "python3",
+                UPDATE_SCRIPT,
+                "--inject",
+                "--file",
+                job_file,
+                "--zones",
+                "us-central1-a us-central1-c",
+                "--env-var",
+                "LUSTRE_EXCLUDE_ZONES",
+            ],
+            check=True,
+        )
+
+        res_compute = subprocess.run(
+            ["python3", UPDATE_SCRIPT, "--extract", "--file", job_file],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertEqual(res_compute.stdout.strip(), "us-central1-b")
+
+        res_lustre = subprocess.run(
+            [
+                "python3",
+                UPDATE_SCRIPT,
+                "--extract",
+                "--file",
+                job_file,
+                "--env-var",
+                "LUSTRE_EXCLUDE_ZONES",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertEqual(res_lustre.stdout.strip(), "us-central1-a us-central1-c")
+
+    def _run_find_available_zone_with_mock(self, extra_env):
+        """Run find_available_zone.sh with mocked gcloud/jq in a temp bin dir."""
+        repo_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+        find_script = os.path.join(repo_dir, "tools", "cloud-build", "find_available_zone.sh")
+
+        mock_bin = os.path.join(self.test_dir, "mock_bin")
+        os.makedirs(mock_bin, exist_ok=True)
+        gcloud_mock = os.path.join(mock_bin, "gcloud")
+        with open(gcloud_mock, "w", encoding="utf-8") as f:
+            f.write(
+                """#!/bin/bash
+if [[ "$1 $2" == "storage cat" ]]; then
+    if [[ "$3" == *"lustre"* ]]; then
+        printf "europe-west1-b\\nus-west3-a\\nus-central1-a\\nus-central1-b\\nus-central1-c\\n"
+    else
+        printf "europe-west1-b\\nus-west3-b\\nus-central1-b\\n"
+    fi
+elif [[ "$1 $2 $3" == "compute instances bulk" ]]; then
+    exit 0
+elif [[ "$1 $2 $3" == "compute instances list" ]]; then
+    echo "test-123456-01"
+    echo "test-123456-02"
+elif [[ "$1 $2 $3" == "compute instances delete" ]]; then
+    exit 0
+elif [[ "$1 $2 $3" == "beta quotas info" ]]; then
+    # us-west3-a: 18000, us-central1-a/c: 36000, us-west3-b/europe-west1-b: 0
+    cat <<'JSON'
+[
+  {
+    "dimensionsInfos": [
+      {"dimensions": {"zone": "europe-west1-b"}, "details": {"value": "0"}},
+      {"dimensions": {"zone": "us-west3-b"}, "details": {"value": "0"}},
+      {"dimensions": {"zone": "us-west3-a"}, "details": {"value": "18000"}},
+      {"dimensions": {"zone": "us-central1-a"}, "details": {"value": "36000"}},
+      {"dimensions": {"zone": "us-central1-b"}, "details": {"value": "0"}},
+      {"dimensions": {"zone": "us-central1-c"}, "details": {"value": "36000"}}
+    ]
+  }
+]
+JSON
+elif [[ "$1 $2 $3" == "lustre instances list" ]]; then
+    echo "[]"
+fi
+"""
+            )
+        os.chmod(gcloud_mock, 0o755)
+
+        env = dict(os.environ)
+        env["PATH"] = f"{mock_bin}:{env['PATH']}"
+        env.update(
+            {
+                "PROJECT_ID": "test-proj",
+                "BUILD_ID": "1234567890",
+                "INSTANCE_PREFIX": "test",
+                "MACHINE_TYPE": "a4-highgpu-8g",
+                "NUM_NODES": "2",
+                "MIN_NODES": "2",
+                "CHECK_LUSTRE": "true",
+                "REQUIRED_LUSTRE_GB": "18000",
+                "OPTIONS_GCS_PATH": "gs://bucket/compute.txt",
+                "LUSTRE_OPTIONS_GCS_PATH": "gs://bucket/lustre.txt",
+            }
+        )
+        env.update(extra_env)
+
+        cmd = (
+            f'set -e -u -o pipefail; source "{find_script}"; '
+            'echo "OUT_ZONE=${ZONE}"; echo "OUT_LUSTRE_ZONE=${LUSTRE_ZONE}"'
+        )
+        return subprocess.run(
+            ["bash", "-c", cmd],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+    def test_decoupled_lustre_zone_skips_region_without_lustre_and_selects_cross_zone(self):
+        """Compute zone with 0 Lustre quota uses another zone in same region."""
+        # europe-west1-b has 0 Lustre across the whole region -> skipped.
+        # us-west3-b has 0 Lustre in us-west3-b, but us-west3-a has 18000 -> picked!
+        res = self._run_find_available_zone_with_mock({})
+        self.assertIn("OUT_ZONE=us-west3-b", res.stdout)
+        self.assertIn("OUT_LUSTRE_ZONE=us-west3-a", res.stdout)
+
+    def test_decoupled_lustre_exclude_zones_preserves_compute_zone(self):
+        """LUSTRE_EXCLUDE_ZONES skips excluded Lustre zone without dropping compute zone."""
+        res = self._run_find_available_zone_with_mock(
+            {
+                "EXCLUDE_ZONES": "europe-west1-b us-west3-b",
+                "LUSTRE_EXCLUDE_ZONES": "us-central1-a",
+            }
+        )
+        self.assertIn("OUT_ZONE=us-central1-b", res.stdout)
+        self.assertIn("OUT_LUSTRE_ZONE=us-central1-c", res.stdout)
+
+    def test_lustre_only_mode_keeps_fixed_compute_zone(self):
+        """LUSTRE_ONLY=true keeps fixed ZONE and selects LUSTRE_ZONE in same region."""
+        res = self._run_find_available_zone_with_mock(
+            {
+                "LUSTRE_ONLY": "true",
+                "ZONE": "us-central1-c",
+                "LUSTRE_EXCLUDE_ZONES": "us-central1-a",
+            }
+        )
+        self.assertIn("OUT_ZONE=us-central1-c", res.stdout)
+        self.assertIn("OUT_LUSTRE_ZONE=us-central1-c", res.stdout)
+
+    def test_submit_script_routes_lustre_exhaustion_to_lustre_exclude_zones(self):
+        """Verify submit_and_monitor_kueue_job.sh separates Lustre vs compute exclusions."""
+        repo_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+        submit_script = os.path.join(
+            repo_dir, "tools", "cloud-build", "submit_and_monitor_kueue_job.sh"
+        )
+        with open(submit_script, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        self.assertIn("--env-var LUSTRE_EXCLUDE_ZONES", content)
+        self.assertIn("ACCUMULATED_LUSTRE_EXCLUDE_ZONES", content)
+
 
 if __name__ == "__main__":
     unittest.main()
