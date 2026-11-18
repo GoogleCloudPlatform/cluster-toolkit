@@ -47,7 +47,8 @@ Note: If you create multiple clusters using these same cluster blueprints, ensur
         --project=PROJECT_ID \
         --default-storage-class=STANDARD \
         --location=COMPUTE_REGION \
-        --uniform-bucket-level-access
+        --uniform-bucket-level-access \
+        --public-access-prevention
     gcloud storage buckets update gs://BUCKET_NAME --versioning
     ```
 

@@ -92,7 +92,8 @@ gcloud compute images describe IMAGE_NAME --project=PROJECT_ID \
         --default-storage-class=STANDARD \
         --project=PROJECT_ID \
         --location=COMPUTE_REGION_TERRAFORM_STATE \
-        --uniform-bucket-level-access
+        --uniform-bucket-level-access \
+        --public-access-prevention
     gcloud storage buckets update gs://BUCKET_NAME --versioning
     ```
 

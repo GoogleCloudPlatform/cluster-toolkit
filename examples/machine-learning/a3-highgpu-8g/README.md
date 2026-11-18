@@ -63,7 +63,8 @@ export PROJECT_ID=customer-project-id
 export BUCKET=customer-bucket
 gcloud storage buckets create gs://${BUCKET} --project=${PROJECT_ID} \
     --default-storage-class=STANDARD --location=${REGION} \
-    --uniform-bucket-level-access
+    --uniform-bucket-level-access \
+    --public-access-prevention
 gcloud storage buckets update gs://${BUCKET} --versioning
 ```
 
