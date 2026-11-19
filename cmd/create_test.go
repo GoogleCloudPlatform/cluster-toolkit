@@ -270,6 +270,8 @@ func (s *MySuite) TestSetCreatorLabel(c *C) {
 	oldOut := createFlags.outputDir
 	createFlags.outputDir = out
 	defer func() { createFlags.outputDir = oldOut }()
+	oldAddCreatorLabel := expandFlags.addCreatorLabel
+	defer func() { expandFlags.addCreatorLabel = oldAddCreatorLabel }()
 
 	oldAccount, hadAccount := os.LookupEnv("CLOUDSDK_CORE_ACCOUNT")
 	c.Assert(os.Setenv("CLOUDSDK_CORE_ACCOUNT", "new@google.com"), IsNil)
@@ -326,7 +328,6 @@ func (s *MySuite) TestSetCreatorLabel(c *C) {
 		setCreatorLabel(newCreatorLabelTestCmd(), &b)
 		c.Check(b.AddCreatorLabel, Equals, false)
 	}
-	expandFlags.addCreatorLabel = false
 }
 
 func (s *MySuite) TestVerifyGcsBucketsEmptyBucket(c *C) {
