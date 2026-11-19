@@ -303,7 +303,6 @@ func (g *GKEOrchestrator) fetchNodeList() (*kubernetesNodeList, error) {
 func inspectNodeGroup(labels map[string]string) string {
 	for _, key := range []string{
 		nodePoolLabel,
-		"tpu.google.com/slice-name",
 		"node.kubernetes.io/instance-type",
 		"beta.kubernetes.io/instance-type",
 	} {

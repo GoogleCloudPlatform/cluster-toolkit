@@ -585,8 +585,8 @@ func TestInspectCluster_ReportStartsWithSPSSummary(t *testing.T) {
 
 func TestInspectCluster_KueueLessK8s(t *testing.T) {
 	k8sNodesJSON := `{"items": [
-		{"metadata":{"name":"tpu-0","labels":{"tpu.google.com/slice-name":"slice-v5p-0","node.kubernetes.io/instance-type":"ct5p-hightpu-4t"}},"status":{"conditions":[{"type":"Ready","status":"True"}]}},
-		{"metadata":{"name":"tpu-1","labels":{"tpu.google.com/slice-name":"slice-v5p-0","node.kubernetes.io/instance-type":"ct5p-hightpu-4t"}},"status":{"conditions":[{"type":"Ready","status":"True"}]}},
+		{"metadata":{"name":"tpu-0","labels":{"node.kubernetes.io/instance-type":"ct5p-hightpu-4t"}},"status":{"conditions":[{"type":"Ready","status":"True"}]}},
+		{"metadata":{"name":"tpu-1","labels":{"node.kubernetes.io/instance-type":"ct5p-hightpu-4t"}},"status":{"conditions":[{"type":"Ready","status":"True"}]}},
 		{"metadata":{"name":"ctrl-0","labels":{"node.kubernetes.io/instance-type":"n2-standard-8"}},"status":{"conditions":[{"type":"Ready","status":"True"}]}}
 	]}`
 	responses := map[string][]shell.CommandResult{
@@ -659,8 +659,8 @@ func assertK8sInspectCallsClean(t *testing.T, mockExec *MockExecutor) {
 func assertK8sInspectOutput(t *testing.T, content string) {
 	t.Helper()
 	for _, want := range []string{
-		"slice-v5p-0: 2 total",
-		"slice-v5p-0: 2 healthy",
+		"ct5p-hightpu-4t: 2 total",
+		"ct5p-hightpu-4t: 2 healthy",
 		"n2-standard-8: 1 total",
 		"JobSet: All JobSets",
 		"JobSet: Config for my-k8s-job",
@@ -688,15 +688,12 @@ func TestCountNodes_GroupingPrecedence(t *testing.T) {
 		Items: []kubernetesNode{
 			{Metadata: kubernetesNodeMetadata{Labels: map[string]string{
 				"cloud.google.com/gke-nodepool":    "gke-pool",
-				"tpu.google.com/slice-name":        "ignored-slice",
 				"node.kubernetes.io/instance-type": "ignored-it",
-			}}, Status: kubernetesNodeStatus{Conditions: []kubernetesNodeCondition{{Type: "Ready", Status: "True"}}}},
-			{Metadata: kubernetesNodeMetadata{Labels: map[string]string{
-				"tpu.google.com/slice-name":        "tpu-slice",
-				"node.kubernetes.io/instance-type": "ct5p-hightpu-4t",
+				"beta.kubernetes.io/instance-type": "ignored-beta",
 			}}, Status: kubernetesNodeStatus{Conditions: []kubernetesNodeCondition{{Type: "Ready", Status: "True"}}}},
 			{Metadata: kubernetesNodeMetadata{Labels: map[string]string{
 				"node.kubernetes.io/instance-type": "n2-standard-8",
+				"beta.kubernetes.io/instance-type": "ignored-beta",
 			}}, Status: kubernetesNodeStatus{Conditions: []kubernetesNodeCondition{{Type: "Ready", Status: "False"}}}},
 			{Metadata: kubernetesNodeMetadata{Labels: map[string]string{
 				"beta.kubernetes.io/instance-type": "legacy-node",
@@ -712,7 +709,6 @@ func TestCountNodes_GroupingPrecedence(t *testing.T) {
 		wantHealthy int
 	}{
 		{"gke-pool", 1, 1},
-		{"tpu-slice", 1, 1},
 		{"n2-standard-8", 1, 0},
 		{"legacy-node", 1, 0},
 		{"unknown", 1, 0},
@@ -724,33 +720,23 @@ func TestCountNodes_GroupingPrecedence(t *testing.T) {
 	}
 }
 
-func chdirReadOnlyTempDir(t *testing.T) string {
+func chdirUnwritableTempDir(t *testing.T) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
-		t.Skip("chmod 0555 does not block directory writes on Windows")
+		t.Skip("Windows cannot remove the current working directory")
 	}
-	if os.Geteuid() == 0 {
-		t.Skip("chmod 0555 does not block writes as root")
+	// Enter a temp dir, then remove it: creating "./<file>" now fails with ENOENT even as root.
+	// chmod 0555 does not work here because root bypasses it, and `make tests` runs as root in Cloud Build.
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.Remove(dir); err != nil {
+		t.Fatalf("remove cwd: %v", err)
 	}
-	readOnlyDir := t.TempDir()
-	if err := os.Chmod(readOnlyDir, 0555); err != nil {
-		t.Fatalf("chmod readOnlyDir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(readOnlyDir, 0755) })
-
-	origWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-	if err := os.Chdir(readOnlyDir); err != nil {
-		t.Fatalf("Chdir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(origWD) })
-	return readOnlyDir
+	return dir
 }
 
 func TestOpenInspectOutput_UnwritableCWDFallback(t *testing.T) {
-	readOnlyDir := chdirReadOnlyTempDir(t)
+	unwritableDir := chdirUnwritableTempDir(t)
 
 	t.Run("falls back to ~/.gcluster/logs when CWD is not writable", func(t *testing.T) {
 		homeDir := t.TempDir()
@@ -760,7 +746,14 @@ func TestOpenInspectOutput_UnwritableCWDFallback(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected fallback to ~/.gcluster/logs, got err: %v", err)
 		}
+		info, statErr := file.Stat()
 		_ = file.Close()
+		if statErr != nil {
+			t.Fatalf("stat fallback file: %v", statErr)
+		}
+		if got := info.Mode().Perm(); got != 0600 {
+			t.Errorf("~/.gcluster/logs fallback file mode = %v, want 0600", got)
+		}
 		wantPrefix := filepath.Join(homeDir, ".gcluster", "logs")
 		if !strings.HasPrefix(path, wantPrefix) {
 			t.Errorf("fallback path = %q, want prefix %q", path, wantPrefix)
@@ -792,7 +785,7 @@ func TestOpenInspectOutput_UnwritableCWDFallback(t *testing.T) {
 	})
 
 	t.Run("explicit OutputPath is never silently redirected", func(t *testing.T) {
-		explicitPath := filepath.Join(readOnlyDir, "explicit.log")
+		explicitPath := filepath.Join(unwritableDir, "explicit.log")
 		if _, _, _, err := openInspectOutput(orchestrator.InspectOptions{ClusterName: "k8s-c", OutputPath: explicitPath}, ".log"); err == nil {
 			t.Fatalf("expected error for unwritable explicit OutputPath %q", explicitPath)
 		}
