@@ -20,6 +20,7 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -725,6 +726,9 @@ func TestCountNodes_GroupingPrecedence(t *testing.T) {
 
 func chdirReadOnlyTempDir(t *testing.T) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod 0555 does not block directory writes on Windows")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("chmod 0555 does not block writes as root")
 	}
