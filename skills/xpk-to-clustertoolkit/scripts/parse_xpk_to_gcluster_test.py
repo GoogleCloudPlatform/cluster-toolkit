@@ -147,7 +147,7 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     output = parse_xpk_to_gcluster.parse_xpk_command(cmd)
     self.assertIn("enable_private_endpoint: true", output)
     self.assertIn("enable_pathways_for_tpus: true", output)
-    self.assertIn("n4-standard-64", output)
+    self.assertIn("n2-standard-64", output)
 
   def test_parse_cluster_create_unmapped_flags_warning(self):
     cmd = "xpk cluster create --cluster c1 --custom-unsupported-flag foo"
@@ -1264,6 +1264,52 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     self.assertNotIn("enable_pathways_for_tpus", blueprint["vars"])
     out = parse_xpk_to_gcluster.parse_xpk_command(cmd)
     self.assertNotIn("enable_pathways_for_tpus", out)
+
+  def test_cluster_pathways_gce_machine_type_with_pathways(self):
+    cmd = (
+        "xpk cluster create --cluster tpu-c --project p1 --zone us-central1-a"
+        " --tpu-type v6e-16 --enable-pathways"
+        " --pathways-gce-machine-type n2-standard-32"
+    )
+    blueprint, warnings, rest = parse_xpk_to_gcluster.parse_cluster_create(
+        is_pathways=False,
+        unknown=[
+            "--cluster", "tpu-c",
+            "--project", "p1",
+            "--zone", "us-central1-a",
+            "--tpu-type", "v6e-16",
+            "--enable-pathways",
+            "--pathways-gce-machine-type", "n2-standard-32",
+        ],
+    )
+    self.assertEqual(rest, [])
+    self.assertTrue(blueprint["vars"]["enable_pathways_for_tpus"])
+    self.assertEqual(
+        blueprint["vars"]["pathways_cpu_node_pool_machine_type"],
+        "n2-standard-32",
+    )
+    self.assertFalse(
+        any("Unmapped xpk flags" in w for w in warnings),
+    )
+    out = parse_xpk_to_gcluster.parse_xpk_command(cmd)
+    self.assertIn("pathways_cpu_node_pool_machine_type: n2-standard-32", out)
+    self.assertNotIn("Unmapped xpk flags", out)
+
+  def test_cluster_pathways_gce_machine_type_without_pathways_warns(self):
+    blueprint, warnings, _ = parse_xpk_to_gcluster.parse_cluster_create(
+        is_pathways=False,
+        unknown=[
+            "--cluster", "tpu-c",
+            "--project", "p1",
+            "--zone", "us-central1-a",
+            "--tpu-type", "v6e-16",
+            "--pathways-gce-machine-type", "n2-standard-32",
+        ],
+    )
+    self.assertNotIn("pathways_cpu_node_pool_machine_type", blueprint["vars"])
+    self.assertTrue(
+        any("--pathways-gce-machine-type is only applicable" in w for w in warnings)
+    )
 
   def test_workload_create_image_flag_precedence_and_conflicts(self):
     # Case 1: --docker-image alone emits --image

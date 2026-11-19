@@ -170,7 +170,7 @@ vars:
   enable_pathways_for_tpus: true
 ```
 
-*Note: Enabling Pathways statically provisions a `cpu-np` node pool (utilizing `n4-standard-64` by default) to host the coordinator head pod, while GKE autoscaling dynamically manages its size between 0 and 100 based on job load.*
+*Note: Enabling Pathways statically provisions a `cpu-np` node pool (utilizing `n2-standard-64` by default, configurable via `pathways_cpu_node_pool_machine_type`) to host the coordinator head pod, while GKE autoscaling dynamically manages its size between 1 (`pathways_cpu_node_pool_total_min_nodes`) and 100 based on job load.*
 
 ### 2. Verify Job Manifest (Dry-Run)
 

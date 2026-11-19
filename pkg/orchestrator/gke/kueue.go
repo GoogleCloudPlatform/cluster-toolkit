@@ -266,6 +266,443 @@ func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName, ns string) 
 	return fmt.Errorf("ClusterQueue '%s' does not cover required resources (CPU and Memory); please configure it manually to include quotas for 'cpu' and 'memory' resources", cqName)
 }
 
+// ensurePathwaysFlavorAlignment ensures that the ClusterQueue bound to localQueueName has a
+// non-accelerator ResourceFlavor before any TPU/GPU flavor that matches g.resolvedHeadNodePool.
+// When the cluster still has a stale "pathways-flavor" pointing to a nonexistent node pool (for
+// example hardcoded "cpu-np"), it updates "pathways-flavor" in place. When both the existing pool
+// and g.resolvedHeadNodePool exist on the cluster, it creates a pool-specific flavor without
+// clobbering "pathways-flavor" and prepends it to the CPU resourceGroup in the ClusterQueue.
+func (g *GKEOrchestrator) ensurePathwaysFlavorAlignment(localQueueName, ns string) error {
+	if g.resolvedHeadNodePool == "" {
+		return nil
+	}
+
+	cqName, err := g.getClusterQueueName(localQueueName, ns)
+	if err != nil {
+		return err
+	}
+
+	cq, cqFound, err := g.fetchKueueClusterQueue(cqName)
+	if err != nil || !cqFound {
+		return err
+	}
+
+	rfLabels, rfReadable, err := g.fetchResourceFlavorLabels()
+	if err != nil || !rfReadable {
+		return err
+	}
+
+	cpuGroups := findCPUResourceGroups(cq, rfLabels)
+	if len(cpuGroups) == 0 {
+		return nil
+	}
+
+	var unalignedGroups []cpuResourceGroupMatch
+	for _, group := range cpuGroups {
+		if !hasMatchingPreAcceleratorFlavor(group.flavors[:group.firstAccelIdx], rfLabels, g.resolvedHeadNodePool) {
+			unalignedGroups = append(unalignedGroups, group)
+		}
+	}
+	if len(unalignedGroups) == 0 {
+		return nil
+	}
+
+	targetFlavor, err := g.resolveTargetPathwaysFlavor(rfLabels)
+	if err != nil {
+		return err
+	}
+
+	if err := g.applyPathwaysFlavorToClusterQueue(cqName, cq, unalignedGroups, targetFlavor); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (g *GKEOrchestrator) fetchKueueClusterQueue(cqName string) (map[string]interface{}, bool, error) {
+	res := g.kubectl("get", "clusterqueue", cqName, "-o", "json")
+	if res.ExitCode != 0 {
+		errStr := strings.ToLower(res.Stderr + " " + res.Stdout)
+		if strings.Contains(errStr, "forbidden") {
+			logging.Warn("Insufficient RBAC permissions to read ClusterQueue %q (403 Forbidden). Skipping Pathways flavor alignment.", cqName)
+			return nil, false, nil
+		}
+		if strings.Contains(errStr, "not found") || strings.Contains(errStr, "notfound") {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("failed to get clusterqueue %s: %s", cqName, res.Stderr)
+	}
+
+	cq, err := decodeJSONMap(res.Stdout)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to parse clusterqueue %s JSON: %w", cqName, err)
+	}
+	return cq, true, nil
+}
+
+func (g *GKEOrchestrator) fetchResourceFlavorLabels() (map[string]map[string]string, bool, error) {
+	res := g.kubectl("get", "resourceflavor", "-o", "json")
+	if res.ExitCode != 0 {
+		errStr := strings.ToLower(res.Stderr + " " + res.Stdout)
+		if strings.Contains(errStr, "forbidden") {
+			logging.Warn("Insufficient RBAC permissions to list ResourceFlavors (403 Forbidden). Skipping Pathways flavor alignment.")
+			return nil, false, nil
+		}
+		if strings.Contains(errStr, "not found") || strings.Contains(errStr, "notfound") || strings.Contains(errStr, "no resources found") {
+			return map[string]map[string]string{}, true, nil
+		}
+		return nil, false, fmt.Errorf("failed to list resourceflavors: %s", res.Stderr)
+	}
+
+	parsed, err := decodeJSONMap(res.Stdout)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to parse resourceflavor list JSON: %w", err)
+	}
+
+	labelsByFlavor := make(map[string]map[string]string)
+	items, _ := parsed["items"].([]interface{})
+	for _, item := range items {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		meta, _ := itemMap["metadata"].(map[string]interface{})
+		name, _ := meta["name"].(string)
+		if name == "" {
+			continue
+		}
+		spec, _ := itemMap["spec"].(map[string]interface{})
+		rawLabels, _ := spec["nodeLabels"].(map[string]interface{})
+		labels := make(map[string]string, len(rawLabels))
+		for k, v := range rawLabels {
+			if vs, ok := v.(string); ok {
+				labels[k] = vs
+			}
+		}
+		labelsByFlavor[name] = labels
+	}
+	return labelsByFlavor, true, nil
+}
+
+type cpuResourceGroupMatch struct {
+	rg            map[string]interface{}
+	flavors       []interface{}
+	firstAccelIdx int
+}
+
+func findCPUResourceGroups(cq map[string]interface{}, rfLabels map[string]map[string]string) []cpuResourceGroupMatch {
+	spec, _ := cq["spec"].(map[string]interface{})
+	rgList, _ := spec["resourceGroups"].([]interface{})
+	var matches []cpuResourceGroupMatch
+	for _, rgItem := range rgList {
+		rg, ok := rgItem.(map[string]interface{})
+		if !ok || !coversCPUOrMemory(rg) {
+			continue
+		}
+		flavors, _ := rg["flavors"].([]interface{})
+		if len(flavors) == 0 {
+			continue
+		}
+		firstAccelIdx := len(flavors)
+		for i, fItem := range flavors {
+			fMap, ok := fItem.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			fname, _ := fMap["name"].(string)
+			if isAcceleratorFlavorEntry(fname, fMap, rfLabels[fname]) {
+				firstAccelIdx = i
+				break
+			}
+		}
+		matches = append(matches, cpuResourceGroupMatch{
+			rg:            rg,
+			flavors:       flavors,
+			firstAccelIdx: firstAccelIdx,
+		})
+	}
+	return matches
+}
+
+func coversCPUOrMemory(rg map[string]interface{}) bool {
+	covered, _ := rg["coveredResources"].([]interface{})
+	for _, r := range covered {
+		if rs, ok := r.(string); ok && (rs == "cpu" || rs == "memory") {
+			return true
+		}
+	}
+	return false
+}
+
+func isAcceleratorFlavorEntry(fname string, fMap map[string]interface{}, nodeLabels map[string]string) bool {
+	if isTPUFlavor(fname) || isGPUFlavor(fname) {
+		return true
+	}
+	if _, ok := nodeLabels["cloud.google.com/gke-tpu-accelerator"]; ok {
+		return true
+	}
+	if _, ok := nodeLabels["cloud.google.com/gke-accelerator"]; ok {
+		return true
+	}
+	resources, _ := fMap["resources"].([]interface{})
+	for _, rItem := range resources {
+		rMap, ok := rItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		rName, _ := rMap["name"].(string)
+		if rName != "google.com/tpu" && rName != "nvidia.com/gpu" {
+			continue
+		}
+		if fmt.Sprint(rMap["nominalQuota"]) != "0" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasMatchingPreAcceleratorFlavor(preAccelFlavors []interface{}, rfLabels map[string]map[string]string, targetPool string) bool {
+	for _, fItem := range preAccelFlavors {
+		fMap, ok := fItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		fname, _ := fMap["name"].(string)
+		labels, exists := rfLabels[fname]
+		if !exists {
+			continue
+		}
+		if labels["cloud.google.com/gke-nodepool"] == targetPool {
+			return true
+		}
+		if (fname == "flavor-default" || fname == "pathways-flavor") && len(labels) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *GKEOrchestrator) resolveTargetPathwaysFlavor(rfLabels map[string]map[string]string) (string, error) {
+	existingLabels, exists := rfLabels["pathways-flavor"]
+	if !exists {
+		logging.Info("Creating Kueue ResourceFlavor 'pathways-flavor' for node pool %q...", g.resolvedHeadNodePool)
+		if err := g.ensureNodePoolResourceFlavor("pathways-flavor", "", g.resolvedHeadNodePool); err != nil {
+			return "", err
+		}
+		return "pathways-flavor", nil
+	}
+
+	existingPool := existingLabels["cloud.google.com/gke-nodepool"]
+	if existingPool == g.resolvedHeadNodePool {
+		return "pathways-flavor", nil
+	}
+
+	// Only overwrite 'pathways-flavor' in place when node pool inventory is populated and confirms existingPool is gone.
+	if existingPool == "" || (len(g.clusterDesc.NodePools) > 0 && !g.hasClusterNodePool(existingPool)) {
+		logging.Info("Updating Kueue ResourceFlavor 'pathways-flavor' from stale node pool %q to %q...", existingPool, g.resolvedHeadNodePool)
+		if err := g.ensureNodePoolResourceFlavor("pathways-flavor", existingPool, g.resolvedHeadNodePool); err != nil {
+			return "", err
+		}
+		return "pathways-flavor", nil
+	}
+
+	targetFlavor := "pathways-flavor-" + g.resolvedHeadNodePool
+	if currentLabels, ok := rfLabels[targetFlavor]; !ok || currentLabels["cloud.google.com/gke-nodepool"] != g.resolvedHeadNodePool {
+		logging.Info("Ensuring Kueue ResourceFlavor %q for Pathways head node pool %q (preserving existing 'pathways-flavor' for %q)...", targetFlavor, g.resolvedHeadNodePool, existingPool)
+		if err := g.ensureNodePoolResourceFlavor(targetFlavor, existingPool, g.resolvedHeadNodePool); err != nil {
+			return "", err
+		}
+	}
+	return targetFlavor, nil
+}
+
+func (g *GKEOrchestrator) ensureNodePoolResourceFlavor(flavorName, existingPool, targetPool string) error {
+	rfBytes, err := g.renderResourceFlavor(flavorName, map[string]string{
+		"cloud.google.com/gke-nodepool": targetPool,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to render ResourceFlavor %s: %w", flavorName, err)
+	}
+	if err := g.applyManifests(rfBytes, fmt.Sprintf("resource-flavor-%s.yaml", flavorName), ""); err != nil {
+		if existingPool != "" {
+			return fmt.Errorf("Kueue ResourceFlavor 'pathways-flavor' targets node pool %q, but pathways-head targets %q; failed to update ResourceFlavor %s (pathways-head will stay Pending if Kueue falls through to a TPU flavor): %w", existingPool, targetPool, flavorName, err)
+		}
+		return fmt.Errorf("failed to apply ResourceFlavor %s for node pool %q: %w", flavorName, targetPool, err)
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) applyPathwaysFlavorToClusterQueue(cqName string, cq map[string]interface{}, cpuGroups []cpuResourceGroupMatch, targetFlavor string) error {
+	updated := false
+	for _, group := range cpuGroups {
+		if g.prependFlavorToResourceGroup(group, targetFlavor) {
+			updated = true
+		}
+	}
+	if !updated {
+		return nil
+	}
+
+	stripServerManagedCQFields(cq)
+
+	cqBytes, err := yaml.Marshal(cq)
+	if err != nil {
+		return fmt.Errorf("failed to marshal updated ClusterQueue %s: %w", cqName, err)
+	}
+	if err := g.applyManifests(cqBytes, clusterQueueManifestFile, ""); err != nil {
+		return fmt.Errorf("failed to update ClusterQueue %s with Pathways flavor %q for node pool %q: %w", cqName, targetFlavor, g.resolvedHeadNodePool, err)
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) prependFlavorToResourceGroup(group cpuResourceGroupMatch, targetFlavor string) bool {
+	targetIdx := -1
+	for i, fItem := range group.flavors {
+		fMap, ok := fItem.(map[string]interface{})
+		if ok && fMap["name"] == targetFlavor {
+			targetIdx = i
+			break
+		}
+	}
+
+	if targetIdx >= 0 && targetIdx < group.firstAccelIdx {
+		return false
+	}
+
+	var targetEntry map[string]interface{}
+	var updatedFlavors []interface{}
+	if targetIdx >= 0 {
+		targetEntry = group.flavors[targetIdx].(map[string]interface{})
+		for i, fItem := range group.flavors {
+			if i != targetIdx {
+				updatedFlavors = append(updatedFlavors, fItem)
+			}
+		}
+	} else {
+		targetEntry = g.buildPathwaysFlavorEntry(group.rg, group.flavors, targetFlavor)
+		updatedFlavors = append(updatedFlavors, group.flavors...)
+	}
+
+	// Prepend the Pathways head flavor so CPU-only head pods match it before any TPU/GPU flavor.
+	group.rg["flavors"] = append([]interface{}{targetEntry}, updatedFlavors...)
+	return true
+}
+
+func (g *GKEOrchestrator) buildPathwaysFlavorEntry(rg map[string]interface{}, existingFlavors []interface{}, targetFlavor string) map[string]interface{} {
+	existingQuotas := extractFlavorQuotas(existingFlavors, "pathways-flavor")
+	fc, hasCapacity := g.capacity.Flavors["pathways-flavor"]
+	covered, _ := rg["coveredResources"].([]interface{})
+	var resources []map[string]interface{}
+	for _, r := range covered {
+		resName, ok := r.(string)
+		if !ok {
+			continue
+		}
+		resources = append(resources, map[string]interface{}{
+			"name":         resName,
+			"nominalQuota": g.resolvePathwaysResourceQuota(resName, existingQuotas, fc, hasCapacity),
+		})
+	}
+	return map[string]interface{}{
+		"name":      targetFlavor,
+		"resources": resources,
+	}
+}
+
+func extractFlavorQuotas(flavors []interface{}, flavorName string) map[string]interface{} {
+	quotas := make(map[string]interface{})
+	for _, fItem := range flavors {
+		fMap, ok := fItem.(map[string]interface{})
+		if !ok || fMap["name"] != flavorName {
+			continue
+		}
+		resources, _ := fMap["resources"].([]interface{})
+		for _, rItem := range resources {
+			rMap, ok := rItem.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if rName, ok := rMap["name"].(string); ok {
+				quotas[rName] = rMap["nominalQuota"]
+			}
+		}
+	}
+	return quotas
+}
+
+func (g *GKEOrchestrator) resolvePathwaysResourceQuota(resName string, existingQuotas map[string]interface{}, fc FlavorCapacity, hasCapacity bool) interface{} {
+	if resName != "cpu" && resName != "memory" {
+		return "0"
+	}
+	if q, ok := existingQuotas[resName]; ok {
+		return q
+	}
+	if hasCapacity {
+		return g.getNominalQuota(resName, fc, "pathways-flavor")
+	}
+	if resName == "cpu" {
+		return 480
+	}
+	return "2000G"
+}
+
+func (g *GKEOrchestrator) hasClusterNodePool(poolName string) bool {
+	for _, np := range g.clusterDesc.NodePools {
+		if np.Name == poolName {
+			return true
+		}
+	}
+	return false
+}
+
+func decodeJSONMap(raw string) (map[string]interface{}, error) {
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	var parsed map[string]interface{}
+	if err := dec.Decode(&parsed); err != nil {
+		return nil, err
+	}
+	if parsed == nil {
+		return nil, fmt.Errorf("expected JSON object, got null")
+	}
+	normalized, ok := normalizeJSONValue(parsed).(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("expected JSON object, got %T", normalized)
+	}
+	return normalized, nil
+}
+
+func normalizeJSONValue(v interface{}) interface{} {
+	switch val := v.(type) {
+	case json.Number:
+		if i, err := val.Int64(); err == nil {
+			return i
+		}
+		return val.String()
+	case map[string]interface{}:
+		for k, item := range val {
+			val[k] = normalizeJSONValue(item)
+		}
+		return val
+	case []interface{}:
+		for i, item := range val {
+			val[i] = normalizeJSONValue(item)
+		}
+		return val
+	default:
+		return v
+	}
+}
+
+func stripServerManagedCQFields(cq map[string]interface{}) {
+	delete(cq, "status")
+	if meta, ok := cq["metadata"].(map[string]interface{}); ok {
+		for _, field := range []string{"uid", "resourceVersion", "generation", "creationTimestamp", "managedFields", "selfLink"} {
+			delete(meta, field)
+		}
+	}
+}
+
 // getClusterQueueName inspects a LocalQueue to retrieve the name of its bound ClusterQueue.
 func (g *GKEOrchestrator) getClusterQueueName(localQueueName, ns string) (string, error) {
 	res := g.kubectl("get", "localqueue", localQueueName, "-n", ns, "-o", "jsonpath={.spec.clusterQueue}")

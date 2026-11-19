@@ -837,6 +837,8 @@ blueprints:
     enable_queued_provisioning: true
     kueue_configuration_path: "$(ghpc_stage(\"../tpu-dws-queues.yaml.tftpl\"))"
     num_slices: 1
+    pathways_cpu_node_pool_machine_type: n2-standard-64
+    pathways_cpu_node_pool_total_min_nodes: 1
     project_id: null
     region: null
     system_node_pool_machine_type: n2-standard-8
@@ -864,7 +866,7 @@ blueprints:
   - id: gke-tpu-7x-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-7x-net-0, workload_service_account]
-    settings: [additional_networks, configure_workload_identity_sa, enable_gcsfuse_csi, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, release_channel, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [additional_networks, configure_workload_identity_sa, enable_gcsfuse_csi, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, pathways_cpu_node_pool_machine_type, pathways_cpu_node_pool_total_min_nodes, release_channel, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: workload_policy
     source: modules/compute/resource-policy
     settings: [name, project_id, region, workload_policy]
@@ -905,6 +907,8 @@ blueprints:
     enable_queued_provisioning: true
     kueue_configuration_path: "$(ghpc_stage(\"../tpu-dws-queues.yaml.tftpl\"))"
     num_slices: 1
+    pathways_cpu_node_pool_machine_type: n2-standard-64
+    pathways_cpu_node_pool_total_min_nodes: 1
     project_id: null
     region: null
     system_node_pool_disk_size_gb: 200
@@ -935,7 +939,7 @@ blueprints:
   - id: gke-tpu-v6e-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-v6e-net-0, workload_service_account]
-    settings: [additional_networks, configure_workload_identity_sa, enable_gcsfuse_csi, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [additional_networks, configure_workload_identity_sa, enable_gcsfuse_csi, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, pathways_cpu_node_pool_machine_type, pathways_cpu_node_pool_total_min_nodes, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: gke-tpu-v6e-pool
     source: modules/compute/gke-node-pool
     use: [gke-tpu-v6e-cluster, node_pool_service_account]
@@ -1020,6 +1024,8 @@ blueprints:
     enable_pathways_for_tpus: true
     kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
     num_slices: 1
+    pathways_cpu_node_pool_machine_type: n2-standard-64
+    pathways_cpu_node_pool_total_min_nodes: 1
     project_id: null
     region: null
     system_node_pool_machine_type: n2-standard-8
@@ -1047,7 +1053,7 @@ blueprints:
   - id: gke-tpu-7x-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-7x-net-0, workload_service_account]
-    settings: [additional_networks, configure_workload_identity_sa, enable_gcsfuse_csi, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, release_channel, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [additional_networks, configure_workload_identity_sa, enable_gcsfuse_csi, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, pathways_cpu_node_pool_machine_type, pathways_cpu_node_pool_total_min_nodes, release_channel, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: workload_policy
     source: modules/compute/resource-policy
     settings: [name, project_id, region, workload_policy]
@@ -1091,6 +1097,8 @@ blueprints:
     enable_pathways_for_tpus: true
     kueue_configuration_path: "$(ghpc_stage(\"./kueue-configuration.yaml.tftpl\"))"
     num_slices: 1
+    pathways_cpu_node_pool_machine_type: n2-standard-64
+    pathways_cpu_node_pool_total_min_nodes: 1
     project_id: null
     region: null
     system_node_pool_disk_size_gb: 200
@@ -1121,7 +1129,7 @@ blueprints:
   - id: gke-tpu-v6-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-v6-net-0, workload_service_account]
-    settings: [additional_networks, configure_workload_identity_sa, enable_gcsfuse_csi, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [additional_networks, configure_workload_identity_sa, enable_gcsfuse_csi, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, pathways_cpu_node_pool_machine_type, pathways_cpu_node_pool_total_min_nodes, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: gke-tpu-v6-pool
     source: modules/compute/gke-node-pool
     use: [gke-tpu-v6-cluster, node_pool_service_account]
@@ -1632,6 +1640,8 @@ blueprints:
     enable_queued_provisioning: false
     kueue_configuration_path: null
     num_slices: 1
+    pathways_cpu_node_pool_machine_type: n2-standard-64
+    pathways_cpu_node_pool_total_min_nodes: 1
     project_id: null
     region: null
     reservation_affinity:
@@ -1662,7 +1672,7 @@ blueprints:
   - id: gke-tpu-7x-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-7x-net-0, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_filestore_csi, enable_gcsfuse_csi, enable_managed_lustre_csi, enable_ml_diagnostics, enable_pathways_for_tpus, enable_persistent_disk_csi, enable_private_endpoint, enable_private_ipv6_google_access, enable_slice_controller, maintenance_exclusions, master_authorized_networks, namespace, release_channel, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_filestore_csi, enable_gcsfuse_csi, enable_managed_lustre_csi, enable_ml_diagnostics, enable_pathways_for_tpus, enable_persistent_disk_csi, enable_private_endpoint, enable_private_ipv6_google_access, enable_slice_controller, maintenance_exclusions, master_authorized_networks, namespace, pathways_cpu_node_pool_machine_type, pathways_cpu_node_pool_total_min_nodes, release_channel, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: workload_policy
     source: modules/compute/resource-policy
     settings: [name, project_id, region, workload_policy]
@@ -1710,6 +1720,8 @@ blueprints:
     enable_queued_provisioning: false
     kueue_configuration_path: null
     num_slices: 1
+    pathways_cpu_node_pool_machine_type: n2-standard-64
+    pathways_cpu_node_pool_total_min_nodes: 1
     project_id: null
     region: null
     reservation_affinity:
@@ -1734,7 +1746,7 @@ blueprints:
   - id: gke-tpu-7x-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-7x-net, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_ml_diagnostics, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, enable_slice_controller, maintenance_exclusions, master_authorized_networks, namespace, release_channel, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_ml_diagnostics, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, enable_slice_controller, maintenance_exclusions, master_authorized_networks, namespace, pathways_cpu_node_pool_machine_type, pathways_cpu_node_pool_total_min_nodes, release_channel, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: workload_policy
     source: modules/compute/resource-policy
     settings: [name, project_id, region, workload_policy]
@@ -1762,6 +1774,8 @@ blueprints:
     deployment_name: null
     enable_pathways_for_tpus: true
     num_slices: null
+    pathways_cpu_node_pool_machine_type: n2-standard-64
+    pathways_cpu_node_pool_total_min_nodes: 1
     project_id: null
     region: null
     reservation: null
@@ -1784,7 +1798,7 @@ blueprints:
   - id: gke-tpu-v4-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-v4-net, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_ml_diagnostics, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, namespace, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [configure_workload_identity_sa, enable_ml_diagnostics, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, namespace, pathways_cpu_node_pool_machine_type, pathways_cpu_node_pool_total_min_nodes, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: gke-tpu-v4-pool
     source: modules/compute/gke-node-pool
     use: [gke-tpu-v4-cluster, node_pool_service_account]
@@ -1809,6 +1823,8 @@ blueprints:
     deployment_name: gke-tpu-v5e
     enable_pathways_for_tpus: true
     num_slices: null
+    pathways_cpu_node_pool_machine_type: n2-standard-64
+    pathways_cpu_node_pool_total_min_nodes: 1
     project_id: null
     region: null
     reservation: null
@@ -1831,7 +1847,7 @@ blueprints:
   - id: gke-tpu-v5e-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-v5e-net, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_ml_diagnostics, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, namespace, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [configure_workload_identity_sa, enable_ml_diagnostics, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, namespace, pathways_cpu_node_pool_machine_type, pathways_cpu_node_pool_total_min_nodes, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: gke-tpu-v5e-pool
     source: modules/compute/gke-node-pool
     use: [gke-tpu-v5e-cluster, node_pool_service_account]
@@ -1863,6 +1879,8 @@ blueprints:
     enable_queued_provisioning: false
     kueue_configuration_path: null
     num_slices: 1
+    pathways_cpu_node_pool_machine_type: n2-standard-64
+    pathways_cpu_node_pool_total_min_nodes: 1
     project_id: null
     region: null
     reservation_affinity:
@@ -1889,7 +1907,7 @@ blueprints:
   - id: gke-tpu-v5p-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-v5p-net, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_ml_diagnostics, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, namespace, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [configure_workload_identity_sa, enable_ml_diagnostics, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, namespace, pathways_cpu_node_pool_machine_type, pathways_cpu_node_pool_total_min_nodes, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: gke-tpu-v5p-pool
     source: modules/compute/gke-node-pool
     use: [gke-tpu-v5p-cluster, node_pool_service_account]
@@ -1921,6 +1939,8 @@ blueprints:
     enable_queued_provisioning: false
     kueue_configuration_path: null
     num_slices: 2
+    pathways_cpu_node_pool_machine_type: n2-standard-64
+    pathways_cpu_node_pool_total_min_nodes: 1
     project_id: null
     region: null
     reservation_affinity:
@@ -1954,7 +1974,7 @@ blueprints:
   - id: gke-tpu-v6e-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-v6e-net-0, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_filestore_csi, enable_gcsfuse_csi, enable_managed_lustre_csi, enable_ml_diagnostics, enable_multi_tier_checkpointing, enable_pathways_for_tpus, enable_persistent_disk_csi, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, namespace, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_filestore_csi, enable_gcsfuse_csi, enable_managed_lustre_csi, enable_ml_diagnostics, enable_multi_tier_checkpointing, enable_pathways_for_tpus, enable_persistent_disk_csi, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, namespace, pathways_cpu_node_pool_machine_type, pathways_cpu_node_pool_total_min_nodes, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: gke-tpu-v6e-pool
     source: modules/compute/gke-node-pool
     use: [gke-tpu-v6e-cluster, node_pool_service_account]
@@ -1998,6 +2018,8 @@ blueprints:
     enable_queued_provisioning: false
     kueue_configuration_path: null
     num_slices: 2
+    pathways_cpu_node_pool_machine_type: n2-standard-64
+    pathways_cpu_node_pool_total_min_nodes: 1
     project_id: null
     region: null
     reservation_affinity:
@@ -2024,7 +2046,7 @@ blueprints:
   - id: gke-tpu-v6e-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-v6e-net-0, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_ml_diagnostics, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, namespace, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_ml_diagnostics, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, maintenance_exclusions, master_authorized_networks, namespace, pathways_cpu_node_pool_machine_type, pathways_cpu_node_pool_total_min_nodes, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: gke-tpu-v6e-pool
     source: modules/compute/gke-node-pool
     use: [gke-tpu-v6e-cluster, node_pool_service_account]

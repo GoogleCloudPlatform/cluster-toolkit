@@ -147,7 +147,7 @@ For `xpk cluster create` and `create-pathways`, generate a declarative Cluster T
    * Do NOT add global variables that the example does not declare; explicit module settings block global propagation and trigger `test_deployment_variable_not_used`.
 
 4. **Pathways Configuration**:
-   * **When migrating with Pathways (`--enable-pathways`)**: Set `enable_pathways_for_tpus: true` in `vars:`. This automatically provisions the dedicated `cpu-np` node pool (`n4-standard-64`).
+   * **When migrating with Pathways (`--enable-pathways`)**: Set `enable_pathways_for_tpus: true` in `vars:`. This automatically provisions the dedicated `cpu-np` node pool (`n2-standard-64` in TPU blueprints; module default is `n4-standard-64` or `n2d-standard-64` with `enable_confidential_nodes`, customizable via `pathways_cpu_node_pool_machine_type`).
    * **When migrating WITHOUT Pathways**: You MUST explicitly set `enable_pathways_for_tpus: false` (emitted automatically by the parser for TPU clusters). Canonical blueprints (e.g. `gke-tpu-v6e.yaml:53 (enable_pathways_for_tpus)`) default it to `true` and will otherwise provision an unrequested CPU node pool. Do not set this variable on GPU blueprints.
 
 5. **Reservation Affinity Targeting**:

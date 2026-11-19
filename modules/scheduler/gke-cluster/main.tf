@@ -128,7 +128,8 @@ locals {
     )
   )
   target_system_node_pool_zones = var.system_node_pool_machine_type != null ? toset([]) : local.candidate_zones
-  cpu_np_machine_type           = "n4-standard-64"
+  default_cpu_np_machine_type   = var.enable_confidential_nodes ? "n2d-standard-64" : "n4-standard-64"
+  cpu_np_machine_type           = coalesce(var.pathways_cpu_node_pool_machine_type, local.default_cpu_np_machine_type)
   cpu_np_candidate_zones        = var.enable_pathways_for_tpus ? local.candidate_zones : toset([])
   cpu_np_available_zones = sort([
     for z, m in data.google_compute_machine_types.available_cpu_np_machines :
@@ -512,8 +513,8 @@ resource "google_container_cluster" "gke_cluster" {
     }
 
     precondition {
-      condition     = !(var.enable_confidential_nodes && var.enable_pathways_for_tpus)
-      error_message = "'enable_pathways_for_tpus' cannot be true when 'enable_confidential_nodes' is enabled because cpu-np uses '${local.cpu_np_machine_type}', which does not support Confidential VMs."
+      condition     = !var.enable_pathways_for_tpus || !var.enable_confidential_nodes || can(regex("^(n2d-|c2d-|c3d?-|g4-)", local.cpu_np_machine_type))
+      error_message = "The pathways_cpu_node_pool_machine_type must be a confidential-compatible machine type (e.g., n2d, c2d, c3d, c3, g4) when enable_confidential_nodes and enable_pathways_for_tpus are true."
     }
 
     precondition {
@@ -688,14 +689,14 @@ resource "google_container_node_pool" "cpu_np" {
   name     = "cpu-np"
   cluster  = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
   location = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
-  # Preserve var.system_node_pool_zones (null by default) when all candidate zones support N4
+  # Preserve var.system_node_pool_zones (null by default) when all candidate zones support the resolved machine type
   # so GKE keeps its 3-zone regional default instead of expanding to all zones (e.g., 4 in us-central1).
   node_locations = length(local.cpu_np_available_zones) == length(local.cpu_np_candidate_zones) ? var.system_node_pool_zones : local.cpu_np_available_zones
   version        = local.master_version
 
   autoscaling {
-    total_min_node_count = 0
-    total_max_node_count = 100
+    total_min_node_count = var.pathways_cpu_node_pool_total_min_nodes
+    total_max_node_count = var.pathways_cpu_node_pool_total_max_nodes
   }
 
   management {
@@ -709,6 +710,14 @@ resource "google_container_node_pool" "cpu_np" {
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
     machine_type    = local.cpu_np_machine_type
     image_type      = var.system_node_pool_image_type
+
+    dynamic "confidential_nodes" {
+      for_each = var.enable_confidential_nodes ? [1] : []
+      content {
+        enabled                    = true
+        confidential_instance_type = var.confidential_instance_type
+      }
+    }
 
     shielded_instance_config {
       enable_secure_boot          = var.system_node_pool_enable_secure_boot
@@ -740,6 +749,11 @@ resource "google_container_node_pool" "cpu_np" {
       node_config[0].resource_labels,
       version,
     ]
+
+    precondition {
+      condition     = var.pathways_cpu_node_pool_total_max_nodes >= var.pathways_cpu_node_pool_total_min_nodes
+      error_message = "pathways_cpu_node_pool_total_max_nodes must be greater than or equal to pathways_cpu_node_pool_total_min_nodes."
+    }
   }
 }
 

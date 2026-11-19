@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -1775,5 +1776,234 @@ func TestCheckAndInstallKueue_SharedClusterForbidden(t *testing.T) {
 	}
 	if rolloutCalls != 1 {
 		t.Errorf("kubectl rollout status calls = %d, want 1", rolloutCalls)
+	}
+}
+
+func TestEnsurePathwaysFlavorAlignment_AlreadyAligned(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	applyCount := 0
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			switch {
+			case strings.Contains(fullCmd, "kubectl get localqueue"):
+				return shell.CommandResult{ExitCode: 0, Stdout: "cluster-queue"}
+			case strings.Contains(fullCmd, "kubectl get clusterqueue cluster-queue -o json"):
+				return shell.CommandResult{ExitCode: 0, Stdout: `{"apiVersion":"kueue.x-k8s.io/v1beta2","kind":"ClusterQueue","metadata":{"name":"cluster-queue"},"spec":{"resourceGroups":[{"coveredResources":["google.com/tpu","cpu","memory"],"flavors":[{"name":"pathways-flavor","resources":[{"name":"cpu","nominalQuota":480}]},{"name":"flavor-tpu-v6e-slice","resources":[{"name":"google.com/tpu","nominalQuota":"16"}]}]}]}}`}
+			case strings.Contains(fullCmd, "kubectl get resourceflavor -o json"):
+				return shell.CommandResult{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"pathways-flavor"},"spec":{"nodeLabels":{"cloud.google.com/gke-nodepool":"cpu-np"}}},{"metadata":{"name":"flavor-tpu-v6e-slice"},"spec":{"nodeLabels":{"cloud.google.com/gke-tpu-accelerator":"tpu-v6e-slice"}}}]}`}
+			case strings.Contains(fullCmd, "kubectl apply -f"):
+				applyCount++
+				return shell.CommandResult{ExitCode: 0}
+			default:
+				return shell.CommandResult{ExitCode: 0}
+			}
+		},
+	}
+
+	orc := newTestGKEOrchestrator(mock)
+	orc.resolvedHeadNodePool = "cpu-np"
+
+	if err := orc.ensurePathwaysFlavorAlignment("user-queue", "default"); err != nil {
+		t.Fatalf("ensurePathwaysFlavorAlignment failed: %v", err)
+	}
+	if applyCount != 0 {
+		t.Errorf("expected 0 apply calls when already aligned, got %d", applyCount)
+	}
+}
+
+func newPathwaysAlignmentMock(clusterQueueJSON string, appliedFiles, appliedContents *[]string) *mockExecutor {
+	return &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			switch {
+			case strings.Contains(fullCmd, "kubectl get localqueue"):
+				return shell.CommandResult{ExitCode: 0, Stdout: "cluster-queue"}
+			case strings.Contains(fullCmd, "kubectl get clusterqueue cluster-queue -o json"):
+				return shell.CommandResult{ExitCode: 0, Stdout: clusterQueueJSON}
+			case strings.Contains(fullCmd, "kubectl get resourceflavor -o json"):
+				return shell.CommandResult{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"pathways-flavor"},"spec":{"nodeLabels":{"cloud.google.com/gke-nodepool":"cpu-np"}}},{"metadata":{"name":"flavor-tpu-v6e-slice"},"spec":{"nodeLabels":{"cloud.google.com/gke-tpu-accelerator":"tpu-v6e-slice"}}}]}`}
+			case strings.Contains(fullCmd, "kubectl apply -f"):
+				filePath := args[len(args)-1]
+				*appliedFiles = append(*appliedFiles, filePath)
+				if b, err := os.ReadFile(filePath); err == nil {
+					*appliedContents = append(*appliedContents, string(b))
+				}
+				return shell.CommandResult{ExitCode: 0}
+			default:
+				return shell.CommandResult{ExitCode: 0}
+			}
+		},
+	}
+}
+
+func TestEnsurePathwaysFlavorAlignment_StaleCpuNpUpdatedInPlace(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	var appliedFiles, appliedContents []string
+	cqJSON := `{"apiVersion":"kueue.x-k8s.io/v1beta2","kind":"ClusterQueue","metadata":{"name":"cluster-queue"},"spec":{"resourceGroups":[{"coveredResources":["google.com/tpu","cpu","memory"],"flavors":[{"name":"pathways-flavor","resources":[{"name":"cpu","nominalQuota":480}]},{"name":"flavor-tpu-v6e-slice","resources":[{"name":"google.com/tpu","nominalQuota":"16"}]}]}]}}`
+	orc := newTestGKEOrchestrator(newPathwaysAlignmentMock(cqJSON, &appliedFiles, &appliedContents))
+	orc.resolvedHeadNodePool = "pathways-np"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "system"},
+		{Name: "pathways-np"},
+	}
+
+	if err := orc.ensurePathwaysFlavorAlignment("user-queue", "default"); err != nil {
+		t.Fatalf("ensurePathwaysFlavorAlignment failed: %v", err)
+	}
+	if len(appliedFiles) != 1 {
+		t.Fatalf("expected 1 apply call (ResourceFlavor update only), got %d (%v)", len(appliedFiles), appliedFiles)
+	}
+	if !strings.Contains(appliedContents[0], "name: pathways-flavor") || !strings.Contains(appliedContents[0], "cloud.google.com/gke-nodepool: pathways-np") {
+		t.Errorf("unexpected updated ResourceFlavor manifest:\n%s", appliedContents[0])
+	}
+}
+
+func TestEnsurePathwaysFlavorAlignment_DualPoolPreservesExistingFlavor(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	var appliedFiles, appliedContents []string
+	cqJSON := `{"apiVersion":"kueue.x-k8s.io/v1beta2","kind":"ClusterQueue","metadata":{"name":"cluster-queue","resourceVersion":"123","uid":"abc"},"spec":{"resourceGroups":[{"coveredResources":["google.com/tpu","cpu","memory"],"flavors":[{"name":"pathways-flavor","resources":[{"name":"google.com/tpu","nominalQuota":"0"},{"name":"cpu","nominalQuota":480},{"name":"memory","nominalQuota":"2000G"}]},{"name":"flavor-tpu-v6e-slice","resources":[{"name":"google.com/tpu","nominalQuota":"16"},{"name":"cpu","nominalQuota":"999999"},{"name":"memory","nominalQuota":"999999T"}]}]}]},"status":{"admittedWorkloads":1}}`
+	orc := newTestGKEOrchestrator(newPathwaysAlignmentMock(cqJSON, &appliedFiles, &appliedContents))
+	orc.resolvedHeadNodePool = "pathways-np"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "cpu-np"},
+		{Name: "pathways-np"},
+	}
+
+	if err := orc.ensurePathwaysFlavorAlignment("user-queue", "default"); err != nil {
+		t.Fatalf("ensurePathwaysFlavorAlignment failed: %v", err)
+	}
+	if len(appliedFiles) != 2 {
+		t.Fatalf("expected 2 apply calls (new ResourceFlavor + ClusterQueue), got %d (%v)", len(appliedFiles), appliedFiles)
+	}
+	if !strings.Contains(appliedContents[0], "name: pathways-flavor-pathways-np") || !strings.Contains(appliedContents[0], "cloud.google.com/gke-nodepool: pathways-np") {
+		t.Errorf("unexpected new ResourceFlavor manifest:\n%s", appliedContents[0])
+	}
+	cqYAML := appliedContents[1]
+	idxNew := strings.Index(cqYAML, "name: pathways-flavor-pathways-np")
+	idxTPU := strings.Index(cqYAML, "name: flavor-tpu-v6e-slice")
+	if idxNew < 0 || idxTPU < 0 || idxNew > idxTPU {
+		t.Errorf("expected pathways-flavor-pathways-np before flavor-tpu-v6e-slice in ClusterQueue:\n%s", cqYAML)
+	}
+	if strings.Contains(cqYAML, "resourceVersion") || strings.Contains(cqYAML, "admittedWorkloads") {
+		t.Errorf("expected server-managed fields stripped from ClusterQueue:\n%s", cqYAML)
+	}
+}
+
+func TestEnsurePathwaysFlavorAlignment_ForbiddenReadSkipped(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			switch {
+			case strings.Contains(fullCmd, "kubectl get localqueue"):
+				return shell.CommandResult{ExitCode: 0, Stdout: "cluster-queue"}
+			case strings.Contains(fullCmd, "kubectl get clusterqueue cluster-queue -o json"):
+				return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): clusterqueues.kueue.x-k8s.io \"cluster-queue\" is forbidden"}
+			default:
+				return shell.CommandResult{ExitCode: 0}
+			}
+		},
+	}
+
+	orc := newTestGKEOrchestrator(mock)
+	orc.resolvedHeadNodePool = "pathways-np"
+
+	if err := orc.ensurePathwaysFlavorAlignment("user-queue", "default"); err != nil {
+		t.Fatalf("expected 403 Forbidden read to skip cleanly, got error: %v", err)
+	}
+}
+
+func TestEnsurePathwaysFlavorAlignment_ForbiddenApplyReturnsError(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	mock := &mockExecutor{
+		executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+			fullCmd := name + " " + strings.Join(args, " ")
+			switch {
+			case strings.Contains(fullCmd, "kubectl get localqueue"):
+				return shell.CommandResult{ExitCode: 0, Stdout: "cluster-queue"}
+			case strings.Contains(fullCmd, "kubectl get clusterqueue cluster-queue -o json"):
+				return shell.CommandResult{ExitCode: 0, Stdout: `{"apiVersion":"kueue.x-k8s.io/v1beta2","kind":"ClusterQueue","metadata":{"name":"cluster-queue"},"spec":{"resourceGroups":[{"coveredResources":["google.com/tpu","cpu","memory"],"flavors":[{"name":"pathways-flavor","resources":[{"name":"cpu","nominalQuota":480}]},{"name":"flavor-tpu-v6e-slice","resources":[{"name":"google.com/tpu","nominalQuota":"16"}]}]}]}}`}
+			case strings.Contains(fullCmd, "kubectl get resourceflavor -o json"):
+				return shell.CommandResult{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"pathways-flavor"},"spec":{"nodeLabels":{"cloud.google.com/gke-nodepool":"cpu-np"}}}]}`}
+			case strings.Contains(fullCmd, "kubectl apply -f"):
+				return shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): resourceflavors.kueue.x-k8s.io \"pathways-flavor\" is forbidden"}
+			default:
+				return shell.CommandResult{ExitCode: 0}
+			}
+		},
+	}
+
+	orc := newTestGKEOrchestrator(mock)
+	orc.resolvedHeadNodePool = "pathways-np"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{{Name: "pathways-np"}}
+
+	err := orc.ensurePathwaysFlavorAlignment("user-queue", "default")
+	if err == nil {
+		t.Fatalf("expected error when apply fails on mismatched pathways-flavor")
+	}
+	for _, want := range []string{"cpu-np", "pathways-np", "Pending"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q missing expected substring %q", err.Error(), want)
+		}
+	}
+}
+
+func TestDecodeJSONMap_NullInput(t *testing.T) {
+	if _, err := decodeJSONMap("null"); err == nil {
+		t.Fatalf("expected error for JSON null input, got nil")
+	}
+}
+
+func TestEnsurePathwaysFlavorAlignment_SplitCPUMemoryResourceGroups(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	var appliedFiles, appliedContents []string
+	cqJSON := `{"apiVersion":"kueue.x-k8s.io/v1beta2","kind":"ClusterQueue","metadata":{"name":"cluster-queue"},"spec":{"resourceGroups":[{"coveredResources":["cpu"],"flavors":[{"name":"pathways-flavor","resources":[{"name":"cpu","nominalQuota":480}]},{"name":"flavor-tpu-v6e-slice","resources":[{"name":"cpu","nominalQuota":"999999"}]}]},{"coveredResources":["memory"],"flavors":[{"name":"flavor-tpu-v6e-slice","resources":[{"name":"memory","nominalQuota":"999999T"}]}]}]}}`
+	orc := newTestGKEOrchestrator(newPathwaysAlignmentMock(cqJSON, &appliedFiles, &appliedContents))
+	orc.resolvedHeadNodePool = "pathways-np"
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "cpu-np"},
+		{Name: "pathways-np"},
+	}
+
+	if err := orc.ensurePathwaysFlavorAlignment("user-queue", "default"); err != nil {
+		t.Fatalf("ensurePathwaysFlavorAlignment failed: %v", err)
+	}
+	if len(appliedFiles) != 2 {
+		t.Fatalf("expected 2 apply calls (new ResourceFlavor + ClusterQueue), got %d (%v)", len(appliedFiles), appliedFiles)
+	}
+
+	cqYAML := appliedContents[1]
+	if strings.Count(cqYAML, "name: pathways-flavor-pathways-np") != 2 {
+		t.Errorf("expected pathways-flavor-pathways-np in both cpu and memory resourceGroups, got:\n%s", cqYAML)
+	}
+	memIdx := strings.Index(cqYAML, "- memory")
+	if memIdx < 0 {
+		t.Fatalf("expected memory resourceGroup in ClusterQueue YAML:\n%s", cqYAML)
+	}
+	memSection := cqYAML[memIdx:]
+	idxNewMem := strings.Index(memSection, "name: pathways-flavor-pathways-np")
+	idxTPUMem := strings.Index(memSection, "name: flavor-tpu-v6e-slice")
+	if idxNewMem < 0 || idxTPUMem < 0 || idxNewMem > idxTPUMem {
+		t.Errorf("expected pathways-flavor-pathways-np before flavor-tpu-v6e-slice in memory resourceGroup:\n%s", memSection)
+	}
+}
+
+func TestEnsurePathwaysFlavorAlignment_EmptyClusterDescPreservesExistingFlavor(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	var appliedFiles, appliedContents []string
+	cqJSON := `{"apiVersion":"kueue.x-k8s.io/v1beta2","kind":"ClusterQueue","metadata":{"name":"cluster-queue"},"spec":{"resourceGroups":[{"coveredResources":["google.com/tpu","cpu","memory"],"flavors":[{"name":"pathways-flavor","resources":[{"name":"google.com/tpu","nominalQuota":"0"},{"name":"cpu","nominalQuota":480},{"name":"memory","nominalQuota":"2000G"}]},{"name":"flavor-tpu-v6e-slice","resources":[{"name":"google.com/tpu","nominalQuota":"16"},{"name":"cpu","nominalQuota":"999999"},{"name":"memory","nominalQuota":"999999T"}]}]}]}}`
+	orc := newTestGKEOrchestrator(newPathwaysAlignmentMock(cqJSON, &appliedFiles, &appliedContents))
+	orc.resolvedHeadNodePool = "pathways-np"
+	// Leave orc.clusterDesc.NodePools empty to simulate unpopulated cluster inventory.
+
+	if err := orc.ensurePathwaysFlavorAlignment("user-queue", "default"); err != nil {
+		t.Fatalf("ensurePathwaysFlavorAlignment failed: %v", err)
+	}
+	if len(appliedFiles) != 2 {
+		t.Fatalf("expected 2 apply calls (new ResourceFlavor + ClusterQueue), got %d (%v)", len(appliedFiles), appliedFiles)
+	}
+	if !strings.Contains(appliedContents[0], "name: pathways-flavor-pathways-np") {
+		t.Errorf("expected new pool-specific ResourceFlavor instead of overwriting pathways-flavor, got:\n%s", appliedContents[0])
 	}
 }
