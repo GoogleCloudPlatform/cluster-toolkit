@@ -24,7 +24,6 @@ import (
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
-	"hpc-toolkit/pkg/shell"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -38,26 +37,26 @@ type LabelScheme string
 const (
 	// SchemeAuto selects automatic detection from node labels and API group discovery.
 	SchemeAuto LabelScheme = ""
-	// SchemeBloom uses tpu.google.com/* TPU slice labels (slice.tpu.google.com/v1alpha1).
-	SchemeBloom LabelScheme = "bloom"
+	// SchemeTPUSlice uses tpu.google.com/* TPU slice labels (slice.tpu.google.com/v1alpha1).
+	SchemeTPUSlice LabelScheme = "tpu-slice"
 	// SchemeGKE uses Google Kubernetes Engine labels (cloud.google.com/gke-*).
 	SchemeGKE LabelScheme = "gke"
-	// SchemeGeneric uses standard Kubernetes labels without Bloom or GKE TPU conventions.
+	// SchemeGeneric uses standard Kubernetes labels without TPU slice or GKE TPU conventions.
 	SchemeGeneric LabelScheme = "generic"
 
 	// LabelSchemeEnvVar overrides automatic label-scheme detection when --k8s-label-scheme is unset.
 	LabelSchemeEnvVar = "GCLUSTER_LABEL_SCHEME"
 )
 
-// Label keys recognized across Bloom TPU slice, GKE, and standard Kubernetes clusters.
+// Label keys recognized across TPU slice, GKE, and standard Kubernetes clusters.
 const (
-	BloomLabelPrefix          = "tpu.google.com/"
-	BloomSliceNameLabel       = "tpu.google.com/slice-name"
-	BloomTPUTypeLabel         = "tpu.google.com/type"
-	BloomTopologyLabel        = "tpu.google.com/topology"
-	BloomManagedByLabel       = "tpu.google.com/managed-by"
-	BloomOwnerNameLabel       = "tpu.google.com/owner-name"
-	BloomPartitionLabelPrefix = "tpu.google.com/partition-id-"
+	TPUSliceLabelPrefix          = "tpu.google.com/"
+	TPUSliceNameLabel            = "tpu.google.com/slice-name"
+	TPUSliceTypeLabel            = "tpu.google.com/type"
+	TPUSliceTopologyLabel        = "tpu.google.com/topology"
+	TPUSliceManagedByLabel       = "tpu.google.com/managed-by"
+	TPUSliceOwnerNameLabel       = "tpu.google.com/owner-name"
+	TPUSlicePartitionLabelPrefix = "tpu.google.com/partition-id-"
 
 	GKETPUAcceleratorLabel = "cloud.google.com/gke-tpu-accelerator"
 	GKETPUTopologyLabel    = "cloud.google.com/gke-tpu-topology"
@@ -129,13 +128,13 @@ type TPUInventory struct {
 
 // Inventory holds a pure-Kubernetes cluster discovery snapshot obtained without calling gcloud.
 type Inventory struct {
-	LabelScheme     LabelScheme
-	ExplicitMode    bool
-	BloomAPIPresent bool
-	TotalNodes      int
-	ReadyNodes      int
+	LabelScheme        LabelScheme
+	ExplicitMode       bool
+	TPUSliceAPIPresent bool
+	TotalNodes         int
+	ReadyNodes         int
 
-	// Pools maps machine type (or pool key) to its aggregated PoolCapacity.
+	// Pools maps machine type (or disambiguated pool key) to its aggregated PoolCapacity.
 	// PoolNames holds the deterministically sorted keys of Pools.
 	Pools     map[string]PoolCapacity
 	PoolNames []string
@@ -157,19 +156,19 @@ type DiscoverOptions struct {
 	LabelSchemeOverride LabelScheme
 }
 
-// ParseLabelScheme parses a user-supplied label scheme ("bloom", "gke", "generic", or "" for auto).
+// ParseLabelScheme parses a user-supplied label scheme ("tpu-slice", "gke", "generic", or "" for auto).
 func ParseLabelScheme(raw string) (LabelScheme, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "":
 		return SchemeAuto, nil
-	case string(SchemeBloom):
-		return SchemeBloom, nil
+	case string(SchemeTPUSlice):
+		return SchemeTPUSlice, nil
 	case string(SchemeGKE):
 		return SchemeGKE, nil
 	case string(SchemeGeneric):
 		return SchemeGeneric, nil
 	default:
-		return "", fmt.Errorf("invalid --k8s-label-scheme / %s value %q: allowed values are bloom, gke, generic", LabelSchemeEnvVar, raw)
+		return "", fmt.Errorf("invalid --k8s-label-scheme / %s value %q: allowed values are tpu-slice, gke, generic", LabelSchemeEnvVar, raw)
 	}
 }
 
@@ -190,7 +189,7 @@ var tpuTypeMatchers = []struct {
 	canonical string
 	tokens    []string
 }{
-	{canonical: "tpu7x", tokens: []string{"tpu7", "v7x", "ironwood"}},
+	{canonical: "tpu7x", tokens: []string{"tpu7", "tpu-7x", "v7x", "ironwood"}},
 	{canonical: "v6e", tokens: []string{"ct6e", "v6e"}},
 	{canonical: "v5p", tokens: []string{"ct5p", "v5p"}},
 	{canonical: "v5e", tokens: []string{"ct5lp", "v5e", "v5lite", "v5-lite"}},
@@ -247,14 +246,11 @@ func InferTPUTypeAndMachine(rawType, rawMachine string, chipsPerNode int) (strin
 
 func isTPUShorthandOrAccelerator(raw string) bool {
 	s := strings.ToLower(strings.TrimSpace(raw))
-	if s == "" {
-		return false
-	}
 	switch s {
-	case "tpu7", "tpu7x", "v7x", "ironwood", "v4", "v5e", "v5p", "v6e", "v5litepod":
+	case "tpu7", "tpu7x", "tpu-7x", "v7x", "ironwood", "v4", "v5e", "v5p", "v6e", "v5litepod":
 		return true
 	}
-	for _, prefix := range []string{"tpu-", "v4-", "v5e-", "v5p-", "v6e-", "v5litepod-", "v7x-"} {
+	for _, prefix := range []string{"tpu-v4", "tpu-v5", "tpu-v6", "tpu-v7", "tpu-7x", "v4-", "v5e-", "v5p-", "v6e-", "v5litepod-", "v7x-"} {
 		if strings.HasPrefix(s, prefix) {
 			return true
 		}
@@ -269,13 +265,13 @@ func defaultTPUMachineType(tpuType string, chipsPerNode int) string {
 	}
 	switch tpuType {
 	case "tpu7x":
-		return fmt.Sprintf("tpu7x-standard-%dt", chips)
+		return fmt.Sprintf("tpu7x-standard-%dt", normalizeTPUChipCount(chips))
 	case "v6e":
-		return fmt.Sprintf("ct6e-standard-%dt", normalize2DChipCount(chips))
+		return fmt.Sprintf("ct6e-standard-%dt", normalizeTPUChipCount(chips))
 	case "v5p":
 		return "ct5p-hightpu-4t"
 	case "v5e":
-		return fmt.Sprintf("ct5lp-hightpu-%dt", normalize2DChipCount(chips))
+		return fmt.Sprintf("ct5lp-hightpu-%dt", normalizeTPUChipCount(chips))
 	case "v4":
 		return "ct4p-hightpu-4t"
 	default:
@@ -283,7 +279,7 @@ func defaultTPUMachineType(tpuType string, chipsPerNode int) string {
 	}
 }
 
-func normalize2DChipCount(chips int) int {
+func normalizeTPUChipCount(chips int) int {
 	switch chips {
 	case 1, 4, 8:
 		return chips
@@ -306,7 +302,7 @@ func IsNotFoundOrNoMatchError(err error) bool {
 		strings.Contains(msg, "no matches for kind")
 }
 
-// DiscoverInventory queries Kubernetes nodes, Bloom Slices and PartitionTrees, and the non-privileged
+// DiscoverInventory queries Kubernetes nodes, TPU Slices and PartitionTrees, and the non-privileged
 // API group discovery endpoint (/apis/slice.tpu.google.com/v1alpha1) without invoking gcloud.
 // When listing nodes fails with 403 Forbidden (multi-tenant RBAC), it enters explicit mode cleanly and
 // resolves the label scheme via API group discovery or opts.LabelSchemeOverride.
@@ -326,20 +322,11 @@ func DiscoverInventory(lister ResourceLister, apiChecker APIGroupChecker, opts D
 		return nil, err
 	}
 
-	probeBloomAPIGroup(apiChecker, inv)
-	discoverBloomCRDs(lister, apiChecker, inv, signals, override)
+	probeFailed := probeTPUSliceAPIGroup(apiChecker, inv)
+	discoverTPUSliceCRDs(lister, apiChecker, probeFailed, inv, signals, override)
 
-	inv.LabelScheme = resolveLabelScheme(override, signals.hasBloomLabels || inv.BloomAPIPresent, signals.hasGKELabels)
-	inv.TPU = buildTPUInventory(inv, signals.hasPartitionLabels)
-	if inv.TPU != nil {
-		if pool, ok := inv.Pools[inv.TPU.MachineType]; ok {
-			p := pool
-			inv.TPUPoolCap = &p
-		}
-	}
-	if inv.LabelScheme == SchemeBloom {
-		shell.SetDefaultAirGapped(true)
-	}
+	inv.LabelScheme = resolveLabelScheme(override, signals.hasTPUSliceLabels || inv.TPUSliceAPIPresent, signals.hasGKELabels)
+	inv.TPU, inv.TPUPoolCap = buildTPUInventory(inv, signals.hasPartitionLabels)
 	return inv, nil
 }
 
@@ -361,7 +348,7 @@ func (inv *Inventory) SummaryLines() []string {
 	}
 	if inv.ExplicitMode {
 		lines := []string{
-			fmt.Sprintf("Kubernetes explicit mode active (label scheme: %s, Bloom API present: %t).", inv.LabelScheme, inv.BloomAPIPresent),
+			fmt.Sprintf("Kubernetes explicit mode active (label scheme: %s, TPU slice API present: %t).", inv.LabelScheme, inv.TPUSliceAPIPresent),
 		}
 		if inv.TPU != nil {
 			lines = append(lines, formatTPUSummaryLine(inv.TPU, inv.TPUPoolCap))
@@ -408,7 +395,7 @@ func formatTPUSummaryLine(tpu *TPUInventory, cap *PoolCapacity) string {
 }
 
 type nodeSignals struct {
-	hasBloomLabels     bool
+	hasTPUSliceLabels  bool
 	hasGKELabels       bool
 	hasPartitionLabels bool
 	nodeSlices         map[string]*nodeSliceAgg
@@ -424,11 +411,17 @@ type nodeSliceAgg struct {
 	readyNodes  int
 }
 
+type poolGroupKey struct {
+	machineType  string
+	class        string
+	controlPlane bool
+}
+
 type poolBuilder struct {
-	cap             PoolCapacity
-	topologies      map[string]struct{}
-	slices          map[string]struct{}
-	hasNonCtrlPlane bool
+	key        poolGroupKey
+	cap        PoolCapacity
+	topologies map[string]struct{}
+	slices     map[string]struct{}
 }
 
 type nodeSnapshot struct {
@@ -446,7 +439,7 @@ type nodeSnapshot struct {
 	nodePool     string
 	topology     string
 	sliceName    string
-	hasBloom     bool
+	hasTPUSlice  bool
 	hasGKE       bool
 	hasPartition bool
 	controlPlane bool
@@ -465,46 +458,50 @@ func discoverNodes(lister ResourceLister, inv *Inventory) (nodeSignals, error) {
 	return accumulateNodes(nodes, inv), nil
 }
 
-func probeBloomAPIGroup(apiChecker APIGroupChecker, inv *Inventory) {
+func probeTPUSliceAPIGroup(apiChecker APIGroupChecker, inv *Inventory) bool {
 	if apiChecker == nil {
-		return
+		return false
 	}
-	present, err := apiChecker.HasAPIGroupVersion(BloomSliceAPIGroupVersion)
+	present, err := apiChecker.HasAPIGroupVersion(TPUSliceAPIGroupVersion)
 	if err != nil {
-		logging.Warn("Failed to probe Kubernetes API group %s: %v", BloomSliceAPIGroupVersion, err)
-		return
+		logging.Warn("Failed to probe Kubernetes API group %s: %v", TPUSliceAPIGroupVersion, err)
+		return true
 	}
 	if present {
-		inv.BloomAPIPresent = true
+		inv.TPUSliceAPIPresent = true
 	}
+	return false
 }
 
-func discoverBloomCRDs(lister ResourceLister, apiChecker APIGroupChecker, inv *Inventory, signals nodeSignals, override LabelScheme) {
-	shouldQuery := inv.BloomAPIPresent || signals.hasBloomLabels || override == SchemeBloom
-	if !shouldQuery && apiChecker == nil && !signals.hasGKELabels {
+func discoverTPUSliceCRDs(lister ResourceLister, apiChecker APIGroupChecker, probeFailed bool, inv *Inventory, signals nodeSignals, override LabelScheme) {
+	if override == SchemeGKE || override == SchemeGeneric {
+		return
+	}
+	shouldQuery := inv.TPUSliceAPIPresent || signals.hasTPUSliceLabels || override == SchemeTPUSlice
+	if !shouldQuery && (apiChecker == nil || probeFailed) && !signals.hasGKELabels {
 		shouldQuery = true
 	}
 	if shouldQuery {
-		crdSlices, foundSlices := listBloomSlices(lister)
+		crdSlices, foundSlices := listTPUSlices(lister)
 		if foundSlices {
-			inv.BloomAPIPresent = true
+			inv.TPUSliceAPIPresent = true
 			inv.Slices = crdSlices
 		}
-		trees, foundTrees := listBloomPartitionTrees(lister)
+		trees, foundTrees := listTPUPartitionTrees(lister)
 		if foundTrees {
-			inv.BloomAPIPresent = true
+			inv.TPUSliceAPIPresent = true
 			inv.PartitionTrees = trees
 		}
 	}
 	mergeNodeDerivedSlices(inv, signals.nodeSlices)
 }
 
-func resolveLabelScheme(override LabelScheme, bloomDetected, gkeDetected bool) LabelScheme {
+func resolveLabelScheme(override LabelScheme, tpuSliceDetected, gkeDetected bool) LabelScheme {
 	if override != SchemeAuto {
 		return override
 	}
-	if bloomDetected {
-		return SchemeBloom
+	if tpuSliceDetected {
+		return SchemeTPUSlice
 	}
 	if gkeDetected {
 		return SchemeGKE
@@ -514,7 +511,7 @@ func resolveLabelScheme(override LabelScheme, bloomDetected, gkeDetected bool) L
 
 func accumulateNodes(nodes []unstructured.Unstructured, inv *Inventory) nodeSignals {
 	signals := nodeSignals{nodeSlices: make(map[string]*nodeSliceAgg)}
-	builders := make(map[string]*poolBuilder)
+	builders := make(map[poolGroupKey]*poolBuilder)
 
 	for i := range nodes {
 		snap := extractNodeSnapshot(nodes[i])
@@ -522,7 +519,7 @@ func accumulateNodes(nodes []unstructured.Unstructured, inv *Inventory) nodeSign
 		if snap.ready {
 			inv.ReadyNodes++
 		}
-		signals.hasBloomLabels = signals.hasBloomLabels || snap.hasBloom
+		signals.hasTPUSliceLabels = signals.hasTPUSliceLabels || snap.hasTPUSlice
 		signals.hasGKELabels = signals.hasGKELabels || snap.hasGKE
 		signals.hasPartitionLabels = signals.hasPartitionLabels || snap.hasPartition
 
@@ -537,13 +534,13 @@ func accumulateNodes(nodes []unstructured.Unstructured, inv *Inventory) nodeSign
 func extractNodeSnapshot(node unstructured.Unstructured) nodeSnapshot {
 	labels := node.GetLabels()
 	cpus, memMiB, tpus, gpus := parseNodeAllocatable(node)
-	hasBloom, hasPartition := hasBloomLabels(labels)
+	hasTPUSlice, hasPartition := hasTPUSliceLabels(labels)
 	hasGKE := hasGKELabels(labels)
 
 	rawInstance := firstNonEmpty(labels[InstanceTypeLabel], labels[BetaInstanceTypeLabel])
-	rawTPUType := firstNonEmpty(labels[BloomTPUTypeLabel], labels[GKETPUAcceleratorLabel])
-	topology := strings.ToLower(strings.TrimSpace(firstNonEmpty(labels[BloomTopologyLabel], labels[GKETPUTopologyLabel])))
-	sliceName := strings.TrimSpace(labels[BloomSliceNameLabel])
+	rawTPUType := firstNonEmpty(labels[TPUSliceTypeLabel], labels[GKETPUAcceleratorLabel])
+	topology := strings.ToLower(strings.TrimSpace(firstNonEmpty(labels[TPUSliceTopologyLabel], labels[GKETPUTopologyLabel])))
+	sliceName := strings.TrimSpace(labels[TPUSliceNameLabel])
 	nodePool := strings.TrimSpace(labels[GKENodePoolLabel])
 
 	isTPU := tpus > 0 || rawTPUType != "" || topology != "" || sliceName != "" || config.IsTPU(rawInstance)
@@ -576,19 +573,34 @@ func extractNodeSnapshot(node unstructured.Unstructured) nodeSnapshot {
 		nodePool:     nodePool,
 		topology:     topology,
 		sliceName:    sliceName,
-		hasBloom:     hasBloom,
+		hasTPUSlice:  hasTPUSlice,
 		hasGKE:       hasGKE,
 		hasPartition: hasPartition,
 		controlPlane: isControlPlaneNode(labels),
 	}
 }
 
-func getOrCreatePoolBuilder(builders map[string]*poolBuilder, snap nodeSnapshot) *poolBuilder {
-	b, ok := builders[snap.machineType]
-	if ok {
+func nodePoolClass(snap nodeSnapshot) string {
+	if snap.isTPU {
+		return "tpu"
+	}
+	if snap.isGPU {
+		return "gpu"
+	}
+	return "cpu"
+}
+
+func getOrCreatePoolBuilder(builders map[poolGroupKey]*poolBuilder, snap nodeSnapshot) *poolBuilder {
+	key := poolGroupKey{
+		machineType:  snap.machineType,
+		class:        nodePoolClass(snap),
+		controlPlane: snap.controlPlane,
+	}
+	if b, ok := builders[key]; ok {
 		return b
 	}
-	b = &poolBuilder{
+	b := &poolBuilder{
+		key: key,
 		cap: PoolCapacity{
 			MachineType:  snap.machineType,
 			NodePoolName: snap.nodePool,
@@ -596,11 +608,11 @@ func getOrCreatePoolBuilder(builders map[string]*poolBuilder, snap nodeSnapshot)
 		topologies: make(map[string]struct{}),
 		slices:     make(map[string]struct{}),
 	}
-	builders[snap.machineType] = b
+	builders[key] = b
 	return b
 }
 
-func addNodeToPool(builders map[string]*poolBuilder, snap nodeSnapshot) {
+func addNodeToPool(builders map[poolGroupKey]*poolBuilder, snap nodeSnapshot) {
 	b := getOrCreatePoolBuilder(builders, snap)
 	b.cap.TotalNodes++
 	if snap.ready {
@@ -620,9 +632,6 @@ func addNodeToPool(builders map[string]*poolBuilder, snap nodeSnapshot) {
 	}
 	if snap.sliceName != "" {
 		b.slices[snap.sliceName] = struct{}{}
-	}
-	if !snap.controlPlane {
-		b.hasNonCtrlPlane = true
 	}
 }
 
@@ -645,21 +654,42 @@ func addNodeToSliceAgg(agg map[string]*nodeSliceAgg, snap nodeSnapshot) {
 	entry.chips = minPositive(entry.chips, snap.tpus)
 }
 
-func finalizePools(inv *Inventory, builders map[string]*poolBuilder) {
+func formatDisambiguatedPoolKey(key poolGroupKey) string {
+	if key.controlPlane {
+		if key.class == "cpu" {
+			return key.machineType + "/control-plane"
+		}
+		return key.machineType + "/control-plane-" + key.class
+	}
+	return key.machineType + "/" + key.class
+}
+
+func finalizePools(inv *Inventory, builders map[poolGroupKey]*poolBuilder) {
+	countByMachine := make(map[string]int, len(builders))
+	for key := range builders {
+		countByMachine[key.machineType]++
+	}
+
+	byName := make(map[string]*poolBuilder, len(builders))
 	names := make([]string, 0, len(builders))
-	for name := range builders {
-		names = append(names, name)
+	for key, b := range builders {
+		poolName := key.machineType
+		if countByMachine[key.machineType] > 1 {
+			poolName = formatDisambiguatedPoolKey(key)
+		}
+		byName[poolName] = b
+		names = append(names, poolName)
 	}
 	slices.Sort(names)
 	inv.PoolNames = names
 
 	controlPlaneOnly := make(map[string]bool, len(builders))
 	for _, name := range names {
-		b := builders[name]
+		b := byName[name]
 		b.cap.Topologies = sortedKeys(b.topologies)
 		b.cap.SliceNames = sortedKeys(b.slices)
 		inv.Pools[name] = b.cap
-		controlPlaneOnly[name] = !b.hasNonCtrlPlane
+		controlPlaneOnly[name] = b.key.controlPlane
 	}
 	inv.CPUPoolCap = selectCPUPoolCap(inv, controlPlaneOnly)
 }
@@ -743,8 +773,8 @@ func parseQuantityField(alloc map[string]interface{}, key string) (resource.Quan
 	return qty, true
 }
 
-func isNodeReady(node unstructured.Unstructured) bool {
-	conditions, _, _ := unstructured.NestedSlice(node.Object, "status", "conditions")
+func hasReadyCondition(obj map[string]interface{}) bool {
+	conditions, _, _ := unstructured.NestedSlice(obj, "status", "conditions")
 	for _, raw := range conditions {
 		cond, ok := raw.(map[string]interface{})
 		if !ok {
@@ -759,16 +789,23 @@ func isNodeReady(node unstructured.Unstructured) bool {
 	return false
 }
 
-func hasBloomLabels(labels map[string]string) (hasBloom, hasPartition bool) {
+func isNodeReady(node unstructured.Unstructured) bool {
+	if unsched, _, _ := unstructured.NestedBool(node.Object, "spec", "unschedulable"); unsched {
+		return false
+	}
+	return hasReadyCondition(node.Object)
+}
+
+func hasTPUSliceLabels(labels map[string]string) (hasTPUSlice, hasPartition bool) {
 	for k := range labels {
-		if strings.HasPrefix(k, BloomLabelPrefix) {
-			hasBloom = true
+		if strings.HasPrefix(k, TPUSliceLabelPrefix) {
+			hasTPUSlice = true
 		}
-		if strings.HasPrefix(k, BloomPartitionLabelPrefix) {
+		if strings.HasPrefix(k, TPUSlicePartitionLabelPrefix) {
 			hasPartition = true
 		}
 	}
-	return hasBloom, hasPartition
+	return hasTPUSlice, hasPartition
 }
 
 func hasGKELabels(labels map[string]string) bool {
@@ -786,49 +823,53 @@ func isControlPlaneNode(labels map[string]string) bool {
 	return hasCtrl || hasMaster
 }
 
-func listBloomSlices(lister ResourceLister) ([]SliceInfo, bool) {
-	items, err := lister.ListResources(BloomSliceGVR, "", "", "")
+func listTPUSlices(lister ResourceLister) ([]SliceInfo, bool) {
+	items, err := lister.ListResources(TPUSliceGVR, "", "", "")
 	if err != nil {
 		if IsNotFoundOrNoMatchError(err) {
 			return nil, false
 		}
 		if IsForbiddenError(err) {
-			logging.Info("Skipping Bloom Slice inventory (lacking permission to list slices).")
+			logging.Info("Skipping TPU Slice inventory (lacking permission to list slices).")
 			return nil, false
 		}
-		logging.Warn("Failed to list Bloom Slice resources: %v", err)
+		logging.Warn("Failed to list TPU Slice resources: %v", err)
 		return nil, false
 	}
 	result := make([]SliceInfo, 0, len(items))
 	for i := range items {
-		result = append(result, parseBloomSlice(items[i]))
+		result = append(result, parseTPUSlice(items[i]))
 	}
 	sortSlices(result)
 	return result, true
 }
 
-func parseBloomSlice(obj unstructured.Unstructured) SliceInfo {
+func parseTPUSlice(obj unstructured.Unstructured) SliceInfo {
 	labels := obj.GetLabels()
 	rawType := firstNonEmpty(
 		nestedString(obj.Object, "spec", "type"),
 		nestedString(obj.Object, "spec", "tpuType"),
-		labels[BloomTPUTypeLabel],
+		labels[TPUSliceTypeLabel],
 	)
 	topology := strings.ToLower(strings.TrimSpace(firstNonEmpty(
 		nestedString(obj.Object, "spec", "topology"),
-		labels[BloomTopologyLabel],
+		labels[TPUSliceTopologyLabel],
 	)))
 	state := strings.ToUpper(strings.TrimSpace(firstNonEmpty(
 		nestedString(obj.Object, "status", "state"),
 		nestedString(obj.Object, "status", "phase"),
 	)))
 	ready := state == "READY" || (state == "" && sliceReadyFromConditions(obj.Object))
-	tpuType, machineType := InferTPUTypeAndMachine(rawType, "", 0)
+	chipsHint := 0
+	if topology == "1x1" {
+		chipsHint = 1
+	}
+	tpuType, machineType := InferTPUTypeAndMachine(rawType, "", chipsHint)
 	chips := 0
 	if machineType != "" {
 		chips = config.AcceleratorsPerVM(machineType)
 	}
-	nodesCount := resolveNodesPerSlice(machineType, topology, chips, sliceNodeCount(obj.Object))
+	nodesCount := resolveCRDSliceNodes(machineType, topology, chips, sliceNodeCount(obj.Object))
 
 	return SliceInfo{
 		Name:          obj.GetName(),
@@ -840,27 +881,15 @@ func parseBloomSlice(obj unstructured.Unstructured) SliceInfo {
 		Ready:         ready,
 		NodesPerSlice: nodesCount,
 		ChipsPerNode:  chips,
-		OwnerName:     strings.TrimSpace(labels[BloomOwnerNameLabel]),
-		ManagedBy:     strings.TrimSpace(labels[BloomManagedByLabel]),
+		OwnerName:     strings.TrimSpace(labels[TPUSliceOwnerNameLabel]),
+		ManagedBy:     strings.TrimSpace(labels[TPUSliceManagedByLabel]),
 		PartitionTree: firstNonEmpty(nestedString(obj.Object, "spec", "partitionTree"), nestedString(obj.Object, "spec", "partition")),
 		FromCRD:       true,
 	}
 }
 
 func sliceReadyFromConditions(obj map[string]interface{}) bool {
-	conditions, _, _ := unstructured.NestedSlice(obj, "status", "conditions")
-	for _, raw := range conditions {
-		cond, ok := raw.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		if cType, _ := cond["type"].(string); cType == "Ready" {
-			if cStatus, _ := cond["status"].(string); cStatus == "True" {
-				return true
-			}
-		}
-	}
-	return false
+	return hasReadyCondition(obj)
 }
 
 func sliceNodeCount(obj map[string]interface{}) int {
@@ -885,17 +914,17 @@ func sliceNodeCount(obj map[string]interface{}) int {
 	return 0
 }
 
-func listBloomPartitionTrees(lister ResourceLister) ([]PartitionTreeInfo, bool) {
-	items, err := lister.ListResources(BloomPartitionTreeGVR, "", "", "")
+func listTPUPartitionTrees(lister ResourceLister) ([]PartitionTreeInfo, bool) {
+	items, err := lister.ListResources(TPUPartitionTreeGVR, "", "", "")
 	if err != nil {
 		if IsNotFoundOrNoMatchError(err) {
 			return nil, false
 		}
 		if IsForbiddenError(err) {
-			logging.Info("Skipping Bloom PartitionTree inventory (lacking permission to list partitiontrees).")
+			logging.Info("Skipping TPU PartitionTree inventory (lacking permission to list partitiontrees).")
 			return nil, false
 		}
-		logging.Warn("Failed to list Bloom PartitionTree resources: %v", err)
+		logging.Warn("Failed to list TPU PartitionTree resources: %v", err)
 		return nil, false
 	}
 	result := make([]PartitionTreeInfo, 0, len(items))
@@ -913,12 +942,12 @@ func parsePartitionTree(obj unstructured.Unstructured) PartitionTreeInfo {
 	rawType := firstNonEmpty(
 		nestedString(obj.Object, "spec", "type"),
 		nestedString(obj.Object, "spec", "tpuType"),
-		labels[BloomTPUTypeLabel],
+		labels[TPUSliceTypeLabel],
 	)
 	rootTopo := strings.ToLower(strings.TrimSpace(firstNonEmpty(
 		nestedString(obj.Object, "spec", "topology"),
 		nestedString(obj.Object, "spec", "rootTopology"),
-		labels[BloomTopologyLabel],
+		labels[TPUSliceTopologyLabel],
 	)))
 	return PartitionTreeInfo{
 		Name:                obj.GetName(),
@@ -969,9 +998,9 @@ func mergeNodeDerivedSlices(inv *Inventory, nodeSlices map[string]*nodeSliceAgg)
 	if len(nodeSlices) == 0 {
 		return
 	}
-	byName := make(map[string]int, len(inv.Slices))
+	byName := make(map[string][]int, len(inv.Slices))
 	for i := range inv.Slices {
-		byName[inv.Slices[i].Name] = i
+		byName[inv.Slices[i].Name] = append(byName[inv.Slices[i].Name], i)
 	}
 	names := make([]string, 0, len(nodeSlices))
 	for name := range nodeSlices {
@@ -981,8 +1010,10 @@ func mergeNodeDerivedSlices(inv *Inventory, nodeSlices map[string]*nodeSliceAgg)
 
 	for _, name := range names {
 		agg := nodeSlices[name]
-		if idx, exists := byName[name]; exists {
-			enrichSliceFromNodes(&inv.Slices[idx], agg)
+		if indices, exists := byName[name]; exists {
+			for _, idx := range indices {
+				enrichSliceFromNodes(&inv.Slices[idx], agg)
+			}
 			continue
 		}
 		chips := agg.chips
@@ -1021,10 +1052,10 @@ func enrichSliceFromNodes(s *SliceInfo, agg *nodeSliceAgg) {
 	}
 }
 
-func buildTPUInventory(inv *Inventory, hasPartitionLabels bool) *TPUInventory {
+func buildTPUInventory(inv *Inventory, hasPartitionLabels bool) (*TPUInventory, *PoolCapacity) {
 	primaryPool := selectPrimaryTPUPool(inv)
 	if primaryPool == nil && len(inv.Slices) == 0 && len(inv.PartitionTrees) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	tpu := &TPUInventory{HasPartitionLabels: hasPartitionLabels}
@@ -1047,12 +1078,12 @@ func buildTPUInventory(inv *Inventory, hasPartitionLabels bool) *TPUInventory {
 	if tpu.NodesPerSlice == 0 {
 		tpu.NodesPerSlice = resolveNodesPerSlice(tpu.MachineType, tpu.Topology, tpu.ChipsPerNode, 0)
 	}
-	return tpu
+	return tpu, primaryPool
 }
 
 func applySliceAndTreeMetadata(inv *Inventory, primaryPool *PoolCapacity, tpu *TPUInventory) {
-	tpu.Topologies = collectAllTopologies(inv, primaryPool, tpu)
 	applyDefaultSlice(inv, tpu)
+	tpu.Topologies = collectAllTopologies(inv, primaryPool, tpu)
 	if tpu.Topology == "" && len(tpu.Topologies) > 0 {
 		tpu.Topology = tpu.Topologies[0]
 	}
@@ -1150,14 +1181,25 @@ func selectDefaultSlice(sliceList []SliceInfo, tpuType string) *SliceInfo {
 	return nil
 }
 
-func resolveNodesPerSlice(machineType, topology string, chipsPerNode, observedNodes int) int {
-	if observedNodes > 0 {
-		return observedNodes
+// resolveCRDSliceNodes computes NodesPerSlice for CRD-only slices (where per-node chip count may be guessed),
+// trusting the CRD's reported node count when present before falling back to topology calculation.
+func resolveCRDSliceNodes(machineType, topology string, chipsPerNode, crdNodes int) int {
+	if crdNodes > 0 {
+		return crdNodes
 	}
+	return resolveNodesPerSlice(machineType, topology, chipsPerNode, 0)
+}
+
+// resolveNodesPerSlice computes NodesPerSlice when real node chip counts are available,
+// preferring topology math so partially visible or repairing slices do not under-report slice size.
+func resolveNodesPerSlice(machineType, topology string, chipsPerNode, observedNodes int) int {
 	if topology != "" {
 		if n, err := config.CalculateAcceleratorNodes(machineType, topology, chipsPerNode); err == nil && n > 0 {
 			return n
 		}
+	}
+	if observedNodes > 0 {
+		return observedNodes
 	}
 	return 0
 }

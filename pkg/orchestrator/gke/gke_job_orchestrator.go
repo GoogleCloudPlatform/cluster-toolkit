@@ -186,11 +186,8 @@ func (g *GKEOrchestrator) pinTelemetryAndValidate(job *orchestrator.JobDefinitio
 }
 
 // validateSubmitLocalPreflight runs the checks that need no cluster access or image build: mount syntax,
-// label-scheme override syntax, ML Diagnostics flags, and custom template parsing.
+// ML Diagnostics flags, and custom template parsing.
 func (g *GKEOrchestrator) validateSubmitLocalPreflight(sm *StorageManager, job orchestrator.JobDefinition) error {
-	if _, err := k8s.ResolveLabelSchemeOverride(job.K8sLabelScheme, nil); err != nil {
-		return err
-	}
 	if err := sm.validateJobMounts(job.RawMounts, job.IsPathwaysJob, job.Pathways.ColocatedPythonSidecarImage != ""); err != nil {
 		return err
 	}
@@ -205,17 +202,18 @@ func (g *GKEOrchestrator) Inventory() *k8s.Inventory {
 	return g.inventory
 }
 
-// DiscoverK8sInventory queries Kubernetes nodes, Bloom Slices/PartitionTrees, and non-privileged API
+// DiscoverK8sInventory queries Kubernetes nodes, TPU Slices/PartitionTrees, and non-privileged API
 // group discovery without invoking gcloud, caching the snapshot on g.inventory.
 // Platform label schemes are never inferred from --node-constraint or --compute-type.
 func (g *GKEOrchestrator) DiscoverK8sInventory(labelSchemeFlag string) (*k8s.Inventory, error) {
+	g.inventory = nil
 	schemeOverride, err := k8s.ResolveLabelSchemeOverride(labelSchemeFlag, nil)
 	if err != nil {
 		return nil, err
 	}
-	kc := g.usableKubeClient()
-	if kc == nil {
-		return nil, fmt.Errorf("kubernetes API client is not initialized for node inventory discovery")
+	kc, err := g.requireKubeClientForDiscovery()
+	if err != nil {
+		return nil, err
 	}
 	inv, err := k8s.DiscoverInventory(kc, g, k8s.DiscoverOptions{
 		LabelSchemeOverride: schemeOverride,
@@ -223,9 +221,27 @@ func (g *GKEOrchestrator) DiscoverK8sInventory(labelSchemeFlag string) (*k8s.Inv
 	if err != nil {
 		return nil, err
 	}
+	if inv.LabelScheme == k8s.SchemeTPUSlice {
+		shell.SetDefaultAirGapped(true)
+	}
 	g.inventory = inv
 	inv.LogSummary()
 	return inv, nil
+}
+
+func (g *GKEOrchestrator) requireKubeClientForDiscovery() (KubeClient, error) {
+	if g.needsDynamicClientInit() {
+		if g.dynClient == nil && strings.TrimSpace(g.kubeContext) == "" {
+			return nil, fmt.Errorf("kubernetes API client is not initialized for node inventory discovery")
+		}
+		if _, err := g.getDynamicClient(); err != nil {
+			return nil, fmt.Errorf("failed to initialize kubernetes API client for node inventory discovery: %w", err)
+		}
+	}
+	if g.kubeClient == nil {
+		return nil, fmt.Errorf("kubernetes API client is not initialized for node inventory discovery")
+	}
+	return g.kubeClient, nil
 }
 
 func (g *GKEOrchestrator) finishJobSubmission(job orchestrator.JobDefinition) error {

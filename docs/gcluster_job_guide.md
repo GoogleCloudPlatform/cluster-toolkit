@@ -20,7 +20,6 @@ If you use `--build-context` to build images on-the-fly:
 * `GCLUSTER_TELEMETRY_IMAGE`: Container image URI for the ML Diagnostics collector native sidecar on Kubernetes 1.29+ TPU workloads when `--enable-ml-diagnostics` is passed without `--ml-diagnostics-image` (switches GKE jobs from the managed webhook to native sidecar injection). Pass `--ml-diagnostics-image=""` to ignore it for one submission.
 * `GCLUSTER_ORCHESTRATOR`: Override automatic orchestrator detection (`gke` or `k8s`). When unset, `gcluster` inspects your `KUBECONFIG` context (`gke-gcloud-auth-plugin`, `*.gke.goog`, legacy `gcp` auth-provider, canonical `gke_` context naming, or `-gke.` API server version) and routes generic Kubernetes clusters to `k8s` mode for `list` (`JobSet`s labeled `gcluster.google.com/workload`), `logs`, `cancel`, and `inspect` without requiring `--project`, `--location`, or `gcloud` (`gcluster job submit` currently requires a GKE cluster). When `gcluster job config` defaults are saved, setting `GCLUSTER_ORCHESTRATOR=k8s` bypasses all saved `cluster`, `project`, and `location` defaults, while passing `--cluster <k8s-context>` (when different from any saved `cluster`) on `list`, `logs`, `cancel`, or `inspect` overrides `cluster` and ignores saved `project` and `location` defaults with a warning.
 * `GCLUSTER_AIR_GAPPED`: Set to `true` (or `1` / `yes` / `on`) in disconnected or air-gapped environments to skip the live API server version probe during orchestrator detection, block outbound GitHub manifest downloads for automatic JobSet or Kueue installation/re-installation (requiring pre-installed controllers), and skip CLI telemetry collection and uploads for the current process without changing your saved telemetry preference. Setting `false` / `0` / `no` / `off` disables air-gapped mode for the current command (for example, overriding an exported `GCLUSTER_AIR_GAPPED=true`) without overriding `gcluster telemetry off`.
-* `GCLUSTER_LABEL_SCHEME`: Overrides automatic Kubernetes TPU node label-scheme detection (`bloom`, `gke`, or `generic`) when `--k8s-label-scheme` is not specified. Useful on multi-tenant clusters where RBAC denies `list nodes` and you want to force a specific scheme.
 
 > [!NOTE]
 > ### Automated Prerequisite Checks Overview
@@ -1425,7 +1424,6 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--gke-nap-provisioning` | `string` | Compute provisioning model for GKE NAP. Allowed values: `on-demand`, `spot`, `reservation`. |
 | `--gke-nap-reservation` | `string` | Name of the Google Cloud Reservation for GKE NAP (required if `--gke-nap-provisioning=reservation`). |
 | `--gke-custom-templates-path` | `string` | Path to a local directory containing custom GKE manifest template overrides. |
-| `--k8s-label-scheme` | `string` | Override automatic Kubernetes TPU node label scheme detection (`bloom`, `gke`, or `generic`; overrides `GCLUSTER_LABEL_SCHEME`). |
 
 ### 9.4 `list` Flags
 *Use these flags to filter the list of jobs.*

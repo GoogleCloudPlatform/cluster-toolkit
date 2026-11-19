@@ -233,8 +233,6 @@ type JobDefinition struct {
 	MLDiagnosticsTelemetryPort  int
 
 	GkeCustomTemplatesPath string
-	// K8sLabelScheme overrides automatic Kubernetes TPU label-scheme discovery ("bloom", "gke", or "generic").
-	K8sLabelScheme string
 
 	RawMounts []string
 	Env       map[string]string

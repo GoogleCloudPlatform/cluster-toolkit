@@ -369,7 +369,6 @@ func setupSubmitTestEnv(t *testing.T) {
 	t.Setenv("GCLUSTER_REFRESH_CREDENTIALS", "")
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
 	t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
-	t.Setenv("GCLUSTER_LABEL_SCHEME", "")
 	resetJobFlags()
 
 	oldStore := store
@@ -2217,56 +2216,4 @@ func TestValidateBuildContext_OCIRegistries(t *testing.T) {
 			}
 		}
 	})
-}
-
-func TestSubmitCmd_K8sLabelSchemeFlagAndEnv(t *testing.T) {
-	tests := []struct {
-		name       string
-		envVal     string
-		flagArgs   []string
-		wantScheme string
-		wantErr    string
-	}{
-		{name: "valid bloom flag", flagArgs: []string{"--k8s-label-scheme", "bloom"}, wantScheme: "bloom"},
-		{name: "valid padded uppercase flag normalized", flagArgs: []string{"--k8s-label-scheme", " BLOOM "}, wantScheme: "bloom"},
-		{name: "valid gke flag", flagArgs: []string{"--k8s-label-scheme=gke"}, wantScheme: "gke"},
-		{name: "valid generic flag", flagArgs: []string{"--k8s-label-scheme=generic"}, wantScheme: "generic"},
-		{name: "valid env-only resolved", envVal: "bloom", wantScheme: "bloom"},
-		{name: "invalid flag rejected", flagArgs: []string{"--k8s-label-scheme=bogus"}, wantErr: "invalid --k8s-label-scheme"},
-		{name: "invalid env rejected", envVal: "bogus", wantErr: "invalid --k8s-label-scheme"},
-		{name: "flag overrides invalid env", envVal: "bogus", flagArgs: []string{"--k8s-label-scheme=bloom"}, wantScheme: "bloom"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			setupSubmitTestEnv(t)
-			t.Setenv("GCLUSTER_LABEL_SCHEME", tc.envVal)
-			mockOrc := &mockOrchestrator{}
-			gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
-
-			args := append([]string{
-				"submit",
-				"--name", "scheme-test",
-				"--image", "busybox",
-				"--command", "echo hi",
-				"--compute-type", "n2-standard-4",
-				"--cluster", "test-cluster",
-				"--location", "us-central1-a",
-				"--project", "test-project",
-			}, tc.flagArgs...)
-			_, err := executeCommand(JobCmd, args...)
-			if tc.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("got err=%v, want substring %q", err, tc.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if mockOrc.SubmittedJob.K8sLabelScheme != tc.wantScheme {
-				t.Errorf("K8sLabelScheme = %q, want %q", mockOrc.SubmittedJob.K8sLabelScheme, tc.wantScheme)
-			}
-		})
-	}
 }

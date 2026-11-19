@@ -24,8 +24,8 @@ import (
 // KubeconfigLoader loads the merged client-go kubeconfig; injectable for hermetic tests.
 type KubeconfigLoader func() (*clientcmdapi.Config, error)
 
-// BloomSliceAPIGroupVersion is the Kubernetes API group/version exposed by the tpu.google.com slice controller.
-const BloomSliceAPIGroupVersion = "slice.tpu.google.com/v1alpha1"
+// TPUSliceAPIGroupVersion is the Kubernetes API group/version exposed by the tpu.google.com slice controller.
+const TPUSliceAPIGroupVersion = "slice.tpu.google.com/v1alpha1"
 
 // NodeGVR identifies core/v1 Node resources for dynamic Kubernetes queries.
 var NodeGVR = schema.GroupVersionResource{
@@ -34,15 +34,15 @@ var NodeGVR = schema.GroupVersionResource{
 	Resource: "nodes",
 }
 
-// BloomSliceGVR identifies Bloom slice.tpu.google.com/v1alpha1 Slice resources.
-var BloomSliceGVR = schema.GroupVersionResource{
+// TPUSliceGVR identifies slice.tpu.google.com/v1alpha1 Slice resources.
+var TPUSliceGVR = schema.GroupVersionResource{
 	Group:    "slice.tpu.google.com",
 	Version:  "v1alpha1",
 	Resource: "slices",
 }
 
-// BloomPartitionTreeGVR identifies Bloom slice.tpu.google.com/v1alpha1 PartitionTree resources.
-var BloomPartitionTreeGVR = schema.GroupVersionResource{
+// TPUPartitionTreeGVR identifies slice.tpu.google.com/v1alpha1 PartitionTree resources.
+var TPUPartitionTreeGVR = schema.GroupVersionResource{
 	Group:    "slice.tpu.google.com",
 	Version:  "v1alpha1",
 	Resource: "partitiontrees",
