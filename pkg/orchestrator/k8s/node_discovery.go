@@ -31,23 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// LabelScheme identifies which Kubernetes node label convention a cluster uses for TPU/accelerator scheduling.
-type LabelScheme string
-
-const (
-	// SchemeAuto selects automatic detection from node labels and API group discovery.
-	SchemeAuto LabelScheme = ""
-	// SchemeTPUSlice uses tpu.google.com/* TPU slice labels (slice.tpu.google.com/v1alpha1).
-	SchemeTPUSlice LabelScheme = "tpu-slice"
-	// SchemeGKE uses Google Kubernetes Engine labels (cloud.google.com/gke-*).
-	SchemeGKE LabelScheme = "gke"
-	// SchemeGeneric uses standard Kubernetes labels without TPU slice or GKE TPU conventions.
-	SchemeGeneric LabelScheme = "generic"
-
-	// LabelSchemeEnvVar overrides automatic label-scheme detection when --k8s-label-scheme is unset.
-	LabelSchemeEnvVar = "GCLUSTER_LABEL_SCHEME"
-)
-
 // Label keys recognized across TPU slice, GKE, and standard Kubernetes clusters.
 const (
 	TPUSliceLabelPrefix          = "tpu.google.com/"
@@ -68,93 +51,6 @@ const (
 	ControlPlaneRoleLabel = "node-role.kubernetes.io/control-plane"
 	MasterRoleLabel       = "node-role.kubernetes.io/master"
 )
-
-// PoolCapacity summarizes per-node and aggregate allocatable resources for one node pool or machine-type group.
-type PoolCapacity struct {
-	MachineType   string
-	NodePoolName  string
-	TotalNodes    int
-	ReadyNodes    int
-	IsTPU         bool
-	IsGPU         bool
-	TPUType       string
-	GPUType       string
-	TPUsPerNode   int
-	GPUsPerNode   int
-	CPUsPerNode   int
-	MemMiBPerNode int
-	Topologies    []string
-	SliceNames    []string
-}
-
-// SliceInfo describes a discovered slice.tpu.google.com/v1alpha1 Slice resource or node-derived slice.
-type SliceInfo struct {
-	Name          string
-	Namespace     string
-	TPUType       string
-	MachineType   string
-	Topology      string
-	State         string
-	Ready         bool
-	NodesPerSlice int
-	ChipsPerNode  int
-	OwnerName     string
-	ManagedBy     string
-	PartitionTree string
-	FromCRD       bool
-}
-
-// PartitionTreeInfo describes a discovered slice.tpu.google.com/v1alpha1 PartitionTree resource.
-type PartitionTreeInfo struct {
-	Name                string
-	TPUType             string
-	RootTopology        string
-	SupportedTopologies []string
-}
-
-// TPUInventory summarizes the primary TPU hardware discovered in the cluster.
-type TPUInventory struct {
-	TPUType            string
-	MachineType        string
-	ChipsPerNode       int
-	Topology           string
-	NodesPerSlice      int
-	DefaultSliceName   string
-	TotalTPUNodes      int
-	ReadyTPUNodes      int
-	Topologies         []string
-	HasPartitionLabels bool
-}
-
-// Inventory holds a pure-Kubernetes cluster discovery snapshot obtained without calling gcloud.
-type Inventory struct {
-	LabelScheme        LabelScheme
-	ExplicitMode       bool
-	TPUSliceAPIPresent bool
-	TotalNodes         int
-	ReadyNodes         int
-
-	// Pools maps machine type (or disambiguated pool key) to its aggregated PoolCapacity.
-	// PoolNames holds the deterministically sorted keys of Pools.
-	Pools     map[string]PoolCapacity
-	PoolNames []string
-
-	// CPUPoolCap and TPUPoolCap are tracked separately so mixed CPU control-plane + TPU worker
-	// clusters never let small CPU nodes override TPU worker pod sizing.
-	CPUPoolCap *PoolCapacity
-	TPUPoolCap *PoolCapacity
-
-	TPU            *TPUInventory
-	Slices         []SliceInfo
-	PartitionTrees []PartitionTreeInfo
-}
-
-// DiscoverOptions configures pure-Kubernetes cluster inventory discovery.
-// Platform label schemes are never inferred from --node-constraint or --compute-type.
-type DiscoverOptions struct {
-	// LabelSchemeOverride forces a specific LabelScheme when non-empty (from --k8s-label-scheme or GCLUSTER_LABEL_SCHEME).
-	LabelSchemeOverride LabelScheme
-}
 
 // ParseLabelScheme parses a user-supplied label scheme ("tpu-slice", "gke", "generic", or "" for auto).
 func ParseLabelScheme(raw string) (LabelScheme, error) {
@@ -392,57 +288,6 @@ func formatTPUSummaryLine(tpu *TPUInventory, cap *PoolCapacity) string {
 	}
 	return fmt.Sprintf("Default slice: %s (type=%s, machine=%s, topology=%s, %d nodes/slice, %d TPU chips/node).",
 		sliceLabel, tpu.TPUType, tpu.MachineType, topo, tpu.NodesPerSlice, tpu.ChipsPerNode)
-}
-
-type nodeSignals struct {
-	hasTPUSliceLabels  bool
-	hasGKELabels       bool
-	hasPartitionLabels bool
-	nodeSlices         map[string]*nodeSliceAgg
-}
-
-type nodeSliceAgg struct {
-	name        string
-	tpuType     string
-	machineType string
-	topology    string
-	chips       int
-	totalNodes  int
-	readyNodes  int
-}
-
-type poolGroupKey struct {
-	machineType  string
-	class        string
-	controlPlane bool
-}
-
-type poolBuilder struct {
-	key        poolGroupKey
-	cap        PoolCapacity
-	topologies map[string]struct{}
-	slices     map[string]struct{}
-}
-
-type nodeSnapshot struct {
-	labels       map[string]string
-	ready        bool
-	cpus         int
-	memMiB       int
-	tpus         int
-	gpus         int
-	isTPU        bool
-	isGPU        bool
-	tpuType      string
-	gpuType      string
-	machineType  string
-	nodePool     string
-	topology     string
-	sliceName    string
-	hasTPUSlice  bool
-	hasGKE       bool
-	hasPartition bool
-	controlPlane bool
 }
 
 func discoverNodes(lister ResourceLister, inv *Inventory) (nodeSignals, error) {
