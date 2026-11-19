@@ -2115,21 +2115,34 @@ func TestRestoreNamespaceContext(t *testing.T) {
 func newTypeK8sInspectMockExecutor() *MockExecutor {
 	okDescribe := shell.CommandResult{ExitCode: 0, Stdout: "ok"}
 	okWorkloads := shell.CommandResult{ExitCode: 0, Stdout: `{"items":[]}`}
+	okLogs := shell.CommandResult{ExitCode: 0, Stdout: "controller ok"}
+	okPod := shell.CommandResult{ExitCode: 0, Stdout: "workload-container\n"}
+	okJobSet := shell.CommandResult{ExitCode: 0, Stdout: "\tFalse\tmain-job\n1 1\tworkload-container\n"}
 	return NewMockExecutor(map[string][]shell.CommandResult{
-		"kubectl get --raw /version":                {{ExitCode: 0, Stdout: `{"major":"1","minor":"32"}`}},
-		"kubectl get --raw /apis/kueue.x-k8s.io":    {{ExitCode: 0, Stdout: "{}"}},
-		"kubectl get nodes -o wide":                 {{ExitCode: 0, Stdout: "NAME STATUS\n"}},
-		"kubectl get nodes -o json":                 {{ExitCode: 0, Stdout: `{"items":[]}`}},
-		"kubectl describe ":                         {okDescribe, okDescribe, okDescribe, okDescribe, okDescribe},
-		"kubectl logs ":                             {{ExitCode: 0, Stdout: "controller ok"}, {ExitCode: 0, Stdout: "controller ok"}},
-		"kubectl get crd topologies.kueue.x-k8s.io": {{ExitCode: 1, Stderr: "NotFound"}},
-		"kubectl get workloads ":                    {okWorkloads, okWorkloads, okWorkloads},
+		"kubectl get --raw /version":                     {{ExitCode: 0, Stdout: `{"major":"1","minor":"32"}`}},
+		"kubectl get --raw /apis/kueue.x-k8s.io":         {{ExitCode: 0, Stdout: "{}"}},
+		"kubectl get nodes -o wide":                      {{ExitCode: 0, Stdout: "NAME STATUS\n"}},
+		"kubectl get nodes -o json":                      {{ExitCode: 0, Stdout: `{"items":[]}`}},
+		"kubectl get pods -n ml-ns":                      {okPod, okPod, okPod},
+		"kubectl get jobsets.jobset.x-k8s.io sample-job": {okJobSet, okJobSet},
+		"kubectl describe ":                              {okDescribe, okDescribe, okDescribe, okDescribe, okDescribe},
+		"kubectl logs ":                                  {okLogs, okLogs, okLogs, okLogs},
+		"kubectl get crd topologies.kueue.x-k8s.io":      {{ExitCode: 1, Stderr: "NotFound"}},
+		"kubectl get workloads ":                         {okWorkloads, okWorkloads, okWorkloads},
 	})
 }
 
 func TestTypeK8s_ZeroGCloudAcrossLifecycle(t *testing.T) {
+	var listHits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		listHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"apiVersion":"jobset.x-k8s.io/v1alpha2","kind":"JobSetList","items":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+
 	cfg := clientcmdapi.NewConfig()
-	cfg.Clusters["local-k8s"] = &clientcmdapi.Cluster{Server: "https://10.128.0.68:6443"}
+	cfg.Clusters["local-k8s"] = &clientcmdapi.Cluster{Server: srv.URL}
 	cfg.Contexts["k8s-ctx"] = &clientcmdapi.Context{Cluster: "local-k8s", Namespace: "ml-ns"}
 	cfg.CurrentContext = "k8s-ctx"
 
@@ -2171,6 +2184,7 @@ func TestTypeK8s_ZeroGCloudAcrossLifecycle(t *testing.T) {
 	if err := orc.configureKubectl("local-k8s", "", ""); err != nil || orc.kubeContext != "k8s-ctx" {
 		t.Fatalf("configureKubectl(TypeK8s) = (%v, %q), want (nil, \"k8s-ctx\")", err, orc.kubeContext)
 	}
+	assertTypeK8sListAndLogsZeroGCloud(t, orc, mockExec, &listHits)
 	outPath := filepath.Join(t.TempDir(), "inspect.log")
 	if err := orc.InspectCluster(orchestrator.InspectOptions{ClusterName: "local-k8s", OutputPath: outPath}); err != nil {
 		t.Fatalf("InspectCluster(TypeK8s) error = %v", err)
@@ -2181,9 +2195,22 @@ func TestTypeK8s_ZeroGCloudAcrossLifecycle(t *testing.T) {
 	assertInspectSanitizesClusterFilename(t, orc)
 }
 
+func assertTypeK8sListAndLogsZeroGCloud(t *testing.T, orc *GKEOrchestrator, mockExec *MockExecutor, listHits *atomic.Int32) {
+	t.Helper()
+	if jobs, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: "local-k8s"}); err != nil || len(jobs) != 0 || listHits.Load() != 1 {
+		t.Fatalf("ListJobs(TypeK8s) = (%v, %v), listHits=%d, want ([], nil, 1)", jobs, err, listHits.Load())
+	}
+	if out, err := orc.GetJobLogs("sample-job", orchestrator.LogsOptions{ClusterName: "local-k8s"}); err != nil || strings.TrimSpace(out) != "controller ok" {
+		t.Fatalf("GetJobLogs(TypeK8s, Follow=false) = (%q, %v), want (\"controller ok\", nil)", out, err)
+	}
+	if _, err := orc.GetJobLogs("sample-job", orchestrator.LogsOptions{ClusterName: "local-k8s", Follow: true}); err != nil || len(mockExec.streamCalls) != 1 {
+		t.Fatalf("GetJobLogs(TypeK8s, Follow=true) = %v, streamCalls=%v, want nil and 1 stream call", err, mockExec.streamCalls)
+	}
+}
+
 func assertTypeK8sInspectClean(t *testing.T, mockExec *MockExecutor, outPath string) {
 	t.Helper()
-	for _, call := range mockExec.calls {
+	for _, call := range slices.Concat(mockExec.calls, mockExec.streamCalls) {
 		if strings.HasPrefix(call, "gcloud") {
 			t.Errorf("unexpected gcloud invocation in TypeK8s mode: %q", call)
 		}
@@ -2341,6 +2368,53 @@ func TestTypeK8s_ConfigureKubectlReResolutionSyncsDynamicClient(t *testing.T) {
 	assertUnseededClusterAndErrorInvalidation(t, cfg)
 	assertSameContextGKERegenerateInvalidatesDynamicClient(t, srvA.URL, srvB.URL, &hitsA, &hitsB)
 	assertInjectedDynamicClientPreserved(t, orc)
+	assertSeededCurrentContextWinsOverCollidingContextName(t, emptyListBody)
+}
+
+func assertSeededCurrentContextWinsOverCollidingContextName(t *testing.T, emptyListBody string) {
+	t.Helper()
+	var hitsAdmin, hitsColliding atomic.Int32
+	srvAdmin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hitsAdmin.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(emptyListBody))
+	}))
+	t.Cleanup(srvAdmin.Close)
+	srvColliding := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hitsColliding.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(emptyListBody))
+	}))
+	t.Cleanup(srvColliding.Close)
+
+	collidingCfg := clientcmdapi.NewConfig()
+	collidingCfg.Clusters["prod"] = &clientcmdapi.Cluster{Server: srvAdmin.URL}
+	collidingCfg.Clusters["other-clus"] = &clientcmdapi.Cluster{Server: srvColliding.URL}
+	collidingCfg.Contexts["admin@prod"] = &clientcmdapi.Context{Cluster: "prod", Namespace: "ns-admin"}
+	collidingCfg.Contexts["prod"] = &clientcmdapi.Context{Cluster: "other-clus", Namespace: "ns-other"}
+	collidingCfg.CurrentContext = "admin@prod"
+
+	det, err := (&orchestrator.Detector{
+		Getenv:           func(k string) string { return map[string]string{shell.AirGappedEnvVar: "true"}[k] },
+		KubeconfigLoader: staticLoader(collidingCfg),
+	}).Detect("", "", "")
+	if err != nil || det.Type != orchestrator.TypeK8s || det.KubeContext != "admin@prod" || det.ClusterName != "prod" {
+		t.Fatalf("Detect() = (%+v, %v), want TypeK8s KubeContext=admin@prod ClusterName=prod", det, err)
+	}
+	rawOrc, err := orchestrator.NewJobOrchestrator(det)
+	if err != nil {
+		t.Fatalf("NewJobOrchestrator(det) error = %v", err)
+	}
+	orc := rawOrc.(*GKEOrchestrator)
+	orc.SetExecutor(NewMockExecutor(nil))
+	orc.kubeconfigLoader = staticLoader(collidingCfg)
+
+	if _, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: det.ClusterName}); err != nil {
+		t.Fatalf("ListJobs(%q) error = %v", det.ClusterName, err)
+	}
+	if hitsAdmin.Load() != 1 || hitsColliding.Load() != 0 {
+		t.Fatalf("ListJobs(%q) hits = (admin=%d, colliding=%d), want (1, 0)", det.ClusterName, hitsAdmin.Load(), hitsColliding.Load())
+	}
 }
 
 func assertSameContextGKERegenerateInvalidatesDynamicClient(t *testing.T, urlA, urlB string, hitsA, hitsB *atomic.Int32) {

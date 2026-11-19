@@ -280,7 +280,9 @@ func detectGKE(in orchestrator.ProbeInput) (orchestrator.Detection, bool) {
 	var auth *clientcmdapi.AuthInfo
 	var cluster *clientcmdapi.Cluster
 	if ok {
-		auth = in.Config.AuthInfos[kubeCtx.AuthInfo]
+		if strings.TrimSpace(kubeCtx.AuthInfo) != "" {
+			auth = in.Config.AuthInfos[kubeCtx.AuthInfo]
+		}
 		cluster = in.Config.Clusters[kubeCtx.Cluster]
 		if isNonStandardGKEContext(ctxName, kubeCtx, auth, cluster) {
 			return orchestrator.Detection{}, false
@@ -348,8 +350,15 @@ func detectGKEOfflineReason(ctxName string, kubeCtx *clientcmdapi.Context, auth 
 	}
 }
 
+func canProbeGKEServerVersion(runner orchestrator.CommandRunner, airGapped, hasServer bool, ctxName string, auth *clientcmdapi.AuthInfo) bool {
+	if airGapped || !hasServer || strings.TrimSpace(ctxName) == "" || runner == nil || auth == nil {
+		return false
+	}
+	return auth.AuthProvider == nil && !k8s.HasClientCertificateAuth(auth) && !hasNonGCloudExecPlugin(auth)
+}
+
 func probeGKEServerVersion(runner orchestrator.CommandRunner, airGapped, hasServer bool, ctxName string, auth *clientcmdapi.AuthInfo) (string, bool) {
-	if airGapped || !hasServer || strings.TrimSpace(ctxName) == "" || runner == nil || k8s.HasClientCertificateAuth(auth) || hasNonGCloudExecPlugin(auth) {
+	if !canProbeGKEServerVersion(runner, airGapped, hasServer, ctxName, auth) {
 		return "", false
 	}
 	res := runner(

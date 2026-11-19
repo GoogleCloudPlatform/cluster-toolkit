@@ -425,13 +425,54 @@ func TestDetect_FourStepPrecedenceMatrix(t *testing.T) {
 				c.CurrentContext = "local-proxy"
 				return c
 			}(),
-			env:         map[string]string{"GCLUSTER_AIR_GAPPED": "true"},
+			versionResult: shell.CommandResult{
+				ExitCode: 0,
+				Stdout:   `{"clientVersion":{"gitVersion":"v1.32.1-gke.1200"},"serverVersion":{"gitVersion":"v1.32.13"}}`,
+			},
 			clusterName: "local-proxy",
 			projectID:   "saved-gke-proj",
 			location:    "us-central1",
 			wantType:    orchestrator.TypeK8s,
 			wantContext: "local-proxy",
 			wantCluster: "local-proxy",
+		},
+		{
+			name: "userless_kubectl_proxy_context_with_gke_server_version_stays_k8s",
+			cfg: func() *clientcmdapi.Config {
+				c := clientcmdapi.NewConfig()
+				c.Clusters["local-proxy"] = &clientcmdapi.Cluster{Server: "http://127.0.0.1:8001"}
+				c.Contexts["local-proxy"] = &clientcmdapi.Context{Cluster: "local-proxy"}
+				c.CurrentContext = "local-proxy"
+				return c
+			}(),
+			versionResult: shell.CommandResult{
+				ExitCode: 0,
+				Stdout:   `{"clientVersion":{"gitVersion":"v1.32.0"},"serverVersion":{"gitVersion":"v1.32.2-gke.1182000"}}`,
+			},
+			wantType:    orchestrator.TypeK8s,
+			wantContext: "local-proxy",
+			wantCluster: "local-proxy",
+		},
+		{
+			name: "oidc_auth_provider_context_skips_version_probe_and_stays_k8s",
+			cfg: buildSingleContextConfig(
+				"oidc-ctx",
+				"oidc-clus",
+				"https://10.200.0.10:6443",
+				&clientcmdapi.AuthInfo{
+					AuthProvider: &clientcmdapi.AuthProviderConfig{
+						Name:   "oidc",
+						Config: map[string]string{"idp-issuer-url": "https://idp.example.com", "client-id": "k8s-cli"},
+					},
+				},
+			),
+			versionResult: shell.CommandResult{
+				ExitCode: 0,
+				Stdout:   `{"clientVersion":{"gitVersion":"v1.32.0"},"serverVersion":{"gitVersion":"v1.32.2-gke.1182000"}}`,
+			},
+			wantType:    orchestrator.TypeK8s,
+			wantContext: "oidc-ctx",
+			wantCluster: "oidc-clus",
 		},
 		{
 			name:             "fresh_workstation_empty_kubeconfig_with_gke_flags_bootstraps_gke",
