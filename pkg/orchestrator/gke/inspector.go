@@ -65,15 +65,11 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	if strings.TrimSpace(opts.ProjectID) == "" {
 		opts.ProjectID = strings.TrimSpace(g.projectID)
 	}
-	isGKE := strings.TrimSpace(opts.ProjectID) != ""
+	isGKE := g.isGKE(opts.ProjectID)
 
 	// 1. Setup Kubectl (Critical, fail fast)
-	if isGKE {
-		if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
-			return fmt.Errorf("failed to configure kubectl: %w", err)
-		}
-	} else if err := g.configureK8sContext(opts.ClusterName); err != nil {
-		return fmt.Errorf("failed to configure kubectl: %w", err)
+	if err := g.prepareInspectKubectl(opts, isGKE); err != nil {
+		return err
 	}
 
 	// Resolve namespace context
@@ -123,11 +119,7 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 
 	// --- 5. Slice Controller (Dynamic Slicing) ---
 	if hasKueue {
-		cResult := g.kubectl("get", "crd", "topologies.kueue.x-k8s.io")
-		if cResult.ExitCode == 0 {
-			writer.runAndLog("Slice Controller: Deployment Details", "kubectl", "describe", "deployment", "slice-controller-controller-manager", "-n", "slice-controller-system")
-			writer.runAndLog("Slice Controller: Logs (tail 100)", "kubectl", "logs", "deployment/slice-controller-controller-manager", "-n", "slice-controller-system", "-c", "manager", "--tail=100")
-		}
+		g.logSliceControllerResources(writer)
 	}
 
 	// --- 6. Workloads ---
@@ -143,33 +135,18 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	return nil
 }
 
-// configureK8sContext pins g.kubeContext from kubeconfig without calling gcloud.
-func (g *GKEOrchestrator) configureK8sContext(clusterName string) error {
-	trimmedCluster := strings.TrimSpace(clusterName)
-	cfg, err := g.loadKubeconfig()
-	if err != nil {
-		g.kubeContext = ""
-		return fmt.Errorf("failed to load kubeconfig: %w", err)
-	}
-	if cfg != nil {
-		if trimmedCluster != "" {
-			if name, _, ok := k8s.FindContextByCluster(cfg, trimmedCluster); ok {
-				g.kubeContext = name
-				return nil
-			}
-		} else if name, _, _, ok := k8s.ResolveCurrentContext(cfg); ok {
-			g.kubeContext = name
-			return nil
+func (g *GKEOrchestrator) prepareInspectKubectl(opts orchestrator.InspectOptions, isGKE bool) error {
+	if isGKE {
+		if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
+			return fmt.Errorf("failed to configure kubectl: %w", err)
 		}
-	}
-	if pinned := strings.TrimSpace(g.kubeContext); pinned != "" && (trimmedCluster == "" || pinned == trimmedCluster) {
 		return nil
 	}
-	g.kubeContext = ""
-	if trimmedCluster != "" {
-		return fmt.Errorf("no kubeconfig context found for cluster %q", trimmedCluster)
+	g.resetStorageCaches()
+	if err := g.configureK8sKubectl(opts.ClusterName); err != nil {
+		return fmt.Errorf("failed to configure kubectl: %w", err)
 	}
-	return fmt.Errorf("no current-context configured in kubeconfig")
+	return g.verifyK8sClusterReachable()
 }
 
 // hasKueueInstalled checks the non-privileged /apis/kueue.x-k8s.io discovery endpoint.
@@ -204,6 +181,14 @@ func (g *GKEOrchestrator) logKueueResources(writer *inspectWriter) {
 	writer.runAndLog("Kueue: ResourceFlavor Details", "kubectl", "describe", "ResourceFlavor")
 	writer.runAndLog("Kueue: Kueue Deployment Details", "kubectl", "describe", "Deployment", "kueue-controller-manager", "-n", "kueue-system")
 	writer.runAndLog("Kueue: Kueue Controller Manager Logs (tail 100)", "kubectl", "logs", "deployment/kueue-controller-manager", "-n", "kueue-system", "-c", "manager", "--tail=100")
+}
+
+func (g *GKEOrchestrator) logSliceControllerResources(writer *inspectWriter) {
+	cResult := g.kubectl("get", "crd", "topologies.kueue.x-k8s.io")
+	if cResult.ExitCode == 0 {
+		writer.runAndLog("Slice Controller: Deployment Details", "kubectl", "describe", "deployment", "slice-controller-controller-manager", "-n", "slice-controller-system")
+		writer.runAndLog("Slice Controller: Logs (tail 100)", "kubectl", "logs", "deployment/slice-controller-controller-manager", "-n", "slice-controller-system", "-c", "manager", "--tail=100")
+	}
 }
 
 func (g *GKEOrchestrator) logClusterWorkloads(writer *inspectWriter, hasKueue bool, targetNamespace string) {
@@ -558,7 +543,7 @@ var inspectFileSegmentSanitizer = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
 func sanitizeInspectFileSegment(clusterName string) string {
 	seg := inspectFileSegmentSanitizer.ReplaceAllString(strings.TrimSpace(clusterName), "-")
-	seg = strings.Trim(seg, "-.")
+	seg = strings.Trim(seg, "-._")
 	if seg == "" {
 		return "cluster"
 	}

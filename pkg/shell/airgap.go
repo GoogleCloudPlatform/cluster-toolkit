@@ -20,7 +20,7 @@ import (
 	"sync/atomic"
 )
 
-// AirGappedEnvVar names the environment variable ("GCLUSTER_AIR_GAPPED") that disables CLI telemetry collection and uploads in air-gapped environments.
+// AirGappedEnvVar names the environment variable ("GCLUSTER_AIR_GAPPED") that skips live API server version probes during orchestrator detection, automatic GitHub manifest downloads, and CLI telemetry collection and uploads in air-gapped environments.
 const AirGappedEnvVar = "GCLUSTER_AIR_GAPPED"
 
 var defaultAirGap atomic.Bool

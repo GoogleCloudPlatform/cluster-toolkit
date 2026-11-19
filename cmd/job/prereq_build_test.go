@@ -30,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 
 	"github.com/spf13/cobra"
@@ -276,7 +277,7 @@ func TestEnsureBuildPrerequisites_ExplicitGARSkipsGKEAuthPluginAndPreservesCache
 	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
 		return shell.CommandResult{ExitCode: 127, Err: exec.ErrNotFound}
 	}
-	err := ensureBasicPrerequisites(&cobra.Command{}, "cluster-proj")
+	err := ensureBasicPrerequisitesFor(&cobra.Command{}, orchestrator.TypeGKE, "cluster-proj")
 	if err == nil || !strings.Contains(err.Error(), "Google Cloud SDK (gcloud) is required") {
 		t.Fatalf("expected expired state with missing gcloud to fail with install hint, got: %v", err)
 	}
@@ -377,8 +378,8 @@ func TestCrossProjectGARAndBasicPrerequisites_NoCacheThrashing(t *testing.T) {
 	writeDockerConfig(t, "us-west4-docker.pkg.dev")
 
 	cmd := &cobra.Command{}
-	if err := ensureBasicPrerequisites(cmd, "cluster-proj"); err != nil {
-		t.Fatalf("first ensureBasicPrerequisites failed: %v", err)
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeGKE, "cluster-proj"); err != nil {
+		t.Fatalf("first ensureBasicPrerequisitesFor failed: %v", err)
 	}
 
 	*executed = nil
@@ -396,8 +397,8 @@ func TestCrossProjectGARAndBasicPrerequisites_NoCacheThrashing(t *testing.T) {
 	}
 
 	*executed = nil
-	if err := ensureBasicPrerequisites(cmd, "cluster-proj"); err != nil {
-		t.Fatalf("second ensureBasicPrerequisites failed: %v", err)
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeGKE, "cluster-proj"); err != nil {
+		t.Fatalf("second ensureBasicPrerequisitesFor failed: %v", err)
 	}
 	if err := ensureBuildPrerequisites(cmd, "cluster-proj", "us-central1-a"); err != nil {
 		t.Fatalf("second ensureBuildPrerequisites failed: %v", err)
@@ -419,8 +420,8 @@ func TestBuildPrerequisitesBeforeBasicPrerequisites_ReusesAuth(t *testing.T) {
 	}
 
 	*executed = nil
-	if err := ensureBasicPrerequisites(cmd, "gar-build-proj"); err != nil {
-		t.Fatalf("ensureBasicPrerequisites after build prereqs failed: %v", err)
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeGKE, "gar-build-proj"); err != nil {
+		t.Fatalf("ensureBasicPrerequisitesFor after build prereqs failed: %v", err)
 	}
 	assertNoGCloudAuthSubprocesses(t, *executed)
 

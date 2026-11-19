@@ -18,10 +18,14 @@
 package gke
 
 import (
+	"context"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,6 +44,9 @@ const (
 	gkeAuthPluginBinary = "gke-gcloud-auth-plugin"
 	// probeRequestTimeout keeps an unreachable endpoint from blocking for the full kubectl dial timeout.
 	probeRequestTimeout = "5s"
+	// gkeVersionProbeTimeout bounds the kubectl version tie-breaker during orchestrator detection on static-token endpoints.
+	gkeVersionProbeTimeout        = "2s"
+	gkeVersionProbeProcessTimeout = 3 * time.Second
 )
 
 func (m endpointMode) String() string {
@@ -146,28 +153,228 @@ func findKubeContext(cfg *clientcmdapi.Config, clusterName, location, projectID 
 
 // resolveGKEContext resolves a GKE context before or outside Initialize: when clusterName is given it checks
 // the exact gcloud context name, then a zone-to-region gcloud context name (for regional clusters passed a zone),
-// then k8s.FindContextByCluster; when clusterName is empty it falls back to current-context.
+// then k8s.ResolveContext; when clusterName is empty it falls back to current-context.
 func resolveGKEContext(cfg *clientcmdapi.Config, clusterName, location, projectID string) (string, *clientcmdapi.Context, string, bool) {
 	clusterName = strings.TrimSpace(clusterName)
 	location = strings.TrimSpace(location)
-	if clusterName == "" {
-		return k8s.ResolveCurrentContext(cfg)
-	}
-	if cfg == nil {
-		return "", nil, "", false
-	}
-	if name, kubeCtx, ok := gkeNamedContext(cfg, clusterName, location, projectID); ok {
-		return name, kubeCtx, clusterName, true
-	}
-	if region := shell.ExtractRegion(location); region != location {
-		if name, kubeCtx, ok := gkeNamedContext(cfg, clusterName, region, projectID); ok {
+	if cfg != nil && clusterName != "" {
+		if name, kubeCtx, ok := gkeNamedContext(cfg, clusterName, location, projectID); ok {
 			return name, kubeCtx, clusterName, true
 		}
+		if region := shell.ExtractRegion(location); region != location {
+			if name, kubeCtx, ok := gkeNamedContext(cfg, clusterName, region, projectID); ok {
+				return name, kubeCtx, clusterName, true
+			}
+		}
 	}
-	if name, kubeCtx, ok := k8s.FindContextByCluster(cfg, clusterName); ok {
-		return name, kubeCtx, clusterName, true
+	return k8s.ResolveContext(cfg, clusterName)
+}
+
+func hasGKEFlags(projectID, location string) bool {
+	return strings.TrimSpace(projectID) != "" || strings.TrimSpace(location) != ""
+}
+
+func isMultiCloudOrAttachedGKEName(s string) bool {
+	parts := strings.SplitN(strings.TrimSpace(s), "_", 4)
+	if len(parts) != 4 || parts[0] != "gke" || parts[2] == "" {
+		return false
 	}
-	return "", nil, "", false
+	switch parts[1] {
+	case "aws", "azure", "attached":
+		return strings.Contains(parts[3], "_")
+	default:
+		return false
+	}
+}
+
+func isCanonicalGKEName(s string) bool {
+	parts := strings.SplitN(strings.TrimSpace(s), "_", 4)
+	if len(parts) != 4 || parts[0] != "gke" || parts[1] == "" || parts[2] == "" || parts[3] == "" {
+		return false
+	}
+	return !isMultiCloudOrAttachedGKEName(s)
+}
+
+func isConnectGatewayHost(host string) bool {
+	for _, suffix := range []string{"connectgateway.googleapis.com", "connectgateway.mtls.googleapis.com"} {
+		if host == suffix || strings.HasSuffix(host, "-"+suffix) || strings.HasSuffix(host, "."+suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasEdgeCloudFlag(args []string) bool {
+	edgeCloud := false
+	for _, raw := range args {
+		name, val, hasVal := strings.Cut(strings.TrimSpace(raw), "=")
+		if name != "--use_edge_cloud" && name != "-use_edge_cloud" {
+			continue
+		}
+		if !hasVal {
+			edgeCloud = true
+		} else if enabled, err := strconv.ParseBool(strings.TrimSpace(val)); err == nil {
+			edgeCloud = enabled
+		}
+	}
+	return edgeCloud
+}
+
+func isNonStandardGKEExec(auth *clientcmdapi.AuthInfo) bool {
+	if auth == nil || auth.Exec == nil {
+		return false
+	}
+	if hasNonGCloudExecPlugin(auth) || hasEdgeCloudFlag(auth.Exec.Args) {
+		return true
+	}
+	if slices.Contains(auth.Exec.Args, "print-access-token") {
+		for _, tok := range []string{"aws", "azure", "attached", "edge-cloud"} {
+			if slices.Contains(auth.Exec.Args, tok) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isNonStandardGKEContext(ctxName string, kubeCtx *clientcmdapi.Context, auth *clientcmdapi.AuthInfo, cluster *clientcmdapi.Cluster) bool {
+	names := []string{ctxName}
+	if kubeCtx != nil {
+		names = append(names, kubeCtx.Cluster)
+	}
+	for _, n := range names {
+		trimmed := strings.TrimSpace(n)
+		if isMultiCloudOrAttachedGKEName(trimmed) ||
+			strings.HasPrefix(trimmed, "connectgateway_") ||
+			strings.HasPrefix(trimmed, "edgecontainer_") {
+			return true
+		}
+	}
+	return isConnectGatewayHost(k8s.ClusterServerHostname(cluster)) || isNonStandardGKEExec(auth)
+}
+
+func isIncompleteKubeContext(kubeCtx *clientcmdapi.Context, auth *clientcmdapi.AuthInfo, cluster *clientcmdapi.Cluster) bool {
+	if kubeCtx == nil || cluster == nil || strings.TrimSpace(cluster.Server) == "" {
+		return true
+	}
+	return strings.TrimSpace(kubeCtx.AuthInfo) != "" && auth == nil
+}
+
+func hasLegacyGCPAuthProvider(auth *clientcmdapi.AuthInfo) bool {
+	return auth != nil && auth.AuthProvider != nil && strings.EqualFold(strings.TrimSpace(auth.AuthProvider.Name), "gcp")
+}
+
+func hasNonGCloudExecPlugin(auth *clientcmdapi.AuthInfo) bool {
+	switch k8s.ExecPluginBaseName(auth) {
+	case "", gkeAuthPluginBinary, "gcloud", "gcloud.cmd", "gcloud.bat", "gcloud.ps1":
+		return false
+	default:
+		return true
+	}
+}
+
+// detectGKE evaluates GKE kubeconfig credentials, *.gke.goog endpoints, and the bounded 2s serverVersion tie-breaker.
+func detectGKE(in orchestrator.ProbeInput) (orchestrator.Detection, bool) {
+	gkeFlags := hasGKEFlags(in.ProjectID, in.Location)
+	ctxName, kubeCtx, resolvedCluster, ok := resolveGKEContext(in.Config, in.ClusterName, in.Location, in.ProjectID)
+	var auth *clientcmdapi.AuthInfo
+	var cluster *clientcmdapi.Cluster
+	if ok {
+		if strings.TrimSpace(kubeCtx.AuthInfo) != "" {
+			auth = in.Config.AuthInfos[kubeCtx.AuthInfo]
+		}
+		cluster = in.Config.Clusters[kubeCtx.Cluster]
+		if isNonStandardGKEContext(ctxName, kubeCtx, auth, cluster) {
+			return orchestrator.Detection{}, false
+		}
+	}
+	if forceCredentialRefreshEnv(in.Getenv) && gkeFlags {
+		if !ok {
+			resolvedCluster = in.ClusterName
+		}
+		return orchestrator.Detection{
+			Type:        orchestrator.TypeGKE,
+			KubeContext: ctxName,
+			ClusterName: resolvedCluster,
+			Reason:      fmt.Sprintf("credential refresh requested via %s", refreshCredentialsEnv),
+		}, true
+	}
+	if !ok {
+		// Bootstrap TypeGKE from project/location when no kubeconfig context matched; when a context does match,
+		// detectGKE classifies that context and CLI callers decide how GKE flags interact with non-GKE contexts.
+		if gkeFlags {
+			return orchestrator.Detection{
+				Type:        orchestrator.TypeGKE,
+				KubeContext: "",
+				ClusterName: in.ClusterName,
+				Reason:      "GKE project/location configured with no existing kubeconfig context",
+			}, true
+		}
+		return orchestrator.Detection{}, false
+	}
+	if reason := detectGKEOfflineReason(ctxName, kubeCtx, auth, cluster, gkeFlags); reason != "" {
+		return orchestrator.Detection{
+			Type:        orchestrator.TypeGKE,
+			KubeContext: ctxName,
+			ClusterName: resolvedCluster,
+			Reason:      reason,
+		}, true
+	}
+	hasServer := cluster != nil && strings.TrimSpace(cluster.Server) != ""
+	if gitVersion, isGKEServer := probeGKEServerVersion(in.Runner, in.AirGapped, hasServer, ctxName, auth); isGKEServer {
+		return orchestrator.Detection{
+			Type:        orchestrator.TypeGKE,
+			KubeContext: ctxName,
+			ClusterName: resolvedCluster,
+			Reason:      fmt.Sprintf("API server for context %q reported GKE version %s", ctxName, gitVersion),
+		}, true
+	}
+	return orchestrator.Detection{}, false
+}
+
+func detectGKEOfflineReason(ctxName string, kubeCtx *clientcmdapi.Context, auth *clientcmdapi.AuthInfo, cluster *clientcmdapi.Cluster, gkeFlags bool) string {
+	host := k8s.ClusterServerHostname(cluster)
+	switch {
+	case k8s.ExecPluginBaseName(auth) == gkeAuthPluginBinary:
+		return fmt.Sprintf("kubeconfig context %q authenticates via %s", ctxName, gkeAuthPluginBinary)
+	case strings.HasSuffix(host, ".gke.goog"):
+		return fmt.Sprintf("kubeconfig context %q targets GKE endpoint %s", ctxName, host)
+	case hasLegacyGCPAuthProvider(auth):
+		return fmt.Sprintf("kubeconfig context %q uses legacy gcp auth-provider", ctxName)
+	case isCanonicalGKEName(ctxName) || isCanonicalGKEName(kubeCtx.Cluster):
+		return fmt.Sprintf("kubeconfig context %q matches gke_* naming", ctxName)
+	case isIncompleteKubeContext(kubeCtx, auth, cluster) && gkeFlags:
+		return fmt.Sprintf("project/location set for incomplete kubeconfig context %q", ctxName)
+	default:
+		return ""
+	}
+}
+
+func canProbeGKEServerVersion(runner orchestrator.CommandRunner, airGapped, hasServer bool, ctxName string, auth *clientcmdapi.AuthInfo) bool {
+	if airGapped || !hasServer || strings.TrimSpace(ctxName) == "" || runner == nil || auth == nil {
+		return false
+	}
+	return auth.AuthProvider == nil && !k8s.HasClientCertificateAuth(auth) && !hasNonGCloudExecPlugin(auth)
+}
+
+func probeGKEServerVersion(runner orchestrator.CommandRunner, airGapped, hasServer bool, ctxName string, auth *clientcmdapi.AuthInfo) (string, bool) {
+	if !canProbeGKEServerVersion(runner, airGapped, hasServer, ctxName, auth) {
+		return "", false
+	}
+	res := runner(
+		gkeVersionProbeProcessTimeout,
+		"kubectl",
+		k8s.WithContext(ctxName, []string{"version", "-o", "json", "--request-timeout=" + gkeVersionProbeTimeout})...,
+	)
+	if strings.TrimSpace(res.Stdout) == "" {
+		return "", false
+	}
+	var payload kubectlVersionOutput
+	if err := json.Unmarshal([]byte(res.Stdout), &payload); err != nil || payload.ServerVersion == nil {
+		return "", false
+	}
+	ver := strings.TrimSpace(payload.ServerVersion.GitVersion)
+	return ver, strings.Contains(strings.ToLower(ver), "-gke.")
 }
 
 func (k kubeContextCheck) reusable() bool {
@@ -262,9 +469,22 @@ var (
 		"getting credentials",
 		gkeAuthPluginBinary,
 		"fetch token",
+		"oauth2:",
+		"no valid id-token",
+		"token response did not contain an id_token",
+		"could not persist new tokens",
+		"auth plugin has been removed",
+		"no auth provider found",
+		"exec plugin: invalid apiversion",
 		"could not get token",
 		"application default credentials",
 		"reauthentication",
+	}
+	probeInvalidMarkers = []string{
+		"unable to read certificate-authority",
+		"unable to read client-",
+		"unable to read token file",
+		"error loading config file",
 	}
 	// GKE's DNS endpoint returns plain-text HTTP 403 before requests reach kube-apiserver
 	// when external DNS access is disabled, container.clusters.connect IAM is denied, or
@@ -286,6 +506,7 @@ var (
 		"timed out",
 		"deadline exceeded",
 		"connection refused",
+		"was refused - did you specify",
 		"connection reset",
 		"no route to host",
 		"network is unreachable",
@@ -295,12 +516,11 @@ var (
 		"x509:",
 		"status code 431",
 		"request header fields too large",
-		// Forward proxies report an unreachable upstream as a gateway error.
-		"status code 502",
+		// Forward proxies and gateways report unreachable upstreams as HTTP 502/503/504.
 		"bad gateway",
-		"status code 503",
+		"error from server (serviceunavailable):",
 		"service unavailable",
-		"status code 504",
+		"error from server (timeout):",
 		"gateway timeout",
 		"dial tcp",
 		"unexpected eof",
@@ -308,8 +528,8 @@ var (
 	}
 )
 
-// classifyProbeFailure maps kubectl stderr to a probeOutcome. Auth markers win
-// because kubectl prefixes plugin failures with "Unable to connect to the server:".
+// classifyProbeFailure maps kubectl stderr to a probeOutcome. Auth and invalid-config
+// markers win because kubectl prefixes plugin failures with "Unable to connect to the server:".
 func classifyProbeFailure(stderr string) probeOutcome {
 	s := strings.ToLower(stderr)
 	contains := func(markers []string) bool {
@@ -321,6 +541,8 @@ func classifyProbeFailure(stderr string) probeOutcome {
 		return false
 	}
 	switch {
+	case contains(probeInvalidMarkers):
+		return probeInvalid
 	case contains(probeAuthMarkers):
 		return probeAuth
 	case contains(probeDNSGatewayRejectedMarkers):
@@ -341,7 +563,14 @@ func (g *GKEOrchestrator) probeContext(contextName string) (probeOutcome, string
 		return probeOK, ""
 	}
 	stderr := strings.TrimSpace(res.Stderr)
-	if stderr == "" && res.Err != nil {
+	if errors.Is(res.Err, context.DeadlineExceeded) {
+		timeoutPrefix := fmt.Sprintf("timed out after %v", shell.DefaultLocalCommandTimeout)
+		if stderr == "" {
+			stderr = timeoutPrefix
+		} else {
+			stderr = fmt.Sprintf("%s: %s", timeoutPrefix, stderr)
+		}
+	} else if stderr == "" && res.Err != nil {
 		stderr = strings.TrimSpace(res.Err.Error())
 	}
 	if strings.TrimSpace(contextName) == "" {
@@ -362,10 +591,17 @@ func firstLine(s string) string {
 	return strings.TrimSpace(s)
 }
 
+func forceCredentialRefreshEnv(getenv func(string) string) bool {
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	v := strings.ToLower(strings.TrimSpace(getenv(refreshCredentialsEnv)))
+	return v != "" && v != "0" && v != "false" && v != "no" && v != "off"
+}
+
 // forceCredentialRefresh reports whether the user asked to bypass kubeconfig reuse.
 func forceCredentialRefresh() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv(refreshCredentialsEnv)))
-	return v != "" && v != "0" && v != "false" && v != "no" && v != "off"
+	return forceCredentialRefreshEnv(os.Getenv)
 }
 
 func (g *GKEOrchestrator) loadKubeconfig() (*clientcmdapi.Config, error) {
@@ -387,14 +623,14 @@ func kubectlCommandLine(kubeContext string, args ...string) string {
 	return strings.Join(parts, " ")
 }
 
-// kubectlIn runs kubectl against an explicit non-blank kubeContext, refusing a blank context so probes never
-// silently fall back to current-context.
+// kubectlIn runs kubectl with DefaultLocalCommandTimeout against an explicit non-blank kubeContext,
+// refusing a blank context so probes never silently fall back to current-context.
 func (g *GKEOrchestrator) kubectlIn(kubeContext string, args ...string) shell.CommandResult {
 	if strings.TrimSpace(kubeContext) == "" {
 		err := fmt.Errorf("internal error: refusing to run kubectl without an explicit --context")
 		return shell.CommandResult{ExitCode: 1, Stderr: err.Error(), Err: err}
 	}
-	return g.executor.ExecuteCommand("kubectl", k8s.WithContext(kubeContext, args)...)
+	return g.executor.ExecuteCommandWithTimeout(shell.DefaultLocalCommandTimeout, "kubectl", k8s.WithContext(kubeContext, args)...)
 }
 
 // kubectl runs kubectl against the context chosen by configureKubectl.
@@ -537,6 +773,7 @@ func (g *GKEOrchestrator) refreshCredentialsPreservingNamespace(clusterName, clu
 // regenerateKubeContext fetches credentials per endpoint mode in order, moving
 // to the next mode on a connectivity failure.
 func (g *GKEOrchestrator) regenerateKubeContext(clusterName, clusterLocation, projectID string, avoid endpointMode) error {
+	g.resetManagedDynamicClient()
 	contextName := gkeContextName(projectID, clusterLocation, clusterName)
 	modes := g.endpointModeOrder(avoid)
 	if len(modes) == 0 {
@@ -596,8 +833,16 @@ func (g *GKEOrchestrator) endpointConnectivityError(clusterName string, attempts
 // Reuse never writes to kubeconfig; only get-credentials changes current-context.
 // GCLUSTER_REFRESH_CREDENTIALS=1 skips reuse.
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
-	g.kubeContext = ""
 	g.resetStorageCaches()
+	if g.mode == orchestrator.TypeK8s {
+		return g.configureK8sKubectl(clusterName)
+	}
+	g.kubeContext = ""
+	defer func() {
+		if g.kubeContext == "" {
+			g.resetManagedDynamicClient()
+		}
+	}()
 	avoid := endpointModeUnknown
 
 	if forceCredentialRefresh() {
@@ -636,6 +881,7 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 // built yet (no pinned context, or an unreadable kubeconfig).
 func (g *GKEOrchestrator) usableKubeClient() KubeClient {
 	if g.needsDynamicClientInit() {
+		g.resetManagedDynamicClient()
 		if g.dynClient == nil && g.kubeContext == "" {
 			return nil
 		}

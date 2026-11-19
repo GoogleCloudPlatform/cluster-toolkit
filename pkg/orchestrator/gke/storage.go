@@ -1824,7 +1824,7 @@ func (sm *StorageManager) ValidateClusterMounts(job orchestrator.JobDefinition) 
 		return err
 	}
 
-	if err := sm.validateCloudMountSchemes(job, firstGCSMount, firstFilestoreMount); err != nil {
+	if err := sm.validateCloudMountSchemes(job.ProjectID, firstGCSMount, firstFilestoreMount); err != nil {
 		return err
 	}
 
@@ -1904,21 +1904,25 @@ func recordUserPVCRequest(pvcReqs *[]userPVCRequest, idxByClaim map[string]int, 
 	}
 }
 
-func (sm *StorageManager) validateCloudMountSchemes(job orchestrator.JobDefinition, firstGCSMount, firstFilestoreMount string) error {
-	isGKE := sm.effectiveProjectID(job.ProjectID) != ""
+func (sm *StorageManager) validateCloudMountSchemes(projectID, firstGCSMount, firstFilestoreMount string) error {
+	isGKE := sm.effectiveProjectID(projectID) != ""
 	if sm.orchestrator != nil {
-		isGKE = sm.orchestrator.isGKE(job)
+		isGKE = sm.orchestrator.isGKE(projectID)
 	}
 	if (firstGCSMount != "" || firstFilestoreMount != "") && !isGKE {
 		cloudMount := firstGCSMount
 		if cloudMount == "" {
 			cloudMount = firstFilestoreMount
 		}
+		reason := "requires a GCP project (--project)"
+		if sm.orchestrator != nil && sm.orchestrator.mode == orchestrator.TypeK8s {
+			reason = "is only supported on GKE clusters"
+		}
 		return fmt.Errorf(
-			"mount %q uses a Cloud URI (filestore:// or gs://), which requires a GCP project (--project). "+
+			"mount %q uses a Cloud URI (filestore:// or gs://), which %s. "+
 				"On generic Kubernetes or off-cloud clusters, mount an NFS export directly with --mount \"nfs://<server>/<export>;<dest>\", "+
 				"mount an existing PVC with --mount \"<pvc-name>;<dest>\", or use --mount \"/host/path;<dest>\"",
-			cloudMount,
+			cloudMount, reason,
 		)
 	}
 	if firstGCSMount != "" {

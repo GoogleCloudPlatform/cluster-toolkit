@@ -49,8 +49,8 @@ const (
 	maxLogRequests = 10
 
 	// jobSetInfoJSONPath reads terminalState, the Suspended condition status, and the first replicated job's
-	// name on line 1 (tab-separated), followed by "<replicas> <parallelism>" per replicated job.
-	jobSetInfoJSONPath = `{.status.terminalState}{"\t"}{.status.conditions[?(@.type=="Suspended")].status}{"\t"}{.spec.replicatedJobs[0].name}{"\n"}{range .spec.replicatedJobs[*]}{.replicas}{" "}{.template.spec.parallelism}{"\n"}{end}`
+	// name on line 1 (tab-separated), followed by "<replicas> <parallelism>\t<container names>" per replicated job.
+	jobSetInfoJSONPath = `{.status.terminalState}{"\t"}{.status.conditions[?(@.type=="Suspended")].status}{"\t"}{.spec.replicatedJobs[0].name}{"\n"}{range .spec.replicatedJobs[*]}{.replicas}{" "}{.template.spec.parallelism}{"\t"}{.template.spec.template.spec.initContainers[*].name}{" "}{.template.spec.template.spec.containers[*].name}{"\n"}{end}`
 
 	// podContainersJSONPath prints one line per pod with all container names for pod and stream counting.
 	podContainersJSONPath = `{range .items[*]}{.spec.initContainers[*].name}{" "}{.spec.containers[*].name}{" "}{.spec.ephemeralContainers[*].name}{"\n"}{end}`
@@ -88,6 +88,7 @@ func (g *GKEOrchestrator) SetExecutor(e Executor) {
 
 func (g *GKEOrchestrator) SetDynamicClient(c dynamic.Interface) {
 	g.dynClient = c
+	g.dynClientManaged = false
 	g.syncKubeClient()
 }
 
@@ -103,6 +104,9 @@ func (g *GKEOrchestrator) resetStorageCaches() {
 // SubmitJob submits a job to the GKE cluster. It processes the job definition,
 // creates the required Kubernetes manifests (JobSet), and applies them to the cluster.
 func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
+	if g.mode == orchestrator.TypeK8s {
+		return orchestrator.UnsupportedK8sSubmitError()
+	}
 	job.GKENamespace = strings.TrimSpace(job.GKENamespace)
 	g.namespace = job.GKENamespace
 	logging.Info("Starting gcluster job submit workflow...")
@@ -265,11 +269,15 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 
 	// Pods appear in batches (and after the leader with InOrder startup), so size decisions on the spec.
 	jsInfo = g.ensureJobSetInfo(foundNamespace, name, jsInfo)
+	livePods := podCount
 	podCount = max(podCount, jsInfo.expectedPods)
-	consoleURL := getCloudConsoleLogsURL(opts.ProjectID, opts.ClusterLocation, opts.ClusterName, foundNamespace, name)
-	selector, mainOnly := g.resolveLogsSelector(name, opts.MainOnly, podCount, jsInfo.firstJob, consoleURL)
+	streamCount = scaleExpectedStreams(livePods, streamCount, podCount, jsInfo.expectedStreams)
+	if opts.MainOnly == nil && podCount > 5 {
+		g.logMainOnlyDefault(name, foundNamespace, opts, podCount, streamCount)
+	}
+	selector, mainOnly := g.resolveLogsSelector(name, opts.MainOnly, podCount, jsInfo.firstJob)
 	if podCount > maxLogRequests && !mainOnly {
-		return "", fmt.Errorf("job '%s' has %d pods matching logs query, which exceeds the max fetch limit (%d). Please view logs directly in the Google Cloud Console:\n%s", name, podCount, maxLogRequests, consoleURL)
+		return "", g.maxLogRequestsError(name, foundNamespace, opts, podCount, streamCount)
 	}
 
 	allContainers := !mainOnly
@@ -478,13 +486,17 @@ func parseJobSetInfo(stdout string) jobSetInfo {
 		return info
 	}
 	for _, line := range strings.Split(rest, "\n") {
+		countsPart, containersPart, _ := strings.Cut(line, "\t")
 		pods := 1
-		for _, f := range strings.Fields(line) {
+		for _, f := range strings.Fields(countsPart) {
 			if n, err := strconv.Atoi(f); err == nil && n >= 0 {
 				pods *= n
 			}
 		}
 		info.expectedPods += pods
+		if containers := len(strings.Fields(containersPart)); containers > 0 {
+			info.expectedStreams += pods * containers
+		}
 	}
 	return info
 }
@@ -513,17 +525,11 @@ func (g *GKEOrchestrator) getJobPodStreams(ns, selector string) (int, int, error
 // resolveLogsSelector returns the pod selector and whether logs are main-only. Main-only selects rank-0 of the
 // first replicated job: job-index and job-completion-index alone are per replicated job and would also match
 // e.g. a Pathways worker-0-0.
-func (g *GKEOrchestrator) resolveLogsSelector(name string, optsMainOnly *bool, podCount int, firstJob, consoleURL string) (string, bool) {
+func (g *GKEOrchestrator) resolveLogsSelector(name string, optsMainOnly *bool, podCount int, firstJob string) (string, bool) {
 	selector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name)
 	mainOnly := podCount > 5
 	if optsMainOnly != nil {
 		mainOnly = *optsMainOnly
-	} else if mainOnly {
-		if podCount > maxLogRequests {
-			logging.Info("Job has %d pods (> %d). Defaulting to --main-only logs. To view logs from all pods, use the Google Cloud Console:\n%s", podCount, maxLogRequests, consoleURL)
-		} else {
-			logging.Info("Job has %d pods (> 5). Defaulting to --main-only logs. To fetch logs from all pods, run with --main-only=false.", podCount)
-		}
 	}
 	if mainOnly {
 		if firstJob != "" {
@@ -596,6 +602,7 @@ func (g *GKEOrchestrator) printConsoleLinks(job orchestrator.JobDefinition) {
 
 	logsLink := getCloudConsoleLogsURL(job.ProjectID, job.ClusterLocation, job.ClusterName, ns, jobName)
 	logging.Info("View your workload logs in real-time here: %s or use gcluster job logs [job-name] to view logs using kubectl", logsLink)
+
 	if job.Pathways.DeploySPS {
 		logging.Info("SPS instance %s submitted. Endpoint: %s", job.WorkloadName, fmt.Sprintf(spsEndpointFormat, job.WorkloadName))
 	}
@@ -1656,26 +1663,40 @@ func (g *GKEOrchestrator) needsDynamicClientInit() bool {
 		return true
 	}
 	if defaultClient, ok := g.kubeClient.(*DefaultKubeClient); ok {
-		return defaultClient.dynClient == nil
+		return defaultClient.dynClient == nil || (g.dynClientManaged && g.dynClientContext != g.kubeContext)
 	}
 	return false
 }
 
-// getDynamicClient builds the client once, for the context set by configureKubectl,
-// and caches it; configureKubectl must run first and is not re-run within a command.
+func (g *GKEOrchestrator) resetManagedDynamicClient() {
+	if !g.dynClientManaged {
+		return
+	}
+	g.dynClient = nil
+	g.dynClientManaged = false
+	g.dynClientContext = ""
+	g.syncKubeClient()
+}
+
+// getDynamicClient builds the client for the context set by configureKubectl and caches it,
+// rebuilding automatically if a managed client's pinned kubeContext changes.
 func (g *GKEOrchestrator) getDynamicClient() (dynamic.Interface, error) {
-	if g.dynClient != nil {
+	if g.dynClient != nil && (!g.dynClientManaged || g.dynClientContext == g.kubeContext) {
 		g.syncKubeClient()
 		return g.dynClient, nil
 	}
+	g.resetManagedDynamicClient()
 	config, err := g.restConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 	}
-	g.dynClient, err = dynamic.NewForConfig(config)
+	dynClient, err := dynamic.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
 	}
+	g.dynClient = dynClient
+	g.dynClientManaged = true
+	g.dynClientContext = g.kubeContext
 	g.syncKubeClient()
 	return g.dynClient, nil
 }
@@ -1687,7 +1708,11 @@ func (g *GKEOrchestrator) restConfig() (*rest.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	return clientcmd.NewNonInteractiveClientConfig(*cfg, g.kubeContext, &clientcmd.ConfigOverrides{}, nil).ClientConfig()
+	var configAccess clientcmd.ConfigAccess
+	if g.kubeconfigLoader == nil {
+		configAccess = clientcmd.NewDefaultPathOptions()
+	}
+	return clientcmd.NewNonInteractiveClientConfig(*cfg, g.kubeContext, &clientcmd.ConfigOverrides{}, configAccess).ClientConfig()
 }
 
 func (g *GKEOrchestrator) awaitJobCompletion(workloadName, clusterName, clusterLocation, projectID, timeout string) error {

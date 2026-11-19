@@ -4048,6 +4048,7 @@ func TestBucketCacheUse(t *testing.T) {
 
 func newFakeGCPPreflightClient(t *testing.T, handler http.HandlerFunc) (*gcpPreflightClient, func() []string) {
 	t.Helper()
+	t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
 
 	var paths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5070,8 +5071,8 @@ func TestValidateClusterMounts_OffCloudGuards(t *testing.T) {
 	sm := &StorageManager{orchestrator: newTestGKEOrchestrator(NewMockExecutor(nil))}
 	for _, m := range []string{"gs://my-bkt;/data", "gs://my-bkt;/data;profile=training", "filestore://my-inst/share;/data"} {
 		err := sm.ValidateClusterMounts(orchestrator.JobDefinition{RawMounts: []string{m}})
-		if err == nil || !strings.Contains(err.Error(), `"nfs://<server>/<export>;<dest>"`) {
-			t.Errorf("ValidateClusterMounts(%q) off-cloud = %v, want error naming quoted K8s mount forms", m, err)
+		if err == nil || !strings.Contains(err.Error(), "requires a GCP project (--project)") || !strings.Contains(err.Error(), `"nfs://<server>/<export>;<dest>"`) {
+			t.Errorf("ValidateClusterMounts(%q) off-cloud = %v, want GCP project error naming quoted K8s mount forms", m, err)
 		}
 	}
 	if _, _, _, err := sm.resolveFilestoreIP("", "us-central1", "my-inst", false); err == nil || !strings.Contains(err.Error(), "requires a GCP project") {
@@ -5080,6 +5081,63 @@ func TestValidateClusterMounts_OffCloudGuards(t *testing.T) {
 	ip, name, capGB, err := sm.resolveFilestoreIP("", "us-central1", "10.0.0.5", true)
 	if err != nil || ip != "10.0.0.5" || name != "10-0-0-5" || capGB != 1024 {
 		t.Errorf("resolveFilestoreIP(off-cloud IP) = (%q, %q, %d, %v), want immediate 1024Gi fallback", ip, name, capGB, err)
+	}
+}
+
+func assertTypeK8sCloudMountRejected(t *testing.T, sm *StorageManager, mockExec *MockExecutor, proj, mount string) {
+	t.Helper()
+	err := sm.ValidateClusterMounts(orchestrator.JobDefinition{
+		ProjectID: proj,
+		RawMounts: []string{mount},
+	})
+	if err == nil || !strings.Contains(err.Error(), "uses a Cloud URI") || !strings.Contains(err.Error(), "is only supported on GKE clusters") || !strings.Contains(err.Error(), `"nfs://<server>/<export>;<dest>"`) {
+		t.Fatalf("ValidateClusterMounts(%q, proj=%q) on TypeK8s = %v, want Cloud URI GKE-only error naming nfs://", mount, proj, err)
+	}
+	if strings.Contains(err.Error(), "requires a GCP project") {
+		t.Errorf("ValidateClusterMounts(%q, proj=%q) on TypeK8s emitted --project error: %v", mount, proj, err)
+	}
+	if len(mockExec.calls) != 0 {
+		t.Errorf("ValidateClusterMounts(%q, proj=%q) on TypeK8s spawned subprocesses %v, want 0", mount, proj, mockExec.calls)
+	}
+}
+
+func TestValidateClusterMounts_TypeK8sRejectsCloudURIsWithProjectID(t *testing.T) {
+	for _, proj := range []string{"ar-build-proj", ""} {
+		mockExec := NewMockExecutor(nil)
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.mode = orchestrator.TypeK8s
+		orc.projectID = proj
+		sm := &StorageManager{orchestrator: orc}
+		for _, m := range []string{"gs://my-bkt;/data", "gs://my-bkt;/data;profile=training", "filestore://my-inst/share;/data"} {
+			assertTypeK8sCloudMountRejected(t, sm, mockExec, proj, m)
+		}
+	}
+
+	// Nil-orchestrator StorageManager falls back to effectiveProjectID(job.ProjectID).
+	nilOrcSM := &StorageManager{}
+	if err := nilOrcSM.ValidateClusterMounts(orchestrator.JobDefinition{RawMounts: []string{"gs://my-bkt;/data"}}); err == nil || !strings.Contains(err.Error(), "requires a GCP project (--project)") {
+		t.Fatalf("nil-orchestrator ValidateClusterMounts without ProjectID = %v, want requires a GCP project", err)
+	}
+	if err := nilOrcSM.ValidateClusterMounts(orchestrator.JobDefinition{ProjectID: "my-proj", RawMounts: []string{"gs://my-bkt;/data"}}); err != nil {
+		t.Fatalf("nil-orchestrator ValidateClusterMounts with ProjectID unexpected error: %v", err)
+	}
+
+	// Positive allow-path: nfs:// on a TypeK8s orchestrator proceeds to cluster RBAC preflight.
+	nfsExec := NewMockExecutor(map[string][]shell.CommandResult{
+		testNFSCanICmd: {{ExitCode: 0, Stdout: "yes\n"}},
+	})
+	orc := newTestGKEOrchestrator(nfsExec)
+	orc.mode = orchestrator.TypeK8s
+	orc.projectID = "ar-build-proj"
+	sm := &StorageManager{orchestrator: orc}
+	if err := sm.ValidateClusterMounts(orchestrator.JobDefinition{
+		ProjectID: "ar-build-proj",
+		RawMounts: []string{"nfs://10.0.0.1/exports;/data"},
+	}); err != nil {
+		t.Fatalf("ValidateClusterMounts(nfs://) on TypeK8s unexpected error: %v", err)
+	}
+	if len(nfsExec.calls) != 1 {
+		t.Errorf("ValidateClusterMounts(nfs://) on TypeK8s calls = %v, want 1 auth can-i check", nfsExec.calls)
 	}
 }
 

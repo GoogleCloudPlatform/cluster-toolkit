@@ -18,17 +18,20 @@ If you use `--build-context` to build images on-the-fly:
 
 * `GCLUSTER_REFRESH_CREDENTIALS`: Set to `1` to make every `gcluster job` command re-run `gcloud container clusters get-credentials` instead of reusing an existing, verified `kubeconfig` context for the cluster. See [Cluster connectivity and kubeconfig reuse](#101-cluster-connectivity-and-kubeconfig-reuse) for when this is useful.
 * `GCLUSTER_TELEMETRY_IMAGE`: Container image URI for the ML Diagnostics collector native sidecar on Kubernetes 1.29+ TPU workloads when `--enable-ml-diagnostics` is passed without `--ml-diagnostics-image` (switches GKE jobs from the managed webhook to native sidecar injection). Pass `--ml-diagnostics-image=""` to ignore it for one submission.
-* `GCLUSTER_AIR_GAPPED`: Set to `true` (or `1` / `yes` / `on`) in disconnected or air-gapped environments to skip CLI telemetry collection and uploads for the current process without changing your saved telemetry preference. Setting `false` / `0` / `no` / `off` does not override `gcluster telemetry off`.
+* `GCLUSTER_ORCHESTRATOR`: Override automatic orchestrator detection (`gke` or `k8s`). When unset, `gcluster` inspects your `KUBECONFIG` context (`gke-gcloud-auth-plugin`, `*.gke.goog`, legacy `gcp` auth-provider, canonical `gke_` context naming, or `-gke.` API server version) and routes generic Kubernetes clusters to `k8s` mode for `list` (`JobSet`s labeled `gcluster.google.com/workload`), `logs`, `cancel`, and `inspect` without requiring `--project`, `--location`, or `gcloud` (`gcluster job submit` currently requires a GKE cluster). When `gcluster job config` defaults are saved, setting `GCLUSTER_ORCHESTRATOR=k8s` bypasses all saved `cluster`, `project`, and `location` defaults, while passing `--cluster <k8s-context>` (when different from any saved `cluster`) on `list`, `logs`, `cancel`, or `inspect` overrides `cluster` and ignores saved `project` and `location` defaults with a warning.
+* `GCLUSTER_AIR_GAPPED`: Set to `true` (or `1` / `yes` / `on`) in disconnected or air-gapped environments to skip the live API server version probe during orchestrator detection, block outbound GitHub manifest downloads for automatic JobSet or Kueue installation/re-installation (requiring pre-installed controllers), and skip CLI telemetry collection and uploads for the current process without changing your saved telemetry preference. Setting `false` / `0` / `no` / `off` disables air-gapped mode for the current command (for example, overriding an exported `GCLUSTER_AIR_GAPPED=true`) without overriding `gcluster telemetry off`.
 
 > [!NOTE]
 > ### Automated Prerequisite Checks Overview
 >
-> When you run `gcluster job submit` (or other job commands), the tool will check for:
+> When you run `gcluster job` commands, prerequisite checks match the detected orchestrator:
 >
-> * **Google Cloud SDK**: Verifies `gcloud` is installed.
-> * **Gcloud Authentication**: Checks if authenticated and if Application Default Credentials (ADC) are valid.
-> * **`kubectl` Installation**: Checks if `kubectl` is installed.
-> * **GKE Auth Plugin**: Checks if `gke-gcloud-auth-plugin` is installed.
+> * **Kubernetes (`k8s`) mode** (`list`, `logs`, `cancel`, `inspect`): Checks only that `kubectl` is installed (zero `gcloud` or Google Cloud credential checks).
+> * **GKE (`gke`) mode**:
+>   * **Google Cloud SDK**: Verifies `gcloud` is installed.
+>   * **Gcloud Authentication**: Checks if authenticated and if Application Default Credentials (ADC) are valid.
+>   * **`kubectl` Installation**: Checks if `kubectl` is installed.
+>   * **GKE Auth Plugin**: Checks if `gke-gcloud-auth-plugin` is installed.
 > * **Destination Registry & Credentials** (Crane `--build-context` builds only):
 >   * **Artifact Registry**: Checks if `artifactregistry.googleapis.com` is enabled in the target Artifact Registry project (defaulting to the cluster's project, or the explicit project in `GCLUSTER_IMAGE_REPO`) and verifies Docker `gcloud`/`gcr` credentials for the target `<region>-docker.pkg.dev` host.
 >   * **Non-Artifact Registry OCI Registries**: Runs a bounded `2s` `GET /v2/` reachability probe and, when the registry returns `401 Unauthorized`, verifies credentials in your Docker keychain (`~/.docker/config.json`) without invoking Google Cloud APIs.
@@ -146,10 +149,11 @@ A TPU shorthand names a slice size, not a host shape. GKE can run the same slice
 > ./gcluster job config set location <REGION/ZONE>
 > ```
 >
-> To view your current configuration, run:
+> To view or clear your saved configuration, run:
 >
 > ```bash
 > ./gcluster job config show
+> ./gcluster job config unset all
 > ```
 
 ### 4.2 Submit the Job
@@ -1289,11 +1293,11 @@ Pass the `--gke-custom-templates-path` flag to the `submit` command:
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-c, --cluster` | `string` | Name of the target GKE cluster. |
-| `-l, --location` | `string` | Google Cloud location (Zone or Region) of the GKE cluster. |
-| `-p, --project` | `string` | Google Cloud Project ID. |
-| `--gke-namespace` | `string` | Target GKE namespace for the operation. Supported across all job commands. If omitted, automatic detection is used. |
-| `--skip-prereqs` | `flag` | Bypasses local workstation pre-flight environment checks (e.g. gcloud SDK, IAM checks, Docker config). |
+| `-c, --cluster` | `string` | Name of the target GKE cluster or Kubernetes `kubeconfig` context. *(Required for GKE; optional in Kubernetes mode when `current-context` is set)* |
+| `-l, --location` | `string` | Google Cloud location (Zone or Region) of the GKE cluster. *(Required for GKE; not used in Kubernetes mode)* |
+| `-p, --project` | `string` | Google Cloud Project ID. *(Required for GKE; not used in Kubernetes mode)* |
+| `--gke-namespace` | `string` | Target Kubernetes namespace for the operation. Supported across all job commands. If omitted, automatic detection is used. |
+| `--skip-prereqs` | `flag` | Bypasses local workstation pre-flight environment checks (`kubectl`, `gcloud`, registry auth, etc.). |
 
 ### 9.2 Configuration Commands
 *Use `gcluster job config` to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*
@@ -1303,7 +1307,7 @@ Modifies configuration defaults. If run without any arguments (`./gcluster job c
 
 * **Supported Keys:**
   * `project`: Google Cloud Project ID
-  * `cluster`: GKE Cluster Name
+  * `cluster`: GKE Cluster Name or Kubernetes `kubeconfig` context
   * `location`: GKE Cluster Location (region or zone)
 
 **Examples:**
@@ -1316,6 +1320,16 @@ Modifies configuration defaults. If run without any arguments (`./gcluster job c
 ./gcluster job config set project my-awesome-project
 ./gcluster job config set cluster my-cluster
 ./gcluster job config set location us-central1-a
+```
+
+#### `gcluster job config unset <key>`
+Clears a saved configuration default (`project`, `cluster`, `location`), or clears all saved defaults when `<key>` is `all` (useful before targeting a generic Kubernetes `KUBECONFIG` context without passing `GCLUSTER_ORCHESTRATOR=k8s`).
+
+**Examples:**
+
+```bash
+./gcluster job config unset project
+./gcluster job config unset all
 ```
 
 #### `gcluster job config show`
@@ -1416,7 +1430,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `--status` | `string` | Filter jobs by status (`Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`). `job list` derives status from the JobSet object (`Suspended` while queued in Kueue, `Running` once admitted, `Succeeded`, or `Failed`), so it never reports `Pending` on GKE and an admitted job whose pods are still unscheduled shows `Running`. For admission and pod details, use `gcluster job inspect --name <job-name> --show` or `kubectl get pods -l jobset.sigs.k8s.io/jobset-name=<job-name>`. |
+| `--status` | `string` | Filter jobs by status (`Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`). `job list` derives status from the JobSet object (`Suspended` while queued in Kueue, `Running` once admitted, `Succeeded`, or `Failed`), so it never reports `Pending` on GKE or Kubernetes and an admitted job whose pods are still unscheduled shows `Running`. For admission and pod details, use `gcluster job inspect --name <job-name> --show` or `kubectl get pods -l jobset.sigs.k8s.io/jobset-name=<job-name>`. |
 | `--name-contains` | `string` | Filter jobs by name containing the specified string. |
 
 ### 9.5 `logs` Flags
@@ -1428,10 +1442,10 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--main-only` | `bool` | Fetch logs only from the rank-0 pod of the JobSet's first replicated job (`main-job`, or `pathways-head` for Pathways), using that pod's default container. |
 
 > [!NOTE]
-> **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. For jobs with up to 10 pods, you can override this to stream logs from all pods by explicitly passing `--main-only=false`; for jobs with more than 10 pods, `gcluster` prints a link to view all-pod logs in the Google Cloud Console.
+> **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. For jobs with up to 10 pods, you can override this to stream logs from all pods by explicitly passing `--main-only=false`; for jobs with more than 10 pods, `gcluster` prints a Google Cloud Console link on GKE or a pinned `kubectl --context <context> logs ...` command in Kubernetes (`k8s`) mode.
 
 ### 9.6 `inspect` Flags
-*Use these flags when inspecting cluster health or a specific workload.*
+*Use these flags when inspecting cluster health or a specific workload. In Kubernetes (`k8s`) mode, `gcluster job inspect` runs `kubectl` diagnostics directly against the pinned `KUBECONFIG` context and skips GKE-only `gcloud`, blueprint metadata ConfigMap, and Cloud Console sections.*
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
@@ -1468,7 +1482,7 @@ Every `gcluster job` command first makes `kubectl` target your cluster. A GKE co
 
    Authentication errors (`Unauthorized`, `gke-gcloud-auth-plugin` failures) are **not** retried against another endpoint because a different endpoint cannot fix credentials; `gcluster` fails immediately and tells you to run `gcloud auth application-default login`.
 
-After this step, every `kubectl` call and Kubernetes API request that `gcluster` makes passes the chosen context explicitly (`kubectl --context <context> ...`). Switching `current-context` in another terminal, or another tool running `get-credentials` while `gcluster` is running, does not redirect the job to a different cluster. When an existing context is reused, `gcluster` does not modify your kubeconfig at all; `current-context` only changes when credentials have to be fetched, because `gcloud container clusters get-credentials` sets it.
+After this step, every `kubectl` call and Kubernetes API request that `gcluster` makes passes the chosen context explicitly (`kubectl --context <context> ...`). Switching `current-context` in another terminal, or another tool running `get-credentials` while `gcluster` is running, does not redirect the job to a different cluster. When an existing context is reused (or when running in Kubernetes `k8s` mode, which resolves your `kubeconfig` context directly without calling `gcloud`), `gcluster` does not change `current-context` or rewrite your `kubeconfig` entries (aside from standard `client-go` OIDC token refresh when an `oidc` `auth-provider` refreshes an expired token); `current-context` only changes on GKE when credentials have to be fetched via `gcloud container clusters get-credentials`.
 
 > [!TIP]
 > **Forcing a credential refresh.** Set `GCLUSTER_REFRESH_CREDENTIALS=1` to skip step 1 and always re-run `get-credentials` (step 2 still applies). Use this if you suspect the reused context is wrong in a way the checks above cannot detect — for example, after deliberately editing the entry by hand, or when sharing a `kubeconfig` between tools that expect a specific endpoint:

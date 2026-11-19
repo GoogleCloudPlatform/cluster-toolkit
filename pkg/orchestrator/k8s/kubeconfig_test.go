@@ -20,6 +20,7 @@ import (
 	"slices"
 	"testing"
 
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
@@ -145,6 +146,59 @@ func TestResolveCurrentContext(t *testing.T) {
 	}
 }
 
+func TestResolveContext(t *testing.T) {
+	t.Parallel()
+	cfg := clientcmdapi.NewConfig()
+	prodCtx := &clientcmdapi.Context{Cluster: "prod-cluster", Namespace: "prod-ns"}
+	otherCtx := &clientcmdapi.Context{Cluster: "other-cluster", Namespace: "other-ns"}
+	cfg.Contexts["prod-ctx"] = prodCtx
+	cfg.Contexts["other-ctx"] = otherCtx
+	cfg.CurrentContext = "prod-ctx"
+
+	tests := []struct {
+		clusterName string
+		wantName    string
+		wantCtx     *clientcmdapi.Context
+		wantCluster string
+		wantOK      bool
+	}{
+		{clusterName: "", wantName: "prod-ctx", wantCtx: prodCtx, wantCluster: "prod-cluster", wantOK: true},
+		{clusterName: "prod-cluster", wantName: "prod-ctx", wantCtx: prodCtx, wantCluster: "prod-cluster", wantOK: true},
+		{clusterName: "other-ctx", wantName: "other-ctx", wantCtx: otherCtx, wantCluster: "other-ctx", wantOK: true},
+		{clusterName: "nonexistent", wantOK: false},
+	}
+	for _, tc := range tests {
+		name, gotCtx, clusterName, ok := ResolveContext(cfg, tc.clusterName)
+		if ok != tc.wantOK || name != tc.wantName || gotCtx != tc.wantCtx || clusterName != tc.wantCluster {
+			t.Errorf("ResolveContext(cfg, %q) = (%q, %v, %q, %v), want (%q, %v, %q, %v)",
+				tc.clusterName, name, gotCtx, clusterName, ok, tc.wantName, tc.wantCtx, tc.wantCluster, tc.wantOK)
+		}
+	}
+}
+
+func TestDanglingCurrentContext(t *testing.T) {
+	t.Parallel()
+	if got := DanglingCurrentContext(nil); got != "" {
+		t.Errorf("DanglingCurrentContext(nil) = %q, want empty", got)
+	}
+	cfg := clientcmdapi.NewConfig()
+	if got := DanglingCurrentContext(cfg); got != "" {
+		t.Errorf("DanglingCurrentContext(unset) = %q, want empty", got)
+	}
+	cfg.CurrentContext = "   "
+	if got := DanglingCurrentContext(cfg); got != "" {
+		t.Errorf("DanglingCurrentContext(whitespace) = %q, want empty", got)
+	}
+	cfg.CurrentContext = "stale-ctx"
+	if got := DanglingCurrentContext(cfg); got != "stale-ctx" {
+		t.Errorf("DanglingCurrentContext(dangling) = %q, want %q", got, "stale-ctx")
+	}
+	cfg.Contexts["stale-ctx"] = &clientcmdapi.Context{Cluster: "c"}
+	if got := DanglingCurrentContext(cfg); got != "" {
+		t.Errorf("DanglingCurrentContext(valid) = %q, want empty", got)
+	}
+}
+
 func TestExecPluginBaseName(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -160,6 +214,11 @@ func TestExecPluginBaseName(t *testing.T) {
 		{name: "parent dir command", cmd: "..", want: ""},
 		{name: "trailing parent dir command", cmd: "/usr/bin/..", want: ""},
 		{name: "root slash command", cmd: "/", want: ""},
+		{name: "Windows drive root command", cmd: `C:\`, want: ""},
+		{name: "Windows drive dot-exe command", cmd: `C:.exe`, want: ""},
+		{name: "bare .exe extension", cmd: ".exe", want: ""},
+		{name: "double-dot .exe command", cmd: "..exe", want: ""},
+		{name: "triple-dot .exe command", cmd: "...exe", want: ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -177,7 +236,94 @@ func TestExecPluginBaseName(t *testing.T) {
 	}
 }
 
-func TestWithContextAndDefaultLoader(t *testing.T) {
+func TestClusterServerHostname(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		server string
+		want   string
+	}{
+		{server: "https://API.K8S.Example.COM:6443/", want: "api.k8s.example.com"},
+		{server: "https://gke-123456.us-central1.gke.goog.:443/", want: "gke-123456.us-central1.gke.goog"},
+		{server: "//my-cluster.us-central1.gke.goog:443", want: "my-cluster.us-central1.gke.goog"},
+		{server: "my-cluster.us-central1.gke.goog:443", want: "my-cluster.us-central1.gke.goog"},
+		{server: "https://[fd12:3456::1]:6443", want: "fd12:3456::1"},
+		{server: "https://10.128.0.68:6443", want: "10.128.0.68"},
+		{server: "://invalid", want: ""},
+		{server: "", want: ""},
+	}
+	for _, tc := range tests {
+		if got := ClusterServerHostname(&clientcmdapi.Cluster{Server: tc.server}); got != tc.want {
+			t.Errorf("ClusterServerHostname(%q) = %q, want %q", tc.server, got, tc.want)
+		}
+	}
+	if got := ClusterServerHostname(nil); got != "" {
+		t.Errorf("ClusterServerHostname(nil) = %q, want empty", got)
+	}
+}
+
+func TestHasClientCertificateAuth(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		auth *clientcmdapi.AuthInfo
+		want bool
+	}{
+		{
+			name: "cert_data_only",
+			auth: &clientcmdapi.AuthInfo{ClientCertificateData: []byte("cert-pem")},
+			want: true,
+		},
+		{
+			name: "cert_file_only",
+			auth: &clientcmdapi.AuthInfo{ClientCertificate: "/etc/kubernetes/admin.crt"},
+			want: true,
+		},
+		{
+			name: "empty_auth_info",
+			auth: &clientcmdapi.AuthInfo{},
+			want: false,
+		},
+		{
+			name: "bearer_token_only",
+			auth: &clientcmdapi.AuthInfo{Token: "static-bearer-token"},
+			want: false,
+		},
+		{
+			name: "cert_plus_token",
+			auth: &clientcmdapi.AuthInfo{ClientCertificateData: []byte("cert"), Token: "static-bearer-token"},
+			want: false,
+		},
+		{
+			name: "cert_plus_token_file",
+			auth: &clientcmdapi.AuthInfo{ClientCertificateData: []byte("cert"), TokenFile: "/var/run/secrets/token"},
+			want: false,
+		},
+		{
+			name: "cert_plus_exec",
+			auth: &clientcmdapi.AuthInfo{ClientCertificateData: []byte("cert"), Exec: &clientcmdapi.ExecConfig{Command: "plugin"}},
+			want: false,
+		},
+		{
+			name: "cert_plus_auth_provider",
+			auth: &clientcmdapi.AuthInfo{ClientCertificateData: []byte("cert"), AuthProvider: &clientcmdapi.AuthProviderConfig{Name: "gcp"}},
+			want: false,
+		},
+		{
+			name: "nil_auth",
+			auth: nil,
+			want: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := HasClientCertificateAuth(tc.auth); got != tc.want {
+				t.Errorf("HasClientCertificateAuth(%+v) = %v, want %v", tc.auth, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWithContextAndContextNamespace(t *testing.T) {
 	args := []string{"get", "pods"}
 	if got := WithContext("", args); !slices.Equal(got, args) {
 		t.Errorf("WithContext empty = %v, want %v", got, args)
@@ -229,5 +375,31 @@ func TestDefaultKubeconfigLoader(t *testing.T) {
 	t.Setenv("KUBECONFIG", badPath)
 	if _, err := DefaultKubeconfigLoader(); err == nil {
 		t.Fatalf("DefaultKubeconfigLoader() error = nil on malformed kubeconfig, want error")
+	}
+}
+
+func TestOIDCAuthProviderRegistered(t *testing.T) {
+	t.Parallel()
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters["oidc-k8s"] = &clientcmdapi.Cluster{Server: "https://127.0.0.1:6443"}
+	cfg.AuthInfos["oidc-user"] = &clientcmdapi.AuthInfo{
+		AuthProvider: &clientcmdapi.AuthProviderConfig{
+			Name: "oidc",
+			Config: map[string]string{
+				"idp-issuer-url": "https://dex.example.com",
+				"client-id":      "k8s-cli",
+				"id-token":       "header.payload.sig",
+			},
+		},
+	}
+	cfg.Contexts["oidc-ctx"] = &clientcmdapi.Context{Cluster: "oidc-k8s", AuthInfo: "oidc-user"}
+	cfg.CurrentContext = "oidc-ctx"
+
+	restCfg, err := clientcmd.NewNonInteractiveClientConfig(*cfg, "oidc-ctx", &clientcmd.ConfigOverrides{}, nil).ClientConfig()
+	if err != nil {
+		t.Fatalf("ClientConfig(oidc) error = %v", err)
+	}
+	if _, err := rest.TransportFor(restCfg); err != nil {
+		t.Fatalf("rest.TransportFor(oidc) error = %v, want registered oidc auth-provider", err)
 	}
 }
