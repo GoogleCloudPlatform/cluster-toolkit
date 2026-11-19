@@ -82,7 +82,7 @@ gcluster deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 
 ### Flags - deploy
 
-* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. When not set, an existing deployment keeps the `ghpc_creator` label it was created with (or none); a new deployment gets it for `@google.com` accounts. Changing this flag on an existing deployment changes labels on every resource and forces replacement of immutable ones such as instance templates.
 * `-a, --artifacts <string>`: Artifacts directory (automatically configured if unset).
 * `--auto-approve`: Automatically approve proposed changes without prompting.
 * `--backend-config <strings>`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
@@ -117,7 +117,7 @@ gcluster create <BLUEPRINT_FILE> [flags]
 
 ### Flags - create
 
-* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. When not set, an existing deployment keeps the `ghpc_creator` label it was created with (or none); a new deployment gets it for `@google.com` accounts. Changing this flag on an existing deployment changes labels on every resource and forces replacement of immutable ones such as instance templates.
 * `--backend-config strings`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
 * `-d, --deployment-file string`: Deployment file to override blueprint variables and backend configuration.
 * `--force`: Forces overwrite of existing deployment directory. If set, `--overwrite-deployment` is implied and no validation is performed on the existing deployment directory.
@@ -167,7 +167,7 @@ gcluster expand BLUEPRINT_NAME [flags]
 
 ### Flags - expand
 
-* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. When not set, an existing deployment keeps the `ghpc_creator` label it was created with (or none); a new deployment gets it for `@google.com` accounts. Changing this flag on an existing deployment changes labels on every resource and forces replacement of immutable ones such as instance templates.
 * `--backend-config strings`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
 * `-d, --deployment-file string`: Deployment file to override blueprint variables and backend configuration.
 * `-o, --out string`: Output file for the expanded HPC Environment Definition (default `"expanded.yaml"`).

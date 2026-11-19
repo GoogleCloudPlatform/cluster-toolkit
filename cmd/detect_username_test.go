@@ -18,7 +18,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+	"time"
 )
 
 // fakeGcloud puts a `gcloud` shell script with the given body first on PATH.
@@ -73,13 +75,69 @@ func TestDetectUsername(t *testing.T) {
 		}
 	})
 
-	t.Run("no gcloud and no env falls back to the OS user", func(t *testing.T) {
+	t.Run("failing gcloud and no env falls back to the OS user", func(t *testing.T) {
 		fakeGcloud(t, "exit 1")
 		t.Setenv("CLOUDSDK_CORE_ACCOUNT", "")
 		t.Setenv("USER", "")
 		t.Setenv("USERNAME", "")
 		if got := detectUsername(ctx); got == "" {
 			t.Error("got empty username")
+		}
+	})
+
+	t.Run("missing gcloud falls back to USER", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir()) // no gcloud binary at all
+		t.Setenv("CLOUDSDK_CORE_ACCOUNT", "")
+		t.Setenv("USER", "localuser")
+		if got := detectUsername(ctx); got != "localuser" {
+			t.Errorf("got %q, want localuser", got)
+		}
+	})
+
+	t.Run("slow gcloud times out and falls back to USER", func(t *testing.T) {
+		fakeGcloud(t, "/bin/sleep 2; echo late@google.com") // PATH only has the fake gcloud, so use an absolute path
+		t.Setenv("CLOUDSDK_CORE_ACCOUNT", "")
+		t.Setenv("USER", "localuser")
+		old := gcloudAccountTimeout
+		gcloudAccountTimeout = 100 * time.Millisecond
+		t.Cleanup(func() { gcloudAccountTimeout = old })
+		if got := detectUsername(ctx); got != "localuser" {
+			t.Errorf("got %q, want localuser", got)
+		}
+	})
+}
+
+func TestActiveGcloudAccountReason(t *testing.T) {
+	ctx := t.Context()
+
+	t.Run("missing binary", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir())
+		if account, reason := activeGcloudAccount(ctx); account != "" || !strings.Contains(reason, "executable file not found") {
+			t.Errorf("activeGcloudAccount() = (%q, %q), want a not-found reason", account, reason)
+		}
+	})
+
+	t.Run("failing gcloud", func(t *testing.T) {
+		fakeGcloud(t, "exit 3")
+		if account, reason := activeGcloudAccount(ctx); account != "" || !strings.Contains(reason, "exit status 3") {
+			t.Errorf("activeGcloudAccount() = (%q, %q), want an exit status reason", account, reason)
+		}
+	})
+
+	t.Run("no active account", func(t *testing.T) {
+		fakeGcloud(t, "exit 0")
+		if account, reason := activeGcloudAccount(ctx); account != "" || reason != "gcloud reported no active account" {
+			t.Errorf("activeGcloudAccount() = (%q, %q), want the no-active-account reason", account, reason)
+		}
+	})
+
+	t.Run("timeout", func(t *testing.T) {
+		fakeGcloud(t, "/bin/sleep 2")
+		old := gcloudAccountTimeout
+		gcloudAccountTimeout = 100 * time.Millisecond
+		t.Cleanup(func() { gcloudAccountTimeout = old })
+		if account, reason := activeGcloudAccount(ctx); account != "" || !strings.HasPrefix(reason, "timed out after") {
+			t.Errorf("activeGcloudAccount() = (%q, %q), want a timeout reason", account, reason)
 		}
 	})
 }

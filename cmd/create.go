@@ -141,7 +141,8 @@ func printAdvancedInstructionsMessage(deplDir string) {
 // gcloudAccountTimeout bounds the `gcloud auth list` call used to detect the
 // active account. gcloud is a Python program and a cold start can take several
 // seconds, so the limit is generous to avoid silently falling back to $USER.
-const gcloudAccountTimeout = 10 * time.Second
+// It is a variable so tests can shorten it.
+var gcloudAccountTimeout = 10 * time.Second
 
 // creatorLabelKey is the label that records which account created a deployment.
 const creatorLabelKey = "ghpc_creator"
@@ -153,20 +154,13 @@ func detectUsername(ctx context.Context) string {
 	}
 
 	// Try gcloud next
-	ctx, cancel := context.WithTimeout(ctx, gcloudAccountTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err == nil {
-		email := strings.TrimSpace(out.String())
-		if email != "" {
-			return email
-		}
-	} else if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		logging.Info("Timed out after %s detecting the active gcloud account; falling back to the local user name.", gcloudAccountTimeout)
+	account, reason := activeGcloudAccount(ctx)
+	if account != "" {
+		return account
 	}
+	logging.Warn("Could not detect the active gcloud account (%s); falling back to the local user name. "+
+		"A new deployment only gets the ghpc_creator label for @google.com accounts, and later renders keep that choice. "+
+		"Set CLOUDSDK_CORE_ACCOUNT or pass --add-creator-label to override.", reason)
 
 	// Fallback to shell
 	if user := os.Getenv("USER"); user != "" {
@@ -185,6 +179,31 @@ func detectUsername(ctx context.Context) string {
 	return "unknown"
 }
 
+// activeGcloudAccount returns the active gcloud account, or "" and the reason
+// it could not be determined.
+func activeGcloudAccount(ctx context.Context) (string, string) {
+	ctx, cancel := context.WithTimeout(ctx, gcloudAccountTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	// gcloud is a wrapper script; if it is killed on timeout, its child may
+	// keep stdout open. Stop waiting for it shortly after the timeout.
+	cmd.WaitDelay = time.Second
+	err := cmd.Run()
+	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return "", fmt.Sprintf("timed out after %s", gcloudAccountTimeout)
+	case err != nil:
+		return "", err.Error()
+	}
+	if email := strings.TrimSpace(out.String()); email != "" {
+		return email, ""
+	}
+	return "", "gcloud reported no active account"
+}
+
 // setCreatorLabel decides whether the expanded blueprint gets a ghpc_creator
 // label and with which value.
 //
@@ -194,6 +213,10 @@ func detectUsername(ctx context.Context) string {
 // not add, remove or change ghpc_creator. That label is stamped on every
 // resource, and on some resources (e.g. instance templates) a label change
 // forces replacement. Only new deployments detect the active account.
+//
+// The deployment folder is <outputDir>/<deployment_name>. `gcluster expand`
+// has no output directory flag, so for expand the lookup is relative to the
+// current directory, matching what `gcluster create` does without -o.
 func setCreatorLabel(cmd *cobra.Command, bp *config.Blueprint) {
 	if cmd.Flags().Changed("add-creator-label") {
 		bp.AddCreatorLabel = expandFlags.addCreatorLabel
@@ -255,7 +278,11 @@ func previousGlobalLabels(deplDir string) (cty.Value, bool) {
 		return cty.NilVal, false
 	}
 	prev, _, err := config.NewBlueprint(expPath)
-	if err != nil || !prev.Vars.Has("labels") {
+	if err != nil {
+		logging.Warn("Could not read ghpc_creator from %s (%v); detecting the active account instead.", expPath, err)
+		return cty.NilVal, false
+	}
+	if !prev.Vars.Has("labels") {
 		return cty.NilVal, false
 	}
 
@@ -264,6 +291,7 @@ func previousGlobalLabels(deplDir string) (cty.Value, bool) {
 	// a plain map, so evaluate it instead of reading the raw value.
 	labels, err := prev.Eval(config.GlobalRef("labels").AsValue())
 	if err != nil {
+		logging.Warn("Could not read ghpc_creator from %s (%v); detecting the active account instead.", expPath, err)
 		return cty.NilVal, false
 	}
 	labels, _ = labels.Unmark()
