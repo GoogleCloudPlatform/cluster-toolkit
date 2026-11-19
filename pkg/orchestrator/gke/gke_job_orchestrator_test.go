@@ -3945,7 +3945,7 @@ func TestGetJobLogs_FollowRecountsStreamsAfterProbe(t *testing.T) {
 		"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
 		// First count sees 1 pod; by the time the probe passes all 7 pods (14 streams) exist.
 		podsQuery:   {{Stdout: "head-init head-main\n"}, {Stdout: "head-init head-main\n" + strings.Repeat("main side\n", 6)}},
-		jobSetQuery: {{Stdout: "\tFalse\tpathways-head\n1 1\n1 6\n"}},
+		jobSetQuery: {{Stdout: "\tFalse\tpathways-head\n1 1\thead-main\n1 6\tmain\n"}},
 		probe:       {{ExitCode: 0, Stdout: "x"}},
 	}
 	mockExec := NewMockExecutor(responses)
@@ -3961,6 +3961,63 @@ func TestGetJobLogs_FollowRecountsStreamsAfterProbe(t *testing.T) {
 		t.Fatalf("stream calls = %q, want [%q]", mockExec.streamCalls, want)
 	}
 	mockExec.assertAllKubectlPinned(t, "gke_test-project_us-central1-a_test-cluster")
+}
+
+func TestGetJobLogs_BatchedMultiContainerUsesSpecStreams(t *testing.T) {
+	oldInterval := logsRetryInterval
+	logsRetryInterval = time.Millisecond
+	defer func() { logsRetryInterval = oldInterval }()
+
+	falseVal := false
+	podsQuery := "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job -o jsonpath=" + podContainersJSONPath
+	jobSetQuery := "kubectl get jobsets.jobset.x-k8s.io test-job -n default -o jsonpath=" + jobSetInfoJSONPath
+	twoLivePods := "workload sidecar\nworkload sidecar\n"
+	eightPodSpec := "\tFalse\tmain-job\n1 8\tworkload sidecar\n"
+	waiting := shell.CommandResult{ExitCode: 1, Stderr: `container "workload" in pod "p-0" is waiting to start: ContainerCreating`}
+
+	t.Run("snapshot_retries_with_spec_max_log_requests", func(t *testing.T) {
+		snapCmd := "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=16 --tail=-1"
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+			"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+			podsQuery:                            {{Stdout: twoLivePods}},
+			jobSetQuery:                          {{Stdout: eightPodSpec}},
+			snapCmd:                              {waiting, {ExitCode: 0, Stdout: "all 16 streams\n"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		out, err := orc.GetJobLogs("test-job", orchestrator.LogsOptions{
+			ClusterName: "test-cluster", ClusterLocation: "us-central1-a", ProjectID: "test-project",
+			MainOnly: &falseVal,
+		})
+		if err != nil || out != "all 16 streams\n" {
+			t.Fatalf("GetJobLogs(snapshot) = (%q, %v), want (\"all 16 streams\\n\", nil)", out, err)
+		}
+		if got := mockExec.callCount[snapCmd]; got != 2 {
+			t.Errorf("snapshot logs call count = %d, want 2", got)
+		}
+	})
+
+	t.Run("follow_probes_and_streams_with_spec_max_log_requests", func(t *testing.T) {
+		probeCmd := "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=16 --tail=1"
+		streamCmd := "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers -f --max-log-requests=16 --tail=-1"
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+			"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+			podsQuery:                            {{Stdout: twoLivePods}, {Stdout: twoLivePods}},
+			jobSetQuery:                          {{Stdout: eightPodSpec}},
+			probeCmd:                             {{ExitCode: 0, Stdout: "ready\n"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		if _, err := orc.GetJobLogs("test-job", orchestrator.LogsOptions{
+			ClusterName: "test-cluster", ClusterLocation: "us-central1-a", ProjectID: "test-project",
+			Follow: true, MainOnly: &falseVal,
+		}); err != nil {
+			t.Fatalf("GetJobLogs(follow) error = %v", err)
+		}
+		if len(mockExec.streamCalls) != 1 || mockExec.streamCalls[0] != streamCmd {
+			t.Fatalf("stream calls = %q, want [%q]", mockExec.streamCalls, streamCmd)
+		}
+	})
 }
 
 func TestGetJobLogs_FollowProbesContainersBeforeStreaming(t *testing.T) {

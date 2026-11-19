@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -203,11 +204,27 @@ func isConnectGatewayHost(host string) bool {
 	return false
 }
 
+func hasEdgeCloudFlag(args []string) bool {
+	edgeCloud := false
+	for _, raw := range args {
+		name, val, hasVal := strings.Cut(strings.TrimSpace(raw), "=")
+		if name != "--use_edge_cloud" && name != "-use_edge_cloud" {
+			continue
+		}
+		if !hasVal {
+			edgeCloud = true
+		} else if enabled, err := strconv.ParseBool(strings.TrimSpace(val)); err == nil {
+			edgeCloud = enabled
+		}
+	}
+	return edgeCloud
+}
+
 func isNonStandardGKEExec(auth *clientcmdapi.AuthInfo) bool {
 	if auth == nil || auth.Exec == nil {
 		return false
 	}
-	if slices.Contains(auth.Exec.Args, "--use_edge_cloud") {
+	if hasNonGCloudExecPlugin(auth) || hasEdgeCloudFlag(auth.Exec.Args) {
 		return true
 	}
 	if slices.Contains(auth.Exec.Args, "print-access-token") {
@@ -281,8 +298,8 @@ func detectGKE(in orchestrator.ProbeInput) (orchestrator.Detection, bool) {
 		}, true
 	}
 	if !ok {
-		// Only treat --project/--location as GKE bootstrap when no kubeconfig context matched; saved `job config`
-		// defaults also populate these fields when targeting an existing non-GKE KUBECONFIG context.
+		// Bootstrap TypeGKE from project/location when no kubeconfig context matched; when a context does match,
+		// detectGKE classifies that context and CLI callers decide how GKE flags interact with non-GKE contexts.
 		if gkeFlags {
 			return orchestrator.Detection{
 				Type:        orchestrator.TypeGKE,
@@ -538,11 +555,11 @@ func (g *GKEOrchestrator) probeContext(contextName string) (probeOutcome, string
 	}
 	stderr := strings.TrimSpace(res.Stderr)
 	if errors.Is(res.Err, context.DeadlineExceeded) {
-		timeoutSuffix := fmt.Sprintf("timed out after %v", shell.DefaultLocalCommandTimeout)
+		timeoutPrefix := fmt.Sprintf("timed out after %v", shell.DefaultLocalCommandTimeout)
 		if stderr == "" {
-			stderr = timeoutSuffix
+			stderr = timeoutPrefix
 		} else {
-			stderr = fmt.Sprintf("%s (%s)", stderr, timeoutSuffix)
+			stderr = fmt.Sprintf("%s: %s", timeoutPrefix, stderr)
 		}
 	} else if stderr == "" && res.Err != nil {
 		stderr = strings.TrimSpace(res.Err.Error())

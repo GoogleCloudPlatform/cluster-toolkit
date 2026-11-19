@@ -16,6 +16,9 @@ package job
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/pem"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -201,6 +204,21 @@ func TestJobCmd_TypeK8sSubmitFastFailsBeforePrereqsAndLookup(t *testing.T) {
 		},
 		{
 			name: "build_context_submit_rejected_before_submit_prerun",
+			args: func(t *testing.T) []string {
+				return []string{
+					"submit",
+					"--cluster", "k8s-local",
+					"--name", "k8s-build",
+					"--base-image", "python:3.11-slim",
+					"--build-context", t.TempDir(),
+					"--command", "python3 train.py",
+					"--compute-type", "n2-standard-4",
+				}
+			},
+		},
+		{
+			name:        "forced_k8s_build_context_with_project_and_location_rejected_before_submit_prerun",
+			envOverride: "k8s",
 			args: func(t *testing.T) []string {
 				return []string{
 					"submit",
@@ -552,7 +570,17 @@ func TestJobCmd_SavedGKEConfigDoesNotBreakTypeK8sOrEnvOverride(t *testing.T) {
 			wantSavedLog: true,
 		},
 		{
-			name:         "explicit_project_and_location_preserved_in_k8s_mode",
+			name:         "explicit_project_and_location_select_gke_over_bare_k8s_context",
+			withK8sCfg:   true,
+			args:         []string{"list", "--cluster", "onprem-k8s", "--location", "europe-north1", "--project", "explicit-gar-proj"},
+			wantType:     orchestrator.TypeGKE,
+			wantCluster:  "onprem-k8s",
+			wantLocation: "europe-north1",
+			wantProject:  "explicit-gar-proj",
+		},
+		{
+			name:         "forced_k8s_preserves_explicit_project_and_location",
+			envOverride:  "k8s",
 			withK8sCfg:   true,
 			args:         []string{"list", "--cluster", "onprem-k8s", "--location", "europe-north1", "--project", "explicit-gar-proj"},
 			wantType:     orchestrator.TypeK8s,
@@ -597,6 +625,10 @@ func TestJobCmd_SavedGKEConfigDoesNotBreakTypeK8sOrEnvOverride(t *testing.T) {
 				t.Setenv("GCLUSTER_REFRESH_CREDENTIALS", "1")
 			}
 
+			lastProj := "saved-gke-proj"
+			if tc.wantProject != "" {
+				lastProj = tc.wantProject
+			}
 			store = &MockPrereqStore{
 				State: PrereqState{
 					GCloudSDKInstalled:           true,
@@ -606,13 +638,13 @@ func TestJobCmd_SavedGKEConfigDoesNotBreakTypeK8sOrEnvOverride(t *testing.T) {
 					KubectlInstalled:             true,
 					GKEGCloudAuthPluginInstalled: true,
 					LastCheckedTimestamp:         time.Now(),
-					LastCheckedProjectID:         "saved-gke-proj",
+					LastCheckedProjectID:         lastProj,
 				},
 			}
 			mockOrc := &mockOrchestrator{}
 			gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
 
-			snapLogs, restoreLogs := logging.CaptureForTesting()
+			snapLogs, restoreLogs := logging.CaptureForTesting(t)
 			defer restoreLogs()
 			if _, err := executeCommand(JobCmd, tc.args...); err != nil {
 				t.Fatalf("executeCommand(%v) error = %v, want nil", tc.args, err)
@@ -646,7 +678,8 @@ func assertPartialAndK8sSavedDefaultsNotice(t *testing.T) {
 	if err := saveContext(Context{ProjectID: "saved-proj", Location: "us-central1"}); err != nil {
 		t.Fatalf("saveContext(partial): %v", err)
 	}
-	snapPartial, restorePartial := logging.CaptureForTesting()
+	snapPartial, restorePartial := logging.CaptureForTesting(t)
+	defer restorePartial()
 	_, err := executeCommand(JobCmd, "list")
 	partialInfo, _ := snapPartial()
 	restorePartial()
@@ -675,9 +708,9 @@ func assertPartialAndK8sSavedDefaultsNotice(t *testing.T) {
 	mockOrc := &mockOrchestrator{}
 	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
 
-	snapK8s, restoreK8s := logging.CaptureForTesting()
+	snapK8s, restoreK8s := logging.CaptureForTesting(t)
+	defer restoreK8s()
 	if _, err := executeCommand(JobCmd, "list"); err != nil {
-		restoreK8s()
 		t.Fatalf("saved K8s cluster list err = %v, want nil", err)
 	}
 	k8sInfo, _ := snapK8s()
@@ -715,5 +748,337 @@ func TestJobCmd_SequentialInvocationsDoNotLeakTargetFlags(t *testing.T) {
 	if mockOrc.InitClusterName != "onprem-k8s" || mockOrc.InitLocation != "" || mockOrc.InitProjectID != "" {
 		t.Errorf("second invocation init = (%q, %q, %q), want (\"onprem-k8s\", \"\", \"\")",
 			mockOrc.InitClusterName, mockOrc.InitLocation, mockOrc.InitProjectID)
+	}
+}
+
+func TestJobCmd_ExplicitEmptyClusterFlagRejected(t *testing.T) {
+	gkeCfg := func() *clientcmdapi.Config {
+		c := clientcmdapi.NewConfig()
+		c.Clusters["gke_my-proj_us-central1_existing"] = &clientcmdapi.Cluster{Server: "https://34.118.224.10"}
+		c.AuthInfos["gke-user"] = &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin"}}
+		c.Contexts["gke_my-proj_us-central1_existing"] = &clientcmdapi.Context{
+			Cluster:  "gke_my-proj_us-central1_existing",
+			AuthInfo: "gke-user",
+		}
+		c.CurrentContext = "gke_my-proj_us-central1_existing"
+		return c
+	}
+	k8sCfg := func() *clientcmdapi.Config {
+		c := clientcmdapi.NewConfig()
+		c.Clusters["kind-kind"] = &clientcmdapi.Cluster{Server: "https://127.0.0.1:6443"}
+		c.AuthInfos["admin"] = &clientcmdapi.AuthInfo{ClientCertificateData: []byte("cert-pem")}
+		c.Contexts["kind-kind"] = &clientcmdapi.Context{Cluster: "kind-kind", AuthInfo: "admin"}
+		c.Contexts["saved-k8s-ctx"] = &clientcmdapi.Context{Cluster: "kind-kind", AuthInfo: "admin"}
+		c.CurrentContext = "kind-kind"
+		return c
+	}
+
+	tests := []struct {
+		name         string
+		envOverride  string
+		savedCluster string
+		cfg          func() *clientcmdapi.Config
+		args         []string
+		wantSubstr   []string
+		forbid       string
+	}{
+		{
+			name:       "empty_cluster_with_active_k8s_context",
+			cfg:        k8sCfg,
+			args:       []string{"cancel", "my-job", "--cluster", ""},
+			wantSubstr: []string{"cluster name is required", "omit --cluster to use kubeconfig current-context"},
+		},
+		{
+			name:       "whitespace_cluster_with_active_k8s_context",
+			cfg:        k8sCfg,
+			args:       []string{"list", "--cluster", "   "},
+			wantSubstr: []string{"cluster name is required", "omit --cluster to use kubeconfig current-context"},
+		},
+		{
+			name:        "empty_cluster_under_forced_k8s_env",
+			envOverride: "k8s",
+			cfg:         k8sCfg,
+			args:        []string{"cancel", "my-job", "--cluster", "", "--project", "ar-proj"},
+			wantSubstr:  []string{"cluster name is required", "omit --cluster to use kubeconfig current-context"},
+		},
+		{
+			name:         "empty_cluster_overrides_saved_k8s_cluster_and_fails",
+			savedCluster: "saved-k8s-ctx",
+			cfg:          k8sCfg,
+			args:         []string{"list", "--cluster", ""},
+			wantSubstr:   []string{"cluster name is required", "omit --cluster to use kubeconfig current-context"},
+		},
+		{
+			name:       "empty_cluster_with_active_gke_context",
+			cfg:        gkeCfg,
+			args:       []string{"cancel", "my-job", "--cluster", ""},
+			wantSubstr: []string{"cluster name is required"},
+			forbid:     "omit --cluster to use kubeconfig current-context",
+		},
+		{
+			name:        "empty_cluster_under_forced_gke_env",
+			envOverride: "gke",
+			cfg:         k8sCfg,
+			args:        []string{"list", "--cluster", ""},
+			wantSubstr:  []string{"cluster name is required"},
+			forbid:      "omit --cluster to use kubeconfig current-context",
+		},
+		{
+			name:       "empty_cluster_on_submit",
+			cfg:        k8sCfg,
+			args:       []string{"submit", "--cluster", "", "--name", "j1", "--image", "busybox", "--command", "echo hi", "--compute-type", "n2-standard-4"},
+			wantSubstr: []string{"cluster name is required"},
+			forbid:     "omit --cluster to use kubeconfig current-context",
+		},
+		{
+			name:        "empty_cluster_on_forced_k8s_submit",
+			envOverride: "k8s",
+			cfg:         k8sCfg,
+			args:        []string{"submit", "--cluster", "", "--name", "j1", "--image", "busybox", "--command", "echo hi", "--compute-type", "n2-standard-4"},
+			wantSubstr:  []string{"not yet supported in Kubernetes (k8s) mode"},
+			forbid:      "omit --cluster to use kubeconfig current-context",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+			stubUnexpectedSubprocesses(t, false)
+			t.Setenv("KUBECONFIG", writeKubeconfig(t, tc.cfg()))
+			if tc.envOverride != "" {
+				t.Setenv(orchestrator.EnvVar, tc.envOverride)
+			}
+			if tc.savedCluster != "" {
+				if err := saveContext(Context{ClusterName: tc.savedCluster}); err != nil {
+					t.Fatalf("saveContext: %v", err)
+				}
+			}
+			called := false
+			gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+				return &mockOrchestrator{
+					listJobsFunc:  func(orchestrator.ListOptions) ([]orchestrator.JobStatus, error) { called = true; return nil, nil },
+					cancelJobFunc: func(string, orchestrator.CancelOptions) error { called = true; return nil },
+				}
+			}
+			_, err := executeCommand(JobCmd, tc.args...)
+			if err == nil {
+				t.Fatalf("executeCommand(%v) err = nil, want error containing %v", tc.args, tc.wantSubstr)
+			}
+			if called {
+				t.Fatalf("executeCommand(%v) dispatched to orchestrator despite empty --cluster", tc.args)
+			}
+			assertErrorSubstrings(t, tc.args, err.Error(), tc.wantSubstr, tc.forbid)
+		})
+	}
+}
+
+func newTestGKEAndOnPremServers(t *testing.T) (*httptest.Server, *httptest.Server, []byte, string, *atomic.Int32, *atomic.Int32) {
+	t.Helper()
+	var onPremHits, gkeDeletes atomic.Int32
+	onPremSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		onPremHits.Add(1)
+		t.Errorf("unexpected Kubernetes API request sent to on-prem 'prod' server: %s %s", r.Method, r.URL.Path)
+		http.Error(w, "wrong cluster", http.StatusTeapot)
+	}))
+	t.Cleanup(onPremSrv.Close)
+
+	gkeSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/apis/jobset.x-k8s.io/v1alpha2/namespaces/default/jobsets/myjob":
+			_, _ = w.Write([]byte(`{"apiVersion":"jobset.x-k8s.io/v1alpha2","kind":"JobSet","metadata":{"name":"myjob","namespace":"default"}}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/apis/jobset.x-k8s.io/v1alpha2/namespaces/default/jobsets/myjob":
+			gkeDeletes.Add(1)
+			_, _ = w.Write([]byte(`{"apiVersion":"v1","kind":"Status","status":"Success"}`))
+		default:
+			_, _ = w.Write([]byte(`{"apiVersion":"v1","kind":"PersistentVolumeClaimList","items":[]}`))
+		}
+	}))
+	t.Cleanup(gkeSrv.Close)
+
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: gkeSrv.Certificate().Raw})
+	caB64 := base64.StdEncoding.EncodeToString(caPEM)
+	return onPremSrv, gkeSrv, caPEM, caB64, &onPremHits, &gkeDeletes
+}
+
+func stubGKECredsAndDescribeForProd(t *testing.T, kcPath, gkeURL string, caPEM []byte, caB64 string) {
+	t.Helper()
+	gkeHost := strings.TrimPrefix(gkeURL, "https://")
+	describeJSON := fmt.Sprintf(`{"endpoint":%q,"masterAuth":{"clusterCaCertificate":%q}}`, gkeHost, caB64)
+	origExec := shell.ExecuteCommandWithTimeout
+	t.Cleanup(func() { shell.ExecuteCommandWithTimeout = origExec })
+	shell.ExecuteCommandWithTimeout = func(_ time.Duration, name string, args ...string) shell.CommandResult {
+		joined := strings.Join(args, " ")
+		switch {
+		case name == "gcloud" && strings.Contains(joined, "clusters describe prod"):
+			return shell.CommandResult{ExitCode: 0, Stdout: describeJSON}
+		case name == "gcloud" && strings.Contains(joined, "clusters get-credentials prod"):
+			cfg, err := clientcmd.LoadFromFile(kcPath)
+			if err != nil {
+				t.Fatalf("LoadFromFile: %v", err)
+			}
+			const gkeCtx = "gke_my-proj_us-central1_prod"
+			cfg.Clusters[gkeCtx] = &clientcmdapi.Cluster{Server: gkeURL, CertificateAuthorityData: caPEM}
+			cfg.AuthInfos[gkeCtx] = &clientcmdapi.AuthInfo{Token: "gke-jwt"}
+			cfg.Contexts[gkeCtx] = &clientcmdapi.Context{Cluster: gkeCtx, AuthInfo: gkeCtx}
+			if err := clientcmd.WriteToFile(*cfg, kcPath); err != nil {
+				t.Fatalf("WriteToFile: %v", err)
+			}
+			return shell.CommandResult{ExitCode: 0}
+		case name == "kubectl" && strings.Contains(joined, "--context gke_my-proj_us-central1_prod get --raw /version"):
+			return shell.CommandResult{ExitCode: 0, Stdout: `{"gitVersion":"v1.32.2-gke.1182000"}`}
+		default:
+			t.Errorf("unexpected subprocess %s %s", name, joined)
+			return shell.CommandResult{ExitCode: 1, Stderr: "unexpected command"}
+		}
+	}
+}
+
+func writeBareOnPremProdKubeconfig(t *testing.T, onPremURL string) string {
+	t.Helper()
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters["prod"] = &clientcmdapi.Cluster{Server: onPremURL, InsecureSkipTLSVerify: true}
+	cfg.AuthInfos["onprem-sa"] = &clientcmdapi.AuthInfo{Token: "onprem-jwt"}
+	cfg.Contexts["prod"] = &clientcmdapi.Context{Cluster: "prod", AuthInfo: "onprem-sa"}
+	cfg.CurrentContext = "prod"
+	return writeKubeconfig(t, cfg)
+}
+
+func TestJobCmd_GKEFlagsOverrideBareK8sContextCollision(t *testing.T) {
+	t.Run("bare_onprem_prod_only_routes_flags_and_saved_config_to_gke", assertBareOnPremProdRoutesToGKE)
+	t.Run("both_gke_and_bare_onprem_prod_with_saved_config_prefers_gke_context", assertBothGKEAndBareProdPrefersGKEContext)
+}
+
+func assertBareOnPremProdRoutesToGKE(t *testing.T) {
+	onPremSrv, gkeSrv, caPEM, caB64, onPremHits, gkeDeletes := newTestGKEAndOnPremServers(t)
+	setupSubmitTestEnv(t)
+	t.Setenv(shell.AirGappedEnvVar, "true")
+	kcPath := writeBareOnPremProdKubeconfig(t, onPremSrv.URL)
+	t.Setenv("KUBECONFIG", kcPath)
+	stubGKECredsAndDescribeForProd(t, kcPath, gkeSrv.URL, caPEM, caB64)
+	gkeOrchestratorFactory = nil
+
+	if _, err := executeCommand(JobCmd, "cancel", "myjob", "-c", "prod", "-l", "us-central1", "-p", "my-proj", "--skip-prereqs"); err != nil {
+		t.Fatalf("cancel with explicit -c/-l/-p err = %v, want nil", err)
+	}
+	if gkeDeletes.Load() != 1 || onPremHits.Load() != 0 {
+		t.Fatalf("explicit -c/-l/-p hits: gkeDeletes=%d onPremHits=%d, want (1, 0)", gkeDeletes.Load(), onPremHits.Load())
+	}
+
+	// Reset kubeconfig and Cobra flag state back to bare on-prem "prod" only, then test all three values coming from `job config`.
+	resetJobFlags()
+	kcPath2 := writeBareOnPremProdKubeconfig(t, onPremSrv.URL)
+	t.Setenv("KUBECONFIG", kcPath2)
+	stubGKECredsAndDescribeForProd(t, kcPath2, gkeSrv.URL, caPEM, caB64)
+	if err := saveContext(Context{ProjectID: "my-proj", Location: "us-central1", ClusterName: "prod"}); err != nil {
+		t.Fatalf("saveContext: %v", err)
+	}
+	if _, err := executeCommand(JobCmd, "cancel", "myjob", "--skip-prereqs"); err != nil {
+		t.Fatalf("cancel with saved job config err = %v, want nil", err)
+	}
+	if gkeDeletes.Load() != 2 || onPremHits.Load() != 0 {
+		t.Fatalf("saved config hits: gkeDeletes=%d onPremHits=%d, want (2, 0)", gkeDeletes.Load(), onPremHits.Load())
+	}
+
+	assertSubmitWithCollidingBareProdRoutesToGKE(t, onPremSrv.URL, onPremHits)
+	assertExplicitGKEContextAndLoadErrWithSavedGKE(t)
+}
+
+func assertSubmitWithCollidingBareProdRoutesToGKE(t *testing.T, onPremURL string, onPremHits *atomic.Int32) {
+	t.Helper()
+	t.Setenv("KUBECONFIG", writeBareOnPremProdKubeconfig(t, onPremURL))
+	for _, tc := range []struct {
+		workload string
+		args     []string
+	}{
+		{
+			workload: "j1",
+			args:     []string{"submit", "-c", "prod", "-l", "us-central1", "-p", "my-proj", "--skip-prereqs", "--name", "j1", "--image", "busybox", "--command", "echo hi", "--compute-type", "a3-highgpu-8g"},
+		},
+		{
+			workload: "j2",
+			args:     []string{"submit", "--skip-prereqs", "--name", "j2", "--image", "busybox", "--command", "echo hi", "--compute-type", "a3-highgpu-8g"},
+		},
+	} {
+		resetJobFlags()
+		submitMock := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return submitMock }
+		if _, err := executeCommand(JobCmd, tc.args...); err != nil {
+			t.Fatalf("executeCommand(%v) with colliding bare 'prod' context err = %v, want nil", tc.args, err)
+		}
+		if submitMock.SubmittedJob.WorkloadName != tc.workload || submitMock.InitClusterName != "prod" || submitMock.InitLocation != "us-central1" || submitMock.InitProjectID != "my-proj" {
+			t.Fatalf("submit dispatch = (workload=%q, init=%q/%q/%q), want (%s, prod/us-central1/my-proj)",
+				submitMock.SubmittedJob.WorkloadName, submitMock.InitClusterName, submitMock.InitLocation, submitMock.InitProjectID, tc.workload)
+		}
+	}
+	if onPremHits.Load() != 0 {
+		t.Fatalf("submit hit on-prem server %d times, want 0", onPremHits.Load())
+	}
+}
+
+func assertExplicitGKEContextAndLoadErrWithSavedGKE(t *testing.T) {
+	t.Helper()
+	resetJobFlags()
+	cfg := clientcmdapi.NewConfig()
+	const gkeCtx = "gke_other-proj_europe-west4_cached"
+	cfg.Clusters[gkeCtx] = &clientcmdapi.Cluster{Server: "https://34.118.224.10"}
+	cfg.AuthInfos["u"] = &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin"}}
+	cfg.Contexts[gkeCtx] = &clientcmdapi.Context{Cluster: gkeCtx, AuthInfo: "u"}
+	validKC := writeKubeconfig(t, cfg)
+	t.Setenv("KUBECONFIG", validKC)
+
+	mockOrc := &mockOrchestrator{}
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+	if _, err := executeCommand(JobCmd, "list", "-c", gkeCtx, "--skip-prereqs"); err != nil {
+		t.Fatalf("list -c %s with saved GKE defaults err = %v, want nil", gkeCtx, err)
+	}
+	if mockOrc.InitClusterName != gkeCtx || mockOrc.InitLocation != "us-central1" || mockOrc.InitProjectID != "my-proj" {
+		t.Fatalf("list -c %s init = (%q,%q,%q), want (%q, us-central1, my-proj)", gkeCtx, mockOrc.InitClusterName, mockOrc.InitLocation, mockOrc.InitProjectID, gkeCtx)
+	}
+
+	resetJobFlags()
+	corruptKC := filepath.Join(t.TempDir(), "corrupt-kubeconfig")
+	if err := os.WriteFile(corruptKC, []byte("clusters: [unclosed\n"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	t.Setenv("KUBECONFIG", validKC+string(os.PathListSeparator)+corruptKC)
+	if _, err := executeCommand(JobCmd, "list", "-c", "onprem-only", "--skip-prereqs"); err == nil || !strings.Contains(err.Error(), "failed to load kubeconfig") {
+		t.Fatalf("list with corrupt multi-file KUBECONFIG err = %v, want 'failed to load kubeconfig'", err)
+	}
+}
+
+func assertBothGKEAndBareProdPrefersGKEContext(t *testing.T) {
+	onPremSrv, gkeSrv, caPEM, caB64, onPremHits, gkeDeletes := newTestGKEAndOnPremServers(t)
+	setupSubmitTestEnv(t)
+	t.Setenv(shell.AirGappedEnvVar, "true")
+
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters["prod"] = &clientcmdapi.Cluster{Server: onPremSrv.URL, InsecureSkipTLSVerify: true}
+	cfg.AuthInfos["onprem-sa"] = &clientcmdapi.AuthInfo{Token: "onprem-jwt"}
+	cfg.Contexts["prod"] = &clientcmdapi.Context{Cluster: "prod", AuthInfo: "onprem-sa"}
+	const gkeCtx = "gke_my-proj_us-central1_prod"
+	cfg.Clusters[gkeCtx] = &clientcmdapi.Cluster{Server: gkeSrv.URL, CertificateAuthorityData: caPEM}
+	cfg.AuthInfos[gkeCtx] = &clientcmdapi.AuthInfo{Token: "gke-jwt"}
+	cfg.Contexts[gkeCtx] = &clientcmdapi.Context{Cluster: gkeCtx, AuthInfo: gkeCtx}
+	cfg.CurrentContext = "prod"
+	kcPath := writeKubeconfig(t, cfg)
+	t.Setenv("KUBECONFIG", kcPath)
+	stubGKECredsAndDescribeForProd(t, kcPath, gkeSrv.URL, caPEM, caB64)
+	if err := saveContext(Context{ProjectID: "my-proj", Location: "us-central1", ClusterName: "prod"}); err != nil {
+		t.Fatalf("saveContext: %v", err)
+	}
+
+	for _, args := range [][]string{
+		{"cancel", "myjob", "--skip-prereqs"},
+		{"cancel", "myjob", "-c", "prod", "--skip-prereqs"},
+	} {
+		resetJobFlags()
+		gkeOrchestratorFactory = nil
+		if _, err := executeCommand(JobCmd, args...); err != nil {
+			t.Fatalf("executeCommand(%v) err = %v, want nil", args, err)
+		}
+	}
+	if gkeDeletes.Load() != 2 || onPremHits.Load() != 0 {
+		t.Fatalf("both-contexts hits: gkeDeletes=%d onPremHits=%d, want (2, 0)", gkeDeletes.Load(), onPremHits.Load())
 	}
 }

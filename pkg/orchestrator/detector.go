@@ -80,7 +80,7 @@ func (d *Detector) Detect(clusterName, location, projectID string) (Detection, e
 
 	ctxName, _, resolvedCluster, ok := k8s.ResolveContext(cfg, clusterName)
 	if !ok {
-		return unresolvedDetection(TypeK8s, false, clusterName, cfg, loadErr, "no matching kubeconfig context found")
+		return unresolvedDetection(TypeK8s, false, clusterName, cfg, "no matching kubeconfig context found"), nil
 	}
 	return Detection{
 		Type:        TypeK8s,
@@ -105,7 +105,7 @@ func (d *Detector) detectFromOverride(target Type, clusterName, location, projec
 	reason := fmt.Sprintf("forced by %s=%s", EnvVar, target)
 	ctxName, resolvedCluster, resolved := resolveOverrideContext(cfg, target, clusterName, location, projectID, providers)
 	if !resolved {
-		return unresolvedDetection(target, true, clusterName, cfg, loadErr, reason)
+		return unresolvedDetection(target, true, clusterName, cfg, reason), nil
 	}
 	return Detection{
 		Type:        target,
@@ -127,10 +127,7 @@ func resolveOverrideContext(cfg *clientcmdapi.Config, target Type, clusterName, 
 	return ctxName, resolvedCluster, ok
 }
 
-func unresolvedDetection(target Type, forced bool, clusterName string, cfg *clientcmdapi.Config, loadErr error, reason string) (Detection, error) {
-	if target == TypeK8s && loadErr != nil {
-		return Detection{}, fmt.Errorf("failed to load kubeconfig: %w", loadErr)
-	}
+func unresolvedDetection(target Type, forced bool, clusterName string, cfg *clientcmdapi.Config, reason string) Detection {
 	var dangling string
 	if strings.TrimSpace(clusterName) == "" {
 		dangling = k8s.DanglingCurrentContext(cfg)
@@ -141,7 +138,7 @@ func unresolvedDetection(target Type, forced bool, clusterName string, cfg *clie
 		ClusterName:     clusterName,
 		DanglingContext: dangling,
 		Reason:          reason,
-	}, nil
+	}
 }
 
 func supportedOverrideTypes(providers []ProviderSpec) []Type {

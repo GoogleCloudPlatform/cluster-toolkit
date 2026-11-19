@@ -83,7 +83,7 @@ func TestFatal(t *testing.T) {
 }
 
 func TestCaptureForTesting_RaceSafe(t *testing.T) {
-	snapshot, restore := CaptureForTesting()
+	snapshot, restore := CaptureForTesting(t)
 	defer restore()
 
 	var wg sync.WaitGroup
@@ -107,4 +107,33 @@ func TestCaptureForTesting_RaceSafe(t *testing.T) {
 		t.Errorf("CaptureForTesting() errOut = %q, want warn-0 and err-0", errOut)
 	}
 	restore()
+}
+
+type fakeCleanupTB struct {
+	cleanups []func()
+}
+
+func (f *fakeCleanupTB) Cleanup(fn func()) {
+	f.cleanups = append(f.cleanups, fn)
+}
+
+func TestCaptureForTesting_CleanupAutoRestores(t *testing.T) {
+	tb := &fakeCleanupTB{}
+	snap1, _ := CaptureForTesting(tb)
+	Info("first-capture")
+	if info1, _ := snap1(); !strings.Contains(info1, "first-capture") {
+		t.Fatalf("first capture = %q, want first-capture", info1)
+	}
+	if len(tb.cleanups) != 1 {
+		t.Fatalf("registered cleanups = %d, want 1", len(tb.cleanups))
+	}
+	// Simulate test teardown without an explicit restore() call; subsequent CaptureForTesting must not deadlock.
+	tb.cleanups[0]()
+
+	snap2, restore2 := CaptureForTesting(t)
+	defer restore2()
+	Info("second-capture")
+	if info2, _ := snap2(); !strings.Contains(info2, "second-capture") {
+		t.Fatalf("second capture = %q, want second-capture", info2)
+	}
 }

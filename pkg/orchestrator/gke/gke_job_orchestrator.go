@@ -271,13 +271,13 @@ func (g *GKEOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions)
 	jsInfo = g.ensureJobSetInfo(foundNamespace, name, jsInfo)
 	livePods := podCount
 	podCount = max(podCount, jsInfo.expectedPods)
-	hintStreams := scaleExpectedStreams(livePods, streamCount, podCount, jsInfo.expectedStreams)
+	streamCount = scaleExpectedStreams(livePods, streamCount, podCount, jsInfo.expectedStreams)
 	if opts.MainOnly == nil && podCount > 5 {
-		g.logMainOnlyDefault(name, foundNamespace, opts, podCount, hintStreams)
+		g.logMainOnlyDefault(name, foundNamespace, opts, podCount, streamCount)
 	}
 	selector, mainOnly := g.resolveLogsSelector(name, opts.MainOnly, podCount, jsInfo.firstJob)
 	if podCount > maxLogRequests && !mainOnly {
-		return "", g.maxLogRequestsError(name, foundNamespace, opts, podCount, hintStreams)
+		return "", g.maxLogRequestsError(name, foundNamespace, opts, podCount, streamCount)
 	}
 
 	allContainers := !mainOnly

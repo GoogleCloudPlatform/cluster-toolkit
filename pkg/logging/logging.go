@@ -59,8 +59,9 @@ func (s *syncBuffer) String() string {
 	return s.buf.String()
 }
 
-// CaptureForTesting redirects Info and Warn/Error/Fatal logger writers to race-safe in-memory buffers until restore is called.
-func CaptureForTesting() (snapshot func() (infoOut, errOut string), restore func()) {
+// CaptureForTesting redirects Info and Warn/Error/Fatal logger writers to race-safe in-memory buffers until restore is called,
+// and registers restore with tb.Cleanup when tb is non-nil so early test failures never hold captureMu.
+func CaptureForTesting(tb interface{ Cleanup(func()) }) (snapshot func() (infoOut, errOut string), restore func()) {
 	captureMu.Lock()
 	prevInfo := infolog.Writer()
 	prevErr := errorlog.Writer()
@@ -72,16 +73,20 @@ func CaptureForTesting() (snapshot func() (infoOut, errOut string), restore func
 	fatallog.SetOutput(errBuf)
 
 	var once sync.Once
+	restore = func() {
+		once.Do(func() {
+			infolog.SetOutput(prevInfo)
+			errorlog.SetOutput(prevErr)
+			fatallog.SetOutput(prevFatal)
+			captureMu.Unlock()
+		})
+	}
+	if tb != nil {
+		tb.Cleanup(restore)
+	}
 	return func() (string, string) {
-			return infoBuf.String(), errBuf.String()
-		}, func() {
-			once.Do(func() {
-				infolog.SetOutput(prevInfo)
-				errorlog.SetOutput(prevErr)
-				fatallog.SetOutput(prevFatal)
-				captureMu.Unlock()
-			})
-		}
+		return infoBuf.String(), errBuf.String()
+	}, restore
 }
 
 func init() {

@@ -2020,7 +2020,7 @@ func assertHappyPathKueueReinstallOrder(t *testing.T) {
 			},
 		},
 	}
-	snapLogs, restoreLogs := logging.CaptureForTesting()
+	snapLogs, restoreLogs := logging.CaptureForTesting(t)
 	defer restoreLogs()
 	if err := orc.handleKueueReinstallation("v0.15.2", "incomplete"); err != nil {
 		t.Fatalf("handleKueueReinstallation(happy path) error = %v", err)

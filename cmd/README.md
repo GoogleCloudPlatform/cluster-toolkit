@@ -22,7 +22,7 @@ gcluster [SUBCOMMAND]
 * [`export-outputs`](#gcluster-export-outputs): Export outputs from deployment group
 * [`import-inputs`](#gcluster-import-inputs): Import input values from previous deployment groups
 * [`cluster`](#gcluster-cluster): Discover, list, and inspect target clusters and environments (`list`, `describe`, `info`, `volume`)
-* [`job`](#gcluster-job): Manage workloads on GKE clusters (`submit`, `list`, `logs`, `cancel`, `config`, `inspect`, `gke-template-extract`)
+* [`job`](#gcluster-job): Manage workloads on GKE and Kubernetes clusters (`submit`, `list`, `logs`, `cancel`, `config`, `inspect`, `gke-template-extract`)
 * [`telemetry`](#gcluster-telemetry): Enable or disable telemetry
 * [`completion`](#gcluster-completion): Generate completion script
 * [`help`](#gcluster-help): Display help information for any command

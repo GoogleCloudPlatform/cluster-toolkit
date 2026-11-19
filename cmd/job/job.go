@@ -64,6 +64,9 @@ Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic kubeconfig detection, or
 			logSavedDefaultsIfActive(orchestrator.TypeGKE, savedCluster, savedGKE)
 			return validateTypeGKEFlags(cmd.Name(), det, clusterName, location, projectID)
 		}
+		if err := validateExplicitClusterFlag(cmd, det); err != nil {
+			return err
+		}
 		reconcileTypeK8sFlags(cmd, det)
 		logSavedDefaultsIfActive(det.Type, savedCluster, savedGKE)
 
@@ -78,18 +81,69 @@ Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic kubeconfig detection, or
 
 func detectJobOrchestrator(cmd *cobra.Command, savedGKE bool) (orchestrator.Detection, error) {
 	d := &orchestrator.Detector{}
+	explicitGKEFlags := cmd.Flags().Changed("location") || cmd.Flags().Changed("project")
 	if strings.TrimSpace(os.Getenv(orchestrator.EnvVar)) == "" &&
 		cmd.Flags().Changed("cluster") && clusterName != "" &&
-		!cmd.Flags().Changed("location") && !cmd.Flags().Changed("project") && savedGKE {
-		det, err := d.Detect(clusterName, "", "")
-		if err != nil {
-			return orchestrator.Detection{}, err
-		}
-		if det.Type != orchestrator.TypeK8s || det.KubeContext != "" {
-			return det, nil
+		!explicitGKEFlags && savedGKE {
+		if det, ok, err := detectExplicitClusterWithSavedGKE(d); err != nil || ok {
+			return det, err
 		}
 	}
-	return d.Detect(clusterName, location, projectID)
+	det, err := d.Detect(clusterName, location, projectID)
+	if err != nil {
+		return orchestrator.Detection{}, err
+	}
+	return applyGKEFlagPrecedence(cmd, det, explicitGKEFlags, savedGKE), nil
+}
+
+func detectExplicitClusterWithSavedGKE(d *orchestrator.Detector) (orchestrator.Detection, bool, error) {
+	bareDet, err := d.Detect(clusterName, "", "")
+	if err != nil {
+		return orchestrator.Detection{}, false, err
+	}
+	if bareDet.Type != orchestrator.TypeK8s {
+		return bareDet, true, nil
+	}
+	if bareDet.KubeContext == "" {
+		return orchestrator.Detection{}, false, nil
+	}
+	fullDet, err := d.Detect(clusterName, location, projectID)
+	if err != nil {
+		return orchestrator.Detection{}, false, err
+	}
+	if fullDet.Type == orchestrator.TypeGKE && fullDet.KubeContext != "" && fullDet.KubeContext != bareDet.KubeContext {
+		return fullDet, true, nil
+	}
+	return bareDet, true, nil
+}
+
+func applyGKEFlagPrecedence(cmd *cobra.Command, det orchestrator.Detection, explicitGKEFlags, savedGKE bool) orchestrator.Detection {
+	if det.Forced || det.Type != orchestrator.TypeK8s || (!explicitGKEFlags && (cmd.Flags().Changed("cluster") || !savedGKE)) {
+		return det
+	}
+	reason := "GKE project/location configured"
+	if det.KubeContext != "" {
+		reason = fmt.Sprintf("GKE project/location configured (ignoring non-GKE kubeconfig context %q)", det.KubeContext)
+	}
+	return orchestrator.Detection{
+		Type:        orchestrator.TypeGKE,
+		KubeContext: det.KubeContext,
+		ClusterName: clusterName,
+		Reason:      reason,
+	}
+}
+
+func validateExplicitClusterFlag(cmd *cobra.Command, det orchestrator.Detection) error {
+	if !cmd.Flags().Changed("cluster") || clusterName != "" {
+		return nil
+	}
+	if cmd.Name() == SubmitCmd.Name() && det.Forced && det.Type == orchestrator.TypeK8s {
+		return orchestrator.UnsupportedK8sSubmitError()
+	}
+	if cmd.Name() == SubmitCmd.Name() || det.Type == orchestrator.TypeGKE {
+		return validateTypeGKEFlags(cmd.Name(), det, clusterName, location, projectID)
+	}
+	return fmt.Errorf("cluster name is required when --cluster is set; pass a non-empty value or omit --cluster to use kubeconfig current-context")
 }
 
 func isMissingClusterWithGKEFlags(det orchestrator.Detection) bool {

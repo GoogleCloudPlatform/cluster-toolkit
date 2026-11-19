@@ -1810,8 +1810,8 @@ func TestKubectlIn_RefusesEmptyContextAndPinsNonEmpty(t *testing.T) {
 		"kubectl --context pinned-ctx get pods":                                     {{ExitCode: 0, Stdout: "ok"}},
 		"kubectl --context exec-err-ctx get --raw /version --request-timeout=5s":    {{ExitCode: -1, Err: execErr}},
 		"kubectl --context hung-silent-ctx get --raw /version --request-timeout=5s": {{ExitCode: -1, Err: context.DeadlineExceeded}},
-		"kubectl --context hung-plugin-ctx get --raw /version --request-timeout=5s": {{ExitCode: -1, Stderr: "fetching token from STS...", Err: context.DeadlineExceeded}},
-		"kubectl --context hung-reauth-ctx get --raw /version --request-timeout=5s": {{ExitCode: -1, Stderr: "reauthentication prompt waiting on stdin", Err: context.DeadlineExceeded}},
+		"kubectl --context hung-plugin-ctx get --raw /version --request-timeout=5s": {{ExitCode: -1, Stderr: "fetching token from STS...\nwaiting on local callback port 8085", Err: context.DeadlineExceeded}},
+		"kubectl --context hung-reauth-ctx get --raw /version --request-timeout=5s": {{ExitCode: -1, Stderr: "plugin starting\nreauthentication prompt waiting on stdin", Err: context.DeadlineExceeded}},
 	})
 	orc := newTestGKEOrchestrator(exec)
 
@@ -1842,14 +1842,16 @@ func TestKubectlIn_RefusesEmptyContextAndPinsNonEmpty(t *testing.T) {
 
 func assertProbeContextTimeoutOutcomes(t *testing.T, orc *GKEOrchestrator) {
 	t.Helper()
-	if outcome, stderr := orc.probeContext("hung-silent-ctx"); outcome != probeConnectivity || !strings.Contains(stderr, "timed out") {
-		t.Fatalf("probeContext(hung-silent) = (%v, %q), want (probeConnectivity, timed out)", outcome, stderr)
+	if outcome, stderr := orc.probeContext("hung-silent-ctx"); outcome != probeConnectivity || !strings.HasPrefix(firstLine(stderr), "timed out after") {
+		t.Fatalf("probeContext(hung-silent) = (%v, %q), want (probeConnectivity, firstLine timed out after...)", outcome, stderr)
 	}
-	if outcome, stderr := orc.probeContext("hung-plugin-ctx"); outcome != probeConnectivity || !strings.Contains(stderr, "fetching token from STS...") || !strings.Contains(stderr, "timed out") {
-		t.Fatalf("probeContext(hung-plugin) = (%v, %q), want (probeConnectivity, plugin stderr + timed out)", outcome, stderr)
+	outcome, stderr := orc.probeContext("hung-plugin-ctx")
+	if outcome != probeConnectivity || !strings.HasPrefix(firstLine(stderr), "timed out after") || !strings.Contains(firstLine(stderr), "fetching token from STS...") {
+		t.Fatalf("probeContext(hung-plugin) = (%v, %q), want (probeConnectivity, firstLine prefixed with timed out after + plugin line 1)", outcome, stderr)
 	}
-	if outcome, _ := orc.probeContext("hung-reauth-ctx"); outcome != probeAuth {
-		t.Fatalf("probeContext(hung-reauth) = %v, want probeAuth", outcome)
+	outcome, stderr = orc.probeContext("hung-reauth-ctx")
+	if outcome != probeAuth || !strings.HasPrefix(firstLine(stderr), "timed out after") {
+		t.Fatalf("probeContext(hung-reauth) = (%v, %q), want (probeAuth, firstLine prefixed with timed out after)", outcome, stderr)
 	}
 }
 
@@ -2551,7 +2553,8 @@ func assertMainOnlyDefaultSixPodsAndGKEConsoleHints(t *testing.T) {
 	orc6.kubeContext = "k8s-ctx"
 	orc6.k8sCluster = "local-k8s"
 	orc6.kubeClient = &MockKubeClient{Namespace: "ml-ns"}
-	snap6, restore6 := logging.CaptureForTesting()
+	snap6, restore6 := logging.CaptureForTesting(t)
+	defer restore6()
 	_, err := orc6.GetJobLogs("six-pod-job", orchestrator.LogsOptions{ClusterName: "local-k8s"})
 	info6, _ := snap6()
 	restore6()
@@ -2570,7 +2573,8 @@ func assertMainOnlyDefaultSixPodsAndGKEConsoleHints(t *testing.T) {
 	orcGKE.clusterDesc = testClusterDesc(false, true)
 	orcGKE.kubeconfigLoader = staticLoader(kubeconfigWith("https://"+testPublicIP, []byte(testCAPEM), gkeExec(), testContext))
 	orcGKE.kubeClient = &MockKubeClient{Namespace: "ml-ns"}
-	snapGKE, restoreGKE := logging.CaptureForTesting()
+	snapGKE, restoreGKE := logging.CaptureForTesting(t)
+	defer restoreGKE()
 	_, err = orcGKE.GetJobLogs("eleven-pod-job", orchestrator.LogsOptions{
 		ClusterName:     testCluster,
 		ClusterLocation: testLocation,
@@ -2585,7 +2589,7 @@ func assertMainOnlyDefaultSixPodsAndGKEConsoleHints(t *testing.T) {
 
 func assertTypeK8sDefaultLogsInfoOutput(t *testing.T, orc *GKEOrchestrator, wantSnapCmd, wantFollowCmd string) {
 	t.Helper()
-	snapLogs, restoreLogs := logging.CaptureForTesting()
+	snapLogs, restoreLogs := logging.CaptureForTesting(t)
 	defer restoreLogs()
 	if _, err := orc.GetJobLogs("big-job", orchestrator.LogsOptions{ClusterName: "local-k8s"}); err != nil {
 		t.Fatalf("GetJobLogs(MainOnly=nil, Follow=false) error = %v", err)
@@ -2772,7 +2776,7 @@ func assertTypeK8sInspectProceedsOnForbiddenAndUnknownProbe(t *testing.T, cfg *c
 			orc.k8sCluster = "local-k8s"
 			outPath := filepath.Join(t.TempDir(), "inspect-ok.log")
 
-			snapLogs, restoreLogs := logging.CaptureForTesting()
+			snapLogs, restoreLogs := logging.CaptureForTesting(t)
 			defer restoreLogs()
 			if err := orc.InspectCluster(orchestrator.InspectOptions{ClusterName: "local-k8s", OutputPath: outPath}); err != nil {
 				t.Fatalf("InspectCluster(%s) error = %v, want nil", tc.name, err)

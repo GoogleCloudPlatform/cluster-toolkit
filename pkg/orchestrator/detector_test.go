@@ -340,6 +340,20 @@ func TestDetect_FourStepPrecedenceMatrix(t *testing.T) {
 			wantCluster: "connectgateway_my-proj_global_member-1",
 		},
 		{
+			name:        "renamed_connectgateway_global_host_with_gke_auth_plugin_stays_k8s",
+			cfg:         buildSingleContextConfig("fleet-alias", "fleet-clus", "https://connectgateway.googleapis.com/v1/projects/123/locations/global/memberships/member-1", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin"}}),
+			wantType:    orchestrator.TypeK8s,
+			wantContext: "fleet-alias",
+			wantCluster: "fleet-clus",
+		},
+		{
+			name:        "renamed_connectgateway_regional_host_with_gke_auth_plugin_stays_k8s",
+			cfg:         buildSingleContextConfig("fleet-regional-alias", "fleet-regional-clus", "https://us-west1-connectgateway.googleapis.com/v1/projects/123/locations/us-west1/memberships/member-1", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin"}}),
+			wantType:    orchestrator.TypeK8s,
+			wantContext: "fleet-regional-alias",
+			wantCluster: "fleet-regional-clus",
+		},
+		{
 			name: "gdce_edgecontainer_and_use_edge_cloud_stay_k8s",
 			cfg: buildSingleContextConfig("edge-alias", "edgecontainer_my-proj_us-central1_edge-1", "https://192.168.1.10:443", &clientcmdapi.AuthInfo{
 				Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin", Args: []string{"--use_edge_cloud"}},
@@ -347,6 +361,60 @@ func TestDetect_FourStepPrecedenceMatrix(t *testing.T) {
 			wantType:    orchestrator.TypeK8s,
 			wantContext: "edge-alias",
 			wantCluster: "edgecontainer_my-proj_us-central1_edge-1",
+		},
+		{
+			name: "renamed_gdce_bare_use_edge_cloud_flag_stays_k8s",
+			cfg: buildSingleContextConfig("gdce-alias", "gdce-clus", "https://192.168.1.10:443", &clientcmdapi.AuthInfo{
+				Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin", Args: []string{"--use_edge_cloud"}},
+			}),
+			wantType:    orchestrator.TypeK8s,
+			wantContext: "gdce-alias",
+			wantCluster: "gdce-clus",
+		},
+		{
+			name: "renamed_gdce_equals_true_use_edge_cloud_flag_stays_k8s",
+			cfg: buildSingleContextConfig("gdce-eq-alias", "gdce-eq-clus", "https://192.168.1.10:443", &clientcmdapi.AuthInfo{
+				Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin", Args: []string{"--use_edge_cloud=true"}},
+			}),
+			wantType:    orchestrator.TypeK8s,
+			wantContext: "gdce-eq-alias",
+			wantCluster: "gdce-eq-clus",
+		},
+		{
+			name: "renamed_gdce_single_dash_use_edge_cloud_flag_stays_k8s",
+			cfg: buildSingleContextConfig("gdce-dash-alias", "gdce-dash-clus", "https://192.168.1.10:443", &clientcmdapi.AuthInfo{
+				Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin", Args: []string{"-use_edge_cloud"}},
+			}),
+			wantType:    orchestrator.TypeK8s,
+			wantContext: "gdce-dash-alias",
+			wantCluster: "gdce-dash-clus",
+		},
+		{
+			name: "explicit_false_use_edge_cloud_flag_selects_standard_gke",
+			cfg: buildSingleContextConfig("std-gke-alias", "std-gke-clus", "https://34.118.224.10", &clientcmdapi.AuthInfo{
+				Exec: &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin", Args: []string{"--use_edge_cloud=false"}},
+			}),
+			wantType:         orchestrator.TypeGKE,
+			wantContext:      "std-gke-alias",
+			wantCluster:      "std-gke-clus",
+			wantReasonSubstr: "authenticates via gke-gcloud-auth-plugin",
+		},
+		{
+			name:        "eks_aws_exec_plugin_with_refresh_credentials_and_gke_flags_stays_k8s",
+			env:         map[string]string{"GCLUSTER_REFRESH_CREDENTIALS": "1"},
+			cfg:         buildSingleContextConfig("eks-prod", "arn:aws:eks:us-west-2:123:cluster/prod", "https://abc.gr7.us-west-2.eks.amazonaws.com", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: "aws"}}),
+			projectID:   "my-proj",
+			location:    "us-west-2",
+			wantType:    orchestrator.TypeK8s,
+			wantContext: "eks-prod",
+			wantCluster: "arn:aws:eks:us-west-2:123:cluster/prod",
+		},
+		{
+			name:        "aks_kubelogin_exec_plugin_with_four_part_gke_alias_stays_k8s",
+			cfg:         buildSingleContextConfig("gke_aws_prod_eks", "aks-clus", "https://aks-prod.hcp.eastus.azmk8s.io:443", &clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{Command: "kubelogin"}}),
+			wantType:    orchestrator.TypeK8s,
+			wantContext: "gke_aws_prod_eks",
+			wantCluster: "aks-clus",
 		},
 		{
 			name: "userless_kubectl_proxy_context_with_project_and_location_stays_k8s",
