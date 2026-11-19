@@ -401,6 +401,17 @@ select_lustre_zone() {
 	return 1
 }
 
+if [[ "${LUSTRE_ONLY:-false}" == "true" ]]; then
+	if [[ -z "${ZONE:-}" ]]; then
+		echo "ERROR: ZONE must be set when LUSTRE_ONLY=true." >&2
+		exit 1
+	fi
+	if [[ -z "${LUSTRE_OPTIONS_GCS_PATH:-}" ]]; then
+		echo "ERROR: LUSTRE_OPTIONS_GCS_PATH must be set when LUSTRE_ONLY=true." >&2
+		exit 1
+	fi
+fi
+
 SELECTED_ZONE=""
 SELECTED_LUSTRE_ZONE=""
 SUCCESS=false
@@ -428,14 +439,6 @@ if [[ "${CHECK_LUSTRE:-false}" == "true" || "${LUSTRE_ONLY:-false}" == "true" ]]
 fi
 
 if [[ "${LUSTRE_ONLY:-false}" == "true" ]]; then
-	if [[ -z "${ZONE:-}" ]]; then
-		echo "ERROR: ZONE must be set when LUSTRE_ONLY=true." >&2
-		exit 1
-	fi
-	if [[ -z "${LUSTRE_OPTIONS_GCS_PATH:-}" ]]; then
-		echo "ERROR: LUSTRE_OPTIONS_GCS_PATH must be set when LUSTRE_ONLY=true." >&2
-		exit 1
-	fi
 	REGION="${ZONE%-*}"
 	if select_lustre_zone "${REGION}" "${ZONE}"; then
 		SELECTED_ZONE="${ZONE}"

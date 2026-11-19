@@ -1059,6 +1059,21 @@ exit 0
         self.assertIn("OUT_ZONE=us-central1-c", res.stdout)
         self.assertIn("OUT_LUSTRE_ZONE=us-central1-c", res.stdout)
 
+    def test_lustre_only_mode_fails_fast_without_gcloud_calls(self):
+        """LUSTRE_ONLY=true validates ZONE and LUSTRE_OPTIONS_GCS_PATH before any gcloud call."""
+        call_log = os.path.join(self.test_dir, "gcloud_failfast.log")
+        with self.assertRaises(subprocess.CalledProcessError) as ctx:
+            self._run_find_available_zone_with_mock(
+                {
+                    "GCLOUD_CALL_LOG": call_log,
+                    "LUSTRE_ONLY": "true",
+                    "ZONE": "us-central1-c",
+                    "LUSTRE_OPTIONS_GCS_PATH": "",
+                }
+            )
+        self.assertIn("LUSTRE_OPTIONS_GCS_PATH must be set", ctx.exception.stderr)
+        self.assertFalse(os.path.exists(call_log))
+
     def test_submit_script_e2e_routes_lustre_exhaustion_without_excluding_compute_zone(self):
         """E2E: Lustre stockout adds LUSTRE_EXCLUDE_ZONES without adding EXCLUDE_ZONES."""
         attempt1_log = (
