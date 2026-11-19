@@ -27,6 +27,7 @@ import (
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"github.com/google/go-cmp/cmp"
@@ -76,6 +77,7 @@ func setupMockMachineConfig(t *testing.T) {
 	config.ClearMachineTypeCache()
 	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", mockJSON)
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	t.Setenv("GCLUSTER_LABEL_SCHEME", "")
 	t.Cleanup(config.ClearMachineTypeCache)
 }
 
@@ -5013,36 +5015,48 @@ func TestHasAPIGroupVersion(t *testing.T) {
 		mockExec.assertAllKubectlPinned(t, "k8s-ctx")
 	})
 
-	t.Run("404 NotFound returns false without error", func(t *testing.T) {
-		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
-			rawCmd: {{ExitCode: 1, Stderr: "Error from server (NotFound): the server could not find the requested resource"}},
-		})
-		orc := newTestGKEOrchestrator(mockExec)
-		orc.kubeContext = "generic-ctx"
+	t.Run("404 NotFound markers each return false without error", func(t *testing.T) {
+		for _, stderr := range []string{
+			"Error from server (NotFound): group missing",
+			"the server could not find the requested resource",
+			"404 page not found",
+		} {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+				rawCmd: {{ExitCode: 1, Stderr: stderr}},
+			})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.kubeContext = "generic-ctx"
 
-		ok, err := orc.HasAPIGroupVersion(testGroupVersion)
-		if err != nil || ok {
-			t.Fatalf("HasAPIGroupVersion = (%v, %v), want (false, nil)", ok, err)
+			ok, err := orc.HasAPIGroupVersion(testGroupVersion)
+			if err != nil || ok {
+				t.Errorf("stderr %q: HasAPIGroupVersion = (%v, %v), want (false, nil)", stderr, ok, err)
+			}
 		}
 	})
 
-	t.Run("non-404 errors including port 4040, missing kubectl, Forbidden, and empty-stderr fallbacks propagate", func(t *testing.T) {
+	t.Run("non-404 errors including port 4040, missing kubectl, Forbidden, stdout, and empty-output fallbacks propagate", func(t *testing.T) {
 		for _, tc := range []struct {
-			name string
-			res  shell.CommandResult
+			name          string
+			res           shell.CommandResult
+			wantErrSubstr string
 		}{
-			{name: "port 4040 connection refused", res: shell.CommandResult{ExitCode: 1, Stderr: "dial tcp 127.0.0.1:4040: connect: connection refused"}},
-			{name: "kubectl not in PATH", res: shell.CommandResult{ExitCode: 1, Err: errors.New(`exec: "kubectl": executable file not found in $PATH`)}},
-			{name: "RBAC Forbidden", res: shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): forbidden"}},
-			{name: "stdout error fallback", res: shell.CommandResult{ExitCode: 1, Stdout: "gateway 502 bad gateway"}},
-			{name: "empty output falls back to exit status", res: shell.CommandResult{ExitCode: 2}},
+			{name: "port 4040 connection refused", res: shell.CommandResult{ExitCode: 1, Stderr: "dial tcp 127.0.0.1:4040: connect: connection refused"}, wantErrSubstr: "connection refused"},
+			{name: "kubectl not in PATH", res: shell.CommandResult{ExitCode: 1, Err: errors.New(`exec: "kubectl": executable file not found in $PATH`)}, wantErrSubstr: "executable file not found"},
+			{name: "RBAC Forbidden", res: shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): forbidden"}, wantErrSubstr: "Forbidden"},
+			{name: "stdout error fallback", res: shell.CommandResult{ExitCode: 1, Stdout: "gateway 502 bad gateway"}, wantErrSubstr: "502 bad gateway"},
+			{name: "empty output falls back to exit status", res: shell.CommandResult{ExitCode: 2}, wantErrSubstr: "exit status 2"},
 		} {
 			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 				rawCmd: {tc.res},
 			})
 			orc := newTestGKEOrchestrator(mockExec)
-			if ok, err := orc.HasAPIGroupVersion(testGroupVersion); err == nil || ok || strings.HasSuffix(err.Error(), ": ") {
-				t.Errorf("%s: expected informative error from HasAPIGroupVersion, got (%v, %v)", tc.name, ok, err)
+			ok, err := orc.HasAPIGroupVersion(testGroupVersion)
+			if err == nil || ok {
+				t.Errorf("%s: expected error from HasAPIGroupVersion, got (%v, %v)", tc.name, ok, err)
+				continue
+			}
+			if !strings.Contains(err.Error(), tc.wantErrSubstr) || strings.HasSuffix(err.Error(), ": ") {
+				t.Errorf("%s: err = %q, want substring %q without empty trailing suffix", tc.name, err.Error(), tc.wantErrSubstr)
 			}
 		}
 		orcBlank := newTestGKEOrchestrator(NewMockExecutor(nil))
@@ -5050,4 +5064,131 @@ func TestHasAPIGroupVersion(t *testing.T) {
 			t.Fatalf("blank HasAPIGroupVersion = (%v, %v), want (false, nil)", ok, err)
 		}
 	})
+}
+
+func TestDiscoverK8sInventory_NodeConstraintInvariant(t *testing.T) {
+	t.Setenv(shell.AirGappedEnvVar, "")
+	t.Setenv(k8s.LabelSchemeEnvVar, "")
+	shell.SetDefaultAirGapped(false)
+	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
+
+	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("forbidden"))
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get --raw /apis/slice.tpu.google.com/v1alpha1 --request-timeout=10s": {{ExitCode: 1, Stderr: "Error from server (NotFound): 404 page not found"}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.kubeContext = "generic-ctx"
+	orc.kubeClient = &MockKubeClient{
+		ListErrs: map[string]error{"nodes": forbidden},
+	}
+
+	// Passing a job whose --node-constraint carries tpu.google.com/* and --compute-type is tpu7x
+	// must never influence LabelScheme discovery.
+	job := orchestrator.JobDefinition{
+		ComputeType:    "tpu7x",
+		NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "some-slice"},
+	}
+	sm := &StorageManager{orchestrator: orc}
+	if err := orc.validateSubmitLocalPreflight(sm, job); err != nil {
+		t.Fatalf("validateSubmitLocalPreflight failed: %v", err)
+	}
+	inv, err := orc.DiscoverK8sInventory("")
+	if err != nil {
+		t.Fatalf("DiscoverK8sInventory failed: %v", err)
+	}
+	if !inv.ExplicitMode || inv.LabelScheme != k8s.SchemeGeneric {
+		t.Fatalf("got ExplicitMode=%v LabelScheme=%q, want (true, generic)", inv.ExplicitMode, inv.LabelScheme)
+	}
+	if orc.Inventory() != inv {
+		t.Errorf("Inventory() did not return cached inventory")
+	}
+}
+
+func TestDiscoverK8sInventory_TPUSliceAirGapAndCacheInvalidation(t *testing.T) {
+	t.Setenv(shell.AirGappedEnvVar, "")
+	t.Setenv(k8s.LabelSchemeEnvVar, "")
+	shell.SetDefaultAirGapped(false)
+	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
+
+	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("forbidden"))
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get --raw /apis/slice.tpu.google.com/v1alpha1 --request-timeout=10s": {{ExitCode: 0, Stdout: "{}"}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.kubeContext = "tpu-slice-ctx"
+	orc.kubeClient = &MockKubeClient{
+		ListErrs: map[string]error{
+			"nodes":          forbidden,
+			"slices":         forbidden,
+			"partitiontrees": forbidden,
+		},
+	}
+
+	inv, err := orc.DiscoverK8sInventory("")
+	if err != nil {
+		t.Fatalf("DiscoverK8sInventory failed: %v", err)
+	}
+	if !inv.ExplicitMode || inv.LabelScheme != k8s.SchemeTPUSlice || !shell.IsKnownAirGapped() {
+		t.Fatalf("got ExplicitMode=%v LabelScheme=%q airgap=%v, want (true, tpu-slice, true)", inv.ExplicitMode, inv.LabelScheme, shell.IsKnownAirGapped())
+	}
+
+	// Explicit GCLUSTER_AIR_GAPPED=false overrides the process default set above.
+	t.Setenv(shell.AirGappedEnvVar, "false")
+	if shell.IsKnownAirGapped() {
+		t.Errorf("expected GCLUSTER_AIR_GAPPED=false to override default air-gapped state")
+	}
+
+	// Env override and flag-over-env precedence work through DiscoverK8sInventory.
+	t.Setenv(k8s.LabelSchemeEnvVar, "gke")
+	invEnv, err := orc.DiscoverK8sInventory("")
+	if err != nil || invEnv.LabelScheme != k8s.SchemeGKE {
+		t.Fatalf("expected GCLUSTER_LABEL_SCHEME=gke override, got (%+v, %v)", invEnv, err)
+	}
+	invFlag, err := orc.DiscoverK8sInventory("generic")
+	if err != nil || invFlag.LabelScheme != k8s.SchemeGeneric {
+		t.Fatalf("expected flag override generic over env gke, got (%+v, %v)", invFlag, err)
+	}
+
+	// configureKubectl clears stale cached inventory.
+	orc.kubeconfigLoader = func() (*clientcmdapi.Config, error) {
+		return nil, errors.New("broken kubeconfig")
+	}
+	_ = orc.configureKubectl("c", "us-central1", "p")
+	if orc.Inventory() != nil {
+		t.Errorf("expected configureKubectl to reset stale orc.inventory")
+	}
+}
+
+func TestDiscoverK8sInventory_ErrorPropagation(t *testing.T) {
+	t.Setenv(k8s.LabelSchemeEnvVar, "")
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeGeneric}
+	if _, err := orc.DiscoverK8sInventory("invalid"); err == nil || !strings.Contains(err.Error(), "invalid --k8s-label-scheme") {
+		t.Errorf("expected invalid --k8s-label-scheme error, got: %v", err)
+	}
+	if orc.Inventory() != nil {
+		t.Errorf("expected failed DiscoverK8sInventory to clear stale cached inventory")
+	}
+
+	orcNoClient := NewGKEOrchestrator()
+	if _, err := orcNoClient.DiscoverK8sInventory(""); err == nil || !strings.Contains(err.Error(), "not initialized") {
+		t.Errorf("expected uninitialized client error, got: %v", err)
+	}
+
+	// Pinned kubeContext with broken kubeconfig propagates the underlying getDynamicClient error.
+	orcBrokenKube := NewGKEOrchestrator()
+	orcBrokenKube.kubeContext = "broken-ctx"
+	orcBrokenKube.kubeconfigLoader = func() (*clientcmdapi.Config, error) {
+		return nil, errors.New("unreadable kubeconfig")
+	}
+	if _, err := orcBrokenKube.DiscoverK8sInventory(""); err == nil || !strings.Contains(err.Error(), "unreadable kubeconfig") {
+		t.Errorf("expected wrapped getDynamicClient error, got: %v", err)
+	}
+
+	orc.kubeClient = &MockKubeClient{
+		ListErrs: map[string]error{"nodes": errors.New("dial tcp: connection refused")},
+	}
+	if _, err := orc.DiscoverK8sInventory(""); err == nil || !strings.Contains(err.Error(), "connection refused") {
+		t.Errorf("expected non-403 list error to propagate, got: %v", err)
+	}
 }
