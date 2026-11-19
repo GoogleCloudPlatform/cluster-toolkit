@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
 )
@@ -208,6 +209,124 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 		c.Check(checkOverwriteAllowed(p, bp, yesW, noForce), ErrorMatches, `.*remove a deployment group "isildur".*`)
 		c.Check(checkOverwriteAllowed(p, bp, noW, yesForce), IsNil)
 	}
+}
+
+// writePrevDeployment writes an expanded blueprint for deployment "name" under
+// outDir, with the given global labels.
+func writePrevDeployment(c *C, outDir, name string, labels map[string]cty.Value) {
+	artDir := modulewriter.ArtifactsDir(filepath.Join(outDir, name))
+	c.Assert(os.MkdirAll(artDir, 0755), IsNil)
+	vars := config.Dict{}.With("deployment_name", cty.StringVal(name))
+	if labels != nil {
+		vars = vars.With("labels", cty.ObjectVal(labels))
+	}
+	prev := config.Blueprint{BlueprintName: "bp", Vars: vars}
+	c.Assert(prev.Export(filepath.Join(artDir, modulewriter.ExpandedBlueprintName)), IsNil)
+}
+
+func newCreatorLabelTestCmd() *cobra.Command {
+	return addExpandFlags(&cobra.Command{Use: "create"}, false)
+}
+
+func (s *MySuite) TestPreviousCreatorLabel(c *C) {
+	out := c.MkDir()
+	bp := func(name string) config.Blueprint {
+		return config.Blueprint{Vars: config.Dict{}.With("deployment_name", cty.StringVal(name))}
+	}
+
+	// No previous deployment.
+	_, ok := previousCreatorLabel(out, bp("absent"))
+	c.Check(ok, Equals, false)
+
+	// Previous deployment with ghpc_creator.
+	writePrevDeployment(c, out, "with", map[string]cty.Value{
+		"ghpc_blueprint": cty.StringVal("bp"),
+		"ghpc_creator":   cty.StringVal("jdoe_google_com"),
+	})
+	creator, ok := previousCreatorLabel(out, bp("with"))
+	c.Check(ok, Equals, true)
+	c.Check(creator, Equals, "jdoe_google_com")
+
+	// Previous deployment without ghpc_creator.
+	writePrevDeployment(c, out, "without", map[string]cty.Value{
+		"ghpc_blueprint": cty.StringVal("bp"),
+	})
+	creator, ok = previousCreatorLabel(out, bp("without"))
+	c.Check(ok, Equals, true)
+	c.Check(creator, Equals, "")
+
+	// Previous deployment without any labels is treated as unknown.
+	writePrevDeployment(c, out, "nolabels", nil)
+	_, ok = previousCreatorLabel(out, bp("nolabels"))
+	c.Check(ok, Equals, false)
+
+	// Missing deployment_name.
+	_, ok = previousCreatorLabel(out, config.Blueprint{})
+	c.Check(ok, Equals, false)
+}
+
+func (s *MySuite) TestSetCreatorLabel(c *C) {
+	out := c.MkDir()
+	oldOut := createFlags.outputDir
+	createFlags.outputDir = out
+	defer func() { createFlags.outputDir = oldOut }()
+
+	oldAccount, hadAccount := os.LookupEnv("CLOUDSDK_CORE_ACCOUNT")
+	c.Assert(os.Setenv("CLOUDSDK_CORE_ACCOUNT", "new@google.com"), IsNil)
+	defer func() {
+		if hadAccount {
+			os.Setenv("CLOUDSDK_CORE_ACCOUNT", oldAccount)
+		} else {
+			os.Unsetenv("CLOUDSDK_CORE_ACCOUNT")
+		}
+	}()
+
+	writePrevDeployment(c, out, "with", map[string]cty.Value{"ghpc_creator": cty.StringVal("old_google_com")})
+	writePrevDeployment(c, out, "without", map[string]cty.Value{"ghpc_blueprint": cty.StringVal("bp")})
+
+	bp := func(name string) config.Blueprint {
+		return config.Blueprint{Vars: config.Dict{}.With("deployment_name", cty.StringVal(name))}
+	}
+
+	{ // New deployment: detect the active account.
+		b := bp("fresh")
+		setCreatorLabel(newCreatorLabelTestCmd(), &b)
+		c.Check(b.AddCreatorLabel, Equals, true)
+		c.Check(b.CreatorUsername, Equals, "new@google.com")
+	}
+	{ // Existing deployment with ghpc_creator: keep the recorded creator.
+		b := bp("with")
+		setCreatorLabel(newCreatorLabelTestCmd(), &b)
+		c.Check(b.AddCreatorLabel, Equals, true)
+		c.Check(b.CreatorUsername, Equals, "old_google_com")
+	}
+	{ // Existing deployment without ghpc_creator: keep it absent.
+		b := bp("without")
+		setCreatorLabel(newCreatorLabelTestCmd(), &b)
+		c.Check(b.AddCreatorLabel, Equals, false)
+	}
+	{ // An explicit flag behaves as before: false drops the label.
+		b := bp("with")
+		cmd := newCreatorLabelTestCmd()
+		c.Assert(cmd.Flags().Set("add-creator-label", "false"), IsNil)
+		setCreatorLabel(cmd, &b)
+		c.Check(b.AddCreatorLabel, Equals, false)
+	}
+	{ // An explicit flag behaves as before: true detects the active account.
+		b := bp("without")
+		cmd := newCreatorLabelTestCmd()
+		c.Assert(cmd.Flags().Set("add-creator-label", "true"), IsNil)
+		setCreatorLabel(cmd, &b)
+		c.Check(b.AddCreatorLabel, Equals, true)
+		c.Check(b.CreatorUsername, Equals, "new@google.com")
+	}
+	{ // New deployment with a non-@google.com account: no label.
+		c.Assert(os.Setenv("CLOUDSDK_CORE_ACCOUNT", "someone@example.com"), IsNil)
+		b := bp("fresh")
+		setCreatorLabel(newCreatorLabelTestCmd(), &b)
+		c.Check(b.AddCreatorLabel, Equals, false)
+	}
+	expandFlags.addCreatorLabel = false
 }
 
 func (s *MySuite) TestVerifyGcsBucketsEmptyBucket(c *C) {
