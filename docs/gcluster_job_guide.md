@@ -352,7 +352,7 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
     ./gcluster job inspect --name my-python-app-job --show
     ```
 
-    The tool will create a timestamped log file `gcluster-inspect-<cluster>-<timestamp>.log` in your current working directory containing:
+    The tool will create a timestamped log file `gcluster-inspect-<cluster>-<timestamp>.log` in your current working directory (falling back to `~/.gcluster/logs/` or the system temporary directory if the current directory is not writable) containing:
 
   * **Local Setup**: Gcloud version and active configuration.
   * **GKE Infra**: GKE cluster descriptions, node-pool listings, and metadata/resources ConfigMaps.
@@ -361,6 +361,8 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
   * **Slice Controller**: Slice controller deployment details and manager logs (if GKE Kueue dynamic slicing is active).
   * **Workloads**: Overview of all workloads in the cluster, and specific JobSet/Workload descriptors if a name is targeted.
   * **Console Links**: Direct links to GKE clusters, GKE workloads, IAM permissions, and Quota administration consoles.
+
+    If the cluster does not serve the `kueue.x-k8s.io` API group, the report skips the Kueue, Slice Controller, and Kueue workload sections and lists JobSets (`kubectl get jobsets`) instead.
 
     When `--name` is a Shared Pathways Service (SPS) instance, the report starts with a short summary of the instance. To collect only that summary into `gcluster-inspect-<cluster>-<timestamp>-sps.log` (or a custom `--output` file), pass `--filter=pathways-sps` (add `--show` / `-s` to also print it to the terminal):
 
@@ -1433,7 +1435,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `--name` | `string` | Specific workload name to inspect. |
+| `-n, --name` | `string` | Specific workload name to inspect. |
 | `-o, --output` | `string` | Custom path/filename to write logs to. |
 | `-s, --show` | `flag` | Print output to terminal in addition to file. |
 | `--filter` | `string` | Filter inspect output to a specific component (allowed values: `pathways-sps`; requires `--name`). Writes to `gcluster-inspect-<cluster>-<timestamp>-sps.log` by default. |
