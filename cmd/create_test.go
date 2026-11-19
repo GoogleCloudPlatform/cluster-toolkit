@@ -265,6 +265,49 @@ func (s *MySuite) TestPreviousCreatorLabel(c *C) {
 	c.Check(ok, Equals, false)
 }
 
+// writeExpandedPrevDeployment expands a blueprint that sets its own vars.labels
+// (so the expanded blueprint stores labels as a merge(...) expression) and
+// writes it as the previous deployment "name" under outDir.
+func writeExpandedPrevDeployment(c *C, outDir, name, creator string) {
+	prev := config.Blueprint{
+		BlueprintName:   "bp",
+		AddCreatorLabel: creator != "",
+		CreatorUsername: creator,
+		Vars: config.Dict{}.
+			With("deployment_name", cty.StringVal(name)).
+			With("labels", cty.ObjectVal(map[string]cty.Value{"team": cty.StringVal("hpc")})),
+	}
+	c.Assert(prev.Expand(), IsNil)
+
+	artDir := modulewriter.ArtifactsDir(filepath.Join(outDir, name))
+	c.Assert(os.MkdirAll(artDir, 0755), IsNil)
+	expPath := filepath.Join(artDir, modulewriter.ExpandedBlueprintName)
+	c.Assert(prev.Export(expPath), IsNil)
+
+	raw, err := os.ReadFile(expPath)
+	c.Assert(err, IsNil)
+	c.Assert(string(raw), Matches, `(?s).*merge\(.*`) // labels are stored as an expression
+}
+
+func (s *MySuite) TestPreviousCreatorLabel_UserLabels(c *C) {
+	out := c.MkDir()
+	bp := func(name string) config.Blueprint {
+		return config.Blueprint{Vars: config.Dict{}.With("deployment_name", cty.StringVal(name))}
+	}
+
+	// Previous deployment with user labels and ghpc_creator.
+	writeExpandedPrevDeployment(c, out, "with", "alice@google.com")
+	creator, ok := previousCreatorLabel(out, bp("with"))
+	c.Check(ok, Equals, true)
+	c.Check(creator, Equals, "alice_google_com")
+
+	// Previous deployment with user labels and no ghpc_creator.
+	writeExpandedPrevDeployment(c, out, "without", "")
+	creator, ok = previousCreatorLabel(out, bp("without"))
+	c.Check(ok, Equals, true)
+	c.Check(creator, Equals, "")
+}
+
 func (s *MySuite) TestSetCreatorLabel(c *C) {
 	out := c.MkDir()
 	oldOut := createFlags.outputDir

@@ -240,7 +240,14 @@ func previousCreatorLabel(outputDir string, bp config.Blueprint) (string, bool) 
 		return "", false
 	}
 
-	labels := prev.Vars.Get("labels")
+	// When the blueprint or deployment file sets its own vars.labels, the
+	// expanded blueprint stores labels as a merge(...) expression rather than
+	// a plain map, so evaluate it instead of reading the raw value.
+	labels, err := prev.Eval(config.GlobalRef("labels").AsValue())
+	if err != nil {
+		return "", false
+	}
+	labels, _ = labels.Unmark()
 	if labels.IsNull() || !labels.IsKnown() || !labels.CanIterateElements() {
 		return "", false
 	}
