@@ -263,6 +263,34 @@ func (s *MySuite) TestPreviousCreatorLabel(c *C) {
 	// Missing deployment_name.
 	_, ok = previousCreatorLabel(out, config.Blueprint{})
 	c.Check(ok, Equals, false)
+
+	// Unreadable previous expanded blueprint is treated as unknown.
+	badArt := modulewriter.ArtifactsDir(filepath.Join(out, "malformed"))
+	c.Assert(os.MkdirAll(badArt, 0755), IsNil)
+	c.Assert(os.WriteFile(filepath.Join(badArt, modulewriter.ExpandedBlueprintName), []byte("humus"), 0644), IsNil)
+	_, ok = previousCreatorLabel(out, bp("malformed"))
+	c.Check(ok, Equals, false)
+
+	// Labels that are not a map are treated as unknown.
+	writePrevDeploymentVars(c, out, "scalarlabels", cty.StringVal("not-a-map"))
+	_, ok = previousCreatorLabel(out, bp("scalarlabels"))
+	c.Check(ok, Equals, false)
+
+	// A non-string ghpc_creator is treated as unknown.
+	writePrevDeployment(c, out, "numcreator", map[string]cty.Value{"ghpc_creator": cty.NumberIntVal(7)})
+	_, ok = previousCreatorLabel(out, bp("numcreator"))
+	c.Check(ok, Equals, false)
+}
+
+// writePrevDeploymentVars writes an expanded blueprint for deployment "name"
+// under outDir with an arbitrary vars.labels value.
+func writePrevDeploymentVars(c *C, outDir, name string, labels cty.Value) {
+	artDir := modulewriter.ArtifactsDir(filepath.Join(outDir, name))
+	c.Assert(os.MkdirAll(artDir, 0755), IsNil)
+	prev := config.Blueprint{BlueprintName: "bp", Vars: config.Dict{}.
+		With("deployment_name", cty.StringVal(name)).
+		With("labels", labels)}
+	c.Assert(prev.Export(filepath.Join(artDir, modulewriter.ExpandedBlueprintName)), IsNil)
 }
 
 // writeExpandedPrevDeployment expands a blueprint that sets its own vars.labels
