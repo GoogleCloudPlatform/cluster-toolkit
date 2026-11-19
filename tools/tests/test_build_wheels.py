@@ -15,9 +15,11 @@
 """Unit tests for tools/build_wheels.py."""
 
 import base64
+import contextlib
 import csv
 import email.parser
 import hashlib
+import io
 import os
 import platform
 import struct
@@ -86,10 +88,10 @@ def _pe(signed):
     return bytes(data)
 
 
-def fake_binary(path, platform_name, signed=True, **build_info):
+def fake_binary(path, platform_name, signed=True, minos=(12, 0), **build_info):
     """Writes a fake gcluster binary for a platform, with Go build info."""
     goos, goarch = platform_name.split("_", 1)
-    head = {"darwin": _macho(), "windows": _pe(signed)}.get(goos, b"\x7fELF" + b"\0" * 12)
+    head = {"darwin": _macho(minos), "windows": _pe(signed)}.get(goos, b"\x7fELF" + b"\0" * 12)
     _write(path, head + b"\0" * 16 + _build_info(goos, goarch, **build_info))
     return path
 
@@ -294,7 +296,8 @@ class TestBuildWheel(_FakeRepo):
             self.assertIn(f"{WHEEL_NAME}-1.107.0.dist-info/{f}", names)
 
     def test_entries_are_marked_unix(self):
-        with zipfile.ZipFile(self.build()) as z:
+        # zipfile marks entries as made on Windows when it runs there.
+        with mock.patch.object(sys, "platform", "win32"), zipfile.ZipFile(self.build()) as z:
             self.assertEqual({i.create_system for i in z.infolist()}, {3})
 
     def _example_modes(self):
@@ -349,6 +352,11 @@ class TestBuildWheel(_FakeRepo):
         self.assertTrue(path.endswith("-py3-none-macosx_12_0_x86_64.whl"), path)
         path = self.build("darwin_amd64", macos_min=(14, 0))
         self.assertTrue(path.endswith("-py3-none-macosx_14_0_x86_64.whl"), path)
+
+    def test_macos_tag_follows_a_newer_binary_minimum(self):
+        binary = self.binary_for("darwin_amd64", minos=(13, 0))
+        path = bw.build_wheel(NAME, "1.107.0", "darwin_amd64", binary, self.out, self.root)
+        self.assertTrue(path.endswith("-py3-none-macosx_13_0_x86_64.whl"), path)
 
     def test_record_hashes_match_contents(self):
         _write(os.path.join(self.root, "examples", "a,b.yaml"), "x: 1\n")
@@ -461,6 +469,10 @@ class TestMain(_FakeRepo):
         _write(os.path.join(self.root, "examples", "hpc-slurm.yaml"), "changed: true\n")
         self.assertEqual(self.run_main(self.bin("linux_amd64")), 1)
 
+    def test_uncommitted_license_change_is_an_error(self):
+        _write(os.path.join(self.root, "LICENSE"), "changed\n")
+        self.assertEqual(self.run_main(self.bin("linux_amd64")), 1)
+
     def test_repo_root_must_be_a_git_checkout(self):
         subprocess.run(["rm", "-rf", os.path.join(self.root, ".git")], check=True)
         self.assertEqual(self.run_main(self.bin("linux_amd64")), 1)
@@ -498,9 +510,15 @@ class TestMain(_FakeRepo):
         for top in bw.EXAMPLE_DIRS:
             _write(os.path.join(nested, top, "x.yaml"), "x: 1\n")
         _write(os.path.join(nested, "LICENSE"), "Apache License 2.0\n")
+        git(self.root, "add", "-A")
+        git(self.root, "commit", "-q", "-m", "nested")
         args = ["--name", NAME, "--version", "1.107.0", "--out", self.out,
                 "--repo-root", nested, "--binary", self.bin("linux_amd64")]
-        self.assertEqual(bw.main(args), 1)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(bw.main(args), 1)
+        self.assertIn("must be the top level", err.getvalue())
+        self.assertEqual(bw.main(args + ["--skip-version-check"]), 0)
 
     def test_rejects_bad_input(self):
         for spec in ["linux_amd64", "plan9_amd64=" + self.binary]:

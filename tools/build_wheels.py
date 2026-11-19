@@ -501,8 +501,8 @@ def main(argv=None):
             if not head:
                 raise ValueError(f"cannot read the current commit of {args.repo_root}")
             commit = head.decode().strip()
-            if _git(args.repo_root, "status", "--porcelain", "--", *EXAMPLE_DIRS):
-                raise ValueError("examples have uncommitted changes in --repo-root")
+            if _git(args.repo_root, "status", "--porcelain", "--", *EXAMPLE_DIRS, "LICENSE"):
+                raise ValueError("examples or LICENSE have uncommitted changes in --repo-root")
         specs = []
         for spec in args.binary:
             platform, sep, binary = spec.partition("=")
