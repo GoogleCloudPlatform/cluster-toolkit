@@ -62,7 +62,7 @@ steps:
       PRIORITY_LINE=""
     fi
 
-    SA_UNIQUE_ID=$(gcloud iam service-accounts describe "$$SA_EMAIL" --project="$PROJECT_ID" --format="value(uniqueId)")
+    SA_UNIQUE_ID=$$(gcloud iam service-accounts describe "$$SA_EMAIL" --project="$PROJECT_ID" --format="value(uniqueId)")
     OSLOGIN_USER="sa_$${SA_UNIQUE_ID}"
 
     cat <<INNEREOF > job.yaml
@@ -104,11 +104,13 @@ steps:
             - name: TPU_RUNTIME_VERSION
               value: "v2-alpha-tpuv6e"
             - name: ACCELERATOR_TYPE
-              value: "v6e-16"
+              value: "v6e-4"
             - name: PROJECT_ID
               value: "$PROJECT_ID"
             - name: NUM_NODES
-              value: "2"
+              value: "1"
+            - name: MIN_NODES
+              value: "1"
             - name: INSTANCE_PREFIX
               value: "v6esp"
             - name: BUILD_ID
@@ -117,6 +119,12 @@ steps:
               value: "gs://$${OPTIONS_BUCKET}/tpuv6eoptions.txt"
             - name: ENABLE_SPOT_FALLBACK
               value: "true"
+            - name: REQUIRED_CPU_QUOTA
+              value: "26"
+            - name: CPU_QUOTA_METRIC
+              value: "N2D_CPUS"
+            - name: EXCLUDE_ZONES
+              value: "us-east1-d us-west4-a"
             - name: GCLUSTER_GCS_PATH
               value: "$$GCLUSTER_GCS_PATH"
             - name: CHS_REPO
@@ -169,8 +177,8 @@ steps:
               echo '      machine_type: n2d-standard-2'                                             >> \$$EXAMPLE_BP
               echo '      name_prefix: remote-node'                                                 >> \$$EXAMPLE_BP
               echo '      add_deployment_name_before_prefix: true'                                  >> \$$EXAMPLE_BP
-              echo '      spot: $(null)'                                                            >> \$$EXAMPLE_BP
-              echo ''
+              echo '      spot: \$(null)'                                                           >> \$$EXAMPLE_BP
+              echo ''                                                                               >> \$$EXAMPLE_BP
               echo '  - id: job_template_hostname'                                                   >> \$$EXAMPLE_BP
               echo '    source: modules/compute/gke-job-template'                                    >> \$$EXAMPLE_BP
               echo '    use: [gke-tpu-v6e-pool]'                                                      >> \$$EXAMPLE_BP
