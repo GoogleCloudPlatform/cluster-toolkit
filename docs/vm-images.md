@@ -234,6 +234,9 @@ startup-scripts.
 
 ## Slurm on GCP
 
+To update VM images on a running Slurm cluster or hold a cluster on a specific
+image, see the [Slurm Image Upgrade Guide](slurm-image-upgrade.md).
+
 ### Publicly Published Slurm Images
 
 SchedMD publishes "Slurm on GCP" public images, which are documented
