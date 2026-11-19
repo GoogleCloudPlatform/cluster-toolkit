@@ -102,15 +102,15 @@ steps:
             - name: REQUIRED_LUSTRE_GB
               value: "18000"
             - name: MACHINE_TYPE
-              value: "n2d-standard-4"
+              value: "c3-standard-88"
             - name: NUM_NODES
-              value: "2"
+              value: "1"
             - name: MIN_NODES
-              value: "2"
+              value: "1"
             - name: INSTANCE_PREFIX
               value: "gkehd"
             - name: OPTIONS_GCS_PATH
-              value: "gs://hpc-ctk1357/lustreoptions.txt"
+              value: "gs://hpc-ctk1357/c3options.txt"
             - name: ENABLE_SPOT_FALLBACK
               value: "true"
             - name: GCLUSTER_GCS_PATH
