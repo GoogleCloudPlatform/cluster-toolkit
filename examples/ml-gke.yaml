@@ -26,6 +26,8 @@ vars:
   authorized_cidr:  # <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
   # Optional overrides (defaults shown)
+  # Machine type for the GKE system node pool.
+  system_node_pool_machine_type: n2d-standard-4
   # Machine type for the GPU compute node pool.
   compute_machine_type: g2-standard-4
   # Fixed number of nodes in the compute node pool (autoscaling disabled).
@@ -76,6 +78,8 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network1, workload_service_account]
     settings:
+      system_node_pool_machine_type: $(vars.system_node_pool_machine_type)
+      system_node_pool_zones: $(vars.zones)
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
       master_authorized_networks:

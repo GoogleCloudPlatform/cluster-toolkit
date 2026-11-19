@@ -140,6 +140,13 @@ check_vm_capacity() {
 		--min-count="${MIN_NODES}"
 	)
 
+	if [[ "${MACHINE_TYPE}" =~ ^(t2a|c4a)- ]]; then
+			gcloud_cmd+=(--image-family="debian-12-arm64" --image-project="debian-cloud")
+	elif [[ -n "${IMAGE_FAMILY:-}" && -n "${IMAGE_PROJECT:-}" ]]; then
+			# (Optional) Fallback to use environment variables if provided
+			gcloud_cmd+=(--image-family="${IMAGE_FAMILY}" --image-project="${IMAGE_PROJECT}")
+	fi
+
 	if [[ "${provisioning_model}" == "SPOT" ]]; then
 		gcloud_cmd+=(--instance-termination-action="${TERMINATION_ACTION}")
 	else
@@ -525,17 +532,6 @@ for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
 			fi
 			if ! check_lustre_quota "${ZONE}"; then
 				echo "INFO: Skipping ${ZONE} - Lustre quota check failed in zone ${ZONE}."
-				continue
-			fi
-		fi
-
-		if [[ "${CHECK_NETAPP:-false}" == "true" ]]; then
-			if ! echo "${NETAPP_ZONES}" | grep -x -E -q "${ZONE}|${REGION}"; then
-				echo "INFO: Skipping ${ZONE} - NetApp Volumes not available in this zone or region."
-				continue
-			fi
-			if ! check_netapp_quota "${REGION}"; then
-				echo "INFO: Skipping ${ZONE} - NetApp quota check failed in region ${REGION}."
 				continue
 			fi
 		fi
