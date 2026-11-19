@@ -23,7 +23,7 @@ systems and test installed software before submitting a Google Cloud Batch job.
 ```yaml
 - id: batch-job
   source: modules/scheduler/batch-job-template
-  ...
+  # ...
 
 - id: batch-login
   source: modules/scheduler/batch-login-node

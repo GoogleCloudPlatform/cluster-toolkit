@@ -38,7 +38,7 @@ vars:
   num_slices: 1
 
   # Machine type
-  machine_type: ct6e-standard-4t
+  compute_machine_type: ct6e-standard-4t
 
   # The TPU placement topology for pod slice node pool.
   tpu_topology: 4x4
@@ -56,3 +56,6 @@ vars:
   # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
+
+## --- Optional overrides (defaults shown) ---
+  # system_node_pool_machine_type: n2-standard-8

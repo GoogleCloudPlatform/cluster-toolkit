@@ -22,9 +22,11 @@ ifneq (, $(shell which git))
 ## GIT IS PRESENT
 ifneq (,$(wildcard .git))
 ## GIT DIRECTORY EXISTS
-GIT_TAG_VERSION=$(shell git tag --points-at HEAD)
-GIT_BRANCH=$(shell $(SHELL) -c 'git branch --show-current || git rev-parse --abbrev-ref HEAD' 2>/dev/null)
-GIT_COMMIT_INFO=$(shell git describe --tags --dirty --long --always)
+GIT_TAG_VERSION ?= $(or $(_LOUHI_TAG_NAME),$(shell git describe --tags --exact-match 2>/dev/null))
+GIT_BRANCH ?= $(shell $(SHELL) -c 'git branch --show-current || git rev-parse --abbrev-ref HEAD' 2>/dev/null)
+# Keep GIT_COMMIT_INFO pure `git describe` output: the release pipeline's verify step compares
+# "Commit info: <tag>-0-g<sha>" against the release tag as an independent check of the checkout.
+GIT_COMMIT_INFO ?= $(shell git describe --tags --dirty --long --always 2>/dev/null)
 GIT_COMMIT_HASH=$(shell git rev-parse HEAD)
 GIT_INITIAL_HASH=$(shell git rev-list --max-parents=0 HEAD)
 endif
@@ -56,21 +58,17 @@ install: install-user
 
 endif
 
-tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check
+tests: warn-terraform-version warn-packer-version test-engine validate_golden_copy validate_configs packer-check validate-docs test-agentgateway
 
 format: warn-go-version warn-terraform-version warn-packer-version terraform-format packer-format
 	$(info **************** formatting go code *******************)
 	go fmt $(ENG)
 
-install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit check-tflint check-shellcheck
+# `terraform-docs` is needed by `make format`; version read from .pre-commit-config.yaml
+install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit check-tflint
 	$(info *********** installing developer dependencies *********)
-	go install github.com/terraform-docs/terraform-docs@v0.24.0
-	go install github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0
-	go install github.com/go-critic/go-critic/cmd/gocritic@v0.15.0
-	go install github.com/google/addlicense@v1.2.0
-	go install mvdan.cc/sh/v3/cmd/shfmt@v3.14.1
-	go install golang.org/x/tools/cmd/goimports@v0.50.0
-	go install honnef.co/go/tools/cmd/staticcheck@v0.8.1
+	tfdocs=$$(grep -m 1 -oE 'github\.com/terraform-docs/terraform-docs@v[0-9A-Za-z.+-]+' .pre-commit-config.yaml) && \
+		go install "$$tfdocs"
 	go install github.com/jstemmer/go-junit-report/v2@latest
 	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements-dev.txt
 	pip install mypy==1.18.2
@@ -116,14 +114,6 @@ check-tflint:
 	$(info WARNING: tflint not installed, visit https://github.com/terraform-linters/tflint#installation for installation instructions.)
 else
 check-tflint:
-
-endif
-
-ifeq (, $(shell which shellcheck))
-check-shellcheck:
-	$(info WARNING: shellcheck not installed, visit https://github.com/koalaman/shellcheck#installing for installation instructions.)
-else
-check-shellcheck:
 
 endif
 
@@ -258,7 +248,7 @@ endif
 
 ###################################
 # AGENT SKILLS SECTION
-.PHONY: lint-skills test-skills
+.PHONY: lint-skills test-skills test-skills-live generate-docs validate-docs check-cloud-docs
 
 lint-skills:
 	$(info **************** linting agent skills ***************)
@@ -268,4 +258,40 @@ test-skills:
 	$(info **************** running skills unit tests and evals ***************)
 	@python3 tools/tests/test_run_eval.py
 	@python3 tools/run_eval.py --all
+
+generate-docs:
+	$(info **************** generating catalog, README tables, and llms.txt ***************)
+	@go run ./tools/catalog-gen
+
+# Opt-in locally (and executed in Cloud Build via PR-skills-smoke-eval /
+# PR-test-skills-full-eval): drives a real agent CLI against EVAL.yaml prompts
+# in throwaway git worktrees. Requires the agent CLI installed + logged in and a
+# GCP project for gcluster validators. Example:
+#   make test-skills-live LIVE_PROJECT=my-sandbox LIVE_AGENT=gemini
+LIVE_AGENT ?= gemini
+LIVE_SKILL ?= skills/cluster-blueprint-assistant
+LIVE_CONCURRENCY ?= 4
+LIVE_RETRIES ?= 0
+test-skills-live: gcluster
+	$(info **************** running LIVE skills evals ($(LIVE_SKILL)) against $(LIVE_AGENT) ***************)
+	@test -n "$(LIVE_PROJECT)" || { echo "LIVE_PROJECT=<gcp-project> is required"; exit 2; }
+	@python3 tools/run_eval.py --skill $(LIVE_SKILL) --live --agent $(LIVE_AGENT) --project $(LIVE_PROJECT) --concurrency $(LIVE_CONCURRENCY) --retries $(LIVE_RETRIES) --json-output live-eval-results.json --markdown-output live-eval-summary.md
+
+validate-docs:
+	$(info **************** validating README snippets and links ***************)
+	@python3 tools/validate_readme_snippets.py
+	@python3 tools/tests/test_validate_cloud_docs.py
+
+check-cloud-docs:
+	$(info **************** validating public cloud.google.com docs against repo (use main/latest tag for release-accurate results) ***************)
+	@python3 tools/validate_cloud_docs.py --check-live
 # END OF AGENT SKILLS SECTION
+
+.PHONY: test-agentgateway agentgateway-static
+test-agentgateway:
+	go test ./tests
+	python3 -m unittest tests.test_agentgateway tests.agentgateway_playbook_checks
+
+# Requires Helm >= 3.12 and Python packages PyYAML and jsonschema.
+agentgateway-static:
+	python3 tools/validate_configs/agentgateway/validate_static.py

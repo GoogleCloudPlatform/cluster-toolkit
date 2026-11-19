@@ -58,7 +58,7 @@ gcloud compute instance-groups managed update-instances \
 This mode can be switched to proactive (automatic) replacement by setting
 [var.update_policy](#input_update_policy) to "PROACTIVE". In this case we
 recommend the use of Filestore to store the job queue state ("spool") and
-setting [var.spool_parent_dir][#input_spool_parent_dir] to its mount point:
+setting [var.spool_parent_dir](#input_spool_parent_dir) to its mount point:
 
 ```yaml
   - id: spoolfs
@@ -69,7 +69,7 @@ setting [var.spool_parent_dir][#input_spool_parent_dir] to its mount point:
       filestore_tier: ENTERPRISE
       local_mount: /shared
 
-...
+  # ...
 
   - id: htcondor_access
     source: community/modules/scheduler/htcondor-access-point
@@ -85,6 +85,22 @@ setting [var.spool_parent_dir][#input_spool_parent_dir] to its mount point:
 ```
 
 [replacement]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
+
+## Automatic Job Retry on Shutdown Exit Codes
+
+The Access Point configures a `Schedd` job transform (`RETRY_WINDOWS_SHUTDOWN`)
+that automatically re-queues jobs failing with Windows DLL initialization exit
+codes that commonly occur when a job is dispatched to an Execute Point while the
+VM is shutting down:
+
+- `-1073741502` / `3221225794` (`0xC0000142`, `STATUS_DLL_INIT_FAILED`)
+- `-1073741205` / `3221226091` (`0xC000026B`, `STATUS_DLL_INIT_FAILED_LOGOFF`)
+
+The transform preserves any user-specified `OnExitRemove` expression and keeps
+the job in the queue (`OnExitRemove = False`) when it exits normally with one of
+these codes, up to 5 attempts (`NumJobCompletions < 5`). Because this transform
+is applied by the Access Point `Schedd` to all submitted jobs without an OS
+filter, it applies to all jobs in the pool, including Linux jobs.
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2026 Google LLC
@@ -122,8 +138,8 @@ limitations under the License.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| <a name="module_access_point_instance_template"></a> [access\_point\_instance\_template](#module\_access\_point\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 14.0 |
-| <a name="module_htcondor_ap"></a> [htcondor\_ap](#module\_htcondor\_ap) | terraform-google-modules/vm/google//modules/mig | ~> 14.0 |
+| <a name="module_access_point_instance_template"></a> [access\_point\_instance\_template](#module\_access\_point\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 15.4 |
+| <a name="module_htcondor_ap"></a> [htcondor\_ap](#module\_htcondor\_ap) | terraform-google-modules/vm/google//modules/mig | ~> 15.4 |
 | <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | ../../../../modules/scripts/startup-script | n/a |
 
 ## Resources

@@ -87,6 +87,26 @@ func (s *MySuite) TestMergeDeploymentSettings(c *C) {
 			"bucket": cty.StringVal("ds_bucket"),
 		}),
 	})
+
+	// check ai_assisted in deployment file propagates to global labels on Expand
+	ds4 := config.DeploymentSettings{
+		AIAssisted: true,
+		Vars: config.Dict{}.
+			With("project_id", cty.StringVal("ds_test_project_id")).
+			With("deployment_name", cty.StringVal("ds_deployment_name")),
+	}
+	bp4 := config.Blueprint{
+		BlueprintName: "tree",
+		Vars:          config.NewDict(map[string]cty.Value{}),
+	}
+	c.Assert(mergeDeploymentSettings(&bp4, ds4), IsNil)
+	c.Check(bp4.AIAssisted, Equals, true)
+	c.Assert(bp4.Expand(), IsNil)
+	c.Check(bp4.Vars.Get("labels"), DeepEquals, cty.ObjectVal(map[string]cty.Value{
+		"ghpc_blueprint":   cty.StringVal("tree"),
+		"ghpc_deployment":  config.GlobalRef("deployment_name").AsValue(),
+		"ghpc_ai_assisted": cty.StringVal("true"),
+	}))
 }
 
 func (s *MySuite) TestIsOverwriteAllowed_Absent(c *C) {

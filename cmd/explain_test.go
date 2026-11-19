@@ -1,0 +1,740 @@
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package cmd
+
+import (
+	"bytes"
+	"encoding/json"
+	"hpc-toolkit/pkg/sourcereader"
+	"hpc-toolkit/pkg/telemetry"
+	"os"
+	"path/filepath"
+	"runtime"
+	"slices"
+	"strings"
+
+	. "gopkg.in/check.v1"
+	"gopkg.in/yaml.v3"
+)
+
+func setupExplainTestFS(c *C) (string, func()) {
+	wd, err := os.Getwd()
+	c.Assert(err, IsNil)
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	c.Assert(ok, Equals, true)
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), ".."))
+
+	oldFS := sourcereader.ModuleFS
+	sourcereader.ModuleFS = os.DirFS(repoRoot).(sourcereader.BaseFS)
+	c.Assert(os.Chdir(repoRoot), IsNil)
+
+	cleanup := func() {
+		sourcereader.ModuleFS = oldFS
+		explainFlags.format = "text"
+		explainFlags.deploymentFile = ""
+		_ = os.Chdir(wd)
+	}
+	return repoRoot, cleanup
+}
+
+func runExplainForTest(args ...string) (string, error) {
+	var buf bytes.Buffer
+	explainCmd.SetOut(&buf)
+	explainCmd.SetErr(&buf)
+	defer func() {
+		explainCmd.SetOut(nil)
+		explainCmd.SetErr(nil)
+	}()
+	err := runExplainCmd(explainCmd, args)
+	return buf.String(), err
+}
+
+func (s *MySuite) TestExplainZeroArgsListsBlueprintsAndModules(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	out, err := runExplainForTest()
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(out, "Available Blueprints"), Equals, true)
+	c.Check(strings.Contains(out, "examples/hpc-slurm.yaml"), Equals, true)
+	c.Check(strings.Contains(out, "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"), Equals, true)
+	c.Check(strings.Contains(out, "Available Embedded Modules:"), Equals, true)
+	c.Check(strings.Contains(out, "modules/file-system/managed-lustre"), Equals, true)
+	c.Check(strings.Contains(out, "modules/network/vpc"), Equals, true)
+	// Internal modules must never be exposed
+	c.Check(strings.Contains(out, "community/modules/internal"), Equals, false)
+	c.Check(strings.Contains(out, "modules/slurm_files"), Equals, false)
+}
+
+func (s *MySuite) TestExplainBlueprintAndDeploymentPairing(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	out, err := runExplainForTest("examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(out, "Blueprint: examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"), Equals, true)
+	c.Check(strings.Contains(out, "Companion Deployment File: examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml"), Equals, true)
+	c.Check(strings.Contains(out, "gcloud services enable"), Equals, true)
+	c.Check(strings.Contains(out, "lustre.googleapis.com"), Equals, true)
+	c.Check(strings.Contains(out, "a3u_cluster_size"), Equals, true)
+	c.Check(strings.Contains(out, "Stage 1 [cluster-env]:"), Equals, true)
+	c.Check(strings.Contains(out, "Stage 2 [cluster]:"), Equals, true)
+	c.Check(strings.Contains(out, "./gcluster deploy -d examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"), Equals, true)
+
+	// Passing the companion *-deployment.yaml directly should resolve to its sibling blueprint
+	outDepl, err := runExplainForTest("examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outDepl, "Blueprint: examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"), Equals, true)
+}
+
+func (s *MySuite) TestExplainModuleAndPathNormalization(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	// 1. Canonical embedded module path
+	out, err := runExplainForTest("modules/file-system/managed-lustre")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(out, "Module: modules/file-system/managed-lustre (terraform)"), Equals, true)
+	c.Check(strings.Contains(out, "lustre.googleapis.com"), Equals, true)
+	c.Check(strings.Contains(out, "use: [vpc, private_service_access]"), Equals, true)
+	c.Check(strings.Contains(out, "size_gib: 36000"), Equals, true)
+	c.Check(strings.Contains(out, "Inputs Filled Automatically"), Equals, true)
+
+	// 2. Leading './' and trailing '/' from tab completion must not fail
+	outNorm, err := runExplainForTest("./modules/file-system/managed-lustre/")
+	c.Assert(err, IsNil)
+	c.Check(outNorm, Equals, out)
+
+	// 3. Short module name resolution
+	outShort, err := runExplainForTest("managed-lustre")
+	c.Assert(err, IsNil)
+	c.Check(outShort, Equals, out)
+
+	// 4. Packer module resolution
+	outPacker, err := runExplainForTest("modules/packer/custom-image")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outPacker, "Module: modules/packer/custom-image (packer)"), Equals, true)
+}
+
+func (s *MySuite) TestExplainSpecMatchingExactAndClosest(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	// 1. Exact blueprint match: slurm + a3u + lustre
+	outExact, err := runExplainForTest("slurm", "a3u", "lustre")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outExact, "Exact Blueprint Match (3/3 specs matched: slurm, a3-ultragpu-8g, managed-lustre):"), Equals, true)
+	c.Check(strings.Contains(outExact, "Blueprint: examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"), Equals, true)
+
+	// 2. Closest blueprint match with missing module snippet: gke + a3-megagpu + lustre
+	outClosest, err := runExplainForTest("gke", "a3-megagpu", "lustre")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outClosest, "Closest Blueprint Match (2/3 specs matched: gke, a3-megagpu-8g):"), Equals, true)
+	c.Check(strings.Contains(outClosest, "Blueprint: examples/gke-a3-megagpu/gke-a3-megagpu.yaml"), Equals, true)
+	c.Check(strings.Contains(outClosest, "Missing Spec: lustre (modules/file-system/managed-lustre)"), Equals, true)
+	c.Check(strings.Contains(outClosest, "To add missing spec (lustre -> modules/file-system/managed-lustre), insert into group [primary]:"), Equals, true)
+	c.Check(strings.Contains(outClosest, "- id: private_service_access"), Equals, true)
+	c.Check(strings.Contains(outClosest, "use: [network1]"), Equals, true)
+	c.Check(strings.Contains(outClosest, "use: [network1, private_service_access]"), Equals, true)
+
+	// 3. TPU 7x GKE match
+	outTPU, err := runExplainForTest("gke", "tpu", "7x")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outTPU, "examples/gke-tpu-7x/gke-tpu-7x.yaml"), Equals, true)
+}
+
+func (s *MySuite) TestExplainJSONAndYAMLFormatsAndErrors(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	// JSON format
+	explainFlags.format = "json"
+	outJSON, err := runExplainForTest("modules/file-system/filestore")
+	c.Assert(err, IsNil)
+	var modRes ExplainModuleResult
+	c.Assert(json.Unmarshal([]byte(outJSON), &modRes), IsNil)
+	c.Check(modRes.Module, Equals, "modules/file-system/filestore")
+	c.Check(modRes.Kind, Equals, "terraform")
+
+	// YAML format
+	explainFlags.format = "yaml"
+	outYAML, err := runExplainForTest("examples/hpc-slurm.yaml")
+	c.Assert(err, IsNil)
+	var bpRes ExplainBlueprintResult
+	c.Assert(yaml.Unmarshal([]byte(outYAML), &bpRes), IsNil)
+	c.Check(bpRes.Path, Equals, "examples/hpc-slurm.yaml")
+
+	// Invalid format error
+	explainFlags.format = "xml"
+	_, err = runExplainForTest()
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "invalid --format"), Equals, true)
+
+	// Non-existent path error (must not trigger network download)
+	explainFlags.format = "text"
+	_, err = runExplainForTest("modules/file-system/nonexistent-module")
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "not found"), Equals, true)
+
+	// Unmatched spec error
+	_, err = runExplainForTest("nonexistent_spec_xyz_999")
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "no blueprint matched specs"), Equals, true)
+}
+
+func (s *MySuite) TestExplainSpecMatchingPrefersMachineTypeEvidence(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	// B1: 'gke a4x' must match gke-a4x.yaml (a4x-highgpu-4g), not gke-a4x-max-bm.yaml
+	outA4X, err := runExplainForTest("gke", "a4x")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outA4X, "Blueprint: examples/gke-a4x/gke-a4x.yaml"), Equals, true)
+	c.Check(strings.Contains(outA4X, "other blueprint(s) also matched"), Equals, false)
+
+	// 'gke a4x-max' must match gke-a4x-max-bm.yaml (a4x-maxgpu-4g-metal)
+	outA4XMax, err := runExplainForTest("gke", "a4x-max")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outA4XMax, "Blueprint: examples/gke-a4x-max-bm/gke-a4x-max-bm.yaml"), Equals, true)
+
+	// TPU 7x Slurm & TPU v4 GKE exact match
+	outSlurmTPU7x, err := runExplainForTest("slurm", "tpu", "7x")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSlurmTPU7x, "Exact Blueprint Match (3/3 specs matched: slurm, tpu, tpu7x-standard-4t):"), Equals, true)
+	c.Check(strings.Contains(outSlurmTPU7x, "Blueprint: examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml"), Equals, true)
+
+	outTPUv4, err := runExplainForTest("gke", "tpu", "v4")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outTPUv4, "Blueprint: examples/gke-tpu-v4/gke-tpu-v4.yaml"), Equals, true)
+
+	// Prefix boundary check: 'c2' must match c2-standard-60, not c2d-standard-112
+	c.Check(matchesHardwareMachineType("c2-standard-60", []string{"c2"}), Equals, true)
+	c.Check(matchesHardwareMachineType("c2d-standard-112", []string{"c2"}), Equals, false)
+	c.Check(matchesHardwareMachineType("n2d-standard-32", []string{"n2"}), Equals, false)
+}
+
+func (s *MySuite) TestExplainRejectsMissingDeploymentFileAndBadBlueprint(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	// B2: Explicitly passed -d / --deployment-file that does not exist must fail fast
+	explainFlags.deploymentFile = "nonexistent-deployment-file.yaml"
+	_, err := runExplainForTest("examples/hpc-slurm.yaml")
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "failed to load deployment file"), Equals, true)
+
+	// N3: -d / --deployment-file outside blueprint mode must be rejected
+	_, err = runExplainForTest("slurm", "a3u")
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "--deployment-file is only valid"), Equals, true)
+	_, err = runExplainForTest("modules/file-system/filestore")
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "--deployment-file is only valid"), Equals, true)
+	explainFlags.deploymentFile = ""
+
+	// N1: Existing .yaml file with invalid blueprint syntax or no deployment_groups must report parse error
+	tmpDir := c.MkDir()
+	badBP := filepath.Join(tmpDir, "broken-blueprint.yaml")
+	c.Assert(os.WriteFile(badBP, []byte("blueprint_name: broken\nvars:\n  project_id: test\n"), 0644), IsNil)
+	_, err = runExplainForTest(badBP)
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "not found"), Equals, false)
+}
+
+func (s *MySuite) TestExplainHardcodedModuleSourcesExist(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	for _, def := range knownSpecAliasTable {
+		if def.ModuleSource != "" {
+			c.Check(detectEmbeddedModuleKind(sourcereader.ModuleFS, def.ModuleSource), Not(Equals), "",
+				Commentf("knownSpecAliasTable[%s] -> %s", def.Canonical, def.ModuleSource))
+		}
+	}
+	for _, src := range preferredProviderOrder {
+		c.Check(detectEmbeddedModuleKind(sourcereader.ModuleFS, src), Not(Equals), "",
+			Commentf("preferredProviderOrder -> %s", src))
+	}
+
+	// Verify synonym deduplication (N5) and reference blueprints (B2)
+	specs := parseSpecTokens([]string{"slurm", "a3u", "a3ultra", "h200"})
+	c.Check(len(specs), Equals, 2)
+
+	outGkeLustre, err := runExplainForTest("gke", "a3-megagpu", "lustre")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeLustre, "examples/gke-managed-lustre.yaml"), Equals, true)
+
+	// Directory with 1 blueprint resolves automatically; directory with >1 blueprint lists choices
+	outDir, err := runExplainForTest("examples/gke-a3-ultragpu/")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outDir, "examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml"), Equals, true)
+
+	_, err = runExplainForTest("examples/machine-learning/a3-ultragpu-8g/")
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "contains multiple blueprints"), Equals, true)
+	c.Check(strings.Contains(err.Error(), "a3ultra-slurm-blueprint.yaml"), Equals, true)
+
+	// Verify 'a4h' hardware token matches gke-a4.yaml and multi-stage targetGroup picks [setup] over [enable_apis]
+	outGkeA4, err := runExplainForTest("gke", "a4h")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeA4, "Exact Blueprint Match"), Equals, true)
+	c.Check(strings.Contains(outGkeA4, "examples/gke-a4/gke-a4.yaml"), Equals, true)
+
+	outHclsPstore, err := runExplainForTest("slurm", "c2", "parallelstore")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outHclsPstore, "insert into group [setup]:"), Equals, true)
+	c.Check(strings.Contains(outHclsPstore, "use: [network, private_service_access]"), Equals, true)
+}
+
+func (s *MySuite) TestExplainVarsMirrorDeploymentMergeSemantics(c *C) {
+	repoRoot, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	dir := c.MkDir()
+	bp := filepath.Join(dir, "t-blueprint.yaml")
+	c.Assert(os.WriteFile(bp, []byte(`blueprint_name: t
+vars:
+  project_id: p
+  deployment_name: from-blueprint
+  zone: us-central1-a
+  optional_thing: $(null)
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+`), 0644), IsNil)
+	c.Assert(os.WriteFile(filepath.Join(dir, "t-deployment.yaml"), []byte(`vars:
+  deployment_name:
+  zone: us-east1-b
+`), 0644), IsNil)
+
+	explainFlags.format = "json"
+	out, err := runExplainForTest(bp)
+	c.Assert(err, IsNil)
+	var res ExplainBlueprintResult
+	c.Assert(json.Unmarshal([]byte(out), &res), IsNil)
+	got := map[string]ExplainVariable{}
+	for _, v := range res.Variables {
+		got[v.Name] = v
+	}
+	// cmd/create.go:mergeDeploymentSettings: a deployment-file null overrides the
+	// blueprint default, so `gcluster deploy -d` rejects it as unset.
+	c.Check(got["deployment_name"].Required, Equals, true)
+	c.Check(got["zone"].Default, Equals, `"us-east1-b"`)
+	// $(null) is the intentional "optional, unset by default" marker; validateVars accepts it.
+	c.Check(got["optional_thing"].Required, Equals, false)
+
+	// B2: Packer module snippet includes 'kind: packer' and instructs adding a new group
+	explainFlags.format = "text"
+	outPackerSpec, err := runExplainForTest("a4x", "custom-image", "lustre")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outPackerSpec, "kind: packer"), Equals, true)
+	c.Check(strings.Contains(outPackerSpec, "NEW deployment group"), Equals, true)
+
+	// B3: Multi-VPC blueprint prefers cluster VPC ('network') over Packer image-builder VPC ('builder-net')
+	outG4Lustre, err := runExplainForTest("slurm", "g4", "lustre")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outG4Lustre, "use: [network]"), Equals, true)
+	c.Check(strings.Contains(outG4Lustre, "use: [network, private_service_access]"), Equals, true)
+	c.Check(strings.Contains(outG4Lustre, "use: [builder-net"), Equals, false)
+
+	// B4: Running from inside community/examples still resolves the top-level repo root
+	c.Assert(os.Chdir(filepath.Join(repoRoot, "community", "examples")), IsNil)
+	c.Check(findExplainRepoRoot(), Equals, repoRoot)
+	c.Assert(os.Chdir(repoRoot), IsNil)
+
+	// Generic outputs (capacity_gb, gcp_service_list) must not trigger false upstream use:
+	outGkeStorage, err := runExplainForTest("modules/file-system/gke-storage")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeStorage, "netapp_storage_pool"), Equals, false)
+	c.Check(strings.Contains(outGkeStorage, "capacity_gb:"), Equals, true)
+
+	outSvcEnable, err := runExplainForTest("community/modules/project/service-enablement")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSvcEnable, "htcondor_install"), Equals, false)
+	c.Check(strings.Contains(outSvcEnable, "gcp_service_list"), Equals, true)
+
+	// Mode 1 advertised 'gcs-bucket' tag resolves to cloud-storage-bucket in spec mode
+	outGkeGcsBucket, err := runExplainForTest("gke", "gcs-bucket")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeGcsBucket, "cloud-storage-bucket"), Equals, true)
+
+	// Multi-input provider selection prefers already-selected provider (spack_setup)
+	outSpackExec, err := runExplainForTest("community/modules/scripts/spack-execute")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSpackExec, "use: [spack_setup]"), Equals, true)
+
+	// Invalid auto-discovered companion deployment file fails fast
+	c.Assert(os.WriteFile(filepath.Join(dir, "t-deployment.yaml"), []byte("vars: [\ninvalid yaml"), 0644), IsNil)
+	_, err = runExplainForTest(bp)
+	c.Assert(err, NotNil)
+	c.Check(strings.Contains(err.Error(), "failed to load deployment file"), Equals, true)
+
+	// Blueprints with 0 required APIs must serialize "required_apis": [] (not null) in JSON output
+	explainFlags.format = "json"
+	outNoAPIs, err := runExplainForTest("community/examples/gcloud-example.yaml")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outNoAPIs, `"required_apis": []`), Equals, true)
+
+	// Explain module includes lifecycle ignore guardrails in text output
+	explainFlags.format = "text"
+	outNodePool, err := runExplainForTest("modules/compute/gke-node-pool")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outNodePool, "Lifecycle Ignore Guardrails:"), Equals, true)
+	c.Check(strings.Contains(outNodePool, "google_container_node_pool:"), Equals, true)
+	c.Check(strings.Contains(outNodePool, "node_config[0].labels"), Equals, true)
+	c.Check(strings.Contains(outNodePool, "Tip: Use 'reconfigure_ignores'"), Equals, true)
+}
+
+func (s *MySuite) TestExplainTelemetryTargetModes(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+	defer func() {
+		telemetryCollector = nil
+	}()
+
+	cases := []struct {
+		name       string
+		args       []string
+		wantTarget string
+		expectErr  bool
+	}{
+		{
+			name:       "zero args -> catalog",
+			args:       []string{},
+			wantTarget: "catalog",
+		},
+		{
+			name:       "blueprint path -> blueprint",
+			args:       []string{"examples/hpc-slurm.yaml"},
+			wantTarget: "blueprint",
+		},
+		{
+			name:       "deployment path -> deployment",
+			args:       []string{"examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml"},
+			wantTarget: "deployment",
+		},
+		{
+			name:       "module path -> module",
+			args:       []string{"modules/file-system/managed-lustre"},
+			wantTarget: "module",
+		},
+		{
+			name:       "spec keywords -> specs",
+			args:       []string{"slurm", "a3u", "lustre"},
+			wantTarget: "specs",
+		},
+		{
+			name:       "missing blueprint path still records blueprint target",
+			args:       []string{"examples/does-not-exist.yaml"},
+			wantTarget: "blueprint",
+			expectErr:  true,
+		},
+		{
+			name:       "missing deployment path still records deployment target",
+			args:       []string{"examples/does-not-exist-deployment.yaml"},
+			wantTarget: "deployment",
+			expectErr:  true,
+		},
+		{
+			name:       "missing module path still records module target",
+			args:       []string{"modules/network/does-not-exist"},
+			wantTarget: "module",
+			expectErr:  true,
+		},
+	}
+
+	for _, tc := range cases {
+		telemetryCollector = telemetry.NewCollector(explainCmd, tc.args, telemetry.SOURCE)
+		_, err := runExplainForTest(tc.args...)
+		if tc.expectErr {
+			c.Check(err, NotNil)
+		} else {
+			c.Check(err, IsNil)
+		}
+
+		gotTarget, _ := telemetryCollector.GetMetadata(telemetry.EXPLAIN_TARGET)
+		c.Check(gotTarget, Equals, tc.wantTarget)
+	}
+}
+
+func (s *MySuite) TestFindExplainRepoRootReleaseBundle(c *C) {
+	origWD, err := os.Getwd()
+	c.Assert(err, IsNil)
+	defer func() { _ = os.Chdir(origWD) }()
+
+	// Case 1: release bundle root with examples/ + community/examples/
+	bundleRoot1 := c.MkDir()
+	subDir1 := filepath.Join(bundleRoot1, "examples", "gke-a4")
+	c.Assert(os.MkdirAll(subDir1, 0o755), IsNil)
+	c.Assert(os.MkdirAll(filepath.Join(bundleRoot1, "community", "examples"), 0o755), IsNil)
+	c.Assert(os.Chdir(subDir1), IsNil)
+	evalGot1, err := filepath.EvalSymlinks(findExplainRepoRoot())
+	c.Assert(err, IsNil)
+	evalWant1, err := filepath.EvalSymlinks(bundleRoot1)
+	c.Assert(err, IsNil)
+	c.Check(evalGot1, Equals, evalWant1)
+
+	// Case 2: release bundle root with examples/ + gcluster binary
+	bundleRoot2 := c.MkDir()
+	subDir2 := filepath.Join(bundleRoot2, "examples", "hpc")
+	c.Assert(os.MkdirAll(subDir2, 0o755), IsNil)
+	c.Assert(os.WriteFile(filepath.Join(bundleRoot2, "gcluster"), []byte("#!/bin/sh\n"), 0o755), IsNil)
+	c.Assert(os.Chdir(subDir2), IsNil)
+	evalGot2, err := filepath.EvalSymlinks(findExplainRepoRoot())
+	c.Assert(err, IsNil)
+	evalWant2, err := filepath.EvalSymlinks(bundleRoot2)
+	c.Assert(err, IsNil)
+	c.Check(evalGot2, Equals, evalWant2)
+}
+
+func (s *MySuite) TestExplainIndexCoreBeforeCommunity(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	indexOut, err := runExplainForTest()
+	c.Assert(err, IsNil)
+	coreIdx := strings.Index(indexOut, "examples/hpc-slurm.yaml")
+	commIdx := strings.Index(indexOut, "community/examples/")
+	c.Check(coreIdx > 0 && commIdx > coreIdx, Equals, true)
+}
+
+func (s *MySuite) TestExplainUnderscoreCompanion(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	symOut, err := runExplainForTest("community/examples/fsi/ibm-symphony-on-gke/symphony.yaml")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(symOut, "Companion Deployment File: community/examples/fsi/ibm-symphony-on-gke/symphony_deployment.yaml"), Equals, true)
+}
+
+func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	// 1. Workload + accelerator spec matching: gke + vllm (ml-inference) + h200
+	outVLLM, err := runExplainForTest("gke", "vllm", "h200")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outVLLM, "Exact Blueprint Match (3/3 specs matched: gke, ml-inference, a3-ultragpu-8g):"), Equals, true)
+	c.Check(strings.Contains(outVLLM, "Blueprint: examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml"), Equals, true)
+
+	// 2. TPU framework spec matching: gke + maxtext (tpu) + tpu-v6e
+	outMaxText, err := runExplainForTest("gke", "maxtext", "tpu-v6e")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outMaxText, "Exact Blueprint Match (3/3 specs matched: gke, tpu, tpu-v6e):"), Equals, true)
+	c.Check(strings.Contains(outMaxText, "Blueprint: examples/gke-tpu-v6e/gke-tpu-v6e.yaml"), Equals, true)
+
+	// 3. Training framework spec matching: slurm + pytorch/jax (ml-training) + h100
+	outPyTorch, err := runExplainForTest("slurm", "pytorch", "h100")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outPyTorch, "Exact Blueprint Match (3/3 specs matched: slurm, ml-training, a3-highgpu-8g):"), Equals, true)
+	c.Check(strings.Contains(outPyTorch, "Blueprint: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"), Equals, true)
+
+	outJAX, err := runExplainForTest("slurm", "jax", "h100")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outJAX, "Exact Blueprint Match (3/3 specs matched: slurm, ml-training, a3-highgpu-8g):"), Equals, true)
+	c.Check(strings.Contains(outJAX, "Blueprint: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"), Equals, true)
+
+	// 4. L4, RTX PRO 6000, A100, and generic GPU/NVIDIA hardware aliases
+	outL4, err := runExplainForTest("gke", "l4")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outL4, "Blueprint: examples/ml-gke.yaml"), Equals, true)
+
+	outRTX, err := runExplainForTest("gke", "rtx-pro-6000", "inference")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outRTX, "Blueprint: examples/gke-g4/gke-g4.yaml"), Equals, true)
+
+	outG4Train, err := runExplainForTest("gke", "g4", "training")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outG4Train, "Exact Blueprint Match (3/3 specs matched: gke, g4, ml-training):"), Equals, true)
+	c.Check(strings.Contains(outG4Train, "Blueprint: examples/gke-g4/gke-g4.yaml"), Equals, true)
+
+	outH100GKE, err := runExplainForTest("gke", "h100")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outH100GKE, "Blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml"), Equals, true)
+	c.Check(strings.Contains(outH100GKE, "examples/gke-a3-megagpu/gke-a3-megagpu.yaml"), Equals, true)
+
+	outGkeGPU, err := runExplainForTest("gke", "gpu")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeGPU, "Blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml"), Equals, true)
+	c.Check(strings.Contains(outGkeGPU, "examples/gke-g4/gke-g4.yaml"), Equals, true)
+
+	outGkeNvidia, err := runExplainForTest("gke", "nvidia")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeNvidia, "Blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml"), Equals, true)
+
+	outGkeInfer, err := runExplainForTest("gke", "inference")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeInfer, "Blueprint: examples/gke-a3-highgpu/gke-a3-highgpu.yaml"), Equals, true)
+
+	outA100, err := runExplainForTest("slurm", "a100")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outA100, "Exact Blueprint Match (2/2 specs matched: slurm, a2):"), Equals, true)
+
+	// 4b. Raw-token path specificity bonus preserved even when generic token precedes specific token
+	outGromacs, err := runExplainForTest("slurm", "gromacs")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGromacs, "Blueprint: community/examples/hpc-slurm-gromacs.yaml"), Equals, true)
+
+	outHpcGromacs, err := runExplainForTest("slurm", "hpc", "gromacs")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outHpcGromacs, "Blueprint: community/examples/hpc-slurm-gromacs.yaml"), Equals, true)
+
+	outMpiGromacs, err := runExplainForTest("slurm", "mpi", "gromacs")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outMpiGromacs, "Blueprint: community/examples/hpc-slurm-gromacs.yaml"), Equals, true)
+
+	outTpuMaxText, err := runExplainForTest("slurm", "tpu", "maxtext")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outTpuMaxText, "Blueprint: community/examples/hpc-slurm6-tpu-maxtext.yaml"), Equals, true)
+
+	// 4c. Specific workload tokens in module IDs/sources or non-segment path substrings (vllm, gemma, spack)
+	outGkeVLLM, err := runExplainForTest("gke", "vllm")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeVLLM, "Blueprint: community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml"), Equals, true)
+
+	outGkeGemma, err := runExplainForTest("gke", "gemma")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outGkeGemma, "Blueprint: community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml"), Equals, true)
+
+	outSpack, err := runExplainForTest("slurm", "spack")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSpack, "Blueprint: examples/hcls-blueprint.yaml"), Equals, true)
+
+	// 4d. Pure-ML vs mixed HPC+ML tie-break, hardware alias path-bonus consistency, and A5X/VR200
+	outSlurmTrain, err := runExplainForTest("slurm", "training")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSlurmTrain, "Blueprint: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"), Equals, true)
+
+	outSlurmInfer, err := runExplainForTest("slurm", "inference")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outSlurmInfer, "Blueprint: examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml"), Equals, true)
+
+	outTPU7xAlias, err := runExplainForTest("tpu7x")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outTPU7xAlias, "Blueprint: examples/gke-tpu-7x/gke-tpu-7x.yaml"), Equals, true)
+
+	outN2, err := runExplainForTest("n2")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outN2, "Blueprint: examples/batch.yaml"), Equals, true)
+
+	outA5X, err := runExplainForTest("gke", "vr200")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outA5X, "Blueprint: examples/gke-a5x-bm/gke-a5x-bm.yaml"), Equals, true)
+
+	// 5. Tied exact-match blueprints (OtherExactMatches) surfaced in text and JSON
+	outTied, err := runExplainForTest("a3-ultragpu")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(outTied, "other blueprint(s) also matched all requested specs:"), Equals, true)
+	c.Check(strings.Contains(outTied, "examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"), Equals, true)
+
+	oldFormat := explainFlags.format
+	explainFlags.format = "json"
+	defer func() { explainFlags.format = oldFormat }()
+	outTiedJSON, err := runExplainForTest("a3-ultragpu")
+	c.Assert(err, IsNil)
+	var specRes ExplainSpecMatchResult
+	c.Assert(json.Unmarshal([]byte(outTiedJSON), &specRes), IsNil)
+	c.Check(specRes.ExactMatch, Equals, true)
+	c.Check(specRes.OtherExact > 0, Equals, true)
+	c.Check(len(specRes.OtherExactMatches), Equals, specRes.OtherExact)
+
+	// Excluded blueprints must not leak into 'hpc' workload matches
+	outHPCJSON, err := runExplainForTest("hpc")
+	c.Assert(err, IsNil)
+	var hpcRes ExplainSpecMatchResult
+	c.Assert(json.Unmarshal([]byte(outHPCJSON), &hpcRes), IsNil)
+	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/alphaevolve/alpha-evolve-experiment.yaml"), Equals, false)
+	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/kms-key-per-service.yaml"), Equals, false)
+	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/hpc-slurm6-tpu.yaml"), Equals, false)
+	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/hpc-slurm6-tpu-maxtext.yaml"), Equals, false)
+}
+
+func runExplainJSONForTest(args ...string) (string, error) {
+	explainFlags.format = "json"
+	defer func() { explainFlags.format = "text" }()
+	return runExplainForTest(args...)
+}
+
+func (s *MySuite) TestExplainModuleDeprecatedAndValidations(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	npOut, err := runExplainForTest("modules/compute/gke-node-pool")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(npOut, "Deprecated Settings ("), Equals, true)
+	c.Check(strings.Contains(npOut, "Use `placement_policy` instead"), Equals, true)
+	c.Check(strings.Contains(npOut, "use autoscaling_total_max_nodes"), Equals, true)
+	c.Check(strings.Contains(npOut, "object({strategy=string, max_surge=optional(number), max_unavailable=optional(number)})"), Equals, true)
+
+	npJSONOut, err := runExplainJSONForTest("modules/compute/gke-node-pool")
+	c.Assert(err, IsNil)
+	var npRes ExplainModuleResult
+	c.Assert(json.Unmarshal([]byte(npJSONOut), &npRes), IsNil)
+	c.Check(len(npRes.DeprecatedInputs) >= 4, Equals, true)
+	for _, opt := range npRes.OptionalInputs {
+		c.Check(opt.Name == "compact_placement", Equals, false)
+	}
+
+	gsOut, err := runExplainForTest("modules/file-system/gke-storage")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(gsOut, `(string, default: "WaitForFirstConsumer")`), Equals, true)
+	c.Check(strings.Contains(gsOut, `[Validation: Allowed string values for var.storage_type are`), Equals, true)
+
+	kaOut, err := runExplainForTest("modules/management/kubectl-apply")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(kaOut, "object({cloud_storage_bucket_name=string, gcs_fuse_mount_options=optional(list), in_memory_volume_size=optional(string), name=optional(string), node_selector=optional(map), tolerations=optional(list)})"), Equals, true)
+	c.Check(strings.Contains(kaOut, " | checkpoint_configuration.name must be"), Equals, true)
+
+	kaJSONOut, err := runExplainJSONForTest("modules/management/kubectl-apply")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(kaJSONOut, "install=optional(bool)"), Equals, true)
+	c.Check(strings.Contains(kaJSONOut, "config_template_vars"), Equals, true)
+}
+
+func (s *MySuite) TestExplainBlueprintGlobalVsBlueprintVars(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	bpOut, err := runExplainForTest("examples/gke-a4/gke-a4.yaml")
+	c.Assert(err, IsNil)
+	globalIdx := strings.Index(bpOut, "Global Variables:")
+	bpVarIdx := strings.Index(bpOut, "Blueprint Variables:")
+	c.Check(globalIdx > 0 && bpVarIdx > globalIdx, Equals, true)
+
+	gcloudOut, err := runExplainForTest("community/examples/gcloud-example.yaml")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(gcloudOut, "Global Variables:"), Equals, true)
+	c.Check(strings.Contains(gcloudOut, "Blueprint Variables:"), Equals, false)
+
+	bpJSONOut, err := runExplainJSONForTest("examples/gke-a4/gke-a4.yaml")
+	c.Assert(err, IsNil)
+	var bpRes ExplainBlueprintResult
+	c.Assert(json.Unmarshal([]byte(bpJSONOut), &bpRes), IsNil)
+	foundGlobal := false
+	foundNonGlobal := false
+	for _, v := range bpRes.Variables {
+		if v.Name == "project_id" && v.Global {
+			foundGlobal = true
+		}
+		if v.Name == "static_node_count" && !v.Global {
+			foundNonGlobal = true
+		}
+	}
+	c.Check(foundGlobal, Equals, true)
+	c.Check(foundNonGlobal, Equals, true)
+}

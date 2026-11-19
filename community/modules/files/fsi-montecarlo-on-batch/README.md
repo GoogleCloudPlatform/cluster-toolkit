@@ -5,7 +5,7 @@ Copy files to a target GCS bucket.
 Primarily used for FSI - MonteCarlo Tutorial **[fsi-montecarlo-on-batch-tutorial]**.
 
 [fsi-montecarlo-on-batch-tutorial]:
-../docs/tutorials/fsi-montecarlo-on-batch/README.md
+../../../../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
 ## Usage
 This copies the module files to the specified GCS bucket. It is expected that

@@ -20,6 +20,9 @@ vars:
   deployment_name: flux-fw-cluster
   region: us-central1
   zone: us-central1-a
+  # Optional overrides (defaults shown)
+  # Machine type for the Flux manager (broker) node.
+  manager_machine_type: n2d-standard-8
 
 deployment_groups:
 - group: primary
@@ -54,7 +57,7 @@ deployment_groups:
         properties: []
         boot_script: null
       manager_name_prefix: gfluxfw
-      manager_machine_type: n2d-standard-8
+      manager_machine_type: $(vars.manager_machine_type)
 
       subnetwork: $(flux-net.subnetwork_self_link)
 

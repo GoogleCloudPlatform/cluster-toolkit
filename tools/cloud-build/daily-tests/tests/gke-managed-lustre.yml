@@ -14,8 +14,6 @@
 ---
 test_name: gke-managed-lustre
 deployment_name: gke-ml-{{ build }}
-region: us-central1
-zone: us-central1-a
 lustre_instance_id: "{{ deployment_name }}-lstr"
 size_gib: 18000
 per_unit_storage_throughput: 500
@@ -27,13 +25,14 @@ post_deploy_tests:
 - test-validation/test-gke-managed-lustre.yml
 custom_vars:
   project: "{{ project }}"
-cli_deployment_vars:
-  test_name: "{{ test_name }}"
-  region: "{{ region }}"
-  zone: "{{ zone }}"
-  base_network_name: "{{ deployment_name }}-basic"
-  lustre_instance_id: "{{ lustre_instance_id }}"
-  size_gib: "{{ size_gib }}"
-  per_unit_storage_throughput: "{{ per_unit_storage_throughput }}"
-  gcp_public_cidrs_access_enabled: true
-  kms_key: "projects/{{ project }}/locations/us-central1/keyRings/lustre-keyring/cryptoKeys/lustre-key"
+cli_deployment_vars: >-
+  {{ {
+    'test_name': test_name,
+    'region': region,
+    'zone': zone,
+    'base_network_name': deployment_name ~ '-basic',
+    'lustre_instance_id': lustre_instance_id,
+    'size_gib': size_gib,
+    'per_unit_storage_throughput': per_unit_storage_throughput,
+    'gcp_public_cidrs_access_enabled': true
+  } | combine({'kms_key': 'projects/' ~ project ~ '/locations/us-central1/keyRings/lustre-keyring/cryptoKeys/lustre-key'} if region == 'us-central1' else {}) }}

@@ -51,6 +51,26 @@ func NewCollector(cmd *cobra.Command, args []string, installationMode string) *C
 	}
 }
 
+// SetMetadata sets a metadata key-value pair on the collector safely before CollectMetrics runs.
+func (c *Collector) SetMetadata(key, value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.metadata == nil {
+		c.metadata = make(map[string]string)
+	}
+	c.metadata[key] = value
+}
+
+// GetMetadata retrieves a metadata value from the collector safely.
+func (c *Collector) GetMetadata(key string) (string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	val, ok := c.metadata[key]
+	return val, ok
+}
+
 // Main function for collecting Telemetry metrics.
 func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.mu.Lock()
@@ -78,7 +98,10 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
 	c.metadata[INSTALLATION_MODE] = c.installationMode
-	c.metadata[IS_AI_ASSISTED] = strconv.FormatBool(c.blueprint.AIAssisted)
+	c.metadata[IS_AI_ASSISTED] = strconv.FormatBool(isAIAssisted(c.blueprint, c.eventCmd, c.eventArgs))
+	if _, exists := c.metadata[EXPLAIN_TARGET]; !exists {
+		c.metadata[EXPLAIN_TARGET] = ""
+	}
 	c.metadata[IS_TEST_DATA] = getIsTestData(projectID)
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 	c.metadata[ERROR_TYPE] = getErrorType(err)

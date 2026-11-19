@@ -24,6 +24,9 @@ resource "time_static" "exclusion_start" {
 }
 
 locals {
+  # Inference Gateway retains its existing prerequisites.
+  enable_gateway_api = var.enable_gateway_api || var.enable_inference_gateway
+
   upgrade_settings = {
     strategy        = var.upgrade_settings.strategy
     max_surge       = coalesce(var.upgrade_settings.max_surge, 0)
@@ -113,14 +116,24 @@ data "google_project" "project" {
 data "google_compute_zones" "available" {
   project = var.project_id
   region  = var.region
+  status  = "UP"
 }
 
 locals {
-  target_system_node_pool_zones = var.system_node_pool_machine_type != null ? [] : toset(
+  candidate_zones = toset(
     var.system_node_pool_zones != null ? var.system_node_pool_zones : (
-      var.cluster_availability_type == "ZONAL" ? (var.zone != null ? [var.zone] : []) : data.google_compute_zones.available.names
+      var.cluster_availability_type == "ZONAL" ? (var.zone != null ? [var.zone] : []) : [
+        for z in data.google_compute_zones.available.names : z if can(regex("-[a-z]$", z))
+      ]
     )
   )
+  target_system_node_pool_zones = var.system_node_pool_machine_type != null ? toset([]) : local.candidate_zones
+  cpu_np_machine_type           = "n4-standard-64"
+  cpu_np_candidate_zones        = var.enable_pathways_for_tpus ? local.candidate_zones : toset([])
+  cpu_np_available_zones = sort([
+    for z, m in data.google_compute_machine_types.available_cpu_np_machines :
+    z if length(m.machine_types) > 0
+  ])
 }
 
 data "google_compute_machine_types" "available_system_machines" {
@@ -128,6 +141,13 @@ data "google_compute_machine_types" "available_system_machines" {
   project  = var.project_id
   zone     = each.value
   filter   = "name = \"n4-standard-4\""
+}
+
+data "google_compute_machine_types" "available_cpu_np_machines" {
+  for_each = local.cpu_np_candidate_zones
+  project  = var.project_id
+  zone     = each.value
+  filter   = "name = \"${local.cpu_np_machine_type}\""
 }
 
 data "google_container_engine_versions" "version_prefix_filter" {
@@ -313,7 +333,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   dynamic "gateway_api_config" {
-    for_each = var.enable_inference_gateway ? [1] : []
+    for_each = local.enable_gateway_api ? [1] : []
     content {
       channel = "CHANNEL_STANDARD"
     }
@@ -370,8 +390,11 @@ resource "google_container_cluster" "gke_cluster" {
     gcs_fuse_csi_driver_config {
       enabled = var.enable_gcsfuse_csi
     }
-    high_scale_checkpointing_config {
-      enabled = var.enable_multi_tier_checkpointing
+    dynamic "high_scale_checkpointing_config" {
+      for_each = var.enable_multi_tier_checkpointing ? [1] : []
+      content {
+        enabled = true
+      }
     }
     gce_persistent_disk_csi_driver_config {
       enabled = var.enable_persistent_disk_csi
@@ -389,7 +412,7 @@ resource "google_container_cluster" "gke_cluster" {
       enabled = var.enable_managed_lustre_csi
     }
     dynamic "http_load_balancing" {
-      for_each = var.enable_inference_gateway ? [1] : []
+      for_each = local.enable_gateway_api ? [1] : []
       content {
         disabled = false
       }
@@ -451,6 +474,10 @@ resource "google_container_cluster" "gke_cluster" {
     ignore_changes = [
       node_config,
       min_master_version,
+      # Ignore unmanaged Fleet membership added out-of-band (e.g. Connect Gateway)
+      fleet,
+      # Ignore cluster-level node_locations on regional clusters to prevent fighting GKE regional zone defaults
+      node_locations,
     ]
     precondition {
       condition     = var.default_max_pods_per_node == null || var.networking_mode == "VPC_NATIVE"
@@ -482,6 +509,16 @@ resource "google_container_cluster" "gke_cluster" {
     precondition {
       condition     = !var.enable_confidential_nodes || can(regex("^(n2d-|c2d-|c3d?-|t2d-|g4-)", local.system_node_pool_machine_type))
       error_message = "The system_node_pool_machine_type must be a confidential-compatible machine type (e.g., n2d, c2d, c3d, c3, t2d, g4) when enable_confidential_nodes is true."
+    }
+
+    precondition {
+      condition     = !(var.enable_confidential_nodes && var.enable_pathways_for_tpus)
+      error_message = "'enable_pathways_for_tpus' cannot be true when 'enable_confidential_nodes' is enabled because cpu-np uses '${local.cpu_np_machine_type}', which does not support Confidential VMs."
+    }
+
+    precondition {
+      condition     = !var.enable_pathways_for_tpus || length(local.cpu_np_available_zones) > 0
+      error_message = "Machine type '${local.cpu_np_machine_type}' required for Pathways (cpu-np) is not available in target zone(s): ${length(local.cpu_np_candidate_zones) > 0 ? join(", ", sort(local.cpu_np_candidate_zones)) : "none specified"}. Choose a region or zone with '${local.cpu_np_machine_type}' support, update or unset 'system_node_pool_zones', or set 'enable_pathways_for_tpus' to false."
     }
   }
 
@@ -602,6 +639,8 @@ resource "google_container_node_pool" "system_node_pools" {
   lifecycle {
     ignore_changes = [
       node_config[0].labels,
+      # Ignore resource_labels to prevent node pool replacement on blueprint/metadata renames
+      node_config[0].resource_labels,
       node_config[0].taint,
       version,
     ]
@@ -645,11 +684,13 @@ resource "google_container_node_pool" "cpu_np" {
   provider = google-beta
   count    = var.enable_pathways_for_tpus ? 1 : 0
 
-  project        = var.project_id
-  name           = "cpu-np"
-  cluster        = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
-  location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
-  node_locations = var.system_node_pool_zones
+  project  = var.project_id
+  name     = "cpu-np"
+  cluster  = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
+  location = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
+  # Preserve var.system_node_pool_zones (null by default) when all candidate zones support N4
+  # so GKE keeps its 3-zone regional default instead of expanding to all zones (e.g., 4 in us-central1).
+  node_locations = length(local.cpu_np_available_zones) == length(local.cpu_np_candidate_zones) ? var.system_node_pool_zones : local.cpu_np_available_zones
   version        = local.master_version
 
   autoscaling {
@@ -666,7 +707,7 @@ resource "google_container_node_pool" "cpu_np" {
     resource_labels = local.labels
     service_account = var.service_account_email
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
-    machine_type    = "n4-standard-64"
+    machine_type    = local.cpu_np_machine_type
     image_type      = var.system_node_pool_image_type
 
     shielded_instance_config {
@@ -695,6 +736,8 @@ resource "google_container_node_pool" "cpu_np" {
 
   lifecycle {
     ignore_changes = [
+      # Ignore resource_labels to prevent node pool replacement on blueprint/metadata renames
+      node_config[0].resource_labels,
       version,
     ]
   }
@@ -734,7 +777,7 @@ resource "kubernetes_labels" "workload_namespace_labels" {
 module "workload_identity" {
   count   = var.configure_workload_identity_sa ? 1 : 0
   source  = "terraform-google-modules/kubernetes-engine/google//modules/workload-identity"
-  version = ">= 40.0"
+  version = ">= 46.0"
 
   use_existing_gcp_sa = true
   name                = var.k8s_service_account_name
@@ -813,14 +856,4 @@ resource "terraform_data" "validate_ml_diagnostics_version" {
       error_message = "GKE-managed ML Diagnostics requires a GKE version of ${local.mldiagnostics_minimum_version} or higher. Please update 'version_prefix' or 'min_master_version'."
     }
   }
-}
-
-resource "google_service_account_iam_member" "mtc_node_workload_identity" {
-  count              = var.enable_multi_tier_checkpointing ? 1 : 0
-  service_account_id = "projects/${var.project_id}/serviceAccounts/${local.sa_email}"
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${replace(var.project_id, ":", "/")}.svc.id.goog[gke-managed-checkpointing/gke-checkpointing-multitier-node]"
-  depends_on = [
-    google_container_cluster.gke_cluster
-  ]
 }

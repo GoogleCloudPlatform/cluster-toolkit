@@ -132,9 +132,11 @@ steps:
               echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/ml-tpu7x-onspot-slurm.yaml"
 
               DEPLOYMENT_NAME="tpu7x-slurm-$$BUILD_ID_SHORT"
+              BLUEPRINT="/workspace/examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml"
+              BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | awk '{print \$$2}')
 
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/tpu7x-onspot-slurm/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/\$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
@@ -146,7 +148,6 @@ steps:
 
               REGION="us-central1"
               ZONE="us-central1-c"
-              BLUEPRINT="/workspace/examples/machine-learning/tpu7x-standard-4t/tpu7x-slurm-blueprint.yaml"
 
               sed -i "s/^  project_id:.*/  project_id: \$$PROJECT_ID/" \$$BLUEPRINT
               sed -i "s/^  deployment_name:.*/  deployment_name: \$$DEPLOYMENT_NAME/" \$$BLUEPRINT

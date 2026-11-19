@@ -434,35 +434,6 @@ func TestEnsureProjectExists_Timeout(t *testing.T) {
 	}
 }
 
-func TestCheckArtifactRegistryAPI_Timeout(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommandWithTimeout
-	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
-
-	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
-		if timeout != shell.DefaultCloudAPITimeout {
-			t.Errorf("expected timeout %v, got %v", shell.DefaultCloudAPITimeout, timeout)
-		}
-		return shell.CommandResult{ExitCode: 124, Err: context.DeadlineExceeded}
-	}
-
-	var state PrereqState
-	var missing []missingPrereq
-
-	checkArtifactRegistryAPI("test-project", &state, &missing)
-
-	if len(missing) != 1 {
-		t.Fatalf("expected 1 missing prereq, got %d", len(missing))
-	}
-
-	expectedName := fmt.Sprintf("Artifact Registry API (verification timed out after %v)", shell.DefaultCloudAPITimeout)
-	if missing[0].name != expectedName {
-		t.Errorf("missing[0].name = %q, want %q", missing[0].name, expectedName)
-	}
-	if state.ArtifactRegistryAPIEnabled {
-		t.Error("expected ArtifactRegistryAPIEnabled to remain false on timeout")
-	}
-}
-
 func TestCheckK8sDependencies_Timeout(t *testing.T) {
 	origExecuteCommand := shell.ExecuteCommandWithTimeout
 	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
@@ -546,137 +517,35 @@ func TestEnsureApplicationDefaultCredentials_Failure(t *testing.T) {
 	}
 }
 
-func TestIsDockerCredsConfigured(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
+// stubPrereqCommands makes every local/gcloud command used by the prerequisite
+// checks succeed, points HOME and DOCKER_CONFIG at empty directories (no cached
+// state or Docker credentials on any OS), and returns the command lines executed.
+func stubPrereqCommands(t *testing.T) *[]string {
+	t.Helper()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("DOCKER_CONFIG", t.TempDir())
+	useFileStore(t)
 
-	dockerDir := filepath.Join(tempDir, ".docker")
-	configPath := filepath.Join(dockerDir, "config.json")
-
-	tests := []struct {
-		name          string
-		configContent string
-		shouldExist   bool
-		region        string
-		expected      bool
-	}{
-		{
-			name:        "No config file",
-			shouldExist: false,
-			region:      "us-central1",
-			expected:    false,
-		},
-		{
-			name:          "Corrupted config file",
-			configContent: "invalid",
-			shouldExist:   true,
-			region:        "us-central1",
-			expected:      false,
-		},
-		{
-			name:          "CredsStore set to gcloud",
-			configContent: `{"credsStore": "gcloud"}`,
-			shouldExist:   true,
-			region:        "us-central1",
-			expected:      true,
-		},
-		{
-			name:          "CredHelpers configured correctly",
-			configContent: `{"credHelpers": {"gcr.io": "gcloud", "us-central1-docker.pkg.dev": "gcloud"}}`,
-			shouldExist:   true,
-			region:        "us-central1",
-			expected:      true,
-		},
-		{
-			name:          "CredHelpers missing gcr.io",
-			configContent: `{"credHelpers": {"us-central1-docker.pkg.dev": "gcloud"}}`,
-			shouldExist:   true,
-			region:        "us-central1",
-			expected:      false,
-		},
-		{
-			name:          "CredHelpers missing regional registry",
-			configContent: `{"credHelpers": {"gcr.io": "gcloud"}}`,
-			shouldExist:   true,
-			region:        "us-central1",
-			expected:      false,
-		},
-		{
-			name:          "CredHelpers wrong helper",
-			configContent: `{"credHelpers": {"gcr.io": "desktop", "us-central1-docker.pkg.dev": "gcloud"}}`,
-			shouldExist:   true,
-			region:        "us-central1",
-			expected:      false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if !tt.shouldExist {
-				os.Remove(configPath)
-			} else {
-				if err := os.MkdirAll(dockerDir, 0755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(configPath, []byte(tt.configContent), 0644); err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			got := isDockerCredsConfigured(tt.region)
-			if got != tt.expected {
-				t.Errorf("isDockerCredsConfigured() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestEnsurePrerequisites_DockerCreds(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-
+	executed := new([]string)
 	origExecuteCommand := shell.ExecuteCommandWithTimeout
-	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
-
+	t.Cleanup(func() { shell.ExecuteCommandWithTimeout = origExecuteCommand })
 	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
+		*executed = append(*executed, strings.Join(append([]string{name}, args...), " "))
 		if name == "gcloud" && len(args) > 1 && args[0] == "auth" && args[1] == "list" {
 			return shell.CommandResult{ExitCode: 0, Stdout: "user@example.com"}
 		}
 		if name == "gcloud" && len(args) > 1 && args[0] == "services" && args[1] == "list" {
-			return shell.CommandResult{ExitCode: 0, Stdout: "artifactregistry.googleapis.com"}
+			return shell.CommandResult{ExitCode: 0, Stdout: "ENABLED"}
 		}
 		return shell.CommandResult{ExitCode: 0}
 	}
 
 	origGetADCSetupCommand := getADCSetupCommandFunc
-	defer func() { getADCSetupCommandFunc = origGetADCSetupCommand }()
+	t.Cleanup(func() { getADCSetupCommandFunc = origGetADCSetupCommand })
 	getADCSetupCommandFunc = func() string { return "" }
-
-	origStore := store
-	defer func() { store = origStore }()
-	store = &MockPrereqStore{
-		State: PrereqState{
-			LastCheckedTimestamp: time.Now().Add(-48 * time.Hour), // Stale
-		},
-	}
-
-	cmd := &cobra.Command{}
-	projectID := "test-project"
-	location := "us-central1-a"
-
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-
-	err := ensurePrerequisites(cmd, projectID, location)
-	if err == nil {
-		t.Error("expected error because prerequisites are missing, got nil")
-	}
-
-	output := buf.String()
-	expectedCmd := "gcloud auth configure-docker us-central1-docker.pkg.dev --quiet"
-	if !strings.Contains(output, expectedCmd) {
-		t.Errorf("expected output to contain %q, but got:\n%s", expectedCmd, output)
-	}
+	return executed
 }
 
 type mockPrereqStore struct{}

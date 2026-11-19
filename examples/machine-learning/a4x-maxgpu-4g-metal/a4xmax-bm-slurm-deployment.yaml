@@ -25,3 +25,8 @@ vars:
   zone: # supply zone with a4x-maxgpu-4g-metal capacity in reservation
   a4x_max_cluster_size: # supply a4x-maxgpu-4g-metal reservation size
   a4x_max_reservation_name: # supply a4x-maxgpu-4g-metal reservation name
+
+## --- Optional overrides (defaults shown) ---
+  # a4x_max_node_count_dynamic_max: 0
+  # login_machine_type: c4a-standard-4
+  # controller_machine_type: c4a-highcpu-16

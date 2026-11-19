@@ -1,7 +1,7 @@
 
 backcall==0.2.0
 cachetools==5.3.1
-certifi==2024.7.4
+certifi==2026.10.19
 charset-normalizer==3.2.0
 decorator==5.1.1
 docopt==0.6.2
@@ -34,7 +34,7 @@ prompt-toolkit==3.0.39
 proto-plus==1.26.0
 protobuf==5.29.6
 ptyprocess==0.7.0
-pyasn1==0.6.4
+pyasn1==0.6.5
 pyasn1-modules==0.4.2
 Pygments==2.20.0
 pyparsing==3.1.0

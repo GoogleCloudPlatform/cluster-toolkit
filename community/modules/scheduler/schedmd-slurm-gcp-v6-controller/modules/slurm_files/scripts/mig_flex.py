@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional
+from typing import Any, List, Optional, Tuple
 
 import util
 import uuid
@@ -24,11 +24,13 @@ from time import sleep
 import dataclasses
 import re
 import shlex
+import threading
 import googleapiclient.errors  # type: ignore
 
 log = logging.getLogger()
 
 DWS_EOL_RESERVATION_DURATION = 10 # minutes
+_tpu_shared_resource_lock = threading.Lock()
 
 def _duration(flex_options: NSDict, job_id: Optional[int], lkp: util.Lookup) -> int:
     dur = flex_options.max_run_duration
@@ -285,67 +287,69 @@ def get_instance_template_copy(nodeset: NSDict, lkp: util.Lookup) -> str:
     source_template_name = util.trim_self_link(nodeset.instance_template)
     new_template_name = source_template_name.replace("-compute-", "-copy-")
     new_self_link = nodeset.instance_template.replace(source_template_name, new_template_name)
-    try:
-        lkp.compute.instanceTemplates().get(
-            project=lkp.project, instanceTemplate=new_template_name
-        ).execute()
-        return new_self_link
-    except googleapiclient.errors.HttpError as e:
-        if e.resp.status != 404:
-            raise
-    except Exception:
-        pass
-    source_template = (
-        lkp.compute.instanceTemplates()
-        .get(project=lkp.project, instanceTemplate=source_template_name)
-        .execute()
-    )
-    properties = dict(source_template.get("properties") or {})
-    properties["labels"] = {
-        **(properties.get("labels") or {}),
-        "slurm_template_role": "copy",
-    }
-    # TPU reservations require RESERVATION_BOUND and DELETE on termination in the template
-    if getattr(nodeset, "reservation_name", None):
-        local_prefix = f"projects/{lkp.project}/reservations/"
-        res_name = (
-            nodeset.reservation_name[len(local_prefix):]
-            if nodeset.reservation_name.startswith(local_prefix)
-            else nodeset.reservation_name
+    with _tpu_shared_resource_lock:
+        try:
+            lkp.compute.instanceTemplates().get(
+                project=lkp.project, instanceTemplate=new_template_name
+            ).execute()
+            return new_self_link
+        except googleapiclient.errors.HttpError as e:
+            if e.resp.status != 404:
+                raise
+        except Exception:
+            pass
+        source_template = (
+            lkp.compute.instanceTemplates()
+            .get(project=lkp.project, instanceTemplate=source_template_name)
+            .execute()
         )
-        properties["reservationAffinity"] = {
-            "consumeReservationType": "SPECIFIC_RESERVATION",
-            "key": f"compute.{util.universe_domain()}/reservation-name",
-            "values": [res_name],
+        properties = dict(source_template.get("properties") or {})
+        properties["labels"] = {
+            **(properties.get("labels") or {}),
+            "slurm_template_role": "copy",
         }
-        scheduling = properties.get("scheduling") or {}
-        properties["scheduling"] = scheduling
-        scheduling["provisioningModel"] = "RESERVATION_BOUND"
-        scheduling["instanceTerminationAction"] = "DELETE"
-    # Remove threadsPerCore=1 default since TPU machine types reject custom SMT settings
-    if lkp.is_tpu_nodeset(nodeset.nodeset_name):
-        if isinstance(properties.get("advancedMachineFeatures"), dict):
-            properties["advancedMachineFeatures"].pop("threadsPerCore", None)
-    req = lkp.compute.instanceTemplates().insert(
-        project=lkp.project,
-        body=dict(
-            name=new_template_name,
-            properties=properties,
-            description=f"Cluster Toolkit copy of {source_template_name}",
-        ),
-    )
-    util.log_api_request(req)
-    try:
-        op = req.execute()
-    except googleapiclient.errors.HttpError as insert_err:
-        if insert_err.resp.status != 409:
-            raise
-        log.info("Instance template %s already exists, skipping creation.", new_template_name)
-    else:
-        res = util.wait_for_operation(op)
-        if "error" in res:
-            raise RuntimeError(f"Failed to copy instance template: {res}")
-    return new_self_link
+        # TPU reservations require RESERVATION_BOUND and DELETE on termination in the template
+        if getattr(nodeset, "reservation_name", None):
+            local_prefix = f"projects/{lkp.project}/reservations/"
+            res_name = (
+                nodeset.reservation_name[len(local_prefix):]
+                if nodeset.reservation_name.startswith(local_prefix)
+                else nodeset.reservation_name
+            )
+            properties["reservationAffinity"] = {
+                "consumeReservationType": "SPECIFIC_RESERVATION",
+                "key": f"compute.{util.universe_domain()}/reservation-name",
+                "values": [res_name],
+            }
+            scheduling = properties.get("scheduling") or {}
+            properties["scheduling"] = scheduling
+            scheduling["provisioningModel"] = "RESERVATION_BOUND"
+            scheduling["instanceTerminationAction"] = "DELETE"
+        # Remove threadsPerCore=1 default since TPU machine types reject custom SMT settings
+        if lkp.is_tpu_nodeset(nodeset.nodeset_name):
+            if isinstance(properties.get("advancedMachineFeatures"), dict):
+                properties["advancedMachineFeatures"].pop("threadsPerCore", None)
+        req = lkp.compute.instanceTemplates().insert(
+            project=lkp.project,
+            body=dict(
+                name=new_template_name,
+                properties=properties,
+                description=f"Cluster Toolkit copy of {source_template_name}",
+            ),
+        )
+        util.log_api_request(req)
+        try:
+            op = req.execute()
+        except googleapiclient.errors.HttpError as insert_err:
+            if insert_err.resp.status != 409:
+                raise
+            log.info("Instance template %s already exists, skipping creation.", new_template_name)
+            sleep(util.ALREADY_EXISTS_SETTLE_SEC)
+        else:
+            res = util.wait_for_operation(op)
+            if "error" in res:
+                raise RuntimeError(f"Failed to copy instance template: {res}")
+        return new_self_link
 
 def get_mig_for_node(node: str, lkp: util.Lookup) -> tuple[Optional[str], List[str], bool]:
     """Returns (mig_self_link, all_nodes_in_mig, is_creating) for the MIG managing the given node."""
@@ -431,8 +435,51 @@ def resume_tpu_chunk(
         reason = shlex.quote("Node cannot be resumed, not all nodes in the target TPU slice are ready to be resumed")
         util.run(f"{lkp.scontrol} update nodename={nodelist} state=POWER_DOWN_FORCE reason={reason}", check=False)
         return
-    for slice_chunk in util.chunked(chunk, n=vmcount):
-        _resume_single_tpu_node(slice_chunk, job_id, lkp, topology=topology)
+    _resume_single_tpu_node(chunk, job_id, lkp, topology=topology)
+
+
+def resume_tpu_chunks(
+    chunks: List[Any],
+    resume_data: Optional[Any],
+    lkp: util.Lookup,
+) -> List[Tuple[Any, Exception]]:
+    """Resumes TPU chunks concurrently on a shared thread pool.
+
+    Returns a list of (chunk, exception) pairs for any chunks that failed.
+    """
+    if not chunks:
+        return []
+    # Warm cached properties on the main thread before fanning out across worker threads
+    try:
+        _ = lkp.compute
+        _ = lkp.instances()
+    except Exception:
+        pass
+    work = []
+    for chunk in chunks:
+        job_topo = None
+        if resume_data and chunk.excl_job_id is not None:
+            for job in resume_data.jobs:
+                if job.job_id == chunk.excl_job_id and job.accelerator_topology:
+                    job_topo = job.accelerator_topology
+                    break
+        work.append((chunk, job_topo))
+
+    def _resume(item: Tuple[Any, Optional[str]]) -> None:
+        chunk, job_topo = item
+        resume_tpu_chunk(chunk.nodes, chunk.excl_job_id, lkp, topology=job_topo)
+
+    results = list(util.map_with_futures(_resume, work))
+    failed: List[Tuple[Any, Exception]] = []
+    for (chunk, _), res in zip(work, results):
+        if isinstance(res, Exception):
+            log.error(
+                "Failed to resume TPU slice %s: %s",
+                util.to_hostlist(chunk.nodes),
+                res,
+            )
+            failed.append((chunk, res))
+    return failed
 
 def _resume_single_tpu_node(
     chunk: List[str],
@@ -566,9 +613,9 @@ def _resume_single_tpu_node(
             raise RuntimeError(f"TPU MIG resize operation failed: {err_str}")
     except Exception:
         mig_self_link = (
-            f"zones/{zones[0]}/instanceGroupManagers/{mig_name}"
+            f"projects/{lkp.project}/zones/{zones[0]}/instanceGroupManagers/{mig_name}"
             if is_zonal
-            else f"regions/{region}/instanceGroupManagers/{mig_name}"
+            else f"projects/{lkp.project}/regions/{region}/instanceGroupManagers/{mig_name}"
         )
         _delete_tpu_mig(mig_self_link, chunk, lkp)
         raise
@@ -579,32 +626,34 @@ def _ensure_tpu_workload_policy(policy: ResourcePolicy, lkp: util.Lookup) -> str
     policy_resource_name = (
         f"projects/{lkp.project}/regions/{policy.region}/resourcePolicies/{policy.name}"
     )
-    try:
-        lkp.compute.resourcePolicies().get(
-            project=lkp.project, region=policy.region, resourcePolicy=policy.name
-        ).execute()
-        return policy_resource_name
-    except googleapiclient.errors.HttpError as e:
-        if e.resp.status != 404:
-            raise
-        log.info("Creating TPU Workload Policy: %s", policy.name)
-        req = lkp.compute.resourcePolicies().insert(
-            project=lkp.project,
-            region=policy.region,
-            body=dataclasses.asdict(policy),
-        )
-        util.log_api_request(req)
+    with _tpu_shared_resource_lock:
         try:
-            op = req.execute()
-        except googleapiclient.errors.HttpError as insert_err:
-            if insert_err.resp.status != 409:
-                raise
-            log.info("TPU Workload Policy %s already exists, skipping creation.", policy.name)
+            lkp.compute.resourcePolicies().get(
+                project=lkp.project, region=policy.region, resourcePolicy=policy.name
+            ).execute()
             return policy_resource_name
-        res = util.wait_for_operation(op)
-        if "error" in res:
-            raise RuntimeError(f"Failed to create TPU Workload Policy: {res}")
-        return policy_resource_name
+        except googleapiclient.errors.HttpError as e:
+            if e.resp.status != 404:
+                raise
+            log.info("Creating TPU Workload Policy: %s", policy.name)
+            req = lkp.compute.resourcePolicies().insert(
+                project=lkp.project,
+                region=policy.region,
+                body=dataclasses.asdict(policy),
+            )
+            util.log_api_request(req)
+            try:
+                op = req.execute()
+            except googleapiclient.errors.HttpError as insert_err:
+                if insert_err.resp.status != 409:
+                    raise
+                log.info("TPU Workload Policy %s already exists, skipping creation.", policy.name)
+                sleep(util.ALREADY_EXISTS_SETTLE_SEC)
+                return policy_resource_name
+            res = util.wait_for_operation(op)
+            if "error" in res:
+                raise RuntimeError(f"Failed to create TPU Workload Policy: {res}")
+            return policy_resource_name
 
 def suspend_tpu_nodes(nodes: List[str], lkp: util.Lookup) -> None:
     """Suspends TPU nodes by identifying and deleting their ephemeral MIGs and cleaning up phantom peers."""

@@ -168,3 +168,15 @@ output "node_service_account" {
   description = "The GCP Service Account email used by the GKE node pools."
   value       = local.sa_email
 }
+
+output "mtc_service_account_member" {
+  description = "Workload Identity Federation principal of the Multi-Tier Checkpointing (MTC) driver's Kubernetes service account. Grant it object access on the MTC checkpoint bucket; it is only used when enable_multi_tier_checkpointing is true."
+  # Referencing the cluster's workload pool makes IAM grants on this principal
+  # wait for the cluster, which creates the pool in a new project.
+  value = "principal://iam.googleapis.com/projects/${data.google_project.project.number}/locations/global/workloadIdentityPools/${google_container_cluster.gke_cluster.workload_identity_config[0].workload_pool}/subject/ns/gke-managed-checkpointing/sa/gke-checkpointing-multitier-node"
+}
+
+output "enable_multi_tier_checkpointing" {
+  description = "Indicates whether High Scale Checkpointing (Multi-Tier Checkpointing) is enabled."
+  value       = var.enable_multi_tier_checkpointing
+}

@@ -29,6 +29,7 @@
     scontrol show config | grep -E "GresTypes\s*=.*tpu"
     scontrol show config | grep -E "JobSubmitPlugins\s*=.*tpu"
     scontrol show config | grep -E "CliFilterPlugins\s*=.*tpu"
+    scontrol show config | grep -E "SlurmctldParameters\s*=.*enable_async_reply"
   args:
     executable: /bin/bash
   changed_when: false
@@ -62,7 +63,7 @@
     executable: /bin/bash
   changed_when: false
 
-- name: Verify srun on Static TPU partition (mounts, cgroup ConstrainDevices=no, and VFIO devices)
+- name: Verify srun on Static TPU partition (mounts, cgroup ConstrainDevices, and VFIO devices)
   ansible.builtin.command: >
     srun -N {{ custom_vars.num_slurm_nodes | default(1) }}
     -p {{ custom_vars.tpu_partition }}
@@ -70,7 +71,7 @@
     bash -c '
     set -e;
     mount | grep -q "on /home ";
-    grep -q "^ConstrainDevices=no" /var/spool/slurmd/conf-cache/cgroup.conf /usr/local/etc/slurm/cgroup.conf 2>/dev/null;
+    grep -q "^ConstrainDevices={{ "no" if custom_vars.tpu_type in ["tpu7x", "v5p"] else "yes" }}" /var/spool/slurmd/conf-cache/cgroup.conf /usr/local/etc/slurm/cgroup.conf 2>/dev/null;
     VFIO_COUNT=$(ls -1 /dev/vfio/devices/vfio* | wc -l);
     echo "Static partition $(hostname): Found ${VFIO_COUNT} VFIO TPU devices";
     test "${VFIO_COUNT}" -eq {{ custom_vars.expected_tpu_cores }};
@@ -126,7 +127,7 @@
     mode: "0755"
     content: |
       #!/bin/bash
-      #SBATCH --job-name=tpu7x-sbatch-test
+      #SBATCH --job-name={{ custom_vars.tpu_type }}-sbatch-test
       #SBATCH --partition={{ custom_vars.tpu_partition }}
       #SBATCH --nodes={{ custom_vars.num_slurm_nodes | default(1) }}
       #SBATCH --layout={{ custom_vars.tpu_type }}={{ custom_vars.tpu_topology }}
@@ -161,7 +162,7 @@
   delay: 30
 
 - name: Verify sbatch job output on shared /home filesystem
-  ansible.builtin.command: "cat {{ ansible_facts['user_dir'] }}/tpu7x-sbatch-test_{{ sbatch_job.stdout | trim }}.out"
+  ansible.builtin.command: "cat {{ ansible_facts['user_dir'] }}/{{ custom_vars.tpu_type }}-sbatch-test_{{ sbatch_job.stdout | trim }}.out"
   register: sbatch_output
   failed_when: "'TPU_SBATCH_SUCCESS' not in sbatch_output.stdout"
 

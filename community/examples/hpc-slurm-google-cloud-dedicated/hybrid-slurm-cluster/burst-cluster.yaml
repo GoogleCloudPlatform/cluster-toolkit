@@ -55,6 +55,13 @@ vars:
     # To read the image directly from Project A instead, set this to <PROJECT_A_ID> and grant
     # Project B's service agent roles/compute.imageUser on Project A.
     project: $(vars.project_id)
+  # Optional overrides (defaults shown)
+  # Number of statically provisioned nodes in the burst partition.
+  compute_node_count_static: 0
+  # Maximum number of dynamically provisioned nodes in the burst partition.
+  compute_node_count_dynamic_max: 16
+  # Machine type for the burst partition.
+  compute_machine_type: c3-standard-176
 
 terraform_providers:
   google:
@@ -260,9 +267,9 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, ssh_config]
     settings:
-      node_count_static: 0
-      node_count_dynamic_max: 16  # Elastic autoscaling nodes
-      machine_type: c3-standard-176
+      node_count_static: $(vars.compute_node_count_static)
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)  # Elastic autoscaling nodes
+      machine_type: $(vars.compute_machine_type)
       disk_type: hyperdisk-balanced
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false

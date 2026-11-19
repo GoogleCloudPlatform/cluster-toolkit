@@ -81,15 +81,15 @@ gcloud auth login
 gcloud auth application-default login
 gcloud config set project YOUR_PROJECT_ID
 
-# Set GCLUSTER_IMAGE_REPO to your Artifact Registry repository name (not the full URL):
+# Set GCLUSTER_IMAGE_REPO to an Artifact Registry repository name (or a full registry/repository prefix):
 export GCLUSTER_IMAGE_REPO="my-ar-repo"
 ```
 
 > [!NOTE]
-> **Artifact Registry configuration for on-the-fly builds (`GCLUSTER_IMAGE_REPO`):**
+> **Container registry configuration for on-the-fly builds (`GCLUSTER_IMAGE_REPO`):**
 >
-> - When you use `--base-image` with `--build-context`, `gcluster` automatically constructs the target image registry path using your cluster's region and project ID: `REGION-docker.pkg.dev/PROJECT_ID/IMAGE_REPO/IMAGE_NAME:TAG` (where `IMAGE_REPO` is the value of `$GCLUSTER_IMAGE_REPO`).
-> - **Cross-region / cross-project constraint:** The on-the-fly container image builder currently does not support Artifact Registry repositories located in a different region or Google Cloud project than the target cluster. If your workflow relies on a centralized registry across projects or regions, build and push your container image independently, and supply the full image URI directly via `--image`.
+> - When `GCLUSTER_IMAGE_REPO` is set to a bare repository name (or subpath such as `my-ar-repo/team-a`), `gcluster` constructs the regional Artifact Registry path using your cluster's region and project ID: `REGION-docker.pkg.dev/PROJECT_ID/IMAGE_REPO/USER-runner:TAG`.
+> - **Cross-region, cross-project, and non-Artifact Registry OCI repositories:** To push to an Artifact Registry repository in another region or Google Cloud project—or to an OCI registry such as Harbor—set `GCLUSTER_IMAGE_REPO` to the full `<registry-host>/<repository>` prefix (for example, `us-west4-docker.pkg.dev/shared-project/my-ar-repo` or `harbor.example.com/ml-team`).
 
 ---
 
@@ -128,7 +128,7 @@ vars:
   zone: us-central1-a
   region: us-central1
   num_slices: 2
-  machine_type: ct6e-standard-4t
+  compute_machine_type: ct6e-standard-4t
   tpu_topology: 4x4
   enable_private_endpoint: true
   authorized_cidr: 10.0.0.0/8
@@ -154,7 +154,7 @@ deployment_groups:
     use: [tpu_cluster]
     settings:
       name: tpu-pool
-      machine_type: $(vars.machine_type)
+      machine_type: $(vars.compute_machine_type)
       num_slices: $(vars.num_slices)
       spot: $(vars.spot)
       placement_policy:
@@ -209,19 +209,19 @@ Submit workloads in Cluster Toolkit using `gcluster job submit`.
 
 ### 🧠 Compute Type & Topology Resolution
 
-Supported hardware shorthands (such as `v6e-4`, `v4-8`, `l4-8`, `h100-80gb-8`) can be passed directly into `--compute-type`. For configurations where the shorthand is not in the static map (such as `v5e-*`), or when specifying multi-slice topologies, pass the resolved GCE machine type with explicit `--topology` (e.g., `--compute-type ct5lp-hightpu-4t --topology 4x4` or `--compute-type ct6e-standard-4t --topology 4x4`). Note that for TPU 7x, an explicit `--topology` is always mandatory (e.g. `--compute-type tpu7x-standard-4t --topology 4x4x8`).
+Supported hardware shorthands (such as `v6e-4`, `v5e-8` / `v5litepod-8`, `v4-8`, `l4-8`, `h100-80gb-8`) can be passed directly into `--compute-type`. Because a TPU slice shorthand (e.g., `v5e-8`) can run on different host shapes (`ct5lp-hightpu-8t` vs. `ct5lp-hightpu-4t`), `gcluster` resolves the host machine type from the cluster's existing TPU node pools; to pin a specific host shape or when specifying custom multi-slice topologies on NAP clusters, pass the resolved GCE machine type with explicit `--topology` (e.g., `--compute-type ct5lp-hightpu-4t --topology 2x4` or `--compute-type ct6e-standard-4t --topology 4x4`). Note that for TPU 7x, an explicit `--topology` is always mandatory (e.g. `--compute-type tpu7x-standard-4t --topology 4x4x8`).
 
 ### 📋 1:1 Flag Mapping Matrix
 
 | XPK `workload create` Flag | `gcluster job submit` Flag | Notes / Differences |
 | :--- | :--- | :--- |
-| `--workload <NAME>` | `--name <NAME>` | Workload name (max 28 characters) |
+| `--workload <NAME>` | `--name <NAME>` | Workload name (max 28 characters for standard jobs, or max 22 characters when `--pathways` is enabled) |
 | `--cluster <NAME>` | `--cluster <NAME>` | Target GKE cluster (optional if configured in `gcluster job config`) |
 | `--project <ID>` | `--project <ID>` | Target Google Cloud project |
 | `--zone <ZONE>` / `--region <REGION>` | `--location <LOC>` | Target cluster region or zone |
 | `--docker-image <IMG>` | `--image <IMG>` | Container image URL |
 | `--command "<CMD>"` | `--command "<CMD>"` | Main entrypoint command |
-| `--tpu-type <TYPE>` / `--device-type <TYPE>` | `--compute-type <TYPE> [--topology <TOP>]` | Accepts shorthand directly (e.g. `v6e-4`, `v4-8`, `l4-8`) or GCE machine type with topology (e.g. `ct5lp-hightpu-4t --topology 4x4`, `tpu7x-standard-4t --topology 4x4x8`) |
+| `--tpu-type <TYPE>` / `--device-type <TYPE>` | `--compute-type <TYPE> [--topology <TOP>]` | Accepts shorthand directly (e.g. `v6e-4`, `v5e-8`, `v4-8`, `l4-8`) or GCE machine type with topology (e.g. `ct5lp-hightpu-4t --topology 2x4`, `tpu7x-standard-4t --topology 4x4x8`) |
 | `--num-slices <N>` | `--num-slices <N>` | Number of TPU slices |
 | `--num-nodes <N>` | `--num-nodes <N>` | GPU/CPU jobs only. Omit `--num-nodes` for TPU jobs |
 | `--priority <PRIORITY>` | `--priority <PRIORITY>` | Kueue queue priority (`low`, `medium`, `high`) |

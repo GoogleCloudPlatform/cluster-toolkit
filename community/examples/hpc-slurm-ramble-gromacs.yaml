@@ -22,6 +22,11 @@ vars:
   region: us-central1
   zone: us-central1-c
   system_user_name: spack-ramble
+  # Optional overrides (defaults shown)
+  # Maximum number of dynamically provisioned nodes in the compute partition.
+  compute_node_count_dynamic_max: 20
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -115,7 +120,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      node_count_dynamic_max: 20
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
 
@@ -129,7 +134,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: true
 
   - id: slurm_controller

@@ -15,23 +15,40 @@
 package gke
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
-	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8syaml "sigs.k8s.io/yaml"
+
 	"hpc-toolkit/pkg/shell"
 
+	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
+
+func TestMain(m *testing.M) {
+	_ = os.Unsetenv(refreshCredentialsEnv)
+	os.Exit(m.Run())
+}
 
 var errLoadKubeconfigForTest = errors.New("kubeconfig unreadable")
 
@@ -109,10 +126,14 @@ func kubeconfigWith(server string, caData []byte, exec *clientcmdapi.ExecConfig,
 }
 
 func gkeExec() *clientcmdapi.ExecConfig {
-	return &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin"}
+	return &clientcmdapi.ExecConfig{
+		Command:         "gke-gcloud-auth-plugin",
+		APIVersion:      "client.authentication.k8s.io/v1beta1",
+		InteractiveMode: clientcmdapi.IfAvailableExecInteractiveMode,
+	}
 }
 
-func staticLoader(cfg *clientcmdapi.Config) kubeconfigLoader {
+func staticLoader(cfg *clientcmdapi.Config) k8s.KubeconfigLoader {
 	return func() (*clientcmdapi.Config, error) { return cfg, nil }
 }
 
@@ -143,17 +164,39 @@ func TestKnownEndpoints_EmptyDescribe(t *testing.T) {
 	}
 }
 
+func TestKnownEndpoints_DNSOnlyClusterPreservesDNSMode(t *testing.T) {
+	desc := gkeCluster{
+		Endpoint:             testDNSHost,
+		PrivateClusterConfig: &gkePrivateClusterConfig{PublicEndpoint: testPublicIP, PrivateEndpoint: "172.16.0.34"},
+		ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
+			DnsEndpointConfig: &dnsEndpointConfig{AllowExternalTraffic: true, Endpoint: testDNSHost},
+			IPEndpointsConfig: &ipEndpointsConfig{Enabled: new(false), PublicEndpoint: testPublicIP, PrivateEndpoint: "172.16.0.34"},
+		},
+	}
+	got := desc.knownEndpoints()
+	if len(got) != 1 || got["https://"+testDNSHost] != endpointModeDNS {
+		t.Fatalf("knownEndpoints() for DNS-only cluster = %v, want only https://%s -> DNS", got, testDNSHost)
+	}
+
+	// Even when Enabled is omitted (legacy response), DNS wins when Endpoint mirrors the DNS host.
+	desc.ControlPlaneEndpointsConfig.IPEndpointsConfig.Enabled = nil
+	if got := desc.knownEndpoints(); got["https://"+testDNSHost] != endpointModeDNS {
+		t.Fatalf("knownEndpoints() with mirrored Endpoint = %v, want https://%s -> DNS", got, testDNSHost)
+	}
+}
+
 func TestEvaluateExistingContext(t *testing.T) {
 	caBytes := []byte(testCAPEM)
 	desc := testClusterDesc(true, true)
 
 	tests := []struct {
-		name       string
-		cfg        *clientcmdapi.Config
-		desc       gkeCluster
-		wantReuse  bool
-		wantMode   endpointMode
-		wantReason string
+		name        string
+		cfg         *clientcmdapi.Config
+		desc        gkeCluster
+		wantReuse   bool
+		wantContext string
+		wantMode    endpointMode
+		wantReason  string
 	}{
 		{
 			name:      "DNS-mode context with exec plugin and no CA data is reusable",
@@ -256,24 +299,137 @@ func TestEvaluateExistingContext(t *testing.T) {
 		},
 		{
 			name:      "exec plugin given by absolute path is accepted",
-			cfg:       kubeconfigWith("https://"+testDNSHost, nil, &clientcmdapi.ExecConfig{Command: "/usr/lib/google-cloud-sdk/bin/gke-gcloud-auth-plugin"}, testContext),
+			cfg:       kubeconfigWith("https://"+testDNSHost, nil, &clientcmdapi.ExecConfig{Command: "/usr/lib/google-cloud-sdk/bin/gke-gcloud-auth-plugin", APIVersion: "client.authentication.k8s.io/v1beta1", InteractiveMode: clientcmdapi.IfAvailableExecInteractiveMode}, testContext),
 			desc:      desc,
 			wantReuse: true,
 			wantMode:  endpointModeDNS,
 		},
 		{
 			name:      "exec plugin with Windows .exe suffix is accepted",
-			cfg:       kubeconfigWith("https://"+testDNSHost, nil, &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin.exe"}, testContext),
+			cfg:       kubeconfigWith("https://"+testDNSHost, nil, &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin.exe", APIVersion: "client.authentication.k8s.io/v1beta1", InteractiveMode: clientcmdapi.IfAvailableExecInteractiveMode}, testContext),
 			desc:      desc,
 			wantReuse: true,
 			wantMode:  endpointModeDNS,
 		},
 		{
 			name:      "exec plugin with uppercase .EXE suffix and backslash Windows install path is accepted",
-			cfg:       kubeconfigWith("https://"+testDNSHost, nil, &clientcmdapi.ExecConfig{Command: `C:\Program Files\Google\Cloud SDK\google-cloud-sdk\bin\GKE-GCLOUD-AUTH-PLUGIN.EXE`}, testContext),
+			cfg:       kubeconfigWith("https://"+testDNSHost, nil, &clientcmdapi.ExecConfig{Command: `C:\Program Files\Google\Cloud SDK\google-cloud-sdk\bin\GKE-GCLOUD-AUTH-PLUGIN.EXE`, APIVersion: "client.authentication.k8s.io/v1beta1", InteractiveMode: clientcmdapi.IfAvailableExecInteractiveMode}, testContext),
 			desc:      desc,
 			wantReuse: true,
 			wantMode:  endpointModeDNS,
+		},
+		{
+			name:      "exec plugin with v1 apiVersion and Never interactiveMode is accepted",
+			cfg:       kubeconfigWith("https://"+testDNSHost, nil, &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin", APIVersion: "client.authentication.k8s.io/v1", InteractiveMode: clientcmdapi.NeverExecInteractiveMode}, testContext),
+			desc:      desc,
+			wantReuse: true,
+			wantMode:  endpointModeDNS,
+		},
+		{
+			name:       "v1 exec plugin missing interactiveMode is not reusable",
+			cfg:        kubeconfigWith("https://"+testDNSHost, nil, &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin", APIVersion: "client.authentication.k8s.io/v1"}, testContext),
+			desc:       desc,
+			wantReuse:  false,
+			wantReason: "exec interactiveMode",
+		},
+		{
+			name:       "Always exec interactiveMode is not reusable in non-TTY subprocesses",
+			cfg:        kubeconfigWith("https://"+testDNSHost, nil, &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin", APIVersion: "client.authentication.k8s.io/v1", InteractiveMode: clientcmdapi.AlwaysExecInteractiveMode}, testContext),
+			desc:       desc,
+			wantReuse:  false,
+			wantReason: "exec interactiveMode",
+		},
+		{
+			name:       "invalid exec interactiveMode is not reusable",
+			cfg:        kubeconfigWith("https://"+testDNSHost, nil, &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin", APIVersion: "client.authentication.k8s.io/v1beta1", InteractiveMode: "Bogus"}, testContext),
+			desc:       desc,
+			wantReuse:  false,
+			wantReason: "exec interactiveMode",
+		},
+		{
+			name: "combined static token and exec plugin is not reusable",
+			cfg: func() *clientcmdapi.Config {
+				c := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext)
+				c.AuthInfos[testContext].Token = "stale-static-token"
+				return c
+			}(),
+			desc:       desc,
+			wantReuse:  false,
+			wantReason: "static credentials with exec",
+		},
+		{
+			name: "combined client certificate and exec plugin is not reusable",
+			cfg: func() *clientcmdapi.Config {
+				c := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext)
+				c.AuthInfos[testContext].ClientCertificateData = []byte("cert")
+				return c
+			}(),
+			desc:       desc,
+			wantReuse:  false,
+			wantReason: "static credentials with exec",
+		},
+		{
+			name: "combined auth-provider and exec plugin is not reusable",
+			cfg: func() *clientcmdapi.Config {
+				c := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext)
+				c.AuthInfos[testContext].AuthProvider = &clientcmdapi.AuthProviderConfig{Name: "gcp"}
+				return c
+			}(),
+			desc:       desc,
+			wantReuse:  false,
+			wantReason: "auth-provider and exec",
+		},
+		{
+			name: "context referencing missing cluster entry is not reusable",
+			cfg: func() *clientcmdapi.Config {
+				c := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext)
+				delete(c.Clusters, testContext)
+				return c
+			}(),
+			desc:       desc,
+			wantReuse:  false,
+			wantReason: "references unknown cluster entry",
+		},
+		{
+			name:       "legacy v1alpha1 exec plugin is not reusable",
+			cfg:        kubeconfigWith("https://"+testDNSHost, nil, &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin", APIVersion: "client.authentication.k8s.io/v1alpha1", InteractiveMode: clientcmdapi.IfAvailableExecInteractiveMode}, testContext),
+			desc:       desc,
+			wantReuse:  false,
+			wantReason: "unsupported exec apiVersion",
+		},
+		{
+			name:       "empty exec apiVersion is not reusable",
+			cfg:        kubeconfigWith("https://"+testDNSHost, nil, &clientcmdapi.ExecConfig{Command: "gke-gcloud-auth-plugin", InteractiveMode: clientcmdapi.IfAvailableExecInteractiveMode}, testContext),
+			desc:       desc,
+			wantReuse:  false,
+			wantReason: "unsupported exec apiVersion",
+		},
+		{
+			name: "DNS-only cluster with Endpoint mirroring DNS host and no CA data is reusable",
+			cfg:  kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext),
+			desc: gkeCluster{
+				Endpoint: testDNSHost,
+				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
+					DnsEndpointConfig: &dnsEndpointConfig{AllowExternalTraffic: true, Endpoint: testDNSHost},
+					IPEndpointsConfig: &ipEndpointsConfig{Enabled: new(false)},
+				},
+			},
+			wantReuse: true,
+			wantMode:  endpointModeDNS,
+		},
+		{
+			name: "renamed GKE context alias referencing canonical cluster entry is reusable",
+			cfg: func() *clientcmdapi.Config {
+				c := clientcmdapi.NewConfig()
+				c.Clusters[testContext] = &clientcmdapi.Cluster{Server: "https://" + testDNSHost}
+				c.AuthInfos[testContext] = &clientcmdapi.AuthInfo{Exec: gkeExec()}
+				c.Contexts["prod-gpu"] = &clientcmdapi.Context{Cluster: testContext, AuthInfo: testContext, Namespace: "team-ns"}
+				return c
+			}(),
+			desc:        desc,
+			wantReuse:   true,
+			wantContext: "prod-gpu",
+			wantMode:    endpointModeDNS,
 		},
 		{
 			name: "legacy context named after the cluster is found",
@@ -284,9 +440,10 @@ func TestEvaluateExistingContext(t *testing.T) {
 				c.Contexts[testCluster] = &clientcmdapi.Context{Cluster: testCluster, AuthInfo: "u"}
 				return c
 			}(),
-			desc:      desc,
-			wantReuse: true,
-			wantMode:  endpointModeDNS,
+			desc:        desc,
+			wantReuse:   true,
+			wantContext: testCluster,
+			wantMode:    endpointModeDNS,
 		},
 	}
 
@@ -296,13 +453,57 @@ func TestEvaluateExistingContext(t *testing.T) {
 			if got.reusable() != tt.wantReuse {
 				t.Fatalf("reusable() = %v, want %v (reason=%q)", got.reusable(), tt.wantReuse, got.reason)
 			}
-			if tt.wantReuse && got.mode != tt.wantMode {
-				t.Errorf("mode = %v, want %v", got.mode, tt.wantMode)
+			if tt.wantReuse {
+				wantCtx := tt.wantContext
+				if wantCtx == "" {
+					wantCtx = testContext
+				}
+				if got.contextName != wantCtx || got.mode != tt.wantMode {
+					t.Errorf("check = (context=%q, mode=%v), want (%q, %v)", got.contextName, got.mode, wantCtx, tt.wantMode)
+				}
 			}
 			if !tt.wantReuse && !strings.Contains(got.reason, tt.wantReason) {
 				t.Errorf("reason = %q, want substring %q", got.reason, tt.wantReason)
 			}
 		})
+	}
+}
+
+func TestEvaluateExistingContext_YAMLExecInteractiveModeDefaults(t *testing.T) {
+	desc := testClusterDesc(true, true)
+	load := func(apiVersion string) *clientcmdapi.Config {
+		t.Helper()
+		raw := fmt.Sprintf(`apiVersion: v1
+kind: Config
+clusters:
+- name: %s
+  cluster:
+    server: https://%s
+contexts:
+- name: %s
+  context:
+    cluster: %s
+    user: %s
+users:
+- name: %s
+  user:
+    exec:
+      apiVersion: %s
+      command: gke-gcloud-auth-plugin
+`, testContext, testDNSHost, testContext, testContext, testContext, testContext, apiVersion)
+		cfg, err := clientcmd.Load([]byte(raw))
+		if err != nil {
+			t.Fatalf("clientcmd.Load(%s) error = %v", apiVersion, err)
+		}
+		return cfg
+	}
+
+	// client-go defaults omitted interactiveMode to IfAvailable for v1beta1 YAML, but not for v1 YAML.
+	if got := evaluateExistingContext(load("client.authentication.k8s.io/v1beta1"), testCluster, testLocation, testProject, desc); !got.reusable() {
+		t.Fatalf("v1beta1 YAML without interactiveMode should be reusable after client-go defaulting; got reason=%q", got.reason)
+	}
+	if got := evaluateExistingContext(load("client.authentication.k8s.io/v1"), testCluster, testLocation, testProject, desc); got.reusable() || !strings.Contains(got.reason, "interactiveMode") {
+		t.Fatalf("v1 YAML without interactiveMode must not be reusable; got reusable=%v reason=%q", got.reusable(), got.reason)
 	}
 }
 
@@ -327,10 +528,15 @@ func TestClassifyProbeFailure(t *testing.T) {
 		{"error: the server responded with the status code 504 but did not return more information", probeConnectivity},
 		{"Error from server (Timeout): Gateway Timeout", probeConnectivity},
 		{"error: You must be logged in to the server (Unauthorized)", probeAuth},
+		{"error: You must be logged in to the server (the server has asked for the client to provide credentials)", probeAuth},
 		{"Unable to connect to the server: getting credentials: exec: executable gke-gcloud-auth-plugin not found", probeAuth},
 		{"Unable to connect to the server: getting credentials: exec: executable gke-gcloud-auth-plugin failed with exit code 1", probeAuth},
 		{"could not get token: oauth2: cannot fetch token: 400 Bad Request", probeAuth},
 		{"Error from server (Forbidden): forbidden: User cannot get path \"/version\"", probeForbidden},
+		// GKE's DNS endpoint returns HTTP 403 when external traffic is disabled, IAM denies clusters.connect, or VPC-SC blocks access.
+		{"Error from server (Forbidden): control_plane_endpoints_config.dns_endpoint_config.allow_external_traffic is disabled, external access via DNS endpoint is not allowed", probeConnectivity},
+		{"Error from server (Forbidden): Permission 'container.googleapis.com/clusters.connect' denied on resource '//container.googleapis.com/projects/p/locations/l/clusters/c'", probeConnectivity},
+		{"Error from server (Forbidden): Request is prohibited by organization's policy. vpcServiceControlsUniqueIdentifier: abc123", probeConnectivity},
 		// A forward proxy refusing the CONNECT is a connectivity problem, not an apiserver RBAC rejection.
 		{"Unable to connect to the server: proxyconnect tcp: dial tcp 203.0.113.10:443: proxy returned status 403 Forbidden", probeConnectivity},
 		// Incidental substrings must not be misread as connectivity failures.
@@ -624,7 +830,7 @@ func TestConfigureKubectl_RefreshEnvForcesRegeneration(t *testing.T) {
 }
 
 func TestConfigureKubectl_RefreshEnvFalseValuesDoNotForce(t *testing.T) {
-	for _, v := range []string{"", "0", "false", "FALSE", "no"} {
+	for _, v := range []string{"", "0", "false", "FALSE", "no", "off", "OFF"} {
 		t.Run("value="+v, func(t *testing.T) {
 			t.Setenv(refreshCredentialsEnv, v)
 			exec := newExactExecutor(map[string][]shell.CommandResult{probeCmd: {{ExitCode: 0}}})
@@ -785,6 +991,21 @@ func TestShouldUseDNSEndpoint(t *testing.T) {
 			},
 			wantEndpoint: true,
 		},
+		{
+			name: "IP endpoints explicitly disabled uses DNS endpoint even if EnablePublicEndpoint is true",
+			clusterDesc: gkeCluster{
+				ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
+					DnsEndpointConfig: &dnsEndpointConfig{
+						AllowExternalTraffic: true,
+					},
+					IPEndpointsConfig: &ipEndpointsConfig{
+						Enabled:              new(false),
+						EnablePublicEndpoint: true,
+					},
+				},
+			},
+			wantEndpoint: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -794,6 +1015,108 @@ func TestShouldUseDNSEndpoint(t *testing.T) {
 				t.Errorf("shouldUseDNSEndpoint() = %v, want %v", got, tt.wantEndpoint)
 			}
 		})
+	}
+}
+
+func TestEndpointModeOrder_DNSOnlyOmitsIPFallback(t *testing.T) {
+	orc := &GKEOrchestrator{
+		clusterDesc: gkeCluster{
+			Endpoint: testDNSHost,
+			ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
+				DnsEndpointConfig: &dnsEndpointConfig{AllowExternalTraffic: true, Endpoint: testDNSHost},
+				IPEndpointsConfig: &ipEndpointsConfig{Enabled: new(false)},
+			},
+		},
+	}
+	if got := orc.endpointModeOrder(endpointModeUnknown); !slices.Equal(got, []endpointMode{endpointModeDNS}) {
+		t.Fatalf("endpointModeOrder(DNS-only) = %v, want [DNS]", got)
+	}
+	if got := orc.endpointModeOrder(endpointModeDNS); !slices.Equal(got, []endpointMode{endpointModeDNS}) {
+		t.Fatalf("endpointModeOrder(DNS-only, avoid=DNS) = %v, want [DNS]", got)
+	}
+
+	// When both IP endpoints and external DNS are disabled, endpointModeOrder returns empty and regenerateKubeContext fails fast.
+	exec := newExactExecutor(nil)
+	disabledOrc := newTestGKEOrchestrator(exec)
+	disabledOrc.clusterDesc = gkeCluster{
+		ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
+			DnsEndpointConfig: &dnsEndpointConfig{AllowExternalTraffic: false, Endpoint: testDNSHost},
+			IPEndpointsConfig: &ipEndpointsConfig{Enabled: new(false)},
+		},
+	}
+	if got := disabledOrc.endpointModeOrder(endpointModeUnknown); len(got) != 0 {
+		t.Fatalf("endpointModeOrder(all-disabled) = %v, want empty", got)
+	}
+	err := disabledOrc.regenerateKubeContext(testCluster, testLocation, testProject, endpointModeUnknown)
+	if err == nil || !strings.Contains(err.Error(), "no usable control-plane endpoint") || len(exec.calls) != 0 {
+		t.Fatalf("regenerateKubeContext(all-disabled) = (%v, calls=%v), want fast-fail with 0 calls", err, exec.calls)
+	}
+}
+
+func TestConfigureKubectl_DisabledExternalDNSFallsBackToIP(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		stderr string
+	}{
+		{name: "allow_external_traffic disabled", stderr: "Error from server (Forbidden): control_plane_endpoints_config.dns_endpoint_config.allow_external_traffic is disabled"},
+		{name: "IAM clusters.connect denied", stderr: "Error from server (Forbidden): Permission 'container.googleapis.com/clusters.connect' denied on resource"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			exec := newExactExecutor(map[string][]shell.CommandResult{
+				probeCmd:   {{ExitCode: 1, Stderr: tc.stderr}, {ExitCode: 0}},
+				getCredsIP: {{ExitCode: 0}},
+				setNSCmd:   {{ExitCode: 0}},
+			})
+			orc := newTestGKEOrchestrator(exec)
+			orc.clusterDesc = testClusterDesc(false, true)
+			orc.kubeconfigLoader = staticLoader(kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext))
+
+			if err := orc.configureKubectl(testCluster, testLocation, testProject); err != nil {
+				t.Fatalf("configureKubectl() error = %v; calls=%v", err, exec.calls)
+			}
+			wantCalls := []string{probeCmd, getCredsIP, setNSCmd, probeCmd}
+			if orc.kubeContext != testContext || !slices.Equal(exec.calls, wantCalls) {
+				t.Fatalf("kubeContext=%q calls=%v, want (%q, %v)", orc.kubeContext, exec.calls, testContext, wantCalls)
+			}
+		})
+	}
+}
+
+func TestConfigureKubectl_DNSOnlyReuseAndFailureMessage(t *testing.T) {
+	dnsOnlyDesc := gkeCluster{
+		Endpoint: testDNSHost,
+		ControlPlaneEndpointsConfig: &controlPlaneEndpointsConfig{
+			DnsEndpointConfig: &dnsEndpointConfig{AllowExternalTraffic: true, Endpoint: testDNSHost},
+			IPEndpointsConfig: &ipEndpointsConfig{Enabled: new(false)},
+		},
+	}
+
+	// End-to-end reuse on a DNS-only cluster with no CA data.
+	reuseExec := newExactExecutor(map[string][]shell.CommandResult{probeCmd: {{ExitCode: 0}}})
+	reuseOrc := newTestGKEOrchestrator(reuseExec)
+	reuseOrc.clusterDesc = dnsOnlyDesc
+	reuseOrc.kubeconfigLoader = staticLoader(kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext))
+	if err := reuseOrc.configureKubectl(testCluster, testLocation, testProject); err != nil {
+		t.Fatalf("configureKubectl(DNS-only reuse) error = %v", err)
+	}
+	if reuseOrc.kubeContext != testContext || !slices.Equal(reuseExec.calls, []string{probeCmd}) {
+		t.Fatalf("DNS-only reuse got kubeContext=%q calls=%v, want (%q, [%q])", reuseOrc.kubeContext, reuseExec.calls, testContext, probeCmd)
+	}
+
+	// Failed DNS-only cluster omits IP-only "authorized networks" hint and points to DNS/IAM remediation.
+	failExec := newExactExecutor(map[string][]shell.CommandResult{
+		getCredsDNS: {{ExitCode: 0}},
+		probeCmd:    {{ExitCode: 1, Stderr: "Error from server (Forbidden): Permission 'container.googleapis.com/clusters.connect' denied"}},
+	})
+	failOrc := newTestGKEOrchestrator(failExec)
+	failOrc.clusterDesc = dnsOnlyDesc
+	failOrc.kubeconfigLoader = staticLoader(clientcmdapi.NewConfig())
+	err := failOrc.configureKubectl(testCluster, testLocation, testProject)
+	if err == nil || strings.Contains(err.Error(), "authorized networks") || !strings.Contains(err.Error(), "container.clusters.connect") {
+		t.Fatalf("DNS-only failure err = %v, want DNS/IAM hint without authorized networks", err)
+	}
+	if failExec.count(getCredsIP) != 0 || failExec.count(getCredsDNS) != 1 {
+		t.Fatalf("DNS-only failure must not fall back to IP; calls=%v", failExec.calls)
 	}
 }
 
@@ -883,61 +1206,39 @@ func TestRefreshGKEAuth_DNSEndpoint(t *testing.T) {
 	}
 }
 
-func TestCheckClusterConnectivity(t *testing.T) {
-	const cmd = "kubectl get --raw /version --request-timeout=5s"
+func TestKubectlCommandLine(t *testing.T) {
+	const path = `C:\Users\Jane Doe\.gcluster\generated\jobset.yaml`
+	args := []string{"apply", "-f", path}
 	tests := []struct {
-		name    string
-		result  shell.CommandResult
-		wantErr string
+		name, kubeContext, want string
 	}{
-		{name: "reachable", result: shell.CommandResult{ExitCode: 0}},
-		{name: "forbidden is still connected", result: shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): forbidden"}},
-		{name: "auth failure", result: shell.CommandResult{ExitCode: 1, Stderr: "error: You must be logged in to the server (Unauthorized)"}, wantErr: "authentication to GKE cluster"},
-		{name: "unreachable", result: shell.CommandResult{ExitCode: 1, Stderr: "dial tcp 10.0.0.1:443: i/o timeout"}, wantErr: "authorized networks"},
-		{name: "proxy gateway error is a connectivity failure", result: shell.CommandResult{ExitCode: 1, Stderr: "error: the server responded with the status code 502 but did not return more information"}, wantErr: "authorized networks"},
-		// Mirrors configureKubectl: unrecognised output must not block submission with a misleading network error.
-		{name: "unrecognised output is not fatal", result: shell.CommandResult{ExitCode: 1, Stderr: "something completely different"}},
+		{name: "no context", want: `kubectl apply -f "` + path + `"`},
+		{name: "pinned context", kubeContext: testContext, want: `kubectl --context ` + testContext + ` apply -f "` + path + `"`},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			exec := newExactExecutor(map[string][]shell.CommandResult{cmd: {tt.result}})
-			g := &GKEOrchestrator{executor: exec}
-			err := g.checkClusterConnectivity(testCluster)
-			if tt.wantErr == "" {
-				if err != nil {
-					t.Fatalf("checkClusterConnectivity() error = %v, want nil", err)
-				}
-				return
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := kubectlCommandLine(tc.kubeContext, args...); got != tc.want {
+				t.Errorf("kubectlCommandLine() = %s, want %s", got, tc.want)
 			}
-			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-				t.Fatalf("checkClusterConnectivity() error = %v, want containing %q", err, tt.wantErr)
-			}
-			if exec.count(cmd) != 1 {
-				t.Errorf("probe calls = %d, want 1; calls=%v", exec.count(cmd), exec.calls)
+			if !slices.Equal(args, []string{"apply", "-f", path}) {
+				t.Errorf("kubectlCommandLine() modified its arguments: %q", args)
 			}
 		})
 	}
 }
 
-func TestWithKubeContext(t *testing.T) {
-	args := []string{"get", "pods"}
-	if got := withKubeContext("", args); !slices.Equal(got, args) {
-		t.Errorf("empty context: got %v, want %v", got, args)
-	}
-	want := []string{"--context", "ctx", "get", "pods"}
-	if got := withKubeContext("ctx", args); !slices.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
-	}
-}
-
 func TestKubectlHelpers_PinContext(t *testing.T) {
 	rec := &streamRecorder{exactExecutor: *newExactExecutor(map[string][]shell.CommandResult{
-		"kubectl --context " + testContext + " get pods": {{ExitCode: 0}},
+		"kubectl --context " + testContext + " get pods":   {{ExitCode: 0}},
+		"kubectl --context " + testContext + " exec pod/p": {{ExitCode: 0}},
 	})}
 	g := &GKEOrchestrator{executor: rec, kubeContext: testContext}
 
 	if res := g.kubectl("get", "pods"); res.ExitCode != 0 {
 		t.Errorf("kubectl call was not pinned; calls=%v", rec.calls)
+	}
+	if res := g.kubectlWithTimeout(time.Second, "exec", "pod/p"); res.ExitCode != 0 {
+		t.Errorf("kubectlWithTimeout call was not pinned; calls=%v", rec.calls)
 	}
 	if err := g.kubectlStream("logs", "-f"); err != nil {
 		t.Fatal(err)
@@ -1017,17 +1318,6 @@ func TestConfigureKubectl_FailureClearsPinnedContext(t *testing.T) {
 	}
 }
 
-func TestCheckClusterConnectivity_UsesPinnedContext(t *testing.T) {
-	exec := newExactExecutor(map[string][]shell.CommandResult{probeCmd: {{ExitCode: 0}}})
-	g := &GKEOrchestrator{executor: exec, kubeContext: testContext}
-	if err := g.checkClusterConnectivity(testCluster); err != nil {
-		t.Fatalf("checkClusterConnectivity() error = %v", err)
-	}
-	if exec.count(probeCmd) != 1 {
-		t.Errorf("probe did not use the pinned context; calls=%v", exec.calls)
-	}
-}
-
 func TestRestConfig_UsesPinnedContext(t *testing.T) {
 	cfg := clientcmdapi.NewConfig()
 	cfg.Clusters["current"] = &clientcmdapi.Cluster{Server: "https://current.example.com"}
@@ -1074,25 +1364,751 @@ func TestGetCurrentNamespace_PrefersPinnedContext(t *testing.T) {
 	}
 }
 
-// Guards against new kubectl calls that bypass the pinned context, whatever the executor variable is called.
+func auditFileForUnpinnedKubectl(relPath string, src []byte) []string {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, relPath, src, 0)
+	if err != nil {
+		return []string{fmt.Sprintf("%s: failed to parse Go source: %v", relPath, err)}
+	}
+	var violations []string
+	for _, decl := range file.Decls {
+		funcName := ""
+		if fn, ok := decl.(*ast.FuncDecl); ok {
+			funcName = fn.Name.Name
+		}
+		ast.Inspect(decl, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			if msg := checkKubectlCall(relPath, funcName, call); msg != "" {
+				pos := fset.Position(call.Pos())
+				violations = append(violations, fmt.Sprintf("%s:%d %s", relPath, pos.Line, msg))
+			}
+			return true
+		})
+	}
+	return violations
+}
+
+func checkKubectlCall(relPath, funcName string, call *ast.CallExpr) string {
+	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+		if sel.Sel.Name == "kubectlIn" {
+			return checkKubectlInLiteral(call)
+		}
+		cmdIdx, isExec := selectorCmdArgIndex(sel)
+		if cmdIdx >= 0 && isKubectlLiteralArg(call, cmdIdx) {
+			return validateKubectlInvocation(relPath, funcName, call, cmdIdx, isExec)
+		}
+		return ""
+	}
+	if cmdIdx := identKubectlCmdArgIndex(call); cmdIdx >= 0 {
+		return validateKubectlInvocation(relPath, funcName, call, cmdIdx, false)
+	}
+	return ""
+}
+
+func checkKubectlInLiteral(call *ast.CallExpr) string {
+	if len(call.Args) > 0 {
+		if val, isLit := stringLitValue(call.Args[0]); isLit && strings.TrimSpace(val) == "" {
+			return "calls kubectlIn with an empty/whitespace context"
+		}
+	}
+	return ""
+}
+
+func isKubectlLiteralArg(call *ast.CallExpr, cmdIdx int) bool {
+	if len(call.Args) <= cmdIdx {
+		return false
+	}
+	cmd, isLit := stringLitValue(call.Args[cmdIdx])
+	return isLit && cmd == "kubectl"
+}
+
+func selectorCmdArgIndex(sel *ast.SelectorExpr) (int, bool) {
+	if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "exec" {
+		switch sel.Sel.Name {
+		case "Command":
+			return 0, true
+		case "CommandContext":
+			return 1, true
+		}
+	}
+	switch sel.Sel.Name {
+	case "ExecuteCommand", "ExecuteCommandStream", "NewCommand":
+		return 0, false
+	case "ExecuteCommandWithTimeout", "NewCommandWithTimeout", "Runner":
+		return 1, false
+	default:
+		return -1, false
+	}
+}
+
+func identKubectlCmdArgIndex(call *ast.CallExpr) int {
+	ident, ok := call.Fun.(*ast.Ident)
+	if !ok || ident.Name == "append" {
+		return -1
+	}
+	for _, idx := range []int{0, 1} {
+		if len(call.Args) >= idx+2 && isKubectlLiteralArg(call, idx) {
+			return idx
+		}
+	}
+	return -1
+}
+
+func isAllowedKubeAuthWrapper(funcName string) bool {
+	switch funcName {
+	case "kubectl", "kubectlWithTimeout", "kubectlIn", "kubectlStream":
+		return true
+	default:
+		return false
+	}
+}
+
+func isAllowedRestoreNamespaceCall(call *ast.CallExpr, cmdIdx int) bool {
+	if len(call.Args) < cmdIdx+4 {
+		return false
+	}
+	subcmd, ok1 := stringLitValue(call.Args[cmdIdx+1])
+	action, ok2 := stringLitValue(call.Args[cmdIdx+2])
+	if !ok1 || !ok2 || subcmd != "config" || action != "set-context" {
+		return false
+	}
+	if target, isLit := stringLitValue(call.Args[cmdIdx+3]); isLit {
+		trimmed := strings.TrimSpace(target)
+		return trimmed != "" && trimmed != "--current"
+	}
+	return true
+}
+
+func validateKubectlInvocation(relPath, funcName string, call *ast.CallExpr, cmdIdx int, isExec bool) string {
+	if isExec {
+		if isPinnedWithContextArg(relPath, call, cmdIdx) {
+			return ""
+		}
+		return "invokes kubectl via os/exec without pinned context args"
+	}
+	if relPath == "gke/kube_auth.go" && funcName == "restoreNamespaceContext" && isAllowedRestoreNamespaceCall(call, cmdIdx) {
+		return ""
+	}
+	allowPinned := !strings.HasPrefix(relPath, "gke/") || (relPath == "gke/kube_auth.go" && isAllowedKubeAuthWrapper(funcName))
+	if allowPinned && isPinnedWithContextArg(relPath, call, cmdIdx) {
+		return ""
+	}
+	return "runs kubectl without the pinned context; use g.kubectl / g.kubectlWithTimeout / g.kubectlIn / g.kubectlStream (or k8s.WithContext outside pkg/orchestrator/gke)"
+}
+
+func isWithContextFun(relPath string, fun ast.Expr) bool {
+	if path.Dir(relPath) == "k8s" {
+		ident, ok := fun.(*ast.Ident)
+		return ok && ident.Name == "WithContext"
+	}
+	sel, ok := fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "WithContext" {
+		return false
+	}
+	pkgIdent, ok := sel.X.(*ast.Ident)
+	return ok && pkgIdent.Name == "k8s"
+}
+
+func isPinnedWithContextArg(relPath string, call *ast.CallExpr, cmdIdx int) bool {
+	if !call.Ellipsis.IsValid() || len(call.Args) != cmdIdx+2 {
+		return false
+	}
+	argCall, ok := call.Args[cmdIdx+1].(*ast.CallExpr)
+	if !ok || len(argCall.Args) != 2 || !isWithContextFun(relPath, argCall.Fun) {
+		return false
+	}
+	if ctxLit, isLit := stringLitValue(argCall.Args[0]); isLit && strings.TrimSpace(ctxLit) == "" {
+		return false
+	}
+	return true
+}
+
+func stringLitValue(expr ast.Expr) (string, bool) {
+	lit, ok := expr.(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return "", false
+	}
+	val, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		return "", false
+	}
+	return val, true
+}
+
+// Guards against new kubectl calls that bypass the pinned context, whatever the executor variable is called,
+// and ensures kubectlIn is never invoked with an empty context literal.
 func TestNoUnpinnedKubectlCalls(t *testing.T) {
-	unpinned := regexp.MustCompile(`\.ExecuteCommand(?:Stream|WithTimeout\([^,]+,)?\s*\(?\s*"kubectl"`)
-	files, err := filepath.Glob("*.go")
+	err := filepath.WalkDir("..", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "testdata" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".go") || strings.HasSuffix(d.Name(), "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel("..", p)
+		if err != nil {
+			return err
+		}
+		src, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		for _, v := range auditFileForUnpinnedKubectl(filepath.ToSlash(rel), src) {
+			t.Error(v)
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range files {
-		// kube_auth.go pins its own probe and edits kubeconfig via `kubectl config`.
-		if strings.HasSuffix(f, "_test.go") || f == "kube_auth.go" {
-			continue
+}
+
+func TestAuditFileForUnpinnedKubectl(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name        string
+		relPath     string
+		src         string
+		wantSubstrs []string
+	}{
+		{
+			name:    "flags direct ExecuteCommand, Stream, Timeout with comma, and shell.NewCommand",
+			relPath: "gke/sample.go",
+			src: `package gke
+func f() {
+	g.executor.ExecuteCommand("kubectl", "get", "pods")
+	g.executor.ExecuteCommandStream("kubectl", "logs", "-f")
+	g.executor.ExecuteCommandWithTimeout(max(a, b), "kubectl", "get", "pods")
+	shell.NewCommand("kubectl", "get", "pods")
+	shell.NewCommandWithTimeout(t, "kubectl", "get", "pods")
+}`,
+			wantSubstrs: []string{
+				"gke/sample.go:3 runs kubectl without the pinned context",
+				"gke/sample.go:4 runs kubectl without the pinned context",
+				"gke/sample.go:5 runs kubectl without the pinned context",
+				"gke/sample.go:6 runs kubectl without the pinned context",
+				"gke/sample.go:7 runs kubectl without the pinned context",
+			},
+		},
+		{
+			name:    "flags empty raw-backtick and escaped-whitespace kubectlIn",
+			relPath: "gke/sample.go",
+			src:     "package gke\nfunc f() {\n\tg.kubectlIn(\"\", \"get\")\n\tg.kubectlIn(` `, \"get\")\n\tg.kubectlIn(\"\\t\\n\", \"get\")\n}\n",
+			wantSubstrs: []string{
+				"gke/sample.go:3 calls kubectlIn with an empty/whitespace context",
+				"gke/sample.go:4 calls kubectlIn with an empty/whitespace context",
+				"gke/sample.go:5 calls kubectlIn with an empty/whitespace context",
+			},
+		},
+		{
+			name:    "enforces strict kube_auth.go wrapper and restoreNamespaceContext allowlists",
+			relPath: "gke/kube_auth.go",
+			src: `package gke
+func kubectl(args ...string) { g.executor.ExecuteCommand("kubectl", k8s.WithContext(g.kubeContext, args)...) }
+func restoreNamespaceContext() {
+	g.executor.ExecuteCommand("kubectl", "config", "set-context", ctx, "--namespace=ns")
+	g.executor.ExecuteCommand("kubectl", "config", "set-context", "--current", "--namespace=ns")
+	g.executor.ExecuteCommand("kubectl", "get", "pods")
+}
+func probeContext() { g.executor.ExecuteCommand("kubectl", k8s.WithContext(ctx, args)...) }`,
+			wantSubstrs: []string{
+				"gke/kube_auth.go:5 runs kubectl without the pinned context",
+				"gke/kube_auth.go:6 runs kubectl without the pinned context",
+				"gke/kube_auth.go:8 runs kubectl without the pinned context",
+			},
+		},
+		{
+			name:    "allows bare WithContext inside package k8s and rejects blank context literal",
+			relPath: "k8s/client.go",
+			src: `package k8s
+func f() {
+	exec.ExecuteCommand("kubectl", WithContext(ctx, args)...)
+	exec.ExecuteCommand("kubectl", WithContext("   ", args)...)
+}`,
+			wantSubstrs: []string{
+				"k8s/client.go:4 runs kubectl without the pinned context",
+			},
+		},
+		{
+			name:    "audits bare runner and .Runner calls in orchestrator root package",
+			relPath: "detector.go",
+			src: `package orchestrator
+func f() {
+	runner(t, "kubectl", k8s.WithContext(ctx, args)...)
+	in.Runner(t, "kubectl", k8s.WithContext(ctx, args)...)
+	runner(t, "kubectl", "version")
+	in.Runner(t, "kubectl", k8s.WithContext("", args)...)
+}`,
+			wantSubstrs: []string{
+				"detector.go:5 runs kubectl without the pinned context",
+				"detector.go:6 runs kubectl without the pinned context",
+			},
+		},
+		{
+			name:    "requires inline k8s.WithContext for os/exec in sps_client.go",
+			relPath: "gke/sps_client.go",
+			src: `package gke
+func startPortForward() { exec.CommandContext(ctx, "kubectl", k8s.WithContext(g.kubeContext, args)...) }
+func keepPortForwardAlive() { exec.CommandContext(ctx, "kubectl", args...) }
+func other() { exec.CommandContext(ctx, "kubectl", "port-forward") }`,
+			wantSubstrs: []string{
+				"gke/sps_client.go:3 invokes kubectl via os/exec without pinned context args",
+				"gke/sps_client.go:4 invokes kubectl via os/exec without pinned context args",
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := auditFileForUnpinnedKubectl(tc.relPath, []byte(tc.src))
+			if len(got) != len(tc.wantSubstrs) {
+				t.Fatalf("auditFileForUnpinnedKubectl(%s) returned %d violations (%v), want %d (%v)", tc.relPath, len(got), got, len(tc.wantSubstrs), tc.wantSubstrs)
+			}
+			for i, want := range tc.wantSubstrs {
+				if !strings.Contains(got[i], want) {
+					t.Errorf("violation[%d] = %q, want substring %q", i, got[i], want)
+				}
+			}
+		})
+	}
+}
+
+func TestKubectlIn_RefusesEmptyContextAndPinsNonEmpty(t *testing.T) {
+	execErr := errors.New("exec: kubectl: executable file not found in $PATH")
+	exec := newExactExecutor(map[string][]shell.CommandResult{
+		"kubectl --context pinned-ctx get pods":                                  {{ExitCode: 0, Stdout: "ok"}},
+		"kubectl --context exec-err-ctx get --raw /version --request-timeout=5s": {{ExitCode: -1, Err: execErr}},
+	})
+	orc := newTestGKEOrchestrator(exec)
+
+	res := orc.kubectlIn("   ", "get", "pods")
+	if res.ExitCode == 0 || len(exec.calls) != 0 || !strings.Contains(res.Stderr, "refusing to run kubectl without an explicit --context") {
+		t.Fatalf("kubectlIn(empty) = %+v (calls=%v), want explicit --context error with 0 subprocesses", res, exec.calls)
+	}
+
+	outcome, stderr := orc.probeContext("   ")
+	if outcome != probeInvalid || len(exec.calls) != 0 || !strings.Contains(stderr, "refusing to run kubectl without an explicit --context") {
+		t.Fatalf("probeContext(whitespace) = (%v, %q), calls=%v; want (probeInvalid, refusal, 0 calls)", outcome, stderr, exec.calls)
+	}
+
+	res = orc.kubectlIn("pinned-ctx", "get", "pods")
+	if res.ExitCode != 0 || len(exec.calls) != 1 || exec.calls[0] != "kubectl --context pinned-ctx get pods" {
+		t.Fatalf("kubectlIn(pinned-ctx) = %+v (calls=%v)", res, exec.calls)
+	}
+
+	outcome, stderr = orc.probeContext("exec-err-ctx")
+	if outcome != probeUnknown || !strings.Contains(stderr, "executable file not found") {
+		t.Fatalf("probeContext(exec-err) = (%v, %q), want probeUnknown surfacing res.Err when Stderr is empty", outcome, stderr)
+	}
+}
+
+func TestConfigureKubectl_BlankContextNameIsNotReused(t *testing.T) {
+	if (kubeContextCheck{}).reusable() || (kubeContextCheck{contextName: "   "}).reusable() {
+		t.Fatal("expected blank/whitespace kubeContextCheck.reusable() to be false")
+	}
+	caBytes := []byte(testCAPEM)
+	cfg := clientcmdapi.NewConfig()
+	cfg.Clusters[testCluster] = &clientcmdapi.Cluster{Server: "https://" + testPublicIP, CertificateAuthorityData: caBytes}
+	cfg.AuthInfos["u"] = &clientcmdapi.AuthInfo{Exec: gkeExec()}
+	cfg.Contexts["   "] = &clientcmdapi.Context{Cluster: testCluster, AuthInfo: "u"}
+
+	exec := newExactExecutor(map[string][]shell.CommandResult{
+		getCredsIP: {{ExitCode: 0}},
+		probeCmd:   {{ExitCode: 0}},
+	})
+	orc := newTestGKEOrchestrator(exec)
+	orc.clusterDesc = testClusterDesc(true, true)
+	orc.kubeconfigLoader = staticLoader(cfg)
+
+	if err := orc.configureKubectl(testCluster, testLocation, testProject); err != nil {
+		t.Fatalf("configureKubectl() error = %v", err)
+	}
+	if orc.kubeContext != testContext {
+		t.Fatalf("kubeContext = %q, want %q (blank context key must not be reused)", orc.kubeContext, testContext)
+	}
+	if exec.count(getCredsIP) != 1 || exec.count(probeCmd) != 1 {
+		t.Fatalf("expected get-credentials + pinned probe, got calls=%v", exec.calls)
+	}
+}
+
+func TestRefreshCredentials_ZonalDoesNotCopySiblingRegionalNamespace(t *testing.T) {
+	const (
+		zonalLoc   = "us-central1-a"
+		zonalCtx   = "gke_my-project_us-central1-a_my-cluster"
+		getZonalIP = "gcloud container clusters get-credentials my-cluster --location us-central1-a --project my-project"
+		probeZonal = "kubectl --context " + zonalCtx + " get --raw /version --request-timeout=5s"
+	)
+	// Kubeconfig holds a regional cluster with the same short name and custom namespace "team-ns".
+	cfg := kubeconfigWith("https://198.51.100.99", []byte("other-ca"), gkeExec(), testContext)
+
+	exec := newExactExecutor(map[string][]shell.CommandResult{
+		getZonalIP: {{ExitCode: 0}},
+		probeZonal: {{ExitCode: 0}},
+	})
+	orc := newTestGKEOrchestrator(exec)
+	orc.clusterDesc = testClusterDesc(false, true)
+	orc.kubeconfigLoader = staticLoader(cfg)
+
+	if err := orc.configureKubectl(testCluster, zonalLoc, testProject); err != nil {
+		t.Fatalf("configureKubectl(zonal) error = %v; calls=%v", err, exec.calls)
+	}
+	for _, call := range exec.calls {
+		if strings.Contains(call, "set-context") {
+			t.Fatalf("unexpected namespace carry-over from sibling regional cluster onto zonal context: calls=%v", exec.calls)
 		}
-		src, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatal(err)
+	}
+	if orc.kubeContext != zonalCtx {
+		t.Fatalf("kubeContext = %q, want %q", orc.kubeContext, zonalCtx)
+	}
+}
+
+func TestRefreshCredentials_BareNameDoesNotCopyAndRenamedAliasPreservesNamespace(t *testing.T) {
+	// Case 1: An unrelated bare-name context (e.g. local/on-prem cluster with the same short name)
+	// must NOT leak its namespace onto a newly created GKE context.
+	bareCfg := clientcmdapi.NewConfig()
+	bareCfg.Clusters[testCluster] = &clientcmdapi.Cluster{Server: "https://127.0.0.1:6443"}
+	bareCfg.Contexts[testCluster] = &clientcmdapi.Context{Cluster: testCluster, Namespace: "dev-local"}
+
+	execBare := newExactExecutor(map[string][]shell.CommandResult{
+		getCredsIP: {{ExitCode: 0}},
+		probeCmd:   {{ExitCode: 0}},
+	})
+	orcBare := newTestGKEOrchestrator(execBare)
+	orcBare.clusterDesc = testClusterDesc(false, true)
+	orcBare.kubeconfigLoader = staticLoader(bareCfg)
+	if err := orcBare.configureKubectl(testCluster, testLocation, testProject); err != nil {
+		t.Fatalf("configureKubectl(bare-name collision) error = %v; calls=%v", err, execBare.calls)
+	}
+	for _, call := range execBare.calls {
+		if strings.Contains(call, "set-context") {
+			t.Fatalf("unexpected namespace carry-over from unrelated bare-name context: calls=%v", execBare.calls)
 		}
-		if loc := unpinned.FindIndex(src); loc != nil {
-			line := 1 + bytes.Count(src[:loc[0]], []byte("\n"))
-			t.Errorf("%s:%d runs kubectl without the pinned context; use g.kubectl / g.kubectlStream", f, line)
+	}
+
+	// Case 2: A renamed GKE context alias (Context.Cluster == canonical gke_<proj>_<loc>_<clus>)
+	// MUST preserve its custom namespace when credentials are refreshed.
+	aliasCfg := clientcmdapi.NewConfig()
+	aliasCfg.Clusters[testContext] = &clientcmdapi.Cluster{Server: "https://198.51.100.9"} // forces regeneration
+	aliasCfg.AuthInfos[testContext] = &clientcmdapi.AuthInfo{Exec: gkeExec()}
+	aliasCfg.Contexts["prod-gpu"] = &clientcmdapi.Context{Cluster: testContext, AuthInfo: testContext, Namespace: "team-ns"}
+
+	execAlias := newExactExecutor(map[string][]shell.CommandResult{
+		getCredsIP: {{ExitCode: 0}},
+		probeCmd:   {{ExitCode: 0}},
+		setNSCmd:   {{ExitCode: 0}},
+	})
+	orcAlias := newTestGKEOrchestrator(execAlias)
+	orcAlias.clusterDesc = testClusterDesc(false, true)
+	orcAlias.kubeconfigLoader = staticLoader(aliasCfg)
+	if err := orcAlias.configureKubectl(testCluster, testLocation, testProject); err != nil {
+		t.Fatalf("configureKubectl(renamed GKE alias) error = %v; calls=%v", err, execAlias.calls)
+	}
+	if execAlias.count(setNSCmd) != 1 {
+		t.Fatalf("expected namespace preservation from renamed GKE context alias, got calls=%v", execAlias.calls)
+	}
+}
+
+func TestResolveGKEContext_ZonalFallbackAndCurrentContext(t *testing.T) {
+	assertResolved := func(label string, cfg *clientcmdapi.Config, cluster, loc, proj, wantCtx, wantNS, wantCluster string) {
+		t.Helper()
+		ctxName, kubeCtx, clus, ok := resolveGKEContext(cfg, cluster, loc, proj)
+		if !ok || kubeCtx == nil || ctxName != wantCtx || kubeCtx.Namespace != wantNS || clus != wantCluster {
+			t.Fatalf("resolveGKEContext(%s) = (%q, %+v, %q, %v), want (%q, ns=%q, %q, true)", label, ctxName, kubeCtx, clus, ok, wantCtx, wantNS, wantCluster)
 		}
+	}
+
+	if _, _, _, ok := resolveGKEContext(nil, "reg-clus", "us-central1", "my-proj"); ok {
+		t.Fatalf("expected nil config with explicit cluster to return false")
+	}
+
+	cfg := clientcmdapi.NewConfig()
+	cfg.Contexts["gke_my-proj_us-central1_reg-clus"] = &clientcmdapi.Context{
+		Cluster:   "gke_my-proj_us-central1_reg-clus",
+		Namespace: "reg-ns",
+	}
+	// Competing non-gcloud context with Cluster == "reg-clus" ensures regional gcloud name wins over FindContextByCluster.
+	cfg.Contexts["aaa-competing-ctx"] = &clientcmdapi.Context{Cluster: "reg-clus", Namespace: "wrong-ns"}
+	cfg.Contexts["active-ctx"] = &clientcmdapi.Context{Cluster: "active-clus", Namespace: "active-ns"}
+	cfg.CurrentContext = "active-ctx"
+
+	assertResolved("zonal->regional", cfg, " reg-clus ", " us-central1-b ", " my-proj ", "gke_my-proj_us-central1_reg-clus", "reg-ns", "reg-clus")
+
+	// Exact zonal gcloud context takes precedence over regional fallback when both exist.
+	cfg.Contexts["gke_my-proj_us-central1-b_reg-clus"] = &clientcmdapi.Context{
+		Cluster:   "gke_my-proj_us-central1-b_reg-clus",
+		Namespace: "zonal-ns",
+	}
+	assertResolved("exact zonal over regional", cfg, "reg-clus", "us-central1-b", "my-proj", "gke_my-proj_us-central1-b_reg-clus", "zonal-ns", "reg-clus")
+	assertResolved("current-context", cfg, "", "", "", "active-ctx", "active-ns", "active-clus")
+
+	if _, _, _, ok := resolveGKEContext(cfg, "missing-clus", "us-central1", "my-proj"); ok {
+		t.Fatalf("expected missing explicit cluster not to fall back to current-context")
+	}
+
+	// Renamed GKE context alias (Context.Cluster == canonical gke_<proj>_<loc>_<clus>) wins over bare-name collision.
+	aliasCfg := clientcmdapi.NewConfig()
+	aliasCfg.Contexts["prod-gpu"] = &clientcmdapi.Context{Cluster: "gke_my-proj_us-central1_reg-clus", Namespace: "alias-ns"}
+	aliasCfg.Contexts["reg-clus"] = &clientcmdapi.Context{Cluster: "reg-clus", Namespace: "local-ns"}
+	assertResolved("renamed GKE alias", aliasCfg, "reg-clus", "us-central1", "my-proj", "prod-gpu", "alias-ns", "reg-clus")
+}
+
+func TestDefaultKubeClient_GetCurrentNamespaceErrors(t *testing.T) {
+	t.Parallel()
+	loadSentinel := errors.New("simulated kubeconfig read error")
+	danglingCfg := clientcmdapi.NewConfig()
+	danglingCfg.CurrentContext = "deleted-ctx "
+	whitespaceCurCfg := clientcmdapi.NewConfig()
+	whitespaceCurCfg.CurrentContext = "   "
+
+	for _, tc := range []struct {
+		name        string
+		loader      k8s.KubeconfigLoader
+		cluster     string
+		loc         string
+		proj        string
+		wantSubstr  string
+		wantWrapped error
+	}{
+		{name: "nil cfg", loader: staticLoader(nil), wantSubstr: "no current-context set in kubeconfig"},
+		{name: "load error", loader: func() (*clientcmdapi.Config, error) { return nil, loadSentinel }, cluster: "my-clus", loc: "us-central1", proj: "my-proj", wantSubstr: "--gke-namespace", wantWrapped: loadSentinel},
+		{name: "empty current-context", loader: staticLoader(clientcmdapi.NewConfig()), wantSubstr: "no current-context set in kubeconfig"},
+		{name: "missing explicit cluster", loader: staticLoader(clientcmdapi.NewConfig()), cluster: " missing-clus ", loc: "us-central1", proj: "my-proj", wantSubstr: `cluster "missing-clus"`},
+		{name: "dangling current-context", loader: staticLoader(danglingCfg), wantSubstr: `current-context "deleted-ctx " was not found in kubeconfig`},
+		{name: "whitespace current-context", loader: staticLoader(whitespaceCurCfg), wantSubstr: "no current-context set in kubeconfig"},
+	} {
+		kc := &DefaultKubeClient{kubeconfigLoader: tc.loader}
+		_, err := kc.GetCurrentNamespace(tc.cluster, tc.loc, tc.proj)
+		if err == nil || !strings.Contains(err.Error(), tc.wantSubstr) || (tc.wantWrapped != nil && !errors.Is(err, tc.wantWrapped)) {
+			t.Fatalf("%s: GetCurrentNamespace() = %v, want substring %q (wrapped=%v)", tc.name, err, tc.wantSubstr, tc.wantWrapped)
+		}
+	}
+
+	happyCurCfg := clientcmdapi.NewConfig()
+	happyCurCfg.Contexts["active-ctx"] = &clientcmdapi.Context{Cluster: "active-clus", Namespace: " active-ns "}
+	happyCurCfg.CurrentContext = "active-ctx"
+	kcHappyCur := &DefaultKubeClient{kubeconfigLoader: staticLoader(happyCurCfg)}
+	if ns, err := kcHappyCur.GetCurrentNamespace("", "", ""); err != nil || ns != "active-ns" {
+		t.Fatalf("GetCurrentNamespace(happy current-context) = (%q, %v), want (active-ns, nil)", ns, err)
+	}
+	assertOrchestratorNamespaceLoaderPropagation(t)
+}
+
+func assertOrchestratorNamespaceLoaderPropagation(t *testing.T) {
+	t.Helper()
+	const ctxKey = "gke_my-proj_us-central1_my-clus"
+	orcCfg := clientcmdapi.NewConfig()
+	orcCfg.Contexts[ctxKey] = &clientcmdapi.Context{
+		Cluster:   ctxKey,
+		Namespace: " loader-ns ",
+	}
+	pinnedOnlyCfg := clientcmdapi.NewConfig()
+	pinnedOnlyCfg.Contexts["pinned-only-ctx"] = &clientcmdapi.Context{
+		Cluster:   "unrelated-cluster",
+		Namespace: " loader-ns ",
+	}
+
+	for _, tc := range []struct {
+		name string
+		orc  *GKEOrchestrator
+	}{
+		{name: "pre-seeded DefaultKubeClient", orc: &GKEOrchestrator{kubeClient: &DefaultKubeClient{}, kubeconfigLoader: staticLoader(orcCfg)}},
+		{name: "nil kubeClient", orc: &GKEOrchestrator{kubeconfigLoader: staticLoader(orcCfg)}},
+		{name: "pre-injected DefaultKubeClient loader preserved", orc: &GKEOrchestrator{kubeClient: &DefaultKubeClient{kubeconfigLoader: staticLoader(orcCfg)}}},
+		{name: "pinned context trims namespace", orc: &GKEOrchestrator{kubeContext: "pinned-only-ctx", kubeClient: &MockKubeClient{Namespace: "wrong-fallback"}, kubeconfigLoader: staticLoader(pinnedOnlyCfg)}},
+	} {
+		if ns, err := tc.orc.getCurrentNamespace("my-clus", "us-central1", "my-proj"); err != nil || ns != "loader-ns" {
+			t.Fatalf("%s: getCurrentNamespace = (%q, %v), want (loader-ns, nil)", tc.name, ns, err)
+		}
+	}
+
+	// pinnedContextNamespace returns ("", false) on nil config or loader error.
+	if ns, ok := (&GKEOrchestrator{kubeContext: "pinned", kubeconfigLoader: staticLoader(nil)}).pinnedContextNamespace(); ok || ns != "" {
+		t.Fatalf("pinnedContextNamespace(nil cfg) = (%q, %v), want (\"\", false)", ns, ok)
+	}
+	if ns, ok := (&GKEOrchestrator{kubeContext: "pinned", kubeconfigLoader: func() (*clientcmdapi.Config, error) { return nil, errLoadKubeconfigForTest }}).pinnedContextNamespace(); ok || ns != "" {
+		t.Fatalf("pinnedContextNamespace(load err) = (%q, %v), want (\"\", false)", ns, ok)
+	}
+}
+
+func TestRestoreNamespaceContext(t *testing.T) {
+	exec := newExactExecutor(map[string][]shell.CommandResult{
+		setNSCmd: {
+			{ExitCode: 0},
+			{ExitCode: 1, Stderr: "permission denied"},
+		},
+	})
+	orc := newTestGKEOrchestrator(exec)
+
+	for _, noop := range []string{"", "   ", " default "} {
+		if err := orc.restoreNamespaceContext(testContext, noop); err != nil {
+			t.Fatalf("restoreNamespaceContext(%q) unexpected error: %v", noop, err)
+		}
+	}
+	if len(exec.calls) != 0 {
+		t.Fatalf("expected 0 kubectl calls for blank/default namespaces, got %v", exec.calls)
+	}
+
+	if err := orc.restoreNamespaceContext(testContext, "  team-ns  "); err != nil {
+		t.Fatalf("restoreNamespaceContext(padded) error = %v", err)
+	}
+	if err := orc.restoreNamespaceContext(testContext, "team-ns"); err == nil || !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("restoreNamespaceContext(error) = %v, want permission denied", err)
+	}
+	if exec.count(setNSCmd) != 2 {
+		t.Fatalf("expected 2 set-context calls, got calls=%v", exec.calls)
+	}
+}
+
+func TestImagePullSecrets_NamespacePrecedence(t *testing.T) {
+	setupMockMachineConfig(t)
+	profile := JobProfile{IsCPUMachine: true, CapacityCount: 4}
+	kc := &MockKubeClient{
+		Namespace:      "must-not-use-getcurrentnamespace",
+		ListNamespaces: map[string]string{},
+		Objects: map[string][]unstructured.Unstructured{
+			"secrets": {makeDockerConfigSecret("reg-sec", "registry.local")},
+		},
+	}
+	orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get pv":  {{ExitCode: 0, Stdout: ""}},
+		"kubectl get pvc": {{ExitCode: 0, Stdout: ""}},
+	}))
+	orc.machineCapCache = testMachineCapCache()
+	orc.kubeClient = kc
+	orc.kubeContext = "pinned-ctx"
+	orc.kubeconfigLoader = func() (*clientcmdapi.Config, error) {
+		cfg := clientcmdapi.NewConfig()
+		cfg.Contexts["pinned-ctx"] = &clientcmdapi.Context{Namespace: "ctx-ns"}
+		return cfg, nil
+	}
+
+	baseJob := orchestrator.JobDefinition{
+		WorkloadName:    "ns-job",
+		CommandToRun:    "echo hi",
+		ComputeType:     "n2-standard-4",
+		MachineType:     "n2-standard-4",
+		ClusterLocation: "us-central1-a",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+	}
+
+	if _, err := orc.PrepareManifestOptions(baseJob, "registry.local/app:v1", profile, false, false); err != nil || kc.ListNamespaces["secrets"] != "ctx-ns" {
+		t.Fatalf("got ns=%q err=%v, want ctx-ns", kc.ListNamespaces["secrets"], err)
+	}
+
+	// SubmitJob seeds g.namespace from --gke-namespace before any manifest work.
+	orc.namespace = "flag-ns"
+	if _, err := orc.PrepareManifestOptions(baseJob, "registry.local/app:v1", profile, false, false); err != nil || kc.ListNamespaces["secrets"] != "flag-ns" {
+		t.Fatalf("got ns=%q err=%v, want flag-ns", kc.ListNamespaces["secrets"], err)
+	}
+}
+
+func TestImagePullSecrets_FallbackEscapingAndLazyInit(t *testing.T) {
+	setupMockMachineConfig(t)
+	profile := JobProfile{IsCPUMachine: true, CapacityCount: 4}
+	orc := newCachedTestOrchestrator()
+	orc.kubeClient = &MockKubeClient{
+		ListErrs: map[string]error{
+			"secrets": apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "", errors.New("forbidden")),
+		},
+	}
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "forbidden-sec",
+		CommandToRun:    "echo hi",
+		ComputeType:     "n2-standard-4",
+		MachineType:     "n2-standard-4",
+		ClusterLocation: "us-central1-a",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+	}
+	opts, err := orc.PrepareManifestOptions(job, "registry.local/app:v1", profile, false, false)
+	if err != nil || opts.ImagePullSecrets != "" {
+		t.Fatalf("expected clean fallback on 403 Forbidden, got opts.ImagePullSecrets=%q err=%v", opts.ImagePullSecrets, err)
+	}
+
+	job.ImagePullSecrets = "sec\n  hostPID: true"
+	opts, err = orc.PrepareManifestOptions(job, "registry.local/app:v1", profile, false, false)
+	if err != nil {
+		t.Fatalf("unexpected error escaping secret name: %v", err)
+	}
+	assertJobSetEscapedPullSecret(t, orc, opts, profile, "sec\n  hostPID: true")
+
+	lazyOrc := &GKEOrchestrator{
+		kubeClient:       &DefaultKubeClient{},
+		kubeContext:      "missing-ctx-in-kubeconfig",
+		machineCapCache:  testMachineCapCache(),
+		kubeconfigLoader: func() (*clientcmdapi.Config, error) { return clientcmdapi.NewConfig(), nil },
+	}
+	job.ImagePullSecrets = ""
+	opts, err = lazyOrc.PrepareManifestOptions(job, "registry.local/app:v1", profile, false, false)
+	if err != nil || opts.ImagePullSecrets != "" {
+		t.Fatalf("expected lazy init error to degrade gracefully, got opts.ImagePullSecrets=%q err=%v", opts.ImagePullSecrets, err)
+	}
+}
+
+func assertJobSetEscapedPullSecret(t *testing.T, orc *GKEOrchestrator, opts ManifestOptions, profile JobProfile, wantSecret string) {
+	t.Helper()
+	cpuResp := shell.CommandResult{ExitCode: 0, Stdout: `{"guestCpus": 4, "memoryMb": 16384}`}
+	orc.executor = NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-4 --zone=us-central1-a --format=json": {cpuResp},
+	})
+	orc.clusterZones = []string{"us-central1-a"}
+	manifest, err := orc.GenerateGKEManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	}
+	var js jobSetValidationSpec
+	if err := k8syaml.Unmarshal([]byte(manifest), &js); err != nil {
+		t.Fatalf("failed to unmarshal JobSet YAML: %v\n%s", err, manifest)
+	}
+	podSpec := js.Spec.ReplicatedJobs[0].Template.Spec.Template.Spec
+	if podSpec.HostPID {
+		t.Fatalf("ImagePullSecrets newline injected hostPID=true into PodSpec!")
+	}
+	if len(podSpec.ImagePullSecrets) != 1 || podSpec.ImagePullSecrets[0].Name != wantSecret {
+		t.Errorf("unexpected escaped ImagePullSecrets: %+v", podSpec.ImagePullSecrets)
+	}
+}
+
+func TestImagePullSecrets_NamespaceResolutionFailureFailsFast(t *testing.T) {
+	setupMockMachineConfig(t)
+	profile := JobProfile{IsCPUMachine: true, CapacityCount: 4}
+	mockClient := &MockKubeClient{
+		ExplicitEmpty: true,
+		Err:           errors.New("no matching context found for cluster clus-1 in kubeconfig. You can explicitly specify the namespace using the --gke-namespace flag"),
+		Objects: map[string][]unstructured.Unstructured{
+			"secrets": {makeDockerConfigSecret("ns-sec", "registry.local")},
+		},
+	}
+	// A usable API client whose context resolution fails: discovery must not probe "default".
+	orc := newCachedTestOrchestrator()
+	orc.kubeClient = mockClient
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "ns-fail-job",
+		CommandToRun:    "echo hi",
+		ComputeType:     "n2-standard-4",
+		MachineType:     "n2-standard-4",
+		ClusterName:     "clus-1",
+		ClusterLocation: "us-central1-a",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+	}
+	_, err := orc.PrepareManifestOptions(job, "registry.local/app:v1", profile, false, false)
+	if err == nil || !strings.Contains(err.Error(), "imagePullSecrets discovery") || !strings.Contains(err.Error(), "--gke-namespace") {
+		t.Fatalf("expected namespace resolution error naming --gke-namespace, got: %v", err)
+	}
+
+	orc.namespace = "tenant-ns" // seeded from --gke-namespace by SubmitJob
+	opts, err := orc.PrepareManifestOptions(job, "registry.local/app:v1", profile, false, false)
+	if err != nil || !strings.Contains(opts.ImagePullSecrets, "ns-sec") {
+		t.Fatalf("explicit --gke-namespace must bypass resolution and discover ns-sec: opts=%q err=%v", opts.ImagePullSecrets, err)
 	}
 }

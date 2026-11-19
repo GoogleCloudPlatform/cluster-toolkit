@@ -19,12 +19,16 @@ package shell
 import (
 	"context"
 	"errors"
+	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"testing/iotest"
 	"time"
 
 	. "gopkg.in/check.v1"
@@ -229,6 +233,177 @@ func (s *MySuite) TestAskForConfirmation_No(c *C) {
 
 	got := PromptYesNo("Test prompt")
 	c.Assert(got, Equals, false)
+}
+
+// failOnExit makes logging.Exit panic so a regression to logging.Fatal fails the test
+// instead of exiting the test binary (or looping, if Exit returned). Call the returned
+// func to restore logging.Exit.
+func failOnExit() (restore func()) {
+	origExit := logging.Exit
+	logging.Exit = func(code int) { panic(fmt.Sprintf("logging.Exit(%d) called", code)) }
+	return func() { logging.Exit = origExit }
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read([]byte) (int, error) { return 0, nil }
+
+// transientZeroReader returns zerosBeforeByte (0, nil) reads before each byte in data, so
+// readLine must both tolerate transient empty reads and reset its retry counter after a byte.
+type transientZeroReader struct {
+	data            string
+	zerosBeforeByte int
+	zerosRemaining  int
+	hangAtEnd       bool
+}
+
+func (r *transientZeroReader) Read(p []byte) (int, error) {
+	if r.data == "" {
+		if r.hangAtEnd {
+			return 0, nil
+		}
+		return 0, io.EOF
+	}
+	if r.zerosRemaining > 0 {
+		r.zerosRemaining--
+		return 0, nil
+	}
+	p[0] = r.data[0]
+	r.data = r.data[1:]
+	r.zerosRemaining = r.zerosBeforeByte
+	return 1, nil
+}
+
+func (s *MySuite) TestReadLine(c *C) {
+	errBoom := errors.New("boom")
+	tests := []struct {
+		name     string
+		r        io.Reader
+		wantLine string
+		wantErr  error
+	}{
+		{"newline", strings.NewReader("y\n"), "y", nil},
+		{"crlf keeps carriage return", strings.NewReader("y\r\n"), "y\r", nil},
+		{"empty line", strings.NewReader("\n"), "", nil},
+		{"eof without newline", strings.NewReader("y"), "y", io.EOF},
+		{"eof without data", strings.NewReader(""), "", io.EOF},
+		{"one byte reader", iotest.OneByteReader(strings.NewReader("yes\n")), "yes", nil},
+		{"data with eof", iotest.DataErrReader(strings.NewReader("y")), "y", io.EOF},
+		{"newline with eof", iotest.DataErrReader(strings.NewReader("y\n")), "y", nil},
+		{"read error", iotest.ErrReader(errBoom), "", errBoom},
+		{"data then read error", io.MultiReader(strings.NewReader("y"), iotest.ErrReader(errBoom)), "y", errBoom},
+		{"transient zero reads reset after progress", &transientZeroReader{data: "y\n", zerosBeforeByte: 99, zerosRemaining: 99}, "y", nil},
+		{"data then no progress", &transientZeroReader{data: "y", zerosBeforeByte: 5, zerosRemaining: 5, hangAtEnd: true}, "y", io.ErrNoProgress},
+		{"no progress", zeroReader{}, "", io.ErrNoProgress},
+	}
+	for _, tc := range tests {
+		line, err := readLine(tc.r)
+		c.Check(line, Equals, tc.wantLine, Commentf(tc.name))
+		c.Check(err, Equals, tc.wantErr, Commentf(tc.name))
+	}
+}
+
+func (s *MySuite) TestReadLine_LeavesRemainingInputUnread(c *C) {
+	r := strings.NewReader("n\ny\n")
+	first, err := readLine(r)
+	c.Assert(err, IsNil)
+	c.Check(first, Equals, "n")
+	second, err := readLine(r)
+	c.Assert(err, IsNil)
+	c.Check(second, Equals, "y")
+}
+
+func (s *MySuite) TestPromptYesNo_Answers(c *C) {
+	defer failOnExit()()
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"y\n", true},
+		{"YES\n", true},
+		{"n\n", false},
+		{"No\ny\n", false},
+		{"\n", true},
+		{"y\r\n", true},
+		{"\r\n", true},
+		{"\uFEFFn\r\ny\r\n", false},
+		{"\uFEFFy\n", true},
+		{" n \r\n", false},
+		{"y", true},
+		{"no", false},
+		{"", false},
+		{"maybe", false},
+		{"maybe\n", false},
+		{"maybe\ny\n", true},
+		{"maybe\n\n", true},
+	}
+	for _, tc := range tests {
+		got := promptYesNo(strings.NewReader(tc.input), "Test prompt")
+		c.Check(got, Equals, tc.want, Commentf("input %q", tc.input))
+	}
+}
+
+func (s *MySuite) TestPromptYesNo_ReadErrorsDecline(c *C) {
+	defer failOnExit()()
+	errBoom := errors.New("boom")
+	c.Check(promptYesNo(iotest.ErrReader(errBoom), "Test prompt"), Equals, false)
+	// A partial answer is honored only when input ends with EOF, not on other read errors.
+	c.Check(promptYesNo(io.MultiReader(strings.NewReader("y"), iotest.ErrReader(errBoom)), "Test prompt"), Equals, false)
+	c.Check(promptYesNo(zeroReader{}, "Test prompt"), Equals, false)
+}
+
+func (s *MySuite) TestPromptYesNo_SuccessivePromptsReadOneLineEach(c *C) {
+	defer failOnExit()()
+	for _, input := range []string{"n\ny\n", "n\r\ny\r\n"} {
+		r := strings.NewReader(input)
+		c.Check(promptYesNo(r, "First"), Equals, false, Commentf("input %q", input))
+		c.Check(promptYesNo(r, "Second"), Equals, true, Commentf("input %q", input))
+	}
+}
+
+func (s *MySuite) TestAskForConfirmation_ClosedStdinDeclines(c *C) {
+	defer failOnExit()()
+	pipeRead, pipeWrite, err := os.Pipe()
+	c.Assert(err, IsNil)
+	defer func() { _ = pipeRead.Close() }()
+	c.Assert(pipeWrite.Close(), IsNil)
+
+	origStdin := os.Stdin
+	os.Stdin = pipeRead
+	defer func() { os.Stdin = origStdin }()
+
+	c.Assert(PromptYesNo("Test prompt"), Equals, false)
+}
+
+func (s *MySuite) TestAskForConfirmation_UnreadableStdinDeclines(c *C) {
+	defer failOnExit()()
+	pipeRead, pipeWrite, err := os.Pipe()
+	c.Assert(err, IsNil)
+	defer func() { _ = pipeWrite.Close() }()
+	c.Assert(pipeRead.Close(), IsNil)
+
+	origStdin := os.Stdin
+	os.Stdin = pipeRead
+	defer func() { os.Stdin = origStdin }()
+
+	c.Assert(PromptYesNo("Test prompt"), Equals, false)
+}
+
+func (s *MySuite) TestAskForConfirmation_PipedAnswersSuccessivePrompts(c *C) {
+	defer failOnExit()()
+	pipeRead, pipeWrite, err := os.Pipe()
+	c.Assert(err, IsNil)
+	defer func() { _ = pipeRead.Close() }()
+	_, err = pipeWrite.Write([]byte("n\ny\n"))
+	c.Assert(err, IsNil)
+	c.Assert(pipeWrite.Close(), IsNil)
+
+	origStdin := os.Stdin
+	os.Stdin = pipeRead
+	defer func() { os.Stdin = origStdin }()
+
+	c.Check(PromptYesNo("First"), Equals, false)
+	c.Check(PromptYesNo("Second"), Equals, true)
 }
 
 func (s *MySuite) TestExecuteCommandWithTimeout_SuccessfulExecution(c *C) {

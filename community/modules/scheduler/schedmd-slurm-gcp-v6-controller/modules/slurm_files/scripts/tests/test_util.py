@@ -336,6 +336,56 @@ def test_parse_job_info(job_info, expected_job):
     assert lkp._parse_job_info(job_info) == expected_job
 
 
+@pytest.mark.parametrize(
+    "stdout,expected_jobs",
+    [
+        ("No jobs in the system\n", []),
+        (
+            "JobId=16 JobName=bash\n"
+            "   JobState=COMPLETED\n"
+            "   TimeLimit=00:05:00\n"
+            "   ReqNodeList=(null) ExcNodeList=(null)\n"
+            "   Command=bash -c \"\n"
+            "echo hello\n"
+            "\"\n"
+            "\n"
+            "   WorkDir=/home/user\n"
+            "   TresPerNode=gres/tpu:v5p:4\n"
+            "   Layout=v5p=2x2x1\n"
+            "\n"
+            "JobId=17 JobName=python\n"
+            "   JobState=RUNNING\n"
+            "   TimeLimit=01:00:00\n"
+            "   ReqNodeList=node-0 ExcNodeList=(null)\n"
+            "   Command=/tmp/job.sh\n"
+            "   WorkDir=/home/user\n"
+            "\n",
+            [
+                util.Job(
+                    id=16,
+                    duration=timedelta(minutes=5),
+                    name="bash",
+                    job_state="COMPLETED",
+                    required_nodes="(null)",
+                ),
+                util.Job(
+                    id=17,
+                    duration=timedelta(hours=1),
+                    name="python",
+                    job_state="RUNNING",
+                    required_nodes="node-0",
+                ),
+            ],
+        ),
+    ],
+)
+def test_get_jobs(mocker, stdout, expected_jobs):
+    lkp = util.Lookup(TstCfg())
+    mocker.patch.object(util, "run", return_value=Mock(stdout=stdout))
+    assert lkp.get_jobs() == expected_jobs
+
+
+
 
 @pytest.mark.parametrize(
     "node,state,want",
@@ -1659,7 +1709,6 @@ def _mk_tpu_tpl(machine_name: str):
         ("ct5p-hightpu-4t", "2x2x2", "v5p", 2),
         ("ct6e-standard-4t", "2x4", "v6e", 2),
         ("tpu7x-standard-4t", "2x2x2", "tpu7x", 2),
-        ("tpu7-standard-4t", "2x2x2", "7", 2),
         ("ct6e-standard-8t", "2x4", ValueError, None),
         ("ct6e-standard-1t", "2x4", ValueError, None),
         ("n1-standard-4", None, None, 1),
@@ -2166,3 +2215,50 @@ def test_nodeset_machine_conf_physical_core_and_socket_inversion():
     assert got_sock.sockets_per_board == 1
     assert got_sock.cores_per_socket == 16
     assert got_sock.cpus == 32
+
+
+def test_fetch_config_downloads_keep_order():
+    from mock import patch
+    def blob(text):
+        return Mock(download_as_text=Mock(return_value=text))
+    blobs = Mock(
+        hash="new",
+        core=blob("slurm_cluster_name: m22"),
+        controller_addr=None,
+        partition=[],
+        nodeset=[blob(f"nodeset_name: ns{i}") for i in range(200)],
+        nodeset_dyn=[],
+        nodeset_tpu=[],
+        login_group=[],
+    )
+    with patch.object(util, "_list_config_blobs", return_value=blobs), \
+         patch.object(util, "_assemble_config", side_effect=lambda **kw: kw):
+        res = util._fetch_config(old_hash="old")
+    assert res is not None
+    kw, h = res
+    assert h == "new"
+    assert kw["core"] == {"slurm_cluster_name": "m22"}
+    assert kw["nodesets"] == [{"nodeset_name": f"ns{i}"} for i in range(200)]
+
+
+def test_fetch_config_download_error_propagates():
+    from mock import patch
+    bad = Mock(download_as_text=Mock(side_effect=RuntimeError("boom")))
+    blobs = Mock(
+        hash="new",
+        core=Mock(download_as_text=Mock(return_value="slurm_cluster_name: m22")),
+        controller_addr=None,
+        partition=[],
+        nodeset=[bad],
+        nodeset_dyn=[],
+        nodeset_tpu=[],
+        login_group=[],
+    )
+    with patch.object(util, "_list_config_blobs", return_value=blobs), \
+         pytest.raises(RuntimeError, match="boom"):
+        util._fetch_config(old_hash="old")
+
+
+def test_yaml_load_reads_dumped_config():
+    cfg = util.NSDict({"nodeset": {"a": {"node_conf": {"Weight": 1}, "zones": ["us-east1-b"]}}, "x": None})
+    assert util._yaml_load(util.yaml.dump(cfg, Dumper=util.Dumper)) == cfg

@@ -63,3 +63,62 @@ To run the unit tests:
 ```bash
 python3 -m unittest tools/tests/test_cloud_build_zone_retry.py -v
 ```
+
+## GCE Reservation Capacity Polling
+
+For integration tests that deploy against specific GCE hardware reservations, `wait_for_available_reservation.sh` validates reservation state and polls for available capacity before starting deployment:
+
+```bash
+bash /workspace/tools/cloud-build/wait_for_available_reservation.sh \
+  "<RESERVATION_NAME|RESOURCE_URI>" "<ZONE>" "[RESERVATION_OWNER_PROJECT]" "[REQUIRED_COUNT]" "[BLUEPRINT_FILE]"
+```
+
+For example, in `daily-tests/builds/gke-g4-confidential.yaml`:
+
+```bash
+bash /workspace/tools/cloud-build/wait_for_available_reservation.sh "g4-reservation-0" "us-south1-a" "hpc-toolkit-dev" 2 "\$$EXAMPLE_BP"
+```
+
+* If `AVAILABLE >= REQUIRED_COUNT`, it exits `0` immediately (and if `BLUEPRINT_FILE` and `RESERVATION_OWNER_PROJECT` are provided, injects `project: "<RESERVATION_OWNER_PROJECT>"` under `specific_reservations:`) to allow the test deployment to proceed.
+* If `AVAILABLE < REQUIRED_COUNT` (capacity is currently in use by another build), it retries every 5 minutes (up to 8 hours).
+* If the reservation is not in `READY` state, has `0` total capacity, or `TOTAL_COUNT < REQUIRED_COUNT`, it fails fast with exit code `3`.
+* If the reservation does not exist (`404`), lacks permissions (`403`), or fails authentication/validation (`400`/`401`), it fails fast with exit code `1`.
+
+## Unit Testing
+
+Unit tests for GCE reservation capacity polling (`wait_for_available_reservation.sh`) are located in `tools/tests/test_wait_for_available_reservation.py`.
+
+To run the unit tests:
+
+```bash
+python3 -m unittest tools/tests/test_wait_for_available_reservation.py -v
+```
+
+## Stale PR Build & Kueue Job Reaper
+
+The in-cluster `kueue-reaper` deployment on `test-kueue-cluster` (`kueue-reaper-pod.yaml`) runs `reap_stale_pr_builds.py` every 5 minutes:
+
+1. Lists ongoing (`QUEUED` and `WORKING`) Cloud Builds that carry a `_PR_NUMBER` substitution.
+2. Fetches the head SHA of every open PR with one paginated GitHub REST call (`GET /pulls?state=open`). Unauthenticated calls, `304 Not Modified` included, count against GitHub's 60 requests/hour per-IP limit; set `GITHUB_TOKEN` to raise it.
+3. Cancels builds whose commit is no longer the PR head, and builds of PRs that GitHub confirms are closed or merged. If GitHub or `gcloud` is unavailable, nothing is cancelled on that run.
+4. Once those Cloud Builds transition to `CANCELLED`, the same pod deletes the matching Kubernetes `Job`s so queued jobs leave Kueue and running pods receive `SIGTERM` to tear down their test infrastructure (`kueue_cleanup_pod.sh`).
+
+> **Note:** A build that a maintainer re-runs on an older commit of an open PR is cancelled on the next run, because it no longer matches the PR head.
+
+You can also invoke it manually as a CLI quick action (for a specific PR or across all open/closed PRs):
+
+```bash
+# Preview stale builds across all PRs without cancelling:
+python3 tools/cloud-build/reap_stale_pr_builds.py --project=hpc-toolkit-dev --dry-run
+
+# Cancel stale builds for a specific PR:
+python3 tools/cloud-build/reap_stale_pr_builds.py --project=hpc-toolkit-dev --pr=6550
+```
+
+> **Note:** To run this manually without `--dry-run`, your authenticated Google Cloud account needs permission to cancel builds (`roles/cloudbuild.builds.editor`).
+
+Unit tests for `reap_stale_pr_builds.py` are located in `tools/tests/test_reap_stale_pr_builds.py`:
+
+```bash
+python3 -m unittest tools/tests/test_reap_stale_pr_builds.py -v
+```

@@ -236,13 +236,19 @@ deployment_groups:
       capacity_gib: 20000
       service_level: "EXTREME"
       region: $(vars.region)
+
+  - id: homefs
+    source: modules/file-system/netapp-volume
+    use: [netapp_pool]
+    settings:
+      volume_name: "homefs"
 ```
 
 Example of creating a storage pool using an existing network which was already PSA-peered with NetApp Volume:
 
 ```yaml
 deployment_groups:
- - group: primary
+- group: primary
   modules:
   - id: network
     source: modules/network/pre-existing-vpc
@@ -259,6 +265,12 @@ deployment_groups:
       capacity_gib: 20000
       service_level: "EXTREME"
       region: $(vars.region)
+
+  - id: homefs
+    source: modules/file-system/netapp-volume
+    use: [netapp_pool]
+    settings:
+      volume_name: "homefs"
 ```
 
 ### Storage pool examples

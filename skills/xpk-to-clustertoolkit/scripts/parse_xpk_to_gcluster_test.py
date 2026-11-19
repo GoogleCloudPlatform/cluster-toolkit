@@ -288,7 +288,7 @@ class ParseXpkToGclusterTest(unittest.TestCase):
 
     cluster_cmd = "xpk cluster create --cluster c1 --tpu-type $MY_ACCELERATOR"
     cluster_output = parse_xpk_to_gcluster.parse_xpk_command(cluster_cmd)
-    self.assertIn("machine_type: $MY_ACCELERATOR", cluster_output)
+    self.assertIn("compute_machine_type: $MY_ACCELERATOR", cluster_output)
     self.assertIn("tpu_topology: <YOUR_TOPOLOGY>", cluster_output)
 
   def test_cores_vs_chips_topology_mapping(self):
@@ -325,18 +325,18 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     out_v6e = parse_xpk_to_gcluster.parse_xpk_command("xpk workload create --workload j1 --tpu-type v6e-16")
     self.assertIn("--compute-type ct6e-standard-4t --topology 4x4", out_v6e)
 
-    # v5e family resolves to ct5lp-hightpu-*t with explicit topology
+    # v5e-16 resolves to ct5lp-hightpu-4t with explicit topology; v5e-{1,4,8} pass through as native shorthands
     out_v5e_16 = parse_xpk_to_gcluster.parse_xpk_command("xpk workload create --workload j2 --tpu-type v5e-16")
     self.assertIn("--compute-type ct5lp-hightpu-4t --topology 4x4", out_v5e_16)
 
     out_v5e_8 = parse_xpk_to_gcluster.parse_xpk_command("xpk workload create --workload j3 --tpu-type v5e-8")
-    self.assertIn("--compute-type ct5lp-hightpu-8t --topology 2x4", out_v5e_8)
+    self.assertIn("--compute-type v5e-8", out_v5e_8)
 
     out_v5e_4 = parse_xpk_to_gcluster.parse_xpk_command("xpk workload create --workload j4 --tpu-type v5e-4")
-    self.assertIn("--compute-type ct5lp-hightpu-4t --topology 2x2", out_v5e_4)
+    self.assertIn("--compute-type v5e-4", out_v5e_4)
 
     out_v5e_1 = parse_xpk_to_gcluster.parse_xpk_command("xpk workload create --workload j5 --tpu-type v5e-1")
-    self.assertIn("--compute-type ct5lp-hightpu-1t --topology 1x1", out_v5e_1)
+    self.assertIn("--compute-type v5e-1", out_v5e_1)
 
     # Explicit dimensions for v6e
     out_v6e_1x1 = parse_xpk_to_gcluster.parse_xpk_command("xpk workload create --workload j6 --tpu-type v6e-1x1")
@@ -625,7 +625,7 @@ class ParseXpkToGclusterTest(unittest.TestCase):
     self.assertEqual(vars_block.get("project_id"), "my-project")
     self.assertEqual(vars_block.get("zone"), "us-central1-a")
     self.assertEqual(vars_block.get("region"), "us-central1")
-    self.assertEqual(vars_block.get("machine_type"), "ct6e-standard-4t")
+    self.assertEqual(vars_block.get("compute_machine_type"), "ct6e-standard-4t")
     self.assertEqual(vars_block.get("tpu_topology"), "4x4")
     self.assertEqual(vars_block.get("num_slices"), 2)
 
@@ -652,7 +652,7 @@ class ParseXpkToGclusterTest(unittest.TestCase):
 
     cmd_cl = "xpk cluster create --cluster c1 --tpu-type tpu7x"
     out_cl = parse_xpk_to_gcluster.parse_xpk_command(cmd_cl)
-    self.assertIn("machine_type: tpu7x-standard-4t", out_cl)
+    self.assertIn("compute_machine_type: tpu7x-standard-4t", out_cl)
     self.assertIn("tpu_topology: <YOUR_TOPOLOGY>", out_cl)
 
   def test_tpu7x_trailing_dash(self):

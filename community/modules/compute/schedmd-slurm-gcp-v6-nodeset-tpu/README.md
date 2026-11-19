@@ -22,7 +22,7 @@ be accessed as `tpu` partition.
     settings:
       node_type: v2-8
       tf_version: 2.10.0
-      disable_public_ips: false
+      enable_public_ips: true
       preemptible: true
       preserve_tpu: false
 

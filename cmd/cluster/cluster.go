@@ -39,8 +39,8 @@ var orc *gke.GKEOrchestrator
 // ClusterCmd represents the base command for cluster-related operations
 var ClusterCmd = &cobra.Command{
 	Use:   "cluster",
-	Short: "[EXPERIMENTAL] Manage clusters and environments.",
-	Long:  `Discover, list, and introspect target clusters and environments. This feature is under active development.`,
+	Short: "Manage clusters and environments.",
+	Long:  `Discover, list, and introspect target clusters and environments.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		orc = gkeOrchestratorFactory()
 

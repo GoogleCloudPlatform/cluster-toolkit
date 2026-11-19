@@ -135,10 +135,12 @@ steps:
               cd /workspace
 
               DEPLOYMENT_NAME="h4d-onspot-slurm-$$BUILD_ID_SHORT"
+              BLUEPRINT="/workspace/examples/hpc-slurm-h4d/hpc-slurm-h4d.yaml"
+              BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | awk '{print \$$2}')
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/\$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
@@ -154,7 +156,6 @@ steps:
               set -x
               bash tools/get_binary.sh "${_TEST_PREFIX}"
               REGION="\$${ZONE%-*}"
-              BLUEPRINT="/workspace/examples/hpc-slurm-h4d/hpc-slurm-h4d.yaml"
 
               ENABLE_SPOT="true"
               SLURM_VARS_FILE="tools/cloud-build/daily-tests/tests/ml-h4d-onspot-slurm.yml"

@@ -162,6 +162,28 @@ gcloud compute instance-groups managed update-instances \
 
 [replacement]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
 
+### Shutdown Scripts
+
+By default, this module configures a VM shutdown script in instance metadata to
+stop the HTCondor service when an Execute Point is being shut down or deleted:
+
+- **Windows (`windows-shutdown-script-ps1`)**: Runs `Stop-Service condor -Force`
+  to remove the node from the pool. This reduces the chance of new jobs starting
+  during VM termination, but does not fully prevent it.
+- **Linux (`shutdown-script`)**: Runs `condor_off -fast -startd` and stops the
+  `condor` systemd service.
+
+User-supplied [`var.metadata`](#input_metadata) overrides these defaults. Setting
+`metadata.shutdown-script` (on Linux) or `metadata.windows-shutdown-script-ps1`
+(on Windows) replaces the module's built-in shutdown script.
+
+In addition, the [htcondor-access-point] module configures a job transform rule
+(`RETRY_WINDOWS_SHUTDOWN`) that automatically re-queues jobs up to 4 times
+(`NumJobCompletions < 5`) if they exit with Windows shutdown/DLL initialization
+error codes (`0xC0000142` or `0xC000026B`). Note that this retry rule is applied
+at the Access Point scheduler level and therefore applies to all jobs in the
+pool, including Linux jobs.
+
 ## Known Issues
 
 When using OS Login with "external users" (outside of the Google Cloud
@@ -212,9 +234,9 @@ limitations under the License.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| <a name="module_execute_point_instance_template"></a> [execute\_point\_instance\_template](#module\_execute\_point\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 14.0 |
+| <a name="module_execute_point_instance_template"></a> [execute\_point\_instance\_template](#module\_execute\_point\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 15.4 |
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../../../modules/internal/gpu-definition | n/a |
-| <a name="module_mig"></a> [mig](#module\_mig) | terraform-google-modules/vm/google//modules/mig | ~> 14.0 |
+| <a name="module_mig"></a> [mig](#module\_mig) | terraform-google-modules/vm/google//modules/mig | ~> 15.4 |
 | <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | ../../../../modules/scripts/startup-script | n/a |
 
 ## Resources

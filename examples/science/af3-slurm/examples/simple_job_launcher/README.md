@@ -100,6 +100,12 @@ Options (override defaults):
 - `--time SECONDS`        Slurm time limit in TOTAL SECONDS (e.g., 3600 for 1h). (Default depends on job type: '3600's / '3600's)
 - `--gres SPEC`           Slurm GPU request (e.g., gpu:1, gpu:a100:1). (Default: none for datapipeline, 'gpu:1' for inference if unset)
 - `--job-name-base NAME`  Base name for Slurm job (Default: 'alphafold3')
-- `--log-base-dir DIR`    Base directory for logs (Default: '/home/fschuermann_google_com/slurm_logs')
-- `--jax-cache-dir DIR`   JAX cache directory (Inference only) (Default: '')
-- `-h, --help`            Display this help message and exit.
+- `--log-base-dir DIR`                 Base directory for logs (Default: `$HOME/slurm_logs`)
+- `--jax-compilation-cache-path DIR`   JAX cache directory (Inference only) (Default: '')
+- `--max-template-date DATE`           Maximum template release date (`YYYY-MM-DD`, Inference only)
+- `--conformer-max-iterations NUM`     Maximum RDKit conformer search iterations (Inference only)
+- `--num-recycles NUM`                 Number of recycles during inference (Inference only)
+- `--num-diffusion-samples NUM`        Number of diffusion samples to generate (Inference only)
+- `--num-seeds NUM`                    Number of random seeds (Inference only)
+- `--save-embeddings VALUE`            Save final trunk embeddings (`true`/`false`, Inference only)
+- `-h, --help`                         Display this help message and exit.

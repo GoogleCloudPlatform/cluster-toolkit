@@ -86,6 +86,20 @@ vars:
   #   gcloud beta services identity create --service=file.googleapis.com --project=PROJECT_ID
   #   gcloud beta services identity create --service=compute.googleapis.com --project=PROJECT_ID
 
+  # Optional overrides (defaults shown)
+  # Size in GB of the /home Filestore instance (ZONAL tier minimum).
+  homefs_size_gb: 1024
+  # Maximum number of dynamically provisioned nodes in the debug partition.
+  debug_node_count_dynamic_max: 4
+  # Machine type for the debug partition.
+  debug_machine_type: n2-standard-2
+  # Maximum number of dynamically provisioned nodes in the compute partition.
+  compute_node_count_dynamic_max: 20
+  # Size in GB of the encrypted scratch disk attached to each compute node.
+  scratch_disk_size_gb: 375
+  # Machine type for the login node.
+  login_machine_type: n2-standard-4
+
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 
@@ -205,14 +219,14 @@ deployment_groups:
       # ZONAL is the cheapest tier supporting CMEK; BASIC_HDD does not.
       # size_gb is the tier minimum, since this is a demonstration.
       filestore_tier: ZONAL
-      size_gb: 1024
+      size_gb: $(vars.homefs_size_gb)
 
   - id: debug_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, disk_key_iam]
     settings:
-      node_count_dynamic_max: 4
-      machine_type: n2-standard-2
+      node_count_dynamic_max: $(vars.debug_node_count_dynamic_max)
+      machine_type: $(vars.debug_machine_type)
       allow_automatic_updates: false
       # Encrypt as the cluster's own service account rather than the
       # Compute Engine service agent. Both are granted on disk_key above.
@@ -231,7 +245,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network, disk_key_iam]
     settings:
-      node_count_dynamic_max: 20
+      node_count_dynamic_max: $(vars.compute_node_count_dynamic_max)
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
       # `use` cannot reach inside a caller-supplied list of objects, so the
@@ -240,7 +254,7 @@ deployment_groups:
       additional_disks:
       - device_name: scratch0
         disk_name: null
-        disk_size_gb: 375
+        disk_size_gb: $(vars.scratch_disk_size_gb)
         disk_type: pd-balanced
         disk_labels: {}
         auto_delete: true
@@ -258,7 +272,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network, disk_key_iam]
     settings:
-      machine_type: n2-standard-4
+      machine_type: $(vars.login_machine_type)
       enable_login_public_ips: true
 
   # The controller takes both keys: disk_key_iam for its boot disk (via

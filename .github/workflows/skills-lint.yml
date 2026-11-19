@@ -28,6 +28,7 @@ on:
     - release-candidate-*
     - hotfix-*
     paths:
+    - "AGENTS.md"
     - "skills/**"
     - "tools/run_eval.py"
     - "tools/tests/test_run_eval.py"
@@ -39,6 +40,7 @@ on:
     - main
     - develop
     paths:
+    - "AGENTS.md"
     - "skills/**"
     - "tools/run_eval.py"
     - "tools/tests/test_run_eval.py"

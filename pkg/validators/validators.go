@@ -164,6 +164,7 @@ func Execute(bp config.Blueprint) error {
 
 // validateBlueprintWithMetadata runs metadata-based validations.
 func validateBlueprintWithMetadata(bp config.Blueprint) error {
+	errs := config.Errors{}
 	for _, group := range bp.Groups {
 		for j, mod := range group.Modules {
 			if mod.Kind != config.TerraformKind {
@@ -189,12 +190,12 @@ func validateBlueprintWithMetadata(bp config.Blueprint) error {
 						logging.Error("WARNING: validation failed for module %q: %v", mod.ID, err)
 						continue
 					}
-					return err
+					_ = errs.Add(err)
 				}
 			}
 		}
 	}
-	return nil
+	return errs.OrNil()
 }
 
 func checkInputs(inputs config.Dict, required []string) error {
@@ -218,14 +219,21 @@ func checkInputs(inputs config.Dict, required []string) error {
 	return nil
 }
 
-// Helper function to sure that all input values are strings.
+// Helper function to ensure that all input values are known non-null strings.
 func inputsAsStrings(inputs config.Dict) (map[string]string, error) {
 	ms := map[string]string{}
 	for k, v := range inputs.Items() {
-		if v.Type() != cty.String {
-			return nil, fmt.Errorf("validator inputs must be strings, %s is a %s", k, v.Type())
+		if v == cty.NilVal {
+			return nil, fmt.Errorf("validator input %s must be a known non-null string", k)
 		}
-		ms[k] = v.AsString()
+		u, _ := v.Unmark()
+		if u.Type() != cty.String {
+			return nil, fmt.Errorf("validator inputs must be strings, %s is a %s", k, u.Type().FriendlyName())
+		}
+		if u.IsNull() || !u.IsKnown() {
+			return nil, fmt.Errorf("validator input %s must be a known non-null string", k)
+		}
+		ms[k] = u.AsString()
 	}
 	return ms, nil
 }
@@ -290,22 +298,8 @@ func defaults(bp config.Blueprint) []config.Validator {
 				"zone":       zoneRef,
 			}),
 		})
-		for _, varName := range bp.Vars.Keys() {
-			if resKeyRegex.MatchString(varName) {
-				resRef := config.GlobalRef(varName).AsValue()
-
-				// Automatically add a reservation check for every detected reservation variable
-				defaults = append(defaults, config.Validator{
-					Validator: testReservationExistsName,
-					Inputs: config.NewDict(map[string]cty.Value{
-						"project_id":       projectRef,
-						"zone":             zoneRef,
-						"reservation_name": resRef,
-					}),
-				})
-			}
-		}
 	}
+	defaults = append(defaults, defaultReservationValidators(bp)...)
 
 	if projectIDExists && regionExists && zoneExists {
 		defaults = append(defaults, config.Validator{

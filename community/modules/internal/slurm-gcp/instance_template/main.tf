@@ -26,14 +26,16 @@ module "instance_validation" {
 locals {
   additional_disks = [
     for disk in var.additional_disks : {
-      disk_name         = disk.disk_name
-      device_name       = disk.device_name
-      auto_delete       = disk.auto_delete
-      source            = disk.source
-      boot              = disk.boot
-      disk_size_gb      = disk.disk_size_gb
-      disk_type         = disk.disk_type
-      disk_storage_pool = disk.disk_storage_pool
+      disk_name                   = disk.disk_name
+      device_name                 = disk.device_name
+      auto_delete                 = disk.auto_delete
+      source                      = disk.source
+      boot                        = disk.boot
+      disk_size_gb                = disk.disk_size_gb
+      disk_type                   = disk.disk_type
+      disk_storage_pool           = disk.disk_storage_pool
+      disk_provisioned_iops       = disk.disk_provisioned_iops
+      disk_provisioned_throughput = disk.disk_provisioned_throughput
       disk_labels = merge(
         disk.disk_labels,
         {
@@ -55,12 +57,12 @@ locals {
   source_image_family = (
     var.source_image_family != "" && var.source_image_family != null
     ? var.source_image_family
-    : "slurm-gcp-6-12-hpc-rocky-linux-9"
+    : "aci-cpu-rocky-linux-9-slurm-2605-amd64"
   )
   source_image_project = (
     var.source_image_project != "" && var.source_image_project != null
     ? var.source_image_project
-    : "projects/schedmd-slurm-public/global/images/family"
+    : "projects/advanced-compute-images/global/images/family"
   )
 
   source_image = (
@@ -156,10 +158,12 @@ module "instance_template" {
   source_image         = local.source_image
 
   # Disk
-  disk_type         = var.disk_type
-  disk_size_gb      = var.disk_size_gb
-  disk_storage_pool = var.disk_storage_pool
-  auto_delete       = var.disk_auto_delete
+  disk_type                   = var.disk_type
+  disk_size_gb                = var.disk_size_gb
+  disk_storage_pool           = var.disk_storage_pool
+  disk_provisioned_iops       = var.disk_provisioned_iops
+  disk_provisioned_throughput = var.disk_provisioned_throughput
+  auto_delete                 = var.disk_auto_delete
   disk_labels = merge(
     {
       slurm_cluster_name  = var.slurm_cluster_name

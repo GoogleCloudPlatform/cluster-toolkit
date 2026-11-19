@@ -109,7 +109,7 @@ Build directly from a remote Git repository:
       template_vars:
         _PROJECT_ID: $(vars.project_id)
         _REGION: $(vars.region)
-        _REPO_NAME: $(artifact-repository.artifact_name)
+        _REPO_NAME: $(artifact-repository.repository_name)
         _IMAGE_NAME: "my-image"
 ```
 
@@ -131,7 +131,7 @@ Build from local source code on disk:
       template_vars:
         _PROJECT_ID: $(vars.project_id)
         _REGION: $(vars.region)
-        _REPO_NAME: $(artifact-repository.artifact_name)
+        _REPO_NAME: $(artifact-repository.repository_name)
 ```
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

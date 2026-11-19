@@ -3,3 +3,5 @@ ansible
 pyyaml
 google-cloud-build
 argparse
+jsonschema
+coverage

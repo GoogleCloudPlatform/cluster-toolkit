@@ -1,0 +1,38 @@
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: {{.WorkloadName}}
+{{- if .Namespace }}
+  namespace: {{.Namespace}}
+{{- end }}
+  labels:
+{{(StructuralData (.RenderBlock "workload_labels" 4))}}
+{{- if .ExclusiveTopologyAnnotation }}
+  annotations:
+    {{(StructuralData .ExclusiveTopologyAnnotation)}}
+{{- end }}
+spec:
+  ttlSecondsAfterFinished: {{.TtlSecondsAfterFinished}}
+  network:
+{{(StructuralData (.RenderBlock "jobset_network" 4))}}
+  failurePolicy:
+    maxRestarts: {{.MaxRestarts}}
+    rules:
+      - action: FailJobSet
+        onJobFailureReasons:
+          - PodFailurePolicy
+  replicatedJobs:
+    - name: main-job
+      replicas: {{.NumSlices}}
+      template:
+        spec:
+          completionMode: Indexed
+          parallelism: {{.NodesPerSlice}}
+          completions: {{.NodesPerSlice}}
+          backoffLimit: 0
+{{- if .PodFailurePolicy }}
+          podFailurePolicy:
+{{reindent 12 (StructuralData .PodFailurePolicy)}}
+{{- end }}
+          template:
+{{(StructuralData (.RenderBlock "pod_template" 12))}}

@@ -149,7 +149,7 @@ gcloud compute instances list \
 In dedicated sovereign environments, export `GHPC_MOCK_MACHINE_CONFIG` so `gcluster` can resolve machine type CPU/memory specifications offline without calling public GCP APIs:
 
 ```shell
-export GHPC_MOCK_MACHINE_CONFIG='{"cpus": {"c3-standard-4": {"count": 4, "memoryMb": 16384}}, "gpus": {}, "tpus": {}}'
+export GHPC_MOCK_MACHINE_CONFIG='{"cpus": {"c3-standard-4": {"count": 4, "memoryMb": 16384}, "c3-standard-176": {"count": 176, "memoryMb": 720896}}, "gpus": {}, "tpus": {}}'
 ```
 
 ### 2\. Generate Deployment Configuration
@@ -222,3 +222,9 @@ srun -N 2 hostname
 ## Multi-Cluster & Cloud Bursting
 
 For deploying Multi-Cluster Slurm with Elastic Cloud Bursting across two autonomous GCD projects, see [hybrid-slurm-cluster](./hybrid-slurm-cluster/README.md).
+
+---
+
+## Electronic Design Automation (EDA) Blueprint & Workloads
+
+For deploying an EDA Slurm cluster (`eda-gcd-cluster.yaml`) with shared `/tools`, `/library`, and `/scratch` storage—along with front-end RTL verification (**Verilator** + **RTLMeter / NVDLA**) and back-end physical design (**OpenROAD / ORFS** with the **ASAP7 7nm** PDK and **Ibex** RISC-V CPU core)—see [eda](./eda/README.md).

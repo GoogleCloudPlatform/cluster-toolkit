@@ -231,7 +231,10 @@ def _upload_log_files(log_dict):
 def _normalize_slurm_state(state):
     if not state:
         return None
-    return state.split()[0].split("+", 1)[0]
+    parts = state.split()
+    if not parts:
+        return None
+    return parts[0].split("+", 1)[0]
 
 
 def _parse_slurm_time(value):

@@ -10,8 +10,8 @@ To run a sample job, you need a GKE TPU cluster with ML Diagnostics enabled:
 
 1. Deploy a GKE TPU blueprint (e.g., v6e or 7x) with ML Diagnostics features enabled. Instructions can be found in the respective READMEs:
 
-   - [GKE TPU v6e README](../README.md#understanding-ml-diagnostics-integration)
-   - [GKE TPU 7x README](../../gke-tpu-7x/README.md#understanding-ml-diagnostics-integration)
+   - [GKE TPU v6e README](../README.md#configuring-ml-diagnostics)
+   - [GKE TPU 7x README](../../gke-tpu-7x/README.md#configuring-ml-diagnostics)
 
 2. Verify the cluster and ML Diagnostics components are correctly configured by following the "Testing ML Diagnostics Cluster Configuration" section in the blueprint's README.
 
@@ -24,7 +24,7 @@ Refer to the [ML Diagnostics documentation overview](https://docs.cloud.google.c
 Navigate to the test folder within your cloned `cluster-toolkit` repository:
 
 ```sh
-cd modules/management/mldiagnostics/sample-workload-test
+cd examples/gke-tpu-v6e/ml-diagnostics-sample-workload-test
 ```
 
 Set environment variables for your project and region:

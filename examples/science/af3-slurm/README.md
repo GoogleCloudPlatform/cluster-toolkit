@@ -290,7 +290,8 @@ This solution uses various GCS buckets to store required persistent information:
    gcloud storage buckets create gs://${UNIQUE_WEIGHTS_BUCKET} \
      --project=${PROJECT_ID} \
      --default-storage-class=STANDARD --location=${REGION} \
-     --uniform-bucket-level-access
+     --uniform-bucket-level-access \
+     --public-access-prevention
    ```
 
 1. Create **Databases Bucket**
@@ -305,7 +306,8 @@ This solution uses various GCS buckets to store required persistent information:
    gcloud storage buckets create gs://${UNIQUE_DATABASES_BUCKET} \
      --project=${PROJECT_ID} \
      --default-storage-class=STANDARD --location=${REGION} \
-     --uniform-bucket-level-access
+     --uniform-bucket-level-access \
+     --public-access-prevention
    ```
 
 1. Load **Weights Bucket**
@@ -357,12 +359,11 @@ This solution uses various GCS buckets to store required persistent information:
 ### Deploy the Auto-scaling Cluster
 
 #### Build the Cluster Toolkit gcluster binary
-Follow instructions [here](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment).
+Follow instructions [here](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment), and from the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository build `./gcluster` (if not already built):
 
-However, in the section [Clone the Cluster Toolkit GitHub repository](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment#clone-repo) after the second step execute a `git checkout develop`
-
-> [!TIP]
-> The need of having to change to the `develop` branch will go away once the AF3 High Throughput solution is merged into main.
+```bash
+test -x ./gcluster || make
+```
 
 #### (Optional, but recommended) Create a GCS Bucket for storing terraform state
 
@@ -376,7 +377,8 @@ REGION=<your-preferred-region>
 gcloud storage buckets create gs://${TF_STATE_BUCKET_NAME} \
     --project=${PROJECT_ID} \
     --default-storage-class=STANDARD --location=${REGION} \
-    --uniform-bucket-level-access
+    --uniform-bucket-level-access \
+    --public-access-prevention
 gcloud storage buckets update gs://${TF_STATE_BUCKET_NAME} --versioning
 ```
 
@@ -434,7 +436,7 @@ vars:
   default_inference_partition: $(vars.inference_g2_partition)
   default_inference_timeout: 3600
 
-  ... #more settings, consult the file af3-slurm-deployment.yaml
+  # More settings: consult the file af3-slurm-deployment.yaml
 ```
 
 #### Deploy the cluster

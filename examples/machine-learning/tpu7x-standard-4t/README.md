@@ -8,7 +8,19 @@ Selective deployment and teardown for multi-group blueprints (`cluster-env` and 
 
 ### Build the Cluster Toolkit `gcluster` binary
 
-Follow the instructions [here](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment) to set up your Cluster Toolkit environment, including enabling required APIs and IAM permissions.
+Follow the instructions [here](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment) to set up your Cluster Toolkit environment, enable the required GCP APIs, and build `./gcluster` from the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository:
+
+```bash
+gcloud services enable \
+  compute.googleapis.com \
+  iam.googleapis.com \
+  lustre.googleapis.com \
+  servicenetworking.googleapis.com \
+  storage.googleapis.com \
+  --project=<PROJECT_ID>
+
+test -x ./gcluster || make
+```
 
 ### Managed Lustre Capacity
 

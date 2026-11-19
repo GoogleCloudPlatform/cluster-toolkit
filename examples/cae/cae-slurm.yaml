@@ -40,6 +40,26 @@ vars:
   # for a list of valid family options with Slurm; note: the image types for the compute nodes
   # and the Chrome Remote Desktop (CRD) need to have the same Slurm base.
 
+  # Optional overrides (defaults shown)
+  # Size in GB of the /home Filestore instance.
+  homefs_size_gb: 2560
+  # Size in GB of the /apps Filestore instance.
+  appsfs_size_gb: 2560
+  # Size in GB of the /scratch Filestore instance (10240 is the smallest HIGH_SCALE_SSD size).
+  scratchfs_size_gb: 10240
+  # Maximum number of dynamically provisioned nodes in the h3 (balance) partition.
+  h3_node_count_dynamic_max: 10
+  # Use Spot VMs for the h3 (balance) partition.
+  h3_enable_spot_vm: false
+  # Maximum number of dynamically provisioned nodes in the c3 (highmem) partition.
+  c3_node_count_dynamic_max: 10
+  # Use Spot VMs for the c3 (highmem) partition.
+  c3_enable_spot_vm: false
+  # Machine type for the login node.
+  login_machine_type: n2-standard-8
+  # Machine type for the controller node.
+  controller_machine_type: n2-standard-16
+
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 deployment_groups:
@@ -69,7 +89,7 @@ deployment_groups:
     use: [network]
     settings:
       filestore_tier: BASIC_SSD
-      size_gb: 2560
+      size_gb: $(vars.homefs_size_gb)
       filestore_share_name: homeshare
       local_mount: /home
 
@@ -80,7 +100,7 @@ deployment_groups:
     use: [network]
     settings:
       filestore_tier: BASIC_SSD
-      size_gb: 2560
+      size_gb: $(vars.appsfs_size_gb)
       filestore_share_name: appsshare
       local_mount: /apps
 
@@ -123,7 +143,7 @@ deployment_groups:
     use: [network]
     settings:
       filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240    # smallest size for HIGH_SSD_SCALE
+      size_gb: $(vars.scratchfs_size_gb)    # smallest size for HIGH_SSD_SCALE
       filestore_share_name: scratchshare
       local_mount: /scratch
 
@@ -155,7 +175,8 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      node_count_dynamic_max: 10
+      node_count_dynamic_max: $(vars.h3_node_count_dynamic_max)
+      enable_spot_vm: $(vars.h3_enable_spot_vm)
       machine_type: h3-standard-88
       disk_type: 'pd-balanced'
       bandwidth_tier: gvnic_enabled
@@ -174,7 +195,8 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      node_count_dynamic_max: 10
+      node_count_dynamic_max: $(vars.c3_node_count_dynamic_max)
+      enable_spot_vm: $(vars.c3_enable_spot_vm)
       machine_type: c3-highmem-176
       disk_type: 'pd-balanced'
       bandwidth_tier: tier_1_enabled
@@ -192,7 +214,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
-      machine_type: n2-standard-8
+      machine_type: $(vars.login_machine_type)
 
   ####### Scheduler: SLURM #######
   # This block creates a SLURM controller
@@ -207,7 +229,7 @@ deployment_groups:
     - c3_partition
     - slurm_login
     settings:
-      machine_type: n2-standard-16
+      machine_type: $(vars.controller_machine_type)
       compute_startup_scripts_timeout: 900
       cloud_parameters:
         resume_rate: 0

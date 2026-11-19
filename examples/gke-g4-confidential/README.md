@@ -1,6 +1,6 @@
 # Deploy a GKE G4 Confidential Computing cluster for ML workloads
 
-This blueprint provisions a Google Kubernetes Engine (GKE) cluster with G4 nodes running on Confidential VMs (`g4-standard-48`) powered by AMD SEV-SNP memory encryption and NVIDIA Blackwell GPUs.
+This blueprint provisions a Google Kubernetes Engine (GKE) cluster with G4 nodes running on Confidential VMs (`g4-standard-48`) powered by AMD SEV memory encryption and NVIDIA Blackwell GPUs.
 
 Confidential VMs protect data in-use by keeping memory encrypted in hardware during processing. GKE Confidential Nodes extend this security by isolating node memory from the host hypervisor using AMD SEV (Secure Encrypted Virtualization) technology. Additionally, G4 instances support **Confidential GPUs** which secure memory transfers between the CPU and GPU using hardware-based PCIe encryption (Secure Passthrough).
 
@@ -26,10 +26,21 @@ This blueprint provisions a secure, isolated high-performance computing environm
 1. **Cluster Toolkit:** Ensure you have installed all the dependencies required in cluster toolkit and followed the setup instructions.
     1. Install [dependencies](https://docs.cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
     2. Set up [Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment). For building the `gcluster` binary, see [Install Cluster Toolkit](https://docs.cloud.google.com/cluster-toolkit/docs/setup/configure-environment#install).
-2. **Quota:** Ensure you have sufficient quota for `g4-standard-48` machines in your chosen region/zone. An active zonal reservation is optional but highly recommended to guarantee capacity.
-3. **IP Address:** You will need the public IP address of the machine where you run `gcluster` to configure the cluster's authorized networks.
-4. **Terraform State Bucket:** Create a Cloud Storage bucket to store the state of the Terraform deployment. See [Saving Terraform state](#saving-terraform-state) for instructions.
-5. **GKE Version:** G4 VM Confidential Nodes with Blackwell GPUs require GKE cluster version **`1.35.3-gke.1389000`** or later. The blueprint is pre-configured to target version `1.36.` to satisfy this constraint.
+2. **Enable Required GCP APIs:**
+
+    ```bash
+    gcloud services enable \
+      compute.googleapis.com \
+      container.googleapis.com \
+      iam.googleapis.com \
+      storage.googleapis.com \
+      --project=<PROJECT_ID>
+    ```
+
+3. **Quota:** Ensure you have sufficient quota for `g4-standard-48` machines in your chosen region/zone. An active zonal reservation is optional but highly recommended to guarantee capacity.
+4. **IP Address:** You will need the public IP address of the machine where you run `gcluster` to configure the cluster's authorized networks.
+5. **Terraform State Bucket:** Create a Cloud Storage bucket to store the state of the Terraform deployment. See [Saving Terraform state](#saving-terraform-state) for instructions.
+6. **GKE Version:** G4 VM Confidential Nodes with Blackwell GPUs require GKE cluster version **`1.35.3-gke.1389000`** or later. The blueprint is pre-configured to target version `1.36.` to satisfy this constraint.
 
 ---
 
@@ -43,7 +54,8 @@ export BUCKET=YOUR_BUCKET_NAME
 export REGION=YOUR_REGION
 gcloud storage buckets create gs://${BUCKET} --project=${PROJECT_ID} \
   --default-storage-class=STANDARD --location=${REGION} \
-  --uniform-bucket-level-access
+  --uniform-bucket-level-access \
+  --public-access-prevention
 gcloud storage buckets update gs://${BUCKET} --versioning
 ```
 
@@ -68,7 +80,7 @@ Before deploying, fill out the `gke-g4-confidential-deployment.yaml` file with y
 | `project_id` | Your Google Cloud Project ID. |
 | `deployment_name` | A unique name for this Cluster Toolkit deployment (e.g., `gke-g4-cvm`). |
 | `region` / `zone` | The GCP region and zone (e.g., `us-south1`, `us-south1-a`). |
-| `machine_type` | The GCE machine type used for G4 GPU nodes. Must be `g4-standard-48` for RTX 6000 GPU Confidential nodes. Defaults to `g4-standard-48`. |
+| `compute_machine_type` | The GCE machine type used for G4 GPU nodes. Must be `g4-standard-48` for RTX 6000 GPU Confidential nodes. Defaults to `g4-standard-48`. |
 | `num_gpus` | The number of GPUs to attach to each G4 node. Must be `1` for the `g4-standard-48` shape. Defaults to `1`. |
 | `static_node_count` | The exact number of G4 GPU nodes to provision in the pool. Defaults to `1`. |
 | `authorized_cidr` | Your public IP address in CIDR notation (e.g., `1.2.3.4/32`). |
@@ -151,7 +163,7 @@ If you want to use **Spot VMs** or **DWS Flex Start (Queued Provisioning)** inst
 #### Option 1: Using Spot VMs
 Spot VMs are preemptible instances suitable for fault-tolerant workloads. For more details, refer to the [GKE Spot VMs documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/spot-vms). To configure the cluster to use Spot VMs:
 1. Open [`gke-g4-confidential.yaml`](./gke-g4-confidential.yaml) and locate the `g4-pool` module settings block.
-2. Comment out or remove the `reservation_affinity` block.
+2. Comment out or remove the `reservation_affinity` block (and comment out or remove `reservation:` from the `vars:` block in both `gke-g4-confidential.yaml` and `gke-g4-confidential-deployment.yaml` so `gcluster`'s unused-variable validator passes).
 3. Add `spot: true` to the settings block.
 
 ```yaml
@@ -172,9 +184,8 @@ Spot VMs are preemptible instances suitable for fault-tolerant workloads. For mo
 #### Option 2: Using DWS Flex Start (Queued Provisioning)
 DWS Flex Start is a queued provisioning model that allocates all requested GPU resources at the same time, once the entire capacity becomes available. For more details, refer to the [GKE DWS Flex Start documentation](https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training). To configure the cluster for DWS Flex Start:
 1. Open [`gke-g4-confidential.yaml`](./gke-g4-confidential.yaml) and locate the `g4-pool` module settings block.
-2. Comment out or remove the `static_node_count` setting.
-3. Comment out or remove the `reservation_affinity` block.
-4. Add the following DWS parameters to the settings block:
+2. Comment out or remove the `static_node_count` setting and the `reservation_affinity` block in `g4-pool` (and comment out or remove `reservation:` from the `vars:` block in both `gke-g4-confidential.yaml` and `gke-g4-confidential-deployment.yaml` so `gcluster`'s unused-variable validator passes; keep `static_node_count:` in `vars:` as it is still referenced by `nvidia_smi_job_template`).
+3. Add the following DWS parameters to the settings block:
 
 ```yaml
   - id: g4-pool
@@ -205,11 +216,10 @@ DWS Flex Start is a queued provisioning model that allocates all requested GPU r
 
 ## Deploy the Cluster
 
-1. Switch to the toolkit directory and build:
+1. From the root of the [`cluster-toolkit`](https://github.com/GoogleCloudPlatform/cluster-toolkit) repository, build `./gcluster` (if not already built):
 
    ```bash
-   cd ~/cluster-toolkit
-   make
+   test -x ./gcluster || make
    ```
 
 2. Deploy the infrastructure in a single step:
@@ -392,7 +402,7 @@ SUCCESS: G4 GPU computation completed successfully!
 This test measures the secure PCIe link speed between the CPU and GPU using the NVIDIA `nvbandwidth` tool, operating via driver-managed secure bounce buffers, to verify functional data path execution and collect baseline transfer speeds.
 
 **Significance of the Test:**
-On G4 Confidential VMs (which support 1 GPU max and do not support multi-node clustering), standard multi-node collective communication libraries like NCCL are not applicable. Instead, running `nvbandwidth` is the primary way to stress-test the secure hardware path between the AMD SEV-SNP encrypted CPU and the NVIDIA CC-enabled Blackwell GPU, ensuring that the PCIe hardware encryption engine does not cause data bottlenecks or driver hangs under heavy memory load.
+On G4 Confidential VMs (which support 1 GPU max and do not support multi-node clustering), standard multi-node collective communication libraries like NCCL are not applicable. Instead, running `nvbandwidth` is the primary way to stress-test the secure hardware path between the AMD SEV encrypted CPU and the NVIDIA CC-enabled Blackwell GPU, ensuring that the PCIe hardware encryption engine does not cause data bottlenecks or driver hangs under heavy memory load.
 
 > [!NOTE]
 > The test job is pre-configured with the `-s` / `--skipVerification` flag. Because CPU host memory is encrypted, the tool's data verification step (which attempts to copy results directly to standard CPU stack memory) will trigger a security boundary violation and halt the GPU. Leaving this flag active is required for the test to execute cleanly.

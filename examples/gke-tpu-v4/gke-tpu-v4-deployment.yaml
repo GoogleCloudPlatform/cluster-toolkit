@@ -38,18 +38,14 @@ vars:
 
   # Machine type
   # TPU v4 options: ct4p-hightpu-4t
-  machine_type:
+  compute_machine_type:
 
   # The TPU placement topology for pod slice node pool.
   # TPU v4 options: 2x2x2 (8 chips)
   tpu_topology:
 
-  # Use Spot VMs for the TPU node pool
-  spot:
-
   # The name of the compute engine reservation of TPU v4 nodes
-  # Commented out as we are using Spot VMs
-  # reservation:
+  reservation:
 
   # Cidr block containing the IP of the machine calling terraform.
   # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
@@ -58,3 +54,6 @@ vars:
 
   # The namespace to be configured for running workloads
   user_namespace: default
+
+## --- Optional overrides (defaults shown) ---
+  # system_node_pool_machine_type: n2-standard-8

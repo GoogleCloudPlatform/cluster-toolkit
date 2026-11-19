@@ -136,7 +136,7 @@ For `xpk cluster create` and `create-pathways`, generate a declarative Cluster T
    Merging is **additive**: overwrite only the keys the parser emitted and preserve every other key already present in the example's `vars:` block.
    * **Pre-existing Unset Variables**: Canonical examples (like `examples/gke-tpu-v6e/gke-tpu-v6e.yaml`) declare `authorized_cidr` and `reservation` with no default value. Supply them via `--vars` or prompt the user.
    * **Reservation Affinity**: If `--reservation` is omitted in the XPK command, delete the pre-existing `reservation_affinity` block from the accelerator node pool module and the now-unused `reservation` variable from `vars:` (it is the block's only consumer in canonical blueprints; leaving it trips `test_deployment_variable_not_used`).
-   * **GPU Blueprints**: Do NOT merge `machine_type` into `examples/gke-a3-megagpu/` or `examples/gke-a4/` — those blueprints hardcode the machine type in the node pool. Merge only `static_node_count`, `project_id`, `deployment_name`, `zone`, and `region`.
+   * **GPU Blueprints**: Do NOT merge `compute_machine_type` into `examples/gke-a3-megagpu/` or `examples/gke-a4/` — those blueprints default it to the only machine type the node pool supports. Merge only `static_node_count`, `project_id`, `deployment_name`, `zone`, and `region`.
 
 3. **Decision Rule for `vars:` vs `settings:`**:
    The parser emits three distinct configuration buckets:

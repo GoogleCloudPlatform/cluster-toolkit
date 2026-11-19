@@ -1,0 +1,81 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Single-node NCCL all_reduce test on the 4 GPUs of one A5X node. NCCL and
+# nccl-tests are built into the test image.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nccl-test-single-node
+spec:
+  restartPolicy: Never
+  hostNetwork: true
+  nodeSelector:
+    cloud.google.com/gke-accelerator: nvidia-vr200
+    kubernetes.io/arch: arm64
+  tolerations:
+  - key: nvidia.com/gpu
+    operator: Equal
+    value: present
+    effect: NoSchedule
+  - key: kubernetes.io/arch
+    operator: Equal
+    value: arm64
+    effect: NoSchedule
+  volumes:
+  - name: library-dir-host
+    hostPath:
+      path: /home/kubernetes/bin/nvidia
+  - name: shared-memory
+    emptyDir:
+      medium: "Memory"
+      sizeLimit: 250Gi
+  containers:
+  - name: nccl-test
+    image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-vr200-container:v08-2.32.6
+    resources:
+      requests:
+        cpu: 150m
+        nvidia.com/gpu: "4"
+      limits:
+        nvidia.com/gpu: "4"
+    volumeMounts:
+    - name: library-dir-host
+      mountPath: /usr/local/nvidia
+    - name: shared-memory
+      mountPath: /dev/shm
+    env:
+    - name: LD_LIBRARY_PATH
+      value: /var/nccl/current/lib:/usr/local/cuda-13.5/lib64:/opt/rdma-core/build/lib:/usr/lib/aarch64-linux-gnu:/usr/local/nvidia/lib64
+    - name: UCX_NET_DEVICES
+      value: eth0
+    - name: NCCL_SOCKET_IFNAME
+      value: eth0
+    - name: NCCL_DEBUG
+      value: INFO
+    - name: NCCL_DEBUG_SUBSYS
+      value: INIT
+    - name: NCCL_IB_DISABLE
+      value: "1"
+    - name: NCCL_NVLINK_UTIL_CENTRIC_SCHED_ENABLE
+      value: "0"
+    - name: HWLOC_COMPONENTS
+      value: "-pci"
+    command: ["/bin/bash", "-c"]
+    args:
+    - |
+      set -exo pipefail
+      # The grep hides two known, harmless warnings (no IB devices, no GDRCopy).
+      /var/nccl-tests/build/all_reduce_perf -b 8 -e 8G -f 2 -g 4 -w 5 -n 50 2>&1 | \
+        grep --line-buffered -vE '(wrap_ibv_alloc_pd\) NCCL WARN lib wrapper not initialized|ncclRmaSocketProxyInit\) NCCL WARN RMA/Socket : rma_socket requires GDRCopy)'

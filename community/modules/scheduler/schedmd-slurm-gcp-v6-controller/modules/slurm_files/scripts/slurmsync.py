@@ -79,18 +79,28 @@ class NodeActionIdle():
 
 @dataclass(frozen=True)
 class NodeActionPowerDown():
+    reason: Optional[str] = None
+
     def apply(self, nodes:List[str]) -> None:
         hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} instances to power down ({hostlist})")
-        run(f"{lookup().scontrol} update nodename={hostlist} state=power_down")
+        cmd = f"{lookup().scontrol} update nodename={hostlist} state=power_down"
+        if self.reason:
+            cmd += f" reason={shlex.quote(self.reason)}"
+        run(cmd)
 
 
 @dataclass(frozen=True)
 class NodeActionPowerDownForce():
+    reason: Optional[str] = None
+
     def apply(self, nodes:List[str]) -> None:
         hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} instances to power down ({hostlist})")
-        run(f"{lookup().scontrol} update nodename={hostlist} state=power_down_force")
+        cmd = f"{lookup().scontrol} update nodename={hostlist} state=power_down_force"
+        if self.reason:
+            cmd += f" reason={shlex.quote(self.reason)}"
+        run(cmd)
 
 @dataclass(frozen=True)
 class NodeActionDeleteMIG():
@@ -358,9 +368,12 @@ def get_node_action(nodename: str) -> NodeAction:
         and inst.status == "TERMINATED"
     ):
         if lkp.is_tpu_node(nodename):
-            if state.base != "DOWN":
-                return NodeActionDown(reason="Instance terminated")
-            return NodeActionPowerDown()
+            termination_reason = (
+                "Spot instance preempted"
+                if inst.scheduling.preemptible
+                else "Instance terminated"
+            )
+            return NodeActionPowerDownForce(reason=termination_reason)
         if lkp.is_node_mig(nodename):
             # MIG auto-healing (default_action_on_failure=REPAIR) recreates the VM
             # (delete + insert). Do not start it; wait for RUNNING, then resume via

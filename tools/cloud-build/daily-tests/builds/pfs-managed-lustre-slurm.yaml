@@ -107,6 +107,22 @@ steps:
               value: "$$TRIAGE_INVOKER_SA"
             - name: TRIAGE_CLOUD_RUN_URL
               value: "$$TRIAGE_CLOUD_RUN_URL"
+            - name: NUM_NODES
+              value: "2"
+            - name: MIN_NODES
+              value: "1"
+            - name: MACHINE_TYPE
+              value: "c2-standard-4"
+            - name: INSTANCE_PREFIX
+              value: "mgdltr"
+            - name: ENABLE_SPOT_FALLBACK
+              value: "true"
+            - name: CHECK_LUSTRE
+              value: "true"
+            - name: REQUIRED_LUSTRE_GB
+              value: "18000"
+            - name: OPTIONS_GCS_PATH
+              value: "gs://hpc-ctk1357/lustreoptions.txt"
             command: ["/bin/bash", "-c"]
             args:
             - |
@@ -115,9 +131,12 @@ steps:
               cd /workspace
 
               DEPLOYMENT_NAME="managed-lustre-slurm-$$BUILD_ID_SHORT"
+              BLUEPRINT="examples/pfs-managed-lustre-slurm.yaml"
+              BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | awk '{print \$$2}')
+
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/*/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              gcloud storage rm -r "gs://daily-tests-tf-state/\$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
 
               RUN_CLEANUP=true
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
@@ -125,7 +144,14 @@ steps:
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
-              BLUEPRINT="examples/pfs-managed-lustre-slurm.yaml"
+              source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              if [ -z "\$${ZONE:-}" ]; then
+                echo "ERROR: No available zone found." >&2
+                exit 1
+              fi
+              REGION="\$${ZONE%-*}"
+              echo "Selected zone: \$$ZONE (region: \$$REGION)"
+
               bash tools/add_ttl_label.sh "\$$BLUEPRINT"
               python3 tools/fix_vpc_name.py "\$$BLUEPRINT" "${_TEST_PREFIX}"
 
@@ -134,6 +160,7 @@ steps:
                 --extra-vars="use_fixed_vpc=true" \
                 --user="$$OSLOGIN_USER"  --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
                 --extra-vars="@tools/cloud-build/daily-tests/tests/pfs-managed-lustre-slurm.yml" \
+                --extra-vars="region=\$${REGION} zone=\$${ZONE}" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
                 --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
