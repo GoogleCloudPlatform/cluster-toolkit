@@ -125,12 +125,10 @@ while true; do
 	# Dynamically extract the failed zone from the job logs if failure was due to capacity exhaustion.
 	# Route Managed Lustre resource exhaustion to LUSTRE_EXCLUDE_ZONES so a working compute ZONE is preserved.
 	FAILED_LUSTRE_ZONE=""
-	if grep -q -i -E "google_lustre_instance|module\.homefs" "$JOB_LOGS"; then
+	if grep -B 3 -A 3 -i -E "resource exhausted|not enough resources|stockout" "$JOB_LOGS" | grep -q -i -E "google_lustre_instance|module\.homefs"; then
 		FAILED_LUSTRE_ZONE=$(sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
 		if [ -z "$FAILED_LUSTRE_ZONE" ]; then
-			if grep -q -i -E "not enough resources available|resource exhausted|stockout" "$JOB_LOGS"; then
-				FAILED_LUSTRE_ZONE=$(sed -n 's/.*LUSTRE_ZONE: \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
-			fi
+			FAILED_LUSTRE_ZONE=$(sed -n 's/.*LUSTRE_ZONE: \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
 		fi
 	fi
 

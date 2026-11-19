@@ -1087,6 +1087,25 @@ exit 0
         self.assertEqual(env_map.get("EXCLUDE_ZONES"), "us-central1-c")
         self.assertNotIn("LUSTRE_EXCLUDE_ZONES", env_map)
 
+    def test_submit_script_e2e_earlier_lustre_success_does_not_misclassify_compute_failure(self):
+        """E2E: Earlier Lustre creation logs must not hijack a later compute stockout."""
+        attempt1_log = (
+            "Deploying in ZONE: us-central1-b\n"
+            "LUSTRE_ZONE: us-central1-a\n"
+            "module.homefs.google_lustre_instance.lustre_instance: Creating...\n"
+            "module.homefs.google_lustre_instance.lustre_instance: Creation complete after 3m10s\n"
+            "module.slurm_controller.google_compute_instance.controller: Creating...\n"
+            "module.slurm_controller.google_compute_instance.controller: Creation complete after 20s\n"
+            "module.slurm_login.google_compute_instance.login: Creating...\n"
+            "module.slurm_login.google_compute_instance.login: Creation complete after 15s\n"
+            "module.nodeset.google_compute_region_instance_group_manager.rigm: Creating...\n"
+            "Error: ZONE_RESOURCE_POOL_EXHAUSTED: not enough resources in us-central1-b\n"
+        )
+        res, env_map = self._run_submit_script_e2e(SAMPLE_JOB_YAML, attempt1_log)
+        self.assertIn("Job succeeded!", res.stdout)
+        self.assertEqual(env_map.get("EXCLUDE_ZONES"), "us-central1-b")
+        self.assertNotIn("LUSTRE_EXCLUDE_ZONES", env_map)
+
     def test_submit_script_e2e_skips_exclude_zones_when_lustre_only_true(self):
         """E2E: When LUSTRE_ONLY=true, generic stockout fallback does not inject EXCLUDE_ZONES."""
         job_yaml = """apiVersion: batch/v1
