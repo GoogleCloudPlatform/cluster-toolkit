@@ -124,10 +124,13 @@ while true; do
 
 	# Dynamically extract the failed zone from the job logs if failure was due to capacity exhaustion.
 	# Route Managed Lustre resource exhaustion to LUSTRE_EXCLUDE_ZONES so a working compute ZONE is preserved.
-	FAILED_LUSTRE_ZONE=$(sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
-	if [ -z "$FAILED_LUSTRE_ZONE" ]; then
-		if grep -q -i -E "google_lustre_instance|module\.homefs" "$JOB_LOGS" && grep -q -i -E "not enough resources available|resource exhausted|stockout" "$JOB_LOGS"; then
-			FAILED_LUSTRE_ZONE=$(sed -n 's/.*LUSTRE_ZONE: \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
+	FAILED_LUSTRE_ZONE=""
+	if grep -q -i -E "google_lustre_instance|module\.homefs" "$JOB_LOGS"; then
+		FAILED_LUSTRE_ZONE=$(sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
+		if [ -z "$FAILED_LUSTRE_ZONE" ]; then
+			if grep -q -i -E "not enough resources available|resource exhausted|stockout" "$JOB_LOGS"; then
+				FAILED_LUSTRE_ZONE=$(sed -n 's/.*LUSTRE_ZONE: \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
+			fi
 		fi
 	fi
 
@@ -147,10 +150,12 @@ while true; do
 			IS_LUSTRE_ONLY=$(python3 "${SCRIPT_DIR}/update_job_exclude_zones.py" --extract --file "$JOB_FILE" --env-var LUSTRE_ONLY 2>/dev/null || true)
 		fi
 		if [ "$IS_LUSTRE_ONLY" != "true" ]; then
-			FAILED_ZONE=""
-			# Only fall back to deployed zone if the logs confirm a VM/TPU capacity or stockout error
-			if grep -q -i -E "ZONE_RESOURCE_POOL_EXHAUSTED|not enough resources available|resource exhausted|stockout" "$JOB_LOGS"; then
-				FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
+			FAILED_ZONE=$(sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
+			if [ -z "$FAILED_ZONE" ]; then
+				# Only fall back to deployed zone if the logs confirm a VM/TPU capacity or stockout error
+				if grep -q -i -E "ZONE_RESOURCE_POOL_EXHAUSTED|not enough resources available|resource exhausted|stockout" "$JOB_LOGS"; then
+					FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \([a-z0-9-]*\).*/\1/p' "$JOB_LOGS" | tail -n 1 || true)
+				fi
 			fi
 
 			if [ -n "$FAILED_ZONE" ] && [ -f "$JOB_FILE" ]; then

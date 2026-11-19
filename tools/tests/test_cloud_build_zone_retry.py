@@ -1046,11 +1046,25 @@ exit 0
         env_map = {e["name"]: e["value"] for e in runner.get("env", [])}
         return res, env_map
 
+    def test_lustre_only_mode_without_check_lustre_set(self):
+        """LUSTRE_ONLY=true still loads LUSTRE_OPTIONS_GCS_PATH even when CHECK_LUSTRE is false."""
+        res = self._run_find_available_zone_with_mock(
+            {
+                "CHECK_LUSTRE": "false",
+                "LUSTRE_ONLY": "true",
+                "ZONE": "us-central1-c",
+                "LUSTRE_EXCLUDE_ZONES": "us-central1-a",
+            }
+        )
+        self.assertIn("OUT_ZONE=us-central1-c", res.stdout)
+        self.assertIn("OUT_LUSTRE_ZONE=us-central1-c", res.stdout)
+
     def test_submit_script_e2e_routes_lustre_exhaustion_without_excluding_compute_zone(self):
         """E2E: Lustre stockout adds LUSTRE_EXCLUDE_ZONES without adding EXCLUDE_ZONES."""
         attempt1_log = (
             "Deploying in ZONE: us-central1-b\n"
             "LUSTRE_ZONE: us-central1-a\n"
+            "module.homefs.google_lustre_instance.lustre_instance: Creating...\n"
             "Error: Error creating Instance: googleapi: Error 400: "
             "resource exhausted: not enough resources available to fulfill the request in us-central1-a\n"
         )
@@ -1058,6 +1072,20 @@ exit 0
         self.assertIn("Job succeeded!", res.stdout)
         self.assertEqual(env_map.get("LUSTRE_EXCLUDE_ZONES"), "us-central1-a")
         self.assertNotIn("EXCLUDE_ZONES", env_map)
+
+    def test_submit_script_e2e_routes_compute_resource_exhausted_to_exclude_zones(self):
+        """E2E: Non-Lustre resource exhausted error routes exact failed zone to EXCLUDE_ZONES."""
+        attempt1_log = (
+            "Deploying in ZONE: us-central1-b\n"
+            "LUSTRE_ZONE: us-central1-a\n"
+            "google_compute_instance_from_template.worker: Creating...\n"
+            "Error: Error creating Instance: googleapi: Error 400: "
+            "resource exhausted: not enough resources available to fulfill the request in us-central1-c\n"
+        )
+        res, env_map = self._run_submit_script_e2e(SAMPLE_JOB_YAML, attempt1_log)
+        self.assertIn("Job succeeded!", res.stdout)
+        self.assertEqual(env_map.get("EXCLUDE_ZONES"), "us-central1-c")
+        self.assertNotIn("LUSTRE_EXCLUDE_ZONES", env_map)
 
     def test_submit_script_e2e_skips_exclude_zones_when_lustre_only_true(self):
         """E2E: When LUSTRE_ONLY=true, generic stockout fallback does not inject EXCLUDE_ZONES."""

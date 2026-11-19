@@ -406,7 +406,7 @@ SUCCESS=false
 
 LUSTRE_ZONES=""
 LUSTRE_GCS_CONTENT=""
-if [[ "${CHECK_LUSTRE:-false}" == "true" ]]; then
+if [[ "${CHECK_LUSTRE:-false}" == "true" || "${LUSTRE_ONLY:-false}" == "true" ]]; then
 	if [[ -n "${LUSTRE_OPTIONS_GCS_PATH:-}" ]]; then
 		echo "INFO: Reading Managed Lustre zones from ${LUSTRE_OPTIONS_GCS_PATH}..."
 		if ! LUSTRE_GCS_CONTENT=$(gcloud storage cat "${LUSTRE_OPTIONS_GCS_PATH}"); then
@@ -437,7 +437,7 @@ if [[ "${LUSTRE_ONLY:-false}" == "true" ]]; then
 	fi
 	REGION="${ZONE%-*}"
 	PROVISIONING_MODEL="${PROVISIONING_MODEL:-}"
-	if select_lustre_zone "${REGION}"; then
+	if select_lustre_zone "${REGION}" "${ZONE}"; then
 		SELECTED_ZONE="${ZONE}"
 		SUCCESS=true
 	fi
@@ -558,7 +558,7 @@ else
 fi
 
 if [[ "${SUCCESS}" == "true" ]]; then
-	if [[ "${CHECK_LUSTRE:-false}" == "true" ]]; then
+	if [[ "${CHECK_LUSTRE:-false}" == "true" || "${LUSTRE_ONLY:-false}" == "true" ]]; then
 		echo "Deploying in ZONE: ${SELECTED_ZONE}, LUSTRE_ZONE: ${SELECTED_LUSTRE_ZONE}, MODEL: ${PROVISIONING_MODEL}"
 		export LUSTRE_ZONE="${SELECTED_LUSTRE_ZONE}"
 	else
