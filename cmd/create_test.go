@@ -348,9 +348,9 @@ func (s *MySuite) TestSetCreatorLabel(c *C) {
 	c.Assert(os.Setenv("CLOUDSDK_CORE_ACCOUNT", "new@google.com"), IsNil)
 	defer func() {
 		if hadAccount {
-			os.Setenv("CLOUDSDK_CORE_ACCOUNT", oldAccount)
+			_ = os.Setenv("CLOUDSDK_CORE_ACCOUNT", oldAccount)
 		} else {
-			os.Unsetenv("CLOUDSDK_CORE_ACCOUNT")
+			_ = os.Unsetenv("CLOUDSDK_CORE_ACCOUNT")
 		}
 	}()
 

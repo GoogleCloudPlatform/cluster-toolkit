@@ -42,7 +42,7 @@ func withStdin(t *testing.T, input string) {
 	os.Stdin = f
 	t.Cleanup(func() {
 		os.Stdin = old
-		f.Close()
+		_ = f.Close()
 	})
 }
 

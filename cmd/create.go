@@ -223,6 +223,20 @@ func setCreatorLabel(cmd *cobra.Command, bp *config.Blueprint) {
 // there is no readable previous deployment, and ("", true) when the previous
 // deployment was rendered without a ghpc_creator label.
 func previousCreatorLabel(outputDir string, bp config.Blueprint) (string, bool) {
+	name, ok := deploymentNameOf(bp)
+	if !ok {
+		return "", false
+	}
+	labels, ok := previousGlobalLabels(filepath.Join(outputDir, name))
+	if !ok {
+		return "", false
+	}
+	return creatorFromLabels(labels)
+}
+
+// deploymentNameOf returns the deployment_name of bp, if it is a known,
+// non-empty string.
+func deploymentNameOf(bp config.Blueprint) (string, bool) {
 	if !bp.Vars.Has("deployment_name") {
 		return "", false
 	}
@@ -230,14 +244,19 @@ func previousCreatorLabel(outputDir string, bp config.Blueprint) (string, bool) 
 	if err != nil || name.IsNull() || !name.IsKnown() || name.Type() != cty.String || name.AsString() == "" {
 		return "", false
 	}
+	return name.AsString(), true
+}
 
-	expPath := filepath.Join(modulewriter.ArtifactsDir(filepath.Join(outputDir, name.AsString())), modulewriter.ExpandedBlueprintName)
+// previousGlobalLabels returns the evaluated vars.labels of the expanded
+// blueprint stored in an existing deployment folder.
+func previousGlobalLabels(deplDir string) (cty.Value, bool) {
+	expPath := filepath.Join(modulewriter.ArtifactsDir(deplDir), modulewriter.ExpandedBlueprintName)
 	if _, err := os.Stat(expPath); err != nil {
-		return "", false
+		return cty.NilVal, false
 	}
 	prev, _, err := config.NewBlueprint(expPath)
 	if err != nil || !prev.Vars.Has("labels") {
-		return "", false
+		return cty.NilVal, false
 	}
 
 	// When the blueprint or deployment file sets its own vars.labels, the
@@ -245,12 +264,18 @@ func previousCreatorLabel(outputDir string, bp config.Blueprint) (string, bool) 
 	// a plain map, so evaluate it instead of reading the raw value.
 	labels, err := prev.Eval(config.GlobalRef("labels").AsValue())
 	if err != nil {
-		return "", false
+		return cty.NilVal, false
 	}
 	labels, _ = labels.Unmark()
 	if labels.IsNull() || !labels.IsKnown() || !labels.CanIterateElements() {
-		return "", false
+		return cty.NilVal, false
 	}
+	return labels, true
+}
+
+// creatorFromLabels returns the ghpc_creator value from labels. It returns
+// ("", true) when the label is absent and ok=false when it is not a string.
+func creatorFromLabels(labels cty.Value) (string, bool) {
 	for it := labels.ElementIterator(); it.Next(); {
 		k, v := it.Element()
 		if k.Type() != cty.String || k.AsString() != creatorLabelKey {
