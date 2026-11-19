@@ -3161,11 +3161,11 @@ func TestEvaluateExistingContext_TLSConfirmUsableAndServerWhitespace(t *testing.
 			wantReason: "invalid kubeconfig context",
 		},
 		{
-			name: "ConfirmUsable rejects non-DNS-1123 context namespace",
+			name: "non-DNS-1123 context namespace does not block reuse (validated at targeting time)",
 			mutate: func(cfg *clientcmdapi.Config) {
 				cfg.Contexts[testContext].Namespace = "INVALID_NAMESPACE"
 			},
-			wantReason: "invalid kubeconfig context",
+			wantReuse: true,
 		},
 	}
 
@@ -3227,14 +3227,13 @@ func TestHasStaticCredentials_AllEightFields(t *testing.T) {
 	}
 }
 
-func TestConfigureKubectl_SelfHealsNamespaceAndTrimsIdentifiers(t *testing.T) {
-	t.Run("invalid DNS-1123 namespace self-heals to default without set-context writeback", func(t *testing.T) {
+func TestConfigureKubectl_PreservesNamespaceAndTrimsIdentifiers(t *testing.T) {
+	t.Run("invalid DNS-1123 namespace keeps the context and its target without get-credentials", func(t *testing.T) {
 		cfg := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext)
 		cfg.Contexts[testContext].Namespace = "INVALID_NAMESPACE"
 
 		exec := newExactExecutor(map[string][]shell.CommandResult{
-			getCredsIP: {{ExitCode: 0}},
-			probeCmd:   {{ExitCode: 0}},
+			probeCmd: {{ExitCode: 0}},
 		})
 		orc := newTestGKEOrchestrator(exec)
 		orc.clusterDesc = testClusterDesc(true, true)
@@ -3243,31 +3242,53 @@ func TestConfigureKubectl_SelfHealsNamespaceAndTrimsIdentifiers(t *testing.T) {
 		if err := orc.configureKubectl(" "+testCluster+" ", " "+testLocation+" ", " "+testProject+" "); err != nil {
 			t.Fatalf("configureKubectl() error = %v; calls=%v", err, exec.calls)
 		}
-		if !slices.Equal(exec.calls, []string{getCredsIP, probeCmd}) {
-			t.Fatalf("calls = %v, want [%q, %q] (must trim args and skip invalid set-context)", exec.calls, getCredsIP, probeCmd)
+		if !slices.Equal(exec.calls, []string{probeCmd}) {
+			t.Fatalf("calls = %v, want [%q] (an invalid namespace must not rewrite kubeconfig)", exec.calls, probeCmd)
+		}
+		if ns, err := orc.getCurrentNamespace(testCluster, testLocation, testProject); err != nil || ns != "INVALID_NAMESPACE" {
+			t.Fatalf("target namespace = %q (err=%v), want INVALID_NAMESPACE so validateTargetNamespaceExists fails fast instead of using default", ns, err)
 		}
 	})
 
-	t.Run("whitespace-padded DNS-1123 namespace refreshes and restores trimmed namespace", func(t *testing.T) {
-		cfg := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext)
-		cfg.Contexts[testContext].Namespace = " team-ns "
+	for _, tc := range []struct {
+		name   string
+		rawNS  string
+		wantNS string
+	}{
+		{
+			name:   "non-DNS-1123 namespace is preserved on refresh instead of resetting to default",
+			rawNS:  "INVALID_NAMESPACE",
+			wantNS: "INVALID_NAMESPACE",
+		},
+		{
+			name:   "whitespace-padded namespace is restored trimmed on refresh",
+			rawNS:  " team-ns ",
+			wantNS: "team-ns",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(refreshCredentialsEnv, "1")
+			cfg := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext)
+			cfg.Contexts[testContext].Namespace = tc.rawNS
 
-		exec := newExactExecutor(map[string][]shell.CommandResult{
-			getCredsIP: {{ExitCode: 0}},
-			setNSCmd:   {{ExitCode: 0}},
-			probeCmd:   {{ExitCode: 0}},
+			wantSetNS := "kubectl config set-context " + testContext + " --namespace=" + tc.wantNS
+			exec := newExactExecutor(map[string][]shell.CommandResult{
+				getCredsIP: {{ExitCode: 0}},
+				wantSetNS:  {{ExitCode: 0}},
+				probeCmd:   {{ExitCode: 0}},
+			})
+			orc := newTestGKEOrchestrator(exec)
+			orc.clusterDesc = testClusterDesc(true, true)
+			orc.kubeconfigLoader = staticLoader(cfg)
+
+			if err := orc.configureKubectl(" "+testCluster+" ", " "+testLocation+" ", " "+testProject+" "); err != nil {
+				t.Fatalf("configureKubectl() error = %v; calls=%v", err, exec.calls)
+			}
+			if !slices.Equal(exec.calls, []string{getCredsIP, wantSetNS, probeCmd}) {
+				t.Fatalf("calls = %v, want [%q, %q, %q]", exec.calls, getCredsIP, wantSetNS, probeCmd)
+			}
 		})
-		orc := newTestGKEOrchestrator(exec)
-		orc.clusterDesc = testClusterDesc(true, true)
-		orc.kubeconfigLoader = staticLoader(cfg)
-
-		if err := orc.configureKubectl(testCluster, testLocation, testProject); err != nil {
-			t.Fatalf("configureKubectl() error = %v; calls=%v", err, exec.calls)
-		}
-		if !slices.Equal(exec.calls, []string{getCredsIP, setNSCmd, probeCmd}) {
-			t.Fatalf("calls = %v, want [%q, %q, %q]", exec.calls, getCredsIP, setNSCmd, probeCmd)
-		}
-	})
+	}
 
 	t.Run("gkeContextName and refreshGKEAuth trim identifier whitespace directly", func(t *testing.T) {
 		if got := gkeContextName(" "+testProject+" ", " "+testLocation+" ", " "+testCluster+" "); got != testContext {

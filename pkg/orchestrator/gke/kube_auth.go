@@ -35,7 +35,6 @@ import (
 	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
-	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
@@ -418,7 +417,12 @@ func evaluateExistingContext(cfg *clientcmdapi.Config, clusterName, location, pr
 		check.reason = reason
 		return check
 	}
-	if err := clientcmd.ConfirmUsable(*cfg, name); err != nil {
+	// Namespace is a targeting concern (validateTargetNamespaceExists reports a bad one) and kubectl
+	// does not enforce DNS-1123 on it, so keep it out of the reuse decision.
+	usable, ctxCopy := *cfg, *kubeCtx
+	ctxCopy.Namespace = ""
+	usable.Contexts = map[string]*clientcmdapi.Context{name: &ctxCopy}
+	if err := clientcmd.ConfirmUsable(usable, name); err != nil {
 		check.reason = fmt.Sprintf("invalid kubeconfig context: %v", err)
 		return check
 	}
@@ -782,15 +786,13 @@ func (g *GKEOrchestrator) restoreNamespaceContext(contextName, namespace string)
 	return nil
 }
 
-// refreshCredentialsPreservingNamespace runs get-credentials and keeps a valid DNS-1123
-// namespace already stored in the kubeconfig context (not the --gke-namespace flag value).
+// refreshCredentialsPreservingNamespace runs get-credentials and keeps the namespace
+// already stored in the kubeconfig context (not the --gke-namespace flag value).
 func (g *GKEOrchestrator) refreshCredentialsPreservingNamespace(clusterName, clusterLocation, projectID string, mode endpointMode) error {
 	originalNamespace := "default"
 	if cfg, err := g.loadKubeconfig(); err == nil {
 		if _, kubeCtx, ok := gkeNamedContext(cfg, clusterName, clusterLocation, projectID); ok {
-			if ns := k8s.ContextNamespace(kubeCtx); len(validation.IsDNS1123Label(ns)) == 0 {
-				originalNamespace = ns
-			}
+			originalNamespace = k8s.ContextNamespace(kubeCtx)
 		}
 	}
 	if err := g.refreshGKEAuth(clusterName, clusterLocation, projectID, mode == endpointModeDNS); err != nil {
