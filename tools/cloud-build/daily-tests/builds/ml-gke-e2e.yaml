@@ -86,6 +86,22 @@ steps:
           - name: runner
             image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
             env:
+            - name: PROJECT_ID
+              value: "$PROJECT_ID"
+            - name: BUILD_ID
+              value: "$BUILD_ID"
+            - name: MACHINE_TYPE
+              value: "g2-standard-4"
+            - name: NUM_NODES
+              value: "1"
+            - name: MIN_NODES
+              value: "1"
+            - name: INSTANCE_PREFIX
+              value: "mlgkee2e"
+            - name: OPTIONS_GCS_PATH
+              value: "gs://hpc-ctk1357/mlgkeoptions.txt"
+            - name: ENABLE_SPOT_FALLBACK
+              value: "true"
             - name: ANSIBLE_HOST_KEY_CHECKING
               value: "false"
             - name: ANSIBLE_CONFIG
@@ -122,6 +138,13 @@ steps:
               trap cleanup_pod EXIT SIGTERM SIGINT
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
+              source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              if [ -z "\$${ZONE:-}" ]; then
+                echo "ERROR: No available zone found." >&2
+                exit 1
+              fi
+              REGION="\$${ZONE%-*}"
+              echo "Selected zone: \$$ZONE (region: \$$REGION)"
 
               # adding vm to act as remote node
               echo '  - id: remote-node'                     >> \$$SG_EXAMPLE
@@ -129,7 +152,7 @@ steps:
               echo '    use: [network1]'                     >> \$$SG_EXAMPLE
               echo '    settings:'                           >> \$$SG_EXAMPLE
               echo '      machine_type: n2d-standard-2'       >> \$$SG_EXAMPLE
-              echo '      zone: asia-southeast1-b'           >> \$$SG_EXAMPLE
+              echo "      zone: \$${ZONE}"                   >> \$$SG_EXAMPLE
 
               echo '  - id: ubuntu_pool'                                         >> \$$SG_EXAMPLE
               echo '    source: modules/compute/gke-node-pool'         >> \$$SG_EXAMPLE
@@ -143,6 +166,7 @@ steps:
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
                 --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
                 --extra-vars="@tools/cloud-build/daily-tests/tests/ml-gke-e2e.yml" \
+                --extra-vars="region=\$${REGION} zone=\$${ZONE}" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
                 --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
