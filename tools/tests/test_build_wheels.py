@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -184,7 +185,9 @@ class TestBuildWheel(_FakeRepo):
         self.assertIn("Tag: py3-none-macosx_12_0_arm64", wheel)
         self.assertEqual(meta["Name"], NAME)
         self.assertEqual(meta["Version"], "1.107.0")
-        self.assertEqual(meta["Requires-Python"], ">=3.8")
+        self.assertEqual(meta["Requires-Python"], ">=3.11")
+        self.assertIn("cluster-toolkit", meta["Keywords"].split(","))
+        self.assertIn("hpc-toolkit", meta["Keywords"].split(","))
         self.assertEqual(meta["Description-Content-Type"], "text/markdown")
         self.assertIn(f"uv tool install {NAME}", meta.get_payload())
 
@@ -194,6 +197,39 @@ class TestBuildWheel(_FakeRepo):
         with open(self.build(), "rb") as f:
             second = f.read()
         self.assertEqual(first, second)
+
+    def _entry_times(self):
+        with zipfile.ZipFile(self.build()) as z:
+            return {i.date_time for i in z.infolist()}
+
+    def test_entry_times_use_source_date_epoch(self):
+        # 1700000000 = 2023-11-14 22:13:20 UTC
+        with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "1700000000"}):
+            self.assertEqual(self._entry_times(), {(2023, 11, 14, 22, 13, 20)})
+
+    def test_entry_times_use_last_commit_time(self):
+        git = lambda *a, **env: subprocess.run(
+            ["git", "-C", self.root, "-c", "user.name=t", "-c", "user.email=t@example.com", *a],
+            check=True, capture_output=True, env={**os.environ, **env})
+        try:
+            git("init", "-q")
+        except (OSError, subprocess.CalledProcessError):
+            self.skipTest("git not available")
+        git("add", "-A")
+        git("commit", "-q", "-m", "x", GIT_COMMITTER_DATE="2025-03-04T05:06:08Z")
+        env = {k: v for k, v in os.environ.items() if k != "SOURCE_DATE_EPOCH"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(self._entry_times(), {(2025, 3, 4, 5, 6, 8)})
+
+    def test_entry_times_fall_back_without_git_or_env(self):
+        env = {k: v for k, v in os.environ.items() if k != "SOURCE_DATE_EPOCH"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(self._entry_times(), {bw.DEFAULT_DATE_TIME})
+
+    def test_invalid_source_date_epoch_is_an_error(self):
+        with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "yesterday"}):
+            with self.assertRaises(ValueError):
+                self.build()
 
     def test_missing_binary_is_an_error(self):
         os.remove(self.binary)

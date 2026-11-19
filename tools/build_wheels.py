@@ -29,6 +29,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import zipfile
 
 # The binary is static (CGO_ENABLED=0), so one Linux wheel covers glibc and musl.
@@ -52,8 +53,9 @@ GO_MIN_MACOS = {
 EXAMPLE_DIRS = ["examples", "community/examples"]
 SKIP_NAMES = {".DS_Store", "__pycache__"}
 SHARE_DIR = "share/cluster-toolkit"
-# Fixed timestamp for reproducible wheels.
-ZIP_DATE_TIME = (2026, 1, 1, 0, 0, 0)
+# Timestamp for wheel entries when neither SOURCE_DATE_EPOCH nor git is available.
+DEFAULT_DATE_TIME = (2026, 1, 1, 0, 0, 0)
+ZIP_MIN_EPOCH = 315532800  # 1980-01-01, the earliest time a zip entry can store
 
 SUMMARY = "Google Cloud Cluster Toolkit command line tool (gcluster)"
 HOMEPAGE = "https://cloud.google.com/cluster-toolkit"
@@ -121,6 +123,26 @@ def toolkit_version(repo_root):
     return m.group(1) if m else None
 
 
+def zip_date_time(repo_root):
+    """Returns the timestamp for wheel entries, constant for a given commit.
+
+    Uses SOURCE_DATE_EPOCH if set (https://reproducible-builds.org/specs/source-date-epoch/),
+    else the last commit time of repo_root, else DEFAULT_DATE_TIME.
+    """
+    epoch = os.environ.get("SOURCE_DATE_EPOCH", "").strip()
+    if not epoch:
+        try:
+            epoch = subprocess.run(["git", "-C", repo_root, "log", "-1", "--format=%ct"],
+                                   capture_output=True, check=True, text=True).stdout.strip()
+        except (OSError, subprocess.CalledProcessError):
+            return DEFAULT_DATE_TIME
+        if not epoch:
+            return DEFAULT_DATE_TIME
+    if not epoch.isdigit():
+        raise ValueError(f"SOURCE_DATE_EPOCH must be a Unix timestamp, got {epoch!r}")
+    return time.gmtime(max(int(epoch), ZIP_MIN_EPOCH))[:6]
+
+
 def min_macos_for_go(go_ver):
     """Returns the minimum macOS version for a Go release."""
     if go_ver not in GO_MIN_MACOS:
@@ -164,7 +186,8 @@ def _metadata(name, version):
         ("Project-URL", f"Source, {REPO}"),
         ("Project-URL", f"Issues, {REPO}/issues"),
         ("Project-URL", f"Releases, {REPO}/releases"),
-        ("Keywords", "gcluster,hpc,ai,ml,slurm,gke,google-cloud,terraform"),
+        ("Keywords", "gcluster,cluster-toolkit,hpc-toolkit,hpc,ai,ml,slurm,gke,"
+                     "google-cloud,terraform"),
         ("Classifier", "Development Status :: 5 - Production/Stable"),
         ("Classifier", "Environment :: Console"),
         ("Classifier", "Intended Audience :: Developers"),
@@ -175,7 +198,7 @@ def _metadata(name, version):
         ("Classifier", "Operating System :: POSIX :: Linux"),
         ("Classifier", "Topic :: System :: Clustering"),
         ("Classifier", "Topic :: System :: Distributed Computing"),
-        ("Requires-Python", ">=3.8"),
+        ("Requires-Python", ">=3.11"),
         ("Description-Content-Type", "text/markdown"),
     ]
     header = "".join(f"{k}: {v}\n" for k, v in fields)
@@ -248,9 +271,10 @@ def build_wheel(name, version, platform, binary, out_dir, repo_root, macos_min):
     entries.append((f"{dist_info}/RECORD", ("\n".join(record) + "\n").encode(), 0o644))
 
     os.makedirs(out_dir, exist_ok=True)
+    date_time = zip_date_time(repo_root)
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for p, d, mode in entries:
-            info = zipfile.ZipInfo(p, date_time=ZIP_DATE_TIME)
+            info = zipfile.ZipInfo(p, date_time=date_time)
             info.create_system = 3  # UNIX, so the output is the same on any build OS
             info.external_attr = (0o100000 | mode) << 16
             info.compress_type = zipfile.ZIP_DEFLATED
