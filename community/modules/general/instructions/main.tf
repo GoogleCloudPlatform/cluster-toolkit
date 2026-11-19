@@ -16,9 +16,9 @@
 
 locals {
   raw_instructions = (
-    var.template_path != null
+    var.template_path != null && var.template_path != ""
     ? templatefile(var.template_path, var.template_vars)
-    : coalesce(var.content, "")
+    : (var.content != null ? var.content : "")
   )
 
   banner_header = var.banner_title != null ? format("\n====================================================================\n==== %s ====\n====================================================================\n", var.banner_title) : ""
@@ -32,18 +32,19 @@ locals {
   )
 
   file_destination = (
-    var.write_to_file == null ? null : (
+    var.write_to_file == null || trimspace(var.write_to_file) == "" ? null : (
       startswith(var.write_to_file, "/")
       ? var.write_to_file
-      : "${path.root}/${var.write_to_file}"
+      : abspath("${path.root}/${var.write_to_file}")
     )
   )
 }
 
 resource "local_file" "instructions_file" {
-  count    = local.file_destination != null ? 1 : 0
-  content  = local.formatted_instructions
-  filename = local.file_destination
+  count           = local.file_destination != null ? 1 : 0
+  content         = local.formatted_instructions
+  filename        = local.file_destination
+  file_permission = "0644"
 }
 
 resource "terraform_data" "print_instructions" {
