@@ -14,22 +14,21 @@
 
 ---
 tags:
-- m.custom-image
+- slurm6
 - m.filestore
 - m.private-service-access
-- m.vpc
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset
 - m.schedmd-slurm-gcp-v6-partition
-- m.startup-script
-- slurm6
+- m.vpc
 
 substitutions:
   _TEST_PREFIX: "" # Default to no prefix
 
 timeout: 86400s
 queueTtl: 86400s  # 24hr
+
 logsBucket: "gs://$PROJECT_NUMBER.cloudbuild-logs.googleusercontent.com"
 
 steps:
@@ -47,11 +46,10 @@ steps:
 - id: generate-job-manifest
   name: gcr.io/cloud-builders/gcloud
   entrypoint: /bin/bash
-  secretEnv: ['SA_EMAIL', 'GCLUSTER_GCS_PATH', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
+  secretEnv: ['GCLUSTER_GCS_PATH', 'SA_EMAIL', 'TRIAGE_GCS_BUCKET', 'TRIAGE_PROJECT_NUMBER', 'TRIAGE_INVOKER_SA', 'TRIAGE_CLOUD_RUN_URL']
   args:
   - -c
   - |
-    set -eo pipefail
     BUILD_ID_SHORT=$$(echo "$BUILD_ID" | cut -c1-6)
 
     # Determine the priority class based on the test prefix.
@@ -64,11 +62,11 @@ steps:
     SA_UNIQUE_ID=$(gcloud iam service-accounts describe "$$SA_EMAIL" --project="$PROJECT_ID" --format="value(uniqueId)")
     OSLOGIN_USER="sa_$${SA_UNIQUE_ID}"
 
-    cat <<JOB > job.yaml
+    cat <<EOF > job.yaml
     apiVersion: batch/v1
     kind: Job
     metadata:
-      name: ml-slurm-$$BUILD_ID_SHORT
+      name: slurm-gcp-v6-rocky9-$$BUILD_ID_SHORT
       namespace: default
       labels:
         kueue.x-k8s.io/queue-name: local-queue-test-locks
@@ -89,16 +87,18 @@ steps:
           - name: runner
             image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
             env:
+            - name: GCLUSTER_GCS_PATH
+              value: "$$GCLUSTER_GCS_PATH"
+            - name: PROJECT_ID
+              value: "$PROJECT_ID"
+            - name: BUILD_ID
+              value: "$BUILD_ID"
             - name: ANSIBLE_HOST_KEY_CHECKING
               value: "false"
             - name: ANSIBLE_CONFIG
               value: "/workspace/tools/cloud-build/ansible.cfg"
-            - name: BUILD_ID
-              value: "$BUILD_ID"
             - name: _TEST_PREFIX
               value: "${_TEST_PREFIX}"
-            - name: GCLUSTER_GCS_PATH
-              value: "$$GCLUSTER_GCS_PATH"
             - name: TRIAGE_GCS_BUCKET
               value: "$$TRIAGE_GCS_BUCKET"
             - name: TRIAGE_PROJECT_NUMBER
@@ -111,11 +111,11 @@ steps:
             args:
             - |
               set -x -e
-              echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/ml-slurm.yaml"
+              echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/slurm-gcp-v6-rocky9.yaml"
               cd /workspace
 
-              DEPLOYMENT_NAME="ml-slurm-v6-$$BUILD_ID_SHORT"
-              BLUEPRINT="examples/ml-slurm.yaml"
+              DEPLOYMENT_NAME="rock-9-$$BUILD_ID_SHORT"
+              BLUEPRINT="examples/hpc-slurm.yaml"
               BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | awk '{print \$$2}')
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
@@ -130,14 +130,14 @@ steps:
               bash tools/add_ttl_label.sh \$$BLUEPRINT
               python3 tools/fix_vpc_name.py \$$BLUEPRINT "${_TEST_PREFIX}"
 
-              ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/multigroup-integration-test.yml \
+              ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
                 --extra-vars="test_prefix=${_TEST_PREFIX}" --extra-vars="use_fixed_vpc=true" \
                 --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
-                --extra-vars="@tools/cloud-build/daily-tests/tests/ml-slurm.yml" \
-                --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
-                --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
-                --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \
-                --extra-vars="triage_cloud_run_url_override=$$TRIAGE_CLOUD_RUN_URL" &
+                --extra-vars="@tools/cloud-build/daily-tests/tests/slurm-v6-rocky9.yml" \
+                --extra-vars="triage_gcs_bucket_override=\$$TRIAGE_GCS_BUCKET" \
+                --extra-vars="triage_project_number_override=\$$TRIAGE_PROJECT_NUMBER" \
+                --extra-vars="triage_invoker_sa_override=\$$TRIAGE_INVOKER_SA" \
+                --extra-vars="triage_cloud_run_url_override=\$$TRIAGE_CLOUD_RUN_URL" &
               ANSIBLE_PID=\$$!
 
               wait \$$ANSIBLE_PID
@@ -147,24 +147,79 @@ steps:
                 cpu: 200m
                 memory: "2Gi"
                 test-locks/slurm: 1
-                test-locks/a2-highgpu: 1
-                test-locks/ml-slurm: 1
+                test-locks/slurm-gcp-v6-rocky9: 1
               limits:
                 cpu: 1
                 memory: "2Gi"
                 test-locks/slurm: 1
-                test-locks/a2-highgpu: 1
-                test-locks/ml-slurm: 1
-    JOB
+                test-locks/slurm-gcp-v6-rocky9: 1
+    EOF
 
 # 3. Submit and Monitor GKE Kueue Job with Retry
 - id: submit-and-monitor-gke-job
   name: gcr.io/cloud-builders/gcloud
   entrypoint: /bin/bash
   args:
-  - tools/cloud-build/submit_and_monitor_kueue_job.sh
-  - ml-slurm
-  - $BUILD_ID
+  - -c
+  - |
+    gcloud container clusters get-credentials test-kueue-cluster --region=us-central1
+    BUILD_ID_SHORT=$$(echo "$BUILD_ID" | cut -c1-6)
+    JOB_NAME="slurm-gcp-v6-rocky9-$$BUILD_ID_SHORT"
+
+    # Cloud Build trap: If the Cloud Build step itself receives a cancellation signal,
+    # delete the GKE job so the pod receives a SIGTERM and performs infrastructure cleanup.
+    cleanup_cb() {
+      echo ""
+      echo "=========================================================================="
+      echo "PIPELINE CANCELLED: The Cloud Build step received a termination signal."
+      echo "Deleting GKE Kueue Job ($$JOB_NAME) to force the Pod to clean itself up!"
+      echo "=========================================================================="
+      kubectl delete job "$$JOB_NAME" -n default || true
+      exit 1
+    }
+    trap cleanup_cb SIGTERM SIGINT
+
+    MAX_RETRIES=10
+    RETRY_DELAY=300
+    ATTEMPT=1
+
+    while true; do
+      echo "=== ATTEMPT $$ATTEMPT: Submitting Kueue Job ==="
+      kubectl apply -f /workspace/job.yaml
+
+      set +e
+      ( bash tools/cloud-build/monitor_kueue_job.sh \
+          test-kueue-cluster \
+          us-central1 \
+          "$$JOB_NAME" \
+          default | tee /workspace/job_logs.txt; exit $${PIPESTATUS[0]} ) &
+      MONITOR_PID=$$!
+      wait $$MONITOR_PID
+      EXIT_CODE=$$?
+      set -e
+
+      if [ $$EXIT_CODE -eq 0 ]; then
+        echo "Job succeeded!"
+        break
+      fi
+
+      # Check if the failure was specifically due to a lack of GCP zone capacity.
+      # If so, retry. If it's a real error (like a terraform syntax error), fail immediately.
+      if bash tools/cloud-build/check_retriable_error.sh /workspace/job_logs.txt; then
+        echo "WARNING: Retriable error detected. Kueue Job has already been deleted. Retrying in $$RETRY_DELAY seconds..."
+      else
+        echo "ERROR: Test failed due to an actual error (not zone capacity). Failing pipeline." >&2
+        exit 1
+      fi
+
+      if [ $$ATTEMPT -ge $$MAX_RETRIES ]; then
+        echo "ERROR: Job failed to find zone capacity after $$MAX_RETRIES attempts." >&2
+        exit 1
+      fi
+
+      sleep $$RETRY_DELAY
+      ATTEMPT=$$((ATTEMPT + 1))
+    done
 
 # 4. Cleanup the built image from Registry to save costs
 - id: cleanup-image
@@ -176,11 +231,8 @@ steps:
   - 'BUILD_ID=$BUILD_ID'
   args:
   - tools/cloud-build/image_cleanup.sh
-
 availableSecrets:
   secretManager:
-  - versionName: projects/${PROJECT_ID}/secrets/sa-email/versions/latest
-    env: 'SA_EMAIL'
   - versionName: projects/${PROJECT_ID}/secrets/gcluster-develop-release-bucket/versions/latest
     env: 'GCLUSTER_GCS_PATH'
   - versionName: projects/${PROJECT_ID}/secrets/triage-gcs-bucket/versions/latest
@@ -191,3 +243,5 @@ availableSecrets:
     env: 'TRIAGE_INVOKER_SA'
   - versionName: projects/${PROJECT_ID}/secrets/triage-cloud-run-url/versions/latest
     env: 'TRIAGE_CLOUD_RUN_URL'
+  - versionName: projects/${PROJECT_ID}/secrets/sa-email/versions/latest
+    env: 'SA_EMAIL'

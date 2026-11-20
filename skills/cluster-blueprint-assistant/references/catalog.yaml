@@ -3715,79 +3715,6 @@ blueprints:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [g4_partition, net0, homefs, slurm_login]
     settings: [disk_size_gb, enable_controller_public_ips, instance_image, instance_image_custom, machine_type]
-- path: examples/ml-slurm.yaml
-  blueprint_name: ml-slurm-v6
-  scheduler: slurm
-  description: "This blueprint provisions an HPC cluster running the Slurm scheduler with the machine learning frameworks PyTorch and TensorFlow pre-installed on every VM. The cluster has 2 partitions:"
-  machine_types: [a2-highgpu-1g, g2-standard-4]
-  accelerators: [nvidia-a100, nvidia-l4]
-  workloads: [ml-training, ml-inference]
-  required_services: [compute.googleapis.com, file.googleapis.com, iam.googleapis.com, logging.googleapis.com, servicenetworking.googleapis.com, storage.googleapis.com]
-  vars:
-    a2_enable_spot_vm: false
-    a2_node_count_dynamic_max: 20
-    deployment_name: ml-example-v6
-    disk_size_gb: 200
-    g2_enable_spot_vm: false
-    g2_node_count_dynamic_max: 20
-    homefs_size_gb: 2560
-    image_build_machine_type: c2-standard-4
-    metadata:
-      VmDnsSetting: GlobalOnly
-    new_image:
-      family: ml-slurm
-      project: $(vars.project_id)
-    project_id: null
-    region: asia-southeast1
-    zone: asia-southeast1-b
-    zones:
-    - asia-southeast1-a
-    - asia-southeast1-b
-    - asia-southeast1-c
-  modules:
-  - id: network
-    source: modules/network/vpc
-  - id: private_service_access
-    source: modules/network/private-service-access
-    use: [network]
-  - id: homefs
-    source: modules/file-system/filestore
-    use: [network, private_service_access]
-    settings: [filestore_tier, local_mount, size_gb]
-  - id: script
-    source: modules/scripts/startup-script
-    settings: [runners]
-  - id: custom-image
-    source: modules/packer/custom-image
-    use: [network, script]
-    settings: [disk_size, disk_type, image_family, machine_type, omit_external_ip, source_image_family, source_image_project_id, state_timeout]
-  - id: examples
-    source: modules/scripts/startup-script
-    settings: [runners]
-  - id: a2_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
-    settings: [bandwidth_tier, enable_spot_vm, instance_image, machine_type, node_count_dynamic_max]
-  - id: a2_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [a2_nodeset]
-    settings: [is_default, partition_name]
-  - id: g2_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
-    settings: [bandwidth_tier, enable_spot_vm, instance_image, machine_type, node_count_dynamic_max]
-  - id: g2_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [g2_nodeset]
-    settings: [exclusive, partition_name]
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
-    settings: [enable_login_public_ips, instance_image]
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [network, a2_partition, g2_partition, homefs, slurm_login]
-    settings: [enable_controller_public_ips, instance_image, login_startup_script]
 - path: examples/netapp-volumes-slurm.yaml
   blueprint_name: netapp-volumes-slurm
   scheduler: slurm
@@ -5307,7 +5234,7 @@ blueprints:
 - path: community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml
   blueprint_name: hpc-c3-slurm-google-cloud-dedicated
   scheduler: slurm
-  description: "Creates a Slurm cluster on C3 machine types for Google Cloud Dedicated (GCD) and sovereign cloud environments using Packer to pre-build a custom Slurm image based on Rocky Linux 8, configured with NFS home directories, SAuth..."
+  description: "Creates a Slurm cluster on C3 machine types for Google Cloud Dedicated (GCD) and sovereign cloud environments using Packer to pre-build a custom Slurm image based on Rocky Linux 9, configured with NFS home directories, SAuth..."
   machine_types: [c3-standard-4, c3-standard-176]
   workloads: [hpc]
   required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
@@ -5425,7 +5352,7 @@ blueprints:
   required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
     authorized_ssh_ranges: []
-    build_slurm_from_git_ref: 6.12.1
+    build_slurm_from_git_ref: 6.13.2
     built_instance_image:
       family: slurm-rocky9
       project: $(vars.project_id)
@@ -5934,59 +5861,6 @@ blueprints:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network1, debug_partition, compute_partition, slurm_login, homefs]
     settings: [enable_controller_public_ips]
-- path: community/examples/hpc-slurm-ubuntu2204.yaml
-  blueprint_name: hpc-slurm-ubuntu2204-v6
-  scheduler: slurm
-  description: "Similar to the hpc-slurm.yaml example, but using Ubuntu 22.04 instead of CentOS 7. Other operating systems are supported by SchedMD for the Slurm on GCP project and images are listed here. Only the examples listed on this page have been..."
-  machine_types: [n2-standard-2]
-  workloads: [hpc]
-  required_services: [compute.googleapis.com, file.googleapis.com, iam.googleapis.com, servicenetworking.googleapis.com, storage.googleapis.com]
-  vars:
-    compute_node_count_dynamic_max: 20
-    debug_machine_type: n2-standard-2
-    debug_node_count_dynamic_max: 4
-    deployment_name: slurm-gcp-v6
-    login_machine_type: n2-standard-4
-    project_id: null
-    region: us-west4
-    slurm_image:
-      family: aci-gpu-u2204-slurm-2511-cuda-130-nvidia-580-amd64
-      project: advanced-compute-images
-    zone: us-west4-c
-  modules:
-  - id: network
-    source: modules/network/vpc
-  - id: private_service_access
-    source: modules/network/private-service-access
-    use: [network]
-  - id: homefs
-    source: modules/file-system/filestore
-    use: [network, private_service_access]
-    settings: [local_mount]
-  - id: debug_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
-    settings: [instance_image, machine_type, node_count_dynamic_max]
-  - id: debug_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [debug_nodeset]
-    settings: [exclusive, is_default, partition_name]
-  - id: compute_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
-    settings: [bandwidth_tier, instance_image, node_count_dynamic_max]
-  - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [compute_nodeset]
-    settings: [partition_name]
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [network, slurm_login, debug_partition, compute_partition, homefs]
-    settings: [enable_controller_public_ips, instance_image]
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
-    settings: [enable_login_public_ips, instance_image, machine_type]
 - path: community/examples/hpc-slurm6-apptainer.yaml
   blueprint_name: hpc-slurm6-apptainer
   scheduler: slurm
@@ -6045,7 +5919,6 @@ blueprints:
     deployment_name: slurm6-hybrid
     disk_size: 64
     key_export_dir: /slurm/key_distribution
-    latest_base_image: slurm-gcp-6-11-hpc-rocky-linux-8
     on_prem_install_dir: your_slurm_installation_directory
     onprem_ctld_addr: your_slurmctld_IPaddress
     onprem_ctld_host: your_slurmctld_name
@@ -6054,8 +5927,10 @@ blueprints:
     region: us-central1
     slurm_gid: 620
     slurm_uid: 620
-    slurm_version: 25.11.6
+    slurm_version: 26.05.4
     slurmd_port: 6818
+    source_image_family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+    source_image_project: advanced-compute-images
     zone: us-central1-c
   modules:
   - id: network
@@ -6468,8 +6343,8 @@ blueprints:
     sharedfs_name: "$(\"${vars.deployment_name}-sharedfs\")"
     slurm_cluster_name: slurmdesktop
     slurm_image:
-      family: slurm-gcp-6-12-hpc-rocky-linux-9
-      project: schedmd-slurm-public
+      family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+      project: advanced-compute-images
     viz_machine_type: n2-standard-8
     zone: us-central1-a
   modules:
@@ -6839,58 +6714,6 @@ blueprints:
   - id: wait
     source: community/modules/scripts/wait-for-startup
     settings: [instance_name]
-- path: community/examples/tutorial-starccm-slurm.yaml
-  blueprint_name: starccm-on-slurm
-  scheduler: slurm
-  description: "This blueprint provisions an HPC cluster running Slurm for use with a Simcenter StarCCM+ tutorial."
-  machine_types: [n2-standard-2, c2-standard-60]
-  workloads: [hpc]
-  required_services: [compute.googleapis.com, file.googleapis.com, storage.googleapis.com]
-  vars:
-    compute_machine_type: c2-standard-60
-    compute_node_count_dynamic_max: 20
-    debug_machine_type: n2-standard-2
-    debug_node_count_dynamic_max: 4
-    deployment_name: starccm-slurm
-    login_machine_type: n2-standard-4
-    project_id: null
-    region: us-central1
-    zone: us-central1-c
-  modules:
-  - id: network1
-    source: modules/network/vpc
-  - id: homefs
-    source: modules/file-system/filestore
-    use: [network1]
-    settings: [local_mount]
-  - id: login-script
-    source: modules/scripts/startup-script
-    settings: [configure_ssh_host_patterns]
-  - id: compute-script
-    source: modules/scripts/startup-script
-    settings: [configure_ssh_host_patterns, runners]
-  - id: debug_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
-    settings: [machine_type, node_count_dynamic_max]
-  - id: debug_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use: [network1, homefs, debug_node_group, compute-script]
-    settings: [is_default, partition_name]
-  - id: compute_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
-    settings: [bandwidth_tier, disable_public_ips, machine_type, node_count_dynamic_max]
-  - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use: [network1, homefs, compute_node_group, compute-script]
-    settings: [partition_name]
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
-    use: [network1, debug_partition, compute_partition, homefs]
-    settings: [disable_controller_public_ips]
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
-    use: [network1, slurm_controller, login-script]
-    settings: [disable_login_public_ips, machine_type]
 - path: community/examples/tutorial-starccm.yaml
   blueprint_name: tutorial-starccm
   scheduler: none
