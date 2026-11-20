@@ -677,7 +677,7 @@ func (g *GKEOrchestrator) kubectlStream(args ...string) error {
 }
 
 // HasAPIGroupVersion checks whether the Kubernetes apiserver serves /apis/<groupVersion>
-// via the non-privileged API discovery endpoint.
+// via the non-privileged API discovery endpoint (implements k8s.APIGroupChecker).
 func (g *GKEOrchestrator) HasAPIGroupVersion(groupVersion string) (bool, error) {
 	gv := strings.Trim(strings.TrimSpace(groupVersion), "/")
 	if gv == "" {
@@ -898,6 +898,7 @@ func (g *GKEOrchestrator) endpointConnectivityError(clusterName string, attempts
 // GCLUSTER_REFRESH_CREDENTIALS=1 skips reuse.
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
 	g.resetStorageCaches()
+	g.inventory = nil
 	if g.mode == orchestrator.TypeK8s {
 		return g.configureK8sKubectl(clusterName)
 	}
