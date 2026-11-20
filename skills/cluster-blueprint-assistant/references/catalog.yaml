@@ -797,7 +797,7 @@ blueprints:
   - id: h4d-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-h4d-net, gke-h4d-rdma-net, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_dcgm_monitoring, enable_filestore_csi, enable_multi_networking, enable_private_endpoint, maintenance_exclusions, master_authorized_networks, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [configure_workload_identity_sa, enable_dcgm_monitoring, enable_filestore_csi, enable_multi_networking, enable_private_endpoint, maintenance_exclusions, master_authorized_networks, min_master_version, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: workload_policy
     source: modules/compute/resource-policy
     settings: [name, project_id, region, workload_policy]
@@ -1191,7 +1191,7 @@ blueprints:
   deployment_path: examples/gke-g4-confidential/gke-g4-confidential-deployment.yaml
   blueprint_name: gke-g4-confidential
   scheduler: gke
-  description: "This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV-SNP) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure..."
+  description: "This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure boot-disk..."
   machine_types: [g4-standard-48]
   accelerators: [nvidia-rtx-pro-6000]
   workloads: [ml-training, ml-inference]
@@ -1358,7 +1358,7 @@ blueprints:
   - id: h4d-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-h4d-net, gke-h4d-rdma-net, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_dcgm_monitoring, enable_filestore_csi, enable_multi_networking, enable_private_endpoint, maintenance_exclusions, master_authorized_networks, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [configure_workload_identity_sa, enable_dcgm_monitoring, enable_filestore_csi, enable_multi_networking, enable_private_endpoint, maintenance_exclusions, master_authorized_networks, min_master_version, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: h4d-pool
     source: modules/compute/gke-node-pool
     use: [h4d-cluster, gke-h4d-rdma-net, node_pool_service_account]
@@ -7646,11 +7646,6 @@ module_wiring:
     required_inputs: [dns_name, zone_name]
   modules/network/firewall-rules:
     required_services: [compute.googleapis.com]
-    required_inputs: [subnetwork_self_link]
-    recommended_use:
-    - modules/network/pre-existing-subnetwork
-    - modules/network/pre-existing-vpc
-    - modules/network/vpc
   modules/network/global-static-ip:
     required_services: [compute.googleapis.com]
     required_inputs: [ip_names]
@@ -7684,7 +7679,6 @@ module_wiring:
     - community/modules/scheduler/htcondor-setup
     - community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     - community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    - modules/network/firewall-rules
     - modules/packer/custom-image
     - modules/scheduler/gke-cluster
   modules/network/pre-existing-vpc:

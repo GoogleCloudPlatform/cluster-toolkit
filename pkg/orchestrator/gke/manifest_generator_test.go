@@ -2286,7 +2286,7 @@ func TestGenerateManifest_CustomGCSFusePVCAnnotation(t *testing.T) {
 			{ExitCode: 0, Stdout: `{"guestCpus": 2}`},
 			{ExitCode: 0, Stdout: `{"guestCpus": 2}`},
 		},
-		fmt.Sprintf("kubectl get pvc ub-verify-dataset-pvc -n default --ignore-not-found --request-timeout=10s -o %s", pvcGCSFuseJSONPath): {
+		fmt.Sprintf("kubectl get pvc -n default --ignore-not-found --request-timeout=10s -o %s -- ub-verify-dataset-pvc", pvcGCSFuseJSONPath): {
 			{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t\t\t"},
 			{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t\t\t"},
 		},

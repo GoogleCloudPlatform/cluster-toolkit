@@ -180,7 +180,7 @@ variable "public_access_prevention" {
   https://cloud.google.com/storage/docs/public-access-prevention
   EOT
   type        = string
-  default     = null
+  default     = "enforced"
   validation {
     condition = var.public_access_prevention == null ? true : contains([
       "inherited",

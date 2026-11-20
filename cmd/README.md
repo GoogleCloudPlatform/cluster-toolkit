@@ -22,7 +22,7 @@ gcluster [SUBCOMMAND]
 * [`export-outputs`](#gcluster-export-outputs): Export outputs from deployment group
 * [`import-inputs`](#gcluster-import-inputs): Import input values from previous deployment groups
 * [`cluster`](#gcluster-cluster): Discover, list, and inspect target clusters and environments (`list`, `describe`, `info`, `volume`)
-* [`job`](#gcluster-job): Manage workloads on GKE clusters (`submit`, `list`, `logs`, `cancel`, `config`, `inspect`, `gke-template-extract`)
+* [`job`](#gcluster-job): Manage workloads on GKE and Kubernetes clusters (`submit`, `list`, `logs`, `cancel`, `config`, `inspect`, `gke-template-extract`)
 * [`telemetry`](#gcluster-telemetry): Enable or disable telemetry
 * [`completion`](#gcluster-completion): Generate completion script
 * [`help`](#gcluster-help): Display help information for any command
@@ -82,7 +82,7 @@ gcluster deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 
 ### Flags - deploy
 
-* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. When not set, an existing deployment keeps the `ghpc_creator` label it was created with (or none); a new deployment gets it for `@google.com` accounts. Changing this flag on an existing deployment changes labels on every resource and forces replacement of immutable ones such as instance templates.
 * `-a, --artifacts <string>`: Artifacts directory (automatically configured if unset).
 * `--auto-approve`: Automatically approve proposed changes without prompting.
 * `--backend-config <strings>`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
@@ -117,7 +117,7 @@ gcluster create <BLUEPRINT_FILE> [flags]
 
 ### Flags - create
 
-* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. When not set, an existing deployment keeps the `ghpc_creator` label it was created with (or none); a new deployment gets it for `@google.com` accounts. Changing this flag on an existing deployment changes labels on every resource and forces replacement of immutable ones such as instance templates.
 * `--backend-config strings`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
 * `-d, --deployment-file string`: Deployment file to override blueprint variables and backend configuration.
 * `--force`: Forces overwrite of existing deployment directory. If set, `--overwrite-deployment` is implied and no validation is performed on the existing deployment directory.
@@ -167,7 +167,7 @@ gcluster expand BLUEPRINT_NAME [flags]
 
 ### Flags - expand
 
-* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. When not set, an existing deployment keeps the `ghpc_creator` label it was created with (or none); a new deployment gets it for `@google.com` accounts. Changing this flag on an existing deployment changes labels on every resource and forces replacement of immutable ones such as instance templates.
 * `--backend-config strings`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
 * `-d, --deployment-file string`: Deployment file to override blueprint variables and backend configuration.
 * `-o, --out string`: Output file for the expanded HPC Environment Definition (default `"expanded.yaml"`).
@@ -223,7 +223,7 @@ gcluster cluster <list|describe|info|volume> [flags]
 
 ## gcluster job
 
-`gcluster job` submits, monitors, and manages batch and distributed workloads on GKE clusters (`submit`, `list`, `logs`, `cancel`, `config`, `inspect`, `gke-template-extract`). For detailed usage, see [`docs/gcluster_job_guide.md`](../docs/gcluster_job_guide.md).
+`gcluster job` submits batch and distributed workloads on GKE clusters (`submit`, `gke-template-extract`), monitors or manages workloads across GKE and Kubernetes clusters (`list`, `logs`, `cancel`, `inspect`), and manages saved CLI defaults (`config`). For detailed usage, see [`docs/gcluster_job_guide.md`](../docs/gcluster_job_guide.md).
 
 ### Usage - job
 
@@ -238,7 +238,7 @@ gcluster job <submit|list|logs|cancel|config|inspect|gke-template-extract> [flag
 * `gcluster job list`: Lists jobs (`--status`, `--name-contains`).
 * `gcluster job logs`: Streams pod logs.
 * `gcluster job cancel`: Cancels workloads.
-* `gcluster job config`: Manages defaults.
+* `gcluster job config`: Manages saved defaults (`set`, `unset`, `show`).
 * `gcluster job gke-template-extract`: Extracts customizable K8s templates.
 
 ## gcluster telemetry

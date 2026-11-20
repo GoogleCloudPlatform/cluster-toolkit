@@ -415,6 +415,76 @@ func TestRunSPSWorkload_Validation(t *testing.T) {
 	})
 }
 
+func TestSubmitSPSClusterWorkload_ValidatesClusterMounts(t *testing.T) {
+	const pvcJSONCmd = "kubectl get pvc -n default --ignore-not-found --request-timeout=10s -o json -- train-pvc"
+	inst := spsInstance{Name: "sps-inst"}
+	baseJob := orchestrator.JobDefinition{
+		WorkloadName:  "sps-mount-check",
+		ImageName:     "gcr.io/proj/img:latest",
+		RawMounts:     []string{"train-pvc;/data"},
+		NumSlices:     2,
+		NodesPerSlice: 1,
+		IsPathwaysJob: true,
+		Pathways:      orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-inst"},
+	}
+
+	t.Run("missing PVC fails fast before manifest generation", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{pvcJSONCmd: {{ExitCode: 0, Stdout: ""}}})
+		orc := newTestGKEOrchestrator(mockExec)
+		err := orc.submitSPSClusterWorkload(baseJob, inst)
+		if err == nil || !strings.Contains(err.Error(), `PersistentVolumeClaim "train-pvc"`) {
+			t.Fatalf("submitSPSClusterWorkload() = %v, want missing PVC error", err)
+		}
+		if len(mockExec.calls) != 1 {
+			t.Errorf("expected exactly 1 kubectl call before fast-fail, got %d: %v", len(mockExec.calls), mockExec.calls)
+		}
+	})
+
+	t.Run("single-pod SPS client allows ReadWriteOnce PVC past ValidateClusterMounts and caches PVC metadata", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			pvcJSONCmd: {{ExitCode: 0, Stdout: `{"spec":{"volumeName":"pv-sps-rwo","accessModes":["ReadWriteOnce"]}}`}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		err := orc.submitSPSClusterWorkload(baseJob, inst)
+		if err == nil || !strings.Contains(err.Error(), "pass --pathways-head-np") {
+			t.Fatalf("expected RWO PVC to pass ValidateClusterMounts and reach generateSPSClientManifest, got: %v", err)
+		}
+		if got := orc.inspectedPVCs["default/train-pvc"].volumeName; got != "pv-sps-rwo" {
+			t.Errorf("expected inspectedPVCs[default/train-pvc].volumeName = pv-sps-rwo, got %q", got)
+		}
+		if len(mockExec.calls) != 1 {
+			t.Errorf("expected 1 PVC inspection call, got %d: %v", len(mockExec.calls), mockExec.calls)
+		}
+	})
+
+	t.Run("single-pod SPS client rejects ReadOnlyMany PVC mounted rw", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			pvcJSONCmd: {{ExitCode: 0, Stdout: `{"spec":{"accessModes":["ReadOnlyMany"]}}`}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		job := baseJob
+		job.RawMounts = []string{"train-pvc;/data;rw"}
+		err := orc.submitSPSClusterWorkload(job, inst)
+		if err == nil || !strings.Contains(err.Error(), "read-only accessModes") {
+			t.Fatalf("expected ReadOnlyMany + rw error on single-pod SPS client, got: %v", err)
+		}
+	})
+
+	t.Run("off-cloud profile mount hits ValidateClusterMounts before RunStorageProfilePreflight", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{})
+		orc := newTestGKEOrchestrator(mockExec)
+		job := baseJob
+		job.RawMounts = []string{"gs://my-bkt;/data;profile=training"}
+		err := orc.submitSPSClusterWorkload(job, inst)
+		if err == nil || !strings.Contains(err.Error(), "Cloud URI") {
+			t.Fatalf("expected Cloud URI error from ValidateClusterMounts before storage-profile preflight, got: %v", err)
+		}
+		if len(mockExec.calls) != 0 {
+			t.Errorf("expected 0 kubectl calls when off-cloud Cloud URI fails fast, got: %v", mockExec.calls)
+		}
+	})
+}
+
 func TestReadySPSProxyPod(t *testing.T) {
 	const listCmd = `kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=sps-client -o jsonpath={range .items[*]}{.metadata.name}{" "}{.status.phase}{"\n"}{end} --request-timeout=10s`
 
