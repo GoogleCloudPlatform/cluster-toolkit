@@ -48,6 +48,19 @@
         - linux-headers-{{ ansible_kernel }}
         grid_fn: NVIDIA-Linux-x86_64-525.125.06-grid.run
         grid_ver: vGPU15.3
+      noble:
+        packages:
+        - build-essential
+        - gdebi-core
+        - mesa-utils
+        - gdm3
+        - pciutils
+        - pkg-config
+        - libglvnd-dev
+        - linux-headers-{{ ansible_kernel }}
+        grid_fn: NVIDIA-Linux-x86_64-595.112.07-grid.run
+        grid_ver: vGPU20.3
+        grid_sha256: "sha256:b055cc313d74be3416993503c42cc552cff75d899400d40d3622d28f9f8e2cd4"
   tasks:
   - name: Fail if using wrong OS
     ansible.builtin.assert:
@@ -72,15 +85,48 @@
     delay: 10
     until: apt_result is success
 
+  - name: Detect attached NVIDIA GPU PCI devices
+    when: ansible_distribution_release == "noble"
+    ansible.builtin.command: "lspci -nn -d 10de:"
+    register: lspci_nvidia
+    changed_when: false
+
+  - name: Disable NVIDIA GSP firmware on Turing/Ada vWS GPUs (T4/L4)
+    when:
+    - ansible_distribution_release == "noble"
+    - lspci_nvidia.stdout is search("Tesla T4|\\bL4\\b|10de:(1eb8|27b8)")
+    ansible.builtin.copy:
+      dest: /etc/modprobe.d/nvidia-gsp.conf
+      content: "options nvidia NVreg_EnableGpuFirmware=0\n"
+      mode: "0644"
+    register: gsp_conf
+
+  - name: Configure nvidia_drm modeset=1 so GBM/EGL does not crash CRD Xorg/Xvfb
+    when: ansible_distribution_release == "noble"
+    ansible.builtin.copy:
+      dest: /etc/modprobe.d/nvidia-drm.conf
+      content: "options nvidia_drm modeset=1\n"
+      mode: "0644"
+    register: drm_modprobe_conf
+
+  - name: Persist nvidia_drm module autoload across reboots
+    when: ansible_distribution_release == "noble"
+    ansible.builtin.copy:
+      dest: /etc/modules-load.d/nvidia-drm.conf
+      content: "nvidia_drm\n"
+      mode: "0644"
+    register: drm_modules_load_conf
+
   - name: Install GRID driver if not existing
     when: nvidiasmi_result is failed
     block:
     - name: Download GPU driver
       ansible.builtin.get_url:
         url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/{{ dist_settings[ansible_distribution_release]["grid_ver"] }}/{{ dist_settings[ansible_distribution_release]["grid_fn"] }}
-        dest: /tmp/
+        dest: /tmp/{{ dist_settings[ansible_distribution_release]["grid_fn"] }}
+        checksum: '{{ dist_settings[ansible_distribution_release].get("grid_sha256", omit) }}'
         mode: "0755"
-        timeout: 30
+        timeout: 60
 
     - name: Stop gdm service
       ansible.builtin.systemd:
@@ -90,8 +136,10 @@
     - name: Install GPU driver
       ansible.builtin.shell: |
         #jinja2: trim_blocks: "True"
-        {% if ansible_distribution_release == "jammy"  %}
+        {% if ansible_distribution_release == "jammy" %}
         CC=gcc-12 /tmp/{{ dist_settings[ansible_distribution_release]["grid_fn"] }} --silent
+        {% elif ansible_distribution_release == "noble" %}
+        /tmp/{{ dist_settings[ansible_distribution_release]["grid_fn"] }} --silent -M=proprietary
         {% else %}
         /tmp/{{ dist_settings[ansible_distribution_release]["grid_fn"] }} --silent
         {% endif %}
@@ -100,13 +148,14 @@
 
   - name: Download VirtualGL driver
     ansible.builtin.get_url:
-      url: https://sourceforge.net/projects/virtualgl/files/3.0.2/virtualgl_3.0.2_amd64.deb/download
-      dest: /tmp/virtualgl_3.0.2_amd64.deb
-      mode: "0755"
+      url: https://github.com/VirtualGL/virtualgl/releases/download/3.1.1/virtualgl_3.1.1_amd64.deb
+      dest: /tmp/virtualgl_3.1.1_amd64.deb
+      checksum: "sha256:796866b5a84dc47e57e9d45f5ea621c9dbc49a26344b89111a63d39ec8fc2184"
+      mode: "0644"
       timeout: 30
 
   - name: Install VirtualGL
-    ansible.builtin.command: gdebi /tmp/virtualgl_3.0.2_amd64.deb --non-interactive
+    ansible.builtin.command: gdebi /tmp/virtualgl_3.1.1_amd64.deb --non-interactive
     register: result
     changed_when: result.rc == 0
 
@@ -142,6 +191,37 @@
     ansible.builtin.command: vglserver_config +glx +s +f -t
     register: result
     changed_when: result.rc == 0
+
+  - name: Ensure nvidia_drm and nvidia_uvm kernel modules are loaded after vglserver_config
+    when: ansible_distribution_release == "noble"
+    ansible.builtin.shell: |
+      set -e
+      changed=false
+      if [ ! -e /dev/dri/card0 ]; then
+        modprobe -r nvidia_drm 2>/dev/null || true
+        modprobe nvidia_drm modeset=1
+        changed=true
+      fi
+      if [ ! -d /sys/module/nvidia_uvm ]; then
+        modprobe nvidia_uvm
+        changed=true
+      fi
+      if [ "$changed" = true ]; then
+        echo "changed"
+      fi
+      exit 0
+    args:
+      executable: /bin/bash
+    register: modprobe_drm_result
+    changed_when: "'changed' in modprobe_drm_result.stdout"
+
+  - name: Update initramfs to persist NVIDIA module options across reboots
+    when:
+    - ansible_distribution_release == "noble"
+    - (nvidiasmi_result is failed) or (gsp_conf is changed) or (drm_modprobe_conf is changed) or (drm_modules_load_conf is changed)
+    ansible.builtin.command: update-initramfs -u
+    register: initramfs_result
+    changed_when: initramfs_result.rc == 0
 
   - name: Configure gdm for X
     block:
