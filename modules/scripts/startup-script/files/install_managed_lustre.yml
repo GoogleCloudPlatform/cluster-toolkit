@@ -23,7 +23,7 @@
   # Ideally changes to this file would also trigger an execution of lnetctl
   # command to update accept_port but it is unclear if lnetctl supports this.
   - name: Update lnet to use non-default port
-    when: managed_lustre_port | int != {{ default_lustre_port }}
+    when: managed_lustre_port | int != default_lustre_port | int
     ansible.builtin.copy:
       owner: root
       group: root
