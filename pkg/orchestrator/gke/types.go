@@ -215,8 +215,9 @@ type GKEOrchestrator struct {
 	dynClientContext string
 	k8sCluster       string
 	// inspectedPVCs caches per-submit PVC metadata inspected during ValidateClusterMounts.
-	inspectedPVCs  map[string]pvcInspectResult
-	nfsAuthChecked bool
+	inspectedPVCs   map[string]pvcInspectResult
+	nfsAuthChecked  bool
+	preflightClient storagePreflightClient
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -355,7 +356,6 @@ type StorageManager struct {
 	getFilestoreIP  func(ctx context.Context, projectID, location, nameOrIP string, isIP bool) (string, string, int64, error)
 	filestoreClient filestoreClient
 	instancesCache  []*filestorepb.Instance
-	preflightClient storagePreflightClient
 	now             func() time.Time // stamps last-claimed-at; nil means time.Now
 }
 
@@ -400,8 +400,8 @@ type storagePreflightClient interface {
 
 type gcpPreflightClient struct {
 	storage *gcs.Service
-	iam     *iamapi.Service
-	crm     *crm.Service
+	iam     func() (*iamapi.Service, error)
+	crm     func() (*crm.Service, error)
 }
 
 type iamBinding struct {
@@ -411,9 +411,10 @@ type iamBinding struct {
 
 // DataLocations is set only for custom dual-region buckets.
 type bucketLocation struct {
-	Location      string
-	LocationType  string
-	DataLocations []string
+	Location              string
+	LocationType          string
+	DataLocations         []string
+	HierarchicalNamespace bool
 }
 
 type profileMount struct {

@@ -17,6 +17,7 @@ package gke
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -29,6 +30,7 @@ import (
 	"testing"
 	"time"
 
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
@@ -3190,7 +3192,9 @@ func (f *fakePreflightClient) rolePermissions(_ context.Context, role string) ([
 }
 
 func newPreflightStorageManager(executor Executor, client storagePreflightClient) *StorageManager {
-	return &StorageManager{orchestrator: newTestGKEOrchestrator(executor), preflightClient: client}
+	orc := newTestGKEOrchestrator(executor)
+	orc.preflightClient = client
+	return &StorageManager{orchestrator: orc}
 }
 
 func scResponses(results ...shell.CommandResult) map[string][]shell.CommandResult {
@@ -3284,12 +3288,12 @@ func TestCollectProfileMounts(t *testing.T) {
 	sm := &StorageManager{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := sm.collectProfileMounts(tt.mounts)
+			got, _, err := sm.collectPreflightMounts(tt.mounts)
 			if err != nil {
-				t.Fatalf("collectProfileMounts() unexpected error: %v", err)
+				t.Fatalf("collectPreflightMounts() unexpected error: %v", err)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("collectProfileMounts() = %+v, want %+v", got, tt.want)
+				t.Errorf("collectPreflightMounts() = %+v, want %+v", got, tt.want)
 			}
 		})
 	}
@@ -3297,8 +3301,11 @@ func TestCollectProfileMounts(t *testing.T) {
 
 func TestCollectProfileMountsInvalidMount(t *testing.T) {
 	sm := &StorageManager{}
-	if _, err := sm.collectProfileMounts([]string{"gs://bkt;/data;profile=bogus"}); err == nil {
-		t.Fatal("collectProfileMounts() expected an error for an unsupported profile")
+	if _, _, err := sm.collectPreflightMounts([]string{"gs://bkt;/data;profile=bogus"}); err == nil || !strings.Contains(err.Error(), "unsupported storage profile") {
+		t.Fatalf("collectPreflightMounts() = %v, want unsupported storage profile error", err)
+	}
+	if _, _, err := sm.collectPreflightMounts([]string{"gs://bkt;/data;options=implicit_dirs"}); err == nil || !strings.Contains(err.Error(), `"implicit-dirs"`) {
+		t.Fatalf("collectPreflightMounts() = %v, want implicit-dirs suggestion error", err)
 	}
 }
 
@@ -3518,12 +3525,12 @@ func TestRunStorageProfilePreflightBucketRegionMismatch(t *testing.T) {
 
 func TestCollectProfileMountsSplitsSubPath(t *testing.T) {
 	sm := profileStorageManager(t.TempDir())
-	got, err := sm.collectProfileMounts([]string{"gs://bkt/sub/dir;/data;ro;profile=serving", "gs://bkt;/other;ro;profile=serving"})
+	got, _, err := sm.collectPreflightMounts([]string{"gs://bkt/sub/dir;/data;ro;profile=serving", "gs://bkt;/other;ro;profile=serving"})
 	if err != nil {
-		t.Fatalf("collectProfileMounts() unexpected error: %v", err)
+		t.Fatalf("collectPreflightMounts() unexpected error: %v", err)
 	}
 	if len(got) != 1 || got[0].Bucket != "bkt" {
-		t.Errorf("collectProfileMounts() = %+v, want one mount on bucket %q (the subpath is not part of the bucket)", got, "bkt")
+		t.Errorf("collectPreflightMounts() = %+v, want one mount on bucket %q (the subpath is not part of the bucket)", got, "bkt")
 	}
 }
 
@@ -4076,7 +4083,11 @@ func newFakeGCPPreflightClient(t *testing.T, handler http.HandlerFunc) (*gcpPref
 		t.Fatalf("failed to build Resource Manager test client: %v", err)
 	}
 
-	return &gcpPreflightClient{storage: storageSvc, iam: iamSvc, crm: crmSvc}, func() []string { return paths }
+	return &gcpPreflightClient{
+		storage: storageSvc,
+		iam:     func() (*iamapi.Service, error) { return iamSvc, nil },
+		crm:     func() (*crm.Service, error) { return crmSvc, nil },
+	}, func() []string { return paths }
 }
 
 func preflightAPIHandler() http.HandlerFunc {
@@ -5375,4 +5386,374 @@ func TestValidateToProcessMounts_StaticGCSFusePVCCacheHandoff(t *testing.T) {
 	if len(mockExec.calls) != 2 {
 		t.Errorf("expected exactly 2 kubectl calls (1 get pvc + 1 get pv), got %d: %v", len(mockExec.calls), mockExec.calls)
 	}
+}
+
+func TestHasImplicitDirsOption(t *testing.T) {
+	tests := []struct {
+		name    string
+		options string
+		want    bool
+	}{
+		{name: "empty", options: "", want: false},
+		{name: "unrelated options", options: "uid=1000,only-dir=sub", want: false},
+		{name: "bare implicit-dirs", options: "implicit-dirs", want: true},
+		{name: "double dash implicit-dirs is not valid CSI syntax", options: "--implicit-dirs", want: false},
+		{name: "implicit-dirs equals true", options: "implicit-dirs=true", want: true},
+		{name: "implicit-dirs equals false opt-out", options: "implicit-dirs=false", want: true},
+		{name: "implicit-dirs colon true", options: "implicit-dirs:true", want: true},
+		{name: "implicit-dirs colon false opt-out", options: "implicit-dirs:false", want: true},
+		{name: "with other options and whitespace", options: "only-dir=sub, implicit-dirs ,uid=1000", want: true},
+		{name: "profile aiml-training colon", options: "profile:aiml-training", want: true},
+		{name: "profile aiml-serving colon", options: "profile:aiml-serving", want: true},
+		{name: "profile aiml-checkpointing colon", options: "profile:aiml-checkpointing", want: true},
+		{name: "profile aiml-training equals", options: "profile=aiml-training", want: true},
+		{name: "profile aiml-serving equals", options: "profile=aiml-serving", want: true},
+		{name: "profile aiml-checkpointing equals", options: "profile=aiml-checkpointing", want: true},
+		{name: "profile aiml-training with explicit opt-out", options: "profile:aiml-training,implicit-dirs=false", want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasImplicitDirsOption(tt.options); got != tt.want {
+				t.Errorf("hasImplicitDirsOption(%q) = %v, want %v", tt.options, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseSingleVolumeRejectsInvalidGCSFuseOptions(t *testing.T) {
+	sm := &StorageManager{}
+	tests := []struct {
+		mount       string
+		wantSuggest string
+	}{
+		{mount: "gs://bkt;/data;options=implicit_dirs", wantSuggest: `"implicit-dirs"`},
+		{mount: "gs://bkt;/data;options=--implicit_dirs", wantSuggest: `"implicit-dirs"`},
+		{mount: "gs://bkt;/data;options=uid=1000, implicit_dirs", wantSuggest: `"implicit-dirs"`},
+		{mount: "gs://bkt;/data;options=uid=1000,implicit_dirs=true", wantSuggest: `"implicit-dirs=true"`},
+		{mount: "gs://bkt;/data;options=implicit_dirs=false", wantSuggest: `"implicit-dirs=false"`},
+		{mount: "gs://bkt;/data;options=implicit_dirs:true", wantSuggest: `"implicit-dirs:true"`},
+		{mount: "gs://bkt;/data;profile=training;options=implicit_dirs", wantSuggest: `"implicit-dirs"`},
+		{mount: "gs://bkt;/data;options=--implicit-dirs", wantSuggest: `"implicit-dirs"`},
+		{mount: "gs://bkt;/data;options=--", wantSuggest: "flag name is empty"},
+		{mount: "gs://bkt;/data;options=defaults,implicit-dirs", wantSuggest: `remove "defaults"`},
+		{mount: "gs://bkt;/data;options=_netdev,implicit-dirs", wantSuggest: `remove "_netdev"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.mount, func(t *testing.T) {
+			_, err := sm.parseSingleVolume(tt.mount)
+			if err == nil {
+				t.Fatalf("parseSingleVolume(%q) expected error, got nil", tt.mount)
+			}
+			if !strings.Contains(err.Error(), tt.wantSuggest) {
+				t.Errorf("parseSingleVolume(%q) error = %v, want substring %s", tt.mount, err, tt.wantSuggest)
+			}
+		})
+	}
+
+	pm, err := sm.parseSingleVolume("gs://bkt;/data;options=only-dir=sub, implicit-dirs ,uid=1000")
+	if err != nil {
+		t.Fatalf("parseSingleVolume() unexpected error: %v", err)
+	}
+	if pm.Options != "only-dir=sub,implicit-dirs,uid=1000" {
+		t.Errorf("pm.Options = %q, want whitespace-trimmed canonical options", pm.Options)
+	}
+}
+
+func TestGCPPreflightClientReadsHierarchicalNamespace(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/b/hns-bkt"):
+			_, _ = fmt.Fprint(w, `{"location":"US-CENTRAL1","locationType":"region","hierarchicalNamespace":{"enabled":true}}`)
+		case strings.Contains(r.URL.Path, "/b/flat-bkt"):
+			_, _ = fmt.Fprint(w, `{"location":"US-CENTRAL1","locationType":"region"}`)
+		case strings.Contains(r.URL.Path, "/b/disabled-hns-bkt"):
+			_, _ = fmt.Fprint(w, `{"location":"US-CENTRAL1","locationType":"region","hierarchicalNamespace":{"enabled":false}}`)
+		default:
+			http.Error(w, `{"error":{"code":404,"message":"not found"}}`, http.StatusNotFound)
+		}
+	}
+	client, _ := newFakeGCPPreflightClient(t, handler)
+	client.iam = func() (*iamapi.Service, error) {
+		t.Fatal("iam client must not be initialized for bucketLocation")
+		return nil, nil
+	}
+	client.crm = func() (*crm.Service, error) {
+		t.Fatal("crm client must not be initialized for bucketLocation")
+		return nil, nil
+	}
+	ctx := context.Background()
+
+	hns, err := client.bucketLocation(ctx, "hns-bkt")
+	if err != nil || !hns.HierarchicalNamespace {
+		t.Fatalf("bucketLocation(hns-bkt) = %+v, %v; want HierarchicalNamespace=true", hns, err)
+	}
+	flat, err := client.bucketLocation(ctx, "flat-bkt")
+	if err != nil || flat.HierarchicalNamespace {
+		t.Fatalf("bucketLocation(flat-bkt) = %+v, %v; want HierarchicalNamespace=false", flat, err)
+	}
+	disabled, err := client.bucketLocation(ctx, "disabled-hns-bkt")
+	if err != nil || disabled.HierarchicalNamespace {
+		t.Fatalf("bucketLocation(disabled-hns-bkt) = %+v, %v; want HierarchicalNamespace=false", disabled, err)
+	}
+}
+
+func TestGCPPreflightClientLazyServiceInitErrors(t *testing.T) {
+	wantErr := errors.New("adc unavailable")
+	client := &gcpPreflightClient{
+		iam: func() (*iamapi.Service, error) { return nil, wantErr },
+		crm: func() (*crm.Service, error) { return nil, wantErr },
+	}
+	ctx := context.Background()
+
+	if _, err := client.projectNumber(ctx, "proj"); !errors.Is(err, wantErr) {
+		t.Errorf("projectNumber() err = %v, want %v", err, wantErr)
+	}
+	if _, err := client.projectIAMBindings(ctx, "proj"); !errors.Is(err, wantErr) {
+		t.Errorf("projectIAMBindings() err = %v, want %v", err, wantErr)
+	}
+	if _, err := client.rolePermissions(ctx, "projects/proj/roles/custom"); !errors.Is(err, wantErr) {
+		t.Errorf("rolePermissions() err = %v, want %v", err, wantErr)
+	}
+}
+
+func TestRunStorageProfilePreflightInlineFlatBucketWarns(t *testing.T) {
+	snapshot, _ := logging.CaptureForTesting(t)
+	executor := NewMockExecutor(map[string][]shell.CommandResult{})
+	client := &fakePreflightClient{
+		numberErr: fmt.Errorf("projectNumber should not be called"),
+		locations: map[string]bucketLocation{"flat-bkt": {Location: "US-CENTRAL1", LocationType: "region"}},
+	}
+	sm := newPreflightStorageManager(executor, client)
+
+	if err := sm.RunStorageProfilePreflight([]string{"gs://flat-bkt/a;/a;options=implicit-dirs", "gs://flat-bkt/b;/b", "gs://flat-bkt/c;/c"}, "proj", "us-central1", false); err != nil {
+		t.Fatalf("RunStorageProfilePreflight() unexpected error: %v", err)
+	}
+	_, errOut := snapshot()
+	if strings.Count(errOut, "Bucket gs://flat-bkt") != 1 || !strings.Contains(errOut, ";options=implicit-dirs") || !strings.Contains(errOut, "implicit-dirs=false") {
+		t.Errorf("expected single flat-bucket implicit-dirs warning with opt-out, got: %q", errOut)
+	}
+	if len(executor.calls) != 0 || len(client.numberRequests) != 0 || len(client.bindingRequests) != 0 {
+		t.Errorf("expected 0 kubectl/IAM calls, got kubectl=%v numbers=%v bindings=%v", executor.calls, client.numberRequests, client.bindingRequests)
+	}
+	if !reflect.DeepEqual(client.locationRequests, []string{"flat-bkt"}) {
+		t.Errorf("locationRequests = %v, want [flat-bkt]", client.locationRequests)
+	}
+}
+
+func TestRunStorageProfilePreflightInlineSkipsWarningWhenCovered(t *testing.T) {
+	tests := []struct {
+		name      string
+		mounts    []string
+		locations map[string]bucketLocation
+		wantCalls []string
+	}{
+		{
+			name:      "HNS bucket",
+			mounts:    []string{"gs://hns-bkt;/data"},
+			locations: map[string]bucketLocation{"hns-bkt": {Location: "US-CENTRAL1", LocationType: "region", HierarchicalNamespace: true}},
+			wantCalls: []string{"hns-bkt"},
+		},
+		{
+			name: "options implicit-dirs, opt-out, and aiml profile",
+			mounts: []string{
+				"gs://flat-bkt/a;/a;options=implicit-dirs",
+				"gs://flat-bkt/b;/b;options=implicit-dirs=false",
+				"gs://flat-bkt/c;/c;options=profile:aiml-training",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			snapshot, _ := logging.CaptureForTesting(t)
+			client := &fakePreflightClient{locations: tt.locations}
+			sm := newPreflightStorageManager(NewMockExecutor(map[string][]shell.CommandResult{}), client)
+
+			if err := sm.RunStorageProfilePreflight(tt.mounts, "proj", "us-central1", false); err != nil {
+				t.Fatalf("RunStorageProfilePreflight() unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(client.locationRequests, tt.wantCalls) {
+				t.Errorf("locationRequests = %v, want %v", client.locationRequests, tt.wantCalls)
+			}
+			_, errOut := snapshot()
+			if strings.Contains(errOut, "implicit-dirs") {
+				t.Errorf("unexpected implicit-dirs warning: %q", errOut)
+			}
+		})
+	}
+}
+
+func TestRunStorageProfilePreflightProfiledAndMixedFlatBucket(t *testing.T) {
+	tests := []struct {
+		name      string
+		mounts    []string
+		wantWarns int
+	}{
+		{
+			name:      "profiled mount does not emit flat-bucket warning",
+			mounts:    []string{"gs://flat-bkt;/data;profile=training"},
+			wantWarns: 0,
+		},
+		{
+			name:      "mixed inline and profiled mount on same flat bucket memoizes lookup and warns once",
+			mounts:    []string{"gs://flat-bkt;/raw", "gs://flat-bkt;/train;profile=training"},
+			wantWarns: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			snapshot, _ := logging.CaptureForTesting(t)
+			executor := NewMockExecutor(scResponses(shell.CommandResult{ExitCode: 0, Stdout: "storageclass.storage.k8s.io/gcsfusecsi-training\n"}))
+			client := &fakePreflightClient{
+				number: 42,
+				bindings: map[string][]iamBinding{
+					"flat-bkt": {{Role: "roles/storage.admin", Members: []string{"serviceAccount:service-42@container-engine-robot.iam.gserviceaccount.com"}}},
+				},
+				locations: map[string]bucketLocation{"flat-bkt": {Location: "US-CENTRAL1", LocationType: "region"}},
+			}
+			sm := newPreflightStorageManager(executor, client)
+
+			if err := sm.RunStorageProfilePreflight(tt.mounts, "proj", "us-central1", false); err != nil {
+				t.Fatalf("RunStorageProfilePreflight() unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(client.locationRequests, []string{"flat-bkt"}) {
+				t.Errorf("locationRequests = %v, want single call [flat-bkt]", client.locationRequests)
+			}
+			_, errOut := snapshot()
+			if got := strings.Count(errOut, "Bucket gs://flat-bkt"); got != tt.wantWarns {
+				t.Errorf("flat-bucket warning count = %d, want %d; output: %q", got, tt.wantWarns, errOut)
+			}
+		})
+	}
+}
+
+func TestRunStorageProfilePreflightInlineFlatBucketFailOpenAndDI(t *testing.T) {
+	t.Run("bucketLocation error fails open silently", func(t *testing.T) {
+		snapshot, _ := logging.CaptureForTesting(t)
+		client := &fakePreflightClient{locationErr: map[string]error{"flat-bkt": fmt.Errorf("googleapi: Error 403: forbidden")}}
+		sm := newPreflightStorageManager(NewMockExecutor(map[string][]shell.CommandResult{}), client)
+
+		if err := sm.RunStorageProfilePreflight([]string{"gs://flat-bkt;/data"}, "proj", "us-central1", false); err != nil {
+			t.Fatalf("RunStorageProfilePreflight() must fail open, got: %v", err)
+		}
+		_, errOut := snapshot()
+		if strings.Contains(errOut, "implicit-dirs") {
+			t.Errorf("expected no flat-bucket warning on API error, got: %q", errOut)
+		}
+	})
+
+	t.Run("empty projectID skips cloud calls", func(t *testing.T) {
+		client := &fakePreflightClient{locationErr: map[string]error{"flat-bkt": fmt.Errorf("should not be called")}}
+		sm := newPreflightStorageManager(NewMockExecutor(map[string][]shell.CommandResult{}), client)
+
+		if err := sm.RunStorageProfilePreflight([]string{"gs://flat-bkt;/data"}, "", "us-central1", false); err != nil {
+			t.Fatalf("RunStorageProfilePreflight() unexpected error: %v", err)
+		}
+		if len(client.locationRequests) != 0 {
+			t.Errorf("expected 0 cloud calls for empty projectID, got %v", client.locationRequests)
+		}
+	})
+
+	t.Run("orchestrator preflightClient seam is inherited by StorageManager", func(t *testing.T) {
+		snapshot, _ := logging.CaptureForTesting(t)
+		client := &fakePreflightClient{locations: map[string]bucketLocation{"flat-bkt": {Location: "US-CENTRAL1", LocationType: "region"}}}
+		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{}))
+		orc.preflightClient = client
+		sm := &StorageManager{orchestrator: orc}
+
+		if err := sm.RunStorageProfilePreflight([]string{"gs://flat-bkt;/data"}, "proj", "us-central1", false); err != nil {
+			t.Fatalf("RunStorageProfilePreflight() unexpected error: %v", err)
+		}
+		if !reflect.DeepEqual(client.locationRequests, []string{"flat-bkt"}) {
+			t.Errorf("expected StorageManager to inherit orchestrator.preflightClient, got %v", client.locationRequests)
+		}
+		_, errOut := snapshot()
+		if !strings.Contains(errOut, ";options=implicit-dirs") {
+			t.Errorf("expected flat-bucket warning via orchestrator.preflightClient, got: %q", errOut)
+		}
+	})
+}
+
+func TestRunStorageProfilePreflightMixedDryRunAndAirGapped(t *testing.T) {
+	t.Run("dry-run missing StorageClass skips profile checks but warns on inline flat bucket", func(t *testing.T) {
+		snapshot, _ := logging.CaptureForTesting(t)
+		executor := NewMockExecutor(scResponses(shell.CommandResult{ExitCode: 0, Stdout: ""}))
+		client := &fakePreflightClient{
+			numberErr: fmt.Errorf("must not query projectNumber when StorageClass is absent"),
+			locations: map[string]bucketLocation{
+				"flat-bkt":    {Location: "US-CENTRAL1", LocationType: "region"},
+				"profile-bkt": {Location: "US-EAST1", LocationType: "region"},
+			},
+		}
+		sm := newPreflightStorageManager(executor, client)
+
+		mounts := []string{"gs://flat-bkt;/raw", "gs://profile-bkt;/train;profile=training"}
+		if err := sm.RunStorageProfilePreflight(mounts, "proj", "us-central1", true); err != nil {
+			t.Fatalf("RunStorageProfilePreflight() unexpected error: %v", err)
+		}
+		if len(client.numberRequests) != 0 || !reflect.DeepEqual(client.locationRequests, []string{"flat-bkt"}) {
+			t.Errorf("got numbers=%v locations=%v, want [] and [flat-bkt]", client.numberRequests, client.locationRequests)
+		}
+		_, errOut := snapshot()
+		if strings.Count(errOut, "Bucket gs://flat-bkt") != 1 {
+			t.Errorf("expected single flat-bucket warning, got: %q", errOut)
+		}
+	})
+
+	t.Run("bucketLocation error is memoized across profile and inline checks", func(t *testing.T) {
+		executor := NewMockExecutor(scResponses(shell.CommandResult{ExitCode: 0, Stdout: "storageclass.storage.k8s.io/gcsfusecsi-training\n"}))
+		client := &fakePreflightClient{
+			number:      42,
+			locationErr: map[string]error{"flat-bkt": fmt.Errorf("googleapi: Error 403: forbidden")},
+		}
+		sm := newPreflightStorageManager(executor, client)
+
+		mounts := []string{"gs://flat-bkt;/raw", "gs://flat-bkt;/train;profile=training"}
+		if err := sm.RunStorageProfilePreflight(mounts, "proj", "us-central1", false); err != nil {
+			t.Fatalf("RunStorageProfilePreflight() unexpected error: %v", err)
+		}
+		if !reflect.DeepEqual(client.locationRequests, []string{"flat-bkt"}) {
+			t.Errorf("locationRequests = %v, want single memoized error call [flat-bkt]", client.locationRequests)
+		}
+	})
+
+	t.Run("air-gapped environment skips cloud preflight", func(t *testing.T) {
+		t.Setenv("GCLUSTER_AIR_GAPPED", "true")
+		client := &fakePreflightClient{locationErr: map[string]error{"flat-bkt": fmt.Errorf("should not be called")}}
+		sm := newPreflightStorageManager(NewMockExecutor(map[string][]shell.CommandResult{}), client)
+
+		if err := sm.RunStorageProfilePreflight([]string{"gs://flat-bkt;/data"}, "proj", "us-central1", false); err != nil {
+			t.Fatalf("RunStorageProfilePreflight() unexpected error: %v", err)
+		}
+		if len(client.locationRequests) != 0 {
+			t.Errorf("expected 0 cloud calls in air-gapped mode, got %v", client.locationRequests)
+		}
+	})
+
+	t.Run("client init failure fails open silently for inline mounts and warns for profile mounts", func(t *testing.T) {
+		t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", filepath.Join(t.TempDir(), "missing-adc.json"))
+		t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
+
+		snapshotInline, restoreInline := logging.CaptureForTesting(t)
+		sm := &StorageManager{}
+		if err := sm.RunStorageProfilePreflight([]string{"gs://flat-bkt;/data"}, "proj", "us-central1", false); err != nil {
+			t.Fatalf("inline RunStorageProfilePreflight() unexpected error: %v", err)
+		}
+		_, inlineErrOut := snapshotInline()
+		restoreInline()
+		if inlineErrOut != "" {
+			t.Errorf("expected silent fail-open for inline mount when ADC fails, got: %q", inlineErrOut)
+		}
+
+		snapshotProfile, _ := logging.CaptureForTesting(t)
+		if err := sm.RunStorageProfilePreflight([]string{"gs://bkt;/data;profile=training"}, "proj", "us-central1", false); err != nil {
+			t.Fatalf("profile RunStorageProfilePreflight() unexpected error: %v", err)
+		}
+		if _, errOut := snapshotProfile(); !strings.Contains(errOut, "Skipping Cloud Storage pre-flight checks for storage profile mounts") {
+			t.Errorf("expected profile warning on client init failure, got: %q", errOut)
+		}
+	})
 }

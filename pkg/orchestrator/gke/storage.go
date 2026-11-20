@@ -682,7 +682,7 @@ func parseMountSegments(segments []string, vStr string, pm *parsedMount) (mountS
 
 func validateGCSOnlySegments(pm parsedMount, profileSet bool) error {
 	if strings.HasPrefix(pm.Src, "gs://") {
-		return nil
+		return validateGCSMountOptions(pm.Options)
 	}
 
 	var unsupportedSegments []string
@@ -701,6 +701,46 @@ func validateGCSOnlySegments(pm parsedMount, profileSet bool) error {
 
 	return fmt.Errorf("volume source %q is not a GCS bucket; %s can only be used with GCS fuse volumes (gs://...)",
 		pm.Src, strings.Join(unsupportedSegments, ", "))
+}
+
+func validateGCSMountOptions(options string) error {
+	for _, opt := range splitMountOptions(options) {
+		if opt == "defaults" || opt == "_netdev" {
+			return fmt.Errorf("invalid GCSFuse mount option %q: fstab-only options are not supported by the Cloud Storage FUSE CSI driver; remove %q from options=", opt, opt)
+		}
+		token := strings.TrimLeft(opt, "-")
+		if token == "implicit_dirs" ||
+			strings.HasPrefix(token, "implicit_dirs=") ||
+			strings.HasPrefix(token, "implicit_dirs:") {
+			suggested := strings.Replace(token, "implicit_dirs", "implicit-dirs", 1)
+			return fmt.Errorf("invalid GCSFuse mount option %q: the Cloud Storage FUSE CSI driver uses hyphenated 'implicit-dirs' (not fstab-style 'implicit_dirs'). Use %q in options= instead", opt, suggested)
+		}
+		if token != opt {
+			if token == "" {
+				return fmt.Errorf("invalid GCSFuse mount option %q: flag name is empty", opt)
+			}
+			return fmt.Errorf("invalid GCSFuse mount option %q: omit leading '-' in options= (the Cloud Storage FUSE CSI driver prepends '--' automatically). Use %q in options= instead", opt, token)
+		}
+	}
+	return nil
+}
+
+// hasImplicitDirsOption reports whether a comma-separated GCSFuse mountOptions string
+// already configures implicit-dirs (including explicit opt-out or an aiml-* profile preset).
+func hasImplicitDirsOption(options string) bool {
+	aimlProfiles := []string{
+		"profile:aiml-training", "profile:aiml-serving", "profile:aiml-checkpointing",
+		"profile=aiml-training", "profile=aiml-serving", "profile=aiml-checkpointing",
+	}
+	for _, token := range splitMountOptions(options) {
+		if token == "implicit-dirs" ||
+			strings.HasPrefix(token, "implicit-dirs=") ||
+			strings.HasPrefix(token, "implicit-dirs:") ||
+			slices.Contains(aimlProfiles, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func (sm *StorageManager) parseSingleVolume(vStr string) (parsedMount, error) {
@@ -726,6 +766,9 @@ func (sm *StorageManager) parseSingleVolume(vStr string) (parsedMount, error) {
 
 	if err := validateGCSOnlySegments(pm, segments.ProfileSet); err != nil {
 		return parsedMount{}, err
+	}
+	if strings.HasPrefix(pm.Src, "gs://") && pm.Options != "" {
+		pm.Options = strings.Join(splitMountOptions(pm.Options), ",")
 	}
 
 	if err := resolveMountSourceAndSubPath(&pm); err != nil {
@@ -2049,58 +2092,73 @@ func validatePVCAccessModes(req userPVCRequest, modes []string, totalNodes int, 
 	return nil
 }
 
-// RunStorageProfilePreflight checks that profile= mounts can be satisfied by the cluster and bucket.
+// RunStorageProfilePreflight checks that profile= mounts can be satisfied by the cluster and bucket,
+// and warns when inline gs:// mounts target flat-namespace buckets without implicit-dirs.
 func (sm *StorageManager) RunStorageProfilePreflight(rawMounts []string, projectID, clusterLocation string, dryRun bool) error {
-	mounts, err := sm.collectProfileMounts(rawMounts)
-	if err != nil || len(mounts) == 0 {
+	profileMounts, inlineBuckets, err := sm.collectPreflightMounts(rawMounts)
+	if err != nil || (len(profileMounts) == 0 && len(inlineBuckets) == 0) {
 		return err
 	}
 
-	allFound, err := sm.validateStorageClassesExist(mounts, dryRun)
-	if err != nil {
-		return err
+	if len(profileMounts) > 0 {
+		allFound, err := sm.validateStorageClassesExist(profileMounts, dryRun)
+		if err != nil {
+			return err
+		}
+		if !allFound {
+			profileMounts = nil
+		}
 	}
 	projectID = sm.effectiveProjectID(projectID)
-	if !allFound || projectID == "" {
+	if projectID == "" || (len(profileMounts) == 0 && len(inlineBuckets) == 0) {
 		return nil
 	}
 
-	return sm.checkProfileMisconfiguration(projectID, clusterLocation, mounts, dryRun)
+	return sm.runCloudStoragePreflight(projectID, clusterLocation, profileMounts, inlineBuckets, dryRun)
 }
 
-func (sm *StorageManager) collectProfileMounts(rawMounts []string) ([]profileMount, error) {
-	var out []profileMount
-	seen := map[string]bool{}
+func (sm *StorageManager) collectPreflightMounts(rawMounts []string) ([]profileMount, []string, error) {
+	var profiles []profileMount
+	var inlineBuckets []string
+	seenProfile := map[string]bool{}
+	seenInline := map[string]bool{}
 
 	for _, vStr := range rawMounts {
 		pm, err := sm.parseSingleVolume(vStr)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if pm.Profile == "" {
+		if !strings.HasPrefix(pm.Src, "gs://") {
 			continue
 		}
 		bucket, _, err := splitGCSSource(pm.Src)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		if pm.Profile == "" {
+			if !hasImplicitDirsOption(pm.Options) && !seenInline[bucket] {
+				seenInline[bucket] = true
+				inlineBuckets = append(inlineBuckets, bucket)
+			}
+			continue
 		}
 
 		zones := splitAnywhereCacheZones(pm.Attributes[anywhereCacheZonesAttribute])
 		cached := usesAnywhereCache(pm)
 		key := fmt.Sprintf("%s|%s|%s|%t", bucket, pm.Profile, strings.Join(zones, ","), cached)
-		if seen[key] {
+		if seenProfile[key] {
 			continue
 		}
-		seen[key] = true
+		seenProfile[key] = true
 
-		out = append(out, profileMount{
+		profiles = append(profiles, profileMount{
 			Bucket:             bucket,
 			Profile:            pm.Profile,
 			AnywhereCacheZones: zones,
 			UsesAnywhereCache:  cached,
 		})
 	}
-	return out, nil
+	return profiles, inlineBuckets, nil
 }
 
 func usesAnywhereCache(pm parsedMount) bool {
@@ -2176,23 +2234,66 @@ func (sm *StorageManager) validateStorageClassExists(storageClass string, dryRun
 	return false, err
 }
 
-func (sm *StorageManager) checkProfileMisconfiguration(projectID, clusterLocation string, mounts []profileMount, dryRun bool) error {
-	client, err := sm.getPreflightClient(context.Background())
-	if err != nil {
-		logging.Warn("Skipping Cloud Storage pre-flight checks for storage profile mounts: %v. Proceeding with job submission.", err)
+func (sm *StorageManager) runCloudStoragePreflight(projectID, clusterLocation string, profileMounts []profileMount, inlineBuckets []string, dryRun bool) error {
+	if shell.IsKnownAirGapped() {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), storageAPITimeout)
 	defer cancel()
 
-	if agent, err := gkeServiceAgentEmail(ctx, client, projectID); err != nil {
-		logging.Warn("Skipping the GKE Service Agent IAM pre-flight check: could not resolve the project number for %q: %v. "+
-			"Verify manually that the GKE Service Agent holds the required permissions on the target bucket(s). See %s",
-			projectID, err, gcsFuseProfileIAMURL)
-	} else {
-		warnOnMissingIAM(ctx, client, projectID, agent, mounts)
+	client, err := sm.getPreflightClient(ctx)
+	if err != nil {
+		if len(profileMounts) > 0 {
+			logging.Warn("Skipping Cloud Storage pre-flight checks for storage profile mounts: %v. Proceeding with job submission.", err)
+		}
+		return nil
 	}
-	return checkBucketLocations(ctx, client, clusterLocation, mounts, dryRun)
+
+	fetchBucket := newBucketMetaFetcher(ctx, client)
+	if len(profileMounts) > 0 {
+		if agent, err := gkeServiceAgentEmail(ctx, client, projectID); err != nil {
+			logging.Warn("Skipping the GKE Service Agent IAM pre-flight check: could not resolve the project number for %q: %v. "+
+				"Verify manually that the GKE Service Agent holds the required permissions on the target bucket(s). See %s",
+				projectID, err, gcsFuseProfileIAMURL)
+		} else {
+			warnOnMissingIAM(ctx, client, projectID, agent, profileMounts)
+		}
+		if err := checkBucketLocations(fetchBucket, clusterLocation, profileMounts, dryRun); err != nil {
+			return err
+		}
+	}
+
+	warnFlatBucketsMissingImplicitDirs(fetchBucket, inlineBuckets)
+	return nil
+}
+
+func newBucketMetaFetcher(ctx context.Context, client storagePreflightClient) func(string) (bucketLocation, error) {
+	type cachedBucketMeta struct {
+		loc bucketLocation
+		err error
+	}
+	cache := map[string]cachedBucketMeta{}
+	return func(bucket string) (bucketLocation, error) {
+		if entry, ok := cache[bucket]; ok {
+			return entry.loc, entry.err
+		}
+		loc, err := client.bucketLocation(ctx, bucket)
+		cache[bucket] = cachedBucketMeta{loc: loc, err: err}
+		return loc, err
+	}
+}
+
+func warnFlatBucketsMissingImplicitDirs(fetchBucket func(string) (bucketLocation, error), buckets []string) {
+	for _, bucket := range buckets {
+		meta, err := fetchBucket(bucket)
+		if err != nil || meta.HierarchicalNamespace {
+			continue
+		}
+		logging.Warn("Bucket gs://%s uses a flat namespace (Hierarchical Namespace is disabled) and is mounted without 'implicit-dirs'. "+
+			"Subdirectories uploaded without explicit 0-byte directory objects (e.g., via gcloud storage cp or SDKs) may not be visible unless GCSFuse auto-enables implicit-dirs for the machine type. "+
+			"Add 'implicit-dirs' to options= (e.g., ;options=implicit-dirs) if you need implicit directory traversal, "+
+			"or set 'implicit-dirs=false' in options= if you explicitly want implicit directories disabled.", bucket)
+	}
 }
 
 func warnOnMissingIAM(ctx context.Context, client storagePreflightClient, projectID, agent string, mounts []profileMount) {
@@ -2220,7 +2321,7 @@ func bucketCacheUse(mounts []profileMount) ([]string, map[string]bool) {
 	return order, needsCache
 }
 
-func checkBucketLocations(ctx context.Context, client storagePreflightClient, clusterLocation string, mounts []profileMount, dryRun bool) error {
+func checkBucketLocations(fetchBucket func(string) (bucketLocation, error), clusterLocation string, mounts []profileMount, dryRun bool) error {
 	checked := map[string]bool{}
 	for _, m := range mounts {
 		key := fmt.Sprintf("%s|%s|%t|%t", m.Bucket, strings.Join(m.AnywhereCacheZones, ","), m.UsesAnywhereCache, colocationRequired(m))
@@ -2228,7 +2329,7 @@ func checkBucketLocations(ctx context.Context, client storagePreflightClient, cl
 			continue
 		}
 		checked[key] = true
-		if err := checkBucketLocation(ctx, client, clusterLocation, m, dryRun); err != nil {
+		if err := checkBucketLocation(fetchBucket, clusterLocation, m, dryRun); err != nil {
 			return err
 		}
 	}
@@ -2355,8 +2456,8 @@ func colocationRequired(m profileMount) bool {
 }
 
 // checkBucketLocation blocks on a mismatch when co-location is required (warns on dry run), else warns.
-func checkBucketLocation(ctx context.Context, client storagePreflightClient, clusterLocation string, m profileMount, dryRun bool) error {
-	loc, err := client.bucketLocation(ctx, m.Bucket)
+func checkBucketLocation(fetchBucket func(string) (bucketLocation, error), clusterLocation string, m profileMount, dryRun bool) error {
+	loc, err := fetchBucket(m.Bucket)
 	if err != nil {
 		logging.Warn("Could not read the location of bucket gs://%s: %v. Verify manually that it is in the same region as the cluster. See %s",
 			m.Bucket, err, gcsFuseProfileDocsURL)
@@ -2443,8 +2544,8 @@ func regionWithinBucketLocation(region string, loc bucketLocation) bool {
 }
 
 func (sm *StorageManager) getPreflightClient(ctx context.Context) (storagePreflightClient, error) {
-	if sm.preflightClient != nil {
-		return sm.preflightClient, nil
+	if sm.orchestrator != nil && sm.orchestrator.preflightClient != nil {
+		return sm.orchestrator.preflightClient, nil
 	}
 	return newGCPPreflightClient(ctx)
 }
@@ -2454,19 +2555,31 @@ func newGCPPreflightClient(ctx context.Context) (storagePreflightClient, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Cloud Storage client: %w", err)
 	}
-	iamSvc, err := iamapi.NewService(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create IAM client: %w", err)
-	}
-	crmSvc, err := crm.NewService(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Resource Manager client: %w", err)
-	}
-	return &gcpPreflightClient{storage: storageSvc, iam: iamSvc, crm: crmSvc}, nil
+	return &gcpPreflightClient{
+		storage: storageSvc,
+		iam: sync.OnceValues(func() (*iamapi.Service, error) {
+			svc, err := iamapi.NewService(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create IAM client: %w", err)
+			}
+			return svc, nil
+		}),
+		crm: sync.OnceValues(func() (*crm.Service, error) {
+			svc, err := crm.NewService(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create Resource Manager client: %w", err)
+			}
+			return svc, nil
+		}),
+	}, nil
 }
 
 func (c *gcpPreflightClient) projectNumber(ctx context.Context, projectID string) (int64, error) {
-	project, err := c.crm.Projects.Get(projectID).Context(ctx).Do()
+	crmSvc, err := c.crm()
+	if err != nil {
+		return 0, err
+	}
+	project, err := crmSvc.Projects.Get(projectID).Context(ctx).Do()
 	if err != nil {
 		return 0, err
 	}
@@ -2474,8 +2587,12 @@ func (c *gcpPreflightClient) projectNumber(ctx context.Context, projectID string
 }
 
 func (c *gcpPreflightClient) projectIAMBindings(ctx context.Context, projectID string) ([]iamBinding, error) {
+	crmSvc, err := c.crm()
+	if err != nil {
+		return nil, err
+	}
 	req := &crm.GetIamPolicyRequest{Options: &crm.GetPolicyOptions{RequestedPolicyVersion: 3}}
-	policy, err := c.crm.Projects.GetIamPolicy(projectID, req).Context(ctx).Do()
+	policy, err := crmSvc.Projects.GetIamPolicy(projectID, req).Context(ctx).Do()
 	if err != nil {
 		return nil, err
 	}
@@ -2503,7 +2620,11 @@ func (c *gcpPreflightClient) bucketLocation(ctx context.Context, bucket string) 
 	if err != nil {
 		return bucketLocation{}, err
 	}
-	loc := bucketLocation{Location: b.Location, LocationType: b.LocationType}
+	loc := bucketLocation{
+		Location:              b.Location,
+		LocationType:          b.LocationType,
+		HierarchicalNamespace: b.HierarchicalNamespace != nil && b.HierarchicalNamespace.Enabled,
+	}
 	if b.CustomPlacementConfig != nil {
 		loc.DataLocations = b.CustomPlacementConfig.DataLocations
 	}
@@ -2511,21 +2632,25 @@ func (c *gcpPreflightClient) bucketLocation(ctx context.Context, bucket string) 
 }
 
 func (c *gcpPreflightClient) rolePermissions(ctx context.Context, role string) ([]string, error) {
+	iamSvc, err := c.iam()
+	if err != nil {
+		return nil, err
+	}
 	switch {
 	case strings.HasPrefix(role, "projects/"):
-		r, err := c.iam.Projects.Roles.Get(role).Context(ctx).Do()
+		r, err := iamSvc.Projects.Roles.Get(role).Context(ctx).Do()
 		if err != nil {
 			return nil, err
 		}
 		return r.IncludedPermissions, nil
 	case strings.HasPrefix(role, "organizations/"):
-		r, err := c.iam.Organizations.Roles.Get(role).Context(ctx).Do()
+		r, err := iamSvc.Organizations.Roles.Get(role).Context(ctx).Do()
 		if err != nil {
 			return nil, err
 		}
 		return r.IncludedPermissions, nil
 	case strings.HasPrefix(role, "roles/"):
-		r, err := c.iam.Roles.Get(role).Context(ctx).Do()
+		r, err := iamSvc.Roles.Get(role).Context(ctx).Do()
 		if err != nil {
 			return nil, err
 		}
