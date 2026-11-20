@@ -121,15 +121,9 @@ steps:
               # SIGTERM until a trap is installed. RUN_CLEANUP=false => just exit.
               RUN_CLEANUP=false
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
-              cleanup() {
-                if [ "\$${RUN_CLEANUP:-false}" = "true" ]; then
-                  echo "Cleaning up storage pools..."
-                  gcloud compute storage-pools delete "\$$DEPLOYMENT_NAME-sp-1" --project=\$$PROJECT_ID --zone=us-central1-a --quiet || true
-                fi
-                cleanup_pod
-              }
-
-              trap cleanup EXIT SIGTERM SIGINT
+              trap cleanup_pod EXIT
+              trap 'cleanup_pod 143' SIGTERM
+              trap 'cleanup_pod 130' SIGINT
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."

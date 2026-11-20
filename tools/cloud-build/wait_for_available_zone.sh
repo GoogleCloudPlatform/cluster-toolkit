@@ -54,7 +54,8 @@ while true; do
 		# Check if the failure was specifically due to zone capacity
 		if grep -q "Couldn't find a zone to deploy" "$ZONE_OUTPUT"; then
 			echo "--- RETRYING in 5 minutes... ---" >&2
-			sleep 300
+			sleep 300 &
+			wait $!
 		else
 			echo "--- FATAL ERROR: find_available_zone.sh failed due to a configuration or system error. Exiting. ---" >&2
 			rm -f "$ZONE_EXPORT" "$ZONE_OUTPUT"

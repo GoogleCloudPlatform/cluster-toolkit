@@ -139,10 +139,20 @@ class TestCloudBuildZoneRetry(unittest.TestCase):
         zone_pattern = r".*Deploying in ZONE: \([a-z0-9-]*\).*"
         capacity_pattern = (
             "ZONE_RESOURCE_POOL_EXHAUSTED|"
+            "does not have enough resources available|"
             "not enough resources available|"
             "resource exhausted|"
             "stockout"
         )
+        submit_script = os.path.abspath(
+            os.path.join(
+                os.path.dirname(__file__),
+                "../cloud-build/submit_and_monitor_kueue_job.sh",
+            )
+        )
+        with open(submit_script, "r", encoding="utf-8") as f:
+            self.assertIn(capacity_pattern, f.read())
+
         script = f"""
         FAILED_ZONE=$(sed -n 's/{extract_pattern}/\\1/p' {log_file} |
             tail -n 1 || true)
@@ -176,6 +186,7 @@ class TestCloudBuildZoneRetry(unittest.TestCase):
         zone_pattern = r".*Deploying in ZONE: \([a-z0-9-]*\).*"
         capacity_pattern = (
             "ZONE_RESOURCE_POOL_EXHAUSTED|"
+            "does not have enough resources available|"
             "not enough resources available|"
             "resource exhausted|"
             "stockout"
@@ -219,6 +230,19 @@ class TestCloudBuildZoneRetry(unittest.TestCase):
                 "us-west4-b",
             ),
             (
+                "Deploying in ZONE: us-central1-b, MODEL: SPOT\n"
+                "Error: googleapi: Error 400: The zone "
+                "'projects/my-proj/zones/us-central1-b' does not have enough "
+                "resources available to fulfill the request.\n",
+                "us-central1-b",
+            ),
+            (
+                "Deploying in ZONE: us-west1-a, MODEL: SPOT\n"
+                "Error: The zone DOES NOT HAVE ENOUGH RESOURCES AVAILABLE "
+                "to fulfill the request.\n",
+                "us-west1-a",
+            ),
+            (
                 "Deploying in ZONE: us-west1-c, MODEL: SPOT\n"
                 "Compute Engine does NOT ENOUGH RESOURCES AVAILABLE "
                 "in the specified zone.\n",
@@ -248,6 +272,7 @@ class TestCloudBuildZoneRetry(unittest.TestCase):
         zone_pattern = r".*Deploying in ZONE: \([a-z0-9-]*\).*"
         capacity_pattern = (
             "ZONE_RESOURCE_POOL_EXHAUSTED|"
+            "does not have enough resources available|"
             "not enough resources available|"
             "resource exhausted|"
             "stockout"

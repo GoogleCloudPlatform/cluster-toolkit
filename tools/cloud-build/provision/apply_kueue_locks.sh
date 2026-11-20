@@ -56,7 +56,10 @@ for PROJECT in "${PROJECTS[@]}"; do
 			kubectl apply -f "$CONFIGS_DIR/kueue-setup.yaml" || ERRORS=1
 			# The reaper's KSA (with Workload Identity) is created by the
 			# test-infra-kueue blueprint. Only apply the reaper where that KSA exists.
-			if kubectl get serviceaccount kueue-reaper-ksa -n default &>/dev/null; then
+			if ! ksa_out=$(kubectl get serviceaccount kueue-reaper-ksa -n default --ignore-not-found --request-timeout=15s -o name); then
+				echo "Error: failed to check kueue-reaper-ksa in $PROJECT." >&2
+				ERRORS=1
+			elif [ -n "$ksa_out" ]; then
 				echo "Syncing kueue-stale-pr-reaper ConfigMap..."
 				kubectl create configmap kueue-stale-pr-reaper \
 					-n default \
@@ -64,9 +67,8 @@ for PROJECT in "${PROJECTS[@]}"; do
 					--dry-run=client -o yaml | kubectl apply -f - || ERRORS=1
 
 				echo "Applying kueue-reaper-pod..."
-				if kubectl apply -f "$CONFIGS_DIR/kueue-reaper-pod.yaml"; then
-					# reaper.sh is read once at container start, so restart to pick up ConfigMap edits.
-					kubectl rollout restart deployment/kueue-reaper -n default || ERRORS=1
+				# reaper.sh is read once at container start, so restart to pick up ConfigMap edits.
+				if kubectl apply -f "$CONFIGS_DIR/kueue-reaper-pod.yaml" && kubectl rollout restart deployment/kueue-reaper -n default; then
 					kubectl rollout status deployment/kueue-reaper -n default --timeout="${KUEUE_REAPER_TIMEOUT:-300s}" || ERRORS=1
 				else
 					ERRORS=1

@@ -140,7 +140,9 @@ steps:
               # SIGTERM until a trap is installed. RUN_CLEANUP=false => just exit.
               RUN_CLEANUP=false
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
-              trap cleanup_pod EXIT SIGTERM SIGINT
+              trap cleanup_pod EXIT
+              trap 'cleanup_pod 143' SIGTERM
+              trap 'cleanup_pod 130' SIGINT
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."

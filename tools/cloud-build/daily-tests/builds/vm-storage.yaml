@@ -112,9 +112,19 @@ steps:
 
               DEPLOYMENT_NAME="vmstorage-$$BUILD_ID_SHORT"
 
-              RUN_CLEANUP=true
+              # Register the SIGTERM handler FIRST. bash is PID 1 here and ignores
+              # SIGTERM until a trap is installed. RUN_CLEANUP=false => just exit.
+              RUN_CLEANUP=false
               source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
-              trap cleanup_pod EXIT SIGTERM SIGINT
+              trap cleanup_pod EXIT
+              trap 'cleanup_pod 143' SIGTERM
+              trap 'cleanup_pod 130' SIGINT
+
+              # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
+              echo "Checking for and clearing leaked Terraform state locks..."
+              bash tools/cloud-build/clear_tf_state_locks.sh tools/cloud-build/daily-tests/tests/vm-storage.yml "\$$DEPLOYMENT_NAME" || true
+
+              RUN_CLEANUP=true
 
               REGION="\$${ZONE%-*}"
               bash tools/get_binary.sh "\$$_TEST_PREFIX"

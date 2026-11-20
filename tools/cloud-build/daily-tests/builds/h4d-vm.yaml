@@ -130,6 +130,14 @@ steps:
             - |
               set -e -u -o pipefail
               echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/h4d-vm.yaml"
+              # Register the SIGTERM handler FIRST. bash is PID 1 here and ignores
+              # SIGTERM until a trap is installed. RUN_CLEANUP=false => just exit.
+              RUN_CLEANUP=false
+              source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
+              trap cleanup_pod EXIT
+              trap 'cleanup_pod 143' SIGTERM
+              trap 'cleanup_pod 130' SIGINT
+
               echo "Sourcing find_available_zone.sh to determine zone."
               source /workspace/tools/cloud-build/wait_for_available_zone.sh
               if [ -z "\$${ZONE:-}" ]; then
@@ -142,11 +150,6 @@ steps:
 
               DEPLOYMENT_NAME="h4d-jbvms-$$BUILD_ID_SHORT"
               BLUEPRINT="/workspace/examples/h4d-vm.yaml"
-              # Register the SIGTERM handler FIRST. bash is PID 1 here and ignores
-              # SIGTERM until a trap is installed. RUN_CLEANUP=false => just exit.
-              RUN_CLEANUP=false
-              source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
-              trap cleanup_pod EXIT SIGTERM SIGINT
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."

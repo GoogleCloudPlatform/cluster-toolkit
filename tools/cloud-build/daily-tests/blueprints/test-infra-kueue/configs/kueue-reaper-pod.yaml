@@ -44,6 +44,7 @@ metadata:
 data:
   reaper.sh: |
     #!/bin/bash
+    trap 'exit 0' SIGTERM SIGINT
     echo "Starting Centralized K8s Reaper Pod..."
     echo "This pod monitors active jobs and cancels them if their Cloud Build is CANCELLED."
 
@@ -95,11 +96,13 @@ data:
                 filter_str="$filter_str OR $part"
               fi
             done
-            while read -r bid bstatus; do
-              if [ -n "$bid" ]; then
-                build_statuses["$bid"]="$bstatus"
-              fi
-            done < <(gcloud builds list --filter="$filter_str" --limit=unlimited --format="value(id,status)")
+            if chunk_out=$(timeout 60 gcloud builds list --filter="$filter_str" --limit=unlimited --page-size=25 --format="value(id,status)"); then
+              while read -r bid bstatus; do
+                [ -n "$bid" ] && build_statuses["$bid"]="$bstatus"
+              done <<< "$chunk_out"
+            else
+              echo "WARNING: gcloud builds list failed for chunk at index $i (exit=$?)" >&2
+            fi
           done
 
           # Check and delete jobs for cancelled/failed builds
@@ -110,14 +113,14 @@ data:
             if [ "$status" == "CANCELLED" ] || [ "$status" == "FAILURE" ] || [ "$status" == "TIMEOUT" ] || [ "$status" == "INTERNAL_ERROR" ] || [ "$status" == "EXPIRED" ]; then
               echo "WARNING: Cloud Build $build_id is $status!"
               echo "Deleting suspended/active Kubernetes Job $job_name to trigger graceful cleanup or remove it from Kueue..."
-              kubectl delete job "$job_name" -n default --wait=false 2>/dev/null || true
+              kubectl delete job "$job_name" -n default --wait=false --request-timeout=15s 2>/dev/null || true
             fi
           done
         fi
       fi
 
       # Poll every minute
-      sleep 60
+      sleep 60 & wait $!
     done
 ---
 apiVersion: apps/v1
@@ -136,9 +139,6 @@ spec:
     metadata:
       labels:
         app: kueue-reaper
-      annotations:
-        # Bump this whenever reaper.sh changes so the Deployment rolls the pod.
-        reaper-script-version: "2"
     spec:
       serviceAccountName: kueue-reaper-ksa
       containers:
