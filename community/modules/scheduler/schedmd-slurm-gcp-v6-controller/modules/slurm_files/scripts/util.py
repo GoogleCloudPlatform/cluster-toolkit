@@ -1790,7 +1790,17 @@ class Lookup:
         )
     @cached_property
     def control_host_addr(self):
-        return self.control_addr or (host_lookup(self.control_host) if self.control_host else None)
+        if self.control_addr:
+            return self.control_addr
+        if not self.control_host:
+            return None
+        ctrl_zone = to_leaf_name(self.cfg.get("controller_zone"))
+        if ctrl_zone and self.project and "." not in self.control_host:
+            try:
+                return socket.gethostbyname(f"{self.control_host}.{ctrl_zone}.c.{self.project}.internal")
+            except socket.gaierror:
+                pass
+        return host_lookup(self.control_host)
 
     @property
     def control_host_port(self):

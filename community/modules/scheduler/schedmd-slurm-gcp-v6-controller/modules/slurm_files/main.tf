@@ -46,6 +46,8 @@ locals {
     cluster_id                      = random_uuid.cluster_id.result
     project                         = var.project_id
     slurm_cluster_name              = var.slurm_cluster_name
+    controller_zone                 = var.controller_zone
+    backup_controller_zone          = var.backup_controller_zone
     slurm_backup_controller_name    = var.slurm_backup_controller_name
     slurm_backup_controller_ip      = var.slurm_backup_controller_ip
     enable_controller_load_balancer = var.enable_controller_load_balancer

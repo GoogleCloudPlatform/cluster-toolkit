@@ -477,14 +477,24 @@ def install_slurm_conf(lkp: util.Lookup) -> None:
 
     # Resolve IPs for SlurmctldHost to ensure correct HA configuration (requires name(IP) format)
     # and use multiple lines for Slurm 23.02+ syntax compliance if HA is enabled.
+    ctrl_zone = util.to_leaf_name(lkp.cfg.get("controller_zone"))
+    backup_zone = util.to_leaf_name(lkp.cfg.get("backup_controller_zone"))
     control_host = lkp.control_host
     if lkp.cfg.get("enable_controller_load_balancer"):
         control_ip = control_host
     else:
-        try:
-            control_ip = socket.gethostbyname(control_host)
-        except Exception as e:
-            log.warning(f"Failed to resolve control_host {control_host}: {e}")
+        control_ip = None
+        ctrl_targets = [control_host] if control_host else []
+        if lkp.project and control_host and "." not in control_host:
+            for z in dict.fromkeys(z for z in (ctrl_zone, backup_zone) if z):
+                ctrl_targets.append(f"{control_host}.{z}.c.{lkp.project}.internal")
+        for target in ctrl_targets:
+            try:
+                control_ip = socket.gethostbyname(target)
+                break
+            except Exception as e:
+                log.warning(f"Failed to resolve control_host '{target}': {e}")
+        if not control_ip:
             control_ip = lkp.control_addr if lkp.control_addr else control_host
 
     slurmctld_hosts_str = f"SlurmctldHost={control_host}({control_ip})"
@@ -495,19 +505,30 @@ def install_slurm_conf(lkp: util.Lookup) -> None:
         if not backup_ip:
             timeout = lkp.cfg.get("controller_startup_scripts_timeout", 300)
             snooze = 10 # seconds
-            retries = int(timeout / snooze)
+            retries = max(1, int((timeout or 300) / snooze))
+            lookup_targets = []
+            if lkp.project and "." not in backup_name:
+                for z in dict.fromkeys(z for z in (backup_zone, ctrl_zone) if z):
+                    lookup_targets.append(f"{backup_name}.{z}.c.{lkp.project}.internal")
+            lookup_targets.append(backup_name)
             for i in range(retries):
-                try:
-                    backup_ip = socket.gethostbyname(backup_name)
-                    log.info(f"Successfully resolved backup_controller hostname '{backup_name}' to {backup_ip}")
+                last_err: Optional[Exception] = None
+                for target in lookup_targets:
+                    try:
+                        backup_ip = socket.gethostbyname(target)
+                        log.info(f"Successfully resolved backup_controller '{target}' to {backup_ip}")
+                        break
+                    except Exception as e:
+                        last_err = e
+                if backup_ip:
                     break
-                except Exception as e:
-                    if i < retries - 1:
-                        log.warning(f"Failed to resolve backup_controller hostname '{backup_name}' (Attempt {i + 1}/{retries}): {e}. Retrying in {snooze} seconds...")
-                        time.sleep(snooze)
-                    else:
-                        log.error(f"Failed to resolve backup_controller hostname '{backup_name}' after {retries} attempts: {e}")
-                        raise
+                if i < retries - 1:
+                    log.warning(f"Failed to resolve backup_controller hostname '{backup_name}' (Attempt {i + 1}/{retries}): {last_err}. Retrying in {snooze} seconds...")
+                    time.sleep(snooze)
+                else:
+                    log.error(f"Failed to resolve backup_controller hostname '{backup_name}' after {retries} attempts: {last_err}")
+                    assert last_err is not None
+                    raise last_err
         else:
             log.info(f"Using static backup_controller IP {backup_ip} from config")
 
