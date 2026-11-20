@@ -55,6 +55,15 @@ gcluster explain [MODULE | BLUEPRINT | SPECS...] [flags]
 * `-d, --deployment-file <string>`: Optional companion deployment YAML file when explaining a blueprint.
 * `-f, --format <string>`: Output format: `text`, `yaml`, or `json` (default `"text"`).
 
+In `json` and `yaml` output, a module input can include a `constraints` object with limits the module states in a simple form, in its Terraform `validation` blocks or `metadata.yaml` validators:
+
+* `allowed_values`, plus `case_insensitive: true` when the module ignores case.
+* `min` and `max`, plus `min_exclusive` / `max_exclusive` for `>` and `<`.
+* `pattern`: an RE2 regular expression. It matches anywhere in the value unless it starts with `^` and ends with `$`, like Terraform's `regex()` and JSON Schema `pattern` (the HTML `pattern` attribute needs a full match instead).
+* `allow_null: true` when the rules explicitly accept null, and `sources` (`terraform` and/or `metadata`).
+
+Limits are only listed when they can be read exactly. Other rules, such as ones that depend on several inputs, stay in `validations` as messages.
+
 ### Examples - explain
 
 ```bash
