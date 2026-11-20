@@ -140,6 +140,13 @@ check_vm_capacity() {
 		--min-count="${MIN_NODES}"
 	)
 
+	if [[ "${MACHINE_TYPE}" =~ ^(t2a|c4a)- ]]; then
+			gcloud_cmd+=(--image-family="debian-12-arm64" --image-project="debian-cloud")
+	elif [[ -n "${IMAGE_FAMILY:-}" && -n "${IMAGE_PROJECT:-}" ]]; then
+			# (Optional) Fallback to use environment variables if provided
+			gcloud_cmd+=(--image-family="${IMAGE_FAMILY}" --image-project="${IMAGE_PROJECT}")
+	fi
+
 	if [[ "${provisioning_model}" == "SPOT" ]]; then
 		gcloud_cmd+=(--instance-termination-action="${TERMINATION_ACTION}")
 	else
@@ -316,6 +323,82 @@ check_lustre_quota() {
 		return 1
 	fi
 }
+
+declare -A NETAPP_QUOTA_CACHE
+check_netapp_quota() {
+	local region=$1
+	local required_capacity=${REQUIRED_NETAPP_GB:-0}
+	local service_level=${REQUIRED_NETAPP_SERVICE_LEVEL:-"FLEX"}
+	service_level="${service_level^^}"
+
+	if [[ "$required_capacity" -le 0 ]]; then
+		return 0
+	fi
+
+	if [[ -n "${NETAPP_QUOTA_CACHE[$region]:-}" ]]; then
+		return "${NETAPP_QUOTA_CACHE[$region]}"
+	fi
+
+	local quota_id
+	case "${service_level}" in
+	"FLEX")
+		quota_id="FlexStoragePoolCapacityGiBPerRegion"
+		;;
+	"STANDARD")
+		quota_id="StandardStoragePoolCapacityGiBPerRegion"
+		;;
+	"PREMIUM" | "EXTREME")
+		quota_id="StoragePoolCapacityGiBPerRegion"
+		;;
+	*)
+		echo "WARN: Unknown NetApp service level '${service_level}'. Falling back to FlexStoragePoolCapacityGiBPerRegion."
+		quota_id="FlexStoragePoolCapacityGiBPerRegion"
+		service_level="FLEX"
+		;;
+	esac
+
+	local limit
+	limit=$(gcloud beta quotas info list --service=netapp.googleapis.com --project="${PROJECT_ID}" \
+		--filter="quotaId=${quota_id}" --format="json" 2>/dev/null |
+		jq -r --arg region "$region" '[.[].dimensionsInfos[]? | select(((.applicableLocations? // []) | index($region) != null) or ((.dimensions?.region? // "") == $region)) | .details?.value? | select(. != null) | tonumber] | max' 2>/dev/null)
+
+	if [[ -z "$limit" || "$limit" == "null" ]]; then
+		echo "WARN: Could not fetch NetApp quota limit (${quota_id}) for $region. Failing-open and assuming capacity exists."
+		NETAPP_QUOTA_CACHE[$region]=0
+		return 0
+	fi
+
+	limit=$(jq -n --arg v "${limit}" '($v | tonumber? | floor) // 0' 2>/dev/null)
+	if [[ ! "${limit}" =~ ^-?[0-9]+$ ]]; then limit=0; fi
+
+	if [[ "${limit}" -lt 0 ]]; then
+		NETAPP_QUOTA_CACHE[$region]=0
+		return 0
+	fi
+
+	if [[ "${limit}" -eq 0 ]]; then
+		echo "INFO: NetApp quota limit (${quota_id}) for $region is explicitly 0. Skipping zone."
+		NETAPP_QUOTA_CACHE[$region]=1
+		return 1
+	fi
+
+	local usage
+	usage=$(gcloud netapp storage-pools list --location="-" --project="${PROJECT_ID}" --format="json" 2>/dev/null |
+		jq -r --arg region "$region" --arg level "$service_level" '([.[]? | select((.name? // "" | split("/")[3]? // "") as $loc | ($loc | length > 0) and ($loc == $region or ($loc | startswith($region + "-")))) | ((.serviceLevel? // "") | ascii_upcase) as $sl | select(if ($level == "PREMIUM" or $level == "EXTREME") then ($sl == "PREMIUM" or $sl == "EXTREME") else $sl == $level end) | .capacityGib | select(. != null) | tonumber] | add // 0) | floor' 2>/dev/null)
+
+	if [[ ! "${usage}" =~ ^[0-9]+$ ]]; then usage=0; fi
+
+	local remaining=$((limit - usage))
+	if [[ "$remaining" -ge "$required_capacity" ]]; then
+		NETAPP_QUOTA_CACHE[$region]=0
+		return 0
+	else
+		echo "INFO: Insufficient NetApp quota (${service_level}/${quota_id}) in $region (Limit: $limit, Usage: $usage, Required: $required_capacity)."
+		NETAPP_QUOTA_CACHE[$region]=1
+		return 1
+	fi
+}
+
 declare -A CPU_QUOTA_CACHE
 check_cpu_quota() {
 	local region=$1
@@ -397,6 +480,15 @@ if [[ "${CHECK_LUSTRE:-false}" == "true" ]]; then
 	echo "INFO: Fetching available Managed Lustre zones..."
 	if ! LUSTRE_ZONES=$(gcloud lustre locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>&1); then
 		echo "ERROR: Failed to fetch available Lustre locations: ${LUSTRE_ZONES}" >&2
+		exit 1
+	fi
+fi
+
+NETAPP_ZONES=""
+if [[ "${CHECK_NETAPP:-false}" == "true" ]]; then
+	echo "INFO: Fetching available NetApp Volumes zones..."
+	if ! NETAPP_ZONES=$(gcloud netapp locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>&1); then
+		echo "ERROR: Failed to fetch available NetApp locations: ${NETAPP_ZONES}" >&2
 		exit 1
 	fi
 fi
