@@ -83,7 +83,7 @@ variable "network_storage" {
 variable "disk_size_gb" {
   description = "Boot disk size in GB"
   type        = number
-  default     = 20
+  default     = 100
   nullable    = false
 }
 

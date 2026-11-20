@@ -41,7 +41,7 @@ deployment_groups:
     settings:
       instance_image:
         project: rocky-linux-cloud
-        family: rocky-linux-8
+        family: rocky-linux-9
 
   - id: spack-setup
     source: community/modules/scripts/spack-setup
@@ -81,5 +81,5 @@ deployment_groups:
     settings:
       machine_type: n2d-standard-4
       instance_image:
-        family: rocky-linux-8
+        family: rocky-linux-9
         project: rocky-linux-cloud

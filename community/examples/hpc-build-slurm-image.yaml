@@ -21,10 +21,8 @@ vars:
   zone: us-central1-a
 
   image_build_machine_type: n2d-standard-16
-  # Rocky 8: hpc-rocky-linux-8
-  # Rocky 9: hpc-rocky-linux-9
-  build_from_image_family: hpc-rocky-linux-9
-  build_from_image_project: cloud-hpc-image-public
+  source_image_family: aci-cpu-rocky-linux-9-amd64
+  source_image_project: advanced-compute-images
   build_from_git_ref: 6.13.2
   built_image_family: my-custom-slurm
   built_instance_image:
@@ -96,8 +94,8 @@ deployment_groups:
     kind: packer
     settings:
       machine_type: $(vars.image_build_machine_type)
-      source_image_family: $(vars.build_from_image_family)
-      source_image_project_id: [$(vars.build_from_image_project)]
+      source_image_family: $(vars.source_image_family)
+      source_image_project_id: [$(vars.source_image_project)]
       image_family: $(vars.built_image_family)
     use:
     - network
