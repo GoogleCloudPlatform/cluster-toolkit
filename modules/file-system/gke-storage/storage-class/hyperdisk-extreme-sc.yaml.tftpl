@@ -4,7 +4,7 @@ metadata:
   name: ${name}
   labels:
   %{~ for key, val in labels ~}
-    ${key}: ${val}
+    ${key}: ${jsonencode(val)}
 provisioner: pd.csi.storage.gke.io
 allowVolumeExpansion: true
 parameters:

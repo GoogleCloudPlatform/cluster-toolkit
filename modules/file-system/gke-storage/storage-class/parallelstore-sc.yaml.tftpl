@@ -4,7 +4,7 @@ metadata:
   name: ${name}
   labels:
   %{~ for key, val in labels ~}
-    ${key}: ${val}
+    ${key}: ${jsonencode(val)}
   %{~ endfor ~}
 provisioner: parallelstore.csi.storage.gke.io
 parameters:
