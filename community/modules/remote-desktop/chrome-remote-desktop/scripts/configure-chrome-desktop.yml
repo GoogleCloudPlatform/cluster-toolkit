@@ -55,7 +55,6 @@
       content: "exec /etc/X11/Xsession /usr/bin/xfce4-session"
       mode: 0644
 
-  - name: Start Chrome remote desktop
-    ansible.builtin.command: /etc/init.d/chrome-remote-desktop start
-    register: result
-    changed_when: result.rc == 0
+  - name: Reload systemd daemon for Chrome Remote Desktop
+    ansible.builtin.systemd:
+      daemon_reload: true

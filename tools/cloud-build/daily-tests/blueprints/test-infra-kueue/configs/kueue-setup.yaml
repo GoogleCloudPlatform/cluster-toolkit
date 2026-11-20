@@ -88,7 +88,6 @@ spec:
     - test-locks/gke-g4-onspot
     - test-locks/ansible-vm
     - test-locks/batch-mpi
-    - test-locks/crd-ubuntu
     - test-locks/netapp-volumes
     - test-locks/crd
     - test-locks/e2e
@@ -196,8 +195,6 @@ spec:
       - name: test-locks/ansible-vm
         nominalQuota: 1
       - name: test-locks/batch-mpi
-        nominalQuota: 1
-      - name: test-locks/crd-ubuntu
         nominalQuota: 1
       - name: test-locks/netapp-volumes
         nominalQuota: 1
