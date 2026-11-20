@@ -172,6 +172,7 @@ module "slurm_files" {
   slurm_conf_template            = var.slurm_conf_template
   cgroup_conf_tpl                = var.cgroup_conf_tpl
   cloud_parameters               = var.cloud_parameters
+  capacity_circuit_breaker       = var.capacity_circuit_breaker
   experimental                   = var.experimental
   enable_expedited_requeue       = var.enable_expedited_requeue
   enable_health_check_start_only = var.enable_health_check_start_only
