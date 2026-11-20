@@ -154,13 +154,19 @@ func detectUsername(ctx context.Context) string {
 	}
 
 	// Try gcloud next
-	account, reason := activeGcloudAccount(ctx)
+	account, reason, expected := activeGcloudAccount(ctx)
 	if account != "" {
 		return account
 	}
-	logging.Warn("Could not detect the active gcloud account (%s); falling back to the local user name. "+
-		"A new deployment only gets the ghpc_creator label for @google.com accounts, and later renders keep that choice. "+
-		"Set CLOUDSDK_CORE_ACCOUNT or pass --add-creator-label to override.", reason)
+	const consequence = "A new deployment only gets the ghpc_creator label for @google.com accounts, and later renders keep that choice. " +
+		"Set CLOUDSDK_CORE_ACCOUNT or pass --add-creator-label to override."
+	if expected {
+		// gcloud is not installed or not logged in, as is common for external
+		// users and CI: nothing went wrong, so keep this quiet.
+		logging.Info("No active gcloud account (%s); using the local user name. %s", reason, consequence)
+	} else {
+		logging.Warn("Could not detect the active gcloud account (%s); falling back to the local user name. %s", reason, consequence)
+	}
 
 	// Fallback to shell
 	if user := os.Getenv("USER"); user != "" {
@@ -180,8 +186,10 @@ func detectUsername(ctx context.Context) string {
 }
 
 // activeGcloudAccount returns the active gcloud account, or "" and the reason
-// it could not be determined.
-func activeGcloudAccount(ctx context.Context) (string, string) {
+// it could not be determined. expected is true when that is a normal setup
+// (gcloud not installed, or no account logged in) rather than a failure such
+// as a timeout or an error from gcloud.
+func activeGcloudAccount(ctx context.Context) (account string, reason string, expected bool) {
 	ctx, cancel := context.WithTimeout(ctx, gcloudAccountTimeout)
 	defer cancel()
 
@@ -194,14 +202,16 @@ func activeGcloudAccount(ctx context.Context) (string, string) {
 	err := cmd.Run()
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return "", fmt.Sprintf("timed out after %s", gcloudAccountTimeout)
+		return "", fmt.Sprintf("timed out after %s", gcloudAccountTimeout), false
+	case errors.Is(err, exec.ErrNotFound):
+		return "", "gcloud is not installed", true
 	case err != nil:
-		return "", err.Error()
+		return "", err.Error(), false
 	}
 	if email := strings.TrimSpace(out.String()); email != "" {
-		return email, ""
+		return email, "", false
 	}
-	return "", "gcloud reported no active account"
+	return "", "gcloud reported no active account", true
 }
 
 // setCreatorLabel decides whether the expanded blueprint gets a ghpc_creator
