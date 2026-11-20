@@ -23,6 +23,7 @@ from functools import lru_cache
 import archspec.cpu
 import google.cloud.exceptions
 import googleapiclient.discovery
+import googleapiclient.errors
 from google.cloud import storage as gcs
 import google.cloud.secretmanager as secretmanager
 from google.cloud.billing_v1.services import cloud_catalog
@@ -81,6 +82,169 @@ def _get_gcp_client(credentials, service="compute", api_version="v1"):
             service, api_version, credentials=creds, cache_discovery=False
         ),
     )
+
+
+def crypto_key_versions(credentials, key_path):
+    """The key's versions and their states, newest first.
+
+    Read straight from Cloud KMS rather than from OFE's records: a version can
+    be destroyed, disabled or scheduled for destruction outside OFE entirely,
+    and the admin page exists to show what is actually there. Every page is
+    read: a key rotated often enough has more versions than one page holds,
+    and a version left off this list is one revocation would leave working.
+    """
+    _, client = _get_gcp_client(credentials, "cloudkms", "v1")
+    api = client.projects().locations().keyRings().cryptoKeys() \
+        .cryptoKeyVersions()
+    versions = []
+    request = {"parent": key_path}
+    while True:
+        page = api.list(**request).execute()
+        versions.extend(page.get("cryptoKeyVersions", []))
+        if not page.get("nextPageToken"):
+            return versions
+        request["pageToken"] = page["nextPageToken"]
+
+
+def crypto_key_destroy_scheduled_duration(credentials, key_path):
+    """How long the key holds a version in DESTROY_SCHEDULED, e.g. "2592000s".
+
+    Fixed when the key is created. Returns None if the key cannot be read: the
+    caller only uses this to word a warning, which must not fail for want of
+    it.
+    """
+    try:
+        _, client = _get_gcp_client(credentials, "cloudkms", "v1")
+        key = client.projects().locations().keyRings().cryptoKeys() \
+            .get(name=key_path).execute()
+        return key.get("destroyScheduledDuration")
+    except Exception as err:  # pylint: disable=broad-except
+        logger.warning("Could not read the destruction window of %s: %s",
+                       key_path, err)
+        return None
+
+
+class KeyDestructionError(Exception):
+    """Revocation stopped after the key's rotation schedule was cleared.
+
+    Carries what was already scheduled and what failed, because by then the
+    key has changed whether or not any version was scheduled: rotation is off,
+    the versions before the failure stay scheduled, and the key is neither
+    intact nor revoked. Whoever looks next needs to know which.
+    """
+
+    def __init__(self, scheduled, failed, cause):
+        super().__init__(f"failed at {failed} ({cause})")
+        self.scheduled = scheduled
+        self.failed = failed
+
+
+def destroy_crypto_key_versions(credentials, key_path):
+    """Schedule every live version of a CryptoKey for destruction.
+
+    A CryptoKey itself cannot be deleted: Cloud KMS keeps the name permanently,
+    which is why a name can never be reused. Destroying its versions is
+    the whole of what "deleting a key" can mean, and it is what makes data
+    encrypted under the key unreadable -- which is the point when a key has to
+    be revoked, and the reason the caller must confirm first.
+
+    The rotation schedule is cleared first. Otherwise the next scheduled
+    rotation mints a new ENABLED primary version, and the revoked key quietly
+    starts working again.
+
+    Returns the version names scheduled for destruction. Versions already
+    destroyed or already scheduled are skipped, so calling this twice is safe.
+    A failure to clear the rotation schedule is raised as it is, since nothing
+    has changed yet. Any failure after it -- listing the versions or destroying
+    one -- raises KeyDestructionError, even with nothing scheduled, because
+    the key no longer rotates.
+    """
+    _, client = _get_gcp_client(credentials, "cloudkms", "v1")
+    keys = client.projects().locations().keyRings().cryptoKeys()
+    keys.patch(name=key_path, updateMask="rotationPeriod,nextRotationTime",
+               body={}).execute()
+    logger.warning("Cleared the rotation schedule of Cloud KMS key %s",
+                   key_path)
+    api = keys.cryptoKeyVersions()
+    destroyed = []
+    try:
+        versions = crypto_key_versions(credentials, key_path)
+    except Exception as err:  # pylint: disable=broad-except
+        raise KeyDestructionError(destroyed, "listing versions", err) \
+            from err
+    for version in versions:
+        if version.get("state") in ("DESTROYED", "DESTROY_SCHEDULED"):
+            continue
+        try:
+            api.destroy(name=version["name"], body={}).execute()
+        except Exception as err:  # pylint: disable=broad-except
+            raise KeyDestructionError(destroyed, version["name"], err) \
+                from err
+        logger.warning("Scheduled Cloud KMS key version %s for destruction",
+                       version["name"])
+        destroyed.append(version["name"])
+    return destroyed
+
+
+class KeyRingCheckError(Exception):
+    """Cloud KMS could not say whether a key ring exists.
+
+    Raised for any answer other than found or not found: the API disabled, a
+    missing permission, a server error. Guessing either way would put the
+    wrong one of key_ring_name and key_ring_id in the blueprint, so the caller
+    is told why instead. `status` is the HTTP status Cloud KMS returned.
+    """
+
+    def __init__(self, message, status):
+        super().__init__(message)
+        self.status = status
+
+
+def kms_key_ring_exists(credentials, project_id, location, key_ring_name):
+    """Whether a Cloud KMS key ring is already there.
+
+    Cloud KMS key rings can never be deleted, so a ring shared by several
+    resources exists already for every resource after the first, and for any
+    redeploy after a teardown. The caller uses this to decide whether
+    `kms-key` should create the ring or adopt it, since the module takes
+    exactly one of key_ring_name and key_ring_id.
+
+    Raises KeyRingCheckError when Cloud KMS answers with anything but the ring
+    or a 404.
+    """
+    _, client = _get_gcp_client(credentials, "cloudkms", "v1")
+    name = (f"projects/{project_id}/locations/{location}"
+            f"/keyRings/{key_ring_name}")
+    try:
+        client.projects().locations().keyRings().get(name=name).execute()
+        # Logged because it decides whether the blueprint says key_ring_name or
+        # key_ring_id, and a wrong answer surfaces only as a Terraform error
+        # about a ring, with nothing to say which branch was taken or why.
+        logger.info("Key ring %s exists; it will be adopted, not created",
+                    name)
+        return True
+    except googleapiclient.errors.HttpError as err:
+        if err.resp.status == 404:
+            logger.info("Key ring %s does not exist; it will be created", name)
+            return False
+        # Anything else -- the API disabled, no permission to read the ring,
+        # a transient failure -- leaves the answer unknown, and either guess
+        # surfaces later as a Terraform error that does not say why.
+        status = err.resp.status
+        logger.warning("Could not check whether key ring %s exists: %s",
+                       name, err)
+        if status == 403:
+            message = (
+                f"Cannot check the Cloud KMS key ring {name}: the Cloud KMS "
+                f"API is disabled in project {project_id} or this credential "
+                "lacks cloudkms.keyRings.get. Enable the API / grant the "
+                "permission, or ask an administrator.")
+        else:
+            message = (
+                f"Cannot check the Cloud KMS key ring {name}: Cloud KMS "
+                f"returned HTTP {status} ({err.reason}). Try again, "
+                "or ask an administrator.")
+        raise KeyRingCheckError(message, status) from err
 
 
 def _get_vm_reservations(credentials, zone, ttl_hash=None):

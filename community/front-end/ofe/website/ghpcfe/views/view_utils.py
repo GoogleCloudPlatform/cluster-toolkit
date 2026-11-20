@@ -311,3 +311,25 @@ class RegistryDataHelper:
         norm_artifact = RegistryDataHelper.normalize_image(artifact_uri)
         logger.debug("Matching artifact: build='%s', artifact='%s'", norm_build, norm_artifact)
         return norm_build == norm_artifact
+
+
+def cmek_detail_context(resource):
+    """What the Encryption dropdown shows for `resource`.
+
+    Shared by the cluster, Filestore and image detail views so the three cannot
+    describe the same fields differently. Returns None for a resource that
+    cannot carry a key, which leaves the section unrendered.
+
+    Settings that fail to parse neither take the page down nor hide the
+    section: describe() needs them, so the section says only that they are
+    invalid and why.
+    """
+    from ..cluster_manager import cmek, utils  # pylint: disable=import-outside-toplevel
+
+    if not hasattr(resource, "cmek_enabled"):
+        return None
+    try:
+        settings = cmek.CmekSettings.from_config(utils.load_config())
+    except cmek.CmekConfigError as err:
+        return {"encrypted": None, "invalid_settings": str(err)}
+    return cmek.describe(resource, settings)

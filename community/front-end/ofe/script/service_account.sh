@@ -23,6 +23,7 @@
 #                those automatically created by GCP APIs)
 #   check      - checks if a service account already exists
 #   create     - create a service account with all required roles
+#   update     - add any missing required roles to an existing service account
 #   delete     - deletes a service account
 #   credential - create a credential file for existing service account
 #                (file contents are then registered within TKFE)
@@ -68,6 +69,15 @@ SA_ROLES=('aiplatform.admin'
 	'servicenetworking.networksAdmin'
 	'artifactregistry.admin'
 	'cloudbuild.builds.builder'
+	# Customer-managed encryption keys: OFE creates a CryptoKey per encrypted
+	# resource, grants the service agents on it through kms-key-iam, and can
+	# schedule its versions for destruction when an admin revokes it. Without
+	# this every encrypted resource fails at apply. cloudkms.admin has no
+	# encrypt/decrypt permission, so OFE does not decrypt data in normal
+	# operation, but it is not a hard barrier: it can change key IAM policies,
+	# and this account also holds resourcemanager.projectIamAdmin. Enforce that
+	# guarantee with organisation policy or IAM conditions if it is needed.
+	'cloudkms.admin'
 )
 
 #
@@ -133,43 +143,16 @@ check_service_account() {
 }
 
 #
+# Grant every role in SA_ROLES to an account. Safe to repeat: a role the
+# account already has is left as it is, and no role is ever removed.
 #
-create_service_account() {
+grant_service_account_roles() {
 
 	local project=${1}
 	local account=${2}
 	local sa_fullname
 	local role
 
-	if [[ -z ${project} ]]; then
-		error "Error: Must specify PROJECT_ID"
-		help
-		return 99
-	fi
-	if [[ -z ${account} ]]; then
-		error "Error: Must specify ACCOUNT"
-		help
-		return 99
-	fi
-
-	# Create the service account
-	echo "Creating service account [${account}] in project [${project}] ..."
-	set +e
-	if ! gcloud iam service-accounts create "${account}" \
-		--description="TKFE service account" --project="${project}"; then
-		error ""
-		error "Error: Failed to create service account."
-		error "       Your account may not have permissions to do this."
-		error "       Please contact your administrator."
-		error ""
-		return 1
-	fi
-	set -e
-
-	# Add all required roles to new service account
-	# - can assume we can do this if account creation above works
-	# - retries in case of delay in SA creation propagating to gcloud
-	#
 	sa_fullname=$(sa_expand "${project}" "${account}")
 
 	# ---- Configure number of retries ----
@@ -202,6 +185,96 @@ create_service_account() {
 		fi
 	done
 
+	return 0
+}
+
+#
+#
+create_service_account() {
+
+	local project=${1}
+	local account=${2}
+
+	if [[ -z ${project} ]]; then
+		error "Error: Must specify PROJECT_ID"
+		help
+		return 99
+	fi
+	if [[ -z ${account} ]]; then
+		error "Error: Must specify ACCOUNT"
+		help
+		return 99
+	fi
+
+	# Create the service account
+	echo "Creating service account [${account}] in project [${project}] ..."
+	set +e
+	if ! gcloud iam service-accounts create "${account}" \
+		--description="TKFE service account" --project="${project}"; then
+		error ""
+		error "Error: Failed to create service account."
+		error "       Your account may not have permissions to do this."
+		error "       Please contact your administrator."
+		error ""
+		return 1
+	fi
+	set -e
+
+	# Add all required roles to new service account
+	# - can assume we can do this if account creation above works
+	# - retries in case of delay in SA creation propagating to gcloud
+	#
+	grant_service_account_roles "${project}" "${account}" || return 1
+	return 0
+}
+
+#
+# Exact lookup by email. The default table output of gcloud puts the display
+# name in the first column, so an account with a display name is not found by
+# check_service_account; this asks gcloud for the email column only and
+# matches the whole line, so a name that is a prefix or suffix of another
+# account, or contains a dot, cannot match the wrong one.
+#
+service_account_exists() {
+
+	local project=${1}
+	local account=${2}
+	local sa_fullname
+
+	sa_fullname=$(sa_expand "${project}" "${account}")
+	gcloud iam service-accounts list --project="${project}" \
+		--format='value(email)' 2>"${devnull}" | grep -Fxq "${sa_fullname}"
+}
+
+#
+# Bring an existing service account up to date with the roles TKFE needs now.
+# An account made by an earlier version can lack roles added since (for
+# example cloudkms.admin, needed for customer-managed encryption keys).
+# Only adds missing roles; never removes one.
+#
+update_service_account_roles() {
+
+	local project=${1}
+	local account=${2}
+
+	if [[ -z ${project} ]]; then
+		error "Error: Must specify PROJECT_ID"
+		help
+		return 99
+	fi
+	if [[ -z ${account} ]]; then
+		error "Error: Must specify ACCOUNT"
+		help
+		return 99
+	fi
+
+	if ! service_account_exists "${project}" "${account}"; then
+		error "Error: Service account [${account}] not found in project [${project}]."
+		return 1
+	fi
+
+	echo "Ensuring service account [${account}] has all required roles in project [${project}] ..."
+	grant_service_account_roles "${project}" "${account}" || return 1
 	return 0
 }
 
@@ -248,11 +321,28 @@ delete_service_account() {
 	# -- Remove each role associated with the account
 	#    (Deleting an account with associated roles outstanding leaves the roles
 	#    hanging in a "deleted:serviceAccount" within IAM admin.)
+	#    A removal can fail transiently, so each one is retried.
 	#
+	local max_retries=3
+	local attempt
+	local success
 	for role in ${roles}; do
-		if ! gcloud projects remove-iam-policy-binding "${project}" \
-			--member="serviceAccount:${sa_fullname}" \
-			--role="${role}" &>${devnull}; then
+		success=false
+		attempt=1
+		while [[ ${attempt} -le ${max_retries} ]]; do
+			if gcloud projects remove-iam-policy-binding "${project}" \
+				--member="serviceAccount:${sa_fullname}" \
+				--role="${role}" &>${devnull}; then
+				success=true
+				break
+			fi
+			if [[ ${attempt} -lt ${max_retries} ]]; then
+				sleep 3
+			fi
+			((attempt++))
+		done
+
+		if [[ ${success} != true ]]; then
 			error ""
 			error "    Warning: Failed to remove IAM policy: ${role}"
 			error "             Continuing..."
@@ -336,6 +426,10 @@ Usage:
 - Create a new service account - required roles will be added:
       $ ./service_account.sh create PROJECT_ID ACCOUNT
 
+- Add any missing required roles to an existing service account (never removes
+  a role):
+      $ ./service_account.sh update PROJECT_ID ACCOUNT
+
 - Delete a service account:
       $ ./service_account.sh delete PROJECT_ID ACCOUNT
 
@@ -373,6 +467,10 @@ case "${option}" in
 	;;
 "create")
 	create_service_account "${project}" "${account}"
+	rc=$?
+	;;
+"update")
+	update_service_account_roles "${project}" "${account}"
 	rc=$?
 	;;
 "delete")
