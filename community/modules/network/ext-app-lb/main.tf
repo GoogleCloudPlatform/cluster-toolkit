@@ -75,6 +75,7 @@ module "frontend" {
   random_certificate_suffix = length(var.managed_ssl_certificate_domains) > 0
   ssl_policy                = var.ssl_policy != null ? var.ssl_policy : one(google_compute_ssl_policy.policy[*].self_link)
 
-  # Without a certificate there is nothing to redirect to.
+  # Without a certificate, serve HTTP. With one, open port 80 only to redirect.
+  http_forward   = !local.ssl
   https_redirect = local.ssl && var.https_redirect
 }

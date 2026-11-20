@@ -171,6 +171,14 @@ def test_only_es256_assertions_are_accepted(verifier, key, alg):
     assert excinfo.value.status == 401
 
 
+@pytest.mark.parametrize("kid", [None, "", ["x"], {"a": 1}, 7])
+def test_a_missing_or_non_string_key_id_is_refused(verifier, key, kid):
+    assertion = _with_header(key.sign(), alg="ES256", kid=kid)
+    with pytest.raises(BrokerError) as excinfo:
+        verifier.subject(headers(assertion))
+    assert excinfo.value.status == 401
+
+
 def test_a_clock_slightly_behind_iap_is_tolerated(verifier, key):
     now = int(time.time())
     assertion = key.sign(iat=now + 5, exp=now + 600)

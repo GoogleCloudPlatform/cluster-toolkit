@@ -120,7 +120,7 @@ variable "min_tls_version" {
 }
 
 variable "https_redirect" {
-  description = "Whether to redirect HTTP requests to HTTPS. Ignored without a certificate, as the load balancer then serves HTTP only."
+  description = "Whether to redirect HTTP requests to HTTPS. With a certificate, false closes port 80. Ignored without a certificate, as the load balancer then serves HTTP only."
   type        = bool
   default     = true
 }

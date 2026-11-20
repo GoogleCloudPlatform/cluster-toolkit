@@ -110,11 +110,13 @@ variable "iap_backend_service" {
 }
 
 variable "iap_listen_port" {
-  description = "TCP port the broker listens on for the load balancer. Only used when iap_backend_service is set."
+  description = "TCP port the broker listens on for the load balancer. Only used when iap_backend_service is set. Below 1024, so that only root can bind it."
   type        = number
-  default     = 6080
+  default     = 80
   validation {
-    condition     = var.iap_listen_port >= 1 && var.iap_listen_port <= 65535
-    error_message = "iap_listen_port must be a valid TCP port."
+    # Any local user can bind an unprivileged port while the broker is down,
+    # and would then receive IAP-authenticated requests.
+    condition     = var.iap_listen_port >= 1 && var.iap_listen_port < 1024
+    error_message = "iap_listen_port must be below 1024, so that only root can bind it."
   }
 }

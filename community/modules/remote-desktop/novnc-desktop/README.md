@@ -50,8 +50,9 @@ existing host such as a Slurm login node.
 
 Run the `iap_tunnel_command` output, which forwards `localhost:6080` to the
 broker's unix socket over SSH through IAP, then browse to
-`http://localhost:6080/vnc.html`. The broker serves no TCP port, so the VM needs
-no firewall rule beyond the IAP SSH access the `vpc` module allows by default.
+`http://localhost:6080/vnc.html`. Unless `iap_backend_service` is set, the broker
+serves no TCP port, so the VM needs no firewall rule beyond the IAP SSH access
+the `vpc` module allows by default.
 How the broker identifies the user is described in the
 [novnc-runtime README](../novnc-runtime/README.md#access).
 
@@ -93,7 +94,7 @@ No resources.
 | <a name="input_enable_public_ips"></a> [enable\_public\_ips](#input\_enable\_public\_ips) | If true, instances receive public IPs. | `bool` | `false` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = string<br/>    count = number<br/>  }))</pre> | `[]` | no |
 | <a name="input_iap_backend_service"></a> [iap\_backend\_service](#input\_iap\_backend\_service) | Name of the backend service through which an HTTPS load balancer with<br/>Identity-Aware Proxy reaches this host, such as one created by the<br/>iap-backend-service module. When set, the broker also serves the load<br/>balancer on TCP iap\_listen\_port, as whichever user IAP names. The instance<br/>service account needs compute.backendServices.get. Leave null to serve<br/>desktops only over an SSH tunnel. | `string` | `null` | no |
-| <a name="input_iap_listen_port"></a> [iap\_listen\_port](#input\_iap\_listen\_port) | TCP port the broker serves the load balancer on. Only used when iap\_backend\_service is set. | `number` | `6080` | no |
+| <a name="input_iap_listen_port"></a> [iap\_listen\_port](#input\_iap\_listen\_port) | TCP port the broker serves the load balancer on. Only used when iap\_backend\_service is set. Must be below 1024, so that only root can bind it. | `number` | `80` | no |
 | <a name="input_install_root"></a> [install\_root](#input\_install\_root) | Directory under which noVNC assets are installed. | `string` | `"/opt/ghpc-remote-desktop"` | no |
 | <a name="input_instance_count"></a> [instance\_count](#input\_instance\_count) | Number of instances. | `number` | `1` | no |
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Image used to build the noVNC desktop node.<br/><br/>Expected fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "name": "debian-12-bookworm-v20250610",<br/>  "project": "debian-cloud"<br/>}</pre> | no |

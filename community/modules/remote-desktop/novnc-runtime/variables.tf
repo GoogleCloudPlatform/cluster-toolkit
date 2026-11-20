@@ -153,7 +153,7 @@ variable "iap_backend_service" {
 }
 
 variable "iap_listen_port" {
-  description = "TCP port the broker serves the load balancer on. Only used when iap_backend_service is set."
+  description = "TCP port the broker serves the load balancer on. Only used when iap_backend_service is set. Must be below 1024, so that only root can bind it."
   type        = number
-  default     = 6080
+  default     = 80
 }

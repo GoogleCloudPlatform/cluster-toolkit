@@ -121,6 +121,10 @@ prints this command for its VM as the `iap_tunnel_command` output.
 There is nothing else to set up on your machine: no proxy and no headers. The
 connection is yours because sshd opened it as your OS Login account.
 
+Run the forward on your own machine and browse to it directly. A proxy that
+rewrites the `Host` header, such as Cloud Shell Web Preview, fails the broker's
+websocket origin check and gets a 403.
+
 ## Reaching a desktop through a load balancer
 
 `hpc-slurm-remote-desktop-iap.yaml` also publishes each desktop at its own HTTPS
@@ -128,7 +132,7 @@ hostname, so no SSH tunnel is needed. The SSH route above keeps working
 alongside it.
 
 A load balancer cannot reach a unix socket, so these brokers also listen on TCP
-port 6080. A firewall rule admits Google's front ends to it, and the network's
+port 80, which only root can bind. A firewall rule admits Google's front ends to it, and the network's
 rule for internal traffic admits its other VMs. On that port the user is
 whoever Identity-Aware Proxy says they are, and a request without IAP's
 assertion is refused. The broker
@@ -170,7 +174,18 @@ another deployment and serve several clusters.
    per project, so IAP can sign users in.
 4. Grant each desktop user both `roles/compute.osLogin` and, through
    `desktop_iap_members`, IAP access. IAP admits them to the load balancer; OS
-   Login decides whether they get a desktop.
+   Login decides whether they get a desktop. Because the hosts run as a
+   service account, OS Login also requires `roles/iam.serviceAccountUser` on
+   it. Each user must also have used OS Login once in this project, since the
+   broker only finds accounts that already have a POSIX account. Either SSH to
+   any VM in the project, or register a key without connecting:
+
+   ```bash
+   gcloud compute os-login ssh-keys add --project PROJECT_ID \
+     --key-file ~/.ssh/google_compute_engine.pub
+   ```
+
+   Until then, the browser shows "No OS Login account was found".
 5. Grant the desktop hosts' service account `roles/compute.viewer`, so each
    broker can look up its backend service. This blueprint runs them as the
    default compute service account, which otherwise has that only through the

@@ -26,8 +26,9 @@ variable "name" {
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$", var.name))
-    error_message = "name must be a valid resource name: lowercase letters, digits and hyphens, starting with a letter."
+    # Leaves room for the "-hc" suffix of the backend module's health check.
+    condition     = can(regex("^[a-z]([-a-z0-9]{0,58}[a-z0-9])?$", var.name))
+    error_message = "name must be a valid resource name of at most 60 characters: lowercase letters, digits and hyphens, starting with a letter."
   }
 }
 
@@ -68,7 +69,7 @@ variable "endpoints" {
 variable "port" {
   description = "TCP port the desktop brokers serve the load balancer on: the desktop modules' iap_listen_port."
   type        = number
-  default     = 6080
+  default     = 80
 }
 
 variable "health_check_path" {

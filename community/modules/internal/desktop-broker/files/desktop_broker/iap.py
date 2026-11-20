@@ -204,6 +204,8 @@ class Verifier:
         if header.get("alg") != ALGORITHM:
             raise BrokerError(401, "IAP assertion has an unexpected algorithm.")
         key_id = header.get("kid")
+        if not isinstance(key_id, str) or not key_id:
+            raise BrokerError(401, "Malformed IAP assertion.")
 
         certs = self._keys()
         if key_id not in certs:

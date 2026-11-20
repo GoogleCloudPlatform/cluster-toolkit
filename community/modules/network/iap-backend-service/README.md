@@ -87,7 +87,7 @@ for a complete blueprint.
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | Network of the desktop instances. | `string` | n/a | yes |
 | <a name="input_oauth2_client_id"></a> [oauth2\_client\_id](#input\_oauth2\_client\_id) | OAuth client for IAP. Leave null, with oauth2\_client\_secret, to use a Google-managed client, which admits only users in your organization. | `string` | `null` | no |
 | <a name="input_oauth2_client_secret"></a> [oauth2\_client\_secret](#input\_oauth2\_client\_secret) | Secret of oauth2\_client\_id. | `string` | `null` | no |
-| <a name="input_port"></a> [port](#input\_port) | TCP port the desktop brokers serve the load balancer on: the desktop modules' iap\_listen\_port. | `number` | `6080` | no |
+| <a name="input_port"></a> [port](#input\_port) | TCP port the desktop brokers serve the load balancer on: the desktop modules' iap\_listen\_port. | `number` | `80` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the backend service is created. Must be the load balancer's project. | `string` | n/a | yes |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Subnetwork of the desktop instances. Optional when the network has one subnetwork in the zone's region. | `string` | `null` | no |
 | <a name="input_timeout_sec"></a> [timeout\_sec](#input\_timeout\_sec) | Backend service timeout, which bounds how long a desktop's websocket can stay open. | `number` | `86400` | no |
