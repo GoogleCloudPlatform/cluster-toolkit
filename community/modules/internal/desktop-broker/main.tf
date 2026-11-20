@@ -42,6 +42,15 @@ locals {
 
   # Nothing else on the host has to be up before the broker.
   requires_units = ""
+
+  iap_enabled     = var.iap_backend_service != null
+  iap_listen_port = local.iap_enabled ? var.iap_listen_port : null
+  # Verifying IAP assertions needs these; a socket-only broker does not.
+  # cryptography from google-auth's floor for ES256 to the newest major tested.
+  broker_pip_packages = concat(
+    ["aiohttp~=3.10"],
+    local.iap_enabled ? ["google-auth~=2.35", "cryptography>=38.0.3,<51"] : [],
+  )
 }
 
 # ---------------------------------------------------------------- XFCE + VNC
@@ -216,6 +225,8 @@ locals {
     session_idle_timeout_seconds = var.session_idle_timeout_seconds
     session_resolution           = var.session_resolution
     socket_path                  = local.broker_socket_path
+    iap_backend_service          = local.iap_enabled ? var.iap_backend_service : ""
+    iap_listen_port              = local.iap_enabled ? var.iap_listen_port : 0
     state_dir                    = local.broker_state_dir
     vnc_backend                  = local.vnc_backend
 
@@ -246,6 +257,7 @@ locals {
           broker_python_path  = local.broker_python_path
           broker_pip_path     = local.broker_pip_path
           broker_socket_path  = local.broker_socket_path
+          broker_pip_packages = local.broker_pip_packages
           requires_units      = local.requires_units
         })
       },

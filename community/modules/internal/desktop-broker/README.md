@@ -38,6 +38,8 @@ sessions/       store.py (records, locks, slots), userenv.py (privileged work
 backends/       registry.py chooses between tigervnc and turbovnc; gpu.py
                 detects what hardware OpenGL is actually available
 novnc.py        serving the noVNC client and relaying RFB over a websocket
+iap.py          verifying Identity-Aware Proxy assertions on the TCP listener
+                and mapping them to OS Login accounts
 app.py          the only module that knows about every component
 ```
 
@@ -81,12 +83,17 @@ absence silently exposes every display on a local TCP port.
 
 ### Identity
 
-The broker listens only on a unix socket, `/run/ghpc-remote-desktop/broker.sock`,
+The broker always listens on a unix socket, `/run/ghpc-remote-desktop/broker.sock`,
 which any local user may connect to. On each request it asks the kernel which
 account the connecting process runs as (`SO_PEERCRED`), refuses root and any
 account OS Login does not manage, and starts or reuses that account's desktop.
 Nothing the client sends affects the answer, so there is no shared secret and
 no identity header.
+
+When `iap_backend_service` is set, the broker also listens on TCP
+`iap_listen_port` (default 80; below 1024 so only root can bind it). There the
+user is taken from the signed IAP assertion instead, verified by `iap.py`, and
+any request without one is refused.
 
 Users reach the socket by SSH local forwarding, for example
 `ssh -N -L 6080:/run/ghpc-remote-desktop/broker.sock HOST`. sshd opens the
@@ -121,6 +128,8 @@ No modules.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_enable_gpu_acceleration"></a> [enable\_gpu\_acceleration](#input\_enable\_gpu\_acceleration) | Use hardware OpenGL for desktop sessions where a usable GPU is present. | `bool` | `false` | no |
+| <a name="input_iap_backend_service"></a> [iap\_backend\_service](#input\_iap\_backend\_service) | Name of the backend service, in the same project, through which an HTTPS<br/>load balancer with Identity-Aware Proxy reaches this host. When set, the<br/>broker also listens on TCP iap\_listen\_port and serves only requests that<br/>carry an IAP assertion for that backend service. The instance service<br/>account needs compute.backendServices.get to resolve its ID. Leave null to<br/>serve only the unix socket. | `string` | `null` | no |
+| <a name="input_iap_listen_port"></a> [iap\_listen\_port](#input\_iap\_listen\_port) | TCP port the broker listens on for the load balancer. Only used when iap\_backend\_service is set. Below 1024, so that only root can bind it. | `number` | `80` | no |
 | <a name="input_install_root"></a> [install\_root](#input\_install\_root) | Directory under which the broker and front-end assets are installed. | `string` | `"/opt/ghpc-remote-desktop"` | no |
 | <a name="input_max_user_sessions"></a> [max\_user\_sessions](#input\_max\_user\_sessions) | Maximum number of concurrent per-user desktop sessions. | `number` | `32` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. | <pre>list(object({<br/>    server_ip             = string<br/>    remote_mount          = string<br/>    local_mount           = string<br/>    fs_type               = string<br/>    mount_options         = string<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  }))</pre> | `[]` | no |
@@ -137,6 +146,7 @@ No modules.
 | Name | Description |
 | ---- | ----------- |
 | <a name="output_broker_socket_path"></a> [broker\_socket\_path](#output\_broker\_socket\_path) | Unix socket the broker serves on. Forward a local port to it over SSH to reach a desktop. |
+| <a name="output_iap_listen_port"></a> [iap\_listen\_port](#output\_iap\_listen\_port) | TCP port the broker serves the load balancer on, or null when it serves only its unix socket. |
 | <a name="output_startup_runners"></a> [startup\_runners](#output\_startup\_runners) | Ordered startup-script runners that install the desktop runtime, the selected front end and the per-user broker. |
 | <a name="output_vnc_backend"></a> [vnc\_backend](#output\_vnc\_backend) | VNC backend used for per-user desktop sessions. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -44,3 +44,26 @@ def test_display_number_follows_the_slot(tmp_path):
     config = Config(base_config(tmp_path, base_display_number=1))
     assert config.display_number(0) == 1
     assert config.display_number(31) == 32
+
+
+def test_the_iap_listener_is_off_by_default(tmp_path):
+    config = Config(base_config(tmp_path))
+    assert config.iap_listen_port == 0
+    assert config.iap_backend_service == ""
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [{"iap_listen_port": 6080}, {"iap_backend_service": "c1-login"}],
+    ids=["port-only", "backend-only"],
+)
+def test_the_iap_listener_needs_both_settings(tmp_path, overrides):
+    with pytest.raises(ConfigError, match="must be set together"):
+        Config(base_config(tmp_path, **overrides))
+
+
+def test_the_iap_port_must_be_a_port(tmp_path):
+    with pytest.raises(ConfigError, match="valid TCP port"):
+        Config(
+            base_config(tmp_path, iap_listen_port=70000, iap_backend_service="c1")
+        )

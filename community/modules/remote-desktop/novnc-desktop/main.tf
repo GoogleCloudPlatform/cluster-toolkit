@@ -31,6 +31,8 @@ module "novnc_runtime" {
   startup_script               = var.startup_script
   vnc_backend                  = var.vnc_backend
   vnc_display_number           = var.vnc_display_number
+  iap_backend_service          = var.iap_backend_service
+  iap_listen_port              = var.iap_listen_port
 }
 
 module "instances" {

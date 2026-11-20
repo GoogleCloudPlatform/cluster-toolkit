@@ -14,13 +14,17 @@
 
 """Establishing who is asking: the kernel's word, not the client's.
 
-The broker listens only on a unix socket, so every request comes from a process
+The broker listens on a unix socket, so every request on it comes from a process
 on this host, and SO_PEERCRED names the account that process runs as. A browser
 reaches the socket through an SSH forward ("ssh -L 6080:<socket>"), and sshd
 opens that connection as the user who logged in, after OS Login has
 authenticated them. A local user connecting directly is likewise only ever
 themselves. Nothing a client sends can change the answer, so there is no shared
 secret to hold and no header to forge.
+
+The one exception is a broker published through an HTTPS load balancer, which
+also listens on TCP. There the caller is named by a signed IAP assertion
+instead; see iap.py.
 """
 
 import pwd
@@ -32,6 +36,12 @@ from .errors import BrokerError
 # struct ucred: pid_t pid, uid_t uid, gid_t gid. uid_t and gid_t are unsigned,
 # and OS Login hands out uids above 2**31, so they must not be read as int.
 _UCRED = struct.Struct("iII")
+
+
+def on_unix_socket(transport):
+    """Whether a connection arrived on the unix socket rather than over TCP."""
+    connection = transport.get_extra_info("socket") if transport else None
+    return getattr(connection, "family", None) == socket.AF_UNIX
 
 
 def peer_uid(transport):

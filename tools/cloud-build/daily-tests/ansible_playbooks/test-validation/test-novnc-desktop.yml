@@ -51,7 +51,8 @@
   become: true
   ansible.builtin.shell: |
     set -o pipefail
-    ss -ltn | grep -E ':6080\b' || true
+    pid=$(systemctl show -p MainPID --value ghpc-desktop-broker.service)
+    ss -ltnpH | grep -E "pid=${pid}," || true
   args:
     executable: /bin/bash
   changed_when: false
