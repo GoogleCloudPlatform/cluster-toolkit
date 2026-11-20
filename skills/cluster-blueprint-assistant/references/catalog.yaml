@@ -6300,6 +6300,19 @@ blueprints:
     settings: [cloud_parameters, enable_controller_public_ips, machine_type, slurm_conf_tpl, slurmdbd_conf_tpl]
   - id: hpc_dashboard
     source: modules/monitoring/dashboard
+- path: community/examples/instructions/instructions-demo.yaml
+  blueprint_name: instructions-demo
+  scheduler: none
+  description: "Demonstrates how to use the instructions community module to render dynamic post-deployment instructions from a template, wrap next steps in a terminal banner, and persist reference files to disk."
+  vars:
+    admin_user: cluster-admin
+    cluster_name: demo-cluster
+    deployment_name: instructions-test
+    project_id: null
+  modules:
+  - id: custom-next-steps
+    source: community/modules/general/instructions
+    settings: [banner_title, template_path, template_vars, write_to_file]
 - path: community/examples/kms-key-per-service.yaml
   blueprint_name: kms-key-per-service
   scheduler: slurm
@@ -7123,6 +7136,7 @@ module_wiring:
     recommended_use:
     - community/modules/database/bigquery-dataset
     - community/modules/pubsub/topic
+  community/modules/general/instructions: {}
   community/modules/iam/service-account-profiles:
     required_services: [cloudresourcemanager.googleapis.com, iam.googleapis.com]
     required_inputs: [name, profile, service_account_email]
