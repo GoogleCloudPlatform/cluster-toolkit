@@ -244,7 +244,6 @@ resource "google_compute_resource_policy" "nodeset_workload_policy" {
 }
 
 resource "google_compute_region_instance_group_manager" "nodeset_mig" {
-  provider           = google-beta
   for_each           = local.nodeset_migs
   name               = each.value.mig_name
   base_instance_name = each.value.base_instance_name

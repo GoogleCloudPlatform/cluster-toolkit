@@ -17,7 +17,7 @@ import json
 import yaml
 import mock
 from pytest_unordered import unordered
-from common import TstCfg, TstNodeset, TstTPU, tstInstance
+from common import TstCfg, TstNodeset, tstInstance
 import sort_nodes
 
 import util

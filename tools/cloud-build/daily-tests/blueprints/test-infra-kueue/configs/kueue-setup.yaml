@@ -83,7 +83,6 @@ spec:
     - test-locks/ml-h4d-onspot-slurm
     - test-locks/tpu-v6e
     - test-locks/gke-tpu-v6e-flex
-    - test-locks/slurm-gcp-v6-tpu
     - test-locks/gke-tpu-v6e
     - test-locks/gke-g4-onspot
     - test-locks/ansible-vm
@@ -186,8 +185,6 @@ spec:
       - name: test-locks/tpu-v6e
         nominalQuota: 3
       - name: test-locks/gke-tpu-v6e-flex
-        nominalQuota: 1
-      - name: test-locks/slurm-gcp-v6-tpu
         nominalQuota: 1
       - name: test-locks/gke-tpu-v6e
         nominalQuota: 1

@@ -446,7 +446,6 @@ limitations under the License.
 | Name | Type |
 | ---- | ---- |
 | [google-beta_google_compute_instance_from_template.controller](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance_from_template) | resource |
-| [google-beta_google_compute_region_instance_group_manager.nodeset_mig](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_region_instance_group_manager) | resource |
 | [google_compute_address.controller_ips](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
 | [google_compute_disk.controller_disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
 | [google_compute_firewall.health_check_firewall_rule](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall) | resource |
@@ -457,6 +456,7 @@ limitations under the License.
 | [google_compute_region_backend_service.slurm_controller_backend](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_backend_service) | resource |
 | [google_compute_region_health_check.slurm_health_check](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_health_check) | resource |
 | [google_compute_region_instance_group_manager.controller_regional_mig](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_instance_group_manager) | resource |
+| [google_compute_region_instance_group_manager.nodeset_mig](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_instance_group_manager) | resource |
 | [google_compute_region_per_instance_config.controller_regional_stateful_ips](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_per_instance_config) | resource |
 | [google_compute_resource_policy.nodeset_workload_policy](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_resource_policy) | resource |
 | [google_secret_manager_secret.cloudsql](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |

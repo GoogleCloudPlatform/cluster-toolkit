@@ -134,8 +134,6 @@ repos:
     - requests
     - httplib2
     - more-executors
-
-    - google-cloud-tpu
     types: [python]
     pass_filenames: false
 
@@ -156,8 +154,6 @@ repos:
     - pytest
     - pytest-unordered
     - more-executors
-
-    - google-cloud-tpu
     types: [python]
     pass_filenames: false
 

@@ -20,7 +20,7 @@ import unittest.mock
 import unittest
 import tempfile
 
-from common import TstCfg, TstNodeset, TstPartition, TstTPU # needed to import util
+from common import TstCfg, TstNodeset, TstPartition # needed to import util
 import util
 import error_handler
 import resume

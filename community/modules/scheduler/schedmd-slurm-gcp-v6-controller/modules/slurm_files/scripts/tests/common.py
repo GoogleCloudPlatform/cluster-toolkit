@@ -106,10 +106,6 @@ class TstCfg:
     
 
 @dataclass
-class TstTPU:  # to prevent client initialization durint "TPU.__init__"
-    vmcount: int
-
-@dataclass
 class TstMachineConf:
     cpus: int
     memory: int

@@ -144,10 +144,6 @@ class SlurmConfigGeneratorV2411(conf.SlurmConfigGenerator):
     def use_gpu_type(self) -> bool:
         return False
 
-    def install_jobsubmit_lua(self) -> None:
-        # 24.11 does not support or need job_submit.lua
-        pass
-
     def generate_topology_data(self) -> Tuple[bool, Any]:
         return gen_topology_conf(self.lkp)
 
