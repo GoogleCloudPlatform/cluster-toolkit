@@ -2409,7 +2409,7 @@ The Cluster Toolkit automatically sets reserved labels for monitoring and resour
 * `ghpc_blueprint`: The name of the blueprint the deployment was created from (can be overridden in `vars.labels` or module `settings.labels`)
 * `ghpc_deployment`: The name of the specific deployment (can be overridden in `vars.labels` or module `settings.labels`)
 * `ghpc_ai_assisted`: Set to `"true"` when `ai_assisted: true` is configured in the blueprint or deployment variables file (can be overridden in `vars.labels` or module `settings.labels`)
-* `ghpc_creator`: Set automatically to the sanitized account identity (e.g., `jdoe_google_com`) when deploying with a `@google.com` account (or when `--add-creator-label=true` is passed; disable with `--add-creator-label=false`)
+* `ghpc_creator`: Set automatically to the sanitized account identity (e.g., `jdoe_google_com`) when deploying with a `@google.com` account (or when `--add-creator-label=true` is passed; disable with `--add-creator-label=false`). An existing deployment keeps the `ghpc_creator` label it was created with (or none) when it is re-rendered with `gcluster create -w` or `gcluster deploy <blueprint>`. Changing `--add-creator-label` on an existing deployment changes labels on every resource and forces replacement of immutable ones such as instance templates
 * `ghpc_module` and `ghpc_role`: Set inside each Terraform/Packer module's `locals` via `merge(var.labels, { ghpc_module = "...", ghpc_role = "..." })` (see below; because they are merged after `var.labels`, they cannot be overridden via `vars.labels`)
 
 A module role is a default label applied to modules (`ghpc_role`), which

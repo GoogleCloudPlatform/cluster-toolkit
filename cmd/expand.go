@@ -45,7 +45,10 @@ func addExpandFlags(c *cobra.Command, addOutFlag bool) *cobra.Command {
 		"Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")")
 	c.Flags().StringSliceVar(&expandFlags.validatorsToSkip, "skip-validators", nil, "Validators to skip")
 	c.Flags().BoolVar(&expandFlags.addCreatorLabel, "add-creator-label", false,
-		"Add label ghpc_creator to the expanded blueprint. Defaults to true for @google.com accounts.")
+		"Add label ghpc_creator to the expanded blueprint. When not set, an existing deployment keeps the\n"+
+			"ghpc_creator label it was created with (or none); a new deployment gets it for @google.com accounts.\n"+
+			"Changing this on an existing deployment changes labels on every resource and forces replacement of\n"+
+			"immutable ones such as instance templates.")
 	return c
 }
 
