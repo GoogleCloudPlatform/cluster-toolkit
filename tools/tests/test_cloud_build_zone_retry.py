@@ -843,7 +843,11 @@ if [[ -n "${GCLOUD_CALL_LOG:-}" ]]; then
 fi
 if [[ "$1 $2" == "storage cat" ]]; then
     if [[ "$3" == *"lustre"* ]]; then
-        printf "europe-west1-b\\nus-west3-a\\nus-central1-a\\nus-central1-b\\nus-central1-c\\n"
+        if [[ -n "${LUSTRE_GCS_MOCK_CONTENT:-}" ]]; then
+            printf "%b" "${LUSTRE_GCS_MOCK_CONTENT}"
+        else
+            printf "europe-west1-b\\nus-west3-a\\nus-central1-a\\nus-central1-b\\nus-central1-c\\n"
+        fi
     else
         printf "europe-west1-b\\nus-west3-b\\nus-central1-b\\n"
     fi
@@ -1225,6 +1229,19 @@ spec:
             self.assertIn("machine_type: c2-standard-4", content)
             self.assertIn("- name: REQUIRED_SUPPORT_MACHINE_TYPE", content)
             self.assertIn('value: "c2-standard-4"', content)
+
+    def test_select_lustre_zone_strips_whitespace_and_cr(self):
+        """Leading/trailing whitespace and CR in Lustre GCS file still match cleanly."""
+        res = self._run_find_available_zone_with_mock(
+            {
+                "LUSTRE_ONLY": "true",
+                "ZONE": "us-central1-c",
+                "LUSTRE_EXCLUDE_ZONES": "us-central1-a",
+                "LUSTRE_GCS_MOCK_CONTENT": "  us-central1-a \t\r\n   us-central1-c   \n",
+            }
+        )
+        self.assertIn("OUT_ZONE=us-central1-c", res.stdout)
+        self.assertIn("OUT_LUSTRE_ZONE=us-central1-c", res.stdout)
 
 
 if __name__ == "__main__":

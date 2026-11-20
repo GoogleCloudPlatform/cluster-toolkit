@@ -398,7 +398,7 @@ select_lustre_zone() {
 	local region=$1
 	local preferred_zone=${2:-}
 	local candidates
-	candidates=$(echo "${LUSTRE_GCS_CONTENT}" | tr -d '\r' | grep -E "^${region}-[a-z]$" || true)
+	candidates=$(echo "${LUSTRE_GCS_CONTENT}" | tr -d '\r' | sed 's/[[:space:]]//g' | grep -x -E "${region}-[a-z]" || true)
 	if [[ -z "${candidates}" ]]; then
 		echo "INFO: No Managed Lustre candidate zones found in region ${region}."
 		return 1
