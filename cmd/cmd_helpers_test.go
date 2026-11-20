@@ -114,12 +114,20 @@ func TestHasSelectedGroupOfKind(t *testing.T) {
 		t.Error("expected both kinds to be selected when no group filter is set")
 	}
 
-	flagOnlyGroups = []string{"tf"}
+	flagOnlyGroups, flagSkipGroups = []string{"tf"}, nil
 	if !hasSelectedGroupOfKind(bp, config.TerraformKind) {
 		t.Error("expected terraform kind to be selected with --only tf")
 	}
 	if hasSelectedGroupOfKind(bp, config.PackerKind) {
 		t.Error("expected packer kind not to be selected with --only tf")
+	}
+
+	flagOnlyGroups, flagSkipGroups = nil, []string{"tf"}
+	if hasSelectedGroupOfKind(bp, config.TerraformKind) {
+		t.Error("expected terraform kind not to be selected with --skip tf")
+	}
+	if !hasSelectedGroupOfKind(bp, config.PackerKind) {
+		t.Error("expected packer kind to be selected with --skip tf")
 	}
 }
 
