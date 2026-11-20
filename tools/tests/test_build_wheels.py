@@ -490,9 +490,16 @@ class TestBuildWheel(_FakeRepo):
                 self.build()
 
     def test_out_of_range_source_date_epoch_is_an_error(self):
-        with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "9" * 30}):
-            with self.assertRaisesRegex(ValueError, "out of range"):
-                self.build()
+        # 2108-01-01, a time in milliseconds, and a huge value.
+        for epoch in ["4354819200", "1763600000000", "9" * 30]:
+            with self.subTest(epoch=epoch), mock.patch.dict(os.environ,
+                                                            {"SOURCE_DATE_EPOCH": epoch}):
+                with self.assertRaisesRegex(ValueError, "out of range"):
+                    self.build()
+
+    def test_latest_zip_time_is_accepted(self):
+        with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": str(bw.ZIP_MAX_EPOCH)}):
+            self.assertEqual(self._entry_times(), {(2107, 12, 31, 23, 59, 58)})
 
     def test_missing_binary_is_an_error(self):
         os.remove(self.binary)

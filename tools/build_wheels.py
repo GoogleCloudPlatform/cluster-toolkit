@@ -52,6 +52,7 @@ SHARE_DIR = "share/cluster-toolkit"
 # Timestamp for wheel entries when neither SOURCE_DATE_EPOCH nor git is available.
 DEFAULT_DATE_TIME = (2026, 1, 1, 0, 0, 0)
 ZIP_MIN_EPOCH = 315532800  # 1980-01-01, the earliest time a zip entry can store
+ZIP_MAX_EPOCH = 4354819199  # 2107-12-31 23:59:59, the latest time a zip entry can store
 
 SUMMARY = "Google Cloud Cluster Toolkit command line tool (gcluster)"
 HOMEPAGE = "https://cloud.google.com/cluster-toolkit"
@@ -336,10 +337,10 @@ def zip_date_time(repo_root):
             return DEFAULT_DATE_TIME
     if not epoch.isdigit():
         raise ValueError(f"SOURCE_DATE_EPOCH must be a Unix timestamp, got {epoch!r}")
-    try:
-        return time.gmtime(max(int(epoch), ZIP_MIN_EPOCH))[:6]
-    except (OverflowError, OSError, ValueError) as e:
-        raise ValueError(f"timestamp {epoch} is out of range") from e
+    if int(epoch) > ZIP_MAX_EPOCH:
+        raise ValueError(f"timestamp {epoch} is out of range: zip files can't store times "
+                         "after 2107 (SOURCE_DATE_EPOCH is in seconds, not milliseconds)")
+    return time.gmtime(max(int(epoch), ZIP_MIN_EPOCH))[:6]
 
 
 def _record_hash(data):
