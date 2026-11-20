@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Safely extracts or updates EXCLUDE_ZONES in Kubernetes Job manifests.
+"""Safely extracts or updates zone exclusion env vars in Kubernetes Job manifests.
 
 Uses only the Python 3 standard library so it executes reliably in minimal
 environments (such as gcr.io/cloud-builders/gcloud) without external dependencies.
@@ -25,12 +25,17 @@ import re
 import sys
 
 
-def update_job_yaml(content: str, zones_to_inject: str = None) -> tuple:
-    """Extracts or updates EXCLUDE_ZONES in the target test runner container.
+def update_job_yaml(
+    content: str,
+    zones_to_inject: str = None,
+    env_var: str = "EXCLUDE_ZONES",
+) -> tuple:
+    """Extracts or updates a zone exclusion env var in the target container.
 
     Args:
         content: The text content of the job.yaml file.
         zones_to_inject: Space-separated zones to inject. If None, only extracts.
+        env_var: Environment variable name to extract or inject.
 
     Returns:
         tuple of (extracted_zones: str, modified_content: str)
@@ -150,7 +155,9 @@ def update_job_yaml(content: str, zones_to_inject: str = None) -> tuple:
                 first_env_item_idx = abs_i
                 first_env_item_indent = m_it.group(1)
 
-        if re.search(r'name:\s*["\']?EXCLUDE_ZONES["\']?\s*(?:#.*)?$', line):
+        if re.search(
+            rf'name:\s*["\']?{re.escape(env_var)}["\']?\s*(?:#.*)?$', line
+        ):
             # Check backwards (if value: preceded name:)
             for b in range(abs_i - 1, max(target_start, abs_i - 3), -1):
                 if lines[b].strip().startswith("#"):
@@ -197,13 +204,15 @@ def update_job_yaml(content: str, zones_to_inject: str = None) -> tuple:
         else:
             it_ind = env_indent
             val_ind = it_ind + "  "
-        injection = f'{it_ind}- name: EXCLUDE_ZONES\n{val_ind}value: "{zones_to_inject}"\n'
+        injection = (
+            f'{it_ind}- name: {env_var}\n{val_ind}value: "{zones_to_inject}"\n'
+        )
         lines.insert(env_line_idx + 1, injection)
     elif env_empty_idx != -1:
         # Replace empty flow list 'env: []' with block list
         lines[env_empty_idx] = (
             f'{env_indent}env:\n'
-            f'{env_indent}- name: EXCLUDE_ZONES\n'
+            f'{env_indent}- name: {env_var}\n'
             f'{env_indent}  value: "{zones_to_inject}"\n'
         )
     else:
@@ -218,13 +227,21 @@ def update_job_yaml(content: str, zones_to_inject: str = None) -> tuple:
                 img_ind = m.group(1)
                 break
         if img_line_idx != -1:
-            injection = f'{img_ind}env:\n{img_ind}- name: EXCLUDE_ZONES\n{img_ind}  value: "{zones_to_inject}"\n'
+            injection = (
+                f'{img_ind}env:\n'
+                f'{img_ind}- name: {env_var}\n'
+                f'{img_ind}  value: "{zones_to_inject}"\n'
+            )
             lines.insert(img_line_idx + 1, injection)
         else:
             c_base_ind = " " * (
                 item_indent + 2 if item_indent is not None else 8
             )
-            injection = f'{c_base_ind}env:\n{c_base_ind}- name: EXCLUDE_ZONES\n{c_base_ind}  value: "{zones_to_inject}"\n'
+            injection = (
+                f'{c_base_ind}env:\n'
+                f'{c_base_ind}- name: {env_var}\n'
+                f'{c_base_ind}  value: "{zones_to_inject}"\n'
+            )
             lines.insert(target_end, injection)
 
     return extracted_val, "".join(lines)
@@ -232,14 +249,21 @@ def update_job_yaml(content: str, zones_to_inject: str = None) -> tuple:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Update or extract EXCLUDE_ZONES in a Kubernetes Job manifest."
+        description=(
+            "Update or extract zone exclusion env vars in a Kubernetes Job"
+            " manifest."
+        )
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
-        "--extract", action="store_true", help="Extract existing EXCLUDE_ZONES"
+        "--extract",
+        action="store_true",
+        help="Extract existing zone exclusion env var",
     )
     group.add_argument(
-        "--inject", action="store_true", help="Inject or update EXCLUDE_ZONES"
+        "--inject",
+        action="store_true",
+        help="Inject or update zone exclusion env var",
     )
     parser.add_argument(
         "--file",
@@ -251,6 +275,11 @@ def main():
         default="",
         help="Space-separated zone list to inject",
     )
+    parser.add_argument(
+        "--env-var",
+        default="EXCLUDE_ZONES",
+        help="Target environment variable name (default: EXCLUDE_ZONES)",
+    )
     args = parser.parse_args()
 
     if not os.path.isfile(args.file):
@@ -261,11 +290,13 @@ def main():
         content = f.read()
 
     if args.extract:
-        val, _ = update_job_yaml(content, None)
+        val, _ = update_job_yaml(content, None, env_var=args.env_var)
         if val:
             print(val)
     elif args.inject:
-        _, modified = update_job_yaml(content, args.zones)
+        _, modified = update_job_yaml(
+            content, args.zones, env_var=args.env_var
+        )
         tmp_file = f"{args.file}.tmp"
         with open(tmp_file, "w", encoding="utf-8") as f:
             f.write(modified)
