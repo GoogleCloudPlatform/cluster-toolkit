@@ -21,6 +21,7 @@ import base64
 import copy
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime, timezone
+import errno
 import hashlib
 import inspect
 import json
@@ -29,12 +30,14 @@ import logging.config
 import logging.handlers
 import math
 import os
+import random
 import re
 import shlex
 import shutil
 import socket
 import subprocess
 import sys
+import threading
 from enum import Enum
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -686,18 +689,129 @@ def install_custom_scripts(check_hash:bool=False):
                 source.download_to_file(f)
             chown_slurm(fullpath, mode=0o755)
 
-def compute_service(version="beta"):
-    """Make thread-safe compute service handle
-    creates a new Http for each request
+_cred_refresh_lock = threading.Lock()
+_HTTP_TIMEOUT_SEC = 120
+
+
+class _ThreadSafeAuthorizedHttp(google_auth_httplib2.AuthorizedHttp):
+    """AuthorizedHttp wrapper that serializes shared credential token refreshes across threads."""
+
+    def request(
+        self,
+        uri,
+        method="GET",
+        body=None,
+        headers=None,
+        redirections=httplib2.DEFAULT_MAX_REDIRECTS,
+        connection_type=None,
+        **kwargs,
+    ):
+        _credential_refresh_attempt = kwargs.pop("_credential_refresh_attempt", 0)
+        request_headers = headers.copy() if headers is not None else {}
+
+        if self.credentials is not None:
+            with _cred_refresh_lock:
+                self.credentials.before_request(self._request, method, uri, request_headers)
+
+        body_stream_position = None
+        if body is not None and callable(getattr(body, "tell", None)) and callable(getattr(body, "seek", None)):
+            body_stream_position = body.tell()
+
+        response, content = self.http.request(
+            uri,
+            method,
+            body=body,
+            headers=request_headers,
+            redirections=redirections,
+            connection_type=connection_type,
+            **kwargs,
+        )
+
+        if (
+            self.credentials is not None
+            and response.status in self._refresh_status_codes
+            and _credential_refresh_attempt < self._max_refresh_attempts
+        ):
+            with _cred_refresh_lock:
+                self.credentials.refresh(self._request)
+            if body_stream_position is not None:
+                body.seek(body_stream_position)
+            return self.request(
+                uri,
+                method=method,
+                body=body,
+                headers=headers,
+                redirections=redirections,
+                connection_type=connection_type,
+                _credential_refresh_attempt=_credential_refresh_attempt + 1,
+                **kwargs,
+            )
+
+        return response, content
+
+
+class _ThreadLocalHttp:
+    """Http proxy dispatching .request() to a per-thread httplib2.Http pool at execution time.
+
+    HttpRequest and BatchHttpRequest objects are built on the main thread before being
+    submitted to ThreadPoolExecutor workers; resolving threading.local() inside .request()
+    guarantees worker threads never share an underlying httplib2 SSL socket.
     """
+
+    def __init__(self, credentials, user_agent: str):
+        self._credentials = credentials
+        self._user_agent = user_agent
+        self._tls = threading.local()
+
+    @property
+    def credentials(self):
+        if self._credentials is not None and not self._credentials.valid:
+            with _cred_refresh_lock:
+                if not self._credentials.valid:
+                    req = google_auth_httplib2.Request(self._get_raw_http())
+                    self._credentials.refresh(req)
+        return self._credentials
+
+    def _get_raw_http(self):
+        raw = getattr(self._tls, "raw_http", None)
+        if raw is None:
+            raw = set_user_agent(httplib2.Http(timeout=_HTTP_TIMEOUT_SEC), self._user_agent)
+            self._tls.raw_http = raw
+        return raw
+
+    def _get_thread_http(self):
+        http = getattr(self._tls, "http", None)
+        if http is None:
+            raw = self._get_raw_http()
+            if self._credentials is not None:
+                http = _ThreadSafeAuthorizedHttp(self._credentials, http=raw)
+            else:
+                http = raw
+            self._tls.http = http
+        return http
+
+    def request(self, uri, method="GET", body=None, headers=None, **kwargs):
+        return self._get_thread_http().request(
+            uri, method=method, body=body, headers=headers, **kwargs
+        )
+
+    def close(self):
+        http = getattr(self._tls, "http", None)
+        if http is not None and hasattr(http, "close"):
+            http.close()
+
+    def __getattr__(self, name: str):
+        return getattr(self._get_thread_http(), name)
+
+
+def compute_service(version="beta"):
+    """Make thread-safe compute service handle reusing one Http connection pool per thread."""
     credentials = get_credentials()
     dev_key = get_dev_key()
+    tls_http = _ThreadLocalHttp(credentials, USER_AGENT)
 
     def build_request(http, *args, **kwargs):
-        new_http = set_user_agent(httplib2.Http(), USER_AGENT)
-        if credentials is not None:
-            new_http = google_auth_httplib2.AuthorizedHttp(credentials, http=new_http)
-        return googleapiclient.http.HttpRequest(new_http, *args, **kwargs)
+        return googleapiclient.http.HttpRequest(tls_http, *args, **kwargs)
 
     ver = endpoint_version(ApiEndpoint.COMPUTE)
     if ver:
@@ -1378,9 +1492,44 @@ METADATA_TIMEOUT = 2
 # Set once the metadata server turns out to be unreachable, so a host without
 # one, an on-prem controller, does not wait for the same failure on every key.
 _metadata_unreachable = False
+_metadata_tls = threading.local()
+
 
 class MetadataNotFoundError(Exception):
     pass
+
+
+def _get_metadata_session() -> requests_lib.Session:
+    sess = getattr(_metadata_tls, "session", None)
+    if sess is None:
+        sess = requests_lib.Session()
+        _metadata_tls.session = sess
+    return sess
+
+
+def _is_ephemeral_port_exhaustion(exc: BaseException) -> bool:
+    """Return True if an exception stems from local EADDRNOTAVAIL rather than a missing server."""
+    visited: set[int] = set()
+    stack: List[BaseException] = [exc]
+    while stack:
+        cur = stack.pop()
+        if id(cur) in visited:
+            continue
+        visited.add(id(cur))
+        if (isinstance(cur, OSError) and cur.errno == errno.EADDRNOTAVAIL) or (
+            "Cannot assign requested address" in str(cur)
+        ):
+            return True
+        for child in (
+            getattr(cur, "reason", None),
+            getattr(cur, "__cause__", None),
+            getattr(cur, "__context__", None),
+            *getattr(cur, "args", ()),
+        ):
+            if isinstance(child, BaseException):
+                stack.append(child)
+    return False
+
 
 def get_metadata(path:str, silent=False) -> str:
     """Get metadata relative to metadata/computeMetadata/v1"""
@@ -1390,16 +1539,16 @@ def get_metadata(path:str, silent=False) -> str:
     if _metadata_unreachable:
         raise MetadataNotFoundError(f"no metadata server, not fetching {url}")
     try:
-        resp = requests_lib.get(url, headers=HEADERS, timeout=METADATA_TIMEOUT)
+        resp = _get_metadata_session().get(url, headers=HEADERS, timeout=METADATA_TIMEOUT)
         resp.raise_for_status()
         return resp.text
-    except requests_lib.exceptions.ConnectionError:
-        # Nothing listening at all, an on-prem controller, so stop asking it for
-        # anything else. A timeout does not qualify, there the server is up and
-        # just slow, and poisoning the process would break a cloud node.
-        _metadata_unreachable = True
+    except requests_lib.exceptions.ConnectionError as e:
+        # Local ephemeral port exhaustion (EADDRNOTAVAIL / Errno 99) is transient
+        # and must not permanently poison _metadata_unreachable on a cloud VM.
+        if not _is_ephemeral_port_exhaustion(e):
+            _metadata_unreachable = True
         if not silent:
-            log.warning(f"metadata server unreachable ({url})")
+            log.warning(f"metadata server unreachable ({url}): {e}")
         raise MetadataNotFoundError(f"failed to get_metadata from {url}")
     except (requests_lib.exceptions.Timeout, requests_lib.exceptions.HTTPError):
         if not silent:
@@ -1503,37 +1652,77 @@ def to_hostnames(nodelist: str) -> List[str]:
 
 def retry_exception(exc) -> bool:
     """return true for exceptions that should always be retried"""
+    if _is_ephemeral_port_exhaustion(exc):
+        return True
     msg = str(exc)
+    msg_lower = msg.lower()
+    # Physical GCE capacity stockouts (e.g. regionInstances.bulkInsert HTTP 503
+    # reason='insufficientCapacity') must NOT spin-retry 20x inside ensure_execute(),
+    # which holds resume.py workers open and burns regional 'Write requests per minute'
+    # quota. Fail fast so resume.py routes them to error_handler -> Action.REQUEUE.
+    non_retryable_capacity = (
+        "insufficientcapacity",
+        "insufficient_resource_capacity",
+        "sufficient capacity",
+        "zoneresourcepoolexhausted",
+        "zone_resource_pool_exhausted",
+        "vm_min_count_not_reached",
+    )
+    if any(tok in msg_lower for tok in non_retryable_capacity):
+        return False
+
+    resp = getattr(exc, "resp", None)
+    status = getattr(resp, "status", None)
+    if status in (429, 500, 502, 503, 504):
+        return True
     retry_errors = (
         "Rate Limit Exceeded",
+        "rateLimitExceeded",
         "Quota Exceeded",
         "Quota exceeded",
+        "backendError",
+        "Backend Error",
+        "Internal Error",
+        "Service Unavailable",
     )
     return any(err in msg for err in retry_errors)
 
 
 def ensure_execute(request):
-    """Handle rate limits and socket time outs"""
-
+    """Handle rate limits, transient port exhaustion, and socket timeouts."""
+    last_exc: Optional[BaseException] = None
     for retry, wait in enumerate(backoff_delay(0.5, timeout=10 * 60, count=20)):
+        jittered_wait = wait * random.uniform(0.75, 1.25) if wait > 0 else 0
         try:
             return request.execute()
         except googleapiclient.errors.HttpError as e:
             if retry_exception(e):
+                last_exc = e
                 log.error(f"retry:{retry} '{e}'")
-                sleep(wait)
+                if jittered_wait > 0:
+                    sleep(jittered_wait)
                 continue
             raise
 
         except socket.timeout as e:
-            # socket timed out, try again
-            log.debug(e)
+            last_exc = e
+            log.warning(f"retry:{retry} socket timeout: {e}")
+            if jittered_wait > 0:
+                sleep(jittered_wait)
+            continue
 
         except Exception as e:
+            if _is_ephemeral_port_exhaustion(e):
+                last_exc = e
+                log.warning(f"retry:{retry} transient local port exhaustion: {e}")
+                if jittered_wait > 0:
+                    sleep(jittered_wait)
+                continue
             log.error(e, exc_info=True)
             raise
 
-        break
+    assert last_exc is not None
+    raise last_exc
 
 
 def batch_execute(requests, retry_cb=None, log_err=log.error):
@@ -1557,28 +1746,36 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
                     failed[rid] = (requests[rid], e)
         return done, failed
 
-    BATCH_LIMIT = 1000
+    BATCH_LIMIT = 500
+    MAX_BATCH_RETRIES = 12
     if not isinstance(requests, dict):
         requests = {str(k): v for k, v in enumerate(requests)}  # rid generated here
+    else:
+        requests = dict(requests)
     done = {}
     failed = {}
-    timestamps: List[float] = []
+    cb_lock = threading.Lock()
     rate_limited = False
+    rl_attempt = 0
 
     def batch_callback(rid, resp, exc):
         nonlocal rate_limited
         if exc is not None:
             log_err(f"compute request exception {rid}: {exc}")
-            if retry_exception(exc):
-                rate_limited = True
+            if retry_exception(exc) and rl_attempt < MAX_BATCH_RETRIES:
+                with cb_lock:
+                    rate_limited = True
             else:
-                req = requests.pop(rid)
-                failed[rid] = (req, exc)
+                with cb_lock:
+                    req = requests.pop(rid, None)
+                    if req is not None:
+                        failed[rid] = (req, exc)
         else:
             # if retry_cb is set, don't move to done until it returns false
             if retry_cb is None or not retry_cb(resp):
-                requests.pop(rid)
-                done[rid] = resp
+                with cb_lock:
+                    requests.pop(rid, None)
+                    done[rid] = resp
 
     def batch_request(reqs):
         batch = lookup().compute.new_batch_http_request(callback=batch_callback)
@@ -1587,19 +1784,19 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
         return batch
 
     while requests:
-        if timestamps:
-            timestamps = [stamp for stamp in timestamps if stamp > time()]
-        if rate_limited and timestamps:
-            stamp = next(iter(timestamps))
-            sleep(max(stamp - time(), 0))
+        if rate_limited:
+            rl_attempt += 1
+            delay = min(20.0, 2.0 * (2 ** min(rl_attempt - 1, 3))) * random.uniform(0.75, 1.25)
+            sleep(delay)
             rate_limited = False
-        # up to API_REQ_LIMIT (2000) requests
-        # in chunks of up to BATCH_LIMIT (1000)
+        else:
+            rl_attempt = 0
+        # up to 1000 requests per wave in chunks of up to BATCH_LIMIT (500)
+        wave_limit = min(API_REQ_LIMIT, 1000)
         batches = [
             batch_request(chunk)
-            for chunk in chunked(islice(requests.items(), API_REQ_LIMIT), BATCH_LIMIT)
+            for chunk in chunked(islice(requests.items(), wave_limit), BATCH_LIMIT)
         ]
-        timestamps.append(time() + 100)
         with ThreadPoolExecutor() as exe:
             futures = []
             for batch in batches:
@@ -2203,16 +2400,16 @@ class Lookup:
     @lru_cache()
     def _get_reservation(self, project: str, zone: str, name: str) -> Any:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/reservations"""
-        return self.compute.reservations().get(
-            project=project, zone=zone, reservation=name).execute()
+        req = self.compute.reservations().get(project=project, zone=zone, reservation=name)
+        return ensure_execute(req)
 
-    @lru_cache()
+    @lru_cache(maxsize=None)
     def get_mig(self, project: str, region: str, self_link: str) -> Any:
         """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
         req = self.compute.regionInstanceGroupManagers().get(project=project, region=region, instanceGroupManager=self_link)
         return ensure_execute(req)
 
-    @lru_cache()
+    @lru_cache(maxsize=None)
     def get_mig_instances(self, project: str, region: str, self_link: str) -> Any:
         """Returns all managed instances for a given MIG, handling pagination."""
         all_instances = []
@@ -2234,7 +2431,7 @@ class Lookup:
                 break
         return {"managedInstances": all_instances}
 
-    @lru_cache()
+    @lru_cache(maxsize=None)
     def get_mig_repairing_instances(self, project: str, region: str, self_link: str) -> Set[str]:
         """Returns the set of instance names currently in REPAIRING state in a given MIG."""
         mig_insts = self.get_mig_instances(project, region, self_link)
@@ -2260,7 +2457,8 @@ class Lookup:
     @lru_cache()
     def _get_future_reservation(self, project:str, zone:str, name: str) -> Any:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/futureReservations"""
-        return self.compute.futureReservations().get(project=project, zone=zone, futureReservation=name).execute()
+        req = self.compute.futureReservations().get(project=project, zone=zone, futureReservation=name)
+        return ensure_execute(req)
 
     def get_reservation_details(self, project:str, zone:str, name:str, bulk_insert_name:str) -> ReservationDetails:
         try:

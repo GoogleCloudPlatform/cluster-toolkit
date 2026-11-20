@@ -44,8 +44,25 @@ if ! type -P gcloud 1>/dev/null; then
 	exit 1
 fi
 
+tmpfile=""
+tmp_gcloud_cfg=""
+trap '[[ -n "$tmpfile" ]] && rm -f "$tmpfile"; [[ -n "$tmp_gcloud_cfg" ]] && rm -rf "$tmp_gcloud_cfg"' EXIT
 tmpfile=$(mktemp) # have to use a temp file, since `< <(gcloud ...)` doesn't work nicely with `head`
-trap 'rm -f "$tmpfile"' EXIT
+tmp_gcloud_cfg=$(mktemp -d)
+src_gcloud_cfg="${CLOUDSDK_CONFIG:-$HOME/.config/gcloud}"
+if [[ -d "$src_gcloud_cfg" ]]; then
+	for item in "$src_gcloud_cfg"/*; do
+		[[ -e "$item" ]] || continue
+		base="$(basename "$item")"
+		case "$base" in
+		logs | access_tokens.db* | *.lock) continue ;;
+		esac
+		cp -a "$item" "$tmp_gcloud_cfg/" 2>/dev/null || true
+	done
+fi
+export CLOUDSDK_CONFIG="$tmp_gcloud_cfg"
+export CLOUDSDK_CORE_DISABLE_FILE_LOGGING=1
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 
 # Static MIGs "<cluster>-<nodeset>-mig-<N>" (and their member VMs) are owned and deleted by
 # Terraform (nodeset_mig in partition.tf). Deleting them here races that delete and fails
