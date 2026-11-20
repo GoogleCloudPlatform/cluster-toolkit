@@ -57,9 +57,13 @@ jobs:
           exit 1
         fi
 
-        # Ensure consistent 'v' prefix
+        # Ensure consistent 'v' prefix and validate semver tag (vX.Y.Z)
         VERSION="${VERSION#v}"
         VERSION="v${VERSION}"
+        if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "ERROR: Derived version '$VERSION' from branch '$BRANCH' is not a valid semver tag (expected vX.Y.Z)." >&2
+          exit 1
+        fi
 
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
