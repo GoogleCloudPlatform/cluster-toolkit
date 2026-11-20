@@ -95,6 +95,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [eda-all-on-cloud.yaml](#eda-all-on-cloudyaml-) ![community-badge]
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
   * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
+  * [cloudsql-database.yaml](#cloudsql-databaseyaml--) ![community-badge] ![experimental-badge]
   * [cloud-build-remote.yaml](#cloud-build-remoteyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-scale.yaml](#hpc-slurm-scaleyaml-) ![community-badge]
   * [hpc-slurm-multiregion-scale.yaml](#hpc-slurm-multiregion-scaleyaml-) ![community-badge]
@@ -282,6 +283,7 @@ the experimental badge (![experimental-badge]).
 | [community/examples/apptainer-artifact-registry-openfoam.yaml](../community/examples/apptainer-artifact-registry-openfoam.yaml) | none | e2-standard-4 | This blueprint demonstrates staging and running an Apptainer SIF image through the apptainer-runtime and apptainer-app modules, backed by an artifact-registry repository configured as a REMOTE_REPOSITORY pull-through cache mirroring... |
 | [community/examples/client-google-cloud-storage.yaml](../community/examples/client-google-cloud-storage.yaml) | none | n2d-standard-2 | This example demonstrates several different ways to use Google Cloud Storage (GCS) buckets in the Cluster Toolkit. There are two buckets referenced in the example: |
 | [community/examples/cloud-build/cloud-build-remote.yaml](../community/examples/cloud-build/cloud-build-remote.yaml) | none | - | Demonstrates how to use the artifact-registry and cloud-build community modules to create a Docker repository in Artifact Registry and build a container image (AlphaFold 3) directly from a remote GitHub repository using Cloud Build. |
+| [community/examples/cloudsql-database.yaml](../community/examples/cloudsql-database.yaml) | none | - | A private Cloud SQL instance whose generated password is delivered through Secret Manager; see the cloudsql module README. |
 | [community/examples/eda/eda-all-on-cloud.yaml](../community/examples/eda/eda-all-on-cloud.yaml) | slurm | h4d-highmem-192-lssd | Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also creates two new VPC networks, a network called eda-net which connects VMs, Slurm and storage and a RDMA network called eda-rdma-net between the... |
 | [community/examples/eda/eda-hybrid-cloud.yaml](../community/examples/eda/eda-hybrid-cloud.yaml) | slurm | h4d-highmem-192-lssd | Creates a basic auto-scaling Slurm cluster intended for EDA use cases. The blueprint also connects to one existing user network which connects VMs, Slurm and storage and creates a RDMA network called eda-rdma-net for low latency... |
 | [community/examples/flux-framework/flux-cluster.yaml](../community/examples/flux-framework/flux-cluster.yaml) | flux | n2d-standard-8 | The flux-cluster.yaml blueprint describes a flux-framework cluster where flux is deployed as the native resource manager. |
@@ -2174,6 +2176,14 @@ Creates a Slurm cluster on C3 machine types for Google Cloud Dedicated (GCD) and
 The deployment instructions can be found in the [README](../community/examples/hpc-slurm-google-cloud-dedicated/README.md).
 
 [hpc-slurm-google-cloud-dedicated.yaml]: ../community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml
+
+### [cloudsql-database.yaml] ![community-badge] ![experimental-badge]
+
+A private Cloud SQL instance whose generated password is delivered through
+Secret Manager; see the [cloudsql] module README.
+
+[cloudsql]: ../community/modules/database/cloudsql/README.md
+[cloudsql-database.yaml]: ../community/examples/cloudsql-database.yaml
 
 ### [cloud-build-remote.yaml] ![community-badge] ![experimental-badge]
 

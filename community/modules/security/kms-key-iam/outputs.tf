@@ -75,7 +75,7 @@ output "repository_kms_key_name" {
 }
 
 output "encryption_key_name" {
-  description = "The CryptoKey id under the name used by the Cloud SQL federation module, so `use` wires it automatically. Consumed by community/modules/database/slurm-cloudsql-federation's encryption_key_name. Grant the `cloudsql` service agent."
+  description = "The CryptoKey id under the name used by the Cloud SQL federation module, so `use` wires it automatically. Consumed by the encryption_key_name input of community/modules/database/cloudsql and community/modules/database/slurm-cloudsql-federation. Grant the `cloudsql` service agent."
   value       = var.crypto_key_id
 
   depends_on = [google_kms_crypto_key_iam_member.this]

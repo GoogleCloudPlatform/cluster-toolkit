@@ -104,6 +104,10 @@ Modules that are still in development and less stable are labeled with the
 
 * **[redis]** ![core-badge] : Deploys a Google Cloud Memorystore for Redis instance.
 * **[spanner]** ![core-badge] : Creates Spanner instances and databases.
+* **[cloudsql]** ![community-badge] ![experimental-badge] : Creates a
+  general-purpose [Google Cloud SQL](https://cloud.google.com/sql/) instance,
+  database and user, reachable over private connectivity, with credentials
+  delivered as a Secret Manager reference.
 * **[slurm-cloudsql-federation]** ![community-badge] ![experimental-badge] :
   Creates a [Google SQL Instance](https://cloud.google.com/sql/) meant to be
   integrated with a [slurm-controller][schedmd-slurm-gcp-v6-controller].
@@ -115,6 +119,7 @@ Modules that are still in development and less stable are labeled with the
 
 [redis]: database/redis/README.md
 [spanner]: database/spanner/README.md
+[cloudsql]: ../community/modules/database/cloudsql/README.md
 [slurm-cloudsql-federation]: ../community/modules/database/slurm-cloudsql-federation/README.md
 [bigquery-dataset]: ../community/modules/database/bigquery-dataset/README.md
 [bigquery-table]: ../community/modules/database/bigquery-table/README.md
