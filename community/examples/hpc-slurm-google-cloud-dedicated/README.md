@@ -37,7 +37,7 @@ deployment_groups:
     modules:
       - id: slurm-custom-image
         source: modules/packer/custom-image
-        # Builds Rocky Linux 8 image with Slurm v6
+        # Builds Rocky Linux 9 image with Slurm v6
 
   # Group 3: Cluster Provisioning
   - group: cluster
@@ -164,7 +164,7 @@ zone=u-<location>-a,\
 universe_domain=apis-<location>.goog,\
 service_account_email=<account_id>-compute@developer.<prefix>-system.iam.gserviceaccount.com,\
 source_image_project=<prefix>-system:rocky-linux-cloud,\
-source_image_family=rocky-linux-8-optimized-gcp" \
+source_image_family=rocky-linux-9-optimized-gcp" \
   -w --force --validation-level=IGNORE
 ```
 

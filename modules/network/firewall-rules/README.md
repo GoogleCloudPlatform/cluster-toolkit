@@ -21,8 +21,7 @@ and network values must set `use_subnetwork_data: false` when upgrading.
 
 This module can be used by other Toolkit modules to create application-specific
 firewall rules or in conjunction with the [pre-existing-vpc] module to enable
-traffic in existing networks. The snippet below is drawn from the
-[ml-slurm.yaml] example:
+traffic in existing networks:
 
 ```yaml
 - group: primary
@@ -123,4 +122,3 @@ No outputs.
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 
 [pre-existing-vpc]: ../pre-existing-vpc/README.md
-[ml-slurm.yaml]: ../../../examples/ml-slurm.yaml
