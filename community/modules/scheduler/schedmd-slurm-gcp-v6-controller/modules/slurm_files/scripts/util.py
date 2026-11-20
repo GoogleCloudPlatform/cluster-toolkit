@@ -1762,6 +1762,7 @@ class Job:
 class NodeState:
     base: str
     flags: frozenset
+    reason: Optional[str] = None
 
 class Lookup:
     """Wrapper class for cached data access"""
@@ -2110,26 +2111,31 @@ class Lookup:
 
     @lru_cache(maxsize=None)
     def slurm_nodes(self) -> Dict[str, NodeState]:
-        def parse_line(node_line) -> Tuple[str, NodeState]:
-            """turn node,state line to (node, NodeState)"""
-            # state flags include: CLOUD, COMPLETING, DRAIN, FAIL, POWERED_DOWN,
-            #   POWERING_DOWN
-            node, fullstate = node_line.split(",")
-            state = fullstate.split("+")
-            state_tuple = NodeState(base=state[0], flags=frozenset(state[1:]))
-            return (node, state_tuple)
+        node_re = re.compile(r"^NodeName=(\S+)")
+        state_re = re.compile(r"\bState=(\S+)")
+        reason_re = re.compile(r"\bReason=(.*?)(?:\s+\b(?:Comment|Extra|InstanceId|InstanceType)=|$)")
+        reason_ts_re = re.compile(r"\s*\[[^\[\]]*@[^\[\]]*\]\s*$")
 
-        cmd = (
-            f"{self.scontrol} show nodes | "
-            r"grep -oP '^NodeName=\K(\S+)|\s+State=\K(\S+)' | "
-            r"paste -sd',\n'"
-        )
-        node_lines = run(cmd, shell=True).stdout.rstrip().splitlines()
-        nodes = {
-            node: state
-            for node, state in map(parse_line, node_lines)
-            if "CLOUD" in state.flags or "DYNAMIC_NORM" in state.flags
-        }
+        out = run(f"{self.scontrol} show nodes -o").stdout
+        nodes: Dict[str, NodeState] = {}
+        for line in out.splitlines():
+            m_node = node_re.search(line)
+            m_state = state_re.search(line)
+            if not m_node or not m_state:
+                continue
+            state_parts = m_state.group(1).split("+")
+            flags = frozenset(state_parts[1:])
+            if "CLOUD" not in flags and "DYNAMIC_NORM" not in flags:
+                continue
+            m_reason = reason_re.search(line)
+            reason = m_reason.group(1).strip() if m_reason else ""
+            if reason:
+                reason = reason_ts_re.sub("", reason).strip()
+            nodes[m_node.group(1)] = NodeState(
+                base=state_parts[0],
+                flags=flags,
+                reason=reason,
+            )
         return nodes
 
     def node_state(self, nodename: str) -> Optional[NodeState]:
