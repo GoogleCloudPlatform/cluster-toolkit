@@ -45,6 +45,8 @@ A maintainer will review the pull request once the following conditions are met:
 
 7. Ensure any new modules are listed in [modules/README.md](modules/README.md), and new blueprints are listed in [examples/README.md](examples/README.md).
 
+8. Decide whether the change is release-breaking, meaning an existing cluster cannot be upgraded just by re-running `gcluster deploy`. If it is, add the `release-breaking-changes` label (alongside any other `release-*` label) and fill in the **Upgrade steps** and **Redeploy impact** sections of the PR description. See [skills/release-breaking-check/SKILL.md](skills/release-breaking-check/SKILL.md) for the definition and a self-check you can run locally.
+
 Consult [GitHub Help](https://help.github.com/articles/about-pull-requests/) for more
 information on pull requests.
 
