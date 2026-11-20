@@ -179,6 +179,25 @@ func TestRenderMultiError(t *testing.T) {
 	}
 }
 
+// assertSamePath fails the test unless got and want name the same file after
+// resolving symlinks (t.TempDir() can be under a symlink, e.g. on macOS).
+// A relative got is resolved against the current directory, as execPath
+// returns it.
+func assertSamePath(t *testing.T, got, want string) {
+	t.Helper()
+	resolvedGot, err := filepath.EvalSymlinks(got)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q) failed: %v", got, err)
+	}
+	resolvedWant, err := filepath.EvalSymlinks(want)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q) failed: %v", want, err)
+	}
+	if resolvedGot != resolvedWant {
+		t.Errorf("execPath() = %q (%q), want %q (%q)", got, resolvedGot, want, resolvedWant)
+	}
+}
+
 func TestExecPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses POSIX executable files")
@@ -206,9 +225,7 @@ func TestExecPath(t *testing.T) {
 		exe := newExe(t, t.TempDir())
 		t.Setenv("PATH", t.TempDir())
 		os.Args[0] = exe
-		if got := execPath(); got != exe && !strings.HasSuffix(exe, strings.TrimPrefix(got, ".")) {
-			t.Errorf("execPath() = %q, want a path to %q", got, exe)
-		}
+		assertSamePath(t, execPath(), exe)
 	})
 
 	t.Run("same binary on PATH returns gcluster", func(t *testing.T) {
@@ -227,9 +244,7 @@ func TestExecPath(t *testing.T) {
 		exe := newExe(t, t.TempDir())
 		t.Setenv("PATH", onPath)
 		os.Args[0] = exe
-		if got := execPath(); got == "gcluster" {
-			t.Errorf("execPath() = %q, want a path to %q", got, exe)
-		}
+		assertSamePath(t, execPath(), exe)
 	})
 
 	t.Run("missing binary with gcluster on PATH returns gcluster", func(t *testing.T) {
