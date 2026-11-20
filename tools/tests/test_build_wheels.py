@@ -106,7 +106,8 @@ def _git_available():
 
 def git(root, *args, **env):
     return subprocess.run(
-        ["git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
+        ["git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com",
+         "-c", "commit.gpgsign=false", *args],
         check=True, capture_output=True, text=True, env={**os.environ, **env}).stdout.strip()
 
 
@@ -201,6 +202,22 @@ class TestBinaryChecks(unittest.TestCase):
                          ("go1.26.10", "linux", "arm64", "0"))
         self.assertIn("main.gitTagVersion=v1.107.0", info["-ldflags"])
 
+    def test_skips_a_magic_header_that_does_not_parse(self):
+        real = _build_info("linux", "amd64")
+        bad_utf8 = real[:32] + _uvarint(3) + b"go\xff"
+        too_long = real[:32] + _uvarint(2) + b"go" + _uvarint(10 ** 9)
+        for decoy in [bad_utf8, too_long]:
+            with self.subTest(decoy=decoy[32:40]):
+                path = os.path.join(self._tmp.name, "decoy")
+                _write(path, b"\x7fELF" + decoy + b"\0" * 16 + real)
+                self.assertEqual(bw.read_build_info(path)["GOOS"], "linux")
+
+    def test_truncated_build_info_is_an_error(self):
+        with self.assertRaisesRegex(ValueError, "truncated"):
+            bw._read_uvarint_string(_uvarint(10) + b"short", 0)
+        with self.assertRaisesRegex(ValueError, "invalid length"):
+            bw._read_uvarint_string(b"\xff" * 20, 0)
+
     def test_non_go_file_is_an_error(self):
         path = os.path.join(self._tmp.name, "script.sh")
         _write(path, "#!/bin/sh\n")
@@ -243,6 +260,15 @@ class TestBinaryChecks(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"v9\.9\.9"):
             bw.check_binary("linux_amd64", binary, "1.107.0", COMMIT)
 
+    def test_reads_every_ldflag_spelling(self):
+        # As recorded in the build info for each spelling go build accepts.
+        for ldflags in ["\"-X main.gitTagVersion=v1.2.3\"",
+                        "\"-X 'main.gitTagVersion=v1.2.3'\"",
+                        "\"-X \\\"main.gitTagVersion=v1.2.3\\\"\"",
+                        "-X=main.gitTagVersion=v1.2.3"]:
+            with self.subTest(ldflags=ldflags):
+                self.assertEqual(bw._ldflag_var(ldflags, "gitTagVersion"), "v1.2.3")
+
     def test_reads_minimum_macos(self):
         self.assertEqual(bw.macos_min_version(self.fake("darwin_amd64")), (12, 0))
         with self.assertRaises(ValueError):
@@ -253,6 +279,12 @@ class TestBinaryChecks(unittest.TestCase):
         lc = struct.pack("<IIII", 0x24, 16, (10 << 16) | (13 << 8), 0)
         _write(path, struct.pack("<IiiIIIII", 0xFEEDFACF, 0x01000007, 3, 2, 1, len(lc), 0, 0) + lc)
         self.assertEqual(bw.macos_min_version(path), (10, 13))
+
+    def test_oversized_mach_o_load_commands_are_an_error(self):
+        path = os.path.join(self._tmp.name, "huge")
+        _write(path, struct.pack("<IiiIIIII", 0xFEEDFACF, 0x0100000C, 0, 2, 1, 2 ** 32 - 1, 0, 0))
+        with self.assertRaisesRegex(ValueError, "truncated"):
+            bw.macos_min_version(path)
 
     def test_macos_min_override_cannot_go_below_the_binary(self):
         binary = self.fake("darwin_arm64")  # needs macOS 12.0
@@ -266,6 +298,24 @@ class TestBinaryChecks(unittest.TestCase):
         self.assertFalse(bw.has_authenticode_signature(self.fake("windows_amd64", signed=False)))
         with self.assertRaises(ValueError):
             bw.has_authenticode_signature(self.fake("linux_amd64"))
+
+    def test_missing_certificate_table_is_unsigned(self):
+        # Offset 0 means no table; the DOS header there must not be read as a certificate.
+        data = bytearray(_pe(signed=False))
+        struct.pack_into("<H", data, 6, 2)  # read at offset 0: length 0x5A4D ("MZ"), type 2
+        data += b"\0" * (0x5A4D - len(data))
+        struct.pack_into("<II", data, 64 + 24 + 112 + 32, 0, 0x5A4D)
+        path = os.path.join(self._tmp.name, "crafted.exe")
+        _write(path, bytes(data))
+        self.assertFalse(bw.has_authenticode_signature(path))
+
+    def test_certificate_longer_than_its_table_is_unsigned(self):
+        data = bytearray(_pe(signed=True))
+        off, size = struct.unpack_from("<II", data, 64 + 24 + 112 + 32)
+        struct.pack_into("<I", data, off, size + 1)  # WIN_CERTIFICATE.dwLength
+        path = os.path.join(self._tmp.name, "crafted.exe")
+        _write(path, bytes(data))
+        self.assertFalse(bw.has_authenticode_signature(path))
 
     def test_truncated_windows_binary_is_a_value_error(self):
         path = os.path.join(self._tmp.name, "truncated.exe")
@@ -337,6 +387,18 @@ class TestBuildWheel(_FakeRepo):
             times = {i.date_time for i in z.infolist()}
         self.assertEqual(len(names), 4)
         self.assertEqual(times, {bw.DEFAULT_DATE_TIME})  # not the outer repo's commit time
+
+    def test_symlinked_example_is_an_error(self):
+        link = os.path.join(self.root, "examples", "link.yaml")
+        try:
+            os.symlink("hpc-slurm.yaml", link)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks not supported")
+        with self.assertRaisesRegex(ValueError, "symlinks"):
+            self.build()  # not a git checkout: os.walk
+        self.init_git()
+        with self.assertRaisesRegex(ValueError, "symlinks"):
+            self.build()  # git checkout: git ls-files
 
     def test_empty_example_directory_is_an_error(self):
         os.remove(os.path.join(self.root, "community", "examples", "c.yaml"))
@@ -425,6 +487,11 @@ class TestBuildWheel(_FakeRepo):
     def test_invalid_source_date_epoch_is_an_error(self):
         with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "yesterday"}):
             with self.assertRaises(ValueError):
+                self.build()
+
+    def test_out_of_range_source_date_epoch_is_an_error(self):
+        with mock.patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "9" * 30}):
+            with self.assertRaisesRegex(ValueError, "out of range"):
                 self.build()
 
     def test_missing_binary_is_an_error(self):

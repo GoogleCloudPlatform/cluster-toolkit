@@ -125,13 +125,32 @@ def _read_uvarint_string(data, pos):
     while True:
         if pos >= len(data):
             raise ValueError("truncated Go build info")
+        if shift > 63:
+            raise ValueError("invalid length in Go build info")
         b = data[pos]
         pos += 1
         length |= (b & 0x7F) << shift
         if not b & 0x80:
             break
         shift += 7
+    if pos + length > len(data):
+        raise ValueError("truncated Go build info")
     return data[pos:pos + length], pos + length
+
+
+def _parse_build_info(data, i):
+    go, pos = _read_uvarint_string(data, i + 32)
+    if not go.startswith(b"go"):
+        return None
+    mod, _ = _read_uvarint_string(data, pos)
+    if len(mod) >= 33 and mod[-17:-16] == b"\n":
+        mod = mod[16:-16]  # strip the 16-byte sentinels
+    info = {"go": go.decode()}
+    for line in mod.decode("utf-8", "replace").splitlines():
+        if line.startswith("build\t"):
+            key, _, value = line[len("build\t"):].partition("=")
+            info[key] = value
+    return info
 
 
 def read_build_info(binary):
@@ -145,23 +164,20 @@ def read_build_info(binary):
     i = data.find(_BUILDINFO_MAGIC)
     while i >= 0:
         if len(data) >= i + 32 and data[i + 15] & 0x2:  # strings stored inline
-            go, pos = _read_uvarint_string(data, i + 32)
-            if go.startswith(b"go"):
-                mod, _ = _read_uvarint_string(data, pos)
-                if len(mod) >= 33 and mod[-17:-16] == b"\n":
-                    mod = mod[16:-16]  # strip the 16-byte sentinels
-                info = {"go": go.decode()}
-                for line in mod.decode("utf-8", "replace").splitlines():
-                    if line.startswith("build\t"):
-                        key, _, value = line[len("build\t"):].partition("=")
-                        info[key] = value
+            try:
+                info = _parse_build_info(data, i)
+            except ValueError:  # also UnicodeDecodeError; the magic can appear in other data
+                info = None
+            if info:
                 return info
         i = data.find(_BUILDINFO_MAGIC, i + 1)
     raise ValueError(f"{binary}: no Go build info found (not a gcluster binary?)")
 
 
 def _ldflag_var(ldflags, var):
-    values = re.findall(rf"-X\s+'?main\.{var}=([^'\s\"\\]+)", ldflags)
+    # Go accepts -X name=value, -X 'name=value', -X "name=value" (recorded as
+    # -X \"name=value\") and -X=name=value.
+    values = re.findall(rf"-X(?:\s+|=)(?:'|\\\"|\")?main\.{var}=([^'\s\"\\]+)", ldflags)
     return values[-1] if values else None  # the Go linker uses the last -X for a name
 
 
@@ -206,6 +222,8 @@ def macos_min_version(binary):
         if len(header) < 32 or struct.unpack_from("<I", header)[0] != 0xFEEDFACF:
             raise ValueError(f"{binary} is not a 64-bit Mach-O binary")
         ncmds, sizeofcmds = struct.unpack_from("<II", header, 16)
+        if sizeofcmds > os.fstat(f.fileno()).st_size - 32:
+            raise ValueError(f"{binary} has truncated Mach-O load commands")
         cmds = f.read(sizeofcmds)
     off = 0
     try:
@@ -278,12 +296,12 @@ def has_authenticode_signature(binary):
         if struct.unpack_from("<I", data, dirs - 4)[0] <= 4:
             return False
         off, size = struct.unpack_from("<II", data, dirs + 4 * 8)  # entry 4: certificates
-        if size < 8 or off + size > len(data):
+        if off == 0 or size < 8 or off + size > len(data):
             return False
         length, _, cert_type = struct.unpack_from("<IHH", data, off)
     except struct.error as e:
         raise ValueError(f"{binary} is not a valid Windows executable: {e}") from e
-    return length >= 8 and cert_type == 2  # WIN_CERT_TYPE_PKCS_SIGNED_DATA
+    return 8 <= length <= size and cert_type == 2  # WIN_CERT_TYPE_PKCS_SIGNED_DATA
 
 
 def platform_tags(platform, macos_min=None):
@@ -318,7 +336,10 @@ def zip_date_time(repo_root):
             return DEFAULT_DATE_TIME
     if not epoch.isdigit():
         raise ValueError(f"SOURCE_DATE_EPOCH must be a Unix timestamp, got {epoch!r}")
-    return time.gmtime(max(int(epoch), ZIP_MIN_EPOCH))[:6]
+    try:
+        return time.gmtime(max(int(epoch), ZIP_MIN_EPOCH))[:6]
+    except (OverflowError, OSError, ValueError) as e:
+        raise ValueError(f"timestamp {epoch} is out of range") from e
 
 
 def _record_hash(data):
@@ -380,8 +401,12 @@ def _example_files(repo_root):
                 continue
             meta, rel = entry.split("\t", 1)
             git_mode = meta.split(" ", 1)[0]
-            if git_mode not in ("100644", "100755") or _skipped(rel):
-                continue  # symlinks and submodules aren't packaged
+            if _skipped(rel):
+                continue
+            if git_mode == "120000":
+                raise ValueError(f"symlinks aren't supported in examples: {rel}")
+            if git_mode not in ("100644", "100755"):
+                continue  # submodules aren't packaged
             full = os.path.join(repo_root, *rel.split("/"))
             if not os.path.isfile(full):
                 raise ValueError(f"tracked example file is missing: {rel}")
@@ -390,6 +415,11 @@ def _example_files(repo_root):
         for top in EXAMPLE_DIRS:
             for root, dirs, names in os.walk(os.path.join(repo_root, top)):
                 dirs[:] = [d for d in dirs if d not in SKIP_NAMES]
+                links = [n for n in dirs + names
+                         if n not in SKIP_NAMES and os.path.islink(os.path.join(root, n))]
+                if links:
+                    rel = os.path.relpath(os.path.join(root, links[0]), repo_root)
+                    raise ValueError(f"symlinks aren't supported in examples: {rel}")
                 for n in names:
                     full = os.path.join(root, n)
                     rel = os.path.relpath(full, repo_root).replace(os.sep, "/")
