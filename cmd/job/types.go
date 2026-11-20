@@ -45,8 +45,18 @@ type PrereqState struct {
 	GKEGCloudAuthPluginInstalled bool      `json:"gke_gcloud_auth_plugin_installed"`
 	ArtifactRegistryAPIEnabled   bool      `json:"artifact_registry_api_enabled"`
 	LastCheckedProjectID         string    `json:"last_checked_project_id"`
+	LastCheckedARProjectID       string    `json:"last_checked_ar_project_id,omitempty"`
 	LastCheckedTimestamp         time.Time `json:"last_checked_timestamp"`
 }
+
+// PrereqStore loads and persists CLI prerequisite check state.
+type PrereqStore interface {
+	Load() PrereqState
+	Save(PrereqState)
+}
+
+// FilePrereqStore persists PrereqState as JSON under the user's home directory.
+type FilePrereqStore struct{}
 
 type dockerAuthEntry struct {
 	Auth          string `json:"auth"`

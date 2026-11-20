@@ -8,33 +8,39 @@ Before you begin, ensure you have installed `gcluster` and set up your environme
 
 ### Conditional Prerequisites (For On-the-Fly Builds)
 
-If you use `--build-context` to build images on-the-fly, you must set:
+If you use `--build-context` to build images on-the-fly:
 
-* `GCLUSTER_IMAGE_REPO`: The name of your Artifact Registry repository only (e.g., `gcluster-repo`). The tool will automatically construct the full path using the cluster's region and project ID.
-* `USER` or `USERNAME`: Used for unique image tagging (usually set automatically by your OS).
+* `GCLUSTER_IMAGE_REPO`: For Artifact Registry, set the repository name or subpath (e.g., `gcluster-repo` or `gcluster-repo/team-a` when `--project` and `--location` are set) and `gcluster` constructs `<region>-docker.pkg.dev/<project>/<GCLUSTER_IMAGE_REPO>/<user>-runner:<tag>`, or pass an explicit `<region>-docker.pkg.dev/<project>/<repository>` prefix for cross-project/cross-region repositories. For Harbor or other OCI registries, set `<registry-host>[/<repository>]` (e.g., `harbor.example.com/ml-team` or `ghcr.io/my-org/ml-team`; the registry must allow nested repository paths because `gcluster` appends `/<namespace>/<workload>`), or omit `GCLUSTER_IMAGE_REPO` when `--base-image` specifies an explicit registry host other than Artifact Registry or known public/cloud registries to auto-derive `<host>/library/gcluster/<namespace>/<workload>:<hash>`.
+* `USER` or `USERNAME`: Used for unique `<user>-runner` image tagging on Artifact Registry builds (usually set automatically by your OS; not required for non-Artifact Registry OCI builds).
+* `GCLUSTER_INSECURE_REGISTRY`: Optional (`true` / `1`) to allow plain-HTTP or self-signed TLS connections when pushing or pulling `--build-context` images against custom or local OCI registries (loopback and RFC 1918 / IPv6 ULA private IP registries automatically support plain-HTTP fallback). Ignored for Artifact Registry and known public/cloud registries so `gcloud` tokens and public base-image pulls remain TLS-verified.
 
 ### Optional Environment Variables
 
 * `GCLUSTER_REFRESH_CREDENTIALS`: Set to `1` to make every `gcluster job` command re-run `gcloud container clusters get-credentials` instead of reusing an existing, verified `kubeconfig` context for the cluster. See [Cluster connectivity and kubeconfig reuse](#101-cluster-connectivity-and-kubeconfig-reuse) for when this is useful.
 * `GCLUSTER_TELEMETRY_IMAGE`: Container image URI for the ML Diagnostics collector native sidecar on Kubernetes 1.29+ TPU workloads when `--enable-ml-diagnostics` is passed without `--ml-diagnostics-image` (switches GKE jobs from the managed webhook to native sidecar injection). Pass `--ml-diagnostics-image=""` to ignore it for one submission.
+* `GCLUSTER_ORCHESTRATOR`: Override automatic orchestrator detection (`gke` or `k8s`). When unset, `gcluster` inspects your `KUBECONFIG` context (`gke-gcloud-auth-plugin`, `*.gke.goog`, legacy `gcp` auth-provider, canonical `gke_` context naming, or `-gke.` API server version) and routes generic Kubernetes clusters to `k8s` mode for `list` (`JobSet`s labeled `gcluster.google.com/workload`), `logs`, `cancel`, and `inspect` without requiring `--project`, `--location`, or `gcloud` (`gcluster job submit` currently requires a GKE cluster). When `gcluster job config` defaults are saved, setting `GCLUSTER_ORCHESTRATOR=k8s` bypasses all saved `cluster`, `project`, and `location` defaults, while passing `--cluster <k8s-context>` (when different from any saved `cluster`) on `list`, `logs`, `cancel`, or `inspect` overrides `cluster` and ignores saved `project` and `location` defaults with a warning.
+* `GCLUSTER_AIR_GAPPED`: Set to `true` (or `1` / `yes` / `on`) in disconnected or air-gapped environments to skip the live API server version probe during orchestrator detection, block outbound GitHub manifest downloads for automatic JobSet or Kueue installation/re-installation (requiring pre-installed controllers), and skip CLI telemetry collection and uploads for the current process without changing your saved telemetry preference. Setting `false` / `0` / `no` / `off` disables air-gapped mode for the current command (for example, overriding an exported `GCLUSTER_AIR_GAPPED=true`) without overriding `gcluster telemetry off`.
 
 > [!NOTE]
 > ### Automated Prerequisite Checks Overview
 >
-> When you run `gcluster job submit` (or other job commands), the tool will check for:
+> When you run `gcluster job` commands, prerequisite checks match the detected orchestrator:
 >
-> * **Google Cloud SDK**: Verifies `gcloud` is installed.
-> * **Gcloud Authentication**: Checks if authenticated and if Application Default Credentials (ADC) are valid.
-> * **`kubectl` Installation**: Checks if `kubectl` is installed.
-> * **GKE Auth Plugin**: Checks if `gke-gcloud-auth-plugin` is installed.
-> * **Artifact Registry API** (Crane builds only): Checks if `artifactregistry.googleapis.com` is enabled in the cluster's project.
-> * **Container Credential Helper** (Crane builds only): Checks that Docker uses `gcloud` credentials for the Artifact Registry host the build pushes to (`<cluster-region>-docker.pkg.dev`).
+> * **Kubernetes (`k8s`) mode** (`list`, `logs`, `cancel`, `inspect`): Checks only that `kubectl` is installed (zero `gcloud` or Google Cloud credential checks).
+> * **GKE (`gke`) mode**:
+>   * **Google Cloud SDK**: Verifies `gcloud` is installed.
+>   * **Gcloud Authentication**: Checks if authenticated and if Application Default Credentials (ADC) are valid.
+>   * **`kubectl` Installation**: Checks if `kubectl` is installed.
+>   * **GKE Auth Plugin**: Checks if `gke-gcloud-auth-plugin` is installed.
+> * **Destination Registry & Credentials** (Crane `--build-context` builds only):
+>   * **Artifact Registry**: Checks if `artifactregistry.googleapis.com` is enabled in the target Artifact Registry project (defaulting to the cluster's project, or the explicit project in `GCLUSTER_IMAGE_REPO`) and verifies Docker `gcloud`/`gcr` credentials for the target `<region>-docker.pkg.dev` host.
+>   * **Non-Artifact Registry OCI Registries**: Runs a bounded `2s` `GET /v2/` reachability probe and, when the registry returns `401 Unauthorized`, verifies credentials in your Docker keychain (`~/.docker/config.json`) without invoking Google Cloud APIs.
 >
-> The two Crane-build checks only run when `gcluster` builds and pushes the image itself (`--base-image` with `--build-context`). A pre-built `--image` is pulled by the cluster nodes and needs neither.
+> The destination registry checks only run when `gcluster` builds and pushes the image itself (`--base-image` with `--build-context`). A pre-built `--image` is pulled by the cluster nodes and needs neither.
 >
-> If any required dependencies are missing or unconfigured, `gcluster` will identify them and print the necessary installation or remediation commands directly to your console for review and execution
+> If any required dependencies are missing or unconfigured, `gcluster` will identify them and print the necessary installation or remediation commands directly to your console for review and execution.
 >
-> Successful checks are remembered in `~/.gcluster/job_prereq_state.json` to optimize subsequent runs. Checks are re-run if the state is older than 24 hours or if you switch projects. The Docker credential check is not cached: it reads your local Docker config on every Crane build, because the registry depends on the cluster's region.
+> Successful checks are remembered in `~/.gcluster/job_prereq_state.json` to optimize subsequent runs. Cluster project and Artifact Registry project checks are cached independently for 24 hours; local Docker credential config and non-Artifact Registry `/v2/` checks run on each Crane build.
 >
 > **Bypassing Checks:** If you are running `gcluster` in a complex environment (such as an automated CI/CD pipeline without a human `gcloud` session, a system with custom Docker credential helpers, or an environment with strict least-privilege IAM limits), you can completely bypass these validations by appending the `--skip-prereqs` flag.
 
@@ -57,7 +63,7 @@ To use this feature, the cluster administrator must also deploy the `CheckpointC
 
 ## 2. Prepare Sample Application Code
 
-Create a directory named `job_details` and place your application files inside it. This will serve as your build context for the job. The tool packages the files in this directory (excluding `.dockerignore` patterns and default build/VCS artifacts) and adds them to the root (`/`) of the container image.
+Create a directory named `job_details` and place your application files inside it. This will serve as your build context for the job. The tool packages the files in this directory (excluding `.dockerignore` patterns and default build/VCS artifacts) into the active working directory (`WORKDIR`) of the base container image (defaulting to `/workspace` when the base image sets no `WORKDIR` or `/`).
 
 ### `cluster-toolkit/job_details/app.py`
 
@@ -68,7 +74,7 @@ print("This is a sample application running on GKE.")
 ```
 
 > [!NOTE]
-> This on-the-fly image build does not execute a Dockerfile. It packages the files from your build context directory directly into the root directory (`/`) of the container image, honoring `.dockerignore` and skipping 12 hardcoded VCS/build patterns (`.git`, `.terraform`, `.ghpc`, `.ansible`, `vendor`, `bin`, `pkg`, `node_modules`, `*.log`, `tmp/`, `.DS_Store`, and `__pycache__`). Because the container's runtime `WORKDIR` is inherited from `--base-image` (which is `/` for standard base images like `python:3.9-slim`, so `python app.py` resolves `/app.py`), if your `--base-image` sets a non-root `WORKDIR`, reference your packaged files from `/` (for example, `python /app.py`). If you need to install dependencies, make sure they are already present in your `--base-image`.
+> This on-the-fly image build does not execute a Dockerfile. It packages the files from your build context directory directly into the `WORKDIR` of `--base-image` (or sets `WORKDIR /workspace` and extracts there when the base image `WORKDIR` is unset or `/`), normalizing ownership to `root:root` (`0:0`) and file modes to `0755` for directories and executables or `0644` for regular files for reproducible image tags, honoring `.dockerignore`, and skipping 12 hardcoded VCS/build patterns (`.git`, `.terraform`, `.ghpc`, `.ansible`, `vendor`, `bin`, `pkg`, `node_modules`, `*.log`, `tmp/`, `.DS_Store`, and `__pycache__`). Reference packaged files relative to `WORKDIR` (for example, `--command "python app.py"` rather than `python /app.py`). If you need to install dependencies, make sure they are already present in your `--base-image`.
 
 ## 3. Deploy a GKE Cluster
 
@@ -111,9 +117,10 @@ Deploy the GKE cluster:
 Now that the cluster is deployed and your application code is prepared, you can submit your sample Python script as a JobSet job. `gcluster job submit` will automatically build your container image and push it to Artifact Registry in your project.
 
 > [!IMPORTANT]
-> The image will be pushed to a regional Artifact Registry endpoint: `<region>-docker.pkg.dev/<project>/<GCLUSTER_IMAGE_REPO>/<user>-runner:<tag>`.
+> On Artifact Registry, the image will be pushed to a regional endpoint: `<region>-docker.pkg.dev/<project>/<GCLUSTER_IMAGE_REPO>/<user>-runner:<tag>`. On non-Artifact Registry OCI registries, images are pushed to `<registry-host>/<repo-or-library/gcluster>/<namespace>/<workload>:<content-hash>`.
 
-* You **must** set the `GCLUSTER_IMAGE_REPO` environment variable to specify the name of the Artifact Registry repository when using `--build-context` for on-the-fly builds (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo`). The tool will automatically construct the full path using the cluster's region and project ID. The command will fail fast if this variable is not set. The repository **must exist** before submitting the job. If it does not exist, you can create it with:
+* When pushing to Artifact Registry (or using a public/cloud `--base-image` such as `python:3.9-slim`, `nvcr.io/...`, or `cgr.dev/...`), you **must** set the `GCLUSTER_IMAGE_REPO` environment variable to specify the repository (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo` for Artifact Registry, or `export GCLUSTER_IMAGE_REPO=harbor.example.com/ml-team` for an OCI registry). When `--base-image` specifies an explicit registry host other than Artifact Registry or known public/cloud registries, `GCLUSTER_IMAGE_REPO` is optional and defaults to `<host>/library/gcluster`.
+* Non-Artifact Registry OCI targets must allow nested repository paths (`<repository-prefix>/<namespace>/<workload>`, excluding two-level-only registries such as Docker Hub), and on project-scoped registries such as Harbor, the target project (`library` by default, or `<project>` when setting `GCLUSTER_IMAGE_REPO=<host>/<project>[/<subpath>]`) **must exist** and grant push permission to your Docker credentials before submitting the job. For Artifact Registry, the repository **must exist** before submitting the job. If it does not exist, you can create it with:
 
     ```bash
     gcloud artifacts repositories create <REPOSITORY_NAME> \
@@ -121,7 +128,7 @@ Now that the cluster is deployed and your application code is prepared, you can 
         --location=<REGION>
     ```
 
-* You **must** have either `USER` or `USERNAME` environment variable set when using `--build-context` (usually set automatically by your OS). `gcluster` uses this to ensure unique image tagging (e.g., `my-user-runner:tag`). The command will fail if both are missing.
+* For Artifact Registry builds, you **must** have either `USER` or `USERNAME` environment variable set when using `--build-context` (usually set automatically by your OS). `gcluster` uses this to ensure unique image tagging (e.g., `my-user-runner:tag`).
 
 ### 4.1 Unified Job Submission
 
@@ -142,10 +149,11 @@ A TPU shorthand names a slice size, not a host shape. GKE can run the same slice
 > ./gcluster job config set location <REGION/ZONE>
 > ```
 >
-> To view your current configuration, run:
+> To view or clear your saved configuration, run:
 >
 > ```bash
 > ./gcluster job config show
+> ./gcluster job config unset all
 > ```
 
 ### 4.2 Submit the Job
@@ -157,7 +165,7 @@ A TPU shorthand names a slice size, not a host shape. GKE can run the same slice
   --location <REGION/ZONE> \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --command "python /app.py" \
+  --command "python app.py" \
   --name my-python-app-job \
   --compute-type n2-standard-32
 ```
@@ -191,7 +199,7 @@ If you want to run a job across multiple groups of GPU nodes (e.g., 2 groups of 
 
 ### 4.4 Example: Submit Job with Persistent Storage
 
-You can mount Cloud Storage buckets, Filestore instances, existing PVCs (e.g., for Lustre), or host paths using the `--mount` flag.
+You can mount Cloud Storage buckets, Filestore instances, NFS servers, existing PVCs (e.g., for Lustre), or host paths using the `--mount` flag.
 
 Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]"`
 * `mode` is optional and defaults to `ro` (read-only). To allow writes, append `;rw`.
@@ -202,9 +210,10 @@ Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;profile=<profile>][
   * **With `profile=`**: Overrides default [storage profile StorageClass parameters](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#storageclass_configuration_reference) on the generated PVs.
 
 **Supported volume sources (`<src>`):**
-* **Cloud Storage**: `gs://<bucket-name>` (mounts via GCS Fused Driver)
+* **Cloud Storage**: `gs://<bucket-name>[/<sub-path>]` (mounts via the Cloud Storage FUSE CSI driver)
 * **Filestore**: `filestore://<instance-name-or-ip>/<share-name>` (auto-provisions PV and PVC)
-* **Existing PVC**: `<pvc-name>` (the PersistentVolumeClaim must already exist in the target Kubernetes namespace; if the PVC is backed by the GKE Cloud Storage FUSE CSI driver, `gcluster` auto-detects it via `kubectl get pvc`—and, for statically provisioned PVs or custom StorageClasses without a PVC provisioner annotation, `kubectl get pv` or `kubectl get storageclass`—to inject the required `gke-gcsfuse/volumes: "true"` pod annotation)
+* **NFS Server**: `nfs://<server-host-or-ip>/<export-path>` (auto-provisions a shared static NFS PV and PVC after checking `kubectl auth can-i create persistentvolumes --all-namespaces`, and `gcluster job cancel` auto-reclaims unused NFS gateways once no other workload references them; uses default NFS port 2049—custom ports and NFSv4 root exports `nfs://<server>/` require a pre-provisioned PV/PVC—and supports bracketed IPv6 hosts such as `nfs://[fd12::1]/export`)
+* **Existing PVC**: `<pvc-name>[/<sub-path>]` (the PersistentVolumeClaim must already exist in the target Kubernetes namespace; `ReadOnlyMany` PVCs are rejected with `;rw`, multi-node jobs require `ReadWriteMany` or `ReadOnlyMany` to avoid Multi-Attach errors, and Pathways jobs count `pathways-head` as an extra node so even single-host TPU slices reject `ReadWriteOnce` PVCs; if the PVC is backed by the GKE Cloud Storage FUSE CSI driver, `gcluster` auto-detects it via `kubectl get pvc`—and, for statically provisioned PVs or custom StorageClasses without a PVC provisioner annotation, `kubectl get pv` or `kubectl get storageclass`—to inject the required `gke-gcsfuse/volumes: "true"` pod annotation)
 * **Host Path**: `/host/path/on/node` (mounts a directory directly from the host node)
 
 > [!NOTE]
@@ -220,7 +229,7 @@ Mounting a GCS bucket (read-write):
 ```bash
 ./gcluster job submit \
   --name my-storage-job \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -235,7 +244,7 @@ Mounting GCS buckets with storage profiles:
 ```bash
 ./gcluster job submit \
   --name my-training-job \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -246,16 +255,29 @@ Mounting GCS buckets with storage profiles:
 
 *(Note: Replace `<YOUR_DATASET_BUCKET>` and `<YOUR_CHECKPOINT_BUCKET>` with the names of your own buckets).*
 
-Mounting an existing PVC named `lustre-pvc` (read-only):
+Mounting an existing PVC named `lustre-pvc` (read-only) and a PVC sub-directory (read-write):
 
 ```bash
 ./gcluster job submit \
   --name my-lustre-job \
+  --command "python app.py" \
+  --compute-type n2-standard-32 \
+  --base-image python:3.9-slim \
+  --build-context job_details \
+  --mount "lustre-pvc;/data" \
+  --mount "lustre-pvc/checkpoints/run-1;/checkpoints;rw"
+```
+
+Mounting an NFS export (read-write):
+
+```bash
+./gcluster job submit \
+  --name my-nfs-job \
   --command "python /app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --mount "lustre-pvc;/data"
+  --mount "nfs://10.0.0.10/exports/datasets;/data;rw"
 ```
 
 #### GCS FUSE storage profiles (`profile=`)
@@ -271,7 +293,7 @@ You can pass additional custom environment variables—or override `WORKERS_0_HO
 ```bash
 ./gcluster job submit \
   --name my-env-job \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -334,7 +356,7 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
     ./gcluster job inspect --name my-python-app-job --show
     ```
 
-    The tool will create a timestamped log file `gcluster-inspect-<cluster>-<timestamp>.log` in your current working directory containing:
+    The tool will create a timestamped log file `gcluster-inspect-<cluster>-<timestamp>.log` in your current working directory (falling back to `~/.gcluster/logs/` or the system temporary directory if the current directory is not writable) containing:
 
   * **Local Setup**: Gcloud version and active configuration.
   * **GKE Infra**: GKE cluster descriptions, node-pool listings, and metadata/resources ConfigMaps.
@@ -343,6 +365,8 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
   * **Slice Controller**: Slice controller deployment details and manager logs (if GKE Kueue dynamic slicing is active).
   * **Workloads**: Overview of all workloads in the cluster, and specific JobSet/Workload descriptors if a name is targeted.
   * **Console Links**: Direct links to GKE clusters, GKE workloads, IAM permissions, and Quota administration consoles.
+
+    If the cluster does not serve the `kueue.x-k8s.io` API group, the report skips the Kueue, Slice Controller, and Kueue workload sections and lists JobSets (`kubectl get jobsets`) instead.
 
     When `--name` is a Shared Pathways Service (SPS) instance, the report starts with a short summary of the instance. To collect only that summary into `gcluster-inspect-<cluster>-<timestamp>-sps.log` (or a custom `--output` file), pass `--filter=pathways-sps` (add `--show` / `-s` to also print it to the terminal):
 
@@ -379,7 +403,7 @@ Use `--node-constraint` to target a specific node pool. This maps to node labels
 ```bash
 ./gcluster job submit \
   --name my-nodepool-job \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type c2-standard-60 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -471,7 +495,7 @@ Use `--queue` to submit the job to a specific Kueue LocalQueue.
 ```bash
 ./gcluster job submit \
   --name my-kueue-job \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -544,7 +568,7 @@ Request a specific TPU slice topology using `--topology`.
   --name my-topology-job \
   --base-image python:3.9-slim \
   --build-context job_details \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type v6e-16 \
   --topology 4x4
 ```
@@ -558,7 +582,7 @@ Use a specific GKE scheduler (e.g., `gke.io/topology-aware-auto`) using `--gke-s
   --cluster <CLUSTER_NAME> \
   --location <REGION/ZONE> \
   --name my-scheduler-job \
-  --command "python /app.py" \
+  --command "python app.py" \
   --compute-type n2-standard-32 \
   --base-image python:3.9-slim \
   --build-context job_details \
@@ -1243,7 +1267,7 @@ Open the extracted `.tmpl` files in your preferred editor. Workload manifests ar
 * `pathways_jobset.tmpl`: Pathways (`--pathways`) `JobSet` manifest. Defines `pathways-head` and `worker` pod specs inline while reusing `workload_labels`, `jobset_network`, `pod_auth_and_priority`, `pod_placement`, and `telemetry_sidecar` from `base.tmpl`.
 * `base.tmpl`: Shared named `{{- define "<block>" -}}` blocks rendered at a target YAML column width via `{{(StructuralData (.RenderBlock "<block>" <indent>))}}`. To add custom sidecars, pod annotations, or volumes to standard workloads, edit `pod_template` in `base.tmpl`.
 * `job.tmpl`: Standalone `batch/v1` Indexed `Job` and headless `Service` template (reserved for upcoming single-slice `Job` support; `gcluster job submit` does not render `job.tmpl` yet).
-* `filestore.tmpl` & `gcs_fuse_pv_pvc.tmpl`: Storage templates used when provisioning Filestore and Cloud Storage FUSE storage-profile `PersistentVolume` / `PersistentVolumeClaim` resources.
+* `filestore.tmpl` & `gcs_fuse_pv_pvc.tmpl`: Storage templates used when provisioning Filestore, generic NFS (`nfs://`), and Cloud Storage FUSE storage-profile `PersistentVolume` / `PersistentVolumeClaim` resources.
 * `local_queue.tmpl` & `priority_classes.tmpl`: Kueue templates used when bootstrapping default `LocalQueue` and `PriorityClass` resources.
 
 > [!NOTE]
@@ -1269,11 +1293,11 @@ Pass the `--gke-custom-templates-path` flag to the `submit` command:
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-c, --cluster` | `string` | Name of the target GKE cluster. |
-| `-l, --location` | `string` | Google Cloud location (Zone or Region) of the GKE cluster. |
-| `-p, --project` | `string` | Google Cloud Project ID. |
-| `--gke-namespace` | `string` | Target GKE namespace for the operation. Supported across all job commands. If omitted, automatic detection is used. |
-| `--skip-prereqs` | `flag` | Bypasses local workstation pre-flight environment checks (e.g. gcloud SDK, IAM checks, Docker config). |
+| `-c, --cluster` | `string` | Name of the target GKE cluster or Kubernetes `kubeconfig` context. *(Required for GKE; optional in Kubernetes mode when `current-context` is set)* |
+| `-l, --location` | `string` | Google Cloud location (Zone or Region) of the GKE cluster. *(Required for GKE; not used in Kubernetes mode)* |
+| `-p, --project` | `string` | Google Cloud Project ID. *(Required for GKE; not used in Kubernetes mode)* |
+| `--gke-namespace` | `string` | Target Kubernetes namespace for the operation. Supported across all job commands. If omitted, automatic detection is used. |
+| `--skip-prereqs` | `flag` | Bypasses local workstation pre-flight environment checks (`kubectl`, `gcloud`, registry auth, etc.). |
 
 ### 9.2 Configuration Commands
 *Use `gcluster job config` to manage persistent defaults for your job submissions, avoiding the need to pass common flags repeatedly.*
@@ -1283,7 +1307,7 @@ Modifies configuration defaults. If run without any arguments (`./gcluster job c
 
 * **Supported Keys:**
   * `project`: Google Cloud Project ID
-  * `cluster`: GKE Cluster Name
+  * `cluster`: GKE Cluster Name or Kubernetes `kubeconfig` context
   * `location`: GKE Cluster Location (region or zone)
 
 **Examples:**
@@ -1296,6 +1320,16 @@ Modifies configuration defaults. If run without any arguments (`./gcluster job c
 ./gcluster job config set project my-awesome-project
 ./gcluster job config set cluster my-cluster
 ./gcluster job config set location us-central1-a
+```
+
+#### `gcluster job config unset <key>`
+Clears a saved configuration default (`project`, `cluster`, `location`), or clears all saved defaults when `<key>` is `all` (useful before targeting a generic Kubernetes `KUBECONFIG` context without passing `GCLUSTER_ORCHESTRATOR=k8s`).
+
+**Examples:**
+
+```bash
+./gcluster job config unset project
+./gcluster job config unset all
 ```
 
 #### `gcluster job config show`
@@ -1316,7 +1350,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-n, --name` | `string` | Name of the job (JobSet) to create. Used for Kubernetes resources. Maximum of 28 characters for standard workloads, or 22 characters when `--pathways` is enabled. *(Required)* |
-| `-e, --command` | `string` | Command to execute inside the container (e.g., `'python /app.py'`). *(Required except when `--pathways-headless` or `--pathways-deploy-sps` is set)* |
+| `-e, --command` | `string` | Command to execute inside the container (e.g., `'python app.py'`). *(Required except when `--pathways-headless` or `--pathways-deploy-sps` is set)* |
 | `--compute-type` | `string` | The hardware target for the job. GPU/TPU shorthands (e.g., `h100-80gb-8`, `l4-1`, `v6e-8`) and machine types from `gcluster`'s built-in shorthand map (e.g., `a3-highgpu-8g`) resolve without a matching node pool, so they also work on NAP clusters. Any other GCE machine type (e.g., `n2-standard-32`) or a GKE accelerator label (e.g., `nvidia-l4`) is resolved against the cluster's existing node pools. *(Required except when `--pathways-run-sps-workload` is set)* The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed. |
 | `-i, --image` | `string` | Full registry path of a pre-built container image to run. Either `--image`, **or** both `--base-image` and `--build-context`, is required and the two forms are mutually exclusive (except when `--pathways-headless` or `--pathways-deploy-sps` is set, where no image is needed, or when `--pathways-run-sps-workload` is used in terminal mode). |
 | `-B, --base-image` | `string` | Name of the base container image to build upon (e.g., `python:3.9-slim`). Requires `--build-context`; mutually exclusive with `--image`. |
@@ -1327,7 +1361,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--num-nodes` | `int` | Number of nodes to use per group/slice (Default: `1`). Auto-calculated for TPUs based on topology. |
 | `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. Supports pipe separator (`\|`) for multiple values. |
 | `--restarts` | `int` | Maximum number of restarts allowed for the JobSet before marked as failed (Default: `1`, or `30` when `--pathways-deploy-sps` is set). |
-| `--mount` | `stringArray` | Mount storage volumes, buckets, filestore instances, or PVCs using the `<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]` format. Examples of `<src>`: `gs://my-bucket`, `filestore://my-instance/share`, `my-pvc` (for Lustre/etc), or `/host/path`. `profile=` (`training`, `checkpointing`, `serving`) is GCS-only and provisions a shared GCS FUSE storage-profile PV/PVC gateway instead of an inline CSI volume. |
+| `--mount` | `stringArray` | Mount storage volumes, buckets, filestore/NFS shares, or PVCs using the `<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]` format. Examples of `<src>`: `gs://my-bucket[/<sub-path>]`, `filestore://my-instance/share`, `nfs://10.0.0.1/export`, `my-pvc` or `my-pvc/sub-dir` (for Lustre/NFS PVCs), or `/host/path`. `profile=` (`training`, `checkpointing`, `serving`) is GCS-only and provisions a shared GCS FUSE storage-profile PV/PVC gateway instead of an inline CSI volume. |
 | `--env` | `stringArray` | Custom environment variables to pass exclusively to the user's workload container in KEY=VALUE format (e.g. `--env KEY=VALUE`). Applies to both standard and Pathways workloads and can be specified multiple times. For standard JobSet workloads, `WORKERS_0_HOSTNAME` and `MASTER_ADDR` are preset to `<name>-main-job-0-0.<name>` unless overridden via `--env`. |
 | `--await-job-completion` | `bool` | If true, the CLI waits for the job to complete before exiting. |
 | `--timeout` | `string` | Time to wait for job completion (e.g., `1h`, `10m`). Used with `--await-job-completion`. |
@@ -1396,7 +1430,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `--status` | `string` | Filter jobs by status (`Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`). `job list` derives status from the JobSet object (`Suspended` while queued in Kueue, `Running` once admitted, `Succeeded`, or `Failed`), so it never reports `Pending` on GKE and an admitted job whose pods are still unscheduled shows `Running`. For admission and pod details, use `gcluster job inspect --name <job-name> --show` or `kubectl get pods -l jobset.sigs.k8s.io/jobset-name=<job-name>`. |
+| `--status` | `string` | Filter jobs by status (`Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`). `job list` derives status from the JobSet object (`Suspended` while queued in Kueue, `Running` once admitted, `Succeeded`, or `Failed`), so it never reports `Pending` on GKE or Kubernetes and an admitted job whose pods are still unscheduled shows `Running`. For admission and pod details, use `gcluster job inspect --name <job-name> --show` or `kubectl get pods -l jobset.sigs.k8s.io/jobset-name=<job-name>`. |
 | `--name-contains` | `string` | Filter jobs by name containing the specified string. |
 
 ### 9.5 `logs` Flags
@@ -1408,14 +1442,14 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--main-only` | `bool` | Fetch logs only from the rank-0 pod of the JobSet's first replicated job (`main-job`, or `pathways-head` for Pathways), using that pod's default container. |
 
 > [!NOTE]
-> **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. For jobs with up to 10 pods, you can override this to stream logs from all pods by explicitly passing `--main-only=false`; for jobs with more than 10 pods, `gcluster` prints a link to view all-pod logs in the Google Cloud Console.
+> **Smart Logging Defaults**: If a job has more than 5 pods, `gcluster` dynamically defaults to `--main-only=true` to prevent terminal spam from duplicate worker rank logs. For jobs with up to 10 pods, you can override this to stream logs from all pods by explicitly passing `--main-only=false`; for jobs with more than 10 pods, `gcluster` prints a Google Cloud Console link on GKE or a pinned `kubectl --context <context> logs ...` command in Kubernetes (`k8s`) mode.
 
 ### 9.6 `inspect` Flags
-*Use these flags when inspecting cluster health or a specific workload.*
+*Use these flags when inspecting cluster health or a specific workload. In Kubernetes (`k8s`) mode, `gcluster job inspect` runs `kubectl` diagnostics directly against the pinned `KUBECONFIG` context and skips GKE-only `gcloud`, blueprint metadata ConfigMap, and Cloud Console sections.*
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `--name` | `string` | Specific workload name to inspect. |
+| `-n, --name` | `string` | Specific workload name to inspect. |
 | `-o, --output` | `string` | Custom path/filename to write logs to. |
 | `-s, --show` | `flag` | Print output to terminal in addition to file. |
 | `--filter` | `string` | Filter inspect output to a specific component (allowed values: `pathways-sps`; requires `--name`). Writes to `gcluster-inspect-<cluster>-<timestamp>-sps.log` by default. |
@@ -1433,7 +1467,7 @@ Every `gcluster job` command first makes `kubectl` target your cluster. A GKE co
 
 `gcluster` handles this as follows:
 
-1. **Reuse first.** If your `kubeconfig` already contains a context for the cluster (`gke_<project>_<location>_<cluster>`) that *verifiably* belongs to it — its server is one of the cluster's endpoints, its pinned CA matches the cluster CA (IP endpoint only), and it authenticates through `gke-gcloud-auth-plugin` — `gcluster` runs a short (5s) connectivity probe against that context and, on success, **uses it as-is** without calling `gcloud container clusters get-credentials`. Your namespace and endpoint choice are preserved. You will see:
+1. **Reuse first.** If your `kubeconfig` already contains a context for the cluster (`gke_<project>_<location>_<cluster>`) that *verifiably* belongs to it — its server is one of the cluster's endpoints, its pinned CA matches the cluster CA (IP endpoint only), it keeps TLS verification on and doesn't point at a CA file (no `insecure-skip-tls-verify` or `certificate-authority`), and it authenticates through `gke-gcloud-auth-plugin` — `gcluster` runs a short (5s) connectivity probe against that context and, on success, **uses it as-is** without calling `gcloud container clusters get-credentials`. Your namespace and endpoint choice are preserved. You will see:
 
    ```text
    Reusing existing kubeconfig context 'gke_my-project_us-central1_my-cluster' (DNS endpoint).
@@ -1448,7 +1482,7 @@ Every `gcluster job` command first makes `kubectl` target your cluster. A GKE co
 
    Authentication errors (`Unauthorized`, `gke-gcloud-auth-plugin` failures) are **not** retried against another endpoint because a different endpoint cannot fix credentials; `gcluster` fails immediately and tells you to run `gcloud auth application-default login`.
 
-After this step, every `kubectl` call and Kubernetes API request that `gcluster` makes passes the chosen context explicitly (`kubectl --context <context> ...`). Switching `current-context` in another terminal, or another tool running `get-credentials` while `gcluster` is running, does not redirect the job to a different cluster. When an existing context is reused, `gcluster` does not modify your kubeconfig at all; `current-context` only changes when credentials have to be fetched, because `gcloud container clusters get-credentials` sets it.
+After this step, every `kubectl` call and Kubernetes API request that `gcluster` makes passes the chosen context explicitly (`kubectl --context <context> ...`). Switching `current-context` in another terminal, or another tool running `get-credentials` while `gcluster` is running, does not redirect the job to a different cluster. When an existing context is reused (or when running in Kubernetes `k8s` mode, which resolves your `kubeconfig` context directly without calling `gcloud`), `gcluster` does not change `current-context` or rewrite your `kubeconfig` entries (aside from standard `client-go` OIDC token refresh when an `oidc` `auth-provider` refreshes an expired token); `current-context` only changes on GKE when credentials have to be fetched via `gcloud container clusters get-credentials`.
 
 > [!TIP]
 > **Forcing a credential refresh.** Set `GCLUSTER_REFRESH_CREDENTIALS=1` to skip step 1 and always re-run `get-credentials` (step 2 still applies). Use this if you suspect the reused context is wrong in a way the checks above cannot detect — for example, after deliberately editing the entry by hand, or when sharing a `kubeconfig` between tools that expect a specific endpoint:

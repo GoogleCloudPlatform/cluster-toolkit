@@ -32,7 +32,17 @@ import (
 
 // IsForbiddenError reports whether err indicates a 403 Forbidden RBAC error.
 func IsForbiddenError(err error) bool {
-	return err != nil && (apierrors.IsForbidden(err) || strings.Contains(strings.ToLower(err.Error()), "forbidden"))
+	if err == nil {
+		return false
+	}
+	if apierrors.IsForbidden(err) {
+		return true
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(msg, "error from server (forbidden)") ||
+		strings.Contains(msg, "403 forbidden") ||
+		strings.Contains(msg, " is forbidden:") ||
+		strings.HasSuffix(msg, " is forbidden")
 }
 
 // DiscoverImagePullSecrets returns the comma-separated names of the kubernetes.io/dockerconfigjson Secrets

@@ -198,6 +198,9 @@ func (g *GKEOrchestrator) runSPSWorkload(job orchestrator.JobDefinition) error {
 
 func (g *GKEOrchestrator) submitSPSClusterWorkload(job orchestrator.JobDefinition, inst spsInstance) error {
 	sm := &StorageManager{orchestrator: g}
+	if err := sm.ValidateClusterMounts(job); err != nil {
+		return err
+	}
 	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
 		return err
 	}
@@ -434,8 +437,7 @@ var portForwardRe = regexp.MustCompile(`(?:127\.0\.0\.1|\[::1\]):(\d+)`)
 
 func (g *GKEOrchestrator) startPortForward(pod, ns string, sigCh <-chan os.Signal) (int, func(), error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	args := withKubeContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf(":%d", spsProxyPort)})
-	cmd := exec.CommandContext(ctx, "kubectl", args...)
+	cmd := exec.CommandContext(ctx, "kubectl", k8s.WithContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf(":%d", spsProxyPort)})...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		cancel()
@@ -461,8 +463,8 @@ func (g *GKEOrchestrator) startPortForward(pod, ns string, sigCh <-chan os.Signa
 			return 0, nil, fmt.Errorf("port-forward to %s did not become ready: %s", pod, strings.TrimSpace(errOut.String()))
 		}
 		done := make(chan struct{})
-		restartArgs := withKubeContext(g.kubeContext, []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf("%d:%d", port, spsProxyPort)})
-		go keepPortForwardAlive(ctx, cmd, pipeDone, restartArgs, done)
+		restartArgs := []string{"port-forward", "-n", ns, "pod/" + pod, fmt.Sprintf("%d:%d", port, spsProxyPort)}
+		go keepPortForwardAlive(ctx, cmd, pipeDone, g.kubeContext, restartArgs, done)
 		return port, func() { cancel(); <-done }, nil
 	case <-sigCh:
 		cancel()
@@ -495,7 +497,7 @@ func readForwardedPort(r io.Reader, errOut *strings.Builder, portCh chan<- int, 
 }
 
 // keepPortForwardAlive restarts kubectl port-forward if it exits before ctx is cancelled (e.g. on Ctrl-C in pdb).
-func keepPortForwardAlive(ctx context.Context, cmd *exec.Cmd, pipeDone <-chan struct{}, args []string, done chan<- struct{}) {
+func keepPortForwardAlive(ctx context.Context, cmd *exec.Cmd, pipeDone <-chan struct{}, kubeContext string, args []string, done chan<- struct{}) {
 	defer close(done)
 	<-pipeDone
 	for {
@@ -505,7 +507,7 @@ func keepPortForwardAlive(ctx context.Context, cmd *exec.Cmd, pipeDone <-chan st
 			return
 		case <-time.After(500 * time.Millisecond):
 		}
-		cmd = exec.CommandContext(ctx, "kubectl", args...)
+		cmd = exec.CommandContext(ctx, "kubectl", k8s.WithContext(kubeContext, args)...)
 		if err := cmd.Start(); err != nil {
 			if ctx.Err() == nil {
 				logging.Warn("failed to restart kubectl port-forward: %v", err)

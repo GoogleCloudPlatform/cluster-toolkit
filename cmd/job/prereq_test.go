@@ -20,10 +20,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -397,7 +399,7 @@ func TestEnsureBasicPrerequisites_GCloudAuthTimeout(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 
-	err := ensureBasicPrerequisites(cmd, "test-project")
+	err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeGKE, "test-project")
 	if err == nil {
 		t.Fatal("expected timeout error, got nil")
 	}
@@ -431,35 +433,6 @@ func TestEnsureProjectExists_Timeout(t *testing.T) {
 	wantSubstr := fmt.Sprintf("gcloud project validation timed out after %v", shell.DefaultCloudAPITimeout)
 	if !strings.Contains(err.Error(), wantSubstr) {
 		t.Errorf("expected error to contain %q, got %v", wantSubstr, err)
-	}
-}
-
-func TestCheckArtifactRegistryAPI_Timeout(t *testing.T) {
-	origExecuteCommand := shell.ExecuteCommandWithTimeout
-	defer func() { shell.ExecuteCommandWithTimeout = origExecuteCommand }()
-
-	shell.ExecuteCommandWithTimeout = func(timeout time.Duration, name string, args ...string) shell.CommandResult {
-		if timeout != shell.DefaultCloudAPITimeout {
-			t.Errorf("expected timeout %v, got %v", shell.DefaultCloudAPITimeout, timeout)
-		}
-		return shell.CommandResult{ExitCode: 124, Err: context.DeadlineExceeded}
-	}
-
-	var state PrereqState
-	var missing []missingPrereq
-
-	checkArtifactRegistryAPI("test-project", &state, &missing)
-
-	if len(missing) != 1 {
-		t.Fatalf("expected 1 missing prereq, got %d", len(missing))
-	}
-
-	expectedName := fmt.Sprintf("Artifact Registry API (verification timed out after %v)", shell.DefaultCloudAPITimeout)
-	if missing[0].name != expectedName {
-		t.Errorf("missing[0].name = %q, want %q", missing[0].name, expectedName)
-	}
-	if state.ArtifactRegistryAPIEnabled {
-		t.Error("expected ArtifactRegistryAPIEnabled to remain false on timeout")
 	}
 }
 
@@ -506,21 +479,23 @@ func TestCheckK8sDependencies_Missing(t *testing.T) {
 	if len(missing) != 2 {
 		t.Fatalf("expected 2 missing prereqs, got %d", len(missing))
 	}
-	for i, bin := range []string{"kubectl", "gke-gcloud-auth-plugin"} {
-		if missing[i].name != bin {
-			t.Errorf("missing[%d].name = %q, want %q", i, missing[i].name, bin)
-		}
-		if len(missing[i].commands) != 2 {
-			t.Fatalf("expected 2 install commands for %s, got %d", bin, len(missing[i].commands))
-		}
-		wantCmd0 := fmt.Sprintf("gcloud components install %s --quiet   # gcloud from Google's installer", bin)
-		wantCmd1 := fmt.Sprintf("# or install %s with your OS package manager (apt/dnf/brew) if gcloud came from there", bin)
-		if missing[i].commands[0] != wantCmd0 {
-			t.Errorf("missing[%d].commands[0] = %q, want %q", i, missing[i].commands[0], wantCmd0)
-		}
-		if missing[i].commands[1] != wantCmd1 {
-			t.Errorf("missing[%d].commands[1] = %q, want %q", i, missing[i].commands[1], wantCmd1)
-		}
+	if missing[0].name != "kubectl" || len(missing[0].commands) != 2 {
+		t.Fatalf("missing[0] = %+v, want kubectl with 2 install commands", missing[0])
+	}
+	wantKubectlCmd0 := "gcloud components install kubectl --quiet   # gcloud from Google's installer"
+	wantKubectlCmd1 := "# or install kubectl with your OS package manager (apt/dnf/brew on Linux/macOS, winget/choco on Windows) if gcloud came from there"
+	if missing[0].commands[0] != wantKubectlCmd0 || missing[0].commands[1] != wantKubectlCmd1 {
+		t.Errorf("kubectl commands = %q, want [%q, %q]", missing[0].commands, wantKubectlCmd0, wantKubectlCmd1)
+	}
+
+	if missing[1].name != "gke-gcloud-auth-plugin" || len(missing[1].commands) != 2 {
+		t.Fatalf("missing[1] = %+v, want gke-gcloud-auth-plugin with 2 install commands", missing[1])
+	}
+	if !strings.Contains(missing[1].commands[0], "gcloud components install gke-gcloud-auth-plugin --quiet") {
+		t.Errorf("plugin commands[0] = %q, want gcloud components install hint", missing[1].commands[0])
+	}
+	if !strings.Contains(missing[1].commands[1], "google-cloud-cli-gke-gcloud-auth-plugin") || strings.Contains(missing[1].commands[1], "winget") {
+		t.Errorf("plugin commands[1] = %q, want apt/dnf google-cloud-cli-gke-gcloud-auth-plugin hint without winget/choco", missing[1].commands[1])
 	}
 }
 
@@ -543,122 +518,6 @@ func TestEnsureApplicationDefaultCredentials_Failure(t *testing.T) {
 	want := "gcloud auth application-default login"
 	if got != want {
 		t.Errorf("getADCSetupCommand() = %q, want %q", got, want)
-	}
-}
-
-func TestIsDockerCredsConfigured(t *testing.T) {
-	tempDir := t.TempDir()
-	t.Setenv("HOME", tempDir)
-	t.Setenv("USERPROFILE", tempDir) // os.UserHomeDir on Windows
-	t.Setenv("DOCKER_CONFIG", "")
-
-	dockerDir := filepath.Join(tempDir, ".docker")
-	configPath := filepath.Join(dockerDir, "config.json")
-	const registry = "us-central1-docker.pkg.dev"
-
-	tests := []struct {
-		name          string
-		configContent string
-		shouldExist   bool
-		expected      bool
-	}{
-		{
-			name:        "No config file",
-			shouldExist: false,
-			expected:    false,
-		},
-		{
-			name:          "Corrupted config file",
-			configContent: "invalid",
-			shouldExist:   true,
-			expected:      false,
-		},
-		{
-			name:          "CredsStore set to gcloud",
-			configContent: `{"credsStore": "gcloud"}`,
-			shouldExist:   true,
-			expected:      true,
-		},
-		{
-			name:          "CredHelpers configured for gcr.io and the regional registry",
-			configContent: `{"credHelpers": {"gcr.io": "gcloud", "us-central1-docker.pkg.dev": "gcloud"}}`,
-			shouldExist:   true,
-			expected:      true,
-		},
-		{
-			name:          "CredHelpers configured for the regional registry only",
-			configContent: `{"credHelpers": {"us-central1-docker.pkg.dev": "gcloud"}}`,
-			shouldExist:   true,
-			expected:      true,
-		},
-		{
-			name:          "CredHelpers missing regional registry",
-			configContent: `{"credHelpers": {"gcr.io": "gcloud"}}`,
-			shouldExist:   true,
-			expected:      false,
-		},
-		{
-			name:          "CredHelpers wrong helper for the regional registry",
-			configContent: `{"credHelpers": {"gcr.io": "gcloud", "us-central1-docker.pkg.dev": "desktop"}}`,
-			shouldExist:   true,
-			expected:      false,
-		},
-		{
-			name:          "CredHelpers overrides CredsStore for the regional registry",
-			configContent: `{"credsStore": "gcloud", "credHelpers": {"us-central1-docker.pkg.dev": "desktop"}}`,
-			shouldExist:   true,
-			expected:      false,
-		},
-		{
-			name:          "CredHelpers set to gcr for the regional registry",
-			configContent: `{"credHelpers": {"us-central1-docker.pkg.dev": "gcr"}}`,
-			shouldExist:   true,
-			expected:      true,
-		},
-		{
-			name:          "CredsStore set to gcr",
-			configContent: `{"credsStore": "gcr"}`,
-			shouldExist:   true,
-			expected:      true,
-		},
-		{
-			name:          "Auths entry for the regional registry",
-			configContent: `{"auths": {"us-central1-docker.pkg.dev": {"auth": "b2F1dGgyYWNjZXNzdG9rZW46dG9rZW4="}}}`,
-			shouldExist:   true,
-			expected:      true,
-		},
-		{
-			name:          "Auths entry with https prefix for the regional registry",
-			configContent: `{"auths": {"https://us-central1-docker.pkg.dev": {"auth": "b2F1dGgyYWNjZXNzdG9rZW46dG9rZW4="}}}`,
-			shouldExist:   true,
-			expected:      true,
-		},
-		{
-			name:          "Empty auths entry for the regional registry",
-			configContent: `{"auths": {"us-central1-docker.pkg.dev": {}}}`,
-			shouldExist:   true,
-			expected:      false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if !tt.shouldExist {
-				os.Remove(configPath)
-			} else {
-				if err := os.MkdirAll(dockerDir, 0755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(configPath, []byte(tt.configContent), 0644); err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			got := isDockerCredsConfigured(registry)
-			if got != tt.expected {
-				t.Errorf("isDockerCredsConfigured() = %v, want %v", got, tt.expected)
-			}
-		})
 	}
 }
 
@@ -691,102 +550,6 @@ func stubPrereqCommands(t *testing.T) *[]string {
 	t.Cleanup(func() { getADCSetupCommandFunc = origGetADCSetupCommand })
 	getADCSetupCommandFunc = func() string { return "" }
 	return executed
-}
-
-// writeDockerConfig writes a Docker config with a gcloud credential helper for the
-// given registries into the DOCKER_CONFIG directory set by stubPrereqCommands.
-func writeDockerConfig(t *testing.T, registries ...string) {
-	t.Helper()
-	helpers := map[string]string{}
-	for _, r := range registries {
-		helpers[r] = "gcloud"
-	}
-	data, err := json.Marshal(map[string]any{"credHelpers": helpers})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(os.Getenv("DOCKER_CONFIG"), "config.json"), data, 0644); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func ranArtifactRegistryCheck(executed []string) bool {
-	for _, c := range executed {
-		if strings.HasPrefix(c, "gcloud services list") {
-			return true
-		}
-	}
-	return false
-}
-
-func TestEnsureBuildPrerequisites_MissingDockerCreds(t *testing.T) {
-	stubPrereqCommands(t)
-
-	cmd := &cobra.Command{}
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-
-	err := ensureBuildPrerequisites(cmd, "test-project", "us-central1-a")
-	if err == nil {
-		t.Fatalf("expected an error without Docker credentials, got nil\noutput:\n%s", buf.String())
-	}
-	output := buf.String()
-	if want := "gcloud auth configure-docker us-central1-docker.pkg.dev --quiet"; !strings.Contains(output, want) {
-		t.Errorf("expected output to contain %q, got:\n%s", want, output)
-	}
-	if strings.Contains(output, "gcr.io") {
-		t.Errorf("a Crane build only pushes to Artifact Registry; output must not ask for gcr.io credentials:\n%s", output)
-	}
-}
-
-// With a fresh state the Artifact Registry API result is reused, but the Docker
-// config is read for the current cluster's region on every build.
-func TestEnsureBuildPrerequisites_FreshState(t *testing.T) {
-	tests := []struct {
-		name           string
-		dockerRegistry string // registry with a gcloud helper; "" for no Docker config
-		wantErr        bool
-	}{
-		{name: "credentials for the cluster's region skip all checks", dockerRegistry: "us-west4-docker.pkg.dev"},
-		{name: "credentials for another region only are not enough", dockerRegistry: "us-central1-docker.pkg.dev", wantErr: true},
-		{name: "no Docker config", wantErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			executed := stubPrereqCommands(t)
-			if tt.dockerRegistry != "" {
-				writeDockerConfig(t, tt.dockerRegistry)
-			}
-
-			store.Save(PrereqState{
-				GCloudSDKInstalled:           true,
-				GCloudProjectConfigured:      true,
-				GCloudAuthenticated:          true,
-				ADCConfigured:                true,
-				KubectlInstalled:             true,
-				GKEGCloudAuthPluginInstalled: true,
-				ArtifactRegistryAPIEnabled:   true,
-				LastCheckedProjectID:         "test-project",
-				LastCheckedTimestamp:         time.Now(),
-			})
-
-			cmd := &cobra.Command{}
-			var buf bytes.Buffer
-			cmd.SetOut(&buf)
-
-			err := ensureBuildPrerequisites(cmd, "test-project", "us-west4-a")
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("ensureBuildPrerequisites() error = %v, wantErr %v\noutput:\n%s", err, tt.wantErr, buf.String())
-			}
-			if got := strings.Contains(buf.String(), "gcloud auth configure-docker us-west4-docker.pkg.dev --quiet"); got != tt.wantErr {
-				t.Errorf("remediation for us-west4 shown = %v, want %v\noutput:\n%s", got, tt.wantErr, buf.String())
-			}
-			if ran := len(*executed) > 0; ran != tt.wantErr {
-				t.Errorf("executed %v; want checks to run = %v", *executed, tt.wantErr)
-			}
-		})
-	}
 }
 
 type mockPrereqStore struct{}
@@ -829,7 +592,7 @@ func TestEnsureBasicPrerequisites_InvalidProject(t *testing.T) {
 	cmd := &cobra.Command{}
 	projectID := "invalid-project"
 
-	err := ensureBasicPrerequisites(cmd, projectID)
+	err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeGKE, projectID)
 	if err == nil {
 		t.Fatal("expected error because project is invalid, got nil")
 	}
@@ -859,7 +622,7 @@ func TestEnsureBasicPrerequisites_SaveState(t *testing.T) {
 	cmd := &cobra.Command{}
 	projectID := "test-project"
 
-	err := ensureBasicPrerequisites(cmd, projectID)
+	err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeGKE, projectID)
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
@@ -921,7 +684,7 @@ func TestEnsureBasicPrerequisites_RestrictedPermissions_Proceeds(t *testing.T) {
 	cmd := &cobra.Command{}
 	projectID := "restricted-project"
 
-	err := ensureBasicPrerequisites(cmd, projectID)
+	err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeGKE, projectID)
 	if err != nil {
 		t.Fatalf("expected nil error when user lacks resourcemanager permission, got: %v", err)
 	}
@@ -957,7 +720,7 @@ func TestEnsureBasicPrerequisites_ProjectNameContainsPermission_Fails(t *testing
 	cmd := &cobra.Command{}
 	projectID := "my-permission-test"
 
-	err := ensureBasicPrerequisites(cmd, projectID)
+	err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeGKE, projectID)
 	// It should hard fail because it is a NOT_FOUND error, NOT a true IAM permission error.
 	if err == nil {
 		t.Fatal("expected error because project does not exist, but got nil")
@@ -965,5 +728,177 @@ func TestEnsureBasicPrerequisites_ProjectNameContainsPermission_Fails(t *testing
 
 	if !strings.Contains(err.Error(), "NOT_FOUND") {
 		t.Errorf("expected error to contain NOT_FOUND, got: %v", err)
+	}
+}
+
+func TestEnsureBasicPrerequisitesFor_K8sCacheHitAndGKEFullCheck(t *testing.T) {
+	executed := stubPrereqCommands(t)
+	adcCalls := 0
+	getADCSetupCommandFunc = func() string {
+		adcCalls++
+		return ""
+	}
+	cmd := &cobra.Command{}
+
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeK8s, "shared-proj"); err != nil {
+		t.Fatalf("ensureBasicPrerequisitesFor(TypeK8s) err = %v, want nil", err)
+	}
+	if len(*executed) != 1 || !strings.HasPrefix((*executed)[0], "kubectl version") || adcCalls != 0 {
+		t.Fatalf("TypeK8s executed = %v (adcCalls=%d), want only kubectl version and 0 ADC checks", *executed, adcCalls)
+	}
+
+	// Second TypeK8s run within 24h must hit the cache with zero subprocesses.
+	*executed = nil
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeK8s, "shared-proj"); err != nil {
+		t.Fatalf("second ensureBasicPrerequisitesFor(TypeK8s) err = %v, want nil", err)
+	}
+	if len(*executed) != 0 || adcCalls != 0 {
+		t.Fatalf("second TypeK8s executed = %v (adcCalls=%d), want 0 subprocesses", *executed, adcCalls)
+	}
+
+	// Subsequent TypeGKE run on the same project must still verify gcloud, auth, ADC, plugin, and project.
+	*executed = nil
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeGKE, "shared-proj"); err != nil {
+		t.Fatalf("ensureBasicPrerequisitesFor(TypeGKE) err = %v, want nil", err)
+	}
+	wantGKECmds := []string{
+		"gcloud version",
+		"gcloud auth list --filter=status:ACTIVE --format=value(account)",
+		"gke-gcloud-auth-plugin --version",
+		"gcloud projects describe shared-proj",
+	}
+	if !slices.Equal(*executed, wantGKECmds) || adcCalls != 1 {
+		t.Fatalf("TypeGKE executed = %v (adcCalls=%d), want %v and adcCalls=1", *executed, adcCalls, wantGKECmds)
+	}
+}
+
+func TestEnsureBasicPrerequisitesFor_PreservesUnexpiredAndARProjectState(t *testing.T) {
+	executed := stubPrereqCommands(t)
+	adcCalls := 0
+	getADCSetupCommandFunc = func() string {
+		adcCalls++
+		return ""
+	}
+	cmd := &cobra.Command{}
+	tenHoursAgo := time.Now().Add(-10 * time.Hour).Round(time.Second)
+	store.Save(PrereqState{
+		GCloudSDKInstalled:           true,
+		GCloudProjectConfigured:      true,
+		GCloudAuthenticated:          true,
+		ADCConfigured:                true,
+		GKEGCloudAuthPluginInstalled: true,
+		ArtifactRegistryAPIEnabled:   true,
+		LastCheckedARProjectID:       "ar-proj-1",
+		LastCheckedProjectID:         "gke-proj-a",
+		LastCheckedTimestamp:         tenHoursAgo,
+	})
+
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeK8s, ""); err != nil {
+		t.Fatalf("ensureBasicPrerequisitesFor(TypeK8s) err = %v, want nil", err)
+	}
+	if len(*executed) != 1 || !strings.HasPrefix((*executed)[0], "kubectl version") || adcCalls != 0 {
+		t.Fatalf("TypeK8s executed = %v (adcCalls=%d), want only kubectl version", *executed, adcCalls)
+	}
+	saved := store.Load()
+	if !saved.LastCheckedTimestamp.Equal(tenHoursAgo) {
+		t.Fatalf("TypeK8s LastCheckedTimestamp = %v, want %v", saved.LastCheckedTimestamp, tenHoursAgo)
+	}
+	saved.LastCheckedTimestamp = time.Time{}
+	wantAfterK8s := PrereqState{
+		GCloudSDKInstalled:           true,
+		GCloudProjectConfigured:      true,
+		GCloudAuthenticated:          true,
+		ADCConfigured:                true,
+		KubectlInstalled:             true,
+		GKEGCloudAuthPluginInstalled: true,
+		ArtifactRegistryAPIEnabled:   true,
+		LastCheckedARProjectID:       "ar-proj-1",
+		LastCheckedProjectID:         "gke-proj-a",
+	}
+	if saved != wantAfterK8s {
+		t.Fatalf("TypeK8s state = %+v, want %+v", saved, wantAfterK8s)
+	}
+
+	assertUnexpiredCrossProjectGKEPrereqs(t, cmd, executed, &adcCalls, tenHoursAgo)
+}
+
+func assertUnexpiredCrossProjectGKEPrereqs(t *testing.T, cmd *cobra.Command, executed *[]string, adcCalls *int, tenHoursAgo time.Time) {
+	t.Helper()
+	*executed = nil
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeGKE, "gke-proj-b"); err != nil {
+		t.Fatalf("ensureBasicPrerequisitesFor(TypeGKE, gke-proj-b) err = %v, want nil", err)
+	}
+	if !slices.Equal(*executed, []string{"gcloud projects describe gke-proj-b"}) || *adcCalls != 0 {
+		t.Fatalf("cross-project GKE executed = %v (adcCalls=%d), want only [gcloud projects describe gke-proj-b] and 0 ADC calls", *executed, *adcCalls)
+	}
+	saved := store.Load()
+	if !saved.ArtifactRegistryAPIEnabled || saved.LastCheckedARProjectID != "ar-proj-1" || saved.LastCheckedProjectID != "gke-proj-b" || !saved.LastCheckedTimestamp.Equal(tenHoursAgo) {
+		t.Fatalf("cross-project GKE state = %+v, want LastCheckedARProjectID=\"ar-proj-1\" and timestamp=%v preserved", saved, tenHoursAgo)
+	}
+}
+
+func TestEnsureBasicPrerequisitesFor_ExpiredGKEFlagsNotResurrectedByK8sRefresh(t *testing.T) {
+	executed := stubPrereqCommands(t)
+	adcCalls := 0
+	getADCSetupCommandFunc = func() string {
+		adcCalls++
+		return ""
+	}
+	cmd := &cobra.Command{}
+	store.Save(PrereqState{
+		GCloudSDKInstalled:           true,
+		GCloudProjectConfigured:      true,
+		GCloudAuthenticated:          true,
+		ADCConfigured:                true,
+		KubectlInstalled:             true,
+		GKEGCloudAuthPluginInstalled: true,
+		ArtifactRegistryAPIEnabled:   true,
+		LastCheckedARProjectID:       "ar-proj-old",
+		LastCheckedProjectID:         "shared-proj",
+		LastCheckedTimestamp:         time.Now().Add(-48 * time.Hour),
+	})
+
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeK8s, ""); err != nil {
+		t.Fatalf("ensureBasicPrerequisitesFor(TypeK8s) after expiry err = %v, want nil", err)
+	}
+	savedAfterK8s := store.Load()
+	cleared := savedAfterK8s
+	cleared.LastCheckedTimestamp = time.Time{}
+	if cleared != (PrereqState{KubectlInstalled: true}) || isTimestampExpired(savedAfterK8s) {
+		t.Fatalf("saved state after TypeK8s refresh = %+v, want only KubectlInstalled=true with fresh timestamp", savedAfterK8s)
+	}
+
+	*executed = nil
+	if err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeGKE, "shared-proj"); err != nil {
+		t.Fatalf("ensureBasicPrerequisitesFor(TypeGKE) after K8s refresh err = %v, want nil", err)
+	}
+	wantGKECmds := []string{
+		"gcloud version",
+		"gcloud auth list --filter=status:ACTIVE --format=value(account)",
+		"gke-gcloud-auth-plugin --version",
+		"gcloud projects describe shared-proj",
+	}
+	if !slices.Equal(*executed, wantGKECmds) || adcCalls != 1 {
+		t.Fatalf("TypeGKE executed = %v (adcCalls=%d), want %v and adcCalls=1", *executed, adcCalls, wantGKECmds)
+	}
+}
+
+func TestEnsureK8sOnlyBasicPrerequisites_MissingKubectl(t *testing.T) {
+	stubPrereqCommands(t)
+	origExec := shell.ExecuteCommandWithTimeout
+	t.Cleanup(func() { shell.ExecuteCommandWithTimeout = origExec })
+	shell.ExecuteCommandWithTimeout = func(_ time.Duration, name string, args ...string) shell.CommandResult {
+		return shell.CommandResult{ExitCode: 127, Stderr: "kubectl: command not found"}
+	}
+
+	var out bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&out)
+	err := ensureBasicPrerequisitesFor(cmd, orchestrator.TypeK8s, "")
+	if err == nil || !strings.Contains(err.Error(), "prerequisites are missing") {
+		t.Fatalf("ensureBasicPrerequisitesFor(cmd, %q, \"\") err = %v, want missing prerequisites error", orchestrator.TypeK8s, err)
+	}
+	if !strings.Contains(out.String(), "kubectl") || strings.Contains(out.String(), "gcloud") {
+		t.Errorf("TypeK8s missing kubectl remediation = %q, want kubectl hint without gcloud", out.String())
 	}
 }
