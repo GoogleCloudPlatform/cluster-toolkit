@@ -18,15 +18,23 @@ If you use `--build-context` to build images on-the-fly:
 
 * `GCLUSTER_REFRESH_CREDENTIALS`: Set to `1` to make every `gcluster job` command re-run `gcloud container clusters get-credentials` instead of reusing an existing, verified `kubeconfig` context for the cluster. See [Cluster connectivity and kubeconfig reuse](#101-cluster-connectivity-and-kubeconfig-reuse) for when this is useful.
 * `GCLUSTER_TELEMETRY_IMAGE`: Container image URI for the ML Diagnostics collector native sidecar on Kubernetes 1.29+ TPU workloads when `--enable-ml-diagnostics` is passed without `--ml-diagnostics-image` (switches GKE jobs from the managed webhook to native sidecar injection). Pass `--ml-diagnostics-image=""` to ignore it for one submission.
-* `GCLUSTER_ORCHESTRATOR`: Override automatic orchestrator detection (`gke` or `k8s`). When unset, `gcluster` inspects your `KUBECONFIG` context (`gke-gcloud-auth-plugin`, `*.gke.goog`, legacy `gcp` auth-provider, canonical `gke_` context naming, or `-gke.` API server version) and routes generic Kubernetes clusters to `k8s` mode for `list` (`JobSet`s labeled `gcluster.google.com/workload`), `logs`, `cancel`, and `inspect` without requiring `--project`, `--location`, or `gcloud` (`gcluster job submit` currently requires a GKE cluster). When `gcluster job config` defaults are saved, setting `GCLUSTER_ORCHESTRATOR=k8s` bypasses all saved `cluster`, `project`, and `location` defaults, while passing `--cluster <k8s-context>` (when different from any saved `cluster`) on `list`, `logs`, `cancel`, or `inspect` overrides `cluster` and ignores saved `project` and `location` defaults with a warning.
-* `GCLUSTER_AIR_GAPPED`: Set to `true` (or `1` / `yes` / `on`) in disconnected or air-gapped environments to skip the live API server version probe during orchestrator detection, block outbound GitHub manifest downloads for automatic JobSet or Kueue installation/re-installation (requiring pre-installed controllers), and skip CLI telemetry collection and uploads for the current process without changing your saved telemetry preference. Setting `false` / `0` / `no` / `off` disables air-gapped mode for the current command (for example, overriding an exported `GCLUSTER_AIR_GAPPED=true`) without overriding `gcluster telemetry off`.
+* `GCLUSTER_ORCHESTRATOR`: Override automatic orchestrator detection (`gke` or `k8s`). When unset, `gcluster` inspects your `KUBECONFIG` context (`gke-gcloud-auth-plugin`, `*.gke.goog`, legacy `gcp` auth-provider, canonical `gke_` context naming, or `-gke.` API server version) and routes generic Kubernetes clusters to `k8s` mode for `submit`, `list`, `logs`, `cancel`, and `inspect` without requiring `--project`, `--location`, or `gcloud`. When `gcluster job config` defaults are saved, setting `GCLUSTER_ORCHESTRATOR=k8s` bypasses all saved `cluster`, `project`, and `location` defaults, while passing `--cluster <k8s-context>` (when different from any saved `cluster`) overrides `cluster` and ignores saved `project` and `location` defaults with a warning.
+* `GCLUSTER_AIR_GAPPED`: Set to `true` (or `1` / `yes` / `on`) in disconnected or air-gapped environments to skip the live API server version probe during orchestrator detection, skip outbound GitHub connectivity probes and automatic JobSet or Kueue installation/re-installation (continuing with installed Kubernetes APIs instead), and skip CLI telemetry collection and uploads for the current process without changing your saved telemetry preference. On clusters exposing `slice.tpu.google.com/v1alpha1` (`tpu-slice` label scheme), air-gapped defaults to active automatically unless `GCLUSTER_AIR_GAPPED=false` is explicitly set. Setting `false` / `0` / `no` / `off` disables air-gapped mode for the current command without overriding `gcluster telemetry off`.
+* `GCLUSTER_LABEL_SCHEME`: Override automatic Kubernetes node label scheme detection (`tpu-slice`, `gke`, or `generic`) in `k8s` mode when `--k8s-label-scheme` is not passed.
+* `GCLUSTER_DISABLE_KUEUE`: Set to `1` (or `true`) to skip Kueue queueing and omit `kueue.x-k8s.io/queue-name` even when Kueue is installed.
+* `GCLUSTER_DISABLE_JOBSET`: Set to `1` (or `true`) to disable `JobSet` rendering and use a standalone `batch/v1` Indexed `Job` plus headless `Service` (single-slice non-Pathways workloads; on `tpu-slice` clusters, supported only when reusing an existing `READY` slice).
 
 > [!NOTE]
 > ### Automated Prerequisite Checks Overview
 >
 > When you run `gcluster job` commands, prerequisite checks match the detected orchestrator:
 >
-> * **Kubernetes (`k8s`) mode** (`list`, `logs`, `cancel`, `inspect`): Checks only that `kubectl` is installed (zero `gcloud` or Google Cloud credential checks).
+> * **Kubernetes (`k8s`) mode** (`submit`, `list`, `logs`, `cancel`, `inspect`): Checks only that `kubectl` is installed (zero `gcloud` or Google Cloud credential checks).
+> * **Optional Add-On Adaptation (`JobSet` & `Kueue`)**: Before submitting, `gcluster` classifies both `JobSet` and `Kueue` once as `Installed`, `Partial` (fails fast without overwriting), or `Missing`. When an add-on is `Missing`:
+>   * On `tpu-slice` clusters, missing `Kueue` continues silently without Kueue (native slice scheduling handles queueing).
+>   * When connected and interactive, `gcluster` offers a single 3-way prompt (`[1] install / [2] continue with installed APIs / [3] cancel`).
+>   * When connected and non-interactive, GKE installs on fresh clusters after `kubectl auth can-i` checks, while Kubernetes (`k8s`) mode continues with installed APIs without mutating the cluster.
+>   * When air-gapped or running `--dry-run-out`, `gcluster` never installs add-ons and adapts to installed APIs (omitting `kueue.x-k8s.io/queue-name` without Kueue, or rendering a standalone `batch/v1` Indexed `Job` + headless `Service` without JobSet).
 > * **GKE (`gke`) mode**:
 >   * **Google Cloud SDK**: Verifies `gcloud` is installed.
 >   * **Gcloud Authentication**: Checks if authenticated and if Application Default Credentials (ADC) are valid.
@@ -1424,6 +1432,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--gke-nap-provisioning` | `string` | Compute provisioning model for GKE NAP. Allowed values: `on-demand`, `spot`, `reservation`. |
 | `--gke-nap-reservation` | `string` | Name of the Google Cloud Reservation for GKE NAP (required if `--gke-nap-provisioning=reservation`). |
 | `--gke-custom-templates-path` | `string` | Path to a local directory containing custom GKE manifest template overrides. |
+| `--k8s-label-scheme` | `string` | Override Kubernetes node label scheme detection for non-GKE clusters (`tpu-slice`, `gke`, or `generic`; overrides `GCLUSTER_LABEL_SCHEME`). |
 
 ### 9.4 `list` Flags
 *Use these flags to filter the list of jobs.*

@@ -65,6 +65,7 @@ var (
 	serviceAccountName     string
 	topology               string
 	gkeCustomTemplatesPath string
+	k8sLabelScheme         string
 	gkeScheduler           string
 	platform               string
 
@@ -95,19 +96,22 @@ var (
 
 var SubmitCmd = &cobra.Command{
 	Use:   "submit",
-	Short: "Submits a workload on a GKE cluster using JobSet.",
-	Long: `The 'submit' command deploys a workload (Kubernetes JobSet)
-on a GKE cluster, integrated with Kueue. Image can be pre-built (--image)
+	Short: "Submits a workload on a GKE or Kubernetes cluster.",
+	Long: `The 'submit' command deploys a workload (Kubernetes JobSet, or a standalone batch/v1 Indexed Job when JobSet is absent)
+on a GKE or Kubernetes cluster, with optional Kueue integration. Image can be pre-built (--image)
 or built on-the-fly using Crane (--base-image with --build-context).
 
 It accepts parameters for the container image, command to execute, accelerator type,
-and JobSet/Kueue specific configurations like workload name, queue, nodes, and restarts.`,
+and workload scheduling configurations like workload name, queue, nodes, and restarts.`,
 	RunE: runSubmitCmd,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if err := validateWorkloadNameLength(workloadName, isPathwaysJob); err != nil {
 			return err
 		}
-		if computeType == "" && pathways.RunSPSWorkload == "" {
+		if _, err := k8s.ParseLabelScheme(k8sLabelScheme); err != nil {
+			return err
+		}
+		if computeType == "" && pathways.RunSPSWorkload == "" && detectedOrchestratorType != orchestrator.TypeK8s {
 			return fmt.Errorf("required flag(s) \"compute-type\" not set")
 		}
 
@@ -215,6 +219,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&mlDiagnosticsImage, "ml-diagnostics-image", "", "Container image for the ML Diagnostics telemetry collector native sidecar on Kubernetes 1.29+ TPU workloads (requires --enable-ml-diagnostics; overrides GCLUSTER_TELEMETRY_IMAGE, and --ml-diagnostics-image=\"\" ignores it so GKE uses the managed webhook).")
 	SubmitCmd.Flags().IntVar(&mlDiagnosticsTelemetryPort, "ml-diagnostics-telemetry-port", k8s.DefaultTelemetryCollectorPort, "Prometheus metrics port exposed by the ML Diagnostics collector sidecar (requires --enable-ml-diagnostics with --ml-diagnostics-image or GCLUSTER_TELEMETRY_IMAGE on GKE; ports 8431-8438, 8471, 8476-8479, and 13133 are reserved).")
 	SubmitCmd.Flags().StringVar(&gkeCustomTemplatesPath, "gke-custom-templates-path", "", "Path to a local directory containing custom GKE templates overrides.")
+	SubmitCmd.Flags().StringVar(&k8sLabelScheme, "k8s-label-scheme", "", "Override Kubernetes node label scheme for non-GKE clusters: tpu-slice, gke, or generic (default: auto-detect from nodes and API discovery; overrides GCLUSTER_LABEL_SCHEME).")
 
 	_ = SubmitCmd.MarkFlagRequired("name")
 }
@@ -292,6 +297,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		GKEMTCEnabled:                 gkeMtcEnabled,
 		GKEMTCRamdiskDirectory:        gkeMtcRamdiskDirectory,
 		GkeCustomTemplatesPath:        gkeCustomTemplatesPath,
+		K8sLabelScheme:                k8sLabelScheme,
 		GKENAPProvisioning:            gkeNapProvisioning,
 		GKENAPReservation:             gkeNapReservation,
 		IsPathwaysJob:                 isPathwaysJob,

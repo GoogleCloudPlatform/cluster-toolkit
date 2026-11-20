@@ -2164,24 +2164,6 @@ func TestTypeK8s_ZeroGCloudAcrossLifecycle(t *testing.T) {
 	mockExec := newTypeK8sInspectMockExecutor()
 	orc.SetExecutor(mockExec)
 
-	submitErr := orc.SubmitJob(orchestrator.JobDefinition{
-		WorkloadName:           "blocked-job",
-		ImageName:              "busybox:latest",
-		CommandToRun:           "echo hi",
-		GKENamespace:           "should-not-mutate",
-		GkeCustomTemplatesPath: "/should-not-mutate",
-	})
-	wantSubmitErr := orchestrator.UnsupportedK8sSubmitError().Error()
-	if submitErr == nil || submitErr.Error() != wantSubmitErr {
-		t.Fatalf("SubmitJob(TypeK8s) error = %v, want %q", submitErr, wantSubmitErr)
-	}
-	if orc.namespace != "" || orc.gkeCustomTemplatesPath != "" {
-		t.Fatalf("SubmitJob(TypeK8s) mutated state: namespace=%q customTemplatesPath=%q, want both empty", orc.namespace, orc.gkeCustomTemplatesPath)
-	}
-	if len(mockExec.calls) != 0 {
-		t.Fatalf("SubmitJob(TypeK8s) calls = %v, want 0 subprocess calls", mockExec.calls)
-	}
-
 	if loc, err := orc.Initialize("local-k8s", "", ""); err != nil || loc != "" {
 		t.Fatalf("Initialize(TypeK8s) = (%q, %v), want ('', nil)", loc, err)
 	}

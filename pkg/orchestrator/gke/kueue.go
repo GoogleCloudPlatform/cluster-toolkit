@@ -16,6 +16,7 @@ package gke
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,11 +29,16 @@ import (
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"gopkg.in/yaml.v2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/client-go/dynamic"
 )
 
 // -----------------------------------------------------------------------------
@@ -49,8 +55,10 @@ const (
 	defaultClusterQueue  = "default"
 	multisliceLocalQueue = "multislice-queue"
 
-	// kueueAPIVersion is the GVR version used for Kueue resources.
+	// kueueAPIVersion is the primary GVR version used for Kueue resources (Kueue v0.15+).
 	kueueAPIVersion = "v1beta2"
+	// kueueFallbackAPIVersion is the fallback GVR version for older pre-installed Kueue clusters (e.g. v0.10.x).
+	kueueFallbackAPIVersion = "v1beta1"
 
 	clusterQueueManifestFile = "cluster-queue.yaml"
 	localQueueManifestFile   = "local-queue.yaml"
@@ -471,6 +479,83 @@ func (g *GKEOrchestrator) checkKueueInstallPermissions(version string) error {
 		return fmt.Errorf("unable to re-install Kueue to version %s: missing required RBAC permissions: [%s]. Please contact your cluster administrator", version, strings.Join(missing, ", "))
 	}
 	return nil
+}
+
+// installKueueOnFreshCluster installs Kueue on a cluster where neither CRD nor controller Deployment exists.
+// It never deletes existing Kueue resources and never installs GKE default queues on TypeK8s clusters.
+func (g *GKEOrchestrator) installKueueOnFreshCluster(targetVersion, clusterName string) error {
+	if targetVersion == "" {
+		targetVersion = defaultKueueVersion
+	} else if !strings.HasPrefix(targetVersion, "v") {
+		targetVersion = "v" + targetVersion
+	}
+	if g.mode != orchestrator.TypeK8s && g.checkDynamicSlicingViaGKE() {
+		return fmt.Errorf("automatic Kueue installation/modification blocked: cluster %s is set up for Dynamic-Slicing (found 'PROVISION_ONLY' in node pool placementPolicy). Automatic installation or modification of Kueue could conflict with custom topology configurations. Please install Kueue and required CRDs manually", clusterName)
+	}
+	if g.isAirGapped() {
+		return fmt.Errorf("Kueue is not installed and cannot be downloaded when %s is enabled; pre-install Kueue %s on the cluster first", shell.AirGappedEnvVar, targetVersion)
+	}
+	if err := g.checkKueueInstallPermissions(targetVersion); err != nil {
+		return err
+	}
+	kueueManifestsURL := fmt.Sprintf("https://github.com/kubernetes-sigs/kueue/releases/download/%s/manifests.yaml", targetVersion)
+	manifestBytes, err := g.downloadManifests(kueueManifestsURL)
+	if err != nil {
+		return err
+	}
+	cleanedManifests, err := g.cleanAndProcessManifests(manifestBytes, nil)
+	if err != nil {
+		return err
+	}
+	manifestPath, err := writeGeneratedManifest(cleanedManifests, "kueue.yaml")
+	if err != nil {
+		return err
+	}
+	logging.Info("Installing Kueue version %s...", targetVersion)
+	if err := g.applyManifestFile(manifestPath, ""); err != nil {
+		return fmt.Errorf("%w\nTo finish installing Kueue %s from the saved manifest, run:\n  %s",
+			err, targetVersion, kubectlCommandLine(g.kubeContext, "apply", "-f", manifestPath))
+	}
+	logging.Info("Kueue components applied successfully.")
+	if err := g.waitForKueueWebhook(); err != nil {
+		return err
+	}
+	if g.mode != orchestrator.TypeK8s {
+		return g.installKueueResources(defaultClusterQueue, defaultLocalQueue)
+	}
+	return nil
+}
+
+// partialKueueInstallError reports an incomplete Kueue installation without modifying cluster state.
+func (g *GKEOrchestrator) partialKueueInstallError(crdInstalled bool) error {
+	kubectl := func(args ...string) string { return kubectlCommandLine(g.kubeContext, args...) }
+	if crdInstalled {
+		return fmt.Errorf("Kueue is only partly installed: CRD clusterqueues.kueue.x-k8s.io exists (or could not be read), but Deployment kueue-system/kueue-controller-manager was not found. gcluster made no changes.\n"+
+			"Verify your Kueue installation ('%s' / '%s'), ask your cluster administrator to restore or remove the partial install, or set %s=1 to submit without Kueue",
+			kubectl("get", "deployments", "-n", "kueue-system"),
+			kubectl("get", "crd", "clusterqueues.kueue.x-k8s.io"),
+			disableKueueEnvVar)
+	}
+	return fmt.Errorf("Kueue is only partly installed: Deployment kueue-system/kueue-controller-manager exists (or could not be read), but CRD clusterqueues.kueue.x-k8s.io was not found. gcluster made no changes.\n"+
+		"Verify your Kueue installation ('%s' / '%s'), ask your cluster administrator to restore or remove the partial install, or set %s=1 to submit without Kueue",
+		kubectl("get", "deployments", "-n", "kueue-system"),
+		kubectl("get", "crd", "clusterqueues.kueue.x-k8s.io"),
+		disableKueueEnvVar)
+}
+
+// listKueueWorkloads queries Kueue Workload objects using v1beta2 first and transparently falls back
+// to v1beta1 strictly on NotFound/NoMatch errors for compatibility with older Kueue clusters.
+func listKueueWorkloads(client dynamic.Interface, ns, uid string) (*unstructured.UnstructuredList, error) {
+	listOpts := metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("kueue.x-k8s.io/job-uid=%s", uid),
+	}
+	primaryGVR := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: kueueAPIVersion, Resource: "workloads"}
+	wlList, err := client.Resource(primaryGVR).Namespace(ns).List(context.TODO(), listOpts)
+	if err == nil || !k8s.IsNotFoundOrNoMatchError(err) {
+		return wlList, err
+	}
+	fallbackGVR := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: kueueFallbackAPIVersion, Resource: "workloads"}
+	return client.Resource(fallbackGVR).Namespace(ns).List(context.TODO(), listOpts)
 }
 
 func (g *GKEOrchestrator) isKueueInstalled() (bool, error) {

@@ -219,6 +219,13 @@ type GKEOrchestrator struct {
 	nfsAuthChecked bool
 	// inventory caches pure-Kubernetes node, slice, and label-scheme discovery results for the current run.
 	inventory *k8s.Inventory
+	// addons caches the resolved 3-state JobSet/Kueue matrix once per submission.
+	addons addonPlan
+	// connectivity lazily probes outbound GitHub reachability once per run when an add-on install is considered.
+	connectivity *connectivityChecker
+	// isInteractiveFunc and promptLineFunc allow race-free test injection of TTY detection and 3-way prompt reads.
+	isInteractiveFunc func() bool
+	promptLineFunc    func(string) (string, bool)
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -681,6 +688,7 @@ type jobSetInfo struct {
 	expectedPods    int
 	expectedStreams int
 	queried         bool
+	isBatchJob      bool
 }
 
 func (info jobSetInfo) terminal() bool {
@@ -1039,4 +1047,75 @@ type kubectlServerVersion struct {
 
 type kubectlVersionOutput struct {
 	ServerVersion *kubectlServerVersion `json:"serverVersion"`
+}
+
+// addonState represents the 3-state classification of an optional Kubernetes workload add-on (JobSet or Kueue),
+// plus an explicit Disabled state when pinned off by environment variable.
+type addonState int
+
+const (
+	addonStateUnknown addonState = iota
+	addonStateInstalled
+	addonStatePartial
+	addonStateMissing
+	addonStateDisabled
+)
+
+type jobSetAddonProbe struct {
+	state        addonState
+	crdExists    bool
+	crdForbidden bool
+	epReady      bool
+	epForbidden  bool
+	epErr        error
+	checkedEP    bool
+}
+
+type kueueAddonProbe struct {
+	state          addonState
+	crdExists      bool
+	depInstalled   bool
+	dep            *kueueDeployment
+	currentVersion string
+}
+
+type addonPlan struct {
+	resolved      bool
+	jobSetEnabled bool
+	kueueEnabled  bool
+	jobSetState   addonState
+	kueueState    addonState
+}
+
+// connectivityChecker lazily checks outbound GitHub reachability once per run without package-level mutable state.
+type connectivityChecker struct {
+	getenv func(string) string
+	probe  func(ctx context.Context) bool
+	once   sync.Once
+	online bool
+}
+
+// batchJobInfoJSON captures the fields needed by GetJobLogs when falling back to a standalone batch/v1 Job.
+type batchJobInfoJSON struct {
+	Metadata struct {
+		Name   string            `json:"name"`
+		Labels map[string]string `json:"labels"`
+	} `json:"metadata"`
+	Spec struct {
+		Suspend     *bool `json:"suspend"`
+		Parallelism *int  `json:"parallelism"`
+		Completions *int  `json:"completions"`
+		Template    struct {
+			Spec struct {
+				InitContainers []struct{ Name string } `json:"initContainers"`
+				Containers     []struct{ Name string } `json:"containers"`
+			} `json:"spec"`
+		} `json:"template"`
+	} `json:"spec"`
+	Status struct {
+		Conditions []struct {
+			Type   string `json:"type"`
+			Status string `json:"status"`
+		} `json:"conditions"`
+	} `json:"status"`
 }

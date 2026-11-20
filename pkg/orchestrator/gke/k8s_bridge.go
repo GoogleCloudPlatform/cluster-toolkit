@@ -123,8 +123,11 @@ func scaleExpectedStreams(livePods, liveStreams, expectedPods, expectedStreams i
 	return max(expectedPods, streams)
 }
 
-func (g *GKEOrchestrator) allPodsLogsCommand(namespace, name string, maxReqs int, follow bool) string {
+func (g *GKEOrchestrator) allPodsLogsCommand(namespace, name string, maxReqs int, follow, isBatchJob bool) string {
 	selector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name)
+	if isBatchJob {
+		selector = fmt.Sprintf("gcluster.google.com/workload=%s", name)
+	}
 	args := []string{"logs", "-n", namespace, "-l", selector, "--all-containers", "--prefix"}
 	if follow {
 		args = append(args, "-f")
@@ -133,13 +136,13 @@ func (g *GKEOrchestrator) allPodsLogsCommand(namespace, name string, maxReqs int
 	return kubectlCommandLine(g.kubeContext, args...)
 }
 
-func (g *GKEOrchestrator) logMainOnlyDefault(name, namespace string, opts orchestrator.LogsOptions, podCount, maxReqs int) {
+func (g *GKEOrchestrator) logMainOnlyDefault(name, namespace string, opts orchestrator.LogsOptions, podCount, maxReqs int, isBatchJob bool) {
 	if podCount <= maxLogRequests {
 		logging.Info("Job has %d pods (> 5). Defaulting to --main-only logs. To fetch logs from all pods, run with --main-only=false.", podCount)
 		return
 	}
 	if g.mode == orchestrator.TypeK8s {
-		cmdLine := g.allPodsLogsCommand(namespace, name, maxReqs, opts.Follow)
+		cmdLine := g.allPodsLogsCommand(namespace, name, maxReqs, opts.Follow, isBatchJob)
 		logging.Info("Job has %d pods (> %d). Defaulting to --main-only logs. To view logs from all pods, run '%s'.", podCount, maxLogRequests, cmdLine)
 		return
 	}
@@ -147,9 +150,9 @@ func (g *GKEOrchestrator) logMainOnlyDefault(name, namespace string, opts orches
 	logging.Info("Job has %d pods (> %d). Defaulting to --main-only logs. To view logs from all pods, use the Google Cloud Console:\n%s", podCount, maxLogRequests, consoleURL)
 }
 
-func (g *GKEOrchestrator) maxLogRequestsError(name, namespace string, opts orchestrator.LogsOptions, podCount, maxReqs int) error {
+func (g *GKEOrchestrator) maxLogRequestsError(name, namespace string, opts orchestrator.LogsOptions, podCount, maxReqs int, isBatchJob bool) error {
 	if g.mode == orchestrator.TypeK8s {
-		cmdLine := g.allPodsLogsCommand(namespace, name, maxReqs, opts.Follow)
+		cmdLine := g.allPodsLogsCommand(namespace, name, maxReqs, opts.Follow, isBatchJob)
 		verb := "fetch"
 		if opts.Follow {
 			verb = "stream"

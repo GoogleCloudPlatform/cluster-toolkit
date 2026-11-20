@@ -31,6 +31,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"golang.org/x/term"
 )
 
 const (
@@ -223,6 +225,37 @@ Please select an option [d,a,s,c]: `)
 			logging.ExitWithCode(0, "user chose to stop execution of gcluster rather than make proposed changes to infrastructure")
 		}
 	}
+}
+
+// IsInteractive reports whether standard input is connected to an interactive terminal (TTY).
+// It is a package variable so tests can override interactivity deterministically.
+var IsInteractive = func() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
+// PromptLine prints prompt and reads one trimmed line from standard input.
+// It returns (line, true) when input was read, or ("", false) on EOF without input or read error.
+var PromptLine = func(prompt string) (string, bool) {
+	return promptLine(os.Stdin, prompt)
+}
+
+func promptLine(in io.Reader, prompt string) (string, bool) {
+	fmt.Print(prompt)
+	line, err := readLine(in)
+	trimmed := strings.TrimSpace(strings.TrimPrefix(line, "\uFEFF"))
+	if err != nil {
+		if !errors.Is(err, io.EOF) {
+			fmt.Println()
+			logging.Warn("Could not read standard input (%v); falling back to non-interactive default.", err)
+			return "", false
+		}
+		if trimmed == "" {
+			fmt.Println()
+			logging.Warn("No answer on standard input (it is closed or ended); falling back to non-interactive default.")
+			return "", false
+		}
+	}
+	return trimmed, true
 }
 
 // PromptYesNo prompts the user with a yes/no question and reads one line from standard input.

@@ -517,3 +517,136 @@ func TestCreatedByJobSet(t *testing.T) {
 		}
 	}
 }
+
+func makeTestOwnedBatchJob(name, uid string) unstructured.Unstructured {
+	obj := workloadWithClaims("Job", name, map[string]interface{}{workloadLabel: name}, nil)
+	obj.Object["metadata"].(map[string]interface{})["uid"] = "job-" + uid
+	return obj
+}
+
+func makeTestOwnedService(name, uid string) unstructured.Unstructured {
+	return unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "Service",
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": "default",
+			"uid":       "svc-" + uid,
+			"labels":    map[string]interface{}{workloadLabel: name},
+		},
+	}}
+}
+
+func makeTestUnownedObject(kind, name string) unstructured.Unstructured {
+	return unstructured.Unstructured{Object: map[string]interface{}{
+		"kind": kind,
+		"metadata": map[string]interface{}{
+			"name":      name,
+			"namespace": "default",
+			"labels":    map[string]interface{}{"app": "other-team"},
+		},
+	}}
+}
+
+func TestCancelJob_FallbackBatchJobAndOwnershipGuards(t *testing.T) {
+	noMatchErr := errors.New(`the server could not find the requested resource (delete jobsets.jobset.x-k8s.io)`)
+	notFoundErr := apierrors.NewNotFound(jobSetGVR.GroupResource(), "tier3-job")
+
+	t.Run("NoMatch deletes owned batch/v1 Job and headless Service", func(t *testing.T) {
+		mock := &MockKubeClient{
+			Namespace:       "default",
+			DeleteJobSetErr: noMatchErr,
+			ListErrs:        map[string]error{"jobsets": noMatchErr},
+			Objects: map[string][]unstructured.Unstructured{
+				"jobs":     {makeTestOwnedBatchJob("tier3-job", "1")},
+				"services": {makeTestOwnedService("tier3-job", "1")},
+			},
+		}
+		if err := cancelTestOrchestrator(mock).CancelJob("tier3-job", cancelOpts); err != nil {
+			t.Fatalf("CancelJob(NoMatch fallback) err = %v, want nil", err)
+		}
+		if !reflect.DeepEqual(mock.Deleted["jobs"], []string{"tier3-job"}) || !reflect.DeepEqual(mock.Deleted["services"], []string{"tier3-job"}) {
+			t.Errorf("Deleted = %v, want jobs=[tier3-job] and services=[tier3-job]", mock.Deleted)
+		}
+	})
+
+	t.Run("NotFound deletes owned batch/v1 Job and skips unowned same-named Service", func(t *testing.T) {
+		mock := &MockKubeClient{
+			Namespace:       "default",
+			DeleteJobSetErr: notFoundErr,
+			Objects: map[string][]unstructured.Unstructured{
+				"jobs":     {makeTestOwnedBatchJob("tier3-job", "2")},
+				"services": {makeTestUnownedObject("Service", "tier3-job")},
+			},
+		}
+		if err := cancelTestOrchestrator(mock).CancelJob("tier3-job", cancelOpts); err != nil {
+			t.Fatalf("CancelJob(NotFound fallback) err = %v, want nil", err)
+		}
+		if !reflect.DeepEqual(mock.Deleted["jobs"], []string{"tier3-job"}) || len(mock.Deleted["services"]) != 0 {
+			t.Errorf("Deleted = %v, want jobs=[tier3-job] and no services deleted", mock.Deleted)
+		}
+	})
+
+	t.Run("NotFound refuses to delete unowned same-named batch/v1 Job", func(t *testing.T) {
+		mock := &MockKubeClient{
+			Namespace:       "default",
+			DeleteJobSetErr: notFoundErr,
+			Objects: map[string][]unstructured.Unstructured{
+				"jobs":     {makeTestUnownedObject("Job", "tier3-job")},
+				"services": {makeTestOwnedService("tier3-job", "3")},
+			},
+		}
+		err := cancelTestOrchestrator(mock).CancelJob("tier3-job", cancelOpts)
+		if err == nil || !strings.Contains(err.Error(), "missing required label "+workloadLabel+"=tier3-job") {
+			t.Fatalf("CancelJob(unowned Job) err = %v, want ownership refusal", err)
+		}
+		if len(mock.Deleted) != 0 {
+			t.Errorf("Deleted = %v, want none", mock.Deleted)
+		}
+	})
+}
+
+func TestCancelJob_FallbackPropagatesForbiddenAndTimeout(t *testing.T) {
+	forbiddenErr := apierrors.NewForbidden(jobSetGVR.GroupResource(), "tier3-job", errors.New("denied"))
+	timeoutErr := errors.New("context deadline exceeded")
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"403 Forbidden propagates without fallback", forbiddenErr},
+		{"timeout propagates without fallback", timeoutErr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := &MockKubeClient{
+				Namespace:       "default",
+				DeleteJobSetErr: tc.err,
+				Objects: map[string][]unstructured.Unstructured{
+					"jobs":     {makeTestOwnedBatchJob("tier3-job", "4")},
+					"services": {makeTestOwnedService("tier3-job", "4")},
+				},
+			}
+			err := cancelTestOrchestrator(mock).CancelJob("tier3-job", cancelOpts)
+			if err == nil || !errors.Is(err, tc.err) {
+				t.Fatalf("CancelJob() err = %v, want wrapped %v", err, tc.err)
+			}
+			if len(mock.Deleted) != 0 {
+				t.Errorf("Deleted = %v, want empty (must not fall back on %s)", mock.Deleted, tc.name)
+			}
+		})
+	}
+
+	t.Run("403 reading fallback Job propagates without deleting", func(t *testing.T) {
+		mock := &MockKubeClient{
+			Namespace:       "default",
+			DeleteJobSetErr: apierrors.NewNotFound(jobSetGVR.GroupResource(), "tier3-job"),
+			GetErr:          forbiddenErr,
+		}
+		err := cancelTestOrchestrator(mock).CancelJob("tier3-job", cancelOpts)
+		if err == nil || !errors.Is(err, forbiddenErr) {
+			t.Fatalf("CancelJob(fallback GetResource 403) err = %v, want wrapped 403", err)
+		}
+		if len(mock.Deleted) != 0 {
+			t.Errorf("Deleted = %v, want none", mock.Deleted)
+		}
+	})
+}

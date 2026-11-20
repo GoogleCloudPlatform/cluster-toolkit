@@ -352,6 +352,7 @@ func resetCommandFlags(cmd *cobra.Command) {
 }
 
 func resetJobFlags() {
+	detectedOrchestratorType = ""
 	pathways = orchestrator.PathwaysJobDefinition{}
 	resetCommandFlags(JobCmd)
 	nodeConstraint = make(map[string]string)

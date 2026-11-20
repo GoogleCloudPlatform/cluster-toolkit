@@ -2833,3 +2833,573 @@ func TestApplyManifest_AppliesInTargetNamespace(t *testing.T) {
 		})
 	}
 }
+
+func makeAddonMatrixResponses(jsState, kueueState addonState, canIAllowed bool) map[string][]shell.CommandResult {
+	res := map[string][]shell.CommandResult{}
+	switch jsState {
+	case addonStateInstalled:
+		res["kubectl get crd jobsets.jobset.x-k8s.io"] = []shell.CommandResult{{ExitCode: 0, Stdout: "customresourcedefinition.apiextensions.k8s.io/jobsets.jobset.x-k8s.io\n"}}
+		res["kubectl get endpointslice -l kubernetes.io/service-name=jobset-webhook-service"] = []shell.CommandResult{{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.2"],"conditions":{"ready":true}}]}]}`}}
+	case addonStatePartial:
+		res["kubectl get crd jobsets.jobset.x-k8s.io"] = []shell.CommandResult{{ExitCode: 0, Stdout: "customresourcedefinition.apiextensions.k8s.io/jobsets.jobset.x-k8s.io\n"}}
+		res["kubectl get endpointslice -l kubernetes.io/service-name=jobset-webhook-service"] = []shell.CommandResult{{ExitCode: 0, Stdout: `{"items":[]}`}}
+		res["kubectl get service jobset-webhook-service"] = []shell.CommandResult{{ExitCode: 0, Stdout: ""}}
+	case addonStateMissing:
+		res["kubectl get crd jobsets.jobset.x-k8s.io"] = []shell.CommandResult{{ExitCode: 0, Stdout: ""}}
+		res["kubectl get service jobset-webhook-service"] = []shell.CommandResult{{ExitCode: 0, Stdout: ""}}
+	}
+	switch kueueState {
+	case addonStateInstalled:
+		res["kubectl get crd clusterqueues.kueue.x-k8s.io"] = []shell.CommandResult{{ExitCode: 0, Stdout: "clusterqueues.kueue.x-k8s.io\n"}}
+		res["kubectl get deployment kueue-controller-manager"] = []shell.CommandResult{{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.16.0"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`}}
+		res["kubectl get endpointslice -l kubernetes.io/service-name=kueue-webhook-service"] = []shell.CommandResult{{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.3"],"conditions":{"ready":true}}]}]}`}}
+	case addonStatePartial:
+		res["kubectl get crd clusterqueues.kueue.x-k8s.io"] = []shell.CommandResult{{ExitCode: 0, Stdout: "clusterqueues.kueue.x-k8s.io\n"}}
+		res["kubectl get deployment kueue-controller-manager"] = []shell.CommandResult{{ExitCode: 1, Stderr: `Error from server (NotFound): deployments.apps "kueue-controller-manager" not found`}}
+	case addonStateMissing:
+		res["kubectl get crd clusterqueues.kueue.x-k8s.io"] = []shell.CommandResult{{ExitCode: 1, Stderr: `Error from server (NotFound): customresourcedefinitions.apiextensions.k8s.io "clusterqueues.kueue.x-k8s.io" not found`}}
+		res["kubectl get deployment kueue-controller-manager"] = []shell.CommandResult{{ExitCode: 1, Stderr: `Error from server (NotFound): deployments.apps "kueue-controller-manager" not found`}}
+	}
+	canIOut := "no\n"
+	if canIAllowed {
+		canIOut = "yes\n"
+	}
+	res["kubectl auth can-i"] = slices.Repeat([]shell.CommandResult{{ExitCode: 0, Stdout: canIOut}}, 12)
+	res["kubectl apply"] = slices.Repeat([]shell.CommandResult{{ExitCode: 0, Stdout: "applied"}}, 8)
+	res["kubectl rollout status"] = slices.Repeat([]shell.CommandResult{{ExitCode: 0, Stdout: "rolled out"}}, 4)
+	res["kubectl delete -f"] = slices.Repeat([]shell.CommandResult{{ExitCode: 0}}, 4)
+	res["kubectl get resourceflavor"] = []shell.CommandResult{{ExitCode: 0, Stdout: ""}}
+	res["kubectl get priorityclass"] = []shell.CommandResult{{ExitCode: 0, Stdout: "high"}}
+	return res
+}
+
+func makeInstallReadyAddonOrchestrator(t *testing.T, mode orchestrator.Type, jsState, kueueState addonState) (*GKEOrchestrator, *MockExecutor) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	responses := makeAddonMatrixResponses(jsState, kueueState, true)
+	if jsState == addonStateMissing {
+		responses["kubectl get endpointslice -l kubernetes.io/service-name=jobset-webhook-service"] = []shell.CommandResult{
+			{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.2"],"conditions":{"ready":true}}]}]}`},
+		}
+	}
+	if kueueState == addonStateMissing {
+		responses["kubectl get deployment kueue-controller-manager"] = append(
+			responses["kubectl get deployment kueue-controller-manager"],
+			shell.CommandResult{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.16.0"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`},
+		)
+		responses["kubectl get endpointslice -l kubernetes.io/service-name=kueue-webhook-service"] = []shell.CommandResult{
+			{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.3"],"conditions":{"ready":true}}]}]}`},
+		}
+	}
+	mockExec := NewMockExecutor(responses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = mode
+	orc.kubeContext = "test-ctx"
+	orc.kubeClient = &MockKubeClient{
+		Namespace: "default",
+		GetErr:    apierrors.NewNotFound(schema.GroupResource{Resource: "deployments"}, "jobset-controller-manager"),
+	}
+	orc.httpClient = &mockHTTPClient{
+		getFunc: func(string) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: addon-system\n")),
+			}, nil
+		},
+	}
+	return orc, mockExec
+}
+
+type addonMatrixCase struct {
+	name           string
+	mode           orchestrator.Type
+	scheme         k8s.LabelScheme
+	jsState        addonState
+	kueueState     addonState
+	interactive    bool
+	promptAnswers  []string
+	promptEOF      bool
+	connected      bool
+	airGapped      bool
+	dryRun         bool
+	wantErr        string
+	wantJobSet     bool
+	wantKueue      bool
+	wantPrompts    int
+	wantProbes     int
+	wantApplyCount int
+}
+
+func runAddonMatrixCase(t *testing.T, tc addonMatrixCase) {
+	t.Helper()
+	orc, mockExec := makeInstallReadyAddonOrchestrator(t, tc.mode, tc.jsState, tc.kueueState)
+	if tc.scheme != "" {
+		orc.inventory = &k8s.Inventory{LabelScheme: tc.scheme}
+	}
+	probeCalls := 0
+	promptCalls := 0
+	orc.connectivity = &connectivityChecker{
+		getenv: func(k string) string {
+			if k == shell.AirGappedEnvVar && tc.airGapped {
+				return "true"
+			}
+			return ""
+		},
+		probe: func(context.Context) bool {
+			probeCalls++
+			return tc.connected
+		},
+	}
+	orc.isInteractiveFunc = func() bool { return tc.interactive }
+	orc.promptLineFunc = func(string) (string, bool) {
+		idx := promptCalls
+		promptCalls++
+		if tc.promptEOF || idx >= len(tc.promptAnswers) {
+			return "", false
+		}
+		return tc.promptAnswers[idx], true
+	}
+
+	err := orc.resolveClusterAddons(&orchestrator.JobDefinition{ClusterName: "test-cluster"}, tc.dryRun)
+	assertAddonMatrixOutcome(t, tc, orc, mockExec, err, promptCalls, probeCalls)
+}
+
+func assertAddonMatrixOutcome(t *testing.T, tc addonMatrixCase, orc *GKEOrchestrator, mockExec *MockExecutor, err error, promptCalls, probeCalls int) {
+	t.Helper()
+	if tc.wantErr != "" {
+		if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+			t.Fatalf("resolveClusterAddons() err = %v, want substring %q", err, tc.wantErr)
+		}
+		if got := len(commandsWithPrefix(mockExec, "kubectl apply")); got != 0 {
+			t.Errorf("kubectl apply called %d times on error case, want 0", got)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("resolveClusterAddons() unexpected err = %v", err)
+	}
+	if orc.jobSetEnabled() != tc.wantJobSet || orc.kueueEnabled() != tc.wantKueue {
+		t.Errorf("enabled = (jobset=%v, kueue=%v), want (%v, %v)", orc.jobSetEnabled(), orc.kueueEnabled(), tc.wantJobSet, tc.wantKueue)
+	}
+	if promptCalls != tc.wantPrompts || probeCalls != tc.wantProbes {
+		t.Errorf("promptCalls=%d probeCalls=%d, want (%d, %d)", promptCalls, probeCalls, tc.wantPrompts, tc.wantProbes)
+	}
+	if got := len(commandsWithPrefix(mockExec, "kubectl apply")); got != tc.wantApplyCount {
+		t.Errorf("kubectl apply calls = %d, want %d (all calls: %v)", got, tc.wantApplyCount, mockExec.calls)
+	}
+}
+
+func TestResolveClusterAddons_PolicyMatrix(t *testing.T) {
+	cases := []addonMatrixCase{
+		{
+			name: "both_installed_zero_prompts_zero_probes",
+			mode: orchestrator.TypeGKE, jsState: addonStateInstalled, kueueState: addonStateInstalled,
+			interactive: true, connected: true, wantJobSet: true, wantKueue: true,
+		},
+		{
+			name: "partial_jobset_fails_fast_without_apply",
+			mode: orchestrator.TypeK8s, jsState: addonStatePartial, kueueState: addonStateInstalled,
+			interactive: true, connected: true, wantErr: "JobSet is only partly installed",
+		},
+		{
+			name: "partial_kueue_fails_fast_without_apply",
+			mode: orchestrator.TypeGKE, jsState: addonStateInstalled, kueueState: addonStatePartial,
+			interactive: true, connected: true, wantErr: "Kueue is only partly installed",
+		},
+		{
+			name: "partial_kueue_fails_fast_even_on_dry_run",
+			mode: orchestrator.TypeK8s, jsState: addonStateInstalled, kueueState: addonStatePartial,
+			dryRun: true, wantErr: "Kueue is only partly installed",
+		},
+		{
+			name: "tpu_slice_missing_kueue_silent_continue_zero_probe_zero_prompt",
+			mode: orchestrator.TypeK8s, scheme: k8s.SchemeTPUSlice, jsState: addonStateInstalled, kueueState: addonStateMissing,
+			interactive: true, connected: true, wantJobSet: true, wantKueue: false,
+		},
+		{
+			name: "interactive_connected_k8s_both_missing_choice_continue_single_prompt",
+			mode: orchestrator.TypeK8s, scheme: k8s.SchemeGeneric, jsState: addonStateMissing, kueueState: addonStateMissing,
+			interactive: true, promptAnswers: []string{"invalid", "2"}, connected: true,
+			wantJobSet: false, wantKueue: false, wantPrompts: 2, wantProbes: 1,
+		},
+		{
+			name: "interactive_connected_gke_both_missing_choice_cancel",
+			mode: orchestrator.TypeGKE, jsState: addonStateMissing, kueueState: addonStateMissing,
+			interactive: true, promptAnswers: []string{"3"}, connected: true,
+			wantErr: "canceled by user", wantPrompts: 1, wantProbes: 1,
+		},
+		{
+			name: "interactive_connected_k8s_both_missing_choice_install",
+			mode: orchestrator.TypeK8s, scheme: k8s.SchemeGeneric, jsState: addonStateMissing, kueueState: addonStateMissing,
+			interactive: true, promptAnswers: []string{"1"}, connected: true,
+			wantJobSet: true, wantKueue: true, wantPrompts: 1, wantProbes: 1, wantApplyCount: 3,
+		},
+		{
+			name: "interactive_prompt_eof_on_k8s_falls_back_to_continue",
+			mode: orchestrator.TypeK8s, scheme: k8s.SchemeGeneric, jsState: addonStateMissing, kueueState: addonStateMissing,
+			interactive: true, promptEOF: true, connected: true,
+			wantJobSet: false, wantKueue: false, wantPrompts: 1, wantProbes: 1,
+		},
+		{
+			name: "interactive_prompt_eof_on_gke_falls_back_to_install",
+			mode: orchestrator.TypeGKE, jsState: addonStateMissing, kueueState: addonStateInstalled,
+			interactive: true, promptEOF: true, connected: true,
+			wantJobSet: true, wantKueue: true, wantPrompts: 1, wantProbes: 1, wantApplyCount: 1,
+		},
+		{
+			name: "noninteractive_connected_gke_missing_installs_fresh_cluster",
+			mode: orchestrator.TypeGKE, jsState: addonStateMissing, kueueState: addonStateInstalled,
+			interactive: false, connected: true,
+			wantJobSet: true, wantKueue: true, wantProbes: 1, wantApplyCount: 1,
+		},
+		{
+			name: "noninteractive_connected_k8s_missing_continues_without_mutating",
+			mode: orchestrator.TypeK8s, scheme: k8s.SchemeGeneric, jsState: addonStateMissing, kueueState: addonStateMissing,
+			interactive: false, connected: true,
+			wantJobSet: false, wantKueue: false, wantProbes: 1,
+		},
+		{
+			name: "airgapped_gke_missing_continues_without_probe_or_install",
+			mode: orchestrator.TypeGKE, jsState: addonStateMissing, kueueState: addonStateMissing,
+			interactive: true, connected: true, airGapped: true,
+			wantJobSet: false, wantKueue: false, wantProbes: 0,
+		},
+		{
+			name: "dryrun_k8s_missing_continues_without_probe_or_prompt",
+			mode: orchestrator.TypeK8s, scheme: k8s.SchemeGeneric, jsState: addonStateMissing, kueueState: addonStateMissing,
+			interactive: true, connected: true, dryRun: true,
+			wantJobSet: false, wantKueue: false, wantProbes: 0,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runAddonMatrixCase(t, tc)
+		})
+	}
+}
+
+func TestResolveClusterAddons_DisableEnvVars(t *testing.T) {
+	t.Parallel()
+	mockExec := NewMockExecutor(nil)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = orchestrator.TypeK8s
+	probeCalls := 0
+	orc.connectivity = &connectivityChecker{
+		getenv: func(k string) string {
+			if k == disableKueueEnvVar || k == disableJobSetEnvVar {
+				return "1"
+			}
+			return ""
+		},
+		probe: func(context.Context) bool { probeCalls++; return true },
+	}
+
+	if err := orc.resolveClusterAddons(&orchestrator.JobDefinition{ClusterName: "local"}, false); err != nil {
+		t.Fatalf("resolveClusterAddons(disabled envs) err = %v", err)
+	}
+	if orc.jobSetEnabled() || orc.kueueEnabled() {
+		t.Fatalf("expected both add-ons disabled, got jobset=%v kueue=%v", orc.jobSetEnabled(), orc.kueueEnabled())
+	}
+	if len(mockExec.calls) != 0 || probeCalls != 0 {
+		t.Fatalf("expected 0 kubectl/probe calls when disabled, got kubectl=%v probes=%d", mockExec.calls, probeCalls)
+	}
+}
+
+func TestConnectivityChecker_TPUSliceAirGapDefaultAndSingleCacheProbe(t *testing.T) {
+	t.Parallel()
+	probeCalls := 0
+	tpuSliceOrc := &GKEOrchestrator{
+		inventory: &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice},
+		connectivity: &connectivityChecker{
+			getenv: func(string) string { return "" },
+			probe:  func(context.Context) bool { probeCalls++; return true },
+		},
+	}
+	if tpuSliceOrc.isConnected() || probeCalls != 0 {
+		t.Fatalf("SchemeTPUSlice default must be air-gapped with 0 probes; got probes=%d", probeCalls)
+	}
+
+	overrideOrc := &GKEOrchestrator{
+		inventory: &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice},
+		connectivity: &connectivityChecker{
+			getenv: func(k string) string {
+				if k == shell.AirGappedEnvVar {
+					return "false"
+				}
+				return ""
+			},
+			probe: func(context.Context) bool { probeCalls++; return true },
+		},
+	}
+	if !overrideOrc.isConnected() || !overrideOrc.isConnected() || probeCalls != 1 {
+		t.Fatalf("expected cached single connectivity probe when GCLUSTER_AIR_GAPPED=false, got probes=%d", probeCalls)
+	}
+}
+
+func TestConfigureClusterEnvironment_TypeK8sLocalQueueResolution(t *testing.T) {
+	tests := []struct {
+		name      string
+		kueueOn   bool
+		inQueue   string
+		responses map[string][]shell.CommandResult
+		wantQueue string
+		wantErr   string
+	}{
+		{
+			name:      "zero_localqueues_omits_queue_label",
+			kueueOn:   true,
+			responses: map[string][]shell.CommandResult{"kubectl get localqueue": {{ExitCode: 0, Stdout: ""}}},
+			wantQueue: "",
+		},
+		{
+			name:      "one_localqueue_auto_discovered",
+			kueueOn:   true,
+			responses: map[string][]shell.CommandResult{"kubectl get localqueue": {{ExitCode: 0, Stdout: "team-lq"}}},
+			wantQueue: "team-lq",
+		},
+		{
+			name:    "explicit_missing_localqueue_fails_with_available_list",
+			kueueOn: true,
+			inQueue: "missing-q",
+			responses: map[string][]shell.CommandResult{
+				"kubectl get localqueue missing-q -n ml-ns": {{ExitCode: 1, Stderr: `Error from server (NotFound): localqueues "missing-q" not found`}},
+				"kubectl get localqueue -n ml-ns":           {{ExitCode: 0, Stdout: "team-lq"}},
+			},
+			wantErr: `LocalQueue "missing-q" does not exist in namespace "ml-ns" (available: team-lq)`,
+		},
+		{
+			name:      "multiple_localqueues_defaults_to_default_local_queue",
+			kueueOn:   true,
+			responses: map[string][]shell.CommandResult{"kubectl get localqueue": {{ExitCode: 0, Stdout: "custom-a default"}}},
+			wantQueue: defaultLocalQueue,
+		},
+		{
+			name:      "forbidden_list_localqueues_omits_queue_label",
+			kueueOn:   true,
+			responses: map[string][]shell.CommandResult{"kubectl get localqueue": {{ExitCode: 1, Stderr: `Error from server (Forbidden): localqueues.kueue.x-k8s.io is forbidden`}}},
+			wantQueue: "",
+		},
+		{
+			name:      "kueue_disabled_omits_explicit_queue",
+			kueueOn:   false,
+			inQueue:   "ignored-q",
+			wantQueue: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(tc.responses)
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.mode = orchestrator.TypeK8s
+			orc.namespace = "ml-ns"
+			orc.addons = addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: tc.kueueOn}
+
+			job := &orchestrator.JobDefinition{ClusterName: "k8s", KueueQueueName: tc.inQueue}
+			err := orc.configureClusterEnvironment(job)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("configureClusterEnvironment() err = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("configureClusterEnvironment() err = %v", err)
+			}
+			if job.KueueQueueName != tc.wantQueue {
+				t.Errorf("KueueQueueName = %q, want %q", job.KueueQueueName, tc.wantQueue)
+			}
+			if len(commandsWithPrefix(mockExec, "kubectl apply")) != 0 {
+				t.Errorf("must never apply ClusterQueue/LocalQueue in TypeK8s mode")
+			}
+		})
+	}
+}
+
+func TestResolveClusterAddons_OlderKueuePreservedInTypeK8s(t *testing.T) {
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get crd jobsets.jobset.x-k8s.io":                                        {{ExitCode: 0, Stdout: "crd/jobsets"}},
+		"kubectl get endpointslice -l kubernetes.io/service-name=jobset-webhook-service": {{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.2"],"conditions":{"ready":true}}]}]}`}},
+		"kubectl get crd clusterqueues.kueue.x-k8s.io":                                   {{ExitCode: 0, Stdout: "crd/clusterqueues"}},
+		"kubectl get deployment kueue-controller-manager":                                {{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.10.2"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`}},
+		"kubectl get endpoints kueue-webhook-service":                                    {{ExitCode: 0, Stdout: `{"subsets":[{"addresses":[{"ip":"10.0.0.3"}]}]}`}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = orchestrator.TypeK8s
+	if err := orc.resolveClusterAddons(&orchestrator.JobDefinition{ClusterName: "k8s"}, false); err != nil {
+		t.Fatalf("resolveClusterAddons(older Kueue on TypeK8s) err = %v", err)
+	}
+	if len(commandsWithPrefix(mockExec, "kubectl delete")) != 0 || len(commandsWithPrefix(mockExec, "kubectl apply")) != 0 {
+		t.Errorf("older Kueue on TypeK8s must never be deleted or overwritten; calls=%v", mockExec.calls)
+	}
+}
+
+func TestValidateTier3Workload_StaticSliceReuseGuard(t *testing.T) {
+	t.Parallel()
+	readyInv := &k8s.Inventory{
+		LabelScheme: k8s.SchemeTPUSlice,
+		TPU:         &k8s.TPUInventory{TPUType: "tpu7x", MachineType: "tpu7x-standard-4t", DefaultSliceName: "ready-slice", Topology: "2x2x1", NodesPerSlice: 1, ChipsPerNode: 4},
+		Slices: []k8s.SliceInfo{
+			{Name: "pending-slice", TPUType: "tpu7x", Topology: "2x2x2", Ready: false, State: "CREATING", NodesPerSlice: 2},
+			{Name: "ready-slice", TPUType: "tpu7x", Topology: "2x2x1", Ready: true, State: "READY", NodesPerSlice: 1},
+		},
+	}
+
+	tests := []struct {
+		name      string
+		inv       *k8s.Inventory
+		job       orchestrator.JobDefinition
+		wantErr   string
+		wantSlice string
+	}{
+		{
+			name:    "rejects_multi_slice_without_jobset",
+			inv:     readyInv,
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 2},
+			wantErr: "multi-slice workloads (--num-slices=2) require JobSet",
+		},
+		{
+			name:    "rejects_pathways_without_jobset",
+			inv:     readyInv,
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, IsPathwaysJob: true},
+			wantErr: "Pathways workloads (--pathways) require JobSet",
+		},
+		{
+			name:      "allows_explicit_ready_slice_reuse",
+			inv:       readyInv,
+			job:       orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "ready-slice"}},
+			wantSlice: "ready-slice",
+		},
+		{
+			name:    "rejects_explicit_non_ready_slice",
+			inv:     readyInv,
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x2", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "pending-slice"}},
+			wantErr: "is not READY",
+		},
+		{
+			name:    "rejects_explicit_missing_slice",
+			inv:     readyInv,
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "does-not-exist"}},
+			wantErr: "cannot dynamically provision TPU slice",
+		},
+		{
+			name:    "rejects_explicit_topology_mismatch",
+			inv:     readyInv,
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x2", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "ready-slice"}},
+			wantErr: "does not match existing READY slice",
+		},
+		{
+			name:      "auto_reuses_matching_ready_default_slice",
+			inv:       readyInv,
+			job:       orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
+			wantSlice: "ready-slice",
+		},
+		{
+			name:    "rejects_dynamic_provisioning_when_no_ready_slice_matches_topology",
+			inv:     readyInv,
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "4x4x4", NumSlices: 1},
+			wantErr: "no matching READY slice exists",
+		},
+		{
+			name:    "rejects_explicit_mode_without_named_slice",
+			inv:     &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice, ExplicitMode: true},
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
+			wantErr: "cannot dynamically provision a new TPU slice in explicit mode",
+		},
+		{
+			name:      "allows_explicit_mode_with_named_slice",
+			inv:       &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice, ExplicitMode: true},
+			job:       orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "precreated-slice"}},
+			wantSlice: "precreated-slice",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{
+				mode:      orchestrator.TypeK8s,
+				inventory: tc.inv,
+				addons:    addonPlan{resolved: true, jobSetEnabled: false, kueueEnabled: false},
+			}
+			job := tc.job
+			err := orc.validateTier3Workload(&job)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("validateTier3Workload() err = %v, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("validateTier3Workload() unexpected err = %v", err)
+			}
+			if got := job.NodeConstraint[k8s.TPUSliceNameLabel]; got != tc.wantSlice {
+				t.Errorf("bound slice = %q, want %q", got, tc.wantSlice)
+			}
+		})
+	}
+}
+
+func TestValidateK8sPriorityClass(t *testing.T) {
+	tests := []struct {
+		name      string
+		requested string
+		res       shell.CommandResult
+		wantErr   string
+	}{
+		{
+			name:      "exists_succeeds",
+			requested: "high",
+			res:       shell.CommandResult{ExitCode: 0, Stdout: "priorityclass.scheduling.k8s.io/high\n"},
+		},
+		{
+			name:      "forbidden_warns_and_proceeds",
+			requested: "high",
+			res:       shell.CommandResult{ExitCode: 1, Stderr: `Error from server (Forbidden): priorityclasses.scheduling.k8s.io "high" is forbidden`},
+		},
+		{
+			name:      "not_found_fails_fast",
+			requested: "missing-pc",
+			res:       shell.CommandResult{ExitCode: 1, Stderr: `Error from server (NotFound): priorityclasses.scheduling.k8s.io "missing-pc" not found`},
+			wantErr:   `priority class "missing-pc" does not exist`,
+		},
+		{
+			name:      "user_controlled_forbidden_name_does_not_bypass_not_found",
+			requested: "403-forbidden-pc",
+			res:       shell.CommandResult{ExitCode: 1, Stderr: `Error from server (NotFound): priorityclasses.scheduling.k8s.io "403-forbidden-pc" not found`},
+			wantErr:   `priority class "403-forbidden-pc" does not exist`,
+		},
+		{
+			name:      "other_error_fails_fast",
+			requested: "missing-pc",
+			res:       shell.CommandResult{ExitCode: 1, Stderr: "Unable to connect to the server: i/o timeout"},
+			wantErr:   "failed to verify PriorityClass",
+		},
+		{
+			name:      "empty_output_falls_back_to_err",
+			requested: "missing-pc",
+			res:       shell.CommandResult{ExitCode: 1, Err: errors.New("connection refused")},
+			wantErr:   "connection refused",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+				"kubectl get priorityclass": {tc.res},
+			})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.mode = orchestrator.TypeK8s
+			err := orc.validatePriorityClassForMode(tc.requested)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("validatePriorityClassForMode() err = %v, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("validatePriorityClassForMode() unexpected err = %v", err)
+			}
+		})
+	}
+}
