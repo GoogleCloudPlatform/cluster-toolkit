@@ -1101,6 +1101,7 @@ exit 0
             "module.homefs.google_lustre_instance.lustre_instance: Creating...\n"
             "Error: Error creating Instance: googleapi: Error 400: "
             "resource exhausted: not enough resources available to fulfill the request in us-central1-a\n"
+            "  with module.homefs.google_lustre_instance.lustre_instance,\n"
         )
         res, env_map = self._run_submit_script_e2e(SAMPLE_JOB_YAML, attempt1_log)
         self.assertIn("Job succeeded!", res.stdout)
@@ -1134,11 +1135,45 @@ exit 0
             "module.slurm_login.google_compute_instance.login: Creation complete after 15s\n"
             "module.nodeset.google_compute_region_instance_group_manager.rigm: Creating...\n"
             "Error: ZONE_RESOURCE_POOL_EXHAUSTED: not enough resources in us-central1-b\n"
+            "  with module.nodeset.google_compute_region_instance_group_manager.rigm,\n"
         )
         res, env_map = self._run_submit_script_e2e(SAMPLE_JOB_YAML, attempt1_log)
         self.assertIn("Job succeeded!", res.stdout)
         self.assertEqual(env_map.get("EXCLUDE_ZONES"), "us-central1-b")
         self.assertNotIn("LUSTRE_EXCLUDE_ZONES", env_map)
+
+    def test_submit_script_e2e_adjacent_lustre_creation_complete_does_not_misclassify_compute_failure(self):
+        """E2E: Lustre Creation complete right before compute stockout routes to EXCLUDE_ZONES."""
+        attempt1_log = (
+            "Deploying in ZONE: us-central1-b\n"
+            "LUSTRE_ZONE: us-central1-a\n"
+            "module.homefs.google_lustre_instance.lustre_instance: Creation complete after 3m10s\n"
+            "module.nodeset.google_compute_region_instance_group_manager.rigm: Creating...\n"
+            "Error: ZONE_RESOURCE_POOL_EXHAUSTED: not enough resources in us-central1-b\n"
+            "  with module.nodeset.google_compute_region_instance_group_manager.rigm,\n"
+        )
+        res, env_map = self._run_submit_script_e2e(SAMPLE_JOB_YAML, attempt1_log)
+        self.assertIn("Job succeeded!", res.stdout)
+        self.assertEqual(env_map.get("EXCLUDE_ZONES"), "us-central1-b")
+        self.assertNotIn("LUSTRE_EXCLUDE_ZONES", env_map)
+
+    def test_submit_script_e2e_multiline_lustre_error_matches_with_clause(self):
+        """E2E: Wrapped Lustre error still matches 'with module.homefs' within -A 6 lines."""
+        attempt1_log = (
+            "Deploying in ZONE: us-central1-b\n"
+            "LUSTRE_ZONE: us-central1-a\n"
+            "Error: Error waiting for creating Instance: Error code 8, message:\n"
+            "resource exhausted: not enough resources available to fulfill the request in us-central1-a\n"
+            "Details:\n"
+            "  internal limit reached\n"
+            "  help token: xyz\n"
+            "  zone: us-central1-a\n"
+            "  with module.homefs.google_lustre_instance.lustre_instance,\n"
+        )
+        res, env_map = self._run_submit_script_e2e(SAMPLE_JOB_YAML, attempt1_log)
+        self.assertIn("Job succeeded!", res.stdout)
+        self.assertEqual(env_map.get("LUSTRE_EXCLUDE_ZONES"), "us-central1-a")
+        self.assertNotIn("EXCLUDE_ZONES", env_map)
 
     def test_submit_script_e2e_skips_exclude_zones_when_lustre_only_true(self):
         """E2E: When LUSTRE_ONLY=true, generic stockout fallback does not inject EXCLUDE_ZONES."""
