@@ -493,3 +493,40 @@ func (s *MySuite) TestHandleExecError(c *C) {
 	exitErrRes := CommandResult{ExitCode: 42, Stderr: "some cli error", Err: errors.New("exit status 42")}
 	c.Assert(HandleExecError(exitErrRes, "gcloud", timeoutMsg), IsNil)
 }
+
+func (s *MySuite) TestPromptLine(c *C) {
+	line, ok := promptLine(strings.NewReader("  2 \n"), "Select: ")
+	c.Assert(ok, Equals, true)
+	c.Assert(line, Equals, "2")
+
+	line, ok = promptLine(strings.NewReader("\uFEFF1"), "Select: ")
+	c.Assert(ok, Equals, true)
+	c.Assert(line, Equals, "1")
+
+	line, ok = promptLine(strings.NewReader(""), "Select: ")
+	c.Assert(ok, Equals, false)
+	c.Assert(line, Equals, "")
+
+	pipeRead, pipeWrite, err := os.Pipe()
+	c.Assert(err, IsNil)
+	defer func() { _ = pipeWrite.Close() }()
+	c.Assert(pipeRead.Close(), IsNil)
+
+	line, ok = promptLine(pipeRead, "Select: ")
+	c.Assert(ok, Equals, false)
+	c.Assert(line, Equals, "")
+}
+
+func (s *MySuite) TestIsInteractive_NonTerminalPipe(c *C) {
+	pipeRead, pipeWrite, err := os.Pipe()
+	c.Assert(err, IsNil)
+	defer func() {
+		_ = pipeRead.Close()
+		_ = pipeWrite.Close()
+	}()
+	origStdin := os.Stdin
+	os.Stdin = pipeRead
+	defer func() { os.Stdin = origStdin }()
+
+	c.Assert(IsInteractive(), Equals, false)
+}

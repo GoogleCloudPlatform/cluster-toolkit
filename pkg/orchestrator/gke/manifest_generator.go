@@ -212,6 +212,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		MachineType:        job.MachineType,
 		IsTPU:              config.IsTPU(job.MachineType) || config.IsTPU(originalAccelType),
 		IsNAP:              job.GKENAPProvisioning != "",
+		OmitGKENodePool:    !g.hasGKENodePoolLabel(),
 	}
 
 	pathwaysInstanceType := derivePathwaysInstanceType(g.GenerateGKENodeSelectorLabel(originalAccelType), job.MachineType, originalAccelType, schedOpts.Topology)
@@ -611,6 +612,11 @@ func forEachWorkloadObject(manifestContent string, visit func(kind, jobName stri
 			if err := visit("Job", "", jDoc.Labels, jDoc.Spec.PodFailurePolicy, &jDoc.Spec.Template); err != nil {
 				return err
 			}
+		case "Service":
+			var svc corev1.Service
+			if err := k8syaml.Unmarshal([]byte(doc), &svc); err != nil {
+				return fmt.Errorf("failed to parse Service manifest spec: %w", err)
+			}
 		}
 	}
 	return nil
@@ -818,7 +824,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
 		if opts.NodesPerSlice <= 1 {
 			exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname"
-		} else {
+		} else if g.hasGKENodePoolLabel() {
 			exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
 		}
 	}
