@@ -12,34 +12,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Shared Cloud Build workflow for PR-skills-smoke-eval (automatic 5-case smoke
+# Shared Cloud Build workflow for PR-skills-smoke-eval (automatic live smoke
 # gate on skill/eval PRs) and PR-test-skills-full-eval (on-demand
-# approval-gated full evaluation suite on any PR).
+# /gcbrun-gated full evaluation suite across all skills on any PR).
 
 ---
 
 steps:
 - id: git-prepare-workspace
   name: gcr.io/cloud-builders/git
+  automapSubstitutions: true
   entrypoint: bash
   args:
   - -ceu
   - |
     cd /workspace
     if [ -d .git ]; then
+      git remote get-url origin >/dev/null 2>&1 || git remote add origin \
+        https://github.com/GoogleCloudPlatform/cluster-toolkit.git
       if [ -f .git/shallow ]; then
-        git fetch --unshallow
+        git fetch --unshallow origin
       fi
     else
+      rm -f .git
       git init -b main
       git config user.email "ci@cluster-toolkit.local"
       git config user.name "CTK Eval CI"
       git add -A
       git commit -q -m "ci workspace snapshot"
-    fi
-    if [ -n "${_COMPARE_REF}" ]; then
-      git remote get-url origin >/dev/null 2>&1 || git remote add origin \
+      git remote add origin \
         https://github.com/GoogleCloudPlatform/cluster-toolkit.git
+    fi
+    RAW_BASE="${_BASE_BRANCH}"
+    TARGET_BASE="$${BASE_BRANCH:-$${RAW_BASE:-develop}}"
+    git fetch --no-tags origin \
+      "+refs/heads/$${TARGET_BASE}:refs/remotes/origin/$${TARGET_BASE}" \
+      "+refs/heads/main:refs/remotes/origin/main" \
+      2>/dev/null || true
+    if [ -n "${_COMPARE_REF}" ]; then
       git fetch --no-tags origin \
         "+refs/heads/*:refs/remotes/origin/*" "+refs/tags/*:refs/tags/*"
       REF="${_COMPARE_REF}"
@@ -54,41 +64,41 @@ steps:
   - 'GOOGLE_GENAI_USE_VERTEXAI=true'
   - 'GOOGLE_CLOUD_PROJECT=$PROJECT_ID'
   - 'GOOGLE_CLOUD_LOCATION=global'
+  - 'GEMINI_CLI_TRUST_WORKSPACE=true'
   script: |
     #!/usr/bin/env bash
     set -euo pipefail
     cd /workspace
     archive_artifacts() {
-      if [ -n "${_ARTIFACTS_BUCKET}" ]; then
-        DEST="gs://${_ARTIFACTS_BUCKET}/skills-eval/${BUILD_ID:-manual}"
-        gsutil -m cp -r /workspace/live-eval-results.json \
-          /workspace/live-eval-summary.md /workspace/live-logs \
-          "${DEST}/" 2>/dev/null || true
+      ARTIFACT_BKT="${_ARTIFACTS_BUCKET:-${PROJECT_ID}-build-logs}"
+      if [ -n "${ARTIFACT_BKT}" ]; then
+        DEST="gs://${ARTIFACT_BKT}/skills-eval/${BUILD_ID:-manual}"
+        for p in /workspace/live-eval-results.json \
+          /workspace/live-eval-summary.md /workspace/live-logs; do
+          if [ -e "$p" ]; then
+            gsutil -m cp -r "$p" "${DEST}/" 2>/dev/null || true
+          fi
+        done
       fi
     }
     trap archive_artifacts EXIT
     # Transitional bootstrap until DAILY-image-build-test-runner rebuilds
     # test-runner post-merge with pyyaml, nodejs, and @google/gemini-cli.
-    python3 -c "import yaml" 2>/dev/null \
-      || pip install --no-cache-dir pyyaml
-    # Subshells may invoke system /usr/bin/python3 directly instead of
-    # /opt/venv/bin/python3.
-    if ! /usr/bin/python3 -c "import yaml" 2>/dev/null; then
-      apt-get -y update && apt-get -y install python3-yaml
+    if ! command -v gemini >/dev/null 2>&1 \
+      || ! gemini --version 2>/dev/null | grep -qx '0\.68\.0' \
+      || ! python3 -c "import yaml" 2>/dev/null \
+      || ! /usr/bin/python3 -c "import yaml" 2>/dev/null; then
+      bash tools/cloud-build/images/test-runner/install-skills-deps.sh
     fi
-    if ! command -v npm >/dev/null 2>&1; then
-      curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-      apt-get -y update && apt-get -y install nodejs
-    fi
-    if ! command -v gemini >/dev/null 2>&1; then
-      npm install -g @google/gemini-cli@0.66.0
-    fi
+    # Gemini CLI 0.68.0 activate_skill scans .gemini/skills and ~/.gemini/skills
+    # rather than skills/*/SKILL.md; excluding it prevents stale skill leakage.
     for gdir in "$HOME/.gemini" "/root/.gemini"; do
       mkdir -p "$gdir/policies"
       cat > "$gdir/settings.json" <<EOF
     {
       "security": {"auth": {"selectedType": "vertex-ai"}},
-      "model": {"name": "${_GEMINI_MODEL}"}
+      "model": {"name": "${_GEMINI_MODEL}"},
+      "tools": {"exclude": ["activate_skill"]}
     }
     EOF
       cat > "$gdir/trustedFolders.json" <<'EOF'
@@ -100,25 +110,53 @@ steps:
       cat > "$gdir/policies/allow-yolo-shell.toml" <<'EOF'
     [[rule]]
     toolName = "run_shell_command"
-    argsPattern = ".*"
     decision = "allow"
     priority = 999
-    modes = ["yolo"]
     allowRedirection = true
     EOF
     done
-    python3 tools/run_eval.py --all
-    make gcluster
+    make test-skills
     COMPARE_ARGS=()
     if [ -n "${_COMPARE_REF}" ]; then
       COMPARE_ARGS=(--compare "${_COMPARE_REF}")
     fi
-    python3 -u tools/run_eval.py \
-      --skill skills/cluster-blueprint-assistant \
+    # Backward-compatible translation if the provisioned trigger still passes
+    # the legacy 5-case list before Terraform apply updates it:
+    EVAL_SKILL="${_EVAL_SKILL}"
+    if [ "${_EVAL_CASES}" = "case_1,case_4,case_6,case_15,case_16" ]; then
+      EVAL_CASES="smoke"
+      if [ "${EVAL_SKILL}" = "skills/cluster-blueprint-assistant" ]; then
+        EVAL_SKILL=""
+      fi
+    else
+      EVAL_CASES="${_EVAL_CASES}"
+    fi
+    if [ -n "${EVAL_SKILL}" ]; then
+      TARGET_ARGS=(--skill "${EVAL_SKILL}")
+    elif [ "${EVAL_CASES}" = "all" ]; then
+      TARGET_ARGS=(--all)
+    else
+      RAW_BASE="${_BASE_BRANCH}"
+      TARGET_BASE="${BASE_BRANCH:-${RAW_BASE:-develop}}"
+      if git rev-parse --verify "origin/${TARGET_BASE}^{commit}" >/dev/null 2>&1; then
+        BASE_REF="origin/${TARGET_BASE}"
+      else
+        BASE_REF="origin/main"
+      fi
+      TARGET_ARGS=(--changed-from "${BASE_REF}")
+    fi
+    if python3 tools/run_eval.py "${TARGET_ARGS[@]}" \
+      --cases "${EVAL_CASES}" --check-needs-gcluster; then
+      make gcluster
+    else
+      echo "[INFO] Skipping upfront make gcluster (blueprint_reexpand inactive for selected cases)."
+    fi
+    timeout --signal=TERM --kill-after=30s 3300s python3 -u tools/run_eval.py \
+      "${TARGET_ARGS[@]}" \
       --live \
       --agent gemini \
       --project "$PROJECT_ID" \
-      --cases "${_EVAL_CASES}" \
+      --cases "${EVAL_CASES}" \
       --concurrency "${_EVAL_CONCURRENCY}" \
       --retries "${_EVAL_RETRIES}" \
       --timeout 600 \
@@ -127,7 +165,9 @@ steps:
       --json-output /workspace/live-eval-results.json \
       --markdown-output /workspace/live-eval-summary.md
 substitutions:
-  _EVAL_CASES: "case_1,case_4,case_6,case_15,case_16"
+  _BASE_BRANCH: "develop"
+  _EVAL_CASES: "smoke"
+  _EVAL_SKILL: ""
   _EVAL_CONCURRENCY: "4"
   _EVAL_RETRIES: "1"
   _GEMINI_MODEL: "gemini-3.1-pro-preview"
@@ -137,4 +177,5 @@ timeout: 3600s
 options:
   machineType: N1_HIGHCPU_8
   automapSubstitutions: true
+  substitutionOption: ALLOW_LOOSE
   defaultLogsBucketBehavior: REGIONAL_USER_OWNED_BUCKET
