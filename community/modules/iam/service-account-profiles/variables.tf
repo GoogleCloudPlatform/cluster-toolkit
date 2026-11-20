@@ -345,12 +345,6 @@ variable "enable_bigquery_load" {
   default     = false
 }
 
-variable "enable_tpu" {
-  description = "Capability: add the Cloud TPU API permissions needed to manage TPU VM nodesets (schedmd-slurm-gcp-v6-nodeset-tpu)."
-  type        = bool
-  default     = false
-}
-
 variable "enable_tpu_gce" {
   description = <<-EOT
     Capability: add the permissions to manage TPU machine types on Compute Engine (a regular

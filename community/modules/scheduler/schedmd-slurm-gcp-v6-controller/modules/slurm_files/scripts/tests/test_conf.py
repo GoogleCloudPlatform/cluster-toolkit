@@ -22,21 +22,6 @@ import conf
 import util
 
 
-def test_nodeset_tpu_lines():
-    nodeset = TstNodeset(
-        "turbo",
-        node_count_static=2,
-        node_count_dynamic_max=3,
-        node_conf={"red": "velvet"},
-    )
-    assert conf.nodeset_tpu_lines(nodeset, util.Lookup(TstCfg())) == "\n".join(
-        [
-            "NodeName=m22-turbo-[0-4] State=CLOUD red=velvet",
-            "NodeSet=turbo Nodes=m22-turbo-[0-4]",
-        ]
-    )
-
-
 @pytest.mark.parametrize("skip", [False, True])
 def test_nodeset_lines(skip):
     nodeset = TstNodeset(
@@ -68,8 +53,8 @@ def test_nodeset_lines(skip):
 @pytest.mark.parametrize(
     "skip,partition_nodeset,expected",
     [
-        (False, ["turbo", "empty"], "Nodes=turbo,empty,dyno,bolt "),
-        (True, ["turbo", "empty"], "Nodes=m22-turbo-[0-4],dyno,bolt "),
+        (False, ["turbo", "empty"], "Nodes=turbo,empty,dyno "),
+        (True, ["turbo", "empty"], "Nodes=m22-turbo-[0-4],dyno "),
     ],
 )
 def test_partitionlines_nodes(skip, partition_nodeset, expected):
@@ -85,7 +70,6 @@ def test_partitionlines_nodes(skip, partition_nodeset, expected):
     ))
     part = TstPartition(
         partition_nodeset=partition_nodeset,
-        partition_nodeset_tpu=["bolt"],
         partition_nodeset_dyn=["dyno"],
     )
     assert expected in conf.SlurmConfigGenerator(lkp).partitionlines(part)
@@ -593,37 +577,3 @@ def test_v2605_generator_tpu_vs_cpu(mock_slurm_version, tmp_path):
     topo_by_name = {entry["topology"]: entry for entry in topo_sections}
     assert conf_v2605.TOPOLOGY_TPU_BLOCK in topo_by_name
     assert topo_by_name[conf_v2605.TOPOLOGY_TPU_BLOCK]["block"]["block_sizes"] == [1]
-
-
-def test_install_jobsubmit_lua(tmp_path, mocker):
-    mocker.patch("util.chown_slurm")
-    scripts_dir = Path(__file__).resolve().parent.parent
-    etc_dir = tmp_path / "etc"
-    etc_dir.mkdir()
-
-    mocker.patch.object(util.Lookup, "etc_dir", new_callable=mock.PropertyMock, return_value=etc_dir)
-
-    # 1. Partitions without TPU -> should NOT install job_submit.lua
-    cfg_no_tpu = TstCfg(
-        slurm_scripts_dir=scripts_dir,
-        partitions={"p1": TstPartition(partition_nodeset_tpu=[])},
-    )
-    lkp_no_tpu = util.Lookup(cfg_no_tpu)
-    conf.install_jobsubmit_lua(lkp_no_tpu)
-    assert not (etc_dir / "job_submit.lua").exists()
-
-    # 2. Partitions with TPU -> should install job_submit.lua containing validation logic
-    cfg_tpu = TstCfg(
-        slurm_scripts_dir=scripts_dir,
-        partitions={"tpu_part": TstPartition(partition_nodeset_tpu=["tpu_node"])},
-    )
-    lkp_tpu = util.Lookup(cfg_tpu)
-    conf.install_jobsubmit_lua(lkp_tpu)
-    lua_file = etc_dir / "job_submit.lua"
-    assert lua_file.exists()
-    content = lua_file.read_text()
-    assert "is_valid_partition_list(part)" in content
-    assert "if part == nil then" in content
-    assert "tostring(part)" in content
-    # Pin the exact allowlist; %w is locale-dependent (isalnum).
-    assert 'string.match(token, "^[a-zA-Z0-9_.-]+$")' in content
