@@ -61,21 +61,19 @@ You can instruct Slurm to run your health check script **exactly once** when a n
 
 When enabled, the `slurmd` daemon ensures your script executes once during the node's initial boot sequence to verify the node is healthy, but will completely halt the background polling so active jobs are not impacted by the health check.
 
-## Asynchronous Reply Mode (Experimental)
+## Asynchronous Reply Mode
 
 The Slurm controller (`slurmctld`) typically processes network socket connections sequentially in user-space. In large clusters, if clients are extremely slow to read (e.g., due to network lag or a TCP Window stall), the controller's worker threads can get trapped endlessly retrying connections. This consumes CPU cycles, exhausts the thread pool, and can make the entire cluster unresponsive.
 
-For Slurm 25.11+ clusters, the Toolkit supports `enable_async_reply`. This experimental mode allows the controller to instantly disengage and offload RPC responses directly to the Linux kernel network stack for further processing, freeing individual worker threads for new traffic. Because worker threads are instantly freed up, the controller stays heavily responsive even during massive node scale-up events or network latency spikes.
+For Slurm 25.11+ clusters, the Cluster Toolkit automatically enables `enable_async_reply` by default in the `schedmd-slurm-gcp-v6-controller` module. This mode allows the controller to instantly disengage and offload RPC responses directly to the Linux kernel network stack for further processing, freeing individual worker threads for new traffic so the controller stays responsive during massive node scale-up events or network latency spikes.
 
-**How to enable:**
-To enable this feature, place it under the `experimental` block in your controller settings:
+**To disable it globally**, you can explicitly opt out in your controller settings:
 
 ```yaml
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     settings:
-      experimental:
-        enable_async_reply: true
+      enable_async_reply: false
 ```
 
 For more technical details on this mode, visit the official [Slurm Configuration Guide](https://slurm.schedmd.com/slurm.conf.html) and search for `enable_async_reply`.

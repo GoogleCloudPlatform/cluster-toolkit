@@ -305,11 +305,15 @@ of this fan out tree is determined by the
 [TreeWidth](https://slurm.schedmd.com/slurm.conf.html#OPT_TreeWidth)
 configuration variable.
 
-In the cloud, this fan out mechanism can become unstable when nodes restart with
-new IP addresses. You can enforce that all nodes communicate directly with the
-controller by setting TreeWidth to a value >= largest partition.
+For cloud-managed `State=CLOUD` nodes, the default `TreeWidth` is `16`
+(supporting `4,096` nodes in 3 hops and `65,536` nodes in 4 hops), which keeps
+per-node fan-out bounded while launching large multi-node jobs cleanly across
+thousands of nodes. Avoid setting `TreeWidth` above `64` or `>= largest
+partition` on large clusters (values such as `65533` force direct 1-hop
+controller connections and exhaust sockets above ~1,300 nodes; `65533` is used
+automatically only when dynamic `-Z` `nodeset_dyn` partitions are configured).
 
-If the largest partition was 200 nodes, configure the blueprint as follows:
+To override `TreeWidth` explicitly in a blueprint:
 
 ```yaml
 
@@ -318,12 +322,8 @@ If the largest partition was 200 nodes, configure the blueprint as follows:
     # ...
     settings:
       cloud_parameters:
-        tree_width: 200
+        tree_width: 16
 ```
-
-The default has been set to 128. Values above this have not been fully tested
-and may cause congestion on the controller. A more scalable solution is under
-way.
 
 ## ResumeRate and Node Resumption
 
@@ -383,6 +383,38 @@ can outlast its systemd start timeout. Two `cloud_parameters` options help:
       cloud_parameters:
         skip_nodeset_lines: true
         topology_region_switches: true
+```
+
+## Large Job Counts
+
+Slurm's defaults cap job arrays at 1,000 tasks (`MaxArraySize=1001`) and the
+controller at 10,000 jobs in memory (`MaxJobCount`). Clusters that run large
+arrays or many short jobs can raise these limits with `cloud_parameters`
+instead of replacing the whole `slurm.conf` template:
+
+* `max_array_size`: sets `MaxArraySize`. Must be one more than the largest
+  array index you need, e.g. `10001` for `--array=1-10000` (if setting above
+  `10000` on the default `slurm.conf` template, also set `max_job_count` to at
+  least `max_array_size`).
+* `max_job_count`: sets `MaxJobCount`, the number of jobs `slurmctld` keeps in
+  memory, including recently finished ones. Higher values use more controller
+  memory.
+* `min_job_age`: sets `MinJobAge`, the seconds a finished job stays in
+  `slurmctld` memory. Lowering it frees job records sooner when running many
+  short jobs.
+
+Unset values keep Slurm's defaults.
+
+```yaml
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    # ...
+    settings:
+      cloud_parameters:
+        max_array_size: 10001
+        max_job_count: 500000
+        min_job_age: 60
 ```
 
 ## Support
@@ -486,7 +518,7 @@ limitations under the License.
 | <a name="input_bucket_name"></a> [bucket\_name](#input\_bucket\_name) | Name of GCS bucket.<br/>Ignored when 'create\_bucket' is true. | `string` | `null` | no |
 | <a name="input_can_ip_forward"></a> [can\_ip\_forward](#input\_can\_ip\_forward) | Enable IP forwarding, for NAT instances for example. | `bool` | `false` | no |
 | <a name="input_cgroup_conf_tpl"></a> [cgroup\_conf\_tpl](#input\_cgroup\_conf\_tpl) | Slurm cgroup.conf template file path. | `string` | `null` | no |
-| <a name="input_cloud_parameters"></a> [cloud\_parameters](#input\_cloud\_parameters) | cloud.conf options. Defaults inherited from [Slurm GCP repo](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/terraform/slurm_cluster/modules/slurm_files/README_TF.md#input_cloud_parameters) | <pre>object({<br/>    no_comma_params          = optional(bool, false)<br/>    private_data             = optional(list(string))<br/>    scheduler_parameters     = optional(list(string))<br/>    resume_rate              = optional(number)<br/>    resume_timeout           = optional(number)<br/>    suspend_rate             = optional(number)<br/>    suspend_timeout          = optional(number)<br/>    slurmd_timeout           = optional(number)<br/>    unkillable_step_timeout  = optional(number)<br/>    topology_plugin          = optional(string)<br/>    topology_param           = optional(string)<br/>    tree_width               = optional(number)<br/>    prolog_flags             = optional(string)<br/>    switch_type              = optional(string)<br/>    skip_nodeset_lines       = optional(bool, false)<br/>    topology_region_switches = optional(bool, false)<br/>  })</pre> | `{}` | no |
+| <a name="input_cloud_parameters"></a> [cloud\_parameters](#input\_cloud\_parameters) | cloud.conf options. Defaults inherited from [Slurm GCP repo](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/terraform/slurm_cluster/modules/slurm_files/README_TF.md#input_cloud_parameters) | <pre>object({<br/>    no_comma_params          = optional(bool, false)<br/>    private_data             = optional(list(string))<br/>    scheduler_parameters     = optional(list(string))<br/>    resume_rate              = optional(number)<br/>    resume_timeout           = optional(number)<br/>    suspend_rate             = optional(number)<br/>    suspend_timeout          = optional(number)<br/>    slurmd_timeout           = optional(number)<br/>    unkillable_step_timeout  = optional(number)<br/>    topology_plugin          = optional(string)<br/>    topology_param           = optional(string)<br/>    tree_width               = optional(number)<br/>    prolog_flags             = optional(string)<br/>    switch_type              = optional(string)<br/>    skip_nodeset_lines       = optional(bool, false)<br/>    topology_region_switches = optional(bool, false)<br/>    max_array_size           = optional(number)<br/>    max_job_count            = optional(number)<br/>    min_job_age              = optional(number)<br/>  })</pre> | `{}` | no |
 | <a name="input_cloudsql"></a> [cloudsql](#input\_cloudsql) | Use this database instead of the one on the controller.<br/>  server\_ip : Address of the database server.<br/>  user      : The user to access the database as.<br/>  password  : The password, given the user, to access the given database. (sensitive)<br/>  db\_name   : The database to access.<br/>  user\_managed\_replication : The list of location and (optional) kms\_key\_name for secret | <pre>object({<br/>    server_ip = string<br/>    user      = string<br/>    password  = string # sensitive<br/>    db_name   = string<br/>    user_managed_replication = optional(list(object({<br/>      location     = string<br/>      kms_key_name = optional(string)<br/>    })), [])<br/>  })</pre> | `null` | no |
 | <a name="input_compute_startup_script"></a> [compute\_startup\_script](#input\_compute\_startup\_script) | DEPRECATED: `compute_startup_script` has been deprecated.<br/>Use `startup_script` of nodeset module instead. | `any` | `null` | no |
 | <a name="input_compute_startup_scripts_timeout"></a> [compute\_startup\_scripts\_timeout](#input\_compute\_startup\_scripts\_timeout) | The timeout (seconds) applied to each startup script in compute nodes. If<br/>any script exceeds this timeout, then the instance setup process is considered<br/>failed and handled accordingly.<br/><br/>NOTE: When set to 0, the timeout is considered infinite and thus disabled. | `number` | `300` | no |
@@ -512,6 +544,7 @@ limitations under the License.
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB. | `number` | `50` | no |
 | <a name="input_disk_storage_pool"></a> [disk\_storage\_pool](#input\_disk\_storage\_pool) | Storage pool to use for the boot disk. Note that storage pools are only supported with Hyperdisk types. For boot disks, only hyperdisk-balanced is supported. You must provide an existing storage pool, as this module does not create new ones. | `string` | `null` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Boot disk type, can be either hyperdisk-balanced, pd-ssd, pd-standard, pd-balanced, or pd-extreme. | `string` | `"pd-ssd"` | no |
+| <a name="input_enable_async_reply"></a> [enable\_async\_reply](#input\_enable\_async\_reply) | Enables Slurm 25.11+ asynchronous RPC reply mode (SlurmctldParameters=enable\_async\_reply) so slow client sockets do not stall slurmctld worker threads at scale. | `bool` | `true` | no |
 | <a name="input_enable_backup_controller"></a> [enable\_backup\_controller](#input\_enable\_backup\_controller) | Enables a secondary backup controller for High Availability. | `bool` | `false` | no |
 | <a name="input_enable_bigquery_load"></a> [enable\_bigquery\_load](#input\_enable\_bigquery\_load) | Enables loading of cluster job usage into big query.<br/><br/>NOTE: Requires Google Bigquery API. | `bool` | `false` | no |
 | <a name="input_enable_chs_gpu_health_check_epilog"></a> [enable\_chs\_gpu\_health\_check\_epilog](#input\_enable\_chs\_gpu\_health\_check\_epilog) | Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as an epilog script after completing a job step from a new job allocation.<br/>Compute nodes that fail GPU health check during epilog will be marked as drained. Find more details at:<br/>https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/docs/CHS-Slurm.md | `bool` | `false` | no |
@@ -535,7 +568,7 @@ limitations under the License.
 | <a name="input_enable_smt"></a> [enable\_smt](#input\_enable\_smt) | DEPRECATED: Use `advanced_machine_features.threads_per_core` instead. | `bool` | `null` | no |
 | <a name="input_endpoint_versions"></a> [endpoint\_versions](#input\_endpoint\_versions) | Version of the API to use (The compute service is the only API currently supported) | <pre>object({<br/>    compute = string<br/>  })</pre> | <pre>{<br/>  "compute": "beta"<br/>}</pre> | no |
 | <a name="input_epilog_scripts"></a> [epilog\_scripts](#input\_epilog\_scripts) | List of scripts to be used for Epilog. Programs for the slurmd to execute<br/>on every node when a user's job completes.<br/>See https://slurm.schedmd.com/slurm.conf.html#OPT_Epilog. | <pre>list(object({<br/>    filename = string<br/>    content  = optional(string)<br/>    source   = optional(string)<br/>  }))</pre> | `[]` | no |
-| <a name="input_experimental"></a> [experimental](#input\_experimental) | Experimental Slurm settings. These features are subject to change and may be modified in future releases. | <pre>object({<br/>    enable_async_reply = optional(bool, false)<br/>  })</pre> | `{}` | no |
+| <a name="input_experimental"></a> [experimental](#input\_experimental) | Experimental Slurm settings. These features are subject to change and may be modified in future releases. | `map(any)` | `{}` | no |
 | <a name="input_extra_logging_flags"></a> [extra\_logging\_flags](#input\_extra\_logging\_flags) | The only available flag is `trace_api` | `map(bool)` | `{}` | no |
 | <a name="input_gcloud_path_override"></a> [gcloud\_path\_override](#input\_gcloud\_path\_override) | Directory of the gcloud executable to be used during cleanup | `string` | `""` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = string,<br/>    count = number<br/>  }))</pre> | `[]` | no |
