@@ -378,10 +378,20 @@ func buildPodLevelMount(pm parsedMount, idx int, state *mountBuildState) MountIn
 		SubPath:   pm.SubPath,
 	}
 
-	// Warn here rather than in parseSingleVolume so ValidateMounts + ProcessMounts does not warn twice.
-	if volType == "gcsfuse" && len(pm.Attributes) > 0 {
-		info.Attributes = pm.Attributes
-		warnProfileOnlyAttributes(pm.Attributes, pm.Src)
+	if volType == "gcsfuse" {
+		if pm.SubPath != "" {
+			if info.Options == "" {
+				info.Options = "only-dir=" + pm.SubPath
+			} else {
+				info.Options += ",only-dir=" + pm.SubPath
+			}
+			info.SubPath = ""
+		}
+		// Warn here rather than in parseSingleVolume so ValidateMounts + ProcessMounts does not warn twice.
+		if len(pm.Attributes) > 0 {
+			info.Attributes = pm.Attributes
+			warnProfileOnlyAttributes(pm.Attributes, pm.Src)
+		}
 	}
 
 	return info
@@ -445,16 +455,13 @@ func (sm *StorageManager) validateJobMounts(mounts []string, isPathways bool, ha
 			}
 		}
 
-		dupSrc := pm.Src
-		if pm.SubPath != "" {
-			dupSrc += "/" + pm.SubPath
-		}
+		dupSrc, optsForKey := canonicalMountSourceKey(pm.Src, pm.SubPath, pm.Options, pm.Profile != "")
 		sourceKey := dupSrc
 		if pm.Profile != "" {
 			sourceKey += ";profile=" + pm.Profile
 		}
 		// %v prints map keys in sorted order, so the key is independent of attribute order.
-		sourceKey += fmt.Sprintf(";ro=%t;options=%s;attributes=%v", pm.ReadOnly, pm.Options, pm.Attributes)
+		sourceKey += fmt.Sprintf(";ro=%t;options=%s;attributes=%v", pm.ReadOnly, optsForKey, pm.Attributes)
 
 		if seenSources[sourceKey] {
 			return fmt.Errorf("duplicate volume source: %s", dupSrc)
@@ -682,7 +689,7 @@ func parseMountSegments(segments []string, vStr string, pm *parsedMount) (mountS
 
 func validateGCSOnlySegments(pm parsedMount, profileSet bool) error {
 	if strings.HasPrefix(pm.Src, "gs://") {
-		return validateGCSMountOptions(pm.Options)
+		return nil
 	}
 
 	var unsupportedSegments []string
@@ -703,17 +710,66 @@ func validateGCSOnlySegments(pm parsedMount, profileSet bool) error {
 		pm.Src, strings.Join(unsupportedSegments, ", "))
 }
 
+func splitGCSOptionKeyValue(opt string) (key, sep, val string) {
+	if idx := strings.IndexAny(opt, "=:"); idx >= 0 {
+		return opt[:idx], opt[idx : idx+1], opt[idx+1:]
+	}
+	return opt, "", ""
+}
+
+func hasDotPathSegment(p string) bool {
+	for _, seg := range strings.Split(p, "/") {
+		if seg == "." || seg == ".." {
+			return true
+		}
+	}
+	return false
+}
+
+func validateOnlyDirOption(opt, sep, val string, seenOnlyDir *bool) error {
+	if sep == "" {
+		return fmt.Errorf("invalid GCSFuse mount option %q: 'only-dir' requires a directory value (e.g., options=only-dir=<dir>)", opt)
+	}
+	if strings.Contains(val, "\\") || hasControlChar(val) {
+		return fmt.Errorf("invalid GCSFuse mount option %q: 'only-dir' directory value must use forward slashes '/' and contain no control characters", opt)
+	}
+	trimmed := strings.Trim(val, "/")
+	if strings.TrimSpace(trimmed) == "" {
+		return fmt.Errorf("invalid GCSFuse mount option %q: 'only-dir' directory value must not be empty or root '/'", opt)
+	}
+	if strings.TrimSpace(trimmed) != trimmed {
+		return fmt.Errorf("invalid GCSFuse mount option %q: 'only-dir' directory value must not have leading or trailing whitespace", opt)
+	}
+	if hasDotPathSegment(trimmed) {
+		return fmt.Errorf("invalid GCSFuse mount option %q: 'only-dir' directory value must not contain '.' or '..' path segments", opt)
+	}
+	if *seenOnlyDir {
+		return fmt.Errorf("invalid GCSFuse mount option %q: 'only-dir' may only be specified once per --mount", opt)
+	}
+	*seenOnlyDir = true
+	return nil
+}
+
 func validateGCSMountOptions(options string) error {
+	seenOnlyDir := false
 	for _, opt := range splitMountOptions(options) {
 		if opt == "defaults" || opt == "_netdev" {
 			return fmt.Errorf("invalid GCSFuse mount option %q: fstab-only options are not supported by the Cloud Storage FUSE CSI driver; remove %q from options=", opt, opt)
 		}
 		token := strings.TrimLeft(opt, "-")
-		if token == "implicit_dirs" ||
-			strings.HasPrefix(token, "implicit_dirs=") ||
-			strings.HasPrefix(token, "implicit_dirs:") {
-			suggested := strings.Replace(token, "implicit_dirs", "implicit-dirs", 1)
-			return fmt.Errorf("invalid GCSFuse mount option %q: the Cloud Storage FUSE CSI driver uses hyphenated 'implicit-dirs' (not fstab-style 'implicit_dirs'). Use %q in options= instead", opt, suggested)
+		key, sep, val := splitGCSOptionKeyValue(token)
+		if key == "only-dir" || key == "only_dir" {
+			if err := validateOnlyDirOption(opt, sep, val, &seenOnlyDir); err != nil {
+				return err
+			}
+		}
+		if key == "implicit_dirs" || key == "only_dir" {
+			hyphenated := strings.Replace(key, "_", "-", 1)
+			suggestSep := sep
+			if key == "only_dir" && sep != "" {
+				suggestSep = "="
+			}
+			return fmt.Errorf("invalid GCSFuse mount option %q: the Cloud Storage FUSE CSI driver uses hyphenated %q (not fstab-style %q). Use %q in options= instead", opt, hyphenated, key, hyphenated+suggestSep+val)
 		}
 		if token != opt {
 			if token == "" {
@@ -725,18 +781,90 @@ func validateGCSMountOptions(options string) error {
 	return nil
 }
 
+func validateAndNormalizeGCSMount(pm *parsedMount, hasProfile bool) error {
+	if !strings.HasPrefix(pm.Src, "gs://") {
+		return nil
+	}
+	if pm.SubPath != "" {
+		if err := validateGCSSubPath(pm.Src, pm.SubPath, pm.Options, hasProfile); err != nil {
+			return err
+		}
+	}
+	if err := validateGCSMountOptions(pm.Options); err != nil {
+		return err
+	}
+	if pm.SubPath != "" {
+		pm.SubPath = path.Clean(pm.SubPath)
+	}
+	if pm.Options != "" {
+		pm.Options = normalizeGCSMountOptions(pm.Options)
+	}
+	return nil
+}
+
+func validateGCSSubPath(src, subPath, options string, hasProfile bool) error {
+	if strings.Contains(subPath, "\\") || hasControlChar(subPath) {
+		return fmt.Errorf("invalid GCS mount %q: sub-path %q must use forward slashes '/' and contain no control characters", src+"/"+subPath, subPath)
+	}
+	if hasDotPathSegment(subPath) {
+		return fmt.Errorf("invalid GCS mount %q: sub-path %q must not contain '.' or '..' path segments", src+"/"+subPath, subPath)
+	}
+	if !hasProfile {
+		if strings.Contains(subPath, ",") {
+			return fmt.Errorf("inline GCS mount subpath %q cannot contain ',' because volumeAttributes.mountOptions is comma-delimited; mount the bucket or a comma-free parent prefix, use a pre-existing PVC, or use profile=<training|checkpointing|serving> (GKE %s+) to mount via Pod subPath", subPath, minGCSFuseProfileGKEVersion)
+		}
+		if strings.TrimSpace(subPath) != subPath {
+			return fmt.Errorf("inline GCS mount subpath %q must not have leading or trailing whitespace", subPath)
+		}
+	}
+	for _, opt := range splitMountOptions(options) {
+		key, _, _ := splitGCSOptionKeyValue(strings.TrimLeft(opt, "-"))
+		if key == "only-dir" || key == "only_dir" {
+			return fmt.Errorf("mount %q specifies both a GCS subpath (%q) and %q in options=. Specify the subpath either in the URI (%s/%s without only-dir in options=) or on the bare bucket (%s with options=only-dir=<dir>), not both",
+				src+"/"+subPath, subPath, opt, src, subPath, src)
+		}
+	}
+	return nil
+}
+
+func normalizeGCSMountOptions(options string) string {
+	opts := splitMountOptions(options)
+	for i, opt := range opts {
+		if key, sep, val := splitGCSOptionKeyValue(opt); key == "only-dir" && sep != "" {
+			opts[i] = "only-dir=" + path.Clean(strings.Trim(val, "/"))
+		}
+	}
+	return strings.Join(opts, ",")
+}
+
+// canonicalMountSourceKey computes the duplicate-detection source and options key.
+// For inline GCS mounts, only-dir=<dir> is equivalent to gs://<bucket>/<dir>.
+func canonicalMountSourceKey(src, subPath, options string, hasProfile bool) (dupSrc, optsForKey string) {
+	dupSrc = src
+	if subPath != "" {
+		return src + "/" + subPath, options
+	}
+	if !strings.HasPrefix(src, "gs://") || hasProfile || options == "" {
+		return dupSrc, options
+	}
+	var remaining []string
+	for _, opt := range splitMountOptions(options) {
+		key, _, val := splitGCSOptionKeyValue(opt)
+		if key == "only-dir" {
+			dupSrc = src + "/" + val
+			continue
+		}
+		remaining = append(remaining, opt)
+	}
+	return dupSrc, strings.Join(remaining, ",")
+}
+
 // hasImplicitDirsOption reports whether a comma-separated GCSFuse mountOptions string
 // already configures implicit-dirs (including explicit opt-out or an aiml-* profile preset).
 func hasImplicitDirsOption(options string) bool {
-	aimlProfiles := []string{
-		"profile:aiml-training", "profile:aiml-serving", "profile:aiml-checkpointing",
-		"profile=aiml-training", "profile=aiml-serving", "profile=aiml-checkpointing",
-	}
 	for _, token := range splitMountOptions(options) {
-		if token == "implicit-dirs" ||
-			strings.HasPrefix(token, "implicit-dirs=") ||
-			strings.HasPrefix(token, "implicit-dirs:") ||
-			slices.Contains(aimlProfiles, token) {
+		key, _, val := splitGCSOptionKeyValue(token)
+		if key == "implicit-dirs" || (key == "profile" && (val == "aiml-training" || val == "aiml-serving" || val == "aiml-checkpointing")) {
 			return true
 		}
 	}
@@ -767,11 +895,12 @@ func (sm *StorageManager) parseSingleVolume(vStr string) (parsedMount, error) {
 	if err := validateGCSOnlySegments(pm, segments.ProfileSet); err != nil {
 		return parsedMount{}, err
 	}
-	if strings.HasPrefix(pm.Src, "gs://") && pm.Options != "" {
-		pm.Options = strings.Join(splitMountOptions(pm.Options), ",")
-	}
 
 	if err := resolveMountSourceAndSubPath(&pm); err != nil {
+		return parsedMount{}, err
+	}
+
+	if err := validateAndNormalizeGCSMount(&pm, segments.ProfileSet); err != nil {
 		return parsedMount{}, err
 	}
 
@@ -2131,10 +2260,7 @@ func (sm *StorageManager) collectPreflightMounts(rawMounts []string) ([]profileM
 		if !strings.HasPrefix(pm.Src, "gs://") {
 			continue
 		}
-		bucket, _, err := splitGCSSource(pm.Src)
-		if err != nil {
-			return nil, nil, err
-		}
+		bucket := strings.TrimPrefix(pm.Src, "gs://")
 		if pm.Profile == "" {
 			if !hasImplicitDirsOption(pm.Options) && !seenInline[bucket] {
 				seenInline[bucket] = true

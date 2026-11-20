@@ -211,6 +211,9 @@ Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;profile=<profile>][
 
 **Supported volume sources (`<src>`):**
 * **Cloud Storage**: `gs://<bucket-name>[/<sub-path>]` (mounts via the Cloud Storage FUSE CSI driver)
+  * **Subpaths**: Inline mounts scope `<sub-path>` via GCSFuse `only-dir=<sub-path>` (cannot contain `,`), while `profile=` mounts share a bucket-level gateway PV via Pod `subPath`. Do not combine `<sub-path>` in the URI with `options=only-dir=...`.
+  * **Flat-namespace buckets**: For inline mounts on standard (non-HNS) buckets whose subdirectories were uploaded without explicit directory markers (e.g., via `gcloud storage cp` or SDKs), pass `options=implicit-dirs` (or use `profile=`).
+  * **Mount option syntax**: Use hyphenated CSI flags without leading dashes (e.g., `options=implicit-dirs,only-dir=sub`, not `/etc/fstab` options like `defaults`, `_netdev`, or `implicit_dirs`).
 * **Filestore**: `filestore://<instance-name-or-ip>/<share-name>` (auto-provisions PV and PVC)
 * **NFS Server**: `nfs://<server-host-or-ip>/<export-path>` (auto-provisions a shared static NFS PV and PVC after checking `kubectl auth can-i create persistentvolumes --all-namespaces`, and `gcluster job cancel` auto-reclaims unused NFS gateways once no other workload references them; uses default NFS port 2049—custom ports and NFSv4 root exports `nfs://<server>/` require a pre-provisioned PV/PVC—and supports bracketed IPv6 hosts such as `nfs://[fd12::1]/export`)
 * **Existing PVC**: `<pvc-name>[/<sub-path>]` (the PersistentVolumeClaim must already exist in the target Kubernetes namespace; `ReadOnlyMany` PVCs are rejected with `;rw`, multi-node jobs require `ReadWriteMany` or `ReadOnlyMany` to avoid Multi-Attach errors, and Pathways jobs count `pathways-head` as an extra node so even single-host TPU slices reject `ReadWriteOnce` PVCs; if the PVC is backed by the GKE Cloud Storage FUSE CSI driver, `gcluster` auto-detects it via `kubectl get pvc`—and, for statically provisioned PVs or custom StorageClasses without a PVC provisioner annotation, `kubectl get pv` or `kubectl get storageclass`—to inject the required `gke-gcsfuse/volumes: "true"` pod annotation)
@@ -237,7 +240,7 @@ Mounting a GCS bucket (read-write):
   --mount "gs://<YOUR_BUCKET_NAME>;/data;rw;options=logging:severity:info,enable-atomic-rename-object:true"
 ```
 
-*(Note: Replace `<YOUR_BUCKET_NAME>` with the name of your own bucket. Use `--service-account <KSA_NAME>` to specify the Kubernetes Service Account configured with Workload Identity access to read/write the bucket).*
+*(Note: Replace `<YOUR_BUCKET_NAME>` with the name of your own bucket. Use `--service-account <KSA_NAME>` to specify the Kubernetes Service Account configured with Workload Identity access to read/write the bucket. If your bucket uses a standard flat namespace rather than Hierarchical Namespace, include `implicit-dirs` in `options=` to list subdirectories uploaded without explicit directory markers).*
 
 Mounting GCS buckets with storage profiles:
 
