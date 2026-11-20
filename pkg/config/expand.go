@@ -35,7 +35,7 @@ const (
 	blueprintLabel        = "ghpc_blueprint"
 	deploymentLabel       = "ghpc_deployment"
 	aiAssistedLabel       = "ghpc_ai_assisted"
-	GoogleProviderVersion = ">= 6.9.0, <= 8.8.0"
+	GoogleProviderVersion = ">= 6.9.0, <= 8.12.0"
 )
 
 var validLabelValueRegex = regexp.MustCompile("[^a-z0-9_-]")
