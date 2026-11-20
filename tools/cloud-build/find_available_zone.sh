@@ -359,6 +359,41 @@ check_cpu_quota() {
 	fi
 }
 
+declare -A SUPPORT_MACHINE_CACHE
+check_support_machine_type() {
+	local zone=$1
+	local raw_types=${REQUIRED_SUPPORT_MACHINE_TYPE:-}
+	if [[ -z "${raw_types}" ]]; then
+		return 0
+	fi
+
+	local req_type describe_output cache_key
+	for req_type in ${raw_types//,/ }; do
+		[[ -z "${req_type}" ]] && continue
+		cache_key="${zone}:${req_type}"
+		if [[ -n "${SUPPORT_MACHINE_CACHE[$cache_key]:-}" ]]; then
+			if [[ "${SUPPORT_MACHINE_CACHE[$cache_key]}" != "0" ]]; then
+				return 1
+			fi
+			continue
+		fi
+
+		if describe_output=$(gcloud compute machine-types describe "${req_type}" \
+			--zone="${zone}" --project="${PROJECT_ID}" --format="value(name)" 2>&1); then
+			SUPPORT_MACHINE_CACHE[$cache_key]=0
+		elif echo "${describe_output}" | grep -q -i -E "was not found|not found"; then
+			echo "INFO: Skipping ${zone} - Machine type ${req_type} is not available in ${zone}."
+			SUPPORT_MACHINE_CACHE[$cache_key]=1
+			return 1
+		else
+			echo "WARN: Could not verify machine type ${req_type} in ${zone}: ${describe_output}. Failing-open and assuming available."
+			SUPPORT_MACHINE_CACHE[$cache_key]=0
+		fi
+	done
+
+	return 0
+}
+
 select_lustre_zone() {
 	local region=$1
 	local preferred_zone=${2:-}
@@ -521,6 +556,10 @@ else
 			# Check region for support VMs.
 			if ! check_cpu_quota "${REGION}"; then
 				echo "INFO: Skipping ${ZONE} - CPU quota check failed in region ${REGION}."
+				continue
+			fi
+
+			if ! check_support_machine_type "${ZONE}"; then
 				continue
 			fi
 

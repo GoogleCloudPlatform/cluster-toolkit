@@ -854,6 +854,21 @@ elif [[ "$1 $2 $3" == "compute instances list" ]]; then
     echo "test-123456-02"
 elif [[ "$1 $2 $3" == "compute instances delete" ]]; then
     exit 0
+elif [[ "$1 $2 $3" == "compute machine-types describe" ]]; then
+    zone=""
+    for arg in "$@"; do
+        if [[ "$arg" == --zone=* ]]; then
+            zone="${arg#--zone=}"
+        fi
+    done
+    if [[ " ${UNAVAILABLE_SUPPORT_ZONES:-} " == *" ${zone} "* ]]; then
+        echo "ERROR: (gcloud.compute.machine-types.describe) Could not fetch resource: - The resource 'projects/test-proj/zones/${zone}/machineTypes/$4' was not found" >&2
+        exit 1
+    elif [[ " ${SUPPORT_DESCRIBE_TRANSIENT_ERROR_ZONES:-} " == *" ${zone} "* ]]; then
+        echo "ERROR: (gcloud.compute.machine-types.describe) API rate limit exceeded" >&2
+        exit 1
+    fi
+    echo "$4"
 elif [[ "$1 $2 $3" == "beta quotas info" ]]; then
     # us-west3-a: 18000, us-central1-a/c: 36000, us-west3-b/europe-west1-b: 0
     # us-central1-b defaults to 0 unless US_CENTRAL1_B_LUSTRE_QUOTA is set
@@ -1157,6 +1172,59 @@ spec:
 
         self.assertIn("--env-var LUSTRE_EXCLUDE_ZONES", content)
         self.assertIn("ACCUMULATED_LUSTRE_EXCLUDE_ZONES", content)
+
+    def test_support_machine_type_skips_zone_missing_required_vm_before_probe(self):
+        """Zones lacking REQUIRED_SUPPORT_MACHINE_TYPE skip compute/Lustre probing."""
+        call_log = os.path.join(self.test_dir, "gcloud_support_calls.log")
+        res = self._run_find_available_zone_with_mock(
+            {
+                "GCLOUD_CALL_LOG": call_log,
+                "EXCLUDE_ZONES": "europe-west1-b",
+                "REQUIRED_SUPPORT_MACHINE_TYPE": "c2-standard-4",
+                "UNAVAILABLE_SUPPORT_ZONES": "us-west3-b",
+                "US_CENTRAL1_B_LUSTRE_QUOTA": "18000",
+            }
+        )
+        self.assertIn("OUT_ZONE=us-central1-b", res.stdout)
+        self.assertIn("OUT_LUSTRE_ZONE=us-central1-b", res.stdout)
+        self.assertIn(
+            "Skipping us-west3-b - Machine type c2-standard-4 is not available in us-west3-b.",
+            res.stdout,
+        )
+        with open(call_log, "r", encoding="utf-8") as f:
+            calls = f.read()
+        self.assertNotIn("compute instances bulk-insert --zone=us-west3-b", calls)
+        self.assertNotIn("zone us-west3-b", calls)
+
+    def test_support_machine_type_fails_open_on_transient_gcloud_error(self):
+        """Transient machine-types describe failures warn and fail-open."""
+        res = self._run_find_available_zone_with_mock(
+            {
+                "EXCLUDE_ZONES": "europe-west1-b",
+                "REQUIRED_SUPPORT_MACHINE_TYPE": "c2-standard-4",
+                "SUPPORT_DESCRIBE_TRANSIENT_ERROR_ZONES": "us-west3-b",
+            }
+        )
+        self.assertIn("WARN: Could not verify machine type c2-standard-4 in us-west3-b", res.stdout)
+        self.assertIn("OUT_ZONE=us-west3-b", res.stdout)
+        self.assertIn("OUT_LUSTRE_ZONE=us-west3-a", res.stdout)
+
+    def test_ml_tpu_dynamic_builds_require_c2_standard_4(self):
+        """Dynamic TPU Slurm builds using c2-standard-4 set REQUIRED_SUPPORT_MACHINE_TYPE."""
+        repo_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+        for fname in (
+            "ml-tpu-v5e-onspot-slurm.yaml",
+            "ml-tpu-v5p-onspot-slurm.yaml",
+            "ml-tpu-v6e-onspot-slurm.yaml",
+        ):
+            build_path = os.path.join(
+                repo_dir, "tools", "cloud-build", "daily-tests", "builds", fname
+            )
+            with open(build_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn("machine_type: c2-standard-4", content)
+            self.assertIn("- name: REQUIRED_SUPPORT_MACHINE_TYPE", content)
+            self.assertIn('value: "c2-standard-4"', content)
 
 
 if __name__ == "__main__":
