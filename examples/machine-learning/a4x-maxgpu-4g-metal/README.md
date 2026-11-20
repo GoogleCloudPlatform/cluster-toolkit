@@ -14,15 +14,14 @@ Key features include:
 * Integration with Cloud Storage FUSE for scalable data access.
 * Slurm cluster setup with controller, login, and compute nodes.
 * Pre-installed NVIDIA drivers, CUDA toolkit, and DCGM for GPU monitoring.
-* Installation of Mellanox OFED drivers (DOCA-OFED) for high-performance networking.
+* Installation of Mellanox Firmware Tools (MFT) for high-performance networking.
 
 ## Key Components & Versions
 
-This blueprint installs and configures several key software components. While the blueprint aims to pull recent stable versions, specific versions installed within the image build process include:
+This blueprint uses a pre-configured base image and installs additional software components during the image build process:
 
-* **Base Image Family:** `ubuntu-accelerator-2404-arm64-with-nvidia-580` (from `ubuntu-os-accelerator-images`)
-* **NVIDIA CUDA Toolkit:** 13.0 (and related `datacenter-gpu-manager` packages)
-* **Mellanox OFED (DOCA):** 3.2.0 for Ubuntu 24.04 arm64-sbsa
+* **Base Image Family:** `aci-gpu-u2404-cuda-132-nvidia-595-arm64` (from `advanced-compute-images`)
+* **NVIDIA CUDA Toolkit:** 13.2 (and related `datacenter-gpu-manager` packages, pre-installed)
 * **Mellanox Firmware Tools (MFT):** 4.34.0-145
 * **Slurm:** Git ref `6.13.2` from `https://github.com/GoogleCloudPlatform/slurm-gcp`
 * **NCCL Plugin Image:** `us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-gib-a4x-max-arm64` (Version: `v1.1.1`)
@@ -37,8 +36,7 @@ The image build process includes several custom scripts to prepare the environme
 * **`update_gce_nic_naming.sh`**: This script updates the `gce-nic-naming` utility from the GoogleCloudPlatform/guest-configs repository. This is often necessary to ensure correct and consistent network interface naming (e.g., eth0, eth1) across different GCE instance types or image versions, which is crucial for multi-NIC setups like the one used in A4X Max.
 * **`apply_networkd_workaround.sh`**: This script applies a workaround for `systemd-networkd-wait-online`. On some systems, particularly newer Ubuntu versions, this service can cause significant delays during boot waiting for all links to become fully "routable". The override adjusts the command to wait for *any* interface to be operational, speeding up the boot process on nodes with multiple network interfaces, some of which might be configured differently (e.g., MRDMA interfaces).
 * **`setup_asapd_lite_service.sh`**: Configures and starts the `asapd-lite` service, which runs in a Docker container. This service is part of the networking stack required for A4X Max functionality.
-* **`install_mofed.sh`**: Handles the download and installation of the Mellanox OpenFabrics Enterprise Distribution (OFED) drivers, specifically the DOCA variant, required for the RDMA network interfaces.
-* **`enable_openibd.sh`**: Ensures the `openibd` service, part of the OFED stack, is enabled to start on boot.
+* **`install_mft.sh`**: Handles the download and installation of the Mellanox Firmware Tools (MFT) required for the RDMA network interfaces.
 
 ## A4X-Max Slurm Cluster Deployment
 
