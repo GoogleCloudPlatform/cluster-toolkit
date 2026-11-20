@@ -20,7 +20,7 @@
 # No NVIDIA driver is installed here. Note that the Rocky slurm-gcp images ship
 # NVIDIA userspace libraries without a driver or device, which is not enough for
 # hardware GL - the published family carrying a driver is
-# slurm-gcp-6-12-ubuntu-2204-lts-nvidia-570. Without a render node the desktop
+# aci-gpu-u2404-slurm-2605-cuda-132-nvidia-595-amd64. Without a render node the desktop
 # falls back to software rendering.
 #
 # NOTE: this file is read with file(), not templatefile(), so shell variables use

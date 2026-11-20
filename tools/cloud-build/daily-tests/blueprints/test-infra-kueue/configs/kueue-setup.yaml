@@ -46,10 +46,8 @@ spec:
         nominalQuota: 400Gi
   - coveredResources:
     - test-locks/slurm
-    - test-locks/ml-slurm
-    - test-locks/slurm-gcp-v6-rocky8
+    - test-locks/slurm-gcp-v6-rocky9
     - test-locks/slurm-gcp-v6-ubuntu
-    - test-locks/slurm-gcp-v6-debian
     - test-locks/slurm-gcp-v6-reconfig-size
     - test-locks/slurm-gcp-v6-ssd
     - test-locks/hpc-build-slurm-image
@@ -113,13 +111,9 @@ spec:
       resources:
       - name: test-locks/slurm
         nominalQuota: 5
-      - name: test-locks/ml-slurm
-        nominalQuota: 1
-      - name: test-locks/slurm-gcp-v6-rocky8
+      - name: test-locks/slurm-gcp-v6-rocky9
         nominalQuota: 1
       - name: test-locks/slurm-gcp-v6-ubuntu
-        nominalQuota: 1
-      - name: test-locks/slurm-gcp-v6-debian
         nominalQuota: 1
       - name: test-locks/slurm-gcp-v6-reconfig-size
         nominalQuota: 1
