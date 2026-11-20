@@ -126,7 +126,8 @@ while true; do
 		break
 	elif [ "$EXIT_CODE" -eq 2 ]; then
 		echo "--- Insufficient capacity. RETRYING in 5 minutes... ---" >&2
-		sleep 300
+		sleep 300 &
+		wait $!
 	elif [ "$EXIT_CODE" -eq 3 ]; then
 		echo "--- FATAL ERROR: Reservation configuration or state error. Exiting. ---" >&2
 		exit 3
@@ -137,7 +138,8 @@ while true; do
 			exit 1
 		else
 			echo "--- WARNING: Transient gcloud error encountered. Retrying in 1 minute... ---" >&2
-			sleep 60
+			sleep 60 &
+			wait $!
 		fi
 	fi
 done

@@ -136,15 +136,23 @@ steps:
             - |
               set -e -u -o pipefail
               echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/ml-tpu-v5p-onspot-slurm.yaml"
+              cd /workspace
 
               DEPLOYMENT_NAME="tpu-v5p-slurm-$$BUILD_ID_SHORT"
 
+              # Register the SIGTERM handler FIRST. bash is PID 1 here and ignores
+              # SIGTERM until a trap is installed. RUN_CLEANUP=false => just exit.
+              RUN_CLEANUP=false
+              source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
+              trap cleanup_pod EXIT
+              trap 'cleanup_pod 143' SIGTERM
+              trap 'cleanup_pod 130' SIGINT
+
+              # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/tpu-v5p-onspot-slurm/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              bash tools/cloud-build/clear_tf_state_locks.sh tools/cloud-build/daily-tests/tests/ml-tpu-v5p-onspot-slurm.yml "\$$DEPLOYMENT_NAME" || true
 
               RUN_CLEANUP=true
-              source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
-              trap cleanup_pod EXIT SIGTERM SIGINT
 
               echo "Sourcing wait_for_available_zone.sh to determine zone."
               source /workspace/tools/cloud-build/wait_for_available_zone.sh
@@ -154,7 +162,6 @@ steps:
               fi
 
               set -x
-              cd /workspace
               bash tools/get_binary.sh "${_TEST_PREFIX}"
 
               REGION="\$${ZONE%-*}"
