@@ -614,8 +614,8 @@ func TestDiscoverInventory_SingleChipBackfillAndBareMetalChips(t *testing.T) {
 	if got := byName["single-chip-slice"]; got.ChipsPerNode != 1 || got.MachineType != "tpu7x-standard-1t" || got.NodesPerSlice != 1 {
 		t.Errorf("single-chip backfill failed: %+v", got)
 	}
-	if got := byName["bm-slice"]; got.ChipsPerNode != 0 || got.MachineType != "my-baremetal-host" {
-		t.Errorf("bare-metal host must not default ChipsPerNode to 4: %+v", got)
+	if got := byName["bm-slice"]; got.ChipsPerNode != 0 || got.MachineType != "my-baremetal-host" || got.TPUType != "" {
+		t.Errorf("bare-metal host must not default ChipsPerNode to 4 or pollute TPUType: %+v", got)
 	}
 }
 
@@ -819,5 +819,97 @@ func TestDiscoverInventory_PoolKeyDisambiguationAndSystemTaints(t *testing.T) {
 	}
 	if len(inv.PartitionTrees) != 2 || inv.PartitionTrees[0].Name != "tree-a" || inv.PartitionTrees[1].Name != "tree-b" {
 		t.Errorf("expected sorted PartitionTrees [tree-a tree-b], got %+v", inv.PartitionTrees)
+	}
+}
+
+func TestDiscoverInventory_SelfReviewEdgeCases(t *testing.T) {
+	t.Parallel()
+	// 1. Restarting 8t nodes (no allocatable google.com/tpu) enriching a 4x4 v6e CRD update ChipsPerNode to 8
+	//    (NodesPerSlice=2) and keep slice Ready; secondary 1t pool and control-plane TPU node are excluded from primary counts.
+	node8tA := makeNode("v6e-8t-1", map[string]string{
+		InstanceTypeLabel: "ct6e-standard-8t",
+		TPUSliceTypeLabel: "v6e",
+		TPUSliceNameLabel: "slice-8t",
+	}, map[string]interface{}{"cpu": "120"}, true)
+	node8tB := makeNode("v6e-8t-2", map[string]string{
+		InstanceTypeLabel: "ct6e-standard-8t",
+		TPUSliceTypeLabel: "v6e",
+		TPUSliceNameLabel: "slice-8t",
+	}, map[string]interface{}{"cpu": "120"}, true)
+	node1t := makeNode("v6e-1t-1", map[string]string{
+		InstanceTypeLabel: "ct6e-standard-1t",
+		TPUSliceTypeLabel: "v6e",
+	}, map[string]interface{}{"cpu": "24", "google.com/tpu": "1"}, true)
+	ctrlTPU := makeNode("ctrl-tpu", map[string]string{
+		InstanceTypeLabel:     "ct6e-standard-8t",
+		TPUSliceTypeLabel:     "v6e",
+		ControlPlaneRoleLabel: "",
+	}, map[string]interface{}{"cpu": "120", "google.com/tpu": "8"}, true)
+
+	lister := &fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR:     {node8tA, node8tB, node1t, ctrlTPU},
+			TPUSliceGVR: {makeSliceCRD("slice-8t", "", "v6e", "4x4", "True", "READY", nil)},
+		},
+	}
+	inv, err := DiscoverInventory(lister, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory failed: %v", err)
+	}
+	if inv.TPU == nil || inv.TPU.DefaultSliceName != "slice-8t" || inv.TPU.ChipsPerNode != 8 || inv.TPU.NodesPerSlice != 2 {
+		t.Fatalf("restarting 8t slice enrichment failed: %+v", inv.TPU)
+	}
+	if inv.TPU.TotalTPUNodes != 2 || inv.TPU.ReadyTPUNodes != 2 {
+		t.Errorf("primary TPU node counts leaked secondary/control-plane pools: %d/%d", inv.TPU.ReadyTPUNodes, inv.TPU.TotalTPUNodes)
+	}
+}
+
+func TestDiscoverInventory_UnreadyFallbackAndFailClosedSkipsTrees(t *testing.T) {
+	t.Parallel()
+	// Unready slice must not override PartitionTree.RootTopology, and mismatched slices print "no active slice".
+	ptMultiPrefix := unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "partition.tpu.google.com/v1alpha1",
+		"kind":       "PartitionTree",
+		"metadata":   map[string]interface{}{"name": "v6e-tree"},
+		"status": map[string]interface{}{
+			"partitionId":       "v6e-root",
+			"partitionTypeInfo": "TPU_V6E_2_4",
+		},
+	}}
+	lister2 := &fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR: {makeNode("v6e-8t-only", map[string]string{
+				InstanceTypeLabel: "ct6e-standard-8t",
+				TPUSliceTypeLabel: "v6e",
+			}, map[string]interface{}{"cpu": "120", "google.com/tpu": "8"}, true)},
+			TPUSliceGVR:         {makeSliceCRD("other-4t-slice", "", "v6e", "2x2", "False", "NotCreated", nil)},
+			TPUPartitionTreeGVR: {ptMultiPrefix},
+		},
+	}
+	inv2, err := DiscoverInventory(lister2, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory(2) failed: %v", err)
+	}
+	if inv2.TPU == nil || inv2.TPU.Topology != "2x4" {
+		t.Errorf("expected fallback topology 2x4 from TPU_V6E_2_4 PartitionTree, got %+v", inv2.TPU)
+	}
+	if joined := strings.Join(inv2.SummaryLines(), "\n"); !strings.Contains(joined, "no active slice") {
+		t.Errorf("expected 'no active slice' when only mismatched-shape slice exists, got:\n%s", joined)
+	}
+
+	// 3. Auto fail-closed must return before calling listTPUPartitionTrees.
+	lister3 := &fakeDiscoveryLister{
+		errGVR: map[schema.GroupVersionResource]error{
+			NodeGVR:     apierrors.NewForbidden(NodeGVR.GroupResource(), "", errors.New("forbidden")),
+			TPUSliceGVR: apierrors.NewForbidden(TPUSliceGVR.GroupResource(), "", errors.New("forbidden")),
+		},
+	}
+	if _, err := DiscoverInventory(lister3, &fakeAPIGroupChecker{err: errors.New("probe 403")}, DiscoverOptions{}); err == nil {
+		t.Fatalf("expected fail-closed error")
+	}
+	for _, gvr := range lister3.calls {
+		if gvr == TPUPartitionTreeGVR || gvr == TPUPartitionTreeV1Beta1GVR {
+			t.Errorf("unexpected PartitionTree call %v after Slice fail-closed error", gvr)
+		}
 	}
 }

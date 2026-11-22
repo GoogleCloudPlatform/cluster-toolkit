@@ -296,7 +296,7 @@ func tpuSummaryHeader(inv *Inventory, tpu *TPUInventory) string {
 	if inv.SliceInventoryUnavailable {
 		return "TPU pool: slice inventory unavailable"
 	}
-	if len(inv.Slices) > 0 {
+	if slices.ContainsFunc(inv.Slices, func(s SliceInfo) bool { return sliceMatchesPrimaryTPU(s, tpu) }) {
 		return "TPU pool: no ready slice"
 	}
 	return "TPU pool: no active slice"
@@ -400,8 +400,8 @@ func discoverTPUSliceCRDs(lister ResourceLister, apiChecker APIGroupChecker, pro
 		return nil
 	}
 
-	res := queryTPUSliceCRDs(lister, apiChecker, probeErr, inv, signals, hw, override)
-	if err := checkAutoSchemeFailClosed(override, inv, signals, apiChecker, probeErr, res.sliceErr); err != nil {
+	res, err := queryTPUSliceCRDs(lister, apiChecker, probeErr, inv, signals, hw, override)
+	if err != nil {
 		return err
 	}
 	logDeferredDiscoveryWarnings(probeErr, res.sliceErr, res.treeErr, inv)
@@ -417,18 +417,21 @@ func discoverTPUSliceCRDs(lister ResourceLister, apiChecker APIGroupChecker, pro
 	return nil
 }
 
-func queryTPUSliceCRDs(lister ResourceLister, apiChecker APIGroupChecker, probeErr error, inv *Inventory, signals nodeSignals, hw TPUHardwareResolver, override LabelScheme) crdDiscoveryResult {
+func queryTPUSliceCRDs(lister ResourceLister, apiChecker APIGroupChecker, probeErr error, inv *Inventory, signals nodeSignals, hw TPUHardwareResolver, override LabelScheme) (crdDiscoveryResult, error) {
 	shouldQuery := inv.TPUSliceAPIPresent || signals.hasTPUSliceLabels || override == SchemeTPUSlice
 	if !shouldQuery && (apiChecker == nil || probeErr != nil) && !signals.hasGKELabels {
 		shouldQuery = true
 	}
 	if !shouldQuery {
-		return crdDiscoveryResult{}
+		return crdDiscoveryResult{}, nil
 	}
 	var out crdDiscoveryResult
 	out.slices, out.sliceFound, out.sliceErr = listTPUSlices(lister, hw)
+	if err := checkAutoSchemeFailClosed(override, inv, signals, apiChecker, probeErr, out.sliceErr); err != nil {
+		return crdDiscoveryResult{}, err
+	}
 	out.trees, out.treeErr = listTPUPartitionTrees(lister, hw)
-	return out
+	return out, nil
 }
 
 func checkAutoSchemeFailClosed(override LabelScheme, inv *Inventory, signals nodeSignals, apiChecker APIGroupChecker, probeErr, sliceErr error) error {
@@ -568,7 +571,7 @@ func resolveNodeMachine(hw TPUHardwareResolver, isTPU bool, rawTPUType, rawInsta
 		return "", rawInstance
 	}
 	tpuType = resolveTPUType(hw, rawTPUType)
-	if tpuType == "" {
+	if tpuType == "" && isTPUMachine(hw, rawInstance) {
 		tpuType = resolveTPUType(hw, rawInstance)
 	}
 	if rawInstance != "" || tpus > 0 {
@@ -1135,34 +1138,40 @@ func extractNodeTopology(node map[string]interface{}) string {
 	return extractTopologyFromPartitionID(nestedString(node, "partitionId"))
 }
 
-// extractTopologyFromPartitionTypeInfo parses trailing dimension tokens from v1alpha1
-// partitionTypeInfo strings such as "IRONWOOD_4_4_4" -> "4x4x4".
-func extractTopologyFromPartitionTypeInfo(info string) string {
+// splitPartitionTypeInfo splits a v1alpha1 partitionTypeInfo string such as
+// "IRONWOOD_4_4_4" or "TPU_V6E_2_4" into its accelerator prefix and topology ("4x4x4", "2x4").
+func splitPartitionTypeInfo(info string) (prefix, topology string) {
 	parts := strings.Split(strings.TrimSpace(info), "_")
 	if len(parts) < 3 {
-		return ""
+		return "", ""
 	}
 	dims := make([]string, 0, 3)
-	for i := len(parts) - 1; i >= 0 && len(dims) < 3; i-- {
+	cut := len(parts)
+	for i := len(parts) - 1; i >= 1 && len(dims) < 3; i-- {
 		v, err := strconv.Atoi(parts[i])
 		if err != nil || v <= 0 {
 			break
 		}
 		dims = append(dims, parts[i])
+		cut = i
 	}
-	if len(dims) < 2 {
-		return ""
+	if len(dims) < 2 || cut == 0 {
+		return "", ""
 	}
 	slices.Reverse(dims)
-	return strings.Join(dims, "x")
+	return strings.Join(parts[:cut], "_"), strings.Join(dims, "x")
+}
+
+// extractTopologyFromPartitionTypeInfo parses trailing dimension tokens from v1alpha1
+// partitionTypeInfo strings such as "IRONWOOD_4_4_4" -> "4x4x4".
+func extractTopologyFromPartitionTypeInfo(info string) string {
+	_, topo := splitPartitionTypeInfo(info)
+	return topo
 }
 
 func inferTypeFromPartitionTypeInfo(info string) string {
-	parts := strings.Split(strings.TrimSpace(info), "_")
-	if len(parts) < 3 {
-		return ""
-	}
-	return parts[0]
+	prefix, _ := splitPartitionTypeInfo(info)
+	return prefix
 }
 
 // extractTopologyFromPartitionID extracts a "<d1>x<d2>[x<d3>]" token from partition IDs
@@ -1255,20 +1264,39 @@ func enrichSliceFromNodes(s *SliceInfo, agg *nodeSliceAgg, hw TPUHardwareResolve
 }
 
 func updateEnrichedSliceChipsAndMachine(s *SliceInfo, nodeMachineType string, nodeChips int, hw TPUHardwareResolver) {
+	s.ChipsPerNode = resolveEnrichedSliceChips(s, nodeMachineType, nodeChips, hw)
+	if nodeMachineType != "" || s.ChipsPerNode <= 0 || s.TPUType == "" {
+		return
+	}
+	curMachineChips := chipsPerNodeForMachine(hw, s.MachineType)
+	if s.MachineType != "" && (curMachineChips == 0 || curMachineChips == s.ChipsPerNode) {
+		return
+	}
+	if inferred := inferTPUMachine(hw, s.TPUType, "", s.ChipsPerNode); inferred != "" {
+		s.MachineType = inferred
+	}
+}
+
+func resolveEnrichedSliceChips(s *SliceInfo, nodeMachineType string, nodeChips int, hw TPUHardwareResolver) int {
 	if nodeChips > 0 {
-		s.ChipsPerNode = nodeChips
-	} else if nodeMachineType == "" && isSingleChipTopology(s.Topology) && s.ChipsPerNode > 1 {
-		s.ChipsPerNode = 1
-	} else if s.ChipsPerNode == 0 && s.MachineType != "" {
-		s.ChipsPerNode = chipsPerNodeForMachine(hw, s.MachineType)
+		return nodeChips
 	}
-	if nodeMachineType == "" && s.ChipsPerNode > 0 && s.TPUType != "" {
-		if curMachineChips := chipsPerNodeForMachine(hw, s.MachineType); curMachineChips > 0 && curMachineChips != s.ChipsPerNode {
-			if inferred := inferTPUMachine(hw, s.TPUType, "", s.ChipsPerNode); inferred != "" {
-				s.MachineType = inferred
-			}
+	if nodeMachineType != "" {
+		if c := chipsPerNodeForMachine(hw, nodeMachineType); c > 0 {
+			return c
 		}
+		if isSingleChipTopology(s.Topology) {
+			return 1
+		}
+		return 0
 	}
+	if isSingleChipTopology(s.Topology) {
+		return 1
+	}
+	if s.ChipsPerNode == 0 && s.MachineType != "" {
+		return chipsPerNodeForMachine(hw, s.MachineType)
+	}
+	return s.ChipsPerNode
 }
 
 func resolveSliceNodeCount(topology string, chipsPerNode, observedNodes int) int {
@@ -1292,7 +1320,7 @@ func sliceNodesReady(readyNodes, totalNodes, nodesPerSlice int) bool {
 }
 
 func buildTPUInventory(inv *Inventory, signals nodeSignals, hw TPUHardwareResolver) (*TPUInventory, *PoolCapacity) {
-	primaryPool := selectPrimaryTPUPool(inv, signals)
+	primaryPool, primaryCtrl := selectPrimaryTPUPool(inv, signals)
 	if primaryPool == nil && len(inv.Slices) == 0 && len(inv.PartitionTrees) == 0 {
 		return nil, nil
 	}
@@ -1306,7 +1334,7 @@ func buildTPUInventory(inv *Inventory, signals nodeSignals, hw TPUHardwareResolv
 			tpu.ChipsPerNode = chipsPerNodeForMachine(hw, tpu.MachineType)
 		}
 	}
-	accumulatePrimaryTPUNodeCounts(inv, tpu)
+	accumulatePrimaryTPUNodeCounts(inv, signals, primaryCtrl, tpu, hw)
 	applySliceAndTreeMetadata(inv, primaryPool, tpu, hw)
 	if tpu.ChipsPerNode == 0 && tpu.MachineType != "" {
 		tpu.ChipsPerNode = chipsPerNodeForMachine(hw, tpu.MachineType)
@@ -1317,18 +1345,45 @@ func buildTPUInventory(inv *Inventory, signals nodeSignals, hw TPUHardwareResolv
 	return tpu, primaryPool
 }
 
-func accumulatePrimaryTPUNodeCounts(inv *Inventory, tpu *TPUInventory) {
+func accumulatePrimaryTPUNodeCounts(inv *Inventory, signals nodeSignals, primaryCtrl bool, tpu *TPUInventory, hw TPUHardwareResolver) {
 	for _, name := range inv.PoolNames {
 		pool := inv.Pools[name]
 		if !pool.IsTPU {
 			continue
 		}
-		if tpu.TPUType != "" && pool.TPUType != "" && pool.TPUType != tpu.TPUType {
+		if !primaryCtrl && signals.poolControlPlane[name] {
+			continue
+		}
+		if !poolMatchesPrimaryTPU(pool, tpu, hw) {
 			continue
 		}
 		tpu.TotalTPUNodes += pool.TotalNodes
 		tpu.ReadyTPUNodes += pool.ReadyNodes
 	}
+}
+
+func poolMatchesPrimaryTPU(pool PoolCapacity, tpu *TPUInventory, hw TPUHardwareResolver) bool {
+	if !poolTPUTypeMatches(pool, tpu) {
+		return false
+	}
+	if tpu.MachineType != "" && pool.MachineType != "" && pool.MachineType != tpu.MachineType {
+		return false
+	}
+	poolChips := pool.TPUsPerNode
+	if poolChips == 0 {
+		poolChips = chipsPerNodeForMachine(hw, pool.MachineType)
+	}
+	return tpu.ChipsPerNode == 0 || poolChips == 0 || poolChips == tpu.ChipsPerNode
+}
+
+func poolTPUTypeMatches(pool PoolCapacity, tpu *TPUInventory) bool {
+	if tpu.TPUType == "" {
+		return true
+	}
+	if pool.TPUType == "" {
+		return tpu.MachineType != "" && pool.MachineType == tpu.MachineType
+	}
+	return pool.TPUType == tpu.TPUType
 }
 
 func applySliceAndTreeMetadata(inv *Inventory, primaryPool *PoolCapacity, tpu *TPUInventory, hw TPUHardwareResolver) {
@@ -1419,23 +1474,23 @@ func applyDefaultSlice(inv *Inventory, tpu *TPUInventory) {
 	if defSlice == nil {
 		return
 	}
-	if defSlice.Ready {
-		tpu.DefaultSliceName = defSlice.Name
-	}
 	tpu.TPUType = firstNonEmpty(tpu.TPUType, defSlice.TPUType)
 	tpu.MachineType = firstNonEmpty(tpu.MachineType, defSlice.MachineType)
 	if tpu.ChipsPerNode == 0 {
 		tpu.ChipsPerNode = defSlice.ChipsPerNode
 	}
-	if defSlice.Topology != "" {
-		tpu.Topology = defSlice.Topology
-	}
-	if defSlice.NodesPerSlice > 0 {
-		tpu.NodesPerSlice = defSlice.NodesPerSlice
+	if defSlice.Ready {
+		tpu.DefaultSliceName = defSlice.Name
+		if defSlice.Topology != "" {
+			tpu.Topology = defSlice.Topology
+		}
+		if defSlice.NodesPerSlice > 0 {
+			tpu.NodesPerSlice = defSlice.NodesPerSlice
+		}
 	}
 }
 
-func selectPrimaryTPUPool(inv *Inventory, signals nodeSignals) *PoolCapacity {
+func selectPrimaryTPUPool(inv *Inventory, signals nodeSignals) (*PoolCapacity, bool) {
 	var best *PoolCapacity
 	bestName := ""
 	bestCtrl := true
@@ -1452,7 +1507,7 @@ func selectPrimaryTPUPool(inv *Inventory, signals nodeSignals) *PoolCapacity {
 			bestCtrl = isCtrl
 		}
 	}
-	return best
+	return best, bestCtrl
 }
 
 func isBetterTPUPool(candName string, cand PoolCapacity, candCtrl bool, curName string, cur *PoolCapacity, curCtrl bool) bool {

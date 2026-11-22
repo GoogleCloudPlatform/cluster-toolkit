@@ -5128,6 +5128,9 @@ func TestHasAPIGroupVersion(t *testing.T) {
 			if err != nil || ok {
 				t.Errorf("res %+v: HasAPIGroupVersion = (%v, %v), want (false, nil)", res, ok, err)
 			}
+			if !slices.Equal(mockExec.timeouts, []time.Duration{apiGroupProbeTimeout}) {
+				t.Errorf("timeouts = %v, want [%v]", mockExec.timeouts, apiGroupProbeTimeout)
+			}
 			mockExec.assertAllKubectlPinned(t, "generic-ctx")
 		}
 	})
@@ -5143,8 +5146,10 @@ func TestHasAPIGroupVersion_ErrorsAndBlankInputs(t *testing.T) {
 		wantErrSubstr string
 		wantDeadline  bool
 	}{
-		{name: "deadline exceeded wrapped before stderr", res: shell.CommandResult{ExitCode: 1, Stderr: "404 page not found", Err: context.DeadlineExceeded}, wantErrSubstr: "timed out", wantDeadline: true},
+		{name: "deadline exceeded wrapped before stderr", res: shell.CommandResult{ExitCode: 0, Stderr: "404 page not found", Err: context.DeadlineExceeded}, wantErrSubstr: "timed out", wantDeadline: true},
 		{name: "skips WARNING and klog WMMDD lines", res: shell.CommandResult{ExitCode: 1, Stderr: "WARNING: kubeconfig perm\nW1120 12:00:00.000000 1 loader.go:1] warn\nError from server (Forbidden): denied"}, wantErrSubstr: "Forbidden"},
+		{name: "stderr warnings only fall through to stdout", res: shell.CommandResult{ExitCode: 1, Stderr: "\nWARNING: deprecated\nW1120 12:00:00.000000 1 loader.go:1] warn", Stdout: "proxy 503 unavailable"}, wantErrSubstr: "503 unavailable"},
+		{name: "non-klog W1234x line is preserved", res: shell.CommandResult{ExitCode: 1, Stderr: "W1234x real error"}, wantErrSubstr: "W1234x real error"},
 		{name: "port 4040 connection refused", res: shell.CommandResult{ExitCode: 1, Stderr: "dial tcp 127.0.0.1:4040: connect: connection refused"}, wantErrSubstr: "connection refused"},
 		{name: "kubectl not in PATH", res: shell.CommandResult{ExitCode: 1, Err: errors.New(`exec: "kubectl": executable file not found in $PATH`)}, wantErrSubstr: "executable file not found"},
 		{name: "stdout error fallback", res: shell.CommandResult{ExitCode: 1, Stdout: "gateway 502 bad gateway"}, wantErrSubstr: "502 bad gateway"},
@@ -5164,10 +5169,13 @@ func TestHasAPIGroupVersion_ErrorsAndBlankInputs(t *testing.T) {
 		if !strings.Contains(err.Error(), tc.wantErrSubstr) || strings.HasSuffix(err.Error(), ": ") {
 			t.Errorf("%s: err = %q, want substring %q", tc.name, err.Error(), tc.wantErrSubstr)
 		}
+		if !slices.Equal(mockExec.timeouts, []time.Duration{apiGroupProbeTimeout}) {
+			t.Errorf("%s: timeouts = %v, want [%v]", tc.name, mockExec.timeouts, apiGroupProbeTimeout)
+		}
 		mockExec.assertAllKubectlPinned(t, "err-ctx")
 	}
 	orcBlank := newTestGKEOrchestrator(NewMockExecutor(nil))
-	for _, blank := range []string{"  ", "/ /", "///"} {
+	for _, blank := range []string{"  ", "/ /", "/ / /", "///"} {
 		if ok, err := orcBlank.HasAPIGroupVersion(blank); err != nil || ok {
 			t.Fatalf("HasAPIGroupVersion(%q) = (%v, %v), want (false, nil)", blank, ok, err)
 		}
@@ -5333,6 +5341,7 @@ func TestGCETPUHardwareResolver(t *testing.T) {
 		{"tpu7-podslice", "tpu7x"},
 		{"tpu7x", "tpu7x"},
 		{"tpu-7x", "tpu7x"},
+		{"tpu-v7x-slice", "tpu7x"},
 		{"ironwood", "tpu7x"},
 		{"tpu7l", "tpu7l"},
 		{"ct5l-hightpu-4t", "v5e"},
@@ -5343,18 +5352,27 @@ func TestGCETPUHardwareResolver(t *testing.T) {
 			t.Errorf("NormalizeTPUType(%q) = %q, want %q", tc[0], got, tc[1])
 		}
 	}
+	if !r.IsTPUMachine("v7x") || !r.IsTPUMachine("ironwood") || !r.IsTPUMachine("tpu7x-standard-4t") {
+		t.Errorf("expected IsTPUMachine true for v7x/ironwood/tpu7x-standard-4t")
+	}
 	// tpu7x must never produce tpu7x-standard-8t.
-	if got := r.InferTPUMachine("tpu7x", "", 8); got != "tpu7x-standard-4t" {
-		t.Errorf("InferTPUMachine(tpu7x, 8) = %q, want tpu7x-standard-4t", got)
-	}
-	if got := r.InferTPUMachine("tpu7x", "", 1); got != "tpu7x-standard-1t" {
-		t.Errorf("InferTPUMachine(tpu7x, 1) = %q, want tpu7x-standard-1t", got)
-	}
-	if got := r.InferTPUMachine("v6e", "v6e-8", 0); got != "ct6e-standard-8t" {
-		t.Errorf("InferTPUMachine(v6e, v6e-8, 0) = %q, want ct6e-standard-8t", got)
-	}
-	if got := r.InferTPUMachine("v5e", "v5e-1", 0); got != "ct5lp-hightpu-1t" {
-		t.Errorf("InferTPUMachine(v5e, v5e-1, 0) = %q, want ct5lp-hightpu-1t", got)
+	for _, tc := range []struct {
+		tpuType, rawMachine string
+		chips               int
+		want                string
+	}{
+		{"tpu7x", "", 8, "tpu7x-standard-4t"},
+		{"tpu7x", "", 1, "tpu7x-standard-1t"},
+		{"TPU7X", "", 4, "tpu7x-standard-4t"},
+		{"tpu-v7x-slice", "tpu-v7x-slice", 4, "tpu7x-standard-4t"},
+		{"tpu7x", "tpu7x-8", 0, "tpu7x-standard-4t"},
+		{"", "v6e-8", 0, "ct6e-standard-8t"},
+		{"v5e", "v5e-1", 0, "ct5lp-hightpu-1t"},
+		{"v5e", "v5lite-4", 0, "ct5lp-hightpu-4t"},
+	} {
+		if got := r.InferTPUMachine(tc.tpuType, tc.rawMachine, tc.chips); got != tc.want {
+			t.Errorf("InferTPUMachine(%q, %q, %d) = %q, want %q", tc.tpuType, tc.rawMachine, tc.chips, got, tc.want)
+		}
 	}
 	// Strict -<N>t parsing rejects non-digits like tpu-4test and custom bare-metal hostnames.
 	for _, tc := range []struct {
@@ -5367,10 +5385,92 @@ func TestGCETPUHardwareResolver(t *testing.T) {
 		{"v6e-8", 8},
 		{"v5e-1", 1},
 		{"tpu7-8", 4},
+		{"tpu7x-8", 4},
 		{"tpu7-podslice", 4},
 	} {
 		if got := r.ChipsPerNode(tc.in); got != tc.want {
 			t.Errorf("ChipsPerNode(%q) = %d, want %d", tc.in, got, tc.want)
 		}
+	}
+}
+
+func TestAirGapEpochAndExternalDefaults(t *testing.T) {
+	t.Setenv(shell.AirGappedEnvVar, "")
+	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
+
+	// External SetDefaultAirGapped(true) before any claim must survive release.
+	shell.SetDefaultAirGapped(true)
+	o1 := NewGKEOrchestrator()
+	o1.claimAirGap()
+	o1.releaseAirGap()
+	if !shell.IsKnownAirGapped() {
+		t.Fatalf("external SetDefaultAirGapped(true) must be preserved after release")
+	}
+
+	// External SetDefaultAirGapped(false) invalidates stale epoch so re-claim re-enables air-gap
+	// and a new owner releasing does not leak true.
+	shell.SetDefaultAirGapped(false)
+	o1.claimAirGap()
+	shell.SetDefaultAirGapped(false)
+	o1.claimAirGap()
+	if !shell.IsKnownAirGapped() {
+		t.Fatalf("re-claim after external reset must re-enable air-gap")
+	}
+	o2 := NewGKEOrchestrator()
+	shell.SetDefaultAirGapped(false)
+	o2.claimAirGap()
+	o1.releaseAirGap() // stale epoch must NOT drop o2's claim
+	if !shell.IsKnownAirGapped() {
+		t.Fatalf("stale-epoch release must not drop active owner's air-gap claim")
+	}
+	o2.releaseAirGap()
+	if shell.IsKnownAirGapped() {
+		t.Fatalf("expected air-gap reset once final active owner released")
+	}
+
+	// SubmitJob early return on TypeK8s must also clear inventory and release air-gap.
+	o2.mode = orchestrator.TypeK8s
+	o2.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice}
+	o2.claimAirGap()
+	if err := o2.SubmitJob(orchestrator.JobDefinition{}); err == nil {
+		t.Fatalf("expected UnsupportedK8sSubmitError for TypeK8s")
+	}
+	if o2.Inventory() != nil || shell.IsKnownAirGapped() {
+		t.Fatalf("TypeK8s SubmitJob early return must clear inventory and release air-gap")
+	}
+}
+
+type stubDynClient struct {
+	dynamic.Interface
+	id string
+}
+
+func TestSetKubeClientAndSetDynamicClientSync(t *testing.T) {
+	t.Setenv(shell.AirGappedEnvVar, "")
+	shell.SetDefaultAirGapped(false)
+	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
+
+	orc := NewGKEOrchestrator()
+	dynA := &stubDynClient{id: "a"}
+	dynB := &stubDynClient{id: "b"}
+	orc.dynClient = dynA
+	orc.dynClientManaged = true
+	orc.dynClientContext = "ctx-a"
+
+	// Injecting *DefaultKubeClient must sync dynClient and clear managed flags.
+	orc.SetKubeClient(&DefaultKubeClient{dynClient: dynB})
+	if orc.dynClient != dynB || orc.dynClientManaged || orc.dynClientContext != "" {
+		t.Fatalf("SetKubeClient(*DefaultKubeClient) did not sync dynClient/managed state")
+	}
+	// Replacing custom KubeClient via SetDynamicClient(dynA) installs *DefaultKubeClient.
+	orc.SetKubeClient(&MockKubeClient{})
+	orc.SetDynamicClient(dynA)
+	if d, ok := orc.kubeClient.(*DefaultKubeClient); !ok || d == nil || d.dynClient != dynA {
+		t.Fatalf("SetDynamicClient did not replace custom KubeClient with *DefaultKubeClient")
+	}
+	// SetDynamicClient(nil) clears kubeClient instead of leaving empty *DefaultKubeClient.
+	orc.SetDynamicClient(nil)
+	if orc.kubeClient != nil || orc.dynClient != nil {
+		t.Fatalf("SetDynamicClient(nil) should clear both kubeClient and dynClient")
 	}
 }

@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
@@ -514,9 +515,6 @@ var (
 		"unable to read token file",
 		"error loading config file",
 	}
-	// GKE's DNS endpoint returns plain-text HTTP 403 before requests reach kube-apiserver
-	// when external DNS access is disabled, container.clusters.connect IAM is denied, or
-	// VPC Service Controls blocks access. client-go formats these as
 	// Only the apiserver's status error counts as RBAC-forbidden; a forward proxy's "403 Forbidden" on CONNECT is a connectivity failure.
 	probeForbiddenMarkers    = []string{"error from server (forbidden)"}
 	probeConnectivityMarkers = []string{
@@ -673,16 +671,18 @@ const apiGroupProbeTimeout = 15 * time.Second
 // HasAPIGroupVersion checks whether the Kubernetes apiserver serves /apis/<groupVersion>
 // via the non-privileged API discovery endpoint (implements k8s.APIGroupChecker).
 func (g *GKEOrchestrator) HasAPIGroupVersion(groupVersion string) (bool, error) {
-	gv := strings.TrimSpace(strings.Trim(strings.TrimSpace(groupVersion), "/"))
+	gv := strings.TrimFunc(groupVersion, func(r rune) bool {
+		return r == '/' || unicode.IsSpace(r)
+	})
 	if gv == "" {
 		return false, nil
 	}
 	res := g.kubectlWithTimeout(apiGroupProbeTimeout, "get", "--raw", "/apis/"+gv, kubectlReadTimeout)
-	if res.ExitCode == 0 {
-		return true, nil
-	}
 	if errors.Is(res.Err, context.DeadlineExceeded) {
 		return false, fmt.Errorf("failed to query Kubernetes API group %q: timed out after %v: %w", gv, apiGroupProbeTimeout, res.Err)
+	}
+	if res.ExitCode == 0 && res.Err == nil {
+		return true, nil
 	}
 	combined := res.Stderr + "\n" + res.Stdout
 	if isAPIGroupNotFoundText(combined) {
@@ -705,12 +705,12 @@ func firstNonWarningLine(stderr, stdout string, err error) string {
 		if line := scanNonWarningLine(err.Error()); line != "" {
 			return line
 		}
-		return firstLine(err.Error())
+		return firstLine(strings.TrimSpace(err.Error()))
 	}
-	if line := firstLine(stderr); line != "" {
+	if line := firstLine(strings.TrimSpace(stderr)); line != "" {
 		return line
 	}
-	return firstLine(stdout)
+	return firstLine(strings.TrimSpace(stdout))
 }
 
 func scanNonWarningLine(s string) string {

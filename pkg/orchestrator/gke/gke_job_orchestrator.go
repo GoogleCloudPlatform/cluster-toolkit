@@ -93,8 +93,12 @@ func (g *GKEOrchestrator) SetDynamicClient(c dynamic.Interface) {
 	g.dynClient = c
 	g.dynClientManaged = false
 	g.dynClientContext = ""
-	if _, isDefault := g.kubeClient.(*DefaultKubeClient); !isDefault {
+	if d, isDefault := g.kubeClient.(*DefaultKubeClient); !isDefault || d == nil {
 		g.kubeClient = nil
+	}
+	if c == nil {
+		g.kubeClient = nil
+		return
 	}
 	g.syncKubeClient()
 }
@@ -111,6 +115,13 @@ func (g *GKEOrchestrator) SetKubeClient(c KubeClient) {
 		g.dynClientContext = ""
 		return
 	}
+	if d, ok := c.(*DefaultKubeClient); ok {
+		g.dynClient = d.dynClient
+		g.dynClientManaged = false
+		g.dynClientContext = ""
+	} else {
+		g.resetManagedDynamicClient()
+	}
 	g.kubeClient = c
 }
 
@@ -122,12 +133,12 @@ func (g *GKEOrchestrator) resetStorageCaches() {
 // SubmitJob submits a job to the GKE cluster. It processes the job definition,
 // creates the required Kubernetes manifests (JobSet), and applies them to the cluster.
 func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
+	g.clearInventory()
 	if g.mode == orchestrator.TypeK8s {
 		return orchestrator.UnsupportedK8sSubmitError()
 	}
 	job.GKENamespace = strings.TrimSpace(job.GKENamespace)
 	g.namespace = job.GKENamespace
-	g.clearInventory()
 	logging.Info("Starting gcluster job submit workflow...")
 	g.gkeCustomTemplatesPath = job.GkeCustomTemplatesPath
 	g.resetStorageCaches()
@@ -227,11 +238,17 @@ var (
 func (g *GKEOrchestrator) claimAirGap() {
 	airGapMu.Lock()
 	defer airGapMu.Unlock()
+	cur := shell.IsAirGappedEnv(func(string) string { return "" })
+	if airGapOwners > 0 && !cur {
+		airGapOwners = 0
+		airGapPrevDefault = false
+		airGapEpoch++
+	}
 	if g.airGapEpoch != 0 && g.airGapEpoch == airGapEpoch {
 		return
 	}
 	if airGapOwners == 0 {
-		airGapPrevDefault = shell.IsAirGappedEnv(func(string) string { return "" })
+		airGapPrevDefault = cur
 		airGapEpoch++
 	}
 	airGapOwners++
@@ -321,7 +338,7 @@ func (g *GKEOrchestrator) requireKubeClientForDiscovery() (KubeClient, error) {
 }
 
 func (gceTPUHardwareResolver) IsTPUMachine(machineType string) bool {
-	return config.IsTPU(machineType)
+	return config.IsTPU(machineType) || isTPU7xToken(strings.ToLower(strings.TrimSpace(machineType)))
 }
 
 var gceTPUTypeTokens = []struct {
@@ -363,7 +380,7 @@ func containsAnyToken(s string, tokens []string) bool {
 }
 
 func isTPU7xToken(s string) bool {
-	if s == "tpu7" || strings.HasPrefix(s, "tpu7-") || s == "tpu7x" || strings.HasPrefix(s, "tpu7x-") {
+	if s == "tpu7" || strings.HasPrefix(s, "tpu7-") || strings.Contains(s, "tpu7x") || strings.Contains(s, "tpu-v7x") {
 		return true
 	}
 	if strings.Contains(s, "tpu-7x") || s == "v7x" || strings.HasPrefix(s, "v7x-") || strings.Contains(s, "ironwood") {
@@ -381,13 +398,11 @@ func (r gceTPUHardwareResolver) InferTPUMachine(tpuType, rawMachine string, chip
 	if chips <= 0 && trimmedMachine != "" {
 		chips = shorthandChipsPerNode(trimmedMachine)
 	}
-	if inferred := defaultGCETPUMachineType(tpuType, chips); inferred != "" {
-		return inferred
+	normType := r.NormalizeTPUType(tpuType)
+	if normType == "" && trimmedMachine != "" {
+		normType = r.NormalizeTPUType(trimmedMachine)
 	}
-	if trimmedMachine != "" && !isGCEAcceleratorShorthand(trimmedMachine) {
-		return trimmedMachine
-	}
-	return ""
+	return defaultGCETPUMachineType(normType, chips)
 }
 
 func (gceTPUHardwareResolver) ChipsPerNode(machineType string) int {
@@ -433,7 +448,7 @@ func shorthandChipsPerNode(raw string) int {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "v5e-1", "v5litepod-1", "v6e-1", "tpu7-1", "tpu7x-1":
 		return 1
-	case "v5e-4", "v5litepod-4", "v6e-4", "v4-8", "v5p-8", "tpu7-4", "tpu7-8", "tpu7-podslice", "tpu7x-4":
+	case "v5e-4", "v5litepod-4", "v6e-4", "v4-8", "v5p-8", "tpu7-4", "tpu7-8", "tpu7-podslice", "tpu7x-4", "tpu7x-8":
 		return 4
 	case "v5e-8", "v5litepod-8", "v6e-8":
 		return 8
@@ -451,7 +466,7 @@ func isGCEAcceleratorShorthand(raw string) bool {
 	case "tpu7", "tpu7x", "tpu-7x", "v7x", "ironwood", "v4", "v5e", "v5p", "v6e", "v5litepod":
 		return true
 	}
-	for _, prefix := range []string{"tpu-v4", "tpu-v5", "tpu-v6", "tpu-v7", "tpu-7x", "tpu7-", "v4-", "v5e-", "v5p-", "v6e-", "v5litepod-", "v7x-"} {
+	for _, prefix := range []string{"tpu-v4", "tpu-v5", "tpu-v6", "tpu-v7", "tpu-7x", "tpu7-", "v4-", "v5e-", "v5p-", "v6e-", "v5lite-", "v5-lite-", "v5litepod-", "v7x-"} {
 		if strings.HasPrefix(s, prefix) {
 			return true
 		}
