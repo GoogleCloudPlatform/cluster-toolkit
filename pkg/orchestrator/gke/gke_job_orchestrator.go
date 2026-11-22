@@ -17,6 +17,7 @@ package gke
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/imagebuilder"
@@ -30,6 +31,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -87,12 +89,28 @@ func (g *GKEOrchestrator) SetExecutor(e Executor) {
 }
 
 func (g *GKEOrchestrator) SetDynamicClient(c dynamic.Interface) {
+	g.clearInventory()
 	g.dynClient = c
 	g.dynClientManaged = false
+	g.dynClientContext = ""
+	if _, isDefault := g.kubeClient.(*DefaultKubeClient); !isDefault {
+		g.kubeClient = nil
+	}
 	g.syncKubeClient()
 }
 
 func (g *GKEOrchestrator) SetKubeClient(c KubeClient) {
+	g.clearInventory()
+	if d, ok := c.(*DefaultKubeClient); ok && d == nil {
+		c = nil
+	}
+	if c == nil {
+		g.kubeClient = nil
+		g.dynClient = nil
+		g.dynClientManaged = false
+		g.dynClientContext = ""
+		return
+	}
 	g.kubeClient = c
 }
 
@@ -109,7 +127,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	}
 	job.GKENamespace = strings.TrimSpace(job.GKENamespace)
 	g.namespace = job.GKENamespace
-	g.inventory = nil
+	g.clearInventory()
 	logging.Info("Starting gcluster job submit workflow...")
 	g.gkeCustomTemplatesPath = job.GkeCustomTemplatesPath
 	g.resetStorageCaches()
@@ -197,6 +215,50 @@ func (g *GKEOrchestrator) validateSubmitLocalPreflight(sm *StorageManager, job o
 	return k8s.ValidateCustomWorkloadTemplates(g.gkeCustomTemplatesPath, workloadTemplateName(job))
 }
 
+var (
+	errKubeClientUninitialized = errors.New("Kubernetes API client is not initialized for node inventory discovery")
+
+	airGapMu          sync.Mutex
+	airGapOwners      int
+	airGapEpoch       uint64
+	airGapPrevDefault bool
+)
+
+func (g *GKEOrchestrator) claimAirGap() {
+	airGapMu.Lock()
+	defer airGapMu.Unlock()
+	if g.airGapEpoch != 0 && g.airGapEpoch == airGapEpoch {
+		return
+	}
+	if airGapOwners == 0 {
+		airGapPrevDefault = shell.IsAirGappedEnv(func(string) string { return "" })
+		airGapEpoch++
+	}
+	airGapOwners++
+	g.airGapEpoch = airGapEpoch
+	shell.SetDefaultAirGapped(true)
+}
+
+func (g *GKEOrchestrator) releaseAirGap() {
+	airGapMu.Lock()
+	defer airGapMu.Unlock()
+	if g.airGapEpoch == 0 {
+		return
+	}
+	if g.airGapEpoch == airGapEpoch && airGapOwners > 0 {
+		airGapOwners--
+		if airGapOwners == 0 && !airGapPrevDefault {
+			shell.SetDefaultAirGapped(false)
+		}
+	}
+	g.airGapEpoch = 0
+}
+
+func (g *GKEOrchestrator) clearInventory() {
+	g.inventory = nil
+	g.releaseAirGap()
+}
+
 // Inventory returns the cached pure-Kubernetes cluster inventory discovered for the current run, if any.
 func (g *GKEOrchestrator) Inventory() *k8s.Inventory {
 	return g.inventory
@@ -211,18 +273,31 @@ func (g *GKEOrchestrator) DiscoverK8sInventory(labelSchemeFlag string) (*k8s.Inv
 	if err != nil {
 		return nil, err
 	}
+	switch schemeOverride {
+	case k8s.SchemeTPUSlice:
+		g.claimAirGap()
+	case k8s.SchemeGKE, k8s.SchemeGeneric:
+		g.releaseAirGap()
+	}
 	kc, err := g.requireKubeClientForDiscovery()
 	if err != nil {
 		return nil, err
 	}
-	inv, err := k8s.DiscoverInventory(kc, g, k8s.DiscoverOptions{
+	var apiChecker k8s.APIGroupChecker
+	if strings.TrimSpace(g.kubeContext) != "" {
+		apiChecker = g
+	}
+	inv, err := k8s.DiscoverInventory(kc, apiChecker, k8s.DiscoverOptions{
 		LabelSchemeOverride: schemeOverride,
+		HardwareResolver:    gceTPUHardwareResolver{},
 	})
 	if err != nil {
 		return nil, err
 	}
 	if inv.LabelScheme == k8s.SchemeTPUSlice {
-		shell.SetDefaultAirGapped(true)
+		g.claimAirGap()
+	} else {
+		g.releaseAirGap()
 	}
 	g.inventory = inv
 	inv.LogSummary()
@@ -231,17 +306,186 @@ func (g *GKEOrchestrator) DiscoverK8sInventory(labelSchemeFlag string) (*k8s.Inv
 
 func (g *GKEOrchestrator) requireKubeClientForDiscovery() (KubeClient, error) {
 	if g.needsDynamicClientInit() {
+		g.resetManagedDynamicClient()
 		if g.dynClient == nil && strings.TrimSpace(g.kubeContext) == "" {
-			return nil, fmt.Errorf("kubernetes API client is not initialized for node inventory discovery")
+			return nil, errKubeClientUninitialized
 		}
 		if _, err := g.getDynamicClient(); err != nil {
-			return nil, fmt.Errorf("failed to initialize kubernetes API client for node inventory discovery: %w", err)
+			return nil, fmt.Errorf("failed to initialize Kubernetes API client for node inventory discovery: %w", err)
 		}
 	}
 	if g.kubeClient == nil {
-		return nil, fmt.Errorf("kubernetes API client is not initialized for node inventory discovery")
+		return nil, errKubeClientUninitialized
 	}
 	return g.kubeClient, nil
+}
+
+func (gceTPUHardwareResolver) IsTPUMachine(machineType string) bool {
+	return config.IsTPU(machineType)
+}
+
+var gceTPUTypeTokens = []struct {
+	canonical string
+	tokens    []string
+}{
+	{canonical: "v6e", tokens: []string{"ct6e", "v6e"}},
+	{canonical: "v5p", tokens: []string{"ct5p", "v5p"}},
+	{canonical: "v5e", tokens: []string{"ct5lp", "ct5l", "v5e", "v5lite", "v5-lite"}},
+	{canonical: "v4", tokens: []string{"ct4p", "tpu-v4"}},
+}
+
+func (gceTPUHardwareResolver) NormalizeTPUType(raw string) string {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	if s == "" {
+		return ""
+	}
+	if isTPU7xToken(s) {
+		return "tpu7x"
+	}
+	for _, entry := range gceTPUTypeTokens {
+		if containsAnyToken(s, entry.tokens) {
+			return entry.canonical
+		}
+	}
+	if s == "v4" || strings.HasPrefix(s, "v4-") {
+		return "v4"
+	}
+	return s
+}
+
+func containsAnyToken(s string, tokens []string) bool {
+	for _, tok := range tokens {
+		if strings.Contains(s, tok) {
+			return true
+		}
+	}
+	return false
+}
+
+func isTPU7xToken(s string) bool {
+	if s == "tpu7" || strings.HasPrefix(s, "tpu7-") || s == "tpu7x" || strings.HasPrefix(s, "tpu7x-") {
+		return true
+	}
+	if strings.Contains(s, "tpu-7x") || s == "v7x" || strings.HasPrefix(s, "v7x-") || strings.Contains(s, "ironwood") {
+		return true
+	}
+	return false
+}
+
+func (r gceTPUHardwareResolver) InferTPUMachine(tpuType, rawMachine string, chipsPerNode int) string {
+	trimmedMachine := strings.TrimSpace(rawMachine)
+	if trimmedMachine != "" && !isGCEAcceleratorShorthand(trimmedMachine) {
+		return trimmedMachine
+	}
+	chips := chipsPerNode
+	if chips <= 0 && trimmedMachine != "" {
+		chips = shorthandChipsPerNode(trimmedMachine)
+	}
+	if inferred := defaultGCETPUMachineType(tpuType, chips); inferred != "" {
+		return inferred
+	}
+	if trimmedMachine != "" && !isGCEAcceleratorShorthand(trimmedMachine) {
+		return trimmedMachine
+	}
+	return ""
+}
+
+func (gceTPUHardwareResolver) ChipsPerNode(machineType string) int {
+	trimmed := strings.TrimSpace(machineType)
+	if trimmed == "" {
+		return 0
+	}
+	if n, ok := parseStrictChipSuffix(trimmed); ok {
+		return n
+	}
+	if n := shorthandChipsPerNode(trimmed); n > 0 {
+		return n
+	}
+	lower := strings.ToLower(trimmed)
+	for _, prefix := range []string{"tpu7x-", "ct6e-", "ct5p-", "ct5lp-", "ct5l-", "ct4p-"} {
+		if strings.HasPrefix(lower, prefix) {
+			return 4
+		}
+	}
+	return 0
+}
+
+func parseStrictChipSuffix(machineType string) (int, bool) {
+	lower := strings.ToLower(strings.TrimSpace(machineType))
+	idx := strings.LastIndex(lower, "-")
+	if idx < 0 || !strings.HasSuffix(lower, "t") {
+		return 0, false
+	}
+	digits := lower[idx+1 : len(lower)-1]
+	if digits == "" {
+		return 0, false
+	}
+	for i := 0; i < len(digits); i++ {
+		if digits[i] < '0' || digits[i] > '9' {
+			return 0, false
+		}
+	}
+	n, err := strconv.Atoi(digits)
+	return n, err == nil && n > 0
+}
+
+func shorthandChipsPerNode(raw string) int {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "v5e-1", "v5litepod-1", "v6e-1", "tpu7-1", "tpu7x-1":
+		return 1
+	case "v5e-4", "v5litepod-4", "v6e-4", "v4-8", "v5p-8", "tpu7-4", "tpu7-8", "tpu7-podslice", "tpu7x-4":
+		return 4
+	case "v5e-8", "v5litepod-8", "v6e-8":
+		return 8
+	default:
+		return 0
+	}
+}
+
+func isGCEAcceleratorShorthand(raw string) bool {
+	if shorthandChipsPerNode(raw) > 0 {
+		return true
+	}
+	s := strings.ToLower(strings.TrimSpace(raw))
+	switch s {
+	case "tpu7", "tpu7x", "tpu-7x", "v7x", "ironwood", "v4", "v5e", "v5p", "v6e", "v5litepod":
+		return true
+	}
+	for _, prefix := range []string{"tpu-v4", "tpu-v5", "tpu-v6", "tpu-v7", "tpu-7x", "tpu7-", "v4-", "v5e-", "v5p-", "v6e-", "v5litepod-", "v7x-"} {
+		if strings.HasPrefix(s, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func defaultGCETPUMachineType(tpuType string, chipsPerNode int) string {
+	switch tpuType {
+	case "tpu7x":
+		if chipsPerNode == 1 {
+			return "tpu7x-standard-1t"
+		}
+		return "tpu7x-standard-4t"
+	case "v6e":
+		return fmt.Sprintf("ct6e-standard-%dt", normalizeGCEChipCount(chipsPerNode))
+	case "v5p":
+		return "ct5p-hightpu-4t"
+	case "v5e":
+		return fmt.Sprintf("ct5lp-hightpu-%dt", normalizeGCEChipCount(chipsPerNode))
+	case "v4":
+		return "ct4p-hightpu-4t"
+	default:
+		return ""
+	}
+}
+
+func normalizeGCEChipCount(chips int) int {
+	switch chips {
+	case 1, 4, 8:
+		return chips
+	default:
+		return 4
+	}
 }
 
 func (g *GKEOrchestrator) finishJobSubmission(job orchestrator.JobDefinition) error {

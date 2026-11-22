@@ -60,6 +60,9 @@ func RegisterProviders() {
 }
 
 func (g *GKEOrchestrator) configureK8sKubectl(clusterName string) error {
+	g.resetStorageCaches()
+	g.clearInventory()
+	g.resetManagedDynamicClient()
 	trimmed := strings.TrimSpace(clusterName)
 	if strings.TrimSpace(g.kubeContext) != "" && (trimmed == "" || trimmed == g.k8sCluster || trimmed == g.kubeContext) {
 		return nil

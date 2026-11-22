@@ -23,6 +23,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -192,6 +193,14 @@ func TestIsForbiddenError(t *testing.T) {
 		{"wrapped 403 Forbidden", errors.New(`insufficient RBAC permissions to read ClusterQueue "default" (403 Forbidden)`), true},
 		{"structured is forbidden suffix", errors.New(`persistentvolumeclaims "pvc" is forbidden`), true},
 		{"non-403 server timeout echoing forbidden resource name", errors.New("Error from server (Timeout): request did not complete (get persistentvolumeclaims forbidden-pvc)"), false},
+		{"proxy HTML 403", errors.New("<html><title>403 Forbidden</title></html>"), false},
+		{"unexpected server error 403", &apierrors.StatusError{ErrStatus: metav1.Status{Code: 403, Reason: metav1.StatusReasonUnknown, Message: "403 Forbidden from gateway"}}, false},
+		{"unexpected server response plain 403", apierrors.NewGenericServerResponse(403, "list", schema.GroupResource{Resource: "nodes"}, "", "plain proxy 403", 0, true), false},
+		{"unexpected server response HTML 403", apierrors.NewGenericServerResponse(403, "list", schema.GroupResource{Resource: "nodes"}, "", "<html>403 Forbidden</html>", 0, false), false},
+		{"proxyconnect 403", errors.New("proxyconnect tcp: 403 Forbidden"), false},
+		{"GKE DNS allow_external_traffic", apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("allow_external_traffic is disabled")), false},
+		{"GKE IAM clusters.connect", errors.New("Error from server (Forbidden): container.googleapis.com/clusters.connect denied"), false},
+		{"VPC-SC 403", errors.New("Error from server (Forbidden): Request is prohibited by organization's policy. vpcServiceControls"), false},
 		{"other error", errors.New("connection refused"), false},
 	}
 	for _, tc := range cases {

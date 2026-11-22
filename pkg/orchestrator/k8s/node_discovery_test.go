@@ -15,49 +15,150 @@
 package k8s
 
 import (
-	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type fakeDiscoveryLister struct {
-	resources map[schema.GroupVersionResource][]unstructured.Unstructured
-	errs      map[schema.GroupVersionResource]error
-	called    []schema.GroupVersionResource
+	byGVR  map[schema.GroupVersionResource][]unstructured.Unstructured
+	errGVR map[schema.GroupVersionResource]error
+	calls  []schema.GroupVersionResource
 }
 
 func (f *fakeDiscoveryLister) ListResources(gvr schema.GroupVersionResource, _, _, _ string) ([]unstructured.Unstructured, error) {
-	f.called = append(f.called, gvr)
-	if err := f.errs[gvr]; err != nil {
+	f.calls = append(f.calls, gvr)
+	if err, ok := f.errGVR[gvr]; ok && err != nil {
 		return nil, err
 	}
-	return f.resources[gvr], nil
+	return f.byGVR[gvr], nil
 }
 
 type fakeAPIGroupChecker struct {
 	groups map[string]bool
 	err    error
-	called []string
+	calls  []string
 }
 
-func (f *fakeAPIGroupChecker) HasAPIGroupVersion(gv string) (bool, error) {
-	f.called = append(f.called, gv)
+func (f *fakeAPIGroupChecker) HasAPIGroupVersion(groupVersion string) (bool, error) {
+	f.calls = append(f.calls, groupVersion)
 	if f.err != nil {
 		return false, f.err
 	}
-	return f.groups[gv], nil
+	return f.groups[groupVersion], nil
+}
+
+// testHardwareResolver simulates a provider-specific GCE TPUHardwareResolver for k8s unit tests.
+type testHardwareResolver struct{}
+
+func (testHardwareResolver) IsTPUMachine(m string) bool {
+	s := strings.ToLower(strings.TrimSpace(m))
+	return strings.HasPrefix(s, "ct") || strings.HasPrefix(s, "tpu7x")
+}
+
+var testTPUNormTable = []struct {
+	canonical string
+	tokens    []string
+}{
+	{"tpu7x", []string{"tpu7x", "ironwood"}},
+	{"v6e", []string{"ct6e", "v6e"}},
+	{"v5p", []string{"ct5p", "v5p"}},
+	{"v5e", []string{"ct5lp", "ct5l", "v5e", "v5lite"}},
+	{"v4", []string{"ct4p", "tpu-v4"}},
+}
+
+func (testHardwareResolver) NormalizeTPUType(raw string) string {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	if s == "tpu7" || strings.HasPrefix(s, "tpu7-") {
+		return "tpu7x"
+	}
+	for _, row := range testTPUNormTable {
+		for _, tok := range row.tokens {
+			if strings.Contains(s, tok) {
+				return row.canonical
+			}
+		}
+	}
+	return s
+}
+
+func (r testHardwareResolver) InferTPUMachine(tpuType, rawMachine string, chips int) string {
+	trimmed := strings.TrimSpace(rawMachine)
+	if trimmed != "" && !isTestTPUShorthand(trimmed, tpuType) {
+		return trimmed
+	}
+	return testDefaultTPUMachine(tpuType, chips)
+}
+
+func isTestTPUShorthand(raw, _ string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "tpu7", "tpu7x", "ironwood", "v6e", "v5p", "v5e", "v4", "tpu-v5p-slice":
+		return true
+	default:
+		return false
+	}
+}
+
+func testDefaultTPUMachine(tpuType string, chips int) string {
+	switch tpuType {
+	case "tpu7x":
+		if chips == 1 {
+			return "tpu7x-standard-1t"
+		}
+		return "tpu7x-standard-4t"
+	case "v6e":
+		return fmt.Sprintf("ct6e-standard-%dt", testNormChips(chips))
+	case "v5p":
+		return "ct5p-hightpu-4t"
+	case "v5e":
+		return fmt.Sprintf("ct5lp-hightpu-%dt", testNormChips(chips))
+	default:
+		return ""
+	}
+}
+
+func testNormChips(chips int) int {
+	if chips == 1 || chips == 8 {
+		return chips
+	}
+	return 4
+}
+
+func (testHardwareResolver) ChipsPerNode(machineType string) int {
+	switch strings.ToLower(strings.TrimSpace(machineType)) {
+	case "tpu7x-standard-1t", "ct6e-standard-1t", "ct5lp-hightpu-1t":
+		return 1
+	case "tpu7x-standard-4t", "ct6e-standard-4t", "ct5p-hightpu-4t", "ct5lp-hightpu-4t", "ct4p-hightpu-4t":
+		return 4
+	case "ct6e-standard-8t", "ct5lp-hightpu-8t":
+		return 8
+	default:
+		return 0
+	}
 }
 
 func makeNode(name string, labels map[string]string, alloc map[string]interface{}, ready bool) unstructured.Unstructured {
-	readyStatus := "False"
+	return makeNodeWithSpec(name, labels, alloc, ready, false, nil)
+}
+
+func makeNodeWithSpec(name string, labels map[string]string, alloc map[string]interface{}, ready, unschedulable bool, taints []interface{}) unstructured.Unstructured {
+	condStatus := "False"
 	if ready {
-		readyStatus = "True"
+		condStatus = "True"
+	}
+	spec := map[string]interface{}{}
+	if unschedulable {
+		spec["unschedulable"] = true
+	}
+	if len(taints) > 0 {
+		spec["taints"] = taints
 	}
 	return unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -65,14 +166,43 @@ func makeNode(name string, labels map[string]string, alloc map[string]interface{
 			"kind":       "Node",
 			"metadata": map[string]interface{}{
 				"name":   name,
-				"labels": stringMapToAny(labels),
+				"labels": toAnyMap(labels),
 			},
+			"spec": spec,
 			"status": map[string]interface{}{
 				"allocatable": alloc,
+				"conditions": []interface{}{
+					map[string]interface{}{"type": "Ready", "status": condStatus},
+				},
+			},
+		},
+	}
+}
+
+func makeSliceCRD(name, ns, tpuType, topology, readyStatus, reason string, partIDs []interface{}) unstructured.Unstructured {
+	spec := map[string]interface{}{
+		"type":     tpuType,
+		"topology": topology,
+	}
+	if len(partIDs) > 0 {
+		spec["partitionIds"] = partIDs
+	}
+	metaObj := map[string]interface{}{"name": name}
+	if ns != "" {
+		metaObj["namespace"] = ns
+	}
+	return unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "slice.tpu.google.com/v1alpha1",
+			"kind":       "Slice",
+			"metadata":   metaObj,
+			"spec":       spec,
+			"status": map[string]interface{}{
 				"conditions": []interface{}{
 					map[string]interface{}{
 						"type":   "Ready",
 						"status": readyStatus,
+						"reason": reason,
 					},
 				},
 			},
@@ -80,7 +210,7 @@ func makeNode(name string, labels map[string]string, alloc map[string]interface{
 	}
 }
 
-func stringMapToAny(in map[string]string) map[string]interface{} {
+func toAnyMap(in map[string]string) map[string]interface{} {
 	out := make(map[string]interface{}, len(in))
 	for k, v := range in {
 		out[k] = v
@@ -88,856 +218,606 @@ func stringMapToAny(in map[string]string) map[string]interface{} {
 	return out
 }
 
-func makeTPUSlice(name, tpuType, topology, state string, labels map[string]string) unstructured.Unstructured {
-	obj := map[string]interface{}{
-		"apiVersion": TPUSliceAPIGroupVersion,
-		"kind":       "Slice",
-		"metadata": map[string]interface{}{
-			"name":   name,
-			"labels": stringMapToAny(labels),
-		},
-		"spec": map[string]interface{}{
-			"type":     tpuType,
-			"topology": topology,
-		},
-		"status": map[string]interface{}{},
-	}
-	if state != "" {
-		obj["status"].(map[string]interface{})["state"] = state
-	}
-	return unstructured.Unstructured{Object: obj}
-}
-
-func makePartitionTree(name, tpuType, rootTopo string, subTopos []interface{}) unstructured.Unstructured {
-	return unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": TPUSliceAPIGroupVersion,
-			"kind":       "PartitionTree",
-			"metadata": map[string]interface{}{
-				"name": name,
-			},
-			"spec": map[string]interface{}{
-				"type":       tpuType,
-				"topology":   rootTopo,
-				"partitions": subTopos,
-			},
-		},
-	}
-}
-
-func TestParseLabelSchemeAndEnvOverride(t *testing.T) {
-	tests := []struct {
-		raw     string
-		want    LabelScheme
-		wantErr bool
+func TestParseAndResolveLabelScheme(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		flag, env string
+		want      LabelScheme
+		wantErr   bool
 	}{
-		{raw: "", want: SchemeAuto},
-		{raw: "  ", want: SchemeAuto},
-		{raw: "tpu-slice", want: SchemeTPUSlice},
-		{raw: " TPU-SLICE ", want: SchemeTPUSlice},
-		{raw: "gke", want: SchemeGKE},
-		{raw: "generic", want: SchemeGeneric},
-		{raw: "unknown", wantErr: true},
+		{"", "", SchemeAuto, false},
+		{"tpu-slice", "gke", SchemeTPUSlice, false},
+		{"  GKE ", "", SchemeGKE, false},
+		{"", "generic", SchemeGeneric, false},
+		{"invalid", "", "", true},
+		{"", "bogus", "", true},
 	}
-	for _, tc := range tests {
-		got, err := ParseLabelScheme(tc.raw)
-		if (err != nil) != tc.wantErr {
-			t.Errorf("ParseLabelScheme(%q) err=%v, wantErr=%v", tc.raw, err, tc.wantErr)
-		}
-		if got != tc.want {
-			t.Errorf("ParseLabelScheme(%q) = %q, want %q", tc.raw, got, tc.want)
-		}
-	}
-
-	env := func(val string) func(string) string {
-		return func(k string) string {
+	for _, tc := range cases {
+		got, err := ResolveLabelSchemeOverride(tc.flag, func(k string) string {
 			if k == LabelSchemeEnvVar {
-				return val
+				return tc.env
 			}
 			return ""
-		}
-	}
-	// Flag takes precedence over env (even if env is invalid).
-	got, err := ResolveLabelSchemeOverride("tpu-slice", env("invalid"))
-	if err != nil || got != SchemeTPUSlice {
-		t.Fatalf("flag precedence failed: got (%q, %v), want (tpu-slice, nil)", got, err)
-	}
-	// Empty flag reads env via os.Getenv when getenv is nil.
-	t.Setenv(LabelSchemeEnvVar, "gke")
-	got, err = ResolveLabelSchemeOverride("", nil)
-	if err != nil || got != SchemeGKE {
-		t.Fatalf("env fallback failed: got (%q, %v), want (gke, nil)", got, err)
-	}
-	// Invalid env with empty flag fails fast.
-	if _, err := ResolveLabelSchemeOverride("", env("bogus")); err == nil || !strings.Contains(err.Error(), "tpu-slice, gke, generic") {
-		t.Fatalf("expected allowed-values error for invalid %s, got: %v", LabelSchemeEnvVar, err)
-	}
-}
-
-func TestNormalizeTPUTypeAndInferMachine(t *testing.T) {
-	tests := []struct {
-		rawType     string
-		rawMachine  string
-		chips       int
-		wantType    string
-		wantMachine string
-	}{
-		{rawType: "tpu-v5p-slice", rawMachine: "", chips: 4, wantType: "v5p", wantMachine: "ct5p-hightpu-4t"},
-		{rawType: "", rawMachine: "ct5p-hightpu-4t", chips: 4, wantType: "v5p", wantMachine: "ct5p-hightpu-4t"},
-		{rawType: "v5p-8", rawMachine: "v5p", chips: 4, wantType: "v5p", wantMachine: "ct5p-hightpu-4t"},
-		{rawType: "", rawMachine: "tpu-v5p-slice", chips: 4, wantType: "v5p", wantMachine: "ct5p-hightpu-4t"},
-		{rawType: "v5e", rawMachine: "ct5lp-hightpu-8t", chips: 8, wantType: "v5e", wantMachine: "ct5lp-hightpu-8t"},
-		{rawType: "tpu-v5-lite-podslice", rawMachine: "", chips: 1, wantType: "v5e", wantMachine: "ct5lp-hightpu-1t"},
-		{rawType: "v5litepod-8", rawMachine: "", chips: 3, wantType: "v5e", wantMachine: "ct5lp-hightpu-4t"},
-		{rawType: "tpu-v6e-slice", rawMachine: "", chips: 8, wantType: "v6e", wantMachine: "ct6e-standard-8t"},
-		{rawType: "", rawMachine: "ct6e-standard-1t", chips: 1, wantType: "v6e", wantMachine: "ct6e-standard-1t"},
-		{rawType: "tpu7x", rawMachine: "", chips: 4, wantType: "tpu7x", wantMachine: "tpu7x-standard-4t"},
-		{rawType: "tpu-7x", rawMachine: "", chips: 3, wantType: "tpu7x", wantMachine: "tpu7x-standard-4t"},
-		{rawType: "ironwood", rawMachine: "", chips: 0, wantType: "tpu7x", wantMachine: "tpu7x-standard-4t"},
-		{rawType: "", rawMachine: "ironwood", chips: 4, wantType: "tpu7x", wantMachine: "tpu7x-standard-4t"},
-		{rawType: "tpu-v4-podslice", rawMachine: "", chips: 4, wantType: "v4", wantMachine: "ct4p-hightpu-4t"},
-		{rawType: "v4-8", rawMachine: "", chips: 4, wantType: "v4", wantMachine: "ct4p-hightpu-4t"},
-		{rawType: "v5p", rawMachine: "tpu-metal-host", chips: 4, wantType: "v5p", wantMachine: "tpu-metal-host"},
-		{rawType: "v5p", rawMachine: "custom-tpu-metal", chips: 4, wantType: "v5p", wantMachine: "custom-tpu-metal"},
-		{rawType: "n2-standard-8", rawMachine: "", chips: 0, wantType: "n2-standard-8", wantMachine: ""},
-		{rawType: "", rawMachine: "", chips: 0, wantType: "", wantMachine: ""},
-	}
-	for _, tc := range tests {
-		gotType, gotMachine := InferTPUTypeAndMachine(tc.rawType, tc.rawMachine, tc.chips)
-		if gotType != tc.wantType || gotMachine != tc.wantMachine {
-			t.Errorf("InferTPUTypeAndMachine(%q, %q, %d) = (%q, %q), want (%q, %q)",
-				tc.rawType, tc.rawMachine, tc.chips, gotType, gotMachine, tc.wantType, tc.wantMachine)
-		}
-	}
-}
-
-func TestDiscoverInventory_TPUSliceMixedPoolDeterministic(t *testing.T) {
-	cpuNode := makeNode("ctrl-0", map[string]string{
-		InstanceTypeLabel:     "n2-standard-8",
-		ControlPlaneRoleLabel: "",
-	}, map[string]interface{}{
-		"cpu":    "8",
-		"memory": "32Gi",
-	}, true)
-	tpuNode0 := makeNode("tpu-0", map[string]string{
-		InstanceTypeLabel:                  "ct5p-hightpu-4t",
-		TPUSliceNameLabel:                  "slice-v5p-0",
-		TPUSliceTypeLabel:                  "v5p",
-		TPUSliceTopologyLabel:              "2x2x2",
-		TPUSlicePartitionLabelPrefix + "0": "p0",
-	}, map[string]interface{}{
-		"cpu":            "208",
-		"memory":         "440Gi",
-		"google.com/tpu": "4",
-	}, true)
-	tpuNode1 := makeNode("tpu-1", map[string]string{
-		InstanceTypeLabel:     "ct5p-hightpu-4t",
-		TPUSliceNameLabel:     "slice-v5p-0",
-		TPUSliceTypeLabel:     "v5p",
-		TPUSliceTopologyLabel: "2x2x2",
-	}, map[string]interface{}{
-		"cpu":            "208",
-		"memory":         "440Gi",
-		"google.com/tpu": "4",
-	}, true)
-
-	sliceObj := makeTPUSlice("slice-v5p-0", "v5p", "2x2x2", "READY", map[string]string{
-		TPUSliceOwnerNameLabel: "job-1",
-		TPUSliceManagedByLabel: "slice-scheduler",
-	})
-	treeObj := makePartitionTree("pt-v5p", "v5p", "2x2x2", []interface{}{
-		map[string]interface{}{
-			"topology": "2x2x2",
-			"children": []interface{}{
-				map[string]interface{}{"topology": "2x2x1"},
-			},
-		},
-	})
-
-	checker := &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}
-	var firstSummary []string
-
-	for run := 0; run < 25; run++ {
-		nodes := []unstructured.Unstructured{cpuNode, tpuNode0, tpuNode1}
-		if run%2 == 1 {
-			nodes = []unstructured.Unstructured{tpuNode1, cpuNode, tpuNode0}
-		}
-		lister := &fakeDiscoveryLister{
-			resources: map[schema.GroupVersionResource][]unstructured.Unstructured{
-				NodeGVR:             nodes,
-				TPUSliceGVR:         {sliceObj},
-				TPUPartitionTreeGVR: {treeObj},
-			},
-		}
-		inv, err := DiscoverInventory(lister, checker, DiscoverOptions{})
-		if err != nil {
-			t.Fatalf("run %d: unexpected error: %v", run, err)
-		}
-		assertTPUSliceMixedInventory(t, inv)
-		summary := inv.SummaryLines()
-		if run == 0 {
-			firstSummary = summary
-			inv.LogSummary()
-		} else if !slices.Equal(summary, firstSummary) {
-			t.Fatalf("run %d: non-deterministic summary:\ngot:  %v\nwant: %v", run, summary, firstSummary)
-		}
-	}
-}
-
-func assertTPUSliceMixedInventory(t *testing.T, inv *Inventory) {
-	t.Helper()
-	assertTPUSlicePoolCaps(t, inv)
-	assertTPUSliceTPU(t, inv)
-	assertTPUSliceCRDs(t, inv)
-}
-
-func assertTPUSlicePoolCaps(t *testing.T, inv *Inventory) {
-	t.Helper()
-	if inv.LabelScheme != SchemeTPUSlice || !inv.TPUSliceAPIPresent || inv.ExplicitMode {
-		t.Fatalf("unexpected header state: scheme=%q tpuSliceAPI=%v explicit=%v", inv.LabelScheme, inv.TPUSliceAPIPresent, inv.ExplicitMode)
-	}
-	if wantPools := []string{"ct5p-hightpu-4t", "n2-standard-8"}; !slices.Equal(inv.PoolNames, wantPools) {
-		t.Fatalf("PoolNames = %v, want %v", inv.PoolNames, wantPools)
-	}
-	tpuCap := inv.DefaultPoolCap(true)
-	if tpuCap == nil || tpuCap.MachineType != "ct5p-hightpu-4t" || tpuCap.CPUsPerNode != 208 || tpuCap.MemMiBPerNode != 440*1024 {
-		t.Fatalf("TPUPoolCap = %+v, want ct5p-hightpu-4t 208 vCPU / %d MiB", tpuCap, 440*1024)
-	}
-	cpuCap := inv.DefaultPoolCap(false)
-	if cpuCap == nil || cpuCap.MachineType != "n2-standard-8" || cpuCap.CPUsPerNode != 8 || cpuCap.MemMiBPerNode != 32*1024 {
-		t.Fatalf("CPUPoolCap = %+v, want n2-standard-8 8 vCPU / %d MiB", cpuCap, 32*1024)
-	}
-}
-
-func assertTPUSliceTPU(t *testing.T, inv *Inventory) {
-	t.Helper()
-	if inv.TPU == nil || inv.TPU.TPUType != "v5p" || inv.TPU.Topology != "2x2x2" || inv.TPU.NodesPerSlice != 2 {
-		t.Fatalf("unexpected TPU inventory: %+v", inv.TPU)
-	}
-	if inv.TPU.ChipsPerNode != 4 || inv.TPU.DefaultSliceName != "slice-v5p-0" || !inv.TPU.HasPartitionLabels {
-		t.Fatalf("unexpected TPU slice/partition metadata: %+v", inv.TPU)
-	}
-	if !slices.Equal(inv.TPU.Topologies, []string{"2x2x1", "2x2x2"}) {
-		t.Fatalf("TPU.Topologies = %v, want [2x2x1 2x2x2]", inv.TPU.Topologies)
-	}
-}
-
-func assertTPUSliceCRDs(t *testing.T, inv *Inventory) {
-	t.Helper()
-	if len(inv.Slices) != 1 || !inv.Slices[0].FromCRD || inv.Slices[0].MachineType != "ct5p-hightpu-4t" {
-		t.Fatalf("unexpected Slices (expected deduplicated CRD+node merge): %+v", inv.Slices)
-	}
-	if len(inv.PartitionTrees) != 1 || inv.PartitionTrees[0].RootTopology != "2x2x2" {
-		t.Fatalf("unexpected PartitionTrees: %+v", inv.PartitionTrees)
-	}
-}
-
-func TestDiscoverInventory_ExplicitMode_403Forbidden(t *testing.T) {
-	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("cannot list nodes"))
-
-	tests := []struct {
-		name           string
-		tpuSliceAPI    bool
-		override       LabelScheme
-		wantScheme     LabelScheme
-		wantTPUSlice   bool
-		wantCRDQueries bool
-	}{
-		{
-			name:           "403 with TPU slice API present auto-detects SchemeTPUSlice",
-			tpuSliceAPI:    true,
-			wantScheme:     SchemeTPUSlice,
-			wantTPUSlice:   true,
-			wantCRDQueries: true,
-		},
-		{
-			name:           "403 with TPU slice API absent falls back to SchemeGeneric",
-			tpuSliceAPI:    false,
-			wantScheme:     SchemeGeneric,
-			wantTPUSlice:   false,
-			wantCRDQueries: false,
-		},
-		{
-			name:           "403 with TPU slice API absent honors --k8s-label-scheme=tpu-slice",
-			tpuSliceAPI:    false,
-			override:       SchemeTPUSlice,
-			wantScheme:     SchemeTPUSlice,
-			wantTPUSlice:   false,
-			wantCRDQueries: true,
-		},
-		{
-			name:           "403 with TPU slice API present honors --k8s-label-scheme=generic and skips CRDs",
-			tpuSliceAPI:    true,
-			override:       SchemeGeneric,
-			wantScheme:     SchemeGeneric,
-			wantTPUSlice:   true,
-			wantCRDQueries: false,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			lister := &fakeDiscoveryLister{
-				errs: map[schema.GroupVersionResource]error{
-					NodeGVR:             forbidden,
-					TPUSliceGVR:         forbidden,
-					TPUPartitionTreeGVR: forbidden,
-				},
-			}
-			checker := &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: tc.tpuSliceAPI}}
-
-			inv, err := DiscoverInventory(lister, checker, DiscoverOptions{LabelSchemeOverride: tc.override})
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if !inv.ExplicitMode {
-				t.Fatalf("expected ExplicitMode=true")
-			}
-			if inv.LabelScheme != tc.wantScheme {
-				t.Errorf("LabelScheme = %q, want %q", inv.LabelScheme, tc.wantScheme)
-			}
-			if inv.TPUSliceAPIPresent != tc.wantTPUSlice {
-				t.Errorf("TPUSliceAPIPresent = %v, want %v", inv.TPUSliceAPIPresent, tc.wantTPUSlice)
-			}
-			queriedCRDs := slices.Contains(lister.called, TPUSliceGVR)
-			if queriedCRDs != tc.wantCRDQueries {
-				t.Errorf("queriedCRDs = %v, want %v (called=%v)", queriedCRDs, tc.wantCRDQueries, lister.called)
-			}
-			lines := inv.SummaryLines()
-			if len(lines) == 0 || !strings.Contains(lines[0], "explicit mode") {
-				t.Errorf("unexpected explicit-mode summary: %v", lines)
-			}
 		})
+		if (err != nil) != tc.wantErr {
+			t.Errorf("ResolveLabelSchemeOverride(%q,%q) err=%v wantErr=%v", tc.flag, tc.env, err, tc.wantErr)
+		}
+		if err != nil && strings.Contains(err.Error(), "--k8s-label-scheme") {
+			t.Errorf("error must not reference unwired --k8s-label-scheme flag: %v", err)
+		}
+		if err == nil && got != tc.want {
+			t.Errorf("got %q, want %q", got, tc.want)
+		}
 	}
 }
 
-func TestDiscoverInventory_ExplicitMode_SliceTakesPrecedenceOverOtherFamilyTree(t *testing.T) {
-	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("forbidden"))
-	v5pSlice := makeTPUSlice("slice-v5p-ready", "v5p", "2x2x2", "READY", nil)
-	v6eTree := makePartitionTree("pt-v6e", "v6e", "4x4", []interface{}{"2x2"})
+func TestDiscoverInventory_RealCRDSchemasAndV1Beta1Fallback(t *testing.T) {
+	t.Parallel()
+	noMatchSlice := &meta.NoResourceMatchError{PartialResource: TPUSliceGVR}
+	noMatchTree := &meta.NoResourceMatchError{PartialResource: TPUPartitionTreeGVR}
 
-	lister := &fakeDiscoveryLister{
-		resources: map[schema.GroupVersionResource][]unstructured.Unstructured{
-			TPUSliceGVR:         {v5pSlice},
-			TPUPartitionTreeGVR: {v6eTree},
+	v1beta1Slice := makeSliceCRD("slice-ready", "", "tpu7x", "2x2x2", "True", "READY", []interface{}{"fin-pod12-r2-2x2x2-5"})
+	v1beta1Tree := unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"metadata": map[string]interface{}{"name": "tree-v1beta1"},
+			"status": map[string]interface{}{
+				"acceleratorType": "tpu7x",
+				"root": map[string]interface{}{
+					"topology":    "4x4x4",
+					"partitionId": "pod-4x4x4",
+					"childPartitions": []interface{}{
+						map[string]interface{}{
+							"topology":    "2x2x2",
+							"partitionId": "pod-2x2x2",
+							"childPartitions": []interface{}{
+								map[string]interface{}{"partitionId": "pod-2x2x1-0"},
+							},
+						},
+					},
+				},
+			},
 		},
-		errs: map[schema.GroupVersionResource]error{NodeGVR: forbidden},
 	}
-	checker := &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}
-
-	inv, err := DiscoverInventory(lister, checker, DiscoverOptions{})
+	lister := &fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR:                    {makeNode("n1", map[string]string{TPUSliceTypeLabel: "tpu7x"}, map[string]interface{}{"cpu": "240", "memory": "1000Gi", "google.com/tpu": "4"}, true)},
+			TPUSliceV1Beta1GVR:         {v1beta1Slice},
+			TPUPartitionTreeV1Beta1GVR: {v1beta1Tree},
+		},
+		errGVR: map[schema.GroupVersionResource]error{
+			TPUSliceGVR:         noMatchSlice,
+			TPUPartitionTreeGVR: noMatchTree,
+		},
+	}
+	api := &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}
+	inv, err := DiscoverInventory(lister, api, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("DiscoverInventory failed: %v", err)
 	}
-	if inv.TPU == nil || inv.TPU.DefaultSliceName != "slice-v5p-ready" || inv.TPU.TPUType != "v5p" {
-		t.Fatalf("expected Ready v5p slice to anchor TPUInventory over v6e PartitionTree, got %+v", inv.TPU)
+	if inv.LabelScheme != SchemeTPUSlice || !inv.TPUSliceAPIPresent {
+		t.Fatalf("got scheme=%q api=%v, want tpu-slice/true", inv.LabelScheme, inv.TPUSliceAPIPresent)
 	}
-	if !slices.Equal(inv.TPU.Topologies, []string{"2x2x2"}) {
-		t.Fatalf("TPU.Topologies = %v, want [2x2x2] (no cross-family v6e topologies)", inv.TPU.Topologies)
+	if len(inv.Slices) != 1 || !inv.Slices[0].Ready || inv.Slices[0].State != "READY" || len(inv.Slices[0].PartitionIDs) != 1 {
+		t.Fatalf("unexpected v1beta1 slice: %+v", inv.Slices)
 	}
-	if lines := inv.SummaryLines(); len(lines) < 2 || !strings.Contains(lines[1], "slice-v5p-ready") {
-		t.Errorf("expected explicit-mode TPU summary line, got %v", lines)
+	if len(inv.PartitionTrees) != 1 || inv.PartitionTrees[0].RootTopology != "4x4x4" {
+		t.Fatalf("unexpected v1beta1 partition tree: %+v", inv.PartitionTrees)
+	}
+	wantTopos := []string{"2x2x1", "2x2x2", "4x4x4"}
+	if !slices.Equal(inv.PartitionTrees[0].SupportedTopologies, wantTopos) {
+		t.Errorf("SupportedTopologies = %v, want %v", inv.PartitionTrees[0].SupportedTopologies, wantTopos)
+	}
+	if !slices.Equal(api.calls, []string{"slice.tpu.google.com"}) {
+		t.Errorf("API probe calls = %v, want group-level [slice.tpu.google.com]", api.calls)
 	}
 }
 
-func TestDiscoverInventory_GKEClusterSkipsTPUSliceCRDs(t *testing.T) {
-	gkeNode := makeNode("gke-tpu-0", map[string]string{
+func TestDiscoverInventory_V1Alpha1PartitionTreeLiveSchema(t *testing.T) {
+	t.Parallel()
+	// Matches live partition.tpu.google.com/v1alpha1 schema on TPU slice clusters.
+	liveTree := unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"metadata": map[string]interface{}{
+				"name":   "fin-pod10-r1-4x4x4-1",
+				"labels": map[string]interface{}{TPUSliceTypeLabel: "tpu7x"},
+			},
+			"status": map[string]interface{}{
+				"partitionId":       "fin-pod10-r1-4x4x4-1",
+				"partitionTypeInfo": "IRONWOOD_4_4_4",
+				"childPartitions": []interface{}{
+					map[string]interface{}{
+						"partitionId":       "fin-pod10-r1-2x4x4-1",
+						"partitionTypeInfo": "IRONWOOD_2_4_4",
+						"childPartitions": []interface{}{
+							map[string]interface{}{
+								"partitionId":       "fin-pod10-r1-2x2x1-1",
+								"partitionTypeInfo": "IRONWOOD_2_2_1",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	lister := &fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR:             {makeNode("n1", map[string]string{TPUSliceTypeLabel: "tpu7x"}, map[string]interface{}{"google.com/tpu": "4"}, true)},
+			TPUPartitionTreeGVR: {liveTree},
+		},
+	}
+	inv, err := DiscoverInventory(lister, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory failed: %v", err)
+	}
+	if len(inv.PartitionTrees) != 1 || inv.PartitionTrees[0].RootTopology != "4x4x4" || inv.PartitionTrees[0].TPUType != "tpu7x" {
+		t.Fatalf("unexpected v1alpha1 partition tree: %+v", inv.PartitionTrees)
+	}
+	want := []string{"2x2x1", "2x4x4", "4x4x4"}
+	if !slices.Equal(inv.PartitionTrees[0].SupportedTopologies, want) {
+		t.Errorf("SupportedTopologies = %v, want %v", inv.PartitionTrees[0].SupportedTopologies, want)
+	}
+	if inv.TPU == nil || inv.TPU.Topology != "4x4x4" {
+		t.Errorf("expected fallback topology from PartitionTree.RootTopology=4x4x4, got %+v", inv.TPU)
+	}
+}
+
+func TestDiscoverInventory_PartitionTreeDoesNotSetTPUSliceAPIPresent(t *testing.T) {
+	t.Parallel()
+	// GKE dynamic slicing clusters may serve partition.tpu.google.com without slice.tpu.google.com.
+	lister := &fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR: {makeNode("n1", map[string]string{InstanceTypeLabel: "n2-standard-8"}, map[string]interface{}{"cpu": "8"}, true)},
+			TPUPartitionTreeGVR: {
+				{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "gke-part-tree"},
+					"status":   map[string]interface{}{"acceleratorType": "v6e", "root": map[string]interface{}{"topology": "2x2"}},
+				}},
+			},
+		},
+		errGVR: map[schema.GroupVersionResource]error{
+			TPUSliceGVR:        apierrors.NewNotFound(TPUSliceGVR.GroupResource(), ""),
+			TPUSliceV1Beta1GVR: apierrors.NewNotFound(TPUSliceV1Beta1GVR.GroupResource(), ""),
+		},
+	}
+	inv, err := DiscoverInventory(lister, nil, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory failed: %v", err)
+	}
+	if inv.TPUSliceAPIPresent || inv.LabelScheme != SchemeGeneric {
+		t.Fatalf("PartitionTree must not set TPUSliceAPIPresent: got api=%v scheme=%q", inv.TPUSliceAPIPresent, inv.LabelScheme)
+	}
+}
+
+func TestDiscoverInventory_FailClosedWhenAutoSchemeUnresolvable(t *testing.T) {
+	t.Parallel()
+	forbiddenNodes := apierrors.NewForbidden(NodeGVR.GroupResource(), "", errors.New("forbidden"))
+	forbiddenSlices := apierrors.NewForbidden(TPUSliceGVR.GroupResource(), "", errors.New("forbidden"))
+	probeErr := errors.New("apiserver 503 unavailable")
+
+	// Probe failed + Slice 403 -> must fail closed and suggest GCLUSTER_LABEL_SCHEME.
+	lister := &fakeDiscoveryLister{
+		errGVR: map[schema.GroupVersionResource]error{
+			NodeGVR:     forbiddenNodes,
+			TPUSliceGVR: forbiddenSlices,
+		},
+	}
+	_, err := DiscoverInventory(lister, &fakeAPIGroupChecker{err: probeErr}, DiscoverOptions{})
+	if err == nil || !errors.Is(err, probeErr) || !errors.Is(err, forbiddenSlices) || !strings.Contains(err.Error(), LabelSchemeEnvVar) {
+		t.Fatalf("expected fail-closed error wrapping both probe and slice errors, got: %v", err)
+	}
+	// v1beta1 must NOT be queried when v1alpha1 returned 403 (fallback is NotFound/NoMatch only).
+	if slices.Contains(lister.calls, TPUSliceV1Beta1GVR) {
+		t.Errorf("unexpected v1beta1 fallback after 403 on v1alpha1: %v", lister.calls)
+	}
+
+	// apiChecker == nil + Slice 403 -> also fails closed.
+	_, err = DiscoverInventory(lister, nil, DiscoverOptions{})
+	if err == nil || !errors.Is(err, forbiddenSlices) {
+		t.Fatalf("expected fail-closed error when apiChecker is nil and slices are 403, got: %v", err)
+	}
+
+	// Explicit override bypasses the probe and succeeds cleanly even when nodes/slices are 403.
+	api := &fakeAPIGroupChecker{err: probeErr}
+	inv, err := DiscoverInventory(lister, api, DiscoverOptions{LabelSchemeOverride: SchemeTPUSlice})
+	if err != nil {
+		t.Fatalf("explicit override should succeed: %v", err)
+	}
+	if len(api.calls) != 0 {
+		t.Errorf("expected probe to be skipped on explicit override, got calls=%v", api.calls)
+	}
+	if !inv.ExplicitMode || inv.LabelScheme != SchemeTPUSlice || !inv.SliceInventoryUnavailable {
+		t.Errorf("unexpected explicit inventory: %+v", inv)
+	}
+}
+
+func TestDiscoverInventory_SkipsProbeOnPureGKEAndIsolatesHybridOverride(t *testing.T) {
+	t.Parallel()
+	pureGKENode := makeNode("gke-1", map[string]string{
+		InstanceTypeLabel:      "ct5p-hightpu-4t",
 		GKENodePoolLabel:       "tpu-pool",
 		GKETPUAcceleratorLabel: "tpu-v5p-slice",
 		GKETPUTopologyLabel:    "2x2x2",
-		InstanceTypeLabel:      "ct5p-hightpu-4t",
-	}, map[string]interface{}{
-		"cpu":            "208",
-		"memory":         "440Gi",
-		"google.com/tpu": "4",
-	}, true)
-	lister := &fakeDiscoveryLister{
-		resources: map[schema.GroupVersionResource][]unstructured.Unstructured{
-			NodeGVR: {gkeNode},
-		},
-	}
-	checker := &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: false}}
+	}, map[string]interface{}{"cpu": "200", "memory": "400Gi", "google.com/tpu": "4"}, true)
 
-	inv, err := DiscoverInventory(lister, checker, DiscoverOptions{})
+	api := &fakeAPIGroupChecker{err: errors.New("should not be probed on pure GKE")}
+	lister := &fakeDiscoveryLister{byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{NodeGVR: {pureGKENode}}}
+	inv, err := DiscoverInventory(lister, api, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("pure GKE discovery failed: %v", err)
 	}
-	if inv.LabelScheme != SchemeGKE || inv.TPUSliceAPIPresent {
-		t.Fatalf("unexpected GKE discovery state: scheme=%q tpuSliceAPI=%v", inv.LabelScheme, inv.TPUSliceAPIPresent)
-	}
-	if inv.TPU == nil || inv.TPU.TPUType != "v5p" || inv.TPU.NodesPerSlice != 2 || inv.TPU.Topology != "2x2x2" {
-		t.Fatalf("unexpected GKE TPU inventory: %+v", inv.TPU)
-	}
-	for _, gvr := range lister.called {
-		if gvr == TPUSliceGVR || gvr == TPUPartitionTreeGVR {
-			t.Errorf("GKE cluster should not query TPU Slice CRD %v", gvr)
-		}
-	}
-}
-
-func TestDiscoverInventory_CPUPoolSelection(t *testing.T) {
-	ctrlNode := makeNode("ctrl", map[string]string{
-		InstanceTypeLabel:     "n2-standard-8",
-		ControlPlaneRoleLabel: "",
-	}, map[string]interface{}{"cpu": "7910m", "memory": "32Gi"}, true)
-	workerSmall := makeNode("worker-0", map[string]string{
-		InstanceTypeLabel: "n2-standard-32",
-	}, map[string]interface{}{"cpu": "31900m", "memory": "120Gi"}, true)
-	workerLarge := makeNode("worker-1", map[string]string{
-		InstanceTypeLabel: "n2-standard-32",
-	}, map[string]interface{}{"cpu": "32", "memory": "128Gi"}, true)
-	gpuNode := makeNode("gpu-0", map[string]string{
-		BetaInstanceTypeLabel: "g2-standard-48",
-	}, map[string]interface{}{"cpu": "48", "memory": "192Gi", "nvidia.com/gpu": "4"}, true)
-
-	lister := &fakeDiscoveryLister{
-		resources: map[schema.GroupVersionResource][]unstructured.Unstructured{
-			NodeGVR: {ctrlNode, workerLarge, workerSmall, gpuNode},
-		},
-		errs: map[schema.GroupVersionResource]error{
-			TPUSliceGVR:         apierrors.NewNotFound(schema.GroupResource{Resource: "slices"}, ""),
-			TPUPartitionTreeGVR: apierrors.NewNotFound(schema.GroupResource{Resource: "partitiontrees"}, ""),
-		},
+	if inv.LabelScheme != SchemeGKE || len(api.calls) != 0 {
+		t.Fatalf("got scheme=%q apiCalls=%v, want gke and 0 probe calls", inv.LabelScheme, api.calls)
 	}
 
-	inv, err := DiscoverInventory(lister, nil, DiscoverOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if inv.LabelScheme != SchemeGeneric {
-		t.Fatalf("LabelScheme = %q, want generic", inv.LabelScheme)
-	}
-	if inv.CPUPoolCap == nil || inv.CPUPoolCap.MachineType != "n2-standard-32" {
-		t.Fatalf("expected non-control-plane CPU pool n2-standard-32, got %+v", inv.CPUPoolCap)
-	}
-	if inv.CPUPoolCap.CPUsPerNode != 31 || inv.CPUPoolCap.MemMiBPerNode != 120*1024 {
-		t.Errorf("CPUPoolCap = (%d vCPU, %d MiB), want (31, %d)", inv.CPUPoolCap.CPUsPerNode, inv.CPUPoolCap.MemMiBPerNode, 120*1024)
-	}
-	if inv.Pools["n2-standard-8"].CPUsPerNode != 7 {
-		t.Errorf("ctrl node 7910m cpu = %d, want 7 (floored)", inv.Pools["n2-standard-8"].CPUsPerNode)
-	}
-	if !inv.Pools["g2-standard-48"].IsGPU || inv.Pools["g2-standard-48"].GPUsPerNode != 4 {
-		t.Errorf("unexpected GPU pool: %+v", inv.Pools["g2-standard-48"])
-	}
-	if inv.DefaultPoolCap(true) != nil {
-		t.Errorf("expected nil TPUPoolCap on non-TPU cluster, got %+v", inv.DefaultPoolCap(true))
-	}
-}
-
-func TestDiscoverInventory_SharedMachineTypesIsolated(t *testing.T) {
-	cpuN1 := makeNode("cpu-n1", map[string]string{InstanceTypeLabel: "n1-standard-16"}, map[string]interface{}{"cpu": "16", "memory": "60Gi"}, true)
-	gpuN1 := makeNode("gpu-n1", map[string]string{InstanceTypeLabel: "n1-standard-16"}, map[string]interface{}{"cpu": "16", "memory": "60Gi", "nvidia.com/gpu": "2"}, true)
-	ctrlN2 := makeNode("ctrl-n2", map[string]string{InstanceTypeLabel: "n2-standard-8", ControlPlaneRoleLabel: ""}, map[string]interface{}{"cpu": "8", "memory": "32Gi"}, true)
-	unreadyWorkerN2 := makeNode("worker-n2", map[string]string{InstanceTypeLabel: "n2-standard-8"}, map[string]interface{}{"cpu": "8", "memory": "32Gi"}, false)
-
-	lister := &fakeDiscoveryLister{
-		resources: map[schema.GroupVersionResource][]unstructured.Unstructured{
-			NodeGVR: {gpuN1, cpuN1, ctrlN2, unreadyWorkerN2},
-		},
-	}
-	checker := &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: false}}
-
-	inv, err := DiscoverInventory(lister, checker, DiscoverOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if inv.CPUPoolCap == nil || inv.CPUPoolCap.MachineType != "n1-standard-16" || inv.CPUPoolCap.IsGPU {
-		t.Fatalf("GPU pool must not poison CPUPoolCap: got %+v", inv.CPUPoolCap)
-	}
-	if got := inv.Pools["n2-standard-8/cpu"]; got.ReadyNodes != 0 || got.TotalNodes != 1 {
-		t.Errorf("worker pool n2-standard-8/cpu = (%d ready / %d total), want (0/1) without control-plane inflation", got.ReadyNodes, got.TotalNodes)
-	}
-	if got := inv.Pools["n2-standard-8/control-plane"]; got.ReadyNodes != 1 || got.TotalNodes != 1 {
-		t.Errorf("control-plane pool n2-standard-8/control-plane = (%d ready / %d total), want (1/1)", got.ReadyNodes, got.TotalNodes)
-	}
-}
-
-func TestDiscoverInventory_CordonedNodeNotReady(t *testing.T) {
-	cordoned := makeNode("tpu-cordoned", map[string]string{
-		InstanceTypeLabel:     "ct5p-hightpu-4t",
-		TPUSliceNameLabel:     "cordoned-slice",
-		TPUSliceTypeLabel:     "v5p",
-		TPUSliceTopologyLabel: "2x2x1",
-	}, map[string]interface{}{"cpu": "208", "memory": "440Gi", "google.com/tpu": "4"}, true)
-	cordoned.Object["spec"] = map[string]interface{}{"unschedulable": true}
-
-	lister := &fakeDiscoveryLister{
-		resources: map[schema.GroupVersionResource][]unstructured.Unstructured{NodeGVR: {cordoned}},
-	}
-	checker := &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: false}}
-
-	inv, err := DiscoverInventory(lister, checker, DiscoverOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if inv.ReadyNodes != 0 || inv.TPU.ReadyTPUNodes != 0 || inv.TPU.DefaultSliceName != "" {
-		t.Fatalf("cordoned node must not be ready or populate DefaultSliceName: ready=%d tpu=%+v", inv.ReadyNodes, inv.TPU)
-	}
-	if len(inv.Slices) != 1 || inv.Slices[0].Ready {
-		t.Fatalf("expected cordoned node-derived slice Ready=false, got %+v", inv.Slices)
-	}
-}
-
-func TestDiscoverInventory_NonReadyAndConditionReadySlices(t *testing.T) {
-	creatingSlice := makeTPUSlice("slice-creating", "v6e", "2x4", "CREATING", nil)
-	condFalse := makeTPUSlice("slice-cond-false", "v6e", "2x4", "", nil)
-	condFalse.Object["status"] = map[string]interface{}{
-		"conditions": []interface{}{
-			map[string]interface{}{"type": "Ready", "status": "False"},
-		},
-	}
-	lister := &fakeDiscoveryLister{
-		resources: map[schema.GroupVersionResource][]unstructured.Unstructured{
-			NodeGVR:     nil,
-			TPUSliceGVR: {creatingSlice, condFalse},
-		},
-	}
-	checker := &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}
-	inv, err := DiscoverInventory(lister, checker, DiscoverOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if inv.TPU == nil || inv.TPU.DefaultSliceName != "" || inv.TPU.TPUType != "v6e" || inv.TPU.Topology != "2x4" {
-		t.Fatalf("expected non-ready slices to not populate DefaultSliceName: %+v", inv.TPU)
-	}
-	if lines := inv.SummaryLines(); len(lines) < 2 || !strings.Contains(lines[1], "<none>") {
-		t.Errorf("expected <none> slice label in summary, got %v", lines)
-	}
-}
-
-func TestDiscoverInventory_ConditionReadyAnd1x1Slices(t *testing.T) {
-	creatingSlice := makeTPUSlice("slice-creating", "tpu7x", "2x2x2", "CREATING", nil)
-	condReady := makeTPUSlice("slice-cond", "tpu7x", "2x2x2", "", nil)
-	condReady.Object["status"] = map[string]interface{}{
-		"conditions": []interface{}{
-			map[string]interface{}{"type": "Ready", "status": "True"},
-		},
-		"nodes": []interface{}{"n0", "n1"},
-	}
-	lister := &fakeDiscoveryLister{
-		resources: map[schema.GroupVersionResource][]unstructured.Unstructured{
-			NodeGVR:     nil,
-			TPUSliceGVR: {creatingSlice, condReady},
-		},
-	}
-	checker := &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}
-	inv, err := DiscoverInventory(lister, checker, DiscoverOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if inv.TPU == nil || inv.TPU.DefaultSliceName != "slice-cond" || inv.TPU.NodesPerSlice != 2 {
-		t.Fatalf("expected condition-ready slice as default: %+v", inv.TPU)
-	}
-
-	oneByOne := makeTPUSlice("slice-1x1", "v6e", "1x1", "READY", nil)
-	lister1x1 := &fakeDiscoveryLister{
-		resources: map[schema.GroupVersionResource][]unstructured.Unstructured{
-			NodeGVR:     nil,
-			TPUSliceGVR: {oneByOne},
-		},
-	}
-	inv1x1, err := DiscoverInventory(lister1x1, checker, DiscoverOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if inv1x1.TPU == nil || inv1x1.TPU.MachineType != "ct6e-standard-1t" || inv1x1.TPU.ChipsPerNode != 1 || inv1x1.TPU.NodesPerSlice != 1 {
-		t.Fatalf("expected 1x1 v6e slice to infer (ct6e-standard-1t, 1 chip, 1 node), got %+v", inv1x1.TPU)
-	}
-}
-
-func TestDiscoverInventory_NodeDerivedSliceAndFallbackPoolKey(t *testing.T) {
-	nodeOnly := makeNode("tpu-node", map[string]string{
-		TPUSliceNameLabel:     "node-slice-0",
-		TPUSliceTypeLabel:     "v5p",
-		TPUSliceTopologyLabel: "2x2x1",
-	}, map[string]interface{}{"google.com/tpu": "4", "cpu": "100", "memory": "200Gi"}, true)
-	lister := &fakeDiscoveryLister{
-		resources: map[schema.GroupVersionResource][]unstructured.Unstructured{NodeGVR: {nodeOnly}},
-		errs: map[schema.GroupVersionResource]error{
-			TPUSliceGVR:         errors.New(`the server doesn't have a resource type "slices"`),
-			TPUPartitionTreeGVR: errors.New(`the server doesn't have a resource type "partitiontrees"`),
-		},
-	}
-	inv, err := DiscoverInventory(lister, nil, DiscoverOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(inv.Slices) != 1 || inv.Slices[0].FromCRD || inv.Slices[0].Name != "node-slice-0" || !inv.Slices[0].Ready {
-		t.Fatalf("expected node-derived slice, got %+v", inv.Slices)
-	}
-
-	// Fallback nodepool key ("tpu-pool") with PartitionTree must keep TPUPoolCap non-nil.
-	fallbackTPUNode := makeNode("tpu-fallback", map[string]string{
-		GKENodePoolLabel: "tpu-pool",
-	}, map[string]interface{}{"google.com/tpu": "4", "cpu": "100", "memory": "200Gi"}, true)
-	treeObj := makePartitionTree("pt-v5p", "v5p", "2x2x2", nil)
-	listerFB := &fakeDiscoveryLister{
-		resources: map[schema.GroupVersionResource][]unstructured.Unstructured{
-			NodeGVR:             {fallbackTPUNode},
-			TPUPartitionTreeGVR: {treeObj},
-		},
-	}
-	checker := &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}
-	invFB, err := DiscoverInventory(listerFB, checker, DiscoverOptions{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if invFB.TPUPoolCap == nil || invFB.TPUPoolCap.CPUsPerNode != 100 {
-		t.Fatalf("expected non-nil TPUPoolCap for fallback pool key, got %+v", invFB.TPUPoolCap)
-	}
-}
-
-func TestDiscoverInventory_ErrorsAndNilSafety(t *testing.T) {
-	if _, err := DiscoverInventory(nil, nil, DiscoverOptions{}); err == nil || !strings.Contains(err.Error(), "lister is required") {
-		t.Errorf("expected lister-required error for nil lister, got: %v", err)
-	}
-	if _, err := DiscoverInventory(&fakeDiscoveryLister{}, nil, DiscoverOptions{LabelSchemeOverride: "bad"}); err == nil || !strings.Contains(err.Error(), "invalid --k8s-label-scheme") {
-		t.Errorf("expected invalid label-scheme error, got: %v", err)
-	}
-
-	// Non-403 error listing nodes must propagate (not enter explicit mode).
-	lister := &fakeDiscoveryLister{
-		errs: map[schema.GroupVersionResource]error{
-			NodeGVR: errors.New("dial tcp: connection refused"),
-		},
-	}
-	if _, err := DiscoverInventory(lister, nil, DiscoverOptions{}); err == nil || !strings.Contains(err.Error(), "connection refused") {
-		t.Errorf("expected non-403 list nodes error to propagate, got: %v", err)
-	}
-
-	// Nil receiver helpers must not panic.
-	var nilInv *Inventory
-	if nilInv.DefaultPoolCap(true) != nil || nilInv.SummaryLines() != nil {
-		t.Errorf("expected nil helpers for nil *Inventory")
-	}
-}
-
-func TestDiscoverInventory_ProbeErrorFallsBackToCRDs(t *testing.T) {
-	// Transient API group probe error falls back to CRD listing when non-GKE; if CRDs return 503, degrades to generic.
-	lister503 := &fakeDiscoveryLister{
-		resources: map[schema.GroupVersionResource][]unstructured.Unstructured{NodeGVR: nil},
-		errs: map[schema.GroupVersionResource]error{
-			TPUSliceGVR:         errors.New("503 service unavailable"),
-			TPUPartitionTreeGVR: errors.New("503 service unavailable"),
-		},
-	}
-	errChecker := &fakeAPIGroupChecker{err: errors.New("timeout")}
-	inv, err := DiscoverInventory(lister503, errChecker, DiscoverOptions{})
-	if err != nil || inv.LabelScheme != SchemeGeneric {
-		t.Fatalf("expected graceful fallback on apiChecker + CRD 503 error, got (%+v, %v)", inv, err)
-	}
-	if len(errChecker.called) != 1 || !slices.Contains(lister503.called, TPUSliceGVR) {
-		t.Errorf("expected 1 apiChecker probe and CRD fallback query, got checker=%v lister=%v", errChecker.called, lister503.called)
-	}
-
-	// Transient API group probe error falls back to CRD listing and still detects SchemeTPUSlice if CRDs succeed.
-	listerCRD := &fakeDiscoveryLister{
-		resources: map[schema.GroupVersionResource][]unstructured.Unstructured{
-			NodeGVR:     nil,
-			TPUSliceGVR: {makeTPUSlice("s0", "v5p", "2x2x2", "READY", nil)},
-		},
-	}
-	invFallback, err := DiscoverInventory(listerCRD, &fakeAPIGroupChecker{err: errors.New("timeout")}, DiscoverOptions{})
-	if err != nil || invFallback.LabelScheme != SchemeTPUSlice || !invFallback.TPUSliceAPIPresent {
-		t.Fatalf("expected CRD fallback after apiChecker timeout to detect SchemeTPUSlice, got (%+v, %v)", invFallback, err)
-	}
-}
-
-func TestDiscoverInventory_SliceNodeEnrichmentRecomputesNodesPerSlice(t *testing.T) {
-	t.Run("single visible 8-chip v6e node recomputes 4x4 NodesPerSlice=2 via topology math", func(t *testing.T) {
-		// Only 1 of 2 nodes is visible, proving NodesPerSlice=2 comes from CalculateAcceleratorNodes(ct6e-standard-8t, 4x4, 8)
-		// rather than raw observed node count (1) or stale 4-chip default (4).
-		sliceObj := makeTPUSlice("slice-v6e-8t", "v6e", "4x4", "READY", nil)
-		n0 := makeNode("v6e-0", map[string]string{
-			InstanceTypeLabel:     "ct6e-standard-8t",
-			TPUSliceNameLabel:     "slice-v6e-8t",
-			TPUSliceTypeLabel:     "v6e",
-			TPUSliceTopologyLabel: "4x4",
-		}, map[string]interface{}{"cpu": "180", "memory": "720Gi", "google.com/tpu": "8"}, true)
-
-		lister := &fakeDiscoveryLister{
-			resources: map[schema.GroupVersionResource][]unstructured.Unstructured{
-				NodeGVR:     {n0},
-				TPUSliceGVR: {sliceObj},
-			},
-		}
-		checker := &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}
-		inv, err := DiscoverInventory(lister, checker, DiscoverOptions{})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if inv.TPU == nil || inv.TPU.MachineType != "ct6e-standard-8t" || inv.TPU.ChipsPerNode != 8 || inv.TPU.NodesPerSlice != 2 {
-			t.Fatalf("expected recomputed NodesPerSlice=2 for 8-chip v6e 4x4 slice, got %+v", inv.TPU)
-		}
+	// Hybrid node carrying both GKE and tpu.google.com labels under forced gke override.
+	hybridNode := makeNode("hybrid-1", map[string]string{
+		InstanceTypeLabel:                  "ct5p-hightpu-4t",
+		GKENodePoolLabel:                   "tpu-pool",
+		GKETPUAcceleratorLabel:             "tpu-v5p-slice",
+		GKETPUTopologyLabel:                "2x2x2",
+		TPUSliceTypeLabel:                  "tpu7x",
+		TPUSliceTopologyLabel:              "4x4x4",
+		TPUSliceNameLabel:                  "legacy-slice",
+		TPUSlicePartitionLabelPrefix + "x": "p1",
+	}, map[string]interface{}{"google.com/tpu": "4"}, true)
+	listerHybrid := &fakeDiscoveryLister{byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{NodeGVR: {hybridNode}}}
+	invForcedGKE, err := DiscoverInventory(listerHybrid, api, DiscoverOptions{
+		LabelSchemeOverride: SchemeGKE,
+		HardwareResolver:    testHardwareResolver{},
 	})
+	if err != nil {
+		t.Fatalf("forced GKE hybrid discovery failed: %v", err)
+	}
+	if invForcedGKE.TPU == nil || invForcedGKE.TPU.TPUType != "v5p" || invForcedGKE.TPU.Topology != "2x2x2" {
+		t.Errorf("forced GKE should prefer GKE TPU labels, got %+v", invForcedGKE.TPU)
+	}
+	if invForcedGKE.TPU.HasPartitionLabels || len(invForcedGKE.Slices) != 0 || len(invForcedGKE.TPUPoolCap.SliceNames) != 0 {
+		t.Errorf("forced GKE must omit slice/partition metadata: tpu=%+v slices=%+v pool=%+v", invForcedGKE.TPU, invForcedGKE.Slices, invForcedGKE.TPUPoolCap)
+	}
+}
 
-	t.Run("partial repairing 4x4x4 v5p slice keeps NodesPerSlice=16 and enriches duplicate-name namespaces", func(t *testing.T) {
-		sA := makeTPUSlice("shared-slice", "v5p", "4x4x4", "READY", nil)
-		sA.SetNamespace("ns-a")
-		sB := makeTPUSlice("shared-slice", "v5p", "4x4x4", "READY", nil)
-		sB.SetNamespace("ns-b")
-		oneOfSixteen := makeNode("v5p-0", map[string]string{
-			InstanceTypeLabel:     "ct5p-hightpu-4t",
-			TPUSliceNameLabel:     "shared-slice",
-			TPUSliceTypeLabel:     "v5p",
-			TPUSliceTopologyLabel: "4x4x4",
-		}, map[string]interface{}{"cpu": "208", "memory": "440Gi", "google.com/tpu": "4"}, true)
+func TestDiscoverInventory_PoolAggregationGPUsAndMilliCPU(t *testing.T) {
+	t.Parallel()
+	ctrlNode := makeNode("ctrl", map[string]string{ControlPlaneRoleLabel: ""}, map[string]interface{}{"cpu": "500m", "memory": "2Gi"}, true)
+	defaultPoolNode := makeNode("sys-cpu", map[string]string{
+		InstanceTypeLabel: "e2-standard-8",
+		GKENodePoolLabel:  "default-pool",
+	}, map[string]interface{}{"cpu": "8", "memory": "32Gi"}, true)
+	workerCPU := makeNode("worker-cpu", map[string]string{
+		InstanceTypeLabel: "e2-standard-4",
+		GKENodePoolLabel:  "cpu-workers",
+	}, map[string]interface{}{"cpu": "500m", "memory": "4Gi"}, true)
+	unreadyWorkerCPU := makeNode("worker-cpu-bad", map[string]string{
+		InstanceTypeLabel: "e2-standard-4",
+		GKENodePoolLabel:  "cpu-workers",
+	}, map[string]interface{}{"cpu": "100m", "memory": "1Gi"}, false)
+	migNode := makeNode("gpu-mig", map[string]string{
+		InstanceTypeLabel:     "a3-highgpu-8g",
+		GKENodePoolLabel:      "mig-pool",
+		NvidiaGPUProductLabel: "NVIDIA-H100-80GB",
+	}, map[string]interface{}{"cpu": "100", "memory": "500Gi", "nvidia.com/gpu": "0", "nvidia.com/mig-1g.10gb": "2"}, true)
+	amdNode := makeNode("gpu-amd", map[string]string{
+		InstanceTypeLabel: "custom-amd",
+		GKENodePoolLabel:  "amd-pool",
+	}, map[string]interface{}{"cpu": "64", "amd.com/gpu": "4"}, true)
+	intelNode := makeNode("gpu-intel", map[string]string{
+		InstanceTypeLabel: "custom-intel",
+		GKENodePoolLabel:  "intel-pool",
+	}, map[string]interface{}{"cpu": "32", "gpu.intel.com/i915": "2"}, true)
 
-		lister := &fakeDiscoveryLister{
-			resources: map[schema.GroupVersionResource][]unstructured.Unstructured{
-				NodeGVR:     {oneOfSixteen},
-				TPUSliceGVR: {sB, sA},
+	lister := &fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR: {ctrlNode, defaultPoolNode, workerCPU, unreadyWorkerCPU, migNode, amdNode, intelNode},
+		},
+	}
+	inv, err := DiscoverInventory(lister, &fakeAPIGroupChecker{}, DiscoverOptions{LabelSchemeOverride: SchemeGeneric})
+	if err != nil {
+		t.Fatalf("DiscoverInventory failed: %v", err)
+	}
+	// Worker CPU pool beats default-pool and control-plane, and prefers ready-node 500m over unready 100m.
+	if inv.CPUPoolCap == nil || inv.CPUPoolCap.NodePoolName != "cpu-workers" || inv.CPUPoolCap.AllocatableCPUMilli != 500 {
+		t.Fatalf("unexpected CPUPoolCap: %+v", inv.CPUPoolCap)
+	}
+	// Unknown machineType on ctrlNode must stay empty (not synthetic "k8s-node").
+	if pool := inv.Pools["k8s-node"]; pool.MachineType != "" {
+		t.Errorf("synthetic MachineType leaked: %q", pool.MachineType)
+	}
+	summary := strings.Join(inv.SummaryLines(), "\n")
+	for _, want := range []string{"500m vCPU", "GPU pool: a3-highgpu-8g", "pool=mig-pool", "GPU pool: custom-amd", "GPU pool: custom-intel"} {
+		if !strings.Contains(summary, want) {
+			t.Errorf("SummaryLines missing %q:\n%s", want, summary)
+		}
+	}
+	for _, bad := range []string{"<none>", "<unknown>", "(s)"} {
+		if strings.Contains(summary, bad) {
+			t.Errorf("SummaryLines must not contain %q:\n%s", bad, summary)
+		}
+	}
+}
+
+func TestDiscoverInventory_SliceEnrichmentReadinessAndPrimaryIsolation(t *testing.T) {
+	t.Parallel()
+	// Primary TPU pool is worker tpu7x (4 chips); also have control-plane TPU node and a tpu7l slice.
+	ctrlTPU := makeNode("ctrl-tpu", map[string]string{
+		ControlPlaneRoleLabel: "",
+		TPUSliceTypeLabel:     "tpu7l",
+	}, map[string]interface{}{"google.com/tpu": "4"}, true)
+	tpu1 := makeNode("tpu-1", map[string]string{
+		TPUSliceTypeLabel: "tpu7x",
+		TPUSliceNameLabel: "partial-slice",
+	}, map[string]interface{}{"google.com/tpu": "4"}, true)
+	tpu2Unready := makeNode("tpu-2", map[string]string{
+		TPUSliceTypeLabel: "tpu7x",
+		TPUSliceNameLabel: "partial-slice",
+	}, map[string]interface{}{"google.com/tpu": "4"}, false)
+	tpu3 := makeNode("tpu-3", map[string]string{
+		TPUSliceTypeLabel: "tpu7x",
+		TPUSliceNameLabel: "healthy-slice",
+	}, map[string]interface{}{"google.com/tpu": "4"}, true)
+	tpu4 := makeNode("tpu-4", map[string]string{
+		TPUSliceTypeLabel: "tpu7x",
+		TPUSliceNameLabel: "healthy-slice",
+	}, map[string]interface{}{"google.com/tpu": "4"}, true)
+
+	lister := &fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR: {ctrlTPU, tpu1, tpu2Unready, tpu3, tpu4},
+			TPUSliceGVR: {
+				makeSliceCRD("a-other-family", "", "tpu7l", "2x2x1", "True", "READY", nil),
+				makeSliceCRD("partial-slice", "", "tpu7x", "2x2x2", "True", "READY", nil),
+				makeSliceCRD("healthy-slice", "", "tpu7x", "2x2x2", "True", "READY", nil),
 			},
-		}
-		checker := &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}
-		inv, err := DiscoverInventory(lister, checker, DiscoverOptions{})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(inv.Slices) != 2 || inv.Slices[0].Namespace != "ns-a" || inv.Slices[1].Namespace != "ns-b" {
-			t.Fatalf("expected 2 sorted namespaced slices, got %+v", inv.Slices)
-		}
-		for _, s := range inv.Slices {
-			if s.NodesPerSlice != 16 || s.ChipsPerNode != 4 {
-				t.Errorf("slice %s/%s = (nodes=%d, chips=%d), want (16, 4)", s.Namespace, s.Name, s.NodesPerSlice, s.ChipsPerNode)
+		},
+	}
+	inv, err := DiscoverInventory(lister, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory failed: %v", err)
+	}
+	// Worker tpu7x pool beats control-plane tpu7l pool, and TotalTPUNodes isolates to tpu7x (4 nodes, not 5).
+	if inv.TPU == nil || inv.TPU.TPUType != "tpu7x" || inv.TPU.TotalTPUNodes != 4 || inv.TPU.ReadyTPUNodes != 3 {
+		t.Fatalf("unexpected primary TPU isolation: %+v", inv.TPU)
+	}
+	// partial-slice has 1/2 ready nodes so it must be marked not ready; healthy-slice is picked instead.
+	if inv.TPU.DefaultSliceName != "healthy-slice" {
+		t.Errorf("DefaultSliceName = %q, want healthy-slice", inv.TPU.DefaultSliceName)
+	}
+}
+
+func TestDiscoverInventory_SingleChipBackfillAndBareMetalChips(t *testing.T) {
+	t.Parallel()
+	// CRD without topology guesses 4 chips (tpu7x-standard-4t); node omits instance-type and backfills 1x1x1.
+	nodeBackfill := makeNode("bm-1", map[string]string{
+		TPUSliceTypeLabel:     "tpu7x",
+		TPUSliceTopologyLabel: "1x1x1",
+		TPUSliceNameLabel:     "single-chip-slice",
+	}, map[string]interface{}{"cpu": "64"}, true)
+	// Custom bare-metal host with no allocatable TPU must not default ChipsPerNode to 4.
+	bmUnknown := makeNode("bm-2", map[string]string{
+		InstanceTypeLabel: "my-baremetal-host",
+		TPUSliceNameLabel: "bm-slice",
+	}, map[string]interface{}{"cpu": "64"}, true)
+
+	lister := &fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR:     {nodeBackfill, bmUnknown},
+			TPUSliceGVR: {makeSliceCRD("single-chip-slice", "", "tpu7x", "", "True", "READY", nil)},
+		},
+	}
+	inv, err := DiscoverInventory(lister, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory failed: %v", err)
+	}
+	byName := map[string]SliceInfo{}
+	for _, s := range inv.Slices {
+		byName[s.Name] = s
+	}
+	if got := byName["single-chip-slice"]; got.ChipsPerNode != 1 || got.MachineType != "tpu7x-standard-1t" || got.NodesPerSlice != 1 {
+		t.Errorf("single-chip backfill failed: %+v", got)
+	}
+	if got := byName["bm-slice"]; got.ChipsPerNode != 0 || got.MachineType != "my-baremetal-host" {
+		t.Errorf("bare-metal host must not default ChipsPerNode to 4: %+v", got)
+	}
+}
+
+func TestDiscoverInventory_RestartingPoolChipsBeforeSliceMatch(t *testing.T) {
+	t.Parallel()
+	// Restarting ct6e-standard-8t pool reports 0 allocatable TPUs; must derive 8 chips from MachineType
+	// before matching slices so a 4-chip ct6e-standard-4t slice is NOT selected.
+	restartingNode := makeNode("v6e-8t-node", map[string]string{
+		InstanceTypeLabel: "ct6e-standard-8t",
+		TPUSliceTypeLabel: "v6e",
+	}, map[string]interface{}{"cpu": "120"}, true)
+	lister := &fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR: {restartingNode},
+			TPUSliceGVR: {
+				makeSliceCRD("wrong-4t-slice", "", "v6e", "2x2", "True", "READY", nil),
+			},
+		},
+	}
+	inv, err := DiscoverInventory(lister, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory failed: %v", err)
+	}
+	if inv.TPU == nil || inv.TPU.ChipsPerNode != 8 || inv.TPU.DefaultSliceName != "" {
+		t.Fatalf("expected 8-chip restarting pool to reject 4-chip slice, got %+v", inv.TPU)
+	}
+}
+
+func TestDiscoverInventory_NilListerAndNilSummary(t *testing.T) {
+	t.Parallel()
+	if _, err := DiscoverInventory(nil, nil, DiscoverOptions{}); err == nil || !strings.Contains(err.Error(), "Kubernetes resource lister") {
+		t.Fatalf("expected capitalized Kubernetes lister error, got %v", err)
+	}
+	var nilInv *Inventory
+	if nilInv.SummaryLines() != nil {
+		t.Errorf("nil SummaryLines should be nil")
+	}
+	nilInv.LogSummary()
+}
+
+func TestSummaryLines_TPUAndExplicitModes(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name      string
+		inv       *Inventory
+		wantParts []string
+	}{
+		{
+			name: "explicit with unavailable slices",
+			inv:  &Inventory{LabelScheme: SchemeTPUSlice, ExplicitMode: true, SliceInventoryUnavailable: true},
+			wantParts: []string{
+				"explicit mode",
+				"slice inventory unavailable",
+			},
+		},
+		{
+			name: "explicit with ready slice",
+			inv: &Inventory{
+				LabelScheme:  SchemeTPUSlice,
+				ExplicitMode: true,
+				Slices:       []SliceInfo{{Name: "s1", Ready: true}},
+				TPU:          &TPUInventory{DefaultSliceName: "s1"},
+			},
+			wantParts: []string{"explicit mode", "Default slice: s1."},
+		},
+		{
+			name: "tpu pool with ready slice and distinct node pool",
+			inv: &Inventory{
+				LabelScheme: SchemeTPUSlice,
+				TotalNodes:  2,
+				ReadyNodes:  2,
+				TPUPoolCap:  &PoolCapacity{NodePoolName: "tpu-pool-a", MachineType: "tpu7x-standard-4t"},
+				TPU: &TPUInventory{
+					TPUType:          "tpu7x",
+					MachineType:      "tpu7x-standard-4t",
+					TotalTPUNodes:    2,
+					ReadyTPUNodes:    2,
+					ChipsPerNode:     4,
+					Topology:         "2x2x2",
+					DefaultSliceName: "s1",
+				},
+			},
+			wantParts: []string{"tpu7x", "pool=tpu-pool-a", "2/2 ready Kubernetes nodes", "Default slice: s1"},
+		},
+		{
+			name: "tpu pool with unready slice",
+			inv: &Inventory{
+				LabelScheme: SchemeTPUSlice,
+				TotalNodes:  1,
+				ReadyNodes:  1,
+				Slices:      []SliceInfo{{Name: "s-unready", Ready: false}},
+				TPU:         &TPUInventory{TPUType: "tpu7x", TotalTPUNodes: 1, ReadyTPUNodes: 1},
+			},
+			wantParts: []string{"1/1 ready Kubernetes node", "no ready slice"},
+		},
+		{
+			name: "tpu pool with unavailable slice inventory",
+			inv: &Inventory{
+				LabelScheme:               SchemeTPUSlice,
+				SliceInventoryUnavailable: true,
+				TotalNodes:                1,
+				ReadyNodes:                1,
+				TPU:                       &TPUInventory{TPUType: "tpu7x", TotalTPUNodes: 1, ReadyTPUNodes: 1},
+			},
+			wantParts: []string{"slice inventory unavailable"},
+		},
+		{
+			name: "tpu pool with no active slice",
+			inv: &Inventory{
+				LabelScheme: SchemeTPUSlice,
+				TotalNodes:  1,
+				ReadyNodes:  1,
+				TPU:         &TPUInventory{TPUType: "tpu7x", TotalTPUNodes: 1, ReadyTPUNodes: 1},
+			},
+			wantParts: []string{"no active slice"},
+		},
+	}
+	for _, tc := range cases {
+		joined := strings.Join(tc.inv.SummaryLines(), "\n")
+		tc.inv.LogSummary()
+		for _, bad := range []string{"<none>", "<unknown>", "(s)"} {
+			if strings.Contains(joined, bad) {
+				t.Errorf("%s: unexpected %q in summary:\n%s", tc.name, bad, joined)
 			}
 		}
-	})
+		for _, want := range tc.wantParts {
+			if !strings.Contains(joined, want) {
+				t.Errorf("%s: missing %q in summary:\n%s", tc.name, want, joined)
+			}
+		}
+	}
 }
 
-func TestDiscoverInventory_HeterogeneousTPUFamilyDoesNotGraftSlice(t *testing.T) {
-	v5pNode := makeNode("v5p-0", map[string]string{
-		InstanceTypeLabel:     "ct5p-hightpu-4t",
-		TPUSliceTypeLabel:     "v5p",
-		TPUSliceTopologyLabel: "2x2x2",
-	}, map[string]interface{}{"cpu": "208", "memory": "440Gi", "google.com/tpu": "4"}, true)
-	v6eSlice := makeTPUSlice("slice-v6e-only", "v6e", "2x2", "READY", nil)
+func TestDiscoverInventory_PoolKeyDisambiguationAndSystemTaints(t *testing.T) {
+	t.Parallel()
+	// Two pools with identical machineType but distinct GKE node pools and GPU models must not merge.
+	gpuL4 := makeNode("gpu-l4", map[string]string{
+		InstanceTypeLabel:   "g2-standard-8",
+		GKENodePoolLabel:    "pool-l4",
+		GKEAcceleratorLabel: "nvidia-l4",
+	}, map[string]interface{}{"cpu": "8", "nvidia.com/gpu": "1"}, true)
+	gpuH100 := makeNode("gpu-h100", map[string]string{
+		InstanceTypeLabel:   "g2-standard-8",
+		GKENodePoolLabel:    "pool-h100",
+		GKEAcceleratorLabel: "nvidia-h100",
+	}, map[string]interface{}{"cpu": "8", "nvidia.com/gpu": "1"}, true)
+
+	// System-tainted CPU node (CriticalAddonsOnly) with more CPUs must lose to worker CPU node.
+	sysTainted := makeNodeWithSpec("sys-tainted", map[string]string{
+		InstanceTypeLabel: "n2-standard-32",
+		GKENodePoolLabel:  "addons-pool",
+	}, map[string]interface{}{"cpu": "32"}, true, false, []interface{}{
+		map[string]interface{}{"key": "CriticalAddonsOnly", "value": "true", "effect": "NoSchedule"},
+	})
+	worker := makeNode("worker-1", map[string]string{
+		InstanceTypeLabel: "n2-standard-4",
+		GKENodePoolLabel:  "worker-pool",
+	}, map[string]interface{}{"cpu": "4"}, true)
+
+	// Two PartitionTrees out of order verify deterministic sorting.
+	treeB := unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "partition.tpu.google.com/v1beta1",
+		"kind":       "PartitionTree",
+		"metadata":   map[string]interface{}{"name": "tree-b"},
+		"status": map[string]interface{}{
+			"acceleratorType": "v6e",
+			"root":            map[string]interface{}{"topology": "4x4", "partitionId": "p-b"},
+		},
+	}}
+	treeA := unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "partition.tpu.google.com/v1beta1",
+		"kind":       "PartitionTree",
+		"metadata":   map[string]interface{}{"name": "tree-a"},
+		"status": map[string]interface{}{
+			"acceleratorType": "tpu7x",
+			"root":            map[string]interface{}{"topology": "2x2x2", "partitionId": "p-a"},
+		},
+	}}
 
 	lister := &fakeDiscoveryLister{
-		resources: map[schema.GroupVersionResource][]unstructured.Unstructured{
-			NodeGVR:     {v5pNode},
-			TPUSliceGVR: {v6eSlice},
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR:                    {gpuL4, gpuH100, sysTainted, worker},
+			TPUPartitionTreeV1Beta1GVR: {treeB, treeA},
+		},
+		errGVR: map[schema.GroupVersionResource]error{
+			TPUPartitionTreeGVR: apierrors.NewNotFound(schema.GroupResource{Group: "partition.tpu.google.com", Resource: "partitiontrees"}, ""),
 		},
 	}
-	checker := &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}
-	inv, err := DiscoverInventory(lister, checker, DiscoverOptions{})
+	inv, err := DiscoverInventory(lister, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{
+		LabelSchemeOverride: SchemeTPUSlice,
+		HardwareResolver:    testHardwareResolver{},
+	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("DiscoverInventory failed: %v", err)
 	}
-	if inv.TPU == nil || inv.TPU.TPUType != "v5p" || inv.TPU.DefaultSliceName != "" || inv.TPU.Topology != "2x2x2" {
-		t.Fatalf("mismatched v6e slice must not graft onto v5p TPUInventory: %+v", inv.TPU)
+	if len(inv.Pools) != 4 {
+		t.Fatalf("expected 4 distinct pools (2 GPU + 2 CPU), got %d: %v", len(inv.Pools), inv.PoolNames)
 	}
-	if !slices.Equal(inv.TPU.Topologies, []string{"2x2x2"}) {
-		t.Fatalf("TPU.Topologies = %v, want [2x2x2] (no cross-family 2x2)", inv.TPU.Topologies)
+	if inv.CPUPoolCap == nil || inv.CPUPoolCap.NodePoolName != "worker-pool" {
+		t.Errorf("expected worker-pool ahead of CriticalAddonsOnly tainted pool, got %+v", inv.CPUPoolCap)
 	}
-}
-
-func TestPoolSelectionTieBreakers(t *testing.T) {
-	readySmall := PoolCapacity{MachineType: "b", ReadyNodes: 1, CPUsPerNode: 8}
-	unreadyLarge := PoolCapacity{MachineType: "a", ReadyNodes: 0, CPUsPerNode: 32}
-	readyLarge := PoolCapacity{MachineType: "z", ReadyNodes: 1, CPUsPerNode: 32}
-	readySmallA := PoolCapacity{MachineType: "a", ReadyNodes: 1, CPUsPerNode: 8}
-
-	for _, tc := range []struct {
-		name  string
-		a     PoolCapacity
-		aCtrl bool
-		b     PoolCapacity
-		bCtrl bool
-	}{
-		{"ready over unready", readySmall, false, unreadyLarge, false},
-		{"larger over smaller", readyLarge, false, readySmall, false},
-		{"lexical tie-breaker", readySmallA, false, readySmall, false},
-		{"worker over control-plane", readySmall, false, readyLarge, true},
-	} {
-		if !isBetterCPUPool(tc.a, tc.aCtrl, &tc.b, tc.bCtrl) || isBetterCPUPool(tc.b, tc.bCtrl, &tc.a, tc.aCtrl) {
-			t.Errorf("CPU tie-breaker %q failed symmetry", tc.name)
-		}
-	}
-
-	tpuReady1 := PoolCapacity{MachineType: "tpu7x-standard-4t", ReadyNodes: 1, TotalNodes: 1}
-	tpuUnready4 := PoolCapacity{MachineType: "ct5p-hightpu-4t", ReadyNodes: 0, TotalNodes: 4}
-	tpuReady4 := PoolCapacity{MachineType: "tpu7x-standard-4t", ReadyNodes: 2, TotalNodes: 4}
-	tpuReady2A := PoolCapacity{MachineType: "ct5p-hightpu-4t", ReadyNodes: 2, TotalNodes: 2}
-	tpuReady2Z := PoolCapacity{MachineType: "tpu7x-standard-4t", ReadyNodes: 2, TotalNodes: 2}
-
-	for _, tc := range []struct {
-		name string
-		a, b PoolCapacity
-	}{
-		{"ready over unready", tpuReady1, tpuUnready4},
-		{"larger over smaller", tpuReady4, tpuReady2A},
-		{"lexical tie-breaker", tpuReady2A, tpuReady2Z},
-	} {
-		if !isBetterTPUPool(tc.a, &tc.b) || isBetterTPUPool(tc.b, &tc.a) {
-			t.Errorf("TPU tie-breaker %q failed symmetry", tc.name)
-		}
-	}
-}
-
-func TestQuantityAndNestedIntParsing(t *testing.T) {
-	alloc := map[string]interface{}{
-		"int64":   int64(8),
-		"jsonNum": json.Number("16"),
-		"neg":     "-4",
-		"bad":     "not-a-qty",
-		"blank":   "   ",
-		"badType": []string{"x"},
-	}
-	for k, want := range map[string]int64{"int64": 8, "jsonNum": 16} {
-		if q, ok := parseQuantityField(alloc, k); !ok || q.Value() != want {
-			t.Errorf("parseQuantityField(%q) = (%v, %v), want (%d, true)", k, q, ok, want)
-		}
-	}
-	for _, k := range []string{"neg", "bad", "blank", "badType", "missing"} {
-		if _, ok := parseQuantityField(alloc, k); ok {
-			t.Errorf("parseQuantityField(%q) unexpectedly succeeded", k)
-		}
-	}
-
-	obj := map[string]interface{}{
-		"i64":     int64(4),
-		"i":       int(2),
-		"f64":     float64(6),
-		"jsonNum": json.Number("12"),
-		"badType": true,
-	}
-	for k, want := range map[string]int{"i64": 4, "i": 2, "f64": 6, "jsonNum": 12} {
-		if n, ok := nestedInt(obj, k); !ok || n != want {
-			t.Errorf("nestedInt(%q) = (%d, %v), want (%d, true)", k, n, ok, want)
-		}
-	}
-	if _, ok := nestedInt(obj, "badType"); ok {
-		t.Errorf("nestedInt(bool) unexpectedly succeeded")
-	}
-}
-
-func TestDiscoverInventory_NodeOrderIndependenceAndCRDNumNodes(t *testing.T) {
-	nA := makeNode("n-a", map[string]string{InstanceTypeLabel: "n2-standard-8", GKENodePoolLabel: "z-pool"}, map[string]interface{}{"cpu": "8", "memory": "32Gi"}, true)
-	nB := makeNode("n-b", map[string]string{InstanceTypeLabel: "n2-standard-8", GKENodePoolLabel: "a-pool"}, map[string]interface{}{"cpu": "8", "memory": "32Gi"}, true)
-	sliceWithNum := makeTPUSlice("s-num", "v5p", "2x2x2", "READY", nil)
-	sliceWithNum.Object["status"].(map[string]interface{})["numNodes"] = int64(2)
-
-	for _, order := range [][]unstructured.Unstructured{{nA, nB}, {nB, nA}} {
-		lister := &fakeDiscoveryLister{
-			resources: map[schema.GroupVersionResource][]unstructured.Unstructured{
-				NodeGVR:     order,
-				TPUSliceGVR: {sliceWithNum},
-			},
-			errs: map[schema.GroupVersionResource]error{
-				TPUPartitionTreeGVR: errors.New("transient apiserver 503"),
-			},
-		}
-		checker := &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}
-		inv, err := DiscoverInventory(lister, checker, DiscoverOptions{})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if inv.Pools["n2-standard-8"].NodePoolName != "a-pool" {
-			t.Errorf("NodePoolName = %q, want deterministic min a-pool", inv.Pools["n2-standard-8"].NodePoolName)
-		}
-		if len(inv.Slices) != 1 || inv.Slices[0].NodesPerSlice != 2 {
-			t.Errorf("expected status.numNodes=2 (int64) parsed, got %+v", inv.Slices)
-		}
+	if len(inv.PartitionTrees) != 2 || inv.PartitionTrees[0].Name != "tree-a" || inv.PartitionTrees[1].Name != "tree-b" {
+		t.Errorf("expected sorted PartitionTrees [tree-a tree-b], got %+v", inv.PartitionTrees)
 	}
 }

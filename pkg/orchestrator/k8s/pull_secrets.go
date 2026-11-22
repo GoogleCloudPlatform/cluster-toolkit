@@ -17,6 +17,7 @@ package k8s
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/url"
 	"path"
@@ -27,18 +28,76 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// IsForbiddenError reports whether err indicates a 403 Forbidden RBAC error.
+var (
+	// dnsGatewayRejectedMarkers identify GKE DNS control-plane gateway, IAM, and VPC-SC rejections
+	// that arrive as HTTP 403 / "Error from server (Forbidden)" and must not be mistaken for K8s RBAC.
+	dnsGatewayRejectedMarkers = []string{
+		"allow_external_traffic is disabled",
+		"container.googleapis.com/clusters.connect",
+		"prohibited by organization's policy",
+		"vpcservicecontrols",
+	}
+	nonRBACProxyHTMLMarkers = []string{
+		"<!doctype",
+		"<html",
+		"</html>",
+		"<title>",
+		"proxyconnect",
+		"tunnel connection failed",
+		"received unexpected response",
+		"from the server (",
+		"access denied by proxy",
+		"cloudflare",
+		"x-amzn-errortype",
+	}
+)
+
+// IsDNSGatewayRejectedText reports whether text indicates a GKE DNS gateway, IAM clusters.connect,
+// or VPC Service Controls 403 rejection rather than a Kubernetes RBAC denial.
+func IsDNSGatewayRejectedText(text string) bool {
+	lower := strings.ToLower(text)
+	for _, m := range dnsGatewayRejectedMarkers {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
+}
+
+func isNonRBACForbiddenText(lower string) bool {
+	if IsDNSGatewayRejectedText(lower) {
+		return true
+	}
+	for _, m := range nonRBACProxyHTMLMarkers {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsForbiddenError reports whether err indicates a Kubernetes RBAC 403 Forbidden error,
+// rejecting non-RBAC 403s from proxies/WAFs (unexpected server responses or HTML), GKE DNS gateways,
+// IAM clusters.connect, and VPC Service Controls.
 func IsForbiddenError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if apierrors.IsForbidden(err) {
-		return true
+	if apierrors.IsUnexpectedServerError(err) {
+		return false
 	}
 	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	if isNonRBACForbiddenText(msg) {
+		return false
+	}
+	var statusErr apierrors.APIStatus
+	if errors.As(err, &statusErr) {
+		return statusErr.Status().Reason == metav1.StatusReasonForbidden
+	}
 	return strings.Contains(msg, "error from server (forbidden)") ||
 		strings.Contains(msg, "403 forbidden") ||
 		strings.Contains(msg, " is forbidden:") ||

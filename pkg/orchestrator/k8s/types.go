@@ -24,8 +24,9 @@ import (
 // KubeconfigLoader loads the merged client-go kubeconfig; injectable for hermetic tests.
 type KubeconfigLoader func() (*clientcmdapi.Config, error)
 
-// TPUSliceAPIGroupVersion is the Kubernetes API group/version exposed by the tpu.google.com slice controller.
-const TPUSliceAPIGroupVersion = "slice.tpu.google.com/v1alpha1"
+// TPUSliceAPIGroupVersion is the group-level Kubernetes API path exposed by the tpu.google.com slice controller
+// (covers both v1alpha1 and v1beta1).
+const TPUSliceAPIGroupVersion = "slice.tpu.google.com"
 
 // NodeGVR identifies core/v1 Node resources for dynamic Kubernetes queries.
 var NodeGVR = schema.GroupVersionResource{
@@ -41,10 +42,24 @@ var TPUSliceGVR = schema.GroupVersionResource{
 	Resource: "slices",
 }
 
-// TPUPartitionTreeGVR identifies slice.tpu.google.com/v1alpha1 PartitionTree resources.
-var TPUPartitionTreeGVR = schema.GroupVersionResource{
+// TPUSliceV1Beta1GVR identifies slice.tpu.google.com/v1beta1 Slice resources.
+var TPUSliceV1Beta1GVR = schema.GroupVersionResource{
 	Group:    "slice.tpu.google.com",
+	Version:  "v1beta1",
+	Resource: "slices",
+}
+
+// TPUPartitionTreeGVR identifies partition.tpu.google.com/v1alpha1 PartitionTree resources.
+var TPUPartitionTreeGVR = schema.GroupVersionResource{
+	Group:    "partition.tpu.google.com",
 	Version:  "v1alpha1",
+	Resource: "partitiontrees",
+}
+
+// TPUPartitionTreeV1Beta1GVR identifies partition.tpu.google.com/v1beta1 PartitionTree resources.
+var TPUPartitionTreeV1Beta1GVR = schema.GroupVersionResource{
+	Group:    "partition.tpu.google.com",
+	Version:  "v1beta1",
 	Resource: "partitiontrees",
 }
 
@@ -79,6 +94,15 @@ type APIGroupChecker interface {
 	HasAPIGroupVersion(groupVersion string) (bool, error)
 }
 
+// TPUHardwareResolver supplies optional provider-specific TPU machine-type normalization and chip-count
+// lookup so pkg/orchestrator/k8s remains decoupled from GCE machine-type tables.
+type TPUHardwareResolver interface {
+	IsTPUMachine(machineType string) bool
+	NormalizeTPUType(raw string) string
+	InferTPUMachine(tpuType, rawMachine string, chipsPerNode int) string
+	ChipsPerNode(machineType string) int
+}
+
 // dockerConfigJSON is a .dockerconfigjson payload. authn.AuthConfig decodes "auth" with the kubelet's own rules
 // (base64 of "user:pass"), so a payload the kubelet would reject fails to unmarshal here as well.
 type dockerConfigJSON struct {
@@ -91,36 +115,37 @@ type LabelScheme string
 const (
 	// SchemeAuto selects automatic detection from node labels and API group discovery.
 	SchemeAuto LabelScheme = ""
-	// SchemeTPUSlice uses tpu.google.com/* TPU slice labels (slice.tpu.google.com/v1alpha1).
+	// SchemeTPUSlice uses tpu.google.com/* TPU slice labels (slice.tpu.google.com).
 	SchemeTPUSlice LabelScheme = "tpu-slice"
 	// SchemeGKE uses Google Kubernetes Engine labels (cloud.google.com/gke-*).
 	SchemeGKE LabelScheme = "gke"
 	// SchemeGeneric uses standard Kubernetes labels without TPU slice or GKE TPU conventions.
 	SchemeGeneric LabelScheme = "generic"
 
-	// LabelSchemeEnvVar overrides automatic label-scheme detection when --k8s-label-scheme is unset.
+	// LabelSchemeEnvVar overrides automatic label-scheme detection.
 	LabelSchemeEnvVar = "GCLUSTER_LABEL_SCHEME"
 )
 
 // PoolCapacity summarizes per-node and aggregate allocatable resources for one node pool or machine-type group.
 type PoolCapacity struct {
-	MachineType   string
-	NodePoolName  string
-	TotalNodes    int
-	ReadyNodes    int
-	IsTPU         bool
-	IsGPU         bool
-	TPUType       string
-	GPUType       string
-	TPUsPerNode   int
-	GPUsPerNode   int
-	CPUsPerNode   int
-	MemMiBPerNode int
-	Topologies    []string
-	SliceNames    []string
+	MachineType         string
+	NodePoolName        string
+	TotalNodes          int
+	ReadyNodes          int
+	IsTPU               bool
+	IsGPU               bool
+	TPUType             string
+	GPUType             string
+	TPUsPerNode         int
+	GPUsPerNode         int
+	CPUsPerNode         int
+	AllocatableCPUMilli int64
+	MemMiBPerNode       int
+	Topologies          []string
+	SliceNames          []string
 }
 
-// SliceInfo describes a discovered slice.tpu.google.com/v1alpha1 Slice resource or node-derived slice.
+// SliceInfo describes a discovered slice.tpu.google.com Slice resource or node-derived slice.
 type SliceInfo struct {
 	Name          string
 	Namespace     string
@@ -133,11 +158,11 @@ type SliceInfo struct {
 	ChipsPerNode  int
 	OwnerName     string
 	ManagedBy     string
-	PartitionTree string
+	PartitionIDs  []string
 	FromCRD       bool
 }
 
-// PartitionTreeInfo describes a discovered slice.tpu.google.com/v1alpha1 PartitionTree resource.
+// PartitionTreeInfo describes a discovered partition.tpu.google.com PartitionTree resource.
 type PartitionTreeInfo struct {
 	Name                string
 	TPUType             string
@@ -161,13 +186,14 @@ type TPUInventory struct {
 
 // Inventory holds a pure-Kubernetes cluster discovery snapshot obtained without calling gcloud.
 type Inventory struct {
-	LabelScheme        LabelScheme
-	ExplicitMode       bool
-	TPUSliceAPIPresent bool
-	TotalNodes         int
-	ReadyNodes         int
+	LabelScheme               LabelScheme
+	ExplicitMode              bool
+	TPUSliceAPIPresent        bool
+	SliceInventoryUnavailable bool
+	TotalNodes                int
+	ReadyNodes                int
 
-	// Pools maps machine type (or disambiguated pool key) to its aggregated PoolCapacity.
+	// Pools maps a collision-safe deterministic pool key to its aggregated PoolCapacity.
 	// PoolNames holds the deterministically sorted keys of Pools.
 	Pools     map[string]PoolCapacity
 	PoolNames []string
@@ -185,44 +211,68 @@ type Inventory struct {
 // DiscoverOptions configures pure-Kubernetes cluster inventory discovery.
 // Platform label schemes are never inferred from --node-constraint or --compute-type.
 type DiscoverOptions struct {
-	// LabelSchemeOverride forces a specific LabelScheme when non-empty (from --k8s-label-scheme or GCLUSTER_LABEL_SCHEME).
+	// LabelSchemeOverride forces a specific LabelScheme when non-empty (from GCLUSTER_LABEL_SCHEME).
 	LabelSchemeOverride LabelScheme
+	// HardwareResolver provides optional provider-specific TPU machine normalization and chip-count math.
+	HardwareResolver TPUHardwareResolver
 }
 
 type nodeSignals struct {
 	hasTPUSliceLabels  bool
 	hasGKELabels       bool
 	hasPartitionLabels bool
+	poolControlPlane   map[string]bool
+	poolSystem         map[string]bool
 	nodeSlices         map[string]*nodeSliceAgg
 }
 
 type nodeSliceAgg struct {
-	name        string
-	tpuType     string
-	machineType string
-	topology    string
-	chips       int
-	totalNodes  int
-	readyNodes  int
+	name             string
+	tpuType          string
+	readyTPUType     string
+	machineType      string
+	readyMachineType string
+	topology         string
+	readyTopology    string
+	chips            int
+	readyChips       int
+	totalNodes       int
+	readyNodes       int
 }
 
 type poolGroupKey struct {
-	machineType  string
+	poolKey      string
+	nodePool     string
 	class        string
+	accelType    string
 	controlPlane bool
+	systemPool   bool
 }
 
 type poolBuilder struct {
-	key        poolGroupKey
-	cap        PoolCapacity
-	topologies map[string]struct{}
-	slices     map[string]struct{}
+	key              poolGroupKey
+	cap              PoolCapacity
+	allMachineType   string
+	readyMachineType string
+	allTPUType       string
+	readyTPUType     string
+	allGPUType       string
+	readyGPUType     string
+	allCPUMilli      int64
+	readyCPUMilli    int64
+	allMemMiB        int
+	readyMemMiB      int
+	allTPUs          int
+	readyTPUs        int
+	allGPUs          int
+	readyGPUs        int
+	topologies       map[string]struct{}
+	slices           map[string]struct{}
 }
 
 type nodeSnapshot struct {
-	labels       map[string]string
 	ready        bool
-	cpus         int
+	cpuMilli     int64
 	memMiB       int
 	tpus         int
 	gpus         int
@@ -231,6 +281,7 @@ type nodeSnapshot struct {
 	tpuType      string
 	gpuType      string
 	machineType  string
+	poolKey      string
 	nodePool     string
 	topology     string
 	sliceName    string
@@ -238,4 +289,13 @@ type nodeSnapshot struct {
 	hasGKE       bool
 	hasPartition bool
 	controlPlane bool
+	systemPool   bool
+}
+
+type crdDiscoveryResult struct {
+	sliceErr   error
+	sliceFound bool
+	treeErr    error
+	slices     []SliceInfo
+	trees      []PartitionTreeInfo
 }
