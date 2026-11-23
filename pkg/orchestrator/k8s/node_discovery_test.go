@@ -223,34 +223,35 @@ func toAnyMap(in map[string]string) map[string]interface{} {
 func TestParseAndResolveLabelScheme(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		flag, env       string
-		want            LabelScheme
-		wantErrSubstr   string
-		forbidErrSubstr string
+		env           string
+		want          LabelScheme
+		wantErrSubstr string
 	}{
-		{"", "", SchemeAuto, "", ""},
-		{"tpu-slice", "gke", SchemeTPUSlice, "", ""},
-		{"  GKE ", "", SchemeGKE, "", ""},
-		{"", "generic", SchemeGeneric, "", ""},
-		{"invalid", "", "", "invalid label scheme", LabelSchemeEnvVar},
-		{"", "bogus", "", LabelSchemeEnvVar, "--k8s-label-scheme"},
+		{"", SchemeAuto, ""},
+		{"tpu-slice", SchemeTPUSlice, ""},
+		{"  GKE ", SchemeGKE, ""},
+		{"generic", SchemeGeneric, ""},
+		{"bogus", "", LabelSchemeEnvVar},
 	}
 	for _, tc := range cases {
-		got, err := ResolveLabelSchemeOverride(tc.flag, func(k string) string {
+		got, err := ResolveLabelSchemeOverride(func(k string) string {
 			if k == LabelSchemeEnvVar {
 				return tc.env
 			}
 			return ""
 		})
 		if tc.wantErrSubstr != "" {
-			if err == nil || !strings.Contains(err.Error(), tc.wantErrSubstr) || strings.Contains(err.Error(), "--k8s-label-scheme") || strings.Contains(err.Error(), tc.forbidErrSubstr) {
-				t.Errorf("ResolveLabelSchemeOverride(%q,%q) err=%v want %q without %q", tc.flag, tc.env, err, tc.wantErrSubstr, tc.forbidErrSubstr)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErrSubstr) || strings.Contains(err.Error(), "--k8s-label-scheme") {
+				t.Errorf("ResolveLabelSchemeOverride(%q) err=%v want %q without --k8s-label-scheme", tc.env, err, tc.wantErrSubstr)
 			}
 			continue
 		}
 		if err != nil || got != tc.want {
-			t.Errorf("ResolveLabelSchemeOverride(%q,%q) = (%q, %v), want (%q, nil)", tc.flag, tc.env, got, err, tc.want)
+			t.Errorf("ResolveLabelSchemeOverride(%q) = (%q, %v), want (%q, nil)", tc.env, got, err, tc.want)
 		}
+	}
+	if _, err := ParseLabelScheme("invalid"); err == nil || !strings.Contains(err.Error(), "invalid label scheme") || strings.Contains(err.Error(), LabelSchemeEnvVar) {
+		t.Errorf("ParseLabelScheme(invalid) = %v, want source-neutral error", err)
 	}
 }
 
@@ -1354,5 +1355,41 @@ func TestDiscoverInventory_MultiShape8tPoolAndSingleChipPartitionTree(t *testing
 		if invPT.TPU == nil || invPT.TPU.MachineType != tc.wantMachine || invPT.TPU.ChipsPerNode != 1 || invPT.TPU.NodesPerSlice != 1 {
 			t.Errorf("single-chip PartitionTree(%s/%s) = %+v, want machine=%s chips=1 nodes=1", tc.tpuType, tc.topo, invPT.TPU, tc.wantMachine)
 		}
+	}
+}
+
+func TestDiscoverInventory_SingleHost1tAnd8tSliceRejection(t *testing.T) {
+	t.Parallel()
+	// Single-host 8t pool must reject multi-host 4x4 while keeping 2x4.
+	node8t := makeNode("v6e-8t-0", map[string]string{
+		InstanceTypeLabel: "ct6e-standard-8t",
+		TPUSliceTypeLabel: "v6e",
+	}, map[string]interface{}{"cpu": "120", "google.com/tpu": "8"}, true)
+	inv8t, err := DiscoverInventory(&fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR: {node8t},
+			TPUSliceGVR: {
+				makeSliceCRD("a-slice-4x4", "", "v6e", "4x4", "True", "READY", nil),
+				makeSliceCRD("b-slice-2x4", "", "v6e", "2x4", "True", "READY", nil),
+			},
+		},
+	}, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil || inv8t.TPU == nil || inv8t.TPU.DefaultSliceName != "b-slice-2x4" {
+		t.Fatalf("8t pool = (%+v, %v), want b-slice-2x4 (rejecting 4x4)", inv8t, err)
+	}
+
+	// Single-chip 1t pool must reject multi-chip 2x4.
+	node1t := makeNode("v6e-1t-0", map[string]string{
+		InstanceTypeLabel: "ct6e-standard-1t",
+		TPUSliceTypeLabel: "v6e",
+	}, map[string]interface{}{"cpu": "24", "google.com/tpu": "1"}, true)
+	inv1t, err := DiscoverInventory(&fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR:     {node1t},
+			TPUSliceGVR: {makeSliceCRD("slice-2x4", "", "v6e", "2x4", "True", "READY", nil)},
+		},
+	}, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil || inv1t.TPU == nil || inv1t.TPU.DefaultSliceName != "" {
+		t.Fatalf("1t pool = (%+v, %v), want empty DefaultSliceName (rejecting 2x4)", inv1t, err)
 	}
 }

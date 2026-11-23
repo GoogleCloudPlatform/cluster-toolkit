@@ -57,6 +57,7 @@ import (
 func TestMain(m *testing.M) {
 	_ = os.Unsetenv(refreshCredentialsEnv)
 	_ = os.Unsetenv(shell.AirGappedEnvVar)
+	_ = os.Unsetenv(k8s.LabelSchemeEnvVar)
 	shell.SetDefaultAirGapped(false)
 	os.Exit(m.Run())
 }

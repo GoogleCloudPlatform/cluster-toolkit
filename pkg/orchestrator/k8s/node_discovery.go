@@ -75,13 +75,9 @@ func ParseLabelScheme(raw string) (LabelScheme, error) {
 	}
 }
 
-// ResolveLabelSchemeOverride resolves an explicit label scheme override from flagValue,
-// falling back to GCLUSTER_LABEL_SCHEME via getenv (or os.Getenv when nil).
-// A non-empty flagValue takes precedence over the environment variable.
-func ResolveLabelSchemeOverride(flagValue string, getenv func(string) string) (LabelScheme, error) {
-	if strings.TrimSpace(flagValue) != "" {
-		return ParseLabelScheme(flagValue)
-	}
+// ResolveLabelSchemeOverride resolves an explicit label scheme override from
+// GCLUSTER_LABEL_SCHEME via getenv (or os.Getenv when nil).
+func ResolveLabelSchemeOverride(getenv func(string) string) (LabelScheme, error) {
 	if getenv == nil {
 		getenv = os.Getenv
 	}
@@ -1099,13 +1095,14 @@ func parseTPUSlice(obj unstructured.Unstructured, hw TPUHardwareResolver) SliceI
 	}
 	partitionIDs, _, _ := unstructured.NestedStringSlice(obj.Object, "spec", "partitionIds")
 
+	totalChips, _ := parseTopologyChipCount(topology)
 	chipsHint := 0
-	if isSingleChipTopology(topology) {
+	if totalChips == 1 {
 		chipsHint = 1
 	}
 	tpuType := resolveTPUType(hw, rawType)
 	var machineType string
-	if chipsHint > 0 || !isMultiHostShapeTPUFamily(tpuType) {
+	if !isAmbiguousEightChipSlice(hw, tpuType, totalChips) {
 		machineType = inferTPUMachine(hw, tpuType, "", chipsHint)
 	}
 	chips := chipsPerNodeForMachine(hw, machineType)
@@ -1127,8 +1124,12 @@ func parseTPUSlice(obj unstructured.Unstructured, hw TPUHardwareResolver) SliceI
 	}
 }
 
-func isMultiHostShapeTPUFamily(tpuType string) bool {
-	return tpuType == "v5e" || tpuType == "v6e"
+func isAmbiguousEightChipSlice(hw TPUHardwareResolver, tpuType string, totalChips int) bool {
+	if totalChips != 8 || tpuType == "" {
+		return false
+	}
+	return chipsPerNodeForMachine(hw, inferTPUMachine(hw, tpuType, "", 8)) == 8 &&
+		chipsPerNodeForMachine(hw, inferTPUMachine(hw, tpuType, "", 4)) == 4
 }
 
 // listTPUPartitionTrees queries partition.tpu.google.com/v1alpha1 and falls back to v1beta1
@@ -1455,7 +1456,7 @@ func poolTPUTypeMatches(pool PoolCapacity, tpu *TPUInventory) bool {
 
 func applySliceAndTreeMetadata(inv *Inventory, primaryPool *PoolCapacity, poolTopos []string, tpu *TPUInventory, hw TPUHardwareResolver) {
 	applyDefaultSlice(inv, tpu)
-	backfillTPUFromPartitionTrees(inv, tpu, hw)
+	backfillTPUFromPartitionTrees(inv, tpu)
 	tpu.Topologies = collectAllTopologies(inv, poolTopos, tpu)
 	if tpu.DefaultSliceName == "" && tpu.Topology == "" {
 		tpu.Topology = pickFallbackTopology(inv, primaryPool, tpu)
@@ -1469,23 +1470,15 @@ func applySliceAndTreeMetadata(inv *Inventory, primaryPool *PoolCapacity, poolTo
 	}
 }
 
-func backfillTPUFromPartitionTrees(inv *Inventory, tpu *TPUInventory, hw TPUHardwareResolver) {
+func backfillTPUFromPartitionTrees(inv *Inventory, tpu *TPUInventory) {
 	if tpu.TPUType != "" {
 		return
 	}
 	for _, pt := range inv.PartitionTrees {
-		if pt.TPUType == "" {
-			continue
+		if pt.TPUType != "" {
+			tpu.TPUType = pt.TPUType
+			return
 		}
-		tpu.TPUType = pt.TPUType
-		if tpu.MachineType == "" {
-			chipsHint := tpu.ChipsPerNode
-			if chipsHint == 0 && isSingleChipTopology(pt.RootTopology) {
-				chipsHint = 1
-			}
-			tpu.MachineType = inferTPUMachine(hw, tpu.TPUType, "", chipsHint)
-		}
-		return
 	}
 }
 
@@ -1560,7 +1553,7 @@ func sliceTopologyFitsHostChips(s SliceInfo, tpu *TPUInventory) bool {
 		return true
 	}
 	totalChips, ok := parseTopologyChipCount(s.Topology)
-	return !ok || totalChips%tpu.ChipsPerNode == 0
+	return !ok || (totalChips%tpu.ChipsPerNode == 0 && (totalChips == tpu.ChipsPerNode || tpu.ChipsPerNode == 4))
 }
 
 func applyDefaultSlice(inv *Inventory, tpu *TPUInventory) {

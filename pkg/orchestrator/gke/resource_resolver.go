@@ -1002,14 +1002,12 @@ func matchesNormalizedTPUFamily(norm string, fam gceTPUFamilySpec) bool {
 }
 
 // resolveGCETPUShorthand delegates official shorthands to config.ResolveMachineType
-// and normalizes v5lite-*/v5-lite-* cluster-label aliases to v5e-* before lookup.
+// and normalizes cluster-label family aliases (e.g. v5lite-*, tpu-v6e-*, tpu-v5-lite-*)
+// via gceTPUFamilies before lookup.
 func resolveGCETPUShorthand(lower string) string {
 	candidate := lower
-	switch {
-	case strings.HasPrefix(lower, "v5lite-"):
-		candidate = "v5e-" + strings.TrimPrefix(lower, "v5lite-")
-	case strings.HasPrefix(lower, "v5-lite-"):
-		candidate = "v5e-" + strings.TrimPrefix(lower, "v5-lite-")
+	if fam, rest, ok := matchGCEFamilyShorthand(lower); ok && rest != "" && isAllDigits(rest) {
+		candidate = fam.canonical + "-" + rest
 	}
 	if resolved := config.ResolveMachineType(candidate); resolved != candidate && config.IsTPU(resolved) {
 		return strings.ToLower(resolved)

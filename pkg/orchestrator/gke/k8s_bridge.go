@@ -100,9 +100,9 @@ func (g *GKEOrchestrator) configureK8sKubectl(clusterName string) error {
 // DiscoverK8sInventory queries Kubernetes nodes, TPU Slices/PartitionTrees, and non-privileged API
 // group discovery without invoking gcloud, caching the snapshot on g.inventory.
 // Platform label schemes are never inferred from --node-constraint or --compute-type.
-func (g *GKEOrchestrator) DiscoverK8sInventory(labelSchemeFlag string) (*k8s.Inventory, error) {
+func (g *GKEOrchestrator) DiscoverK8sInventory() (*k8s.Inventory, error) {
 	g.inventory = nil
-	schemeOverride, err := k8s.ResolveLabelSchemeOverride(labelSchemeFlag, nil)
+	schemeOverride, err := k8s.ResolveLabelSchemeOverride(nil)
 	if err != nil {
 		return nil, err
 	}

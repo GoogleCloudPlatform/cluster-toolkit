@@ -52,7 +52,7 @@ func TestDiscoverK8sInventory_NodeConstraintInvariant(t *testing.T) {
 	if err := orc.validateSubmitLocalPreflight(sm, job); err != nil {
 		t.Fatalf("validateSubmitLocalPreflight failed: %v", err)
 	}
-	inv, err := orc.DiscoverK8sInventory("")
+	inv, err := orc.DiscoverK8sInventory()
 	if err != nil {
 		t.Fatalf("DiscoverK8sInventory failed: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestDiscoverK8sInventory_TPUSliceExplicitModeAndCacheInvalidation(t *testin
 		},
 	}
 
-	inv, err := orc.DiscoverK8sInventory("")
+	inv, err := orc.DiscoverK8sInventory()
 	if err != nil {
 		t.Fatalf("DiscoverK8sInventory failed: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestDiscoverK8sInventory_LabelSchemeAndHardwareResolverWiring(t *testing.T)
 		Objects: map[string][]unstructured.Unstructured{"nodes": {tpuNode}},
 	}
 
-	invEnv, err := orc.DiscoverK8sInventory("")
+	invEnv, err := orc.DiscoverK8sInventory()
 	if err != nil {
 		t.Fatalf("DiscoverK8sInventory(env=gke) failed: %v", err)
 	}
@@ -144,12 +144,13 @@ func TestDiscoverK8sInventory_LabelSchemeAndHardwareResolverWiring(t *testing.T)
 		t.Fatalf("unexpected env-wired TPU inventory: scheme=%q TPU=%+v", invEnv.LabelScheme, invEnv.TPU)
 	}
 
-	invFlag, err := orc.DiscoverK8sInventory("generic")
+	t.Setenv(k8s.LabelSchemeEnvVar, "generic")
+	invGeneric, err := orc.DiscoverK8sInventory()
 	if err != nil {
-		t.Fatalf("DiscoverK8sInventory(flag=generic) failed: %v", err)
+		t.Fatalf("DiscoverK8sInventory(env=generic) failed: %v", err)
 	}
-	if invFlag.LabelScheme != k8s.SchemeGeneric || invFlag.TPU == nil || invFlag.TPU.MachineType != "ct5lp-hightpu-4t" {
-		t.Fatalf("unexpected flag-overridden TPU inventory: scheme=%q TPU=%+v", invFlag.LabelScheme, invFlag.TPU)
+	if invGeneric.LabelScheme != k8s.SchemeGeneric || invGeneric.TPU == nil || invGeneric.TPU.MachineType != "ct5lp-hightpu-4t" {
+		t.Fatalf("unexpected generic-overridden TPU inventory: scheme=%q TPU=%+v", invGeneric.LabelScheme, invGeneric.TPU)
 	}
 }
 
@@ -163,7 +164,7 @@ func TestDiscoverK8sInventory_ClientLifecycleAndNoAmbientProbe(t *testing.T) {
 			"slices": apierrors.NewNotFound(k8s.TPUSliceGVR.GroupResource(), ""),
 		},
 	}
-	inv, err := orc.DiscoverK8sInventory("")
+	inv, err := orc.DiscoverK8sInventory()
 	if err != nil || inv.LabelScheme != k8s.SchemeGeneric {
 		t.Fatalf("blank-context discovery = (%+v, %v), want generic without ambient probe", inv, err)
 	}
@@ -176,32 +177,25 @@ func TestDiscoverK8sInventory_ClientLifecycleAndNoAmbientProbe(t *testing.T) {
 	if orc.kubeClient != nil || orc.dynClient != nil || orc.inventory != nil {
 		t.Errorf("SetKubeClient(typedNil) did not clear kubeClient/dynClient/inventory")
 	}
-	if _, err := orc.DiscoverK8sInventory(""); !errors.Is(err, errKubeClientUninitialized) {
+	if _, err := orc.DiscoverK8sInventory(); !errors.Is(err, errKubeClientUninitialized) {
 		t.Errorf("expected errKubeClientUninitialized after typed-nil reset, got %v", err)
 	}
 }
 
 func TestDiscoverK8sInventory_ErrorPropagation(t *testing.T) {
-	t.Setenv(k8s.LabelSchemeEnvVar, "")
+	t.Setenv(k8s.LabelSchemeEnvVar, "bogus")
 	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
 	orc.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeGeneric}
-	if _, err := orc.DiscoverK8sInventory("invalid"); err == nil || !strings.Contains(err.Error(), "invalid label scheme") {
-		t.Errorf("expected source-neutral invalid label scheme error, got: %v", err)
-	} else if strings.Contains(err.Error(), k8s.LabelSchemeEnvVar) || strings.Contains(err.Error(), "--k8s-label-scheme") {
-		t.Errorf("flag-value error must not misattribute to env/flag: %v", err)
+	if _, err := orc.DiscoverK8sInventory(); err == nil || !strings.Contains(err.Error(), k8s.LabelSchemeEnvVar) || strings.Contains(err.Error(), "--k8s-label-scheme") {
+		t.Errorf("expected GCLUSTER_LABEL_SCHEME error without --k8s-label-scheme, got: %v", err)
 	}
 	if orc.inventory != nil {
 		t.Errorf("expected failed DiscoverK8sInventory to clear stale cached inventory")
 	}
-
-	t.Setenv(k8s.LabelSchemeEnvVar, "bogus")
-	if _, err := orc.DiscoverK8sInventory(""); err == nil || !strings.Contains(err.Error(), k8s.LabelSchemeEnvVar) || strings.Contains(err.Error(), "--k8s-label-scheme") {
-		t.Errorf("expected GCLUSTER_LABEL_SCHEME error without --k8s-label-scheme, got: %v", err)
-	}
 	t.Setenv(k8s.LabelSchemeEnvVar, "")
 
 	orcNoClient := NewGKEOrchestrator()
-	if _, err := orcNoClient.DiscoverK8sInventory(""); !errors.Is(err, errKubeClientUninitialized) {
+	if _, err := orcNoClient.DiscoverK8sInventory(); !errors.Is(err, errKubeClientUninitialized) {
 		t.Errorf("expected errKubeClientUninitialized, got %v", err)
 	}
 }
@@ -213,7 +207,7 @@ func TestDiscoverK8sInventory_LazyManagedClientInit(t *testing.T) {
 	orcBrokenKube.kubeconfigLoader = func() (*clientcmdapi.Config, error) {
 		return nil, errors.New("unreadable kubeconfig")
 	}
-	if _, err := orcBrokenKube.DiscoverK8sInventory(""); err == nil || !strings.Contains(err.Error(), "unreadable kubeconfig") {
+	if _, err := orcBrokenKube.DiscoverK8sInventory(); err == nil || !strings.Contains(err.Error(), "unreadable kubeconfig") {
 		t.Errorf("expected wrapped getDynamicClient error, got: %v", err)
 	}
 
