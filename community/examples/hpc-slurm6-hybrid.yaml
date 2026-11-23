@@ -27,7 +27,8 @@ vars:
   #never ends up in a disk image; see docs/hybrid-slurm-cluster/README.md.
   key_export_dir: /slurm/key_distribution
 
-  # Set this variable to overwrite the default Slurm version (e.g. "25.11.6")
+  # Set this variable to overwrite the default Slurm version. Must match the
+  # Slurm version of your on-prem controller.
   slurm_version: "26.05.4"
 
   deployment_name: slurm6-hybrid
@@ -41,7 +42,9 @@ vars:
   region: us-central1
   zone: us-central1-c
 
-  # see latest in docs/vm-images.md#publicly-published-slurm-images
+  # Must be a Slurm image: Slurm is rebuilt over the installed copy, not
+  # installed from scratch. Match its Slurm release to slurm_version where
+  # possible; see docs/vm-images.md#publicly-published-slurm-images
   source_image_family: aci-cpu-rocky-linux-9-slurm-2605-amd64
   source_image_project: advanced-compute-images
   custom_image:
