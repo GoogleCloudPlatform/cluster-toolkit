@@ -28,8 +28,8 @@ blueprints:
     compute_machine_type: c2-standard-60
     deployment_name: batch-wrf
     instance_image:
-      family: hpc-rocky-linux-9
-      project: cloud-hpc-image-public
+      family: aci-cpu-rocky-linux-9-amd64
+      project: advanced-compute-images
     project_id: null
     region: us-central1
     spack_builder_machine_type: c2-standard-16
