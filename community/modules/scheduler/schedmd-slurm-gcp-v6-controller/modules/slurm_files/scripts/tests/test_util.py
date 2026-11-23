@@ -2262,3 +2262,197 @@ def test_fetch_config_download_error_propagates():
 def test_yaml_load_reads_dumped_config():
     cfg = util.NSDict({"nodeset": {"a": {"node_conf": {"Weight": 1}, "zones": ["us-east1-b"]}}, "x": None})
     assert util._yaml_load(util.yaml.dump(cfg, Dumper=util.Dumper)) == cfg
+
+
+def test_get_metadata_ephemeral_port_exhaustion_does_not_poison_unreachable(mocker):
+    import errno
+    import requests as requests_lib
+
+    orig_unreachable = util._metadata_unreachable
+    try:
+        util._metadata_unreachable = False
+        sess = Mock()
+        mocker.patch("util._get_metadata_session", return_value=sess)
+
+        # 1. EADDRNOTAVAIL (Errno 99) must NOT poison _metadata_unreachable
+        port_err = requests_lib.exceptions.ConnectionError(
+            OSError(errno.EADDRNOTAVAIL, "Cannot assign requested address")
+        )
+        sess.get.side_effect = port_err
+        with pytest.raises(util.MetadataNotFoundError):
+            util.get_metadata("instance/name", silent=True)
+        assert util._metadata_unreachable is False
+
+        # 2. Genuine missing metadata server (e.g. ECONNREFUSED on-prem) still sets _metadata_unreachable
+        conn_refused = requests_lib.exceptions.ConnectionError(
+            OSError(errno.ECONNREFUSED, "Connection refused")
+        )
+        sess.get.side_effect = conn_refused
+        with pytest.raises(util.MetadataNotFoundError):
+            util.get_metadata("instance/name", silent=True)
+        assert util._metadata_unreachable is True
+    finally:
+        util._metadata_unreachable = orig_unreachable
+
+
+def test_retry_exception_includes_transient_5xx():
+    class FakeHttpError(Exception):
+        def __init__(self, status: int, msg: str) -> None:
+            self.resp = Mock(status=status)
+            self._msg = msg
+
+        def __str__(self) -> str:
+            return self._msg
+
+    err_503 = FakeHttpError(503, "<HttpError 503 'Backend Error'>")
+    assert util.retry_exception(err_503) is True
+
+    # HTTP 503 from GCE stockout (reason='insufficientCapacity') must fail fast to REQUEUE, NOT spin-retry
+    err_503_stockout = FakeHttpError(
+        503,
+        "<HttpError 503 returned 'Region does not currently have sufficient capacity' reason='insufficientCapacity'>",
+    )
+    assert util.retry_exception(err_503_stockout) is False
+
+    err_400 = FakeHttpError(400, "<HttpError 400 'Invalid value'>")
+    assert util.retry_exception(err_400) is False
+
+
+def test_thread_local_http_isolates_worker_threads_from_main_thread_builder(mocker):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    created_https = []
+    create_lock = threading.Lock()
+
+    def fake_http_factory(timeout=None):
+        assert timeout == 120
+        tid_owner = threading.get_ident()
+        m = Mock()
+        m.owner_tid = tid_owner
+
+        def fake_req(uri, method="GET", body=None, headers=None, **kwargs):
+            # Assert the Http instance is ONLY ever used by the thread that created it!
+            assert threading.get_ident() == m.owner_tid
+            resp = Mock(status=200)
+            return resp, b"{}"
+
+        m.request = fake_req
+        with create_lock:
+            created_https.append(m)
+        return m
+
+    mocker.patch("util.httplib2.Http", side_effect=fake_http_factory)
+    tls_http = util._ThreadLocalHttp(credentials=None, user_agent="test-agent")
+
+    # Build all requests on the MAIN thread, then execute across 6 worker threads
+    reqs = [tls_http for _ in range(24)]
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(lambda h: h.request("https://compute.googleapis.com/test"), reqs))
+
+    # Main thread never executed a request, and at most 6 worker Http pools were created
+    assert 1 <= len(created_https) <= 6
+
+
+def test_ensure_execute_retries_ephemeral_port_exhaustion(mocker):
+    import errno
+
+    mocker.patch("util.sleep")
+    req = Mock()
+    port_err = RuntimeError("RefreshError: [Errno 99] Cannot assign requested address")
+    port_err.__cause__ = OSError(errno.EADDRNOTAVAIL, "Cannot assign requested address")
+    req.execute.side_effect = [port_err, {"status": "DONE"}]
+
+    assert util.ensure_execute(req) == {"status": "DONE"}
+    assert req.execute.call_count == 2
+    assert util.retry_exception(port_err) is True
+
+
+def test_ensure_execute_retries_socket_timeout_and_raises_on_exhaustion(mocker):
+    import socket
+
+    mocker.patch("util.sleep")
+    req = Mock()
+    req.execute.side_effect = [socket.timeout("read timed out"), {"status": "DONE"}]
+    assert util.ensure_execute(req) == {"status": "DONE"}
+    assert req.execute.call_count == 2
+
+    req_fail = Mock()
+    req_fail.execute.side_effect = socket.timeout("persistent read timeout")
+    with pytest.raises(socket.timeout, match="persistent read timeout"):
+        util.ensure_execute(req_fail)
+    assert req_fail.execute.call_count == 20
+
+
+def test_delete_instances_ignores_404(mocker):
+    import suspend
+
+    lkp = Mock()
+    lkp.instance.return_value = Mock(zone="us-central1-a")
+    mocker.patch("suspend.lookup", return_value=lkp)
+    mocker.patch("suspend.delete_instance_request", return_value=Mock())
+    err_404 = Exception("HttpError 404 when requesting ... was not found")
+    mocker.patch("suspend.batch_execute", return_value=({}, {"node-0": (Mock(), err_404)}))
+    mock_err = mocker.patch.object(suspend.log, "error")
+    mocker.patch("watch_delete_vm_op.watch_delete_vm_op_topic")
+
+    suspend.delete_instances(["node-0"])
+    mock_err.assert_not_called()
+
+
+def test_batch_execute_caps_transient_retries(mocker):
+    class FakeHttpError(Exception):
+        def __init__(self, status: int, msg: str) -> None:
+            self.resp = Mock(status=status)
+            self._msg = msg
+
+        def __str__(self) -> str:
+            return self._msg
+
+    err_503 = FakeHttpError(503, "<HttpError 503 'Backend Error'>")
+    exec_calls = 0
+
+    def fake_new_batch(callback):
+        added = []
+        batch = Mock()
+        batch.add.side_effect = lambda req, request_id: added.append((request_id, req))
+
+        def do_exec():
+            nonlocal exec_calls
+            exec_calls += 1
+            for rid, _ in added:
+                callback(rid, None, err_503)
+
+        batch.execute.side_effect = do_exec
+        return batch
+
+    lkp = Mock()
+    lkp.compute.new_batch_http_request.side_effect = fake_new_batch
+    mocker.patch("util.universe_domain", return_value=util.DEFAULT_UNIVERSE_DOMAIN)
+    mocker.patch("util.lookup", return_value=lkp)
+    mocker.patch("util.sleep")
+
+    req = Mock()
+    done, failed = util.batch_execute({"node-0": req})
+    assert done == {}
+    assert "node-0" in failed
+    assert failed["node-0"] == (req, err_503)
+    assert exec_calls == 13  # initial attempt + MAX_BATCH_RETRIES (12)
+
+
+def test_watch_delete_vm_op_nacks_on_ephemeral_port_exhaustion(mocker):
+    import errno
+    import watch_delete_vm_op
+
+    lkp = Mock()
+    lkp.instance.return_value = Mock(status="RUNNING")
+    port_err = RuntimeError("RefreshError: [Errno 99] Cannot assign requested address")
+    port_err.__cause__ = OSError(errno.EADDRNOTAVAIL, "Cannot assign requested address")
+    op_req = Mock()
+    op_req.execute.side_effect = port_err
+    mocker.patch("util.get_operation_req", return_value=op_req)
+
+    msg = watch_delete_vm_op.WatchDeleteVmOp_Message(
+        op_name="op-del-1", zone="us-central1-a", node="c-n-0"
+    )
+    assert watch_delete_vm_op._watch_op(lkp, msg) is False
