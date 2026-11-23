@@ -75,7 +75,7 @@ var (
 )
 
 func verifyGcsBuckets(ctx context.Context, bp config.Blueprint) error {
-	buckets, err := modulewriter.GetUniqueGcsBuckets(bp)
+	buckets, err := gcsStateBuckets(bp)
 	if err != nil {
 		return err
 	}
@@ -87,9 +87,10 @@ func verifyGcsBuckets(ctx context.Context, bp config.Blueprint) error {
 		}
 	}()
 
-	for _, bucketName := range buckets {
+	for _, bucket := range buckets {
+		bucketName := bucket.name
 		if client == nil {
-			client, err = storage.NewClient(ctx)
+			client, err = newGcsClient(ctx)
 			if err != nil {
 				logging.Warn("Failed to initialize GCS client to verify bucket '%s': %v. Ensure you have the necessary permissions and network access.", bucketName, err)
 				continue
@@ -339,6 +340,15 @@ func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.Yam
 	}
 	if err := setCLIVariables(&ds, expandFlags.cliVariables); err != nil {
 		logging.Fatal("Failed to set the variables at CLI: %v", err)
+	}
+	// --backend-config defaults to the "gcs" type; refuse to let that silently
+	// replace a backend of another type set in the blueprint or deployment file.
+	currentBackendType := bp.TerraformBackendDefaults.Type
+	if ds.TerraformBackendDefaults.Type != "" {
+		currentBackendType = ds.TerraformBackendDefaults.Type
+	}
+	if err := checkBackendConfigType(currentBackendType, expandFlags.cliBEConfigVars); err != nil {
+		logging.Fatal("Failed to set the backend config at CLI: %v", err)
 	}
 	if err := setBackendConfig(&ds, expandFlags.cliBEConfigVars); err != nil {
 		logging.Fatal("Failed to set the backend config at CLI: %v", err)

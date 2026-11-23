@@ -174,7 +174,9 @@ subcommands as well:
 > name=value variables to set Terraform Backend configuration in blueprints.
 > This feature only supports variables of string type. If you set configuration
 > in both the blueprint and CLI, the tool uses values at CLI. "gcs" is set as
-> type by default.
+> type by default. If the blueprint or deployment file sets a backend of
+> another type, you must pass `type=` explicitly (for example `type=s3` to keep
+> that backend type, or `type=gcs` to switch to a GCS backend).
 
 **Note:** GCS buckets created for Terraform state are not deleted by the `./gcluster destroy` command and must be deleted manually.
 

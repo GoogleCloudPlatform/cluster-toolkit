@@ -216,7 +216,7 @@ func deployTerraformGroup(groupDir string, artifactsDir string, applyBehavior sh
 }
 
 func createGcsBucketsIfMissing(ctx context.Context, bp config.Blueprint) error {
-	buckets, err := modulewriter.GetUniqueGcsBuckets(bp)
+	buckets, err := gcsStateBuckets(bp)
 	if err != nil {
 		return err
 	}
@@ -228,11 +228,15 @@ func createGcsBucketsIfMissing(ctx context.Context, bp config.Blueprint) error {
 		}
 	}()
 
-	for _, bucketName := range buckets {
+	for _, bucket := range buckets {
+		bucketName := bucket.name
 		if client == nil {
-			client, err = storage.NewClient(ctx)
+			client, err = newGcsClient(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to initialize GCS client: %w", err)
+				// Not being able to check says nothing about the bucket, and
+				// Terraform may authenticate differently. Let it decide.
+				logging.Warn("Unable to initialize a GCS client to check the Terraform state bucket(s): %v. Skipping the check, so a missing bucket will not be created automatically; Terraform will report any problem with the backend. To have gcluster check and create the bucket, set up local credentials (for example `gcloud auth application-default login`) and re-run.", err)
+				return nil
 			}
 		}
 
@@ -242,21 +246,23 @@ func createGcsBucketsIfMissing(ctx context.Context, bp config.Blueprint) error {
 		cancel()
 
 		if errors.Is(err, storage.ErrBucketNotExist) {
-			if !flagAutoApprove {
-				prompt := fmt.Sprintf("The required Terraform state bucket '%s' is missing. We can create it now, but for data safety, 'gcluster destroy' will not delete it later. You must delete it manually when done.\nAlternatively, you can create it manually via `gcloud storage buckets create gs://%s --public-access-prevention` and then re-run this command.\nCreate it automatically? [y/N]: ", bucketName, bucketName)
-				if !confirmActionFunc(prompt) {
-					return fmt.Errorf("user aborted")
-				}
-			} else {
-				logging.Info("The required Terraform state bucket '%s' is missing. Auto-approving creation. Note: for data safety, 'gcluster destroy' will not delete it later. You must delete it manually when done.", bucketName)
-			}
-
 			projectID := config.GetKeyFromBlueprint("project_id", bp)
 			if projectID == "" {
 				return fmt.Errorf("cannot create bucket: project_id is missing or invalid in blueprint vars")
 			}
-
 			region := config.GetKeyFromBlueprint("region", bp)
+
+			target, manualCmd := describeBucketCreation(bucket, projectID, region)
+
+			if !flagAutoApprove {
+				prompt := fmt.Sprintf("The required Terraform state bucket '%s' is missing. We can create it now in %s. For data safety, 'gcluster destroy' will not delete it later. You must delete it manually when done.\nAlternatively, you can create it manually via `%s` and then re-run this command.\nCreate it automatically? [y/N]: ", bucketName, target, manualCmd)
+				if !confirmActionFunc(prompt) {
+					return fmt.Errorf("user aborted")
+				}
+			} else {
+				logging.Info("The required Terraform state bucket '%s' is missing. Auto-approving creation in %s. Note: for data safety, 'gcluster destroy' will not delete it later. You must delete it manually when done.", bucketName, target)
+			}
+
 			// Create the state bucket with Public Access Prevention enforced
 			bucketAttrs := &storage.BucketAttrs{
 				PublicAccessPrevention: storage.PublicAccessPreventionEnforced,
