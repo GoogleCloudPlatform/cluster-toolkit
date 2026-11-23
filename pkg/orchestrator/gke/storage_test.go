@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
@@ -2990,33 +2991,42 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 	// The mock fails any command it has no response for, so a missing del response makes a delete attempt an error.
 	newSM := func(res shell.CommandResult, del, wait, gone []shell.CommandResult) *StorageManager {
 		exec := NewMockExecutor(map[string][]shell.CommandResult{
-			"kubectl get pv " + pvName: {res},
-			"kubectl delete pv " + pvName + " --ignore-not-found --wait=true --timeout=60s": del,
-			"kubectl wait --for=delete pv/" + pvName:                                        wait,
-			"kubectl get pv " + pvName + " --ignore-not-found -o name":                      gone,
+			"kubectl get pv " + pvName + " --ignore-not-found " + kubectlReadTimeout + " -o json":     {res},
+			"kubectl delete pv " + pvName + " --ignore-not-found --wait=true --timeout=60s":           del,
+			"kubectl wait --for=delete pv/" + pvName + " --timeout=" + gatewayReleaseTimeout.String(): wait,
+			"kubectl get pv " + pvName + " --ignore-not-found " + kubectlReadTimeout + " -o name":     gone,
 		})
-		return &StorageManager{orchestrator: &GKEOrchestrator{executor: exec, namespace: "default"}}
+		g := newTestGKEOrchestrator(exec)
+		g.namespace = "default"
+		return &StorageManager{orchestrator: g}
 	}
 
 	forbidden := shell.CommandResult{ExitCode: 1, Stderr: `persistentvolumes "x" is forbidden: User cannot get resource "persistentvolumes"`}
 	tests := []struct {
-		name    string
-		res     shell.CommandResult
-		del     []shell.CommandResult
-		wait    []shell.CommandResult
-		gone    []shell.CommandResult
-		dryRun  bool
-		wantErr []string // substrings; nil means success
+		name       string
+		res        shell.CommandResult
+		del        []shell.CommandResult
+		wait       []shell.CommandResult
+		gone       []shell.CommandResult
+		dryRun     bool
+		wantErr    []string // substrings; nil means success
+		forbidSubs []string // substrings that must NOT appear in the error
 	}{
 		{name: "absent PV", res: shell.CommandResult{Stdout: ""}},
 		{name: "matching Bound PV", res: shell.CommandResult{Stdout: matchingPVJSON}},
 		{name: "mismatched PV", res: shell.CommandResult{Stdout: mismatchedPVJSON}, wantErr: []string{"already exists with different settings", `namespace "default"`, "kubectl describe pvc " + pvcName + " -n default", "kubectl delete pvc " + pvcName + " -n default && kubectl delete pv " + pvName, "Bucket data is not affected"}},
 		{name: "Terminating PV is waited out, then recreated", res: shell.CommandResult{Stdout: terminatingPVJSON}, wait: []shell.CommandResult{{}}},
-		{name: "Terminating PV that outlives the wait explains pending deletion", res: shell.CommandResult{Stdout: terminatingPVJSON}, wait: []shell.CommandResult{{ExitCode: 1, Stderr: "timed out"}}, wantErr: []string{"is being deleted", "PVC default/" + pvcName, "kubectl delete pvc " + pvcName + " -n default"}},
+		{name: "Terminating PV that outlives the wait explains pending deletion", res: shell.CommandResult{Stdout: terminatingPVJSON}, wait: []shell.CommandResult{{ExitCode: 1, Stdout: "Timed out waiting for the condition"}}, gone: []shell.CommandResult{{Stdout: "persistentvolume/" + pvName + "\n"}}, wantErr: []string{"is being deleted", "PVC default/" + pvcName, "kubectl describe pvc " + pvcName + " -n default", "kubectl delete pvc " + pvcName + " -n default --ignore-not-found"}},
+		{name: "Terminating PV wait deadline exceeded explains pending deletion", res: shell.CommandResult{Stdout: terminatingPVJSON}, wait: []shell.CommandResult{{ExitCode: 1, Stderr: "context deadline exceeded"}}, gone: []shell.CommandResult{{Stdout: "persistentvolume/" + pvName + "\n"}}, wantErr: []string{"is being deleted", "PVC default/" + pvcName, "kubectl describe pvc " + pvcName + " -n default", "kubectl delete pvc " + pvcName + " -n default --ignore-not-found"}},
+		{name: "Terminating PV wait forbidden with trailing timeout surfaces wait stderr", res: shell.CommandResult{Stdout: terminatingPVJSON}, wait: []shell.CommandResult{{ExitCode: 1, Stderr: "E0101 reflector.go:1] persistentvolumes \"" + pvName + "\" is forbidden: User cannot watch\nerror: timed out waiting for the condition on persistentvolumes/" + pvName}}, gone: []shell.CommandResult{{Stdout: "persistentvolume/" + pvName + "\n"}}, wantErr: []string{"failed to wait for gateway PV", "is forbidden: User cannot watch"}, forbidSubs: []string{"waiting for PVC"}},
+		{name: "Terminating PV wait stream error with trailing timeout surfaces wait stderr", res: shell.CommandResult{Stdout: terminatingPVJSON}, wait: []shell.CommandResult{{ExitCode: 1, Stderr: "error: An error occurred while waiting for the object to be deleted: internal error\nerror: timed out waiting for the condition on persistentvolumes/" + pvName}}, gone: []shell.CommandResult{{Stdout: "persistentvolume/" + pvName + "\n"}}, wantErr: []string{"failed to wait for gateway PV", "An error occurred while waiting"}, forbidSubs: []string{"waiting for PVC"}},
+		{name: "Terminating PV wait non-timeout error surfaces wait stderr", res: shell.CommandResult{Stdout: terminatingPVJSON}, wait: []shell.CommandResult{{ExitCode: 1, Stderr: "Unable to connect to the server: x509: certificate signed by unknown authority"}}, gone: []shell.CommandResult{{Stdout: "persistentvolume/" + pvName + "\n"}}, wantErr: []string{"failed to wait for gateway PV", "x509: certificate signed by unknown authority"}, forbidSubs: []string{"waiting for PVC"}},
+		{name: "Terminating PV wait and follow-up get failure surfaces both errors", res: shell.CommandResult{Stdout: terminatingPVJSON}, wait: []shell.CommandResult{{ExitCode: 1, Stderr: "timed out"}}, gone: []shell.CommandResult{{ExitCode: 1, Stdout: "forbidden"}}, wantErr: []string{"failed to verify deletion of gateway PV", "timed out", "forbidden"}, forbidSubs: []string{"waiting for PVC"}},
 		{name: "Terminating PV already gone when the wait fails", res: shell.CommandResult{Stdout: terminatingPVJSON}, wait: []shell.CommandResult{{ExitCode: 1, Stderr: "not found"}}, gone: []shell.CommandResult{{}}},
 		{name: "unmanaged Released PV is left to the user", res: shell.CommandResult{Stdout: releasedPVJSON}, wantErr: []string{"already exists in Released state", "will not delete it", "kubectl delete pv " + pvName}},
 		{name: "managed Released PV is deleted and recreated", res: shell.CommandResult{Stdout: managedReleasedPVJSON}, del: []shell.CommandResult{{}}},
 		{name: "managed Released PV delete failure", res: shell.CommandResult{Stdout: managedReleasedPVJSON}, del: []shell.CommandResult{{ExitCode: 1, Stderr: "forbidden"}}, wantErr: []string{"failed to delete stale gateway PV", "forbidden"}},
+		{name: "managed Released PV delete failure without stderr surfaces stdout", res: shell.CommandResult{Stdout: managedReleasedPVJSON}, del: []shell.CommandResult{{ExitCode: 1, Stdout: "webhook denied delete"}}, wantErr: []string{"failed to delete stale gateway PV", "webhook denied delete"}},
 		{name: "dry-run skips cluster check", res: shell.CommandResult{Stdout: mismatchedPVJSON}, dryRun: true},
 		{name: "kubectl failure fails fast", res: forbidden, wantErr: []string{"failed to inspect existing gateway PV", "is forbidden"}},
 		{name: "unparsable PV fails fast", res: shell.CommandResult{Stdout: "{not json"}, wantErr: []string{"failed to parse existing gateway PV"}},
@@ -3042,8 +3052,112 @@ func TestGCSFuseProfile_ExistingGatewayPVCheck(t *testing.T) {
 					t.Errorf("error %q missing %q", err, want)
 				}
 			}
+			for _, forbid := range tc.forbidSubs {
+				if strings.Contains(err.Error(), forbid) {
+					t.Errorf("error %q must not contain %q", err, forbid)
+				}
+			}
 		})
 	}
+}
+
+func TestGatewayRemediationCommandsPinKubeContext(t *testing.T) {
+	const (
+		kubeCtx = "gke_proj_us-central1_cluster"
+		pvName  = "gcluster-gcsfuse-bkt-training-pv"
+		pvcName = "gcluster-gcsfuse-bkt-training"
+		ns      = "ml-team"
+	)
+
+	t.Run("recreateStaleGatewayPV unmanaged PV pins context", func(t *testing.T) {
+		g := newTestGKEOrchestrator(nil)
+		g.kubeContext = kubeCtx
+		sm := &StorageManager{orchestrator: g}
+		var existing existingGatewayPV
+		existing.Status.Phase = "Released"
+		err := sm.recreateStaleGatewayPV(pvName, existing)
+		want := "kubectl --context " + kubeCtx + " delete pv " + pvName
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("recreateStaleGatewayPV() = %v, want %q", err, want)
+		}
+	})
+
+	t.Run("recreateStaleGatewayPV managed PV delete pins context on subprocess", func(t *testing.T) {
+		exec := NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl delete pv " + pvName + " --ignore-not-found --wait=true --timeout=60s": {{}},
+		})
+		g := newTestGKEOrchestrator(exec)
+		g.kubeContext = kubeCtx
+		sm := &StorageManager{orchestrator: g}
+		var existing existingGatewayPV
+		existing.Metadata.Labels = map[string]string{managedByLabel: managedByValue}
+		existing.Status.Phase = "Released"
+		if err := sm.recreateStaleGatewayPV(pvName, existing); err != nil {
+			t.Fatalf("recreateStaleGatewayPV() = %v, want nil", err)
+		}
+		exec.assertAllKubectlPinned(t, kubeCtx)
+	})
+
+	t.Run("waitForGatewayRelease pins context on subprocesses and remediation hints", func(t *testing.T) {
+		exec := NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl wait --for=delete pv/" + pvName + " --timeout=" + gatewayReleaseTimeout.String(): {{ExitCode: 1, Stderr: "timed out"}},
+			"kubectl get pv " + pvName + " --ignore-not-found " + kubectlReadTimeout + " -o name":     {{Stdout: "persistentvolume/" + pvName + "\n"}},
+		})
+		g := newTestGKEOrchestrator(exec)
+		g.kubeContext = kubeCtx
+		sm := &StorageManager{orchestrator: g}
+		err := sm.waitForGatewayRelease(pvName, pvcName, ns)
+		wantDesc := "kubectl --context " + kubeCtx + " describe pvc " + pvcName + " -n " + ns
+		wantDel := "kubectl --context " + kubeCtx + " delete pvc " + pvcName + " -n " + ns + " --ignore-not-found"
+		if err == nil || !strings.Contains(err.Error(), wantDesc) || !strings.Contains(err.Error(), wantDel) {
+			t.Fatalf("waitForGatewayRelease() = %v, want %q and %q", err, wantDesc, wantDel)
+		}
+		if len(exec.calls) != 2 {
+			t.Fatalf("expected 2 kubectl calls (wait + get pv), got %d: %v", len(exec.calls), exec.calls)
+		}
+		exec.assertAllKubectlPinned(t, kubeCtx)
+	})
+
+	t.Run("verifyStorageGateways and rollBackJob pin context", func(t *testing.T) {
+		mock := gatewayMock(nil)
+		mock.DeleteJobSetErr = fmt.Errorf("delete forbidden")
+		g := newTestGKEOrchestrator(nil)
+		g.kubeClient = mock
+		g.kubeContext = kubeCtx
+		g.namespace = ns
+		g.dynClient = nopDynamicClient{}
+		manifest := "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: " + pvcName + "\n"
+		err := g.verifyStorageGateways(manifest, "train-job")
+		wantPVC := "kubectl --context " + kubeCtx + " delete pvc " + pvcName + " -n " + ns + " --ignore-not-found"
+		wantPV := "kubectl --context " + kubeCtx + " delete pv " + sanitizePVCName(pvcName+"-"+ns) + " --ignore-not-found"
+		wantJob := "kubectl --context " + kubeCtx + " delete jobset train-job -n " + ns
+		if err == nil || !strings.Contains(err.Error(), wantPVC) || !strings.Contains(err.Error(), wantPV) || !strings.Contains(err.Error(), wantJob) {
+			t.Fatalf("verifyStorageGateways() = %v, want %q, %q, and %q", err, wantPVC, wantPV, wantJob)
+		}
+	})
+
+	t.Run("deleteStorageGateway PV delete failure logs pinned context", func(t *testing.T) {
+		pvc := gatewayPVC(pvcName, pvName, time.Hour)
+		pvc.SetUID("pvc-uid")
+		pv := *managedStorageObject("PersistentVolume", pvName)
+		pv.SetUID("pv-uid")
+		pv.Object["spec"] = map[string]interface{}{"claimRef": map[string]interface{}{"uid": "pvc-uid"}}
+		mock := &MockKubeClient{
+			Objects:    map[string][]unstructured.Unstructured{"persistentvolumes": {pv}},
+			DeleteErrs: map[string]error{"persistentvolumes": fmt.Errorf("forbidden")},
+		}
+		g := newTestGKEOrchestrator(nil)
+		g.kubeClient = mock
+		g.kubeContext = kubeCtx
+		snap, restore := logging.CaptureForTesting(t)
+		defer restore()
+		g.deleteStorageGateway(ns, pvc.DeepCopy())
+		_, errOut := snap()
+		want := "kubectl --context " + kubeCtx + " delete pv " + pvName
+		if !strings.Contains(errOut, want) {
+			t.Fatalf("deleteStorageGateway stderr = %q, want %q", errOut, want)
+		}
+	})
 }
 
 func TestUnmanagedGatewayWarning(t *testing.T) {
@@ -4259,7 +4373,7 @@ func TestVerifyStorageGateways(t *testing.T) {
 		{name: "gateway PV deleted by a concurrent cleanup rolls back", pvc: func() *unstructured.Unstructured {
 			p := gatewayPVC(verifyClaim, "gone-pv", time.Second)
 			return &p
-		}(), wantErr: []string{"was not started"}, wantRollback: true},
+		}(), wantErr: []string{"was not started", "kubectl delete pv gone-pv --ignore-not-found"}, wantRollback: true},
 		{name: "PV still bound to a deleted claim rolls back", pvc: func() *unstructured.Unstructured { p := freshPVC(); return &p }(), pvClaimUID: "old-uid", wantErr: []string{"was not started", "kubectl delete pvc " + verifyClaim + " -n default"}, wantRollback: true},
 		{name: "PV bound to this claim keeps the job", pvc: func() *unstructured.Unstructured { p := freshPVC(); return &p }(), pvClaimUID: "new-uid"},
 		{name: "failed rollback tells the user how to clean up", rollbackErr: fmt.Errorf("forbidden"), wantErr: []string{"kubectl delete jobset job-new -n default", "forbidden"}, wantRollback: true},
