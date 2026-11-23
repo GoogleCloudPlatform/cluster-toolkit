@@ -95,24 +95,29 @@ steps:
               DEPLOYMENT_NAME="$$BUILD_ID_SHORT-slurm-reconfig"
               BP_BEFORE="tools/python-integration-tests/blueprints/slurm-reconfig-before.yaml"
               BP_AFTER="tools/python-integration-tests/blueprints/slurm-reconfig-after.yaml"
-              BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BP_BEFORE" 2>/dev/null | awk '{print \$$2}' || true)
+              # Register the SIGTERM handler FIRST. bash is PID 1 here and ignores
+              # SIGTERM until a trap is installed. RUN_CLEANUP=false => just exit.
+              RUN_CLEANUP=false
+              source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
+              trap cleanup_pod EXIT
+              trap 'cleanup_pod 143' SIGTERM
+              trap 'cleanup_pod 130' SIGINT
 
               # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
               echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/\$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
+              bash tools/cloud-build/clear_tf_state_locks.sh "\$$BP_BEFORE" "\$$DEPLOYMENT_NAME" || true
 
               RUN_CLEANUP=true
-              source /workspace/tools/cloud-build/kueue_cleanup_pod.sh
-              trap cleanup_pod EXIT SIGTERM SIGINT
-
               bash tools/get_binary.sh "" "true"
 
               # 2. Run the TTL script on both files
               bash tools/add_ttl_label.sh \$$BP_BEFORE
               bash tools/add_ttl_label.sh \$$BP_AFTER
 
-              python3 tools/python-integration-tests/slurm_reconfig_size.py
+              python3 tools/python-integration-tests/slurm_reconfig_size.py &
+              ANSIBLE_PID=\$$!
 
+              wait \$$ANSIBLE_PID
               RUN_CLEANUP=false
             resources:
               requests:

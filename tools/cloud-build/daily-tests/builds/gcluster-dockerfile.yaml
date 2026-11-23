@@ -95,45 +95,59 @@ steps:
 
               DEPLOYMENT_NAME="dockerfile-test"
               BLUEPRINT="tools/cloud-build/daily-tests/blueprints/e2e.yaml"
-              BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | awk '{print \$$2}' || true)
-
-              # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
-              echo "Checking for and clearing leaked Terraform state locks..."
-              gcloud storage rm -r "gs://daily-tests-tf-state/\$${BP_NAME:-*}/\$$DEPLOYMENT_NAME/**.tflock" 2>/dev/null || true
-
-              RUN_CLEANUP=true
+              RUN_CLEANUP=false
+              GCLUSTER_PID=""
               cleanup_pod() {
-                local exit_code=\$$?
-                trap - EXIT SIGTERM SIGINT ERR
+                local exit_code=\$${1:-\$$?}
+                trap '' SIGTERM SIGINT
+                trap - EXIT ERR
                 set +e
 
-                if [ "\$$RUN_CLEANUP" = "false" ]; then
-                  exit 0
+                if [ "\$${RUN_CLEANUP:-false}" = "false" ]; then
+                  exit "\$$exit_code"
                 fi
-                if [ \$$exit_code -eq 0 ]; then exit_code=1; fi
+                if [ "\$$exit_code" -eq 0 ]; then exit_code=1; fi
 
                 echo ""
                 echo "=========================================================================="
                 echo "CAUGHT SIGTERM OR SCRIPT ERROR! Destroying resources..."
                 echo "=========================================================================="
+                if [ -n "\$${GCLUSTER_PID:-}" ]; then
+                  kill -TERM "\$$GCLUSTER_PID" 2>/dev/null || true
+                  wait "\$$GCLUSTER_PID" 2>/dev/null || true
+                  echo "Waiting 15s for Terraform to release GCS backend state locks..."
+                  sleep 15
+                fi
                 if [ -d "/workspace/dockerfile-test" ]; then
                   gcluster destroy /workspace/dockerfile-test --auto-approve --robust || true
                 fi
 
                 echo "Graceful cleanup finished."
-                exit \$$exit_code
+                exit "\$$exit_code"
               }
-              trap cleanup_pod EXIT SIGTERM SIGINT ERR
+              trap cleanup_pod EXIT
+              trap 'cleanup_pod 143' SIGTERM
+              trap 'cleanup_pod 130' SIGINT
+              # Force clear any leaked Terraform state locks from previously preempted attempts of this test run.
+              echo "Checking for and clearing leaked Terraform state locks..."
+              bash tools/cloud-build/clear_tf_state_locks.sh "\$$BLUEPRINT" "\$$DEPLOYMENT_NAME" || true
+              RUN_CLEANUP=true
 
               echo "=== STAGE: modify-blueprint ==="
               echo "--- Modifying Blueprint with add_ttl_label.sh ---"
               bash tools/add_ttl_label.sh "\$$BLUEPRINT"
 
               echo "=== STAGE: create-deployment-folder ==="
-              gcluster create tools/cloud-build/daily-tests/blueprints/e2e.yaml --out /workspace --vars project_id=$PROJECT_ID,deployment_name=dockerfile-test,region=us-central1,zone=us-central1-a
+              gcluster create tools/cloud-build/daily-tests/blueprints/e2e.yaml --out /workspace --vars project_id=$PROJECT_ID,deployment_name=dockerfile-test,region=us-central1,zone=us-central1-a &
+              GCLUSTER_PID=\$$!
+              wait "\$$GCLUSTER_PID"
+              GCLUSTER_PID=""
 
               echo "=== STAGE: deploy-resources ==="
-              gcluster deploy /workspace/dockerfile-test --auto-approve
+              gcluster deploy /workspace/dockerfile-test --auto-approve &
+              GCLUSTER_PID=\$$!
+              wait "\$$GCLUSTER_PID"
+              GCLUSTER_PID=""
 
               echo "=== STAGE: check-on-resources ==="
               depl_name="dockerfile-test"
@@ -141,7 +155,10 @@ steps:
               gcloud compute instances describe "\$${depl_name}-0" --project="$PROJECT_ID" --zone="\$$zone" >/dev/null
 
               echo "=== STAGE: destroy-resources ==="
-              gcluster destroy /workspace/dockerfile-test --auto-approve --robust
+              gcluster destroy /workspace/dockerfile-test --auto-approve --robust &
+              GCLUSTER_PID=\$$!
+              wait "\$$GCLUSTER_PID"
+              GCLUSTER_PID=""
 
               RUN_CLEANUP=false
             resources:
