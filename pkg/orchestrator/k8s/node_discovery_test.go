@@ -1058,3 +1058,111 @@ func TestDiscoverInventory_MixedPoolDeterminism25Runs(t *testing.T) {
 		}
 	}
 }
+
+func TestDiscoverInventory_MultiPoolTopologiesIntelGPUAndOverflow(t *testing.T) {
+	t.Parallel()
+	// Two matching primary ct6e-standard-4t GKE pools with different topologies (2x4 and 4x4)
+	// must contribute BOTH topologies to inv.TPU.Topologies.
+	poolA := makeNode("v6e-a", map[string]string{
+		InstanceTypeLabel:      "ct6e-standard-4t",
+		GKENodePoolLabel:       "pool-a",
+		GKETPUAcceleratorLabel: "tpu-v6e-slice",
+		GKETPUTopologyLabel:    "2x4",
+	}, map[string]interface{}{"cpu": "120", "google.com/tpu": "4"}, true)
+	poolB := makeNode("v6e-b", map[string]string{
+		InstanceTypeLabel:      "ct6e-standard-4t",
+		GKENodePoolLabel:       "pool-b",
+		GKETPUAcceleratorLabel: "tpu-v6e-slice",
+		GKETPUTopologyLabel:    "4x4",
+	}, map[string]interface{}{"cpu": "120", "google.com/tpu": "4"}, true)
+	// Intel GPU node with both whole-device i915 and millicores must report 1 GPU (not 1001).
+	intelNode := makeNode("intel-1", map[string]string{
+		InstanceTypeLabel: "n2-standard-8",
+		GKENodePoolLabel:  "intel-pool",
+	}, map[string]interface{}{
+		"cpu":                           "8",
+		"gpu.intel.com/i915":            "1",
+		"gpu.intel.com/millicores":      "1000",
+		"gpu.intel.com/i915_monitoring": "1",
+	}, true)
+
+	lister := &fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR: {poolA, poolB, intelNode},
+		},
+	}
+	inv, err := DiscoverInventory(lister, nil, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory failed: %v", err)
+	}
+	if inv.TPU == nil || !slices.Equal(inv.TPU.Topologies, []string{"2x4", "4x4"}) {
+		t.Errorf("expected both primary pool topologies [2x4 4x4], got %+v", inv.TPU)
+	}
+	foundIntel := false
+	for _, p := range inv.Pools {
+		if p.NodePoolName == "intel-pool" {
+			foundIntel = true
+			if !p.IsGPU || p.GPUsPerNode != 1 || p.GPUType != "gpu.intel.com/i915" {
+				t.Errorf("intel GPU pool = %+v, want 1 GPU of gpu.intel.com/i915", p)
+			}
+		}
+	}
+	if !foundIntel {
+		t.Errorf("intel-pool missing from discovered pools: %v", inv.PoolNames)
+	}
+	if chips, ok := parseTopologyChipCount("999999999x999999999x999999999"); ok || chips != 0 {
+		t.Errorf("parseTopologyChipCount overflow = (%d, %v), want (0, false)", chips, ok)
+	}
+}
+
+func TestDiscoverInventory_PartitionTree403NoFallbackAndCordonedTPUSlice(t *testing.T) {
+	t.Parallel()
+	// Cordoned TPU slice node (Ready=True, unschedulable=true) must mark its slice not ready.
+	cordonedTPU := makeNodeWithSpec("tpu-cordoned", map[string]string{
+		InstanceTypeLabel: "tpu7x-standard-4t",
+		TPUSliceTypeLabel: "tpu7x",
+		TPUSliceNameLabel: "cordoned-slice",
+	}, map[string]interface{}{"cpu": "240", "google.com/tpu": "4"}, true, true, nil)
+
+	lister := &fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR:     {cordonedTPU},
+			TPUSliceGVR: {makeSliceCRD("cordoned-slice", "", "tpu7x", "2x2x1", "True", "READY", nil)},
+		},
+		errGVR: map[schema.GroupVersionResource]error{
+			TPUPartitionTreeGVR: apierrors.NewForbidden(TPUPartitionTreeGVR.GroupResource(), "", errors.New("forbidden")),
+		},
+	}
+	inv, err := DiscoverInventory(lister, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory failed: %v", err)
+	}
+	if slices.Contains(lister.calls, TPUPartitionTreeV1Beta1GVR) {
+		t.Errorf("PartitionTree 403 must not fall back to v1beta1; calls=%v", lister.calls)
+	}
+	if inv.TPU == nil || inv.TPU.DefaultSliceName != "" || inv.TPU.ReadyTPUNodes != 0 {
+		t.Errorf("cordoned TPU slice node must not be selected as ready default slice: %+v", inv.TPU)
+	}
+	if len(inv.Slices) != 1 || inv.Slices[0].Ready {
+		t.Errorf("expected cordoned-slice Ready=false, got %+v", inv.Slices)
+	}
+
+	// Untyped primary TPU node with topology must keep its topology in inv.TPU.Topologies
+	// even after applyDefaultSlice backfills tpu.TPUType and tpu.MachineType from a Slice CRD.
+	untypedNode := makeNode("untyped-tpu", map[string]string{
+		TPUSliceTopologyLabel: "2x2",
+	}, map[string]interface{}{"cpu": "64", "google.com/tpu": "4"}, true)
+	listerUntyped := &fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR:     {untypedNode},
+			TPUSliceGVR: {makeSliceCRD("v5e-slice", "", "v5e", "2x4", "False", "NotCreated", nil)},
+		},
+	}
+	invUntyped, err := DiscoverInventory(listerUntyped, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("untyped primary pool discovery failed: %v", err)
+	}
+	if invUntyped.TPU == nil || !slices.Equal(invUntyped.TPU.Topologies, []string{"2x2", "2x4"}) || invUntyped.TPU.Topology != "2x2" {
+		t.Errorf("untyped primary pool topology lost after applyDefaultSlice: %+v", invUntyped.TPU)
+	}
+}

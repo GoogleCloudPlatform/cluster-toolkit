@@ -15,6 +15,7 @@
 package gke
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -24,7 +25,10 @@ import (
 	"hpc-toolkit/pkg/orchestrator/k8s"
 )
 
-var registerProvidersOnce sync.Once
+var (
+	registerProvidersOnce      sync.Once
+	errKubeClientUninitialized = errors.New("Kubernetes API client is not initialized for node inventory discovery")
+)
 
 func init() {
 	RegisterProviders()
@@ -71,7 +75,6 @@ func (g *GKEOrchestrator) configureK8sKubectl(clusterName string) error {
 	if err != nil {
 		g.kubeContext = ""
 		g.k8sCluster = ""
-		g.resetManagedDynamicClient()
 		return fmt.Errorf("failed to load kubeconfig: %w", err)
 	}
 	if name, _, resolvedCluster, ok := k8s.ResolveContext(cfg, trimmed); ok {
@@ -85,7 +88,6 @@ func (g *GKEOrchestrator) configureK8sKubectl(clusterName string) error {
 	}
 	g.kubeContext = ""
 	g.k8sCluster = ""
-	g.resetManagedDynamicClient()
 	if trimmed != "" {
 		return fmt.Errorf("kubeconfig context or cluster %q was not found; check 'kubectl config get-contexts'", trimmed)
 	}
@@ -93,6 +95,60 @@ func (g *GKEOrchestrator) configureK8sKubectl(clusterName string) error {
 		return fmt.Errorf("kubeconfig current-context %q was not found; run 'kubectl config get-contexts' or pass --cluster <context>", dangling)
 	}
 	return fmt.Errorf("no current-context configured in kubeconfig; run 'kubectl config use-context <context>' or pass --cluster <context>")
+}
+
+func (g *GKEOrchestrator) clearInventory() {
+	g.inventory = nil
+}
+
+// Inventory returns the cached pure-Kubernetes cluster inventory discovered for the current run, if any.
+func (g *GKEOrchestrator) Inventory() *k8s.Inventory {
+	return g.inventory
+}
+
+// DiscoverK8sInventory queries Kubernetes nodes, TPU Slices/PartitionTrees, and non-privileged API
+// group discovery without invoking gcloud, caching the snapshot on g.inventory.
+// Platform label schemes are never inferred from --node-constraint or --compute-type.
+func (g *GKEOrchestrator) DiscoverK8sInventory(labelSchemeFlag string) (*k8s.Inventory, error) {
+	g.inventory = nil
+	schemeOverride, err := k8s.ResolveLabelSchemeOverride(labelSchemeFlag, nil)
+	if err != nil {
+		return nil, err
+	}
+	kc, err := g.requireKubeClientForDiscovery()
+	if err != nil {
+		return nil, err
+	}
+	var apiChecker k8s.APIGroupChecker
+	if strings.TrimSpace(g.kubeContext) != "" {
+		apiChecker = g
+	}
+	inv, err := k8s.DiscoverInventory(kc, apiChecker, k8s.DiscoverOptions{
+		LabelSchemeOverride: schemeOverride,
+		HardwareResolver:    gceTPUHardwareResolver{},
+	})
+	if err != nil {
+		return nil, err
+	}
+	g.inventory = inv
+	inv.LogSummary()
+	return inv, nil
+}
+
+func (g *GKEOrchestrator) requireKubeClientForDiscovery() (KubeClient, error) {
+	if g.needsDynamicClientInit() {
+		g.resetManagedDynamicClient()
+		if g.dynClient == nil && strings.TrimSpace(g.kubeContext) == "" {
+			return nil, errKubeClientUninitialized
+		}
+		if _, err := g.getDynamicClient(); err != nil {
+			return nil, fmt.Errorf("failed to initialize Kubernetes API client for node inventory discovery: %w", err)
+		}
+	}
+	if g.kubeClient == nil {
+		return nil, errKubeClientUninitialized
+	}
+	return g.kubeClient, nil
 }
 
 func (g *GKEOrchestrator) verifyK8sClusterReachable() error {

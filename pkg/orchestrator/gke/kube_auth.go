@@ -677,6 +677,9 @@ func (g *GKEOrchestrator) HasAPIGroupVersion(groupVersion string) (bool, error) 
 	if gv == "" {
 		return false, nil
 	}
+	if strings.TrimSpace(g.kubeContext) == "" {
+		return false, fmt.Errorf("internal error: refusing to query Kubernetes API group %q without an explicit --context", gv)
+	}
 	res := g.kubectlWithTimeout(apiGroupProbeTimeout, "get", "--raw", "/apis/"+gv, kubectlReadTimeout)
 	if errors.Is(res.Err, context.DeadlineExceeded) {
 		return false, fmt.Errorf("failed to query Kubernetes API group %q: timed out after %v: %w", gv, apiGroupProbeTimeout, res.Err)
@@ -688,25 +691,28 @@ func (g *GKEOrchestrator) HasAPIGroupVersion(groupVersion string) (bool, error) 
 	if isAPIGroupNotFoundText(combined) {
 		return false, nil
 	}
-	errLine := firstNonWarningLine(res.Stderr, res.Stdout, res.Err)
-	if errLine == "" {
-		errLine = fmt.Sprintf("exit status %d", res.ExitCode)
+	if errLine := firstNonWarningLine(res.Stderr, res.Stdout); errLine != "" {
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: %s", gv, errLine)
 	}
-	return false, fmt.Errorf("failed to query Kubernetes API group %q: %s", gv, errLine)
+	if res.Err != nil {
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: %w", gv, res.Err)
+	}
+	if fallback := firstNonWarningFallback(res.Stderr, res.Stdout); fallback != "" {
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: %s", gv, fallback)
+	}
+	return false, fmt.Errorf("failed to query Kubernetes API group %q: exit status %d", gv, res.ExitCode)
 }
 
-func firstNonWarningLine(stderr, stdout string, err error) string {
+func firstNonWarningLine(stderr, stdout string) string {
 	for _, block := range []string{stderr, stdout} {
 		if line := scanNonWarningLine(block); line != "" {
 			return line
 		}
 	}
-	if err != nil {
-		if line := scanNonWarningLine(err.Error()); line != "" {
-			return line
-		}
-		return firstLine(strings.TrimSpace(err.Error()))
-	}
+	return ""
+}
+
+func firstNonWarningFallback(stderr, stdout string) string {
 	if line := firstLine(strings.TrimSpace(stderr)); line != "" {
 		return line
 	}
@@ -728,15 +734,7 @@ func isKubectlWarningLine(line string) bool {
 	if strings.HasPrefix(strings.ToUpper(line), "WARNING:") {
 		return true
 	}
-	if len(line) >= 6 && line[0] == 'W' && line[5] == ' ' {
-		for i := 1; i <= 4; i++ {
-			if line[i] < '0' || line[i] > '9' {
-				return false
-			}
-		}
-		return true
-	}
-	return false
+	return len(line) >= 6 && line[0] == 'W' && line[5] == ' ' && isAllDigits(line[1:5])
 }
 
 func isAPIGroupNotFoundText(text string) bool {

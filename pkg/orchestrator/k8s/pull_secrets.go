@@ -155,6 +155,8 @@ func deferToServiceAccount(client ResourceReader, namespace, name string) bool {
 	case err != nil:
 		logging.Info("Skipping automatic imagePullSecrets discovery: cannot read ServiceAccount %s/%s: %v", namespace, name, err)
 		return true
+	case sa == nil:
+		return false
 	}
 	if refs, _, _ := unstructured.NestedSlice(sa.Object, "imagePullSecrets"); len(refs) > 0 {
 		logging.Info("Skipping automatic imagePullSecrets discovery: ServiceAccount %s/%s already lists imagePullSecrets.", namespace, name)

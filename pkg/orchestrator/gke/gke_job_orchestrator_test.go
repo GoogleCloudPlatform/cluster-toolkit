@@ -5137,21 +5137,25 @@ func TestHasAPIGroupVersion(t *testing.T) {
 }
 
 func TestHasAPIGroupVersion_ErrorsAndBlankInputs(t *testing.T) {
+	t.Parallel()
 	const testGroupVersion = "kueue.x-k8s.io"
 	const rawCmd = "kubectl get --raw /apis/kueue.x-k8s.io --request-timeout=10s"
+	errExecNotFound := errors.New(`exec: "kubectl": executable file not found in $PATH`)
+	errWarnOnly := errors.New("exit status 1")
 
 	for _, tc := range []struct {
 		name          string
 		res           shell.CommandResult
 		wantErrSubstr string
-		wantDeadline  bool
+		wantWrapped   error
 	}{
-		{name: "deadline exceeded wrapped before stderr", res: shell.CommandResult{ExitCode: 0, Stderr: "404 page not found", Err: context.DeadlineExceeded}, wantErrSubstr: "timed out", wantDeadline: true},
+		{name: "deadline exceeded wrapped before stderr", res: shell.CommandResult{ExitCode: 0, Stderr: "404 page not found", Err: context.DeadlineExceeded}, wantErrSubstr: "timed out", wantWrapped: context.DeadlineExceeded},
 		{name: "skips WARNING and klog WMMDD lines", res: shell.CommandResult{ExitCode: 1, Stderr: "WARNING: kubeconfig perm\nW1120 12:00:00.000000 1 loader.go:1] warn\nError from server (Forbidden): denied"}, wantErrSubstr: "Forbidden"},
 		{name: "stderr warnings only fall through to stdout", res: shell.CommandResult{ExitCode: 1, Stderr: "\nWARNING: deprecated\nW1120 12:00:00.000000 1 loader.go:1] warn", Stdout: "proxy 503 unavailable"}, wantErrSubstr: "503 unavailable"},
+		{name: "stderr warnings only with empty stdout wraps res.Err", res: shell.CommandResult{ExitCode: 1, Stderr: "WARNING: deprecated\nW1120 12:00:00.000000 1 loader.go:1] warn", Err: errWarnOnly}, wantErrSubstr: "exit status 1", wantWrapped: errWarnOnly},
 		{name: "non-klog W1234x line is preserved", res: shell.CommandResult{ExitCode: 1, Stderr: "W1234x real error"}, wantErrSubstr: "W1234x real error"},
 		{name: "port 4040 connection refused", res: shell.CommandResult{ExitCode: 1, Stderr: "dial tcp 127.0.0.1:4040: connect: connection refused"}, wantErrSubstr: "connection refused"},
-		{name: "kubectl not in PATH", res: shell.CommandResult{ExitCode: 1, Err: errors.New(`exec: "kubectl": executable file not found in $PATH`)}, wantErrSubstr: "executable file not found"},
+		{name: "kubectl not in PATH wraps res.Err", res: shell.CommandResult{ExitCode: 1, Err: errExecNotFound}, wantErrSubstr: "executable file not found", wantWrapped: errExecNotFound},
 		{name: "stdout error fallback", res: shell.CommandResult{ExitCode: 1, Stdout: "gateway 502 bad gateway"}, wantErrSubstr: "502 bad gateway"},
 		{name: "empty output falls back to exit status", res: shell.CommandResult{ExitCode: 2}, wantErrSubstr: "exit status 2"},
 	} {
@@ -5163,8 +5167,8 @@ func TestHasAPIGroupVersion_ErrorsAndBlankInputs(t *testing.T) {
 			t.Errorf("%s: expected error from HasAPIGroupVersion, got (%v, %v)", tc.name, ok, err)
 			continue
 		}
-		if tc.wantDeadline && !errors.Is(err, context.DeadlineExceeded) {
-			t.Errorf("%s: expected wrapped DeadlineExceeded, got %v", tc.name, err)
+		if tc.wantWrapped != nil && !errors.Is(err, tc.wantWrapped) {
+			t.Errorf("%s: expected wrapped %v, got %v", tc.name, tc.wantWrapped, err)
 		}
 		if !strings.Contains(err.Error(), tc.wantErrSubstr) || strings.HasSuffix(err.Error(), ": ") {
 			t.Errorf("%s: err = %q, want substring %q", tc.name, err.Error(), tc.wantErrSubstr)
@@ -5174,19 +5178,28 @@ func TestHasAPIGroupVersion_ErrorsAndBlankInputs(t *testing.T) {
 		}
 		mockExec.assertAllKubectlPinned(t, "err-ctx")
 	}
-	orcBlank := newTestGKEOrchestrator(NewMockExecutor(nil))
+	assertHasAPIGroupVersionBlankGuards(t, testGroupVersion)
+}
+
+func assertHasAPIGroupVersionBlankGuards(t *testing.T, nonBlankGV string) {
+	t.Helper()
+	blankExec := NewMockExecutor(nil)
+	orcBlank := newTestGKEOrchestrator(blankExec)
 	for _, blank := range []string{"  ", "/ /", "/ / /", "///"} {
 		if ok, err := orcBlank.HasAPIGroupVersion(blank); err != nil || ok {
 			t.Fatalf("HasAPIGroupVersion(%q) = (%v, %v), want (false, nil)", blank, ok, err)
 		}
 	}
+	if ok, err := orcBlank.HasAPIGroupVersion(nonBlankGV); err == nil || ok || !strings.Contains(err.Error(), "--context") {
+		t.Fatalf("blank kubeContext HasAPIGroupVersion(%q) = (%v, %v), want explicit --context error", nonBlankGV, ok, err)
+	}
+	if len(blankExec.calls) != 0 {
+		t.Fatalf("expected 0 kubectl calls on blank kubeContext, got %v", blankExec.calls)
+	}
 }
 
 func TestDiscoverK8sInventory_NodeConstraintInvariant(t *testing.T) {
-	t.Setenv(shell.AirGappedEnvVar, "")
 	t.Setenv(k8s.LabelSchemeEnvVar, "")
-	shell.SetDefaultAirGapped(false)
-	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
 
 	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("forbidden"))
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
@@ -5222,11 +5235,8 @@ func TestDiscoverK8sInventory_NodeConstraintInvariant(t *testing.T) {
 	}
 }
 
-func TestDiscoverK8sInventory_TPUSliceAirGapRefcountAndCacheInvalidation(t *testing.T) {
-	t.Setenv(shell.AirGappedEnvVar, "")
+func TestDiscoverK8sInventory_TPUSliceExplicitModeAndCacheInvalidation(t *testing.T) {
 	t.Setenv(k8s.LabelSchemeEnvVar, "")
-	shell.SetDefaultAirGapped(false)
-	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
 
 	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("forbidden"))
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
@@ -5241,45 +5251,28 @@ func TestDiscoverK8sInventory_TPUSliceAirGapRefcountAndCacheInvalidation(t *test
 			"partitiontrees": forbidden,
 		},
 	}
-	t.Cleanup(func() { orc.clearInventory() })
 
 	inv, err := orc.DiscoverK8sInventory("")
 	if err != nil {
 		t.Fatalf("DiscoverK8sInventory failed: %v", err)
 	}
-	if !inv.ExplicitMode || inv.LabelScheme != k8s.SchemeTPUSlice || !shell.IsKnownAirGapped() {
-		t.Fatalf("got ExplicitMode=%v LabelScheme=%q airgap=%v, want (true, tpu-slice, true)", inv.ExplicitMode, inv.LabelScheme, shell.IsKnownAirGapped())
+	if !inv.ExplicitMode || inv.LabelScheme != k8s.SchemeTPUSlice || orc.Inventory() != inv {
+		t.Fatalf("got ExplicitMode=%v LabelScheme=%q cached=%v, want (true, tpu-slice, true)", inv.ExplicitMode, inv.LabelScheme, orc.Inventory() == inv)
 	}
 	mockExec.assertAllKubectlPinned(t, "tpu-slice-ctx")
 
-	// Second concurrent orchestrator also claims air-gap; releasing first keeps air-gap active.
-	orc2 := newTestGKEOrchestrator(NewMockExecutor(nil))
-	orc2.kubeClient = &MockKubeClient{ListErrs: map[string]error{"nodes": forbidden, "slices": forbidden}}
-	t.Cleanup(func() { orc2.clearInventory() })
-	if _, err := orc2.DiscoverK8sInventory("tpu-slice"); err != nil {
-		t.Fatalf("orc2 forced tpu-slice failed: %v", err)
+	orc.mode = orchestrator.TypeK8s
+	if err := orc.SubmitJob(orchestrator.JobDefinition{}); err == nil {
+		t.Fatalf("expected UnsupportedK8sSubmitError for TypeK8s")
 	}
-	// Forced gke on orc releases orc's claim, while orc2 still holds its claim.
-	if _, err := orc.DiscoverK8sInventory("gke"); err != nil {
-		t.Fatalf("orc forced gke failed: %v", err)
-	}
-	if !shell.IsKnownAirGapped() {
-		t.Errorf("expected air-gap to stay true while orc2 still holds a claim")
-	}
-	// Releasing orc2 via SetKubeClient(nil) drops the final refcount and resets process default.
-	orc2.SetKubeClient(nil)
-	if shell.IsKnownAirGapped() {
-		t.Errorf("expected air-gap default to reset once all owners released")
+	if orc.Inventory() != nil {
+		t.Errorf("TypeK8s SubmitJob early return must clear cached inventory")
 	}
 }
 
 func TestDiscoverK8sInventory_ClientLifecycleAndNoAmbientProbe(t *testing.T) {
-	t.Setenv(shell.AirGappedEnvVar, "")
 	t.Setenv(k8s.LabelSchemeEnvVar, "")
-	shell.SetDefaultAirGapped(false)
-	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
 
-	// Blank kubeContext must NOT invoke ambient kubectl probe (apiChecker passed as nil).
 	mockExec := NewMockExecutor(nil)
 	orc := newTestGKEOrchestrator(mockExec)
 	orc.kubeClient = &MockKubeClient{
@@ -5295,11 +5288,10 @@ func TestDiscoverK8sInventory_ClientLifecycleAndNoAmbientProbe(t *testing.T) {
 		t.Errorf("expected zero kubectl calls when kubeContext is blank, got %v", mockExec.calls)
 	}
 
-	// SetKubeClient handles typed-nil (*DefaultKubeClient)(nil) and clears dynClient.
 	var typedNil *DefaultKubeClient
 	orc.SetKubeClient(typedNil)
-	if orc.kubeClient != nil || orc.dynClient != nil {
-		t.Errorf("SetKubeClient(typedNil) did not clear kubeClient/dynClient")
+	if orc.kubeClient != nil || orc.dynClient != nil || orc.Inventory() != nil {
+		t.Errorf("SetKubeClient(typedNil) did not clear kubeClient/dynClient/inventory")
 	}
 	if _, err := orc.DiscoverK8sInventory(""); !errors.Is(err, errKubeClientUninitialized) {
 		t.Errorf("expected errKubeClientUninitialized after typed-nil reset, got %v", err)
@@ -5335,7 +5327,7 @@ func TestDiscoverK8sInventory_ErrorPropagation(t *testing.T) {
 func TestGCETPUHardwareResolver(t *testing.T) {
 	t.Parallel()
 	r := gceTPUHardwareResolver{}
-	normCases := [][2]string{
+	for _, tc := range [][2]string{
 		{"tpu7", "tpu7x"},
 		{"tpu7-8", "tpu7x"},
 		{"tpu7-podslice", "tpu7x"},
@@ -5346,16 +5338,31 @@ func TestGCETPUHardwareResolver(t *testing.T) {
 		{"tpu7l", "tpu7l"},
 		{"ct5l-hightpu-4t", "v5e"},
 		{"v6e-8", "v6e"},
-	}
-	for _, tc := range normCases {
+	} {
 		if got := r.NormalizeTPUType(tc[0]); got != tc[1] {
 			t.Errorf("NormalizeTPUType(%q) = %q, want %q", tc[0], got, tc[1])
 		}
 	}
-	if !r.IsTPUMachine("v7x") || !r.IsTPUMachine("ironwood") || !r.IsTPUMachine("tpu7x-standard-4t") {
-		t.Errorf("expected IsTPUMachine true for v7x/ironwood/tpu7x-standard-4t")
+	for _, tc := range []struct {
+		in   string
+		want bool
+	}{
+		{"v7x", true},
+		{"ironwood", true},
+		{"tpu7x-standard-4t", true},
+		{"v5lite-4", true},
+		{"v5-lite-4", true},
+		{"custom-node-2t", false},
+	} {
+		if got := r.IsTPUMachine(tc.in); got != tc.want {
+			t.Errorf("IsTPUMachine(%q) = %v, want %v", tc.in, got, tc.want)
+		}
 	}
-	// tpu7x must never produce tpu7x-standard-8t.
+	assertGCETPUInferAndChips(t, r)
+}
+
+func assertGCETPUInferAndChips(t *testing.T, r gceTPUHardwareResolver) {
+	t.Helper()
 	for _, tc := range []struct {
 		tpuType, rawMachine string
 		chips               int
@@ -5366,77 +5373,47 @@ func TestGCETPUHardwareResolver(t *testing.T) {
 		{"TPU7X", "", 4, "tpu7x-standard-4t"},
 		{"tpu-v7x-slice", "tpu-v7x-slice", 4, "tpu7x-standard-4t"},
 		{"tpu7x", "tpu7x-8", 0, "tpu7x-standard-4t"},
+		{"tpu7x", "tpu7x-16", 0, "tpu7x-standard-4t"},
+		{"tpu7x", "tpu7x-podslice", 0, "tpu7x-standard-4t"},
+		{"tpu7x", "tpu7x-standard-1t", 4, "tpu7x-standard-1t"},
 		{"", "v6e-8", 0, "ct6e-standard-8t"},
 		{"v5e", "v5e-1", 0, "ct5lp-hightpu-1t"},
+		{"v5e", "v5lite-1", 0, "ct5lp-hightpu-1t"},
 		{"v5e", "v5lite-4", 0, "ct5lp-hightpu-4t"},
+		{"v5e", "v5lite-8", 0, "ct5lp-hightpu-8t"},
+		{"v5e", "v5-lite-1", 0, "ct5lp-hightpu-1t"},
+		{"v5e", "v5-lite-8", 0, "ct5lp-hightpu-8t"},
+		{"", "my-baremetal-host", 0, "my-baremetal-host"},
 	} {
 		if got := r.InferTPUMachine(tc.tpuType, tc.rawMachine, tc.chips); got != tc.want {
 			t.Errorf("InferTPUMachine(%q, %q, %d) = %q, want %q", tc.tpuType, tc.rawMachine, tc.chips, got, tc.want)
 		}
 	}
-	// Strict -<N>t parsing rejects non-digits like tpu-4test and custom bare-metal hostnames.
 	for _, tc := range []struct {
 		in   string
 		want int
 	}{
 		{"ct6e-standard-8T", 8},
+		{"ct5lp-hightpu", 8},
+		{"ct6e-standard", 4},
 		{"tpu-4test", 0},
+		{"custom-node-2t", 0},
 		{"my-baremetal-host", 0},
+		{"my-tpu-baremetal-host", 0},
 		{"v6e-8", 8},
 		{"v5e-1", 1},
+		{"v5lite-1", 1},
+		{"v5lite-8", 8},
+		{"v5-lite-8", 8},
 		{"tpu7-8", 4},
 		{"tpu7x-8", 4},
+		{"tpu7x-16", 4},
 		{"tpu7-podslice", 4},
+		{"tpu7x-podslice", 4},
 	} {
 		if got := r.ChipsPerNode(tc.in); got != tc.want {
 			t.Errorf("ChipsPerNode(%q) = %d, want %d", tc.in, got, tc.want)
 		}
-	}
-}
-
-func TestAirGapEpochAndExternalDefaults(t *testing.T) {
-	t.Setenv(shell.AirGappedEnvVar, "")
-	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
-
-	// External SetDefaultAirGapped(true) before any claim must survive release.
-	shell.SetDefaultAirGapped(true)
-	o1 := NewGKEOrchestrator()
-	o1.claimAirGap()
-	o1.releaseAirGap()
-	if !shell.IsKnownAirGapped() {
-		t.Fatalf("external SetDefaultAirGapped(true) must be preserved after release")
-	}
-
-	// External SetDefaultAirGapped(false) invalidates stale epoch so re-claim re-enables air-gap
-	// and a new owner releasing does not leak true.
-	shell.SetDefaultAirGapped(false)
-	o1.claimAirGap()
-	shell.SetDefaultAirGapped(false)
-	o1.claimAirGap()
-	if !shell.IsKnownAirGapped() {
-		t.Fatalf("re-claim after external reset must re-enable air-gap")
-	}
-	o2 := NewGKEOrchestrator()
-	shell.SetDefaultAirGapped(false)
-	o2.claimAirGap()
-	o1.releaseAirGap() // stale epoch must NOT drop o2's claim
-	if !shell.IsKnownAirGapped() {
-		t.Fatalf("stale-epoch release must not drop active owner's air-gap claim")
-	}
-	o2.releaseAirGap()
-	if shell.IsKnownAirGapped() {
-		t.Fatalf("expected air-gap reset once final active owner released")
-	}
-
-	// SubmitJob early return on TypeK8s must also clear inventory and release air-gap.
-	o2.mode = orchestrator.TypeK8s
-	o2.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice}
-	o2.claimAirGap()
-	if err := o2.SubmitJob(orchestrator.JobDefinition{}); err == nil {
-		t.Fatalf("expected UnsupportedK8sSubmitError for TypeK8s")
-	}
-	if o2.Inventory() != nil || shell.IsKnownAirGapped() {
-		t.Fatalf("TypeK8s SubmitJob early return must clear inventory and release air-gap")
 	}
 }
 
@@ -5446,10 +5423,7 @@ type stubDynClient struct {
 }
 
 func TestSetKubeClientAndSetDynamicClientSync(t *testing.T) {
-	t.Setenv(shell.AirGappedEnvVar, "")
-	shell.SetDefaultAirGapped(false)
-	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
-
+	t.Parallel()
 	orc := NewGKEOrchestrator()
 	dynA := &stubDynClient{id: "a"}
 	dynB := &stubDynClient{id: "b"}
@@ -5457,27 +5431,19 @@ func TestSetKubeClientAndSetDynamicClientSync(t *testing.T) {
 	orc.dynClientManaged = true
 	orc.dynClientContext = "ctx-a"
 
-	// Injecting *DefaultKubeClient must sync dynClient and clear managed flags.
 	orc.SetKubeClient(&DefaultKubeClient{dynClient: dynB})
 	if orc.dynClient != dynB || orc.dynClientManaged || orc.dynClientContext != "" {
 		t.Fatalf("SetKubeClient(*DefaultKubeClient) did not sync dynClient/managed state")
 	}
-	// Replacing custom KubeClient via SetDynamicClient(dynA) installs *DefaultKubeClient,
-	// clears cached inventory, and releases air-gap claim.
 	orc.SetKubeClient(&MockKubeClient{})
 	orc.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice}
-	orc.claimAirGap()
-	if !shell.IsKnownAirGapped() {
-		t.Fatalf("expected air-gap active before SetDynamicClient")
-	}
 	orc.SetDynamicClient(dynA)
 	if d, ok := orc.kubeClient.(*DefaultKubeClient); !ok || d == nil || d.dynClient != dynA {
 		t.Fatalf("SetDynamicClient did not replace custom KubeClient with *DefaultKubeClient")
 	}
-	if orc.Inventory() != nil || shell.IsKnownAirGapped() {
-		t.Fatalf("SetDynamicClient must clear cached inventory and release air-gap claim")
+	if orc.Inventory() != nil {
+		t.Fatalf("SetDynamicClient must clear cached inventory")
 	}
-	// SetDynamicClient(nil) clears kubeClient instead of leaving empty *DefaultKubeClient.
 	orc.SetDynamicClient(nil)
 	if orc.kubeClient != nil || orc.dynClient != nil {
 		t.Fatalf("SetDynamicClient(nil) should clear both kubeClient and dynClient")
@@ -5494,14 +5460,13 @@ func primeOrchInventoryAndDynClient(orc *GKEOrchestrator, id string, managed boo
 		orc.SetDynamicClient(dyn)
 	}
 	orc.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice}
-	orc.claimAirGap()
 	return dyn
 }
 
 func assertConfigureClearedState(t *testing.T, label string, orc *GKEOrchestrator, injected dynamic.Interface, wantKeep bool) {
 	t.Helper()
-	if orc.Inventory() != nil || shell.IsKnownAirGapped() {
-		t.Errorf("%s: must clear inventory and release air-gap", label)
+	if orc.Inventory() != nil {
+		t.Errorf("%s: must clear cached inventory", label)
 	}
 	if wantKeep && orc.dynClient != injected {
 		t.Errorf("%s: must preserve externally injected dynClient", label)
@@ -5512,10 +5477,7 @@ func assertConfigureClearedState(t *testing.T, label string, orc *GKEOrchestrato
 }
 
 func TestConfigureKubectlAndK8sKubectl_InventoryAndDynClientLifecycle(t *testing.T) {
-	t.Setenv(shell.AirGappedEnvVar, "")
-	shell.SetDefaultAirGapped(false)
-	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
-
+	t.Parallel()
 	const probeCmd = "kubectl get --raw /version --request-timeout=5s"
 	for _, managed := range []bool{true, false} {
 		exec := NewMockExecutor(map[string][]shell.CommandResult{

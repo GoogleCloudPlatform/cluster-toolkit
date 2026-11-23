@@ -18,6 +18,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"math"
 	"os"
 	"slices"
 	"strconv"
@@ -136,6 +138,9 @@ func parseTopologyChipCount(topology string) (int, bool) {
 		}
 		v, err := strconv.Atoi(p)
 		if err != nil || v <= 0 {
+			return 0, false
+		}
+		if total > math.MaxInt/v {
 			return 0, false
 		}
 		total *= v
@@ -371,6 +376,10 @@ func discoverNodes(lister ResourceLister, inv *Inventory, hw TPUHardwareResolver
 	return accumulateNodes(nodes, inv, hw, override), nil
 }
 
+// shouldProbeTPUSliceAPI reports whether auto-detection should probe /apis/slice.tpu.google.com.
+// Skipping the probe when readable nodes already prove pure GKE (hasGKELabels && !hasTPUSliceLabels)
+// is an intentional fast path to avoid an extra kubectl call on standard GKE clusters (scaled-to-zero
+// GKE TPU Slice clusters without active TPU slice nodes can set GCLUSTER_LABEL_SCHEME=tpu-slice).
 func shouldProbeTPUSliceAPI(override LabelScheme, inv *Inventory, signals nodeSignals) bool {
 	if override != SchemeAuto {
 		return false
@@ -682,8 +691,8 @@ func finalizeBuilderCapacity(b *poolBuilder) PoolCapacity {
 		c.GPUsPerNode = b.allGPUs
 	}
 	c.CPUsPerNode = int(c.AllocatableCPUMilli / 1000)
-	c.Topologies = sortedKeys(b.topologies)
-	c.SliceNames = sortedKeys(b.slices)
+	c.Topologies = slices.Sorted(maps.Keys(b.topologies))
+	c.SliceNames = slices.Sorted(maps.Keys(b.slices))
 	return c
 }
 
@@ -876,10 +885,27 @@ func parseAllocatableGPUs(alloc map[string]interface{}) (int, string) {
 	if q, ok := parseQuantityField(alloc, "amd.com/gpu"); ok && q.Value() > 0 {
 		return int(q.Value()), "amd"
 	}
-	if count, profile := parsePrefixGPUAllocatable(alloc, "gpu.intel.com/"); count > 0 {
+	if count, profile := parseIntelGPUAllocatable(alloc); count > 0 {
 		return count, profile
 	}
 	return 0, ""
+}
+
+func parseIntelGPUAllocatable(alloc map[string]interface{}) (int, string) {
+	for _, key := range []string{"gpu.intel.com/i915", "gpu.intel.com/xe"} {
+		if q, ok := parseQuantityField(alloc, key); ok && q.Value() > 0 {
+			return int(q.Value()), key
+		}
+	}
+	keys := make([]string, 0)
+	for k := range alloc {
+		if !strings.HasPrefix(k, "gpu.intel.com/") || k == "gpu.intel.com/millicores" || strings.HasSuffix(k, "_monitoring") {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return sumGPUAllocatableKeys(alloc, keys)
 }
 
 func parsePrefixGPUAllocatable(alloc map[string]interface{}, prefix string) (int, string) {
@@ -890,6 +916,10 @@ func parsePrefixGPUAllocatable(alloc map[string]interface{}, prefix string) (int
 		}
 	}
 	slices.Sort(keys)
+	return sumGPUAllocatableKeys(alloc, keys)
+}
+
+func sumGPUAllocatableKeys(alloc map[string]interface{}, keys []string) (int, string) {
 	total := 0
 	firstProfile := ""
 	for _, k := range keys {
@@ -999,6 +1029,8 @@ func isSystemPoolNode(node unstructured.Unstructured, nodePool string) bool {
 	return false
 }
 
+// listTPUSlices queries slice.tpu.google.com/v1alpha1 (spec.{type,topology,partitionIds} and
+// status.conditions Ready) and falls back to v1beta1 strictly on NotFound/NoMatch.
 func listTPUSlices(lister ResourceLister, hw TPUHardwareResolver) ([]SliceInfo, bool, error) {
 	items, err := lister.ListResources(TPUSliceGVR, "", "", "")
 	if err != nil && isNotFoundOrNoMatchError(err) {
@@ -1056,6 +1088,8 @@ func parseTPUSlice(obj unstructured.Unstructured, hw TPUHardwareResolver) SliceI
 	}
 }
 
+// listTPUPartitionTrees queries partition.tpu.google.com/v1alpha1 and falls back to v1beta1
+// strictly on NotFound/NoMatch.
 func listTPUPartitionTrees(lister ResourceLister, hw TPUHardwareResolver) ([]PartitionTreeInfo, error) {
 	items, err := lister.ListResources(TPUPartitionTreeGVR, "", "", "")
 	if err != nil && isNotFoundOrNoMatchError(err) {
@@ -1085,6 +1119,10 @@ func comparePartitionTrees(a, b PartitionTreeInfo) int {
 	return 0
 }
 
+// parsePartitionTree supports both observed partition.tpu.google.com CRD layouts:
+//   - v1alpha1: status itself is the root node (status.{partitionId,partitionTypeInfo,childPartitions})
+//     and TPU type is carried in metadata.labels["tpu.google.com/type"] or partitionTypeInfo prefix.
+//   - v1beta1: status.acceleratorType plus a nested status.root.{topology,partitionId,childPartitions}.
 func parsePartitionTree(obj unstructured.Unstructured, hw TPUHardwareResolver) PartitionTreeInfo {
 	labels := obj.GetLabels()
 	statusMap, _, _ := unstructured.NestedMap(obj.Object, "status")
@@ -1334,8 +1372,8 @@ func buildTPUInventory(inv *Inventory, signals nodeSignals, hw TPUHardwareResolv
 			tpu.ChipsPerNode = chipsPerNodeForMachine(hw, tpu.MachineType)
 		}
 	}
-	accumulatePrimaryTPUNodeCounts(inv, signals, primaryCtrl, tpu, hw)
-	applySliceAndTreeMetadata(inv, primaryPool, tpu, hw)
+	poolTopos := accumulatePrimaryTPUPools(inv, signals, primaryCtrl, tpu, hw)
+	applySliceAndTreeMetadata(inv, primaryPool, poolTopos, tpu, hw)
 	if tpu.ChipsPerNode == 0 && tpu.MachineType != "" {
 		tpu.ChipsPerNode = chipsPerNodeForMachine(hw, tpu.MachineType)
 	}
@@ -1345,7 +1383,8 @@ func buildTPUInventory(inv *Inventory, signals nodeSignals, hw TPUHardwareResolv
 	return tpu, primaryPool
 }
 
-func accumulatePrimaryTPUNodeCounts(inv *Inventory, signals nodeSignals, primaryCtrl bool, tpu *TPUInventory, hw TPUHardwareResolver) {
+func accumulatePrimaryTPUPools(inv *Inventory, signals nodeSignals, primaryCtrl bool, tpu *TPUInventory, hw TPUHardwareResolver) []string {
+	var poolTopos []string
 	for _, name := range inv.PoolNames {
 		pool := inv.Pools[name]
 		if !pool.IsTPU {
@@ -1359,7 +1398,9 @@ func accumulatePrimaryTPUNodeCounts(inv *Inventory, signals nodeSignals, primary
 		}
 		tpu.TotalTPUNodes += pool.TotalNodes
 		tpu.ReadyTPUNodes += pool.ReadyNodes
+		poolTopos = append(poolTopos, pool.Topologies...)
 	}
+	return poolTopos
 }
 
 func poolMatchesPrimaryTPU(pool PoolCapacity, tpu *TPUInventory, hw TPUHardwareResolver) bool {
@@ -1386,9 +1427,9 @@ func poolTPUTypeMatches(pool PoolCapacity, tpu *TPUInventory) bool {
 	return pool.TPUType == tpu.TPUType
 }
 
-func applySliceAndTreeMetadata(inv *Inventory, primaryPool *PoolCapacity, tpu *TPUInventory, hw TPUHardwareResolver) {
+func applySliceAndTreeMetadata(inv *Inventory, primaryPool *PoolCapacity, poolTopos []string, tpu *TPUInventory, hw TPUHardwareResolver) {
 	applyDefaultSlice(inv, tpu)
-	tpu.Topologies = collectAllTopologies(inv, primaryPool, tpu, hw)
+	tpu.Topologies = collectAllTopologies(inv, poolTopos, tpu, hw)
 	if tpu.DefaultSliceName == "" && tpu.Topology == "" {
 		tpu.Topology = pickFallbackTopology(inv, primaryPool, tpu)
 	}
@@ -1428,11 +1469,8 @@ func firstMatchingPartitionTreeRoot(trees []PartitionTreeInfo, tpuType string, r
 	return ""
 }
 
-func collectAllTopologies(inv *Inventory, primaryPool *PoolCapacity, tpu *TPUInventory, hw TPUHardwareResolver) []string {
-	var allTopos []string
-	if primaryPool != nil {
-		allTopos = append(allTopos, primaryPool.Topologies...)
-	}
+func collectAllTopologies(inv *Inventory, poolTopos []string, tpu *TPUInventory, hw TPUHardwareResolver) []string {
+	allTopos := append([]string(nil), poolTopos...)
 	for _, s := range inv.Slices {
 		if s.Topology != "" && sliceMatchesPrimaryTPU(s, tpu) {
 			allTopos = append(allTopos, s.Topology)
@@ -1615,18 +1653,6 @@ func preferPositiveInt64(primary, fallback int64) int64 {
 	return fallback
 }
 
-func sortedKeys(set map[string]struct{}) []string {
-	if len(set) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(set))
-	for k := range set {
-		out = append(out, k)
-	}
-	slices.Sort(out)
-	return out
-}
-
 func normalizeUniqueSorted(values []string) []string {
 	set := make(map[string]struct{}, len(values))
 	for _, v := range values {
@@ -1634,5 +1660,5 @@ func normalizeUniqueSorted(values []string) []string {
 			set[trimmed] = struct{}{}
 		}
 	}
-	return sortedKeys(set)
+	return slices.Sorted(maps.Keys(set))
 }

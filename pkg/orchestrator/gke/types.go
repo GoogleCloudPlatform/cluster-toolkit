@@ -219,8 +219,6 @@ type GKEOrchestrator struct {
 	nfsAuthChecked bool
 	// inventory caches pure-Kubernetes node, slice, and label-scheme discovery results for the current run.
 	inventory *k8s.Inventory
-	// airGapEpoch records the refcount epoch under which this orchestrator claimed default air-gap mode.
-	airGapEpoch uint64
 }
 
 // gceTPUHardwareResolver implements k8s.TPUHardwareResolver using GCE machine-type conventions.

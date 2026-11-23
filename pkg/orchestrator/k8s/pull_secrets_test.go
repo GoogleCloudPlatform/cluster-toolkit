@@ -29,18 +29,22 @@ import (
 )
 
 type stubResourceLister struct {
-	items  []unstructured.Unstructured
-	err    error
-	gotGVR schema.GroupVersionResource
-	gotNS  string
-	gotFS  string
-	sa     *unstructured.Unstructured
-	saErr  error
-	gotSA  string
+	items       []unstructured.Unstructured
+	err         error
+	gotGVR      schema.GroupVersionResource
+	gotNS       string
+	gotFS       string
+	sa          *unstructured.Unstructured
+	saErr       error
+	returnNilSA bool
+	gotSA       string
 }
 
 func (s *stubResourceLister) GetResource(gvr schema.GroupVersionResource, _, name string) (*unstructured.Unstructured, error) {
 	s.gotSA = name
+	if s.returnNilSA {
+		return nil, nil
+	}
 	if s.saErr != nil || s.sa != nil {
 		return s.sa, s.saErr
 	}
@@ -318,5 +322,12 @@ func TestDiscoverImagePullSecrets_DefersToServiceAccount(t *testing.T) {
 		if got := DiscoverImagePullSecrets(lister, "team-ns", tc.sa, images); got != tc.want || lister.gotSA != tc.wantSA {
 			t.Errorf("%s: got (%q, sa=%q), want (%q, sa=%q)", tc.name, got, lister.gotSA, tc.want, tc.wantSA)
 		}
+	}
+	nilSALister := &stubResourceLister{
+		items:       []unstructured.Unstructured{makeTestDockerSecret("sec-1", "registry.local")},
+		returnNilSA: true,
+	}
+	if got := DiscoverImagePullSecrets(nilSALister, "team-ns", "default", images); got != "sec-1" {
+		t.Errorf("(nil, nil) ServiceAccount lookup: got %q, want sec-1", got)
 	}
 }
