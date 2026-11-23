@@ -393,18 +393,46 @@ variable "cloud_parameters" {
     switch_type              = optional(string)
     skip_nodeset_lines       = optional(bool, false)
     topology_region_switches = optional(bool, false)
+    max_array_size           = optional(number)
+    max_job_count            = optional(number)
+    min_job_age              = optional(number)
   })
   default  = {}
   nullable = false
+
+  validation {
+    condition     = var.cloud_parameters.max_array_size == null || (floor(var.cloud_parameters.max_array_size) == var.cloud_parameters.max_array_size && var.cloud_parameters.max_array_size >= 0 && var.cloud_parameters.max_array_size <= 4000001)
+    error_message = "In cloud_parameters, max_array_size must be an integer between 0 and 4000001 (Slurm's maximum MaxArraySize)."
+  }
+
+  validation {
+    condition     = var.cloud_parameters.max_job_count == null || (floor(var.cloud_parameters.max_job_count) == var.cloud_parameters.max_job_count && var.cloud_parameters.max_job_count >= 1)
+    error_message = "In cloud_parameters, max_job_count must be a positive integer."
+  }
+
+  validation {
+    condition     = var.cloud_parameters.max_array_size == null || (var.cloud_parameters.max_job_count != null ? var.cloud_parameters.max_array_size <= var.cloud_parameters.max_job_count : (var.slurm_conf_tpl != null || var.slurm_conf_template != null || var.cloud_parameters.max_array_size <= 10000))
+    error_message = "In cloud_parameters, max_array_size must be less than or equal to max_job_count (which defaults to 10000 on the default slurm.conf template)."
+  }
+
+  validation {
+    condition     = var.cloud_parameters.min_job_age == null || (floor(var.cloud_parameters.min_job_age) == var.cloud_parameters.min_job_age && var.cloud_parameters.min_job_age >= 2)
+    error_message = "In cloud_parameters, min_job_age must be an integer >= 2 seconds (Slurm's minimum MinJobAge)."
+  }
 }
 
 variable "experimental" {
   description = "Experimental Slurm settings. These features are subject to change and may be modified in future releases."
-  type = object({
-    enable_async_reply = optional(bool, false)
-  })
-  default  = {}
-  nullable = false
+  type        = map(any)
+  default     = {}
+  nullable    = false
+}
+
+variable "enable_async_reply" {
+  description = "Enables Slurm 25.11+ asynchronous RPC reply mode (SlurmctldParameters=enable_async_reply) so slow client sockets do not stall slurmctld worker threads at scale."
+  type        = bool
+  default     = true
+  nullable    = false
 }
 
 variable "enable_expedited_requeue" {

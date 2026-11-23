@@ -34,7 +34,7 @@ class SlurmConfigGeneratorV2605(SlurmConfigGeneratorV2511):
     """Slurm 26.05 configuration generator."""
 
     def _add_tpu_conflines(self, conf_options: dict[str, Any]) -> None:
-        """Adds TPU conf lines (GresTypes, JobSubmitPlugins, CliFilterPlugins, SlurmctldParameters) to slurm.conf options."""
+        """Adds TPU conf lines (GresTypes, JobSubmitPlugins, CliFilterPlugins) to slurm.conf options."""
         for param in ("GresTypes", "JobSubmitPlugins", "CliFilterPlugins"):
             val = conf_options.get(param, None)
             if not val:
@@ -43,14 +43,6 @@ class SlurmConfigGeneratorV2605(SlurmConfigGeneratorV2511):
                 conf_options[param] = [val]
             if "tpu" not in conf_options[param]:
                 conf_options[param].append("tpu")
-        val = conf_options.get("SlurmctldParameters", None)
-        if not val:
-            conf_options["SlurmctldParameters"] = ["enable_async_reply"]
-        else:
-            if isinstance(val, str):
-                conf_options["SlurmctldParameters"] = [s.strip() for s in val.split(",") if s.strip()]
-            if "enable_async_reply" not in conf_options["SlurmctldParameters"]:
-                conf_options["SlurmctldParameters"].append("enable_async_reply")
 
     def _append_feature(self, node_conf: dict[str, Any], feature: str) -> None:
         """Appends a feature string to the node configuration's Feature list."""

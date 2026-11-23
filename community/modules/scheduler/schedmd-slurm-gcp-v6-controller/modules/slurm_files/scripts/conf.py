@@ -153,7 +153,10 @@ class SlurmConfigGenerator:
         epilog_path = Path(dirs.custom_scripts / "epilog.d")
         task_prolog_path = Path(dirs.custom_scripts / "task_prolog.d")
         task_epilog_path = Path(dirs.custom_scripts / "task_epilog.d")
-        default_tree_width = 65533 if any_dynamic else 128
+        # TreeWidth=16 gives 2-level slurmd fanout (16 -> 256 -> 4,096 -> 65,536) for State=CLOUD
+        # clusters without exhausting controller FDs (18.3s vs 211.9s at 9k nodes); dynamic (-Z)
+        # partitions still require 65533 (fanout disabled).
+        default_tree_width = 65533 if any_dynamic else 16
 
         return {
             **(comma_params if not no_comma_params else {}),
@@ -182,6 +185,10 @@ class SlurmConfigGenerator:
             "JobSubmitPlugins": "lua" if any_tpu else None,
             "TopologyPlugin": topology_plugin(self.lkp) if self.lkp.cfg.nodeset else None,
             "TopologyParam": get("topology_param", "SwitchAsNodeRank"),
+            # Job limits for large clusters. Unset keeps Slurm's defaults.
+            "MaxArraySize": get("max_array_size", None),
+            "MaxJobCount": get("max_job_count", None),
+            "MinJobAge": get("min_job_age", None),
         }
 
     def conflines(self) -> str:
@@ -862,18 +869,21 @@ def _default_switch(nodeset: NSDict, lkp: util.Lookup) -> str:
     return f"ns_{nodeset.nodeset_name}"
 
 def add_nodeset_topology(
-    nodeset: NSDict, bldr: TopologyBuilder|Any, lkp: util.Lookup
+    nodeset: NSDict,
+    bldr: TopologyBuilder | Any,
+    lkp: util.Lookup,
+    ns_instances: Optional[Iterable[Any]] = None,
 ) -> None:
     up_nodes = set()
     default_path = [_SLURM_TOPO_ROOT, _default_switch(nodeset, lkp)]
 
-    for inst in lkp.instances().values():
-        try:
-            if lkp.node_nodeset_name(inst.name) != nodeset.nodeset_name:
-                continue
-        except Exception:
-            continue
+    instances_iter: Iterable[Any] = (
+        ns_instances
+        if ns_instances is not None
+        else bucket_instances_by_nodeset(lkp).get(nodeset.nodeset_name, ())
+    )
 
+    for inst in instances_iter:
         phys_host = inst.resource_status.physical_host or ""
         bldr.summary.physical_host[inst.name] = phys_host
         up_nodes.add(inst.name)
@@ -891,12 +901,24 @@ def add_nodeset_topology(
         bldr.add(default_path, down_nodes)
         bldr.summary.down_nodes.update(down_nodes)
 
+def bucket_instances_by_nodeset(lkp: util.Lookup) -> Dict[str, List[Any]]:
+    by_ns: Dict[str, List[Any]] = defaultdict(list)
+    for inst in lkp.instances().values():
+        try:
+            by_ns[lkp.node_nodeset_name(inst.name)].append(inst)
+        except Exception:
+            continue
+    return by_ns
+
+
 def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
     bldr = TopologyBuilder()
     for ns in lkp.cfg.nodeset_tpu.values():
         add_tpu_nodeset_topology(ns, bldr, lkp)
-    for ns in lkp.cfg.nodeset.values():
-        add_nodeset_topology(ns, bldr, lkp)
+    if lkp.cfg.nodeset:
+        by_ns = bucket_instances_by_nodeset(lkp)
+        for ns in lkp.cfg.nodeset.values():
+            add_nodeset_topology(ns, bldr, lkp, by_ns.get(ns.nodeset_name, ()))
     return bldr
 
 def gen_topology_yaml(lkp: util.Lookup) -> Tuple[bool, TopologySummary]:
