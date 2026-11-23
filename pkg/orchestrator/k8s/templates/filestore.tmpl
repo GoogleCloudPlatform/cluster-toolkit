@@ -6,18 +6,28 @@ metadata:
     {{.ManagedByLabel}}: {{.ManagedByValue}}
     {{.StorageTypeLabel}}: {{.StorageType}}
 spec:
+  storageClassName: ""
   capacity:
     storage: {{.Capacity}}
   accessModes:
   - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+{{- if .Namespace }}
+  claimRef:
+    namespace: {{ printf "%q" .Namespace }}
+    name: {{ printf "%q" .PVCName }}
+{{- end }}
   nfs:
-    path: /{{.Share}}
-    server: {{.IP}}
+    path: {{ printf "%q" (printf "/%s" .Share) }}
+    server: {{ printf "%q" .IP }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{.PVCName}}
+{{- if .Namespace }}
+  namespace: {{ printf "%q" .Namespace }}
+{{- end }}
   labels:
     {{.ManagedByLabel}}: {{.ManagedByValue}}
     {{.StorageTypeLabel}}: {{.StorageType}}

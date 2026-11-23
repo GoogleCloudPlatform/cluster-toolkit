@@ -397,6 +397,9 @@ func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName strin
 		if g.checkDynamicSlicingViaGKE() {
 			return fmt.Errorf("automatic Kueue installation/modification blocked: cluster %s is set up for Dynamic-Slicing (found 'PROVISION_ONLY' in node pool placementPolicy). Automatic installation or modification of Kueue could conflict with custom topology configurations. Please install Kueue and required CRDs manually", clusterName)
 		}
+		if shell.IsKnownAirGapped() {
+			return fmt.Errorf("cannot re-install Kueue (%s) when %s is enabled; install Kueue %s on the cluster first", reinstallReason, shell.AirGappedEnvVar, version)
+		}
 
 		if err := g.checkKueueInstallPermissions(version); err != nil {
 			return err
@@ -431,37 +434,34 @@ func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason
 		return fmt.Errorf("user declined to re-install Kueue")
 	}
 
+	kueueManifestsURL := fmt.Sprintf("https://github.com/kubernetes-sigs/kueue/releases/download/%s/manifests.yaml", targetVersion)
+	manifestBytes, err := g.downloadManifests(kueueManifestsURL)
+	if err != nil {
+		return err
+	}
+	cleanedManifests, err := g.cleanAndProcessManifests(manifestBytes, nil)
+	if err != nil {
+		return err
+	}
+	manifestPath, err := writeGeneratedManifest(cleanedManifests, "kueue.yaml")
+	if err != nil {
+		return err
+	}
+
 	logging.Info("Proceeding with clean re-installation of Kueue...")
 	if err := g.DeleteAllKueueResources(); err != nil {
 		return fmt.Errorf("failed to delete Kueue resources: %w", err)
 	}
 
-	return g.installKueue(targetVersion)
-}
-
-func (g *GKEOrchestrator) installKueue(version string) error {
-	logging.Info("Installing Kueue version %s...", version)
-	kueueManifestsURL := fmt.Sprintf("https://github.com/kubernetes-sigs/kueue/releases/download/%s/manifests.yaml", version)
-	manifestBytes, err := g.downloadManifests(kueueManifestsURL)
-	if err != nil {
-		return err
+	logging.Info("Installing Kueue version %s...", targetVersion)
+	if err := g.applyManifestFile(manifestPath, ""); err != nil {
+		return fmt.Errorf("%w\nTo finish reinstalling Kueue %s from the saved manifest, run:\n  %s",
+			err, targetVersion, kubectlCommandLine(g.kubeContext, "apply", "-f", manifestPath))
 	}
-
-	cleanedManifests, err := g.cleanAndProcessManifests(manifestBytes, nil)
-	if err != nil {
-		return err
-	}
-
-	if err := g.applyManifests(cleanedManifests, "kueue.yaml", ""); err != nil {
-		return err
-	}
-
 	logging.Info("Kueue components applied successfully.")
-
 	if err := g.waitForKueueWebhook(); err != nil {
 		return err
 	}
-
 	return g.installKueueResources(defaultClusterQueue, defaultLocalQueue)
 }
 

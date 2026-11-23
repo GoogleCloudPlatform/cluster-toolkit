@@ -50,7 +50,8 @@ This section guides you through the cluster creation process, ensuring that your
     gcloud storage buckets create gs://BUCKET_NAME \
     --default-storage-class=STANDARD \
     --location=COMPUTE_REGION \
-    --uniform-bucket-level-access
+    --uniform-bucket-level-access \
+    --public-access-prevention
     gcloud storage buckets update gs://BUCKET_NAME --versioning
     ```
 

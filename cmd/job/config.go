@@ -197,7 +197,7 @@ func validateAndApplyConfig(tempFileName, targetFile string) error {
 	}
 
 	if tempConfig.ProjectID == "" || tempConfig.ClusterName == "" || tempConfig.Location == "" {
-		fmt.Println("Note: Some configuration fields were left empty. You will need to provide them via command-line flags when submitting jobs.")
+		fmt.Println("Note: Some configuration fields were left empty. You will need to provide them via command-line flags when targeting GKE clusters.")
 	}
 	return nil
 }
@@ -266,7 +266,47 @@ var configShowCmd = &cobra.Command{
 	},
 }
 
+var configUnsetCmd = &cobra.Command{
+	Use:   "unset <key>",
+	Short: "Clear a saved default ('project', 'cluster', 'location', or 'all')",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		key := strings.ToLower(strings.TrimSpace(args[0]))
+		switch key {
+		case "project", "cluster", "location":
+		case "all":
+			if err := saveContext(Context{}); err != nil {
+				return err
+			}
+			cmd.Println("Cleared all saved defaults")
+			return nil
+		default:
+			return fmt.Errorf("unknown configuration key '%s', available configuration keys are: 'project', 'cluster', 'location', 'all'", key)
+		}
+
+		ctx, err := loadContext()
+		if err != nil {
+			return err
+		}
+		switch key {
+		case "project":
+			ctx.ProjectID = ""
+		case "cluster":
+			ctx.ClusterName = ""
+		case "location":
+			ctx.Location = ""
+		}
+
+		if err := saveContext(ctx); err != nil {
+			return err
+		}
+		cmd.Printf("Cleared default for '%s'\n", key)
+		return nil
+	},
+}
+
 func init() {
 	ConfigCmd.AddCommand(configSetCmd)
+	ConfigCmd.AddCommand(configUnsetCmd)
 	ConfigCmd.AddCommand(configShowCmd)
 }

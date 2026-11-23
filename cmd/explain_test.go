@@ -598,9 +598,9 @@ func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(outMpiGromacs, "Blueprint: community/examples/hpc-slurm-gromacs.yaml"), Equals, true)
 
-	outTpuMaxText, err := runExplainForTest("slurm", "tpu", "maxtext")
+	outTpuSlurm, err := runExplainForTest("slurm", "tpu")
 	c.Assert(err, IsNil)
-	c.Check(strings.Contains(outTpuMaxText, "Blueprint: community/examples/hpc-slurm6-tpu-maxtext.yaml"), Equals, true)
+	c.Check(strings.Contains(outTpuSlurm, "Blueprint: examples/machine-learning/tpu-v5e-v5p-v6e/tpu-slurm-blueprint.yaml"), Equals, true)
 
 	// 4c. Specific workload tokens in module IDs/sources or non-segment path substrings (vllm, gemma, spack)
 	outGkeVLLM, err := runExplainForTest("gke", "vllm")
@@ -660,8 +660,6 @@ func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
 	c.Assert(json.Unmarshal([]byte(outHPCJSON), &hpcRes), IsNil)
 	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/alphaevolve/alpha-evolve-experiment.yaml"), Equals, false)
 	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/kms-key-per-service.yaml"), Equals, false)
-	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/hpc-slurm6-tpu.yaml"), Equals, false)
-	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/hpc-slurm6-tpu-maxtext.yaml"), Equals, false)
 }
 
 func runExplainJSONForTest(args ...string) (string, error) {

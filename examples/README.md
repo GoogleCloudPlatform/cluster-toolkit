@@ -25,8 +25,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-ha-lb.yaml](#hpc-slurm-ha-lbyaml-) ![community-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm-service-account-profiles.yaml](#hpc-slurm-service-account-profilesyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-apptainer.yaml](#hpc-slurm6-apptaineryaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-hybrid.yaml](#hpc-slurm6-hybridyaml--) ![community-badge] ![experimental-badge]
   * [apptainer-artifact-registry-openfoam.yaml](#apptainer-artifact-registry-openfoamyaml--) ![community-badge] ![experimental-badge]
@@ -227,7 +225,7 @@ the experimental badge (![experimental-badge]).
 | [examples/gke-consumption-options/dws-flex-start/gke-a3-ultragpu.yaml](./gke-consumption-options/dws-flex-start/gke-a3-ultragpu.yaml) | gke | a3-ultragpu-8g | Dynamic Workload Scheduler (DWS) is a resource management and job scheduling platform designed for AI Hypercomputer. Dynamic Workload Scheduler improves your access to AI/ML resources, helps you optimize your spend, and can improve the... |
 | [examples/gke-consumption-options/dws-flex-start/gke-tpu-7x/gke-tpu-7x.yaml](./gke-consumption-options/dws-flex-start/gke-tpu-7x/gke-tpu-7x.yaml) | gke | tpu7x-standard-4t | These steps guide you through the cluster creation process for TPUs using DWS Flex Start. |
 | [examples/gke-consumption-options/dws-flex-start/gke-tpu-v6e/gke-tpu-v6e.yaml](./gke-consumption-options/dws-flex-start/gke-tpu-v6e/gke-tpu-v6e.yaml) | gke | ct6e-standard-4t | These steps guide you through the cluster creation process for TPUs using DWS Flex Start. |
-| [examples/gke-g4-confidential/gke-g4-confidential.yaml](./gke-g4-confidential/gke-g4-confidential.yaml) | gke | g4-standard-48 | This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV-SNP) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure... |
+| [examples/gke-g4-confidential/gke-g4-confidential.yaml](./gke-g4-confidential/gke-g4-confidential.yaml) | gke | g4-standard-48 | This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure boot-disk... |
 | [examples/gke-g4/gke-g4.yaml](./gke-g4/gke-g4.yaml) | gke | g4-standard-48 | This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found here. The deployment instructions can be found in the README. |
 | [examples/gke-h4d/gke-h4d.yaml](./gke-h4d/gke-h4d.yaml) | gke | h4d-highmem-192-lssd | This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found here. The deployment instructions can be found in the README. |
 | [examples/gke-large-scale/gke-scale-5k-autoscaled.yaml](./gke-large-scale/gke-scale-5k-autoscaled.yaml) | gke | e2-standard-2 | Provides blueprints for deploying large-scale GKE Standard clusters (1,000–5,000 nodes) with Kueue, JobSet, Cloud Storage FUSE, Multi-NIC multivpc, and Google Cloud Managed Service for Lustre. |
@@ -309,8 +307,6 @@ the experimental badge (![experimental-badge]).
 | [community/examples/hpc-slurm-ubuntu2204.yaml](../community/examples/hpc-slurm-ubuntu2204.yaml) | slurm | n2-standard-2 | Similar to the hpc-slurm.yaml example, but using Ubuntu 22.04 instead of CentOS 7. Other operating systems are supported by SchedMD for the Slurm on GCP project and images are listed here. Only the examples listed on this page have been... |
 | [community/examples/hpc-slurm6-apptainer.yaml](../community/examples/hpc-slurm6-apptainer.yaml) | slurm | - | This blueprint creates a custom Apptainer enabled image and builds an auto-scaling Slurm cluster using that image. You can deploy containerized workloads on that cluster as described here. |
 | [community/examples/hpc-slurm6-hybrid.yaml](../community/examples/hpc-slurm6-hybrid.yaml) | slurm | - | This blueprint extends an on-premise Slurm cluster with cloud nodes. It builds a compute image matching the on-premise Slurm installation and generates the configuration the on-premise controller needs to burst into GCP. See the hybrid... |
-| [community/examples/hpc-slurm6-tpu-maxtext.yaml](../community/examples/hpc-slurm6-tpu-maxtext.yaml) | slurm | - | Creates an auto-scaling Slurm cluster with TPU nodes. |
-| [community/examples/hpc-slurm6-tpu.yaml](../community/examples/hpc-slurm6-tpu.yaml) | slurm | - | Creates an auto-scaling Slurm cluster with TPU nodes. |
 | [community/examples/htc-htcondor.yaml](../community/examples/htc-htcondor.yaml) | htcondor | - | This blueprint provisions an auto-scaling HTCondor pool based upon the HPC VM Image. |
 | [community/examples/htc-slurm.yaml](../community/examples/htc-slurm.yaml) | slurm | c2-standard-30, n2-standard-2, n2-standard-4 | This blueprint provisions a cluster using the Slurm scheduler in a configuration tuned for the execution of many short-duration, loosely-coupled (non-MPI) jobs. |
 | [community/examples/kms-key-per-service.yaml](../community/examples/kms-key-per-service.yaml) | slurm | n2-standard-2 | The same CMEK Slurm cluster as kms-key.yaml, but with one key per class of resource instead of one shared key, each granted only to the service agent that uses it: the Compute Engine agent can decrypt the disks and nothing else, the... |
@@ -513,23 +509,6 @@ custom role at all, only the baseline logging and monitoring roles.
 controller attaches to the nodes it creates, never project-wide.
 
 [hpc-slurm-service-account-profiles.yaml]: ../community/examples/hpc-slurm-service-account-profiles.yaml
-
-### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
-
-Creates an auto-scaling Slurm cluster with TPU nodes.
-
-[hpc-slurm6-tpu.yaml]: ../community/examples/hpc-slurm6-tpu.yaml
-
-### [hpc-slurm6-tpu-maxtext.yaml] ![community-badge] ![experimental-badge]
-
-Creates an auto-scaling Slurm cluster with TPU nodes.
-
-For tutorial on how to run [maxtext] workload on TPU partition using Slurm,
-Follow [hpc-slurm-tpu-maxtext].
-
-[maxtext]: https://github.com/google/maxtext
-[hpc-slurm6-tpu-maxtext.yaml]: ../community/examples/hpc-slurm6-tpu-maxtext.yaml
-[hpc-slurm-tpu-maxtext]: ../docs/hpc-slurm6-tpu-maxtext.md
 
 ### [hpc-slurm6-apptainer.yaml] ![community-badge] ![experimental-badge]
 
@@ -2019,7 +1998,7 @@ This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, al
 
 ### [gke-g4-confidential] ![core-badge]
 
-This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV-SNP) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure boot-disk encryption for all node pools and supports dynamic Persistent Volumes encrypted with Customer-Managed Encryption Keys (CMEK) via GKE Confidential Storage. The deployment and verification instructions can be found in the [README](gke-g4-confidential/README.md).
+This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure boot-disk encryption for all node pools and supports dynamic Persistent Volumes encrypted with Customer-Managed Encryption Keys (CMEK) via GKE Confidential Storage. The deployment and verification instructions can be found in the [README](gke-g4-confidential/README.md).
 
 [gke-g4-confidential]: ../examples/gke-g4-confidential
 
@@ -2419,7 +2398,7 @@ The Cluster Toolkit automatically sets reserved labels for monitoring and resour
 * `ghpc_blueprint`: The name of the blueprint the deployment was created from (can be overridden in `vars.labels` or module `settings.labels`)
 * `ghpc_deployment`: The name of the specific deployment (can be overridden in `vars.labels` or module `settings.labels`)
 * `ghpc_ai_assisted`: Set to `"true"` when `ai_assisted: true` is configured in the blueprint or deployment variables file (can be overridden in `vars.labels` or module `settings.labels`)
-* `ghpc_creator`: Set automatically to the sanitized account identity (e.g., `jdoe_google_com`) when deploying with a `@google.com` account (or when `--add-creator-label=true` is passed; disable with `--add-creator-label=false`)
+* `ghpc_creator`: Set automatically to the sanitized account identity (e.g., `jdoe_google_com`) when deploying with a `@google.com` account (or when `--add-creator-label=true` is passed; disable with `--add-creator-label=false`). An existing deployment keeps the `ghpc_creator` label it was created with (or none) when it is re-rendered with `gcluster create -w` or `gcluster deploy <blueprint>`. Changing `--add-creator-label` on an existing deployment changes labels on every resource and forces replacement of immutable ones such as instance templates
 * `ghpc_module` and `ghpc_role`: Set inside each Terraform/Packer module's `locals` via `merge(var.labels, { ghpc_module = "...", ghpc_role = "..." })` (see below; because they are merged after `var.labels`, they cannot be overridden via `vars.labels`)
 
 A module role is a default label applied to modules (`ghpc_role`), which

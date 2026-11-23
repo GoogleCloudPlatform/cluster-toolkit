@@ -760,8 +760,8 @@ func TestInferAcceleratorsAndWorkloads(t *testing.T) {
 			wantWork:  []string{"hpc"},
 		},
 		{
-			path:      "community/examples/hpc-slurm6-tpu-maxtext.yaml",
-			wantAccel: []string{"tpu"},
+			path:      "examples/machine-learning/tpu-v5e-v5p-v6e/tpu-slurm-blueprint.yaml",
+			wantAccel: []string{"tpu-v6e", "tpu-v5e", "tpu-v5p"},
 			wantWork:  []string{"ml-training", "ml-inference"},
 		},
 	}

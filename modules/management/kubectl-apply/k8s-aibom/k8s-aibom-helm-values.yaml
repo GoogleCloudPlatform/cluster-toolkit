@@ -11,11 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
----
 
-spec:
-  requirements:
-    services: []
-ghpc:
-  inject_module_id: name
-  has_to_be_used: true
+# Reference values: `helm show values oci://ghcr.io/googlecloudplatform/charts/k8s-aibom --version 1.6.2`
+
+# Lets the controller schedule on GKE system node pools that carry the
+# default "gke-managed-components" taint (same as the jobset values).
+tolerations:
+- key: "components.gke.io/gke-managed-components"
+  operator: "Equal"
+  value: "true"
+  effect: "NoSchedule"
