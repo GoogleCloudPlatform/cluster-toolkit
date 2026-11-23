@@ -42,9 +42,9 @@ import (
 
 const (
 	// tpuTopologyLabel is the GKE label for TPU topology.
-	tpuTopologyLabel = "cloud.google.com/gke-tpu-topology"
+	tpuTopologyLabel = k8s.GKETPUTopologyLabel
 	// nodePoolLabel is the GKE label for the node pool name.
-	nodePoolLabel = "cloud.google.com/gke-nodepool"
+	nodePoolLabel = k8s.GKENodePoolLabel
 	// placementPolicyNameLabel selects nodes carrying a named GCE compact placement or workload policy.
 	placementPolicyNameLabel = "cloud.google.com/placement-policy-name"
 	// placementGroupLabel is the GKE-managed compact placement group identifier used by NAP.
@@ -217,6 +217,18 @@ type GKEOrchestrator struct {
 	// inspectedPVCs caches per-submit PVC metadata inspected during ValidateClusterMounts.
 	inspectedPVCs  map[string]pvcInspectResult
 	nfsAuthChecked bool
+	// inventory caches pure-Kubernetes node, slice, and label-scheme discovery results for the current run.
+	inventory *k8s.Inventory
+}
+
+// gceTPUHardwareResolver implements k8s.TPUHardwareResolver using GCE machine-type conventions.
+type gceTPUHardwareResolver struct{}
+
+type gceTPUFamilySpec struct {
+	canonical      string
+	normTokens     []string
+	shorthandBases []string
+	tpu7xChipRules bool
 }
 
 // Types for GetClusterInfo unmarshaling
