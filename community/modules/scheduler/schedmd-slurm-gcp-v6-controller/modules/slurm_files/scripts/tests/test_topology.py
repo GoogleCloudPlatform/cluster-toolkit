@@ -17,7 +17,7 @@ import json
 import yaml
 import mock
 from pytest_unordered import unordered
-from common import TstCfg, TstNodeset, TstTPU, tstInstance
+from common import TstCfg, TstNodeset, tstInstance
 import sort_nodes
 
 import util
@@ -49,18 +49,13 @@ def test_gen_topology_conf_empty():
 """
 
 
-@mock.patch("tpu.TPU.make")
 @mock.patch('uuid.uuid4')
-def test_gen_topology_conf(mock_uuid, tpu_mock):
+def test_gen_topology_conf(mock_uuid):
     mock_uuid.side_effect = [
         mock.MagicMock(hex=f'{i:05d}' + '0' * 27) for i in range(15)
     ]
     output_dir = tempfile.mkdtemp()
     cfg = TstCfg(
-        nodeset_tpu={
-            "a": TstNodeset("bold", node_count_static=4, node_count_dynamic_max=5),
-            "b": TstNodeset("slim", node_count_dynamic_max=3),
-        },
         nodeset={
             "c": TstNodeset("green", node_count_static=2, node_count_dynamic_max=3),
             "d": TstNodeset("blue", node_count_static=7),
@@ -68,15 +63,6 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
         },
         output_dir=output_dir,
     )
-
-    def tpu_se(ns: str, lkp) -> TstTPU:
-        if ns == "bold":
-            return TstTPU(vmcount=3)
-        if ns == "slim":
-            return TstTPU(vmcount=1)
-        raise AssertionError(f"unexpected TPU name: '{ns}'")
-
-    tpu_mock.side_effect = tpu_se
 
     lkp = util.Lookup(cfg)
     lkp.instances = lambda: { n.name: n for n in [ # type: ignore[assignment]
@@ -130,20 +116,6 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
       nodes: m22-green-[0-2,4]
     - switch: s0_4
       nodes: m22-pink-[0-3]
-    - switch: s1
-      children: s1_[0-1]
-    - switch: s1_0
-      children: s1_0_[0-3]
-    - switch: s1_0_0
-      nodes: m22-bold-[0-2]
-    - switch: s1_0_1
-      nodes: m22-bold-3
-    - switch: s1_0_2
-      nodes: m22-bold-[4-6]
-    - switch: s1_0_3
-      nodes: m22-bold-[7-8]
-    - switch: s1_1
-      nodes: m22-slim-[0-2]
 """
     expected_parsed_tree = yaml.safe_load(expected_tree_yaml)[0]
     assert tree_topology == expected_parsed_tree
@@ -157,16 +129,14 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
     blocks_list = block_topology['block']['blocks']
     
     # Assert total count of blocks
-    # 5 block groups: 'a', 'b', 'slurm-root', 'ns_bold', 'ns_slim'
+    # 3 block groups: 'a', 'b', 'slurm-root'
     # 'a': 2 actual blocks, (32-2)=30 phantom blocks
     # 'b': 1 actual block, (32-1)=31 phantom blocks
     # 'slurm-root': 1 actual block, (32-1)=31 phantom blocks
-    # 'ns_bold': 4 actual blocks, (32-4)=28 phantom blocks
-    # 'ns_slim': 0 actual blocks, 0 phantom blocks (no blocks generated for 'ns_slim')
-    # Total actual: 2+1+1+4+0 = 8
-    # Total phantom: 30+31+31+28+0 = 120
-    # Sum: 8 + 120 = 128.
-    assert len(blocks_list) == 128
+    # Total actual: 2+1+1 = 4
+    # Total phantom: 30+31+31 = 92
+    # Sum: 4 + 92 = 96.
+    assert len(blocks_list) == 96
     # Assert actual blocks and their names/UUID format
     extracted_actual_blocks_data = []
     for block_entry in blocks_list:
@@ -184,13 +154,9 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
                 'name_part': name_part,
                 'nodes': nodes,
             })
-    # Expected name_part and nodes for actual blocks (based on detailed tracing and EXTRACTED ACTUAL BLOCKS DATA)
+    # Expected name_part and nodes for actual blocks
     expected_actual_blocks_data = [
-        {'name_part': 'bold-0', 'nodes': 'm22-bold-[0-2]'},
-        {'name_part': 'bold-1', 'nodes': 'm22-bold-3'},
-        {'name_part': 'bold-2', 'nodes': 'm22-bold-[4-6]'},
-        {'name_part': 'bold-3', 'nodes': 'm22-bold-[7-8]'},
-        {'name_part': 'slurm-root', 'nodes': 'm22-blue-[4-6],m22-green-[0-2,4],m22-pink-[0-3],m22-slim-[0-2]'},
+        {'name_part': 'slurm-root', 'nodes': 'm22-blue-[4-6],m22-green-[0-2,4],m22-pink-[0-3]'},
         {'name_part': 'a', 'nodes': 'm22-blue-[0-1],m22-green-3'},
         {'name_part': 'b', 'nodes': 'm22-blue-2'},
         {'name_part': 'a', 'nodes': 'm22-blue-3'}
@@ -202,7 +168,6 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
         'a': 0,
         'b': 0,
         'slurm-root': 0,
-        'ns_bold': 0,
     }
     for block_entry in blocks_list:
         nodes = block_entry['nodes']
@@ -212,10 +177,9 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
             prefix = parts[0] if len(parts) == 2 else block_entry['block']
             assert prefix in phantom_counts, f"Unexpected phantom block prefix: {prefix}"
             phantom_counts[prefix] += 1
-    assert phantom_counts['a'] == (BLOCK_SIZE - 2) # Found 30 phantom blocks, so 2 actual blocks.
-    assert phantom_counts['b'] == (BLOCK_SIZE - 1) # Found 31 phantom blocks, so 1 actual block.
-    assert phantom_counts['slurm-root'] == (BLOCK_SIZE - 1) # Found 31 phantom blocks, so 1 actual block.
-    assert phantom_counts['ns_bold'] == (BLOCK_SIZE - 4) # Found 28 phantom blocks, so 4 actual blocks.
+    assert phantom_counts['a'] == (BLOCK_SIZE - 2)
+    assert phantom_counts['b'] == (BLOCK_SIZE - 1)
+    assert phantom_counts['slurm-root'] == (BLOCK_SIZE - 1)
 
     summary.dump(lkp)
     summary_got = json.loads(open(output_dir + "/cloud_topology.summary.json").read())
@@ -225,9 +189,7 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
             [f"m22-blue-{i}" for i in (4,5,6)] +
             [f"m22-green-{i}" for i in (0,1,2,4)] +
             [f"m22-pink-{i}" for i in range(4)]),
-        "tpu_nodes": unordered(
-            [f"m22-bold-{i}" for i in range(9)] +
-            [f"m22-slim-{i}" for i in range(3)]),
+        "tpu_nodes": [],
         'physical_host': {
             'm22-blue-0': '/a/a/a',
             'm22-blue-1': '/a/a/b',

@@ -46,7 +46,6 @@ from util import (
     wait_for_operation,
 )
 from util import lookup, ReservationDetails
-import tpu
 import mig_flex
 
 log = logging.getLogger()
@@ -293,9 +292,6 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
             # Static MIG nodes handle multi-MIG routing and 1000-node createInstances
             # batching internally. Keep in a single chunk to preserve atomic multi-shard rollback.
             return [nodes]
-        elif lkp.node_is_tpu(model):
-            ns_name = lkp.node_nodeset_name(model)
-            chunk_size = tpu.TPU.make(ns_name, lkp).vmcount
         else:
             chunk_size = BULK_INSERT_LIMIT
 
@@ -566,7 +562,7 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             "node bulk groups: \n{}".format(yaml.safe_dump(grouped_nodelists).rstrip())
         )
 
-    tpu_chunks, gce_tpu_chunks, flex_chunks, mig_chunks = [], [], [], []
+    gce_tpu_chunks, flex_chunks, mig_chunks = [], [], []
     bi_inserts = {}
 
     for group, chunk in grouped_nodes.items():
@@ -574,8 +570,6 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
 
         if lkp.is_tpu_node(model):
             gce_tpu_chunks.append(chunk)
-        elif lkp.node_is_tpu(model):
-            tpu_chunks.append(chunk.nodes)
         elif lkp.is_flex_node(model):
             flex_chunks.append(chunk)
         elif lkp.is_node_mig(model):
@@ -661,9 +655,6 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             )
     # wait for all bulkInserts to complete and log any errors
     bulk_operations = {group: wait_for_operation(op) for group, op in started.items()}
-
-    # Start TPU after regular nodes so that regular nodes are not affected by the slower TPU nodes
-    execute_with_futures(tpu.start_tpu, tpu_chunks)
 
     for group, op in bulk_operations.items():
         _handle_bulk_insert_op(op, grouped_nodes[group].nodes, resume_data)
@@ -933,7 +924,7 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
     # and bound to each slice MIG. Skip runtime GCE placement policy allocation.
     # GCE TPU nodesets get their workload policy from mig_flex at resume time, so skip them too.
     # (Note: DWS Flex NodeSets must continue to runtime placement policy allocation).
-    if lkp.is_tpu_node(model) or lkp.node_is_tpu(model) or (lkp.is_node_mig(model) and not lkp.is_flex_node(model)):
+    if lkp.is_tpu_node(model) or (lkp.is_node_mig(model) and not lkp.is_flex_node(model)):
         return no_pp
 
     topo = nodeset.get("accelerator_topology") if isinstance(nodeset, dict) else getattr(nodeset, "accelerator_topology", None)
