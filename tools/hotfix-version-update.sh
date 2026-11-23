@@ -17,7 +17,7 @@
 #
 # bash tools/hotfix-version-update.sh
 # bash tools/hotfix-version-update.sh -b hotfix-v1.109.1
-# bash tools/hotfix-version-update.sh -r aslam-quad/cluster-toolkit
+# bash tools/hotfix-version-update.sh -r GoogleCloudPlatform/cluster-toolkit
 #
 
 set -e -o pipefail
