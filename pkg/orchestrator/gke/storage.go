@@ -753,10 +753,10 @@ func validateOnlyDirOption(opt, sep, val string, seenOnlyDir *bool) error {
 func validateGCSMountOptions(options string) error {
 	seenOnlyDir := false
 	for _, opt := range splitMountOptions(options) {
-		if opt == "defaults" || opt == "_netdev" {
+		token := strings.TrimLeft(opt, "-")
+		if token == "defaults" || token == "_netdev" {
 			return fmt.Errorf("invalid GCSFuse mount option %q: fstab-only options are not supported by the Cloud Storage FUSE CSI driver; remove %q from options=", opt, opt)
 		}
-		token := strings.TrimLeft(opt, "-")
 		key, sep, val := splitGCSOptionKeyValue(token)
 		if key == "only-dir" || key == "only_dir" {
 			if err := validateOnlyDirOption(opt, sep, val, &seenOnlyDir); err != nil {
@@ -860,11 +860,11 @@ func canonicalMountSourceKey(src, subPath, options string, hasProfile bool) (dup
 }
 
 // hasImplicitDirsOption reports whether a comma-separated GCSFuse mountOptions string
-// already configures implicit-dirs (including explicit opt-out or an aiml-* profile preset).
+// already configures implicit-dirs (including explicit opt-out).
 func hasImplicitDirsOption(options string) bool {
 	for _, token := range splitMountOptions(options) {
-		key, _, val := splitGCSOptionKeyValue(token)
-		if key == "implicit-dirs" || (key == "profile" && (val == "aiml-training" || val == "aiml-serving" || val == "aiml-checkpointing")) {
+		key, _, _ := splitGCSOptionKeyValue(token)
+		if key == "implicit-dirs" {
 			return true
 		}
 	}

@@ -5410,12 +5410,12 @@ func TestHasImplicitDirsOption(t *testing.T) {
 		{name: "implicit-dirs colon true", options: "implicit-dirs:true", want: true},
 		{name: "implicit-dirs colon false opt-out", options: "implicit-dirs:false", want: true},
 		{name: "with other options and whitespace", options: "only-dir=sub, implicit-dirs ,uid=1000", want: true},
-		{name: "profile aiml-training colon", options: "profile:aiml-training", want: true},
-		{name: "profile aiml-serving colon", options: "profile:aiml-serving", want: true},
-		{name: "profile aiml-checkpointing colon", options: "profile:aiml-checkpointing", want: true},
-		{name: "profile aiml-training equals", options: "profile=aiml-training", want: true},
-		{name: "profile aiml-serving equals", options: "profile=aiml-serving", want: true},
-		{name: "profile aiml-checkpointing equals", options: "profile=aiml-checkpointing", want: true},
+		{name: "profile aiml-training colon does not suppress inline warning", options: "profile:aiml-training", want: false},
+		{name: "profile aiml-serving colon does not suppress inline warning", options: "profile:aiml-serving", want: false},
+		{name: "profile aiml-checkpointing colon does not suppress inline warning", options: "profile:aiml-checkpointing", want: false},
+		{name: "profile aiml-training equals does not suppress inline warning", options: "profile=aiml-training", want: false},
+		{name: "profile aiml-serving equals does not suppress inline warning", options: "profile=aiml-serving", want: false},
+		{name: "profile aiml-checkpointing equals does not suppress inline warning", options: "profile=aiml-checkpointing", want: false},
 		{name: "profile aiml-training with explicit opt-out", options: "profile:aiml-training,implicit-dirs=false", want: true},
 	}
 
@@ -5444,7 +5444,11 @@ func TestParseSingleVolumeRejectsInvalidGCSFuseOptions(t *testing.T) {
 		{mount: "gs://bkt;/data;options=--implicit-dirs", wantSuggest: `"implicit-dirs"`},
 		{mount: "gs://bkt;/data;options=--", wantSuggest: "flag name is empty"},
 		{mount: "gs://bkt;/data;options=defaults,implicit-dirs", wantSuggest: `remove "defaults"`},
+		{mount: "gs://bkt;/data;options=--defaults,implicit-dirs", wantSuggest: `remove "--defaults"`},
+		{mount: "gs://bkt;/data;options=-defaults", wantSuggest: `remove "-defaults"`},
 		{mount: "gs://bkt;/data;options=_netdev,implicit-dirs", wantSuggest: `remove "_netdev"`},
+		{mount: "gs://bkt;/data;options=--_netdev,implicit-dirs", wantSuggest: `remove "--_netdev"`},
+		{mount: "gs://bkt;/data;options=-_netdev", wantSuggest: `remove "-_netdev"`},
 		{mount: "gs://bkt;/data;options=only_dir=sub", wantSuggest: `"only-dir=sub"`},
 		{mount: "gs://bkt;/data;options=--only_dir=sub", wantSuggest: `"only-dir=sub"`},
 		{mount: "gs://bkt;/data;options=only_dir:sub", wantSuggest: `"only-dir=sub"`},
@@ -5597,11 +5601,10 @@ func TestRunStorageProfilePreflightInlineSkipsWarningWhenCovered(t *testing.T) {
 			wantCalls: []string{"hns-bkt"},
 		},
 		{
-			name: "options implicit-dirs, opt-out, and aiml profile",
+			name: "options implicit-dirs and explicit opt-out",
 			mounts: []string{
 				"gs://flat-bkt/a;/a;options=implicit-dirs",
 				"gs://flat-bkt/b;/b;options=implicit-dirs=false",
-				"gs://flat-bkt/c;/c;options=profile:aiml-training",
 			},
 		},
 	}
@@ -5637,6 +5640,11 @@ func TestRunStorageProfilePreflightProfiledAndMixedFlatBucket(t *testing.T) {
 			name:      "profiled mount does not emit flat-bucket warning",
 			mounts:    []string{"gs://flat-bkt;/data;profile=training"},
 			wantWarns: 0,
+		},
+		{
+			name:      "inline mount with options=profile:aiml-training still emits flat-bucket warning",
+			mounts:    []string{"gs://flat-bkt;/raw;options=profile:aiml-training"},
+			wantWarns: 1,
 		},
 		{
 			name:      "mixed inline and profiled mount on same flat bucket memoizes lookup and warns once",
