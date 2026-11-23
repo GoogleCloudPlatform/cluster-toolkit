@@ -54,7 +54,7 @@ deployment_groups:
   - id: client_sa
     source: modules/project/service-account
     settings:
-      name: client
+      name: client-sa
       project_roles:
       - logging.logWriter
       # Lets the client VM read its startup-script bucket, which vm-instance

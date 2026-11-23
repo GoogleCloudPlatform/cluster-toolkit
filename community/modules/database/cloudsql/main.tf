@@ -111,6 +111,9 @@ resource "google_sql_database_instance" "instance" {
       }
     }
 
+    # IAM database users need cloudsql.iam_authentication on, so the module
+    # sets it when iam_service_accounts is not empty. A conflicting value in
+    # database_flags fails the precondition below rather than being replaced.
     dynamic "database_flags" {
       for_each = merge(var.database_flags, length(var.iam_service_accounts) > 0 ? { "cloudsql.iam_authentication" = "on" } : {})
       content {
@@ -137,7 +140,7 @@ resource "google_sql_database_instance" "instance" {
         for_each = var.use_psc_connection ? [""] : []
         content {
           psc_enabled               = true
-          allowed_consumer_projects = coalesce(var.psc_allowed_consumer_projects, [var.project_id])
+          allowed_consumer_projects = distinct(concat([var.project_id], var.psc_allowed_consumer_projects))
         }
       }
     }
@@ -174,6 +177,11 @@ resource "google_sql_database_instance" "instance" {
   # false, would make the provider send an empty root password.
   lifecycle {
     ignore_changes = [root_password_wo_version]
+
+    precondition {
+      condition     = length(var.iam_service_accounts) == 0 || lookup(var.database_flags, "cloudsql.iam_authentication", "on") == "on"
+      error_message = "database_flags sets cloudsql.iam_authentication to \"${lookup(var.database_flags, "cloudsql.iam_authentication", "")}\", but iam_service_accounts needs it \"on\". Remove the flag from database_flags or set it to \"on\"."
+    }
   }
 }
 
@@ -357,11 +365,25 @@ resource "google_secret_manager_secret_iam_member" "password_accessor" {
 
 # Clients verify the server against these CA certificates. Both the current
 # certificate and any upcoming one from a rotation are listed.
+#
+# The instance name can be known at plan time before the instance exists, so
+# the read must wait for the instance. depends_on does that for a created
+# instance. For an adopted instance that another module creates in the same
+# apply, the postcondition does it, as on the existing data source: Terraform
+# does not read a data source with conditions at plan while its dependencies
+# have pending changes. Referencing the existing data source's name, or
+# depending on that data source, is not enough: the name stays known at plan
+# and a pending data read does not defer this one.
 data "google_sql_ca_certs" "instance" {
   project  = var.project_id
   instance = local.effective_instance_name
 
-  # The name is known before the instance exists, so wait for the instance;
-  # otherwise the first plan reads certificates of an instance not yet created.
   depends_on = [google_sql_database_instance.instance]
+
+  lifecycle {
+    postcondition {
+      condition     = length(self.certs) > 0
+      error_message = "Cloud SQL returned no server CA certificates for the instance."
+    }
+  }
 }

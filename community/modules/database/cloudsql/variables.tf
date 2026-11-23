@@ -234,8 +234,9 @@ variable "iam_service_accounts" {
     (CLOUD_IAM_SERVICE_ACCOUNT), which log in with an OAuth access token
     instead of a password. PostgreSQL only. When set, the module turns on the
     cloudsql.iam_authentication flag on a created instance; an adopted
-    instance must already have it. The module grants no project IAM: each
-    account also needs roles/cloudsql.instanceUser. Values must be known at
+    instance must already have it. Setting that flag to anything but "on" in
+    database_flags is refused at plan time. The module grants no project IAM:
+    each account also needs roles/cloudsql.instanceUser. Values must be known at
     plan time, such as literal strings or the `service_account_email` output
     of `modules/project/service-account`.
     EOT
@@ -292,6 +293,10 @@ variable "sql_password" {
   type        = string
   default     = null
   sensitive   = true
+  validation {
+    condition     = var.sql_password == null ? true : var.sql_password != ""
+    error_message = "sql_password must not be empty. Leave it unset to generate a random password."
+  }
 }
 
 variable "network_id" {
@@ -347,6 +352,7 @@ variable "user_managed_replication" {
   }))
   description = "Replication parameters that will be used for the generated password secret."
   default     = []
+  nullable    = false
 }
 
 variable "use_psc_connection" {
@@ -421,13 +427,14 @@ variable "maintenance_window" {
 }
 
 variable "psc_allowed_consumer_projects" {
-  description = "Projects allowed to connect to the instance over Private Service Connect. Leave null to allow only project_id."
+  description = <<-EOT
+    Projects allowed to connect to the instance over Private Service Connect,
+    in addition to project_id. project_id is always allowed, because the
+    module creates its own endpoint there.
+    EOT
   type        = list(string)
-  default     = null
-  validation {
-    condition     = var.psc_allowed_consumer_projects == null ? true : length(var.psc_allowed_consumer_projects) > 0
-    error_message = "psc_allowed_consumer_projects must list at least one project, or be null to allow only project_id."
-  }
+  default     = []
+  nullable    = false
 }
 
 variable "database_deletion_policy" {

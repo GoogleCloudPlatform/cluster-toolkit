@@ -49,8 +49,9 @@ The instance never has a public IP. Choose one of:
 - **Private Service Connect**: set `use_psc_connection = true` and
   `subnetwork_self_link` (required, checked at plan time); the module creates
   the PSC endpoint address and forwarding rule in that subnetwork.
-  `network_id` is not needed. `psc_allowed_consumer_projects` lists the
-  projects allowed to connect (default: `project_id` only).
+  `network_id` is not needed. `project_id` is always allowed to connect,
+  because the module's own endpoint is there; `psc_allowed_consumer_projects`
+  lists any other projects allowed to connect.
 
 Set `deletion_policy: ABANDON` on `private-service-access`, as above.
 Otherwise `terraform destroy` can fail with "Producer services ... are still
@@ -80,6 +81,12 @@ A created instance defaults to:
   `mysql --ssl` or `psql "sslmode=require"`. The module does not create
   client certificates, so with `TRUSTED_CLIENT_CERTIFICATE_REQUIRED` issue
   them yourself, for example with `gcloud sql ssl client-certs create`.
+  To also verify the server, as with `psql "sslmode=verify-ca"` or
+  `mysql --ssl-mode=VERIFY_CA`, give the client the `server_ca_certs` output
+  as its CA file (`sslrootcert` or `--ssl-ca`). It holds the instance's
+  current server CA certificate and any upcoming one from a rotation. It
+  changes when the server CA is rotated, so apply again and give clients the
+  new value after a rotation.
 - `set_root_password = true`: the built-in `root` (MySQL) or `postgres`
   (PostgreSQL) user gets a random password that is never stored, so it cannot
   be used without one. Reset it with `gcloud sql users set-password` if needed.
@@ -176,9 +183,13 @@ Supported for PostgreSQL only; Terraform refuses it on a MySQL instance.
 - **Users.** The module adds each account as a `CLOUD_IAM_SERVICE_ACCOUNT`
   user named after its email without `.gserviceaccount.com`, for example
   `app@my-project.iam`. The `iam_usernames` output maps each email to that
-  name. The built-in password user and its secret are still created.
+  name. The built-in password user and its secret are still created unless
+  `create_password_user` is `false`; with it off, `iam_service_accounts` must
+  list at least one account, and the `username`, `password_secret_id` and
+  `password_secret_version` outputs are null.
 - **Flag.** On a created instance the module sets the
   `cloudsql.iam_authentication` flag to `on`, alongside any `database_flags`.
+  Setting that flag to anything else in `database_flags` fails at plan time.
   It cannot set flags on an adopted instance (`existing_instance_name`), which
   must already have the flag.
 - **Logging in.** The client uses the database username and an OAuth 2.0
@@ -325,7 +336,7 @@ No modules.
 | <a name="input_existing_instance_name"></a> [existing\_instance\_name](#input\_existing\_instance\_name) | Name of an existing Cloud SQL instance to adopt instead of creating a new<br/>one. The instance must have a private IP address. To adopt an instance<br/>created by another cloudsql module in the same apply, set that module's<br/>sql\_instance\_name and pass its instance\_name output here; a literal name<br/>is read at plan time, before the instance exists, and fails. When set,<br/>the inputs that shape a new instance are ignored: api\_deletion\_protection,<br/>availability\_type, backup\_start\_time, data\_cache\_enabled, database\_flags,<br/>database\_version, deletion\_protection, disk\_autoresize, disk\_size\_gb,<br/>edition, enable\_backups, encryption\_key\_name,<br/>final\_backup\_retention\_days, maintenance\_window, network\_id,<br/>point\_in\_time\_recovery, private\_vpc\_connection\_peering,<br/>psc\_allowed\_consumer\_projects, query\_insights, retain\_backups\_on\_delete,<br/>retained\_backups, set\_root\_password, sql\_instance\_name, ssl\_mode and<br/>tier. | `string` | `null` | no |
 | <a name="input_final_backup_retention_days"></a> [final\_backup\_retention\_days](#input\_final\_backup\_retention\_days) | Take a final backup when the instance is deleted and keep it for this many days. Leave null for no final backup. | `number` | `null` | no |
 | <a name="input_iam_database_roles"></a> [iam\_database\_roles](#input\_iam\_database\_roles) | Database roles granted to every account in iam\_service\_accounts, for<br/>example ["cloudsqlsuperuser"]. A new IAM user has no privileges until it<br/>is granted some. The list replaces the users' existing roles. The Cloud<br/>SQL API does not return the roles, so Terraform does not detect drift on<br/>them. | `list(string)` | `[]` | no |
-| <a name="input_iam_service_accounts"></a> [iam\_service\_accounts](#input\_iam\_service\_accounts) | Service account emails to add as IAM database users<br/>(CLOUD\_IAM\_SERVICE\_ACCOUNT), which log in with an OAuth access token<br/>instead of a password. PostgreSQL only. When set, the module turns on the<br/>cloudsql.iam\_authentication flag on a created instance; an adopted<br/>instance must already have it. The module grants no project IAM: each<br/>account also needs roles/cloudsql.instanceUser. Values must be known at<br/>plan time, such as literal strings or the `service_account_email` output<br/>of `modules/project/service-account`. | `list(string)` | `[]` | no |
+| <a name="input_iam_service_accounts"></a> [iam\_service\_accounts](#input\_iam\_service\_accounts) | Service account emails to add as IAM database users<br/>(CLOUD\_IAM\_SERVICE\_ACCOUNT), which log in with an OAuth access token<br/>instead of a password. PostgreSQL only. When set, the module turns on the<br/>cloudsql.iam\_authentication flag on a created instance; an adopted<br/>instance must already have it. Setting that flag to anything but "on" in<br/>database\_flags is refused at plan time. The module grants no project IAM:<br/>each account also needs roles/cloudsql.instanceUser. Values must be known at<br/>plan time, such as literal strings or the `service_account_email` output<br/>of `modules/project/service-account`. | `list(string)` | `[]` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_maintenance_window"></a> [maintenance\_window](#input\_maintenance\_window) | Maintenance window for the Cloud SQL instance: day 1 (Monday) to 7, hour 0 to 23 UTC, and update\_track canary, stable or week5. Leave null to accept Cloud SQL defaults. | <pre>object({<br/>    day          = number<br/>    hour         = number<br/>    update_track = optional(string)<br/>  })</pre> | `null` | no |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is going to be created in:<br/>`projects/<project_id>/global/networks/<network_name>`. Required unless<br/>use\_psc\_connection is true or existing\_instance\_name is set. | `string` | `null` | no |
@@ -334,7 +345,7 @@ No modules.
 | <a name="input_point_in_time_recovery"></a> [point\_in\_time\_recovery](#input\_point\_in\_time\_recovery) | Enable point-in-time recovery (binary logging on MySQL) when enable\_backups is true. | `bool` | `true` | no |
 | <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection, used only as dependency for Cloud SQL creation. | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
-| <a name="input_psc_allowed_consumer_projects"></a> [psc\_allowed\_consumer\_projects](#input\_psc\_allowed\_consumer\_projects) | Projects allowed to connect to the instance over Private Service Connect. Leave null to allow only project\_id. | `list(string)` | `null` | no |
+| <a name="input_psc_allowed_consumer_projects"></a> [psc\_allowed\_consumer\_projects](#input\_psc\_allowed\_consumer\_projects) | Projects allowed to connect to the instance over Private Service Connect,<br/>in addition to project\_id. project\_id is always allowed, because the<br/>module creates its own endpoint there. | `list(string)` | `[]` | no |
 | <a name="input_query_insights"></a> [query\_insights](#input\_query\_insights) | Query insights configuration. | <pre>object({<br/>    enabled                 = optional(bool, false)<br/>    query_plans_per_minute  = optional(number)<br/>    query_string_length     = optional(number)<br/>    record_application_tags = optional(bool)<br/>    record_client_address   = optional(bool)<br/>  })</pre> | `{}` | no |
 | <a name="input_region"></a> [region](#input\_region) | The region where SQL instance will be configured | `string` | n/a | yes |
 | <a name="input_retain_backups_on_delete"></a> [retain\_backups\_on\_delete](#input\_retain\_backups\_on\_delete) | Keep the instance's automated backups after it is deleted (they remain billed until they expire). Set null to use the Cloud SQL default. | `bool` | `true` | no |
