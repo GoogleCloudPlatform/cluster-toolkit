@@ -17,17 +17,19 @@
 #
 # bash tools/hotfix-version-update.sh
 # bash tools/hotfix-version-update.sh -b hotfix-v1.109.1
+# bash tools/hotfix-version-update.sh -r aslam-quad/cluster-toolkit
 #
 
 set -e -o pipefail
 
-REPO="GoogleCloudPlatform/cluster-toolkit"
+REPO="${HOTFIX_REPO:-GoogleCloudPlatform/cluster-toolkit}"
 REMOTE_NAME="origin"
 
 usage() {
-	echo "Usage: $0 [-b <hotfix-vX.Y.Z>]"
+	echo "Usage: $0 [-b <hotfix-vX.Y.Z>] [-r <owner/repo>]"
 	echo "  -b: Optional hotfix branch name (must match hotfix-vX.Y.Z+1 for the next patch release)."
 	echo "      If omitted, hotfix-vX.Y.Z+1 is created directly from main."
+	echo "  -r: Optional GitHub repository slug (default: GoogleCloudPlatform/cluster-toolkit)."
 	exit 1
 }
 
@@ -55,13 +57,19 @@ trap 'rm -rf "${GITDIR}"' EXIT
 
 BRANCH_NAME=""
 
-while getopts "b:h" opt; do
+while getopts "b:r:h" opt; do
 	case "${opt}" in
 	b) BRANCH_NAME="${OPTARG}" ;;
+	r) REPO="${OPTARG}" ;;
 	h) usage ;;
 	*) usage ;;
 	esac
 done
+
+if [[ ! "${REPO}" =~ ^[^/]+/[^/]+$ ]]; then
+	echo "ERROR: Repository '${REPO}' must be in 'owner/repo' format." >&2
+	exit 1
+fi
 
 OLD_TAG=$(gh release view -R "${REPO}" --json tagName --jq '.tagName' 2>/dev/null || true)
 if [ -z "${OLD_TAG}" ]; then

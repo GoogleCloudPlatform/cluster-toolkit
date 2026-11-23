@@ -294,6 +294,15 @@ sys.exit(1)
         self.assertEqual(main_pr_args[main_pr_args.index("--base") + 1], "main")
         self.assertEqual(main_pr_args[main_pr_args.index("--head") + 1], "hotfix-v1.109.1")
 
+    def test_custom_repo_flag_targets_fork(self) -> None:
+        res = self._run_script("-r", "aslam-quad/cluster-toolkit")
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+
+        prs = self._created_prs()
+        self.assertEqual(len(prs), 1)
+        self.assertIn("https://github.com/aslam-quad/cluster-toolkit/pull/", prs[0]["url"])
+        self.assertIn("gh pr create -R aslam-quad/cluster-toolkit --base develop --head main", res.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
