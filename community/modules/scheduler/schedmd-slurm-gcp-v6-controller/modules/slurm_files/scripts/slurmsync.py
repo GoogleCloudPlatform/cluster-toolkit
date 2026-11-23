@@ -214,8 +214,8 @@ _POWER_DOWN_FLAGS = frozenset(("POWERED_DOWN", "POWERING_DOWN"))
 def _sanitize_mig_reason_part(text: str) -> str:
     """Normalize a GCE error field into a single-line Slurm node reason fragment.
 
-    Square brackets are converted to parentheses because ``get_node_reason``
-    splits on ``[`` to strip the user/timestamp suffix appended by ``scontrol``.
+    Square brackets are converted to parentheses so error text cannot be mistaken
+    for the trailing ``[user@timestamp]`` attribution suffix stripped by ``get_node_reason``.
     """
     cleaned = re.sub(r"[\r\n\t\x00-\x1f\x7f]+", " ", text)
     cleaned = cleaned.replace("[", "(").replace("]", ")")
@@ -241,19 +241,23 @@ def _is_mig_managed_reason(reason: Optional[str]) -> bool:
     """Return True when ``reason`` was set by slurmsync MIG auto-healing/error logic."""
     if not reason:
         return False
-    return "MIG Auto-Healing" in reason or reason.startswith(_MIG_ERROR_PREFIX)
+    return reason.lstrip().startswith(("MIG Auto-Healing", _MIG_ERROR_PREFIX))
 
 
 def _can_update_mig_reason(current_reason: Optional[str]) -> bool:
     """Return True if a DOWN node's reason may be updated with a newer MIG error.
 
-    Preserves manual operator reasons (e.g. admin maintenance notes or hardware checks).
+    ``None`` represents a failed/unknown lookup and fails safe (returns False) so a
+    transient ``scontrol`` error never overwrites a manual operator reason.
     """
-    if not current_reason:
+    if current_reason is None:
+        return False
+    stripped = current_reason.strip()
+    if not stripped:
         return True
-    if _is_mig_managed_reason(current_reason):
+    if _is_mig_managed_reason(stripped):
         return True
-    return current_reason.strip().lower() in (
+    return stripped.lower() in (
         "unbacked instance",
         "instance terminated",
         "not responding",
@@ -293,25 +297,29 @@ def _is_instance_managed_by_mig(
         return True
 
 
-_node_reasons_cache: Optional[Dict[str, Optional[str]]] = None
+_REASON_SUFFIX_RE = re.compile(r"\s*\[[^\[\]]+@[^\[\]]+\]\s*$")
+_node_reasons_cache: Optional[Dict[str, str]] = None
+_prefetch_node_reasons_enabled: bool = False
+_node_reasons_prefetched: bool = False
 
 
 def _normalize_reason(reason: Optional[str]) -> Optional[str]:
-    if reason and "[" in reason:
-        return reason.split("[")[0].strip()
-    return reason
+    if reason is None:
+        return None
+    return _REASON_SUFFIX_RE.sub("", reason).strip()
 
 
-def _load_all_node_reasons() -> Optional[Dict[str, Optional[str]]]:
+def _load_all_node_reasons() -> Optional[Dict[str, str]]:
     """Fetch reasons for all Slurm nodes in a single ``scontrol show nodes --json`` call."""
     try:
         result = run(f"{lookup().scontrol} show nodes --json")
         data = json.loads(result.stdout)
-        reasons: Dict[str, Optional[str]] = {}
+        reasons: Dict[str, str] = {}
         for node in data.get("nodes", []):
             name = node.get("name")
             if name:
-                normalized = _normalize_reason(node.get("reason"))
+                normalized = _normalize_reason(node.get("reason") or "")
+                assert normalized is not None
                 reasons[name] = normalized
                 reasons.setdefault(name.split(".")[0], normalized)
         return reasons
@@ -324,6 +332,10 @@ def _load_all_node_reasons() -> Optional[Dict[str, Optional[str]]]:
 
 def get_node_reason(nodename: str) -> Optional[str]:
     """Get the reason for a node's state using JSON output."""
+    global _node_reasons_cache, _node_reasons_prefetched
+    if _prefetch_node_reasons_enabled and not _node_reasons_prefetched:
+        _node_reasons_cache = _load_all_node_reasons()
+        _node_reasons_prefetched = True
     if _node_reasons_cache is not None and nodename in _node_reasons_cache:
         return _node_reasons_cache[nodename]
     try:
@@ -334,7 +346,7 @@ def get_node_reason(nodename: str) -> Optional[str]:
         # Access the reason field directly from the JSON structure
         nodes = data.get('nodes', [])
         if nodes:
-            return _normalize_reason(nodes[0].get('reason'))
+            return _normalize_reason(nodes[0].get('reason') or "")
     except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
         log.error(f"Failed to execute scontrol or parse its JSON output for node {nodename}: {e}")
     except Exception as e:
@@ -452,6 +464,17 @@ def get_node_action(nodename: str) -> NodeAction:
         if lkp.is_node_mig(nodename):
             mig_name = lkp.node_mig_name(nodename)
             region = lkp.node_region(nodename)
+            owner_mig = util.instance_created_by_mig(inst)
+            if owner_mig is not None and owner_mig != mig_name:
+                log.warning(
+                    f"{short_nodename} is managed by a different MIG ({owner_mig}, "
+                    f"expected {mig_name}); skipping legacy TERMINATED/preemption handling."
+                )
+                if state.base != "DOWN":
+                    return NodeActionDown(
+                        reason=f"Instance terminated (managed by different MIG {owner_mig})"
+                    )
+                return NodeActionUnchanged()
             if _is_instance_managed_by_mig(lkp, inst, short_nodename, region, mig_name):
                 # MIG auto-healing (default_action_on_failure=REPAIR) recreates the VM
                 # (delete + insert). Do not start it; wait for RUNNING, then resume via
@@ -590,19 +613,23 @@ def sync_placement_groups():
 
 
 def sync_instances():
-    global _node_reasons_cache
+    global _node_reasons_cache, _prefetch_node_reasons_enabled, _node_reasons_prefetched
     compute_instances = {
         name for name, inst in lookup().instances().items() if inst.role == "compute"
     }
     slurm_nodes = set(lookup().slurm_nodes().keys())
     log.debug(f"reconciling {len(compute_instances)} GCP instances and {len(slurm_nodes)} Slurm nodes.")
 
-    _node_reasons_cache = _load_all_node_reasons()
+    _node_reasons_cache = None
+    _prefetch_node_reasons_enabled = True
+    _node_reasons_prefetched = False
     try:
         for action, nodes in util.groupby_unsorted(list(compute_instances | slurm_nodes), get_node_action):
             action.apply(list(nodes))
     finally:
         _node_reasons_cache = None
+        _prefetch_node_reasons_enabled = False
+        _node_reasons_prefetched = False
 
 
 def reconfigure_slurm() -> bool:

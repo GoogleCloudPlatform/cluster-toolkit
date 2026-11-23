@@ -111,6 +111,7 @@ def suspend_mig_nodes(
         mig_name = lkp.node_mig_name(node)
         nodes_by_mig.setdefault(mig_name, []).append(node)
 
+    check_gce_instances = True
     for mig_name, mig_nodes in nodes_by_mig.items():
         region = lkp.node_region(mig_nodes[0])
 
@@ -139,7 +140,6 @@ def suspend_mig_nodes(
         standalone_nodes: List[str] = []
         seen_standalone: set[str] = set()
         fallback_zones: Optional[List[str]] = None
-        check_gce_instances = True
         for node in mig_nodes:
             short_name = node.split(".")[0]
             if short_name in mig_inst_map:

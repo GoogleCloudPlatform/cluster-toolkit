@@ -329,6 +329,21 @@ def test_slurmsync_terminated_legacy_standalone_vm_uses_legacy_path(mock_lookup,
             assert isinstance(action, slurmsync.NodeActionDown)
             assert action.reason == slurmsync._MIG_REPAIRING_REASON
 
+    # Preemptible VM owned by a DIFFERENT MIG must NOT trigger NodeActionPrempt (start_instances)
+    foreign_mig = _make_instance(
+        "testcl-ns-3",
+        status="TERMINATED",
+        preemptible=True,
+        metadata={
+            "created-by": "projects/123/regions/us-central1/instanceGroupManagers/other-mig"
+        },
+    )
+    with mock.patch.object(util.Lookup, "instance", return_value=foreign_mig):
+        with mock.patch.object(util.Lookup, "node_state", return_value=alloc):
+            action = slurmsync.get_node_action("testcl-ns-3")
+            assert isinstance(action, slurmsync.NodeActionDown)
+            assert "other-mig" in action.reason
+
 
 @mock.patch.object(util.Lookup, "compute", new_callable=mock.PropertyMock)
 @mock.patch("slurmsync.lookup")
@@ -368,9 +383,12 @@ def test_mig_listing_ignores_non_dict_entries():
 
 
 def test_can_update_mig_reason_case_insensitive_and_preserves_manual():
+    # Lookup failure (None) must fail safe so manual operator DOWN reasons are never overwritten
+    assert slurmsync._can_update_mig_reason(None) is False
+
     for reason in (
-        None,
         "",
+        "   ",
         "unbacked instance",
         "UNBACKED INSTANCE",
         "Instance Terminated",
@@ -381,8 +399,30 @@ def test_can_update_mig_reason_case_insensitive_and_preserves_manual():
     ):
         assert slurmsync._can_update_mig_reason(reason) is True
 
-    for manual in ("bad DIMM replaced tomorrow", "admin drain for firmware", "HC failure"):
+    for manual in (
+        "bad DIMM replaced tomorrow",
+        "admin drain for firmware",
+        "HC failure",
+        "[MAINT] bad DIMM",
+        "[TICKET-42] hold",
+        "hold: debugging MIG Auto-Healing flake",
+    ):
         assert slurmsync._can_update_mig_reason(manual) is False
+        assert slurmsync._is_mig_managed_reason(manual) is False
+
+
+def test_normalize_reason_preserves_leading_brackets():
+    assert slurmsync._normalize_reason(None) is None
+    assert slurmsync._normalize_reason("") == ""
+    assert (
+        slurmsync._normalize_reason("[MAINT] bad DIMM [admin@2026-11-23T00:00:00]")
+        == "[MAINT] bad DIMM"
+    )
+    assert slurmsync._normalize_reason("[TICKET-42] hold") == "[TICKET-42] hold"
+    assert (
+        slurmsync._normalize_reason("Not responding [slurm@2026-11-23T00:00:00]")
+        == "Not responding"
+    )
 
 
 @mock.patch("slurmsync.run")
@@ -485,3 +525,97 @@ def test_mig_stale_error_ignored_while_vm_provisioning_or_staging(mock_lookup, m
             mock.patch.object(util.Lookup, "node_state", return_value=powering_up),
         ):
             assert isinstance(slurmsync.get_node_action("testcl-ns-1"), slurmsync.NodeActionUnchanged)
+
+
+@mock.patch("slurmsync.run")
+@mock.patch("slurmsync.lookup")
+def test_sync_instances_skips_bulk_scontrol_when_healthy(mock_lookup, mock_run):
+    """Pure healthy ticks must NOT spawn scontrol show nodes --json."""
+    lkp, mock_compute = _make_lookup([])
+    mock_lookup.return_value = lkp
+    running = _make_instance("testcl-ns-0", status="RUNNING")
+    idle = slurmsync.NodeState(base="IDLE", flags=frozenset())
+
+    with (
+        mock.patch.object(
+            util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mock_compute
+        ),
+        mock.patch.object(util.Lookup, "instances", return_value={"testcl-ns-0": running}),
+        mock.patch.object(util.Lookup, "slurm_nodes", return_value={"testcl-ns-0": idle}),
+        mock.patch.object(util.Lookup, "node_state", return_value=idle),
+    ):
+        slurmsync.sync_instances()
+
+    mock_run.assert_not_called()
+    assert slurmsync._node_reasons_cache is None
+    assert slurmsync._prefetch_node_reasons_enabled is False
+
+
+@mock.patch("slurmsync.run")
+@mock.patch("slurmsync.lookup")
+def test_sync_instances_preserves_bracketed_manual_and_lookup_failure_reasons(
+    mock_lookup, mock_run
+):
+    lkp, mock_compute = _make_lookup([
+        {
+            "name": "testcl-ns-0",
+            "currentAction": "CREATING",
+            "lastAttempt": {
+                "errors": {"errors": [{"code": "QUOTA_EXCEEDED", "message": "No CPUs"}]}
+            },
+        },
+        {
+            "name": "testcl-ns-1",
+            "currentAction": "CREATING",
+            "lastAttempt": {
+                "errors": {"errors": [{"code": "QUOTA_EXCEEDED", "message": "No CPUs"}]}
+            },
+        },
+    ])
+    mock_lookup.return_value = lkp
+    down = slurmsync.NodeState(base="DOWN", flags=frozenset())
+
+    # 1. Leading bracket manual reason is preserved; empty reason node IS updated
+    bulk_json = (
+        '{"nodes": ['
+        '{"name": "testcl-ns-0", "reason": "[MAINT] bad DIMM [admin@2026-11-23T00:00:00]"},'
+        '{"name": "testcl-ns-1", "reason": ""}'
+        ']}'
+    )
+    mock_run.return_value = mock.MagicMock(stdout=bulk_json)
+    with (
+        mock.patch.object(
+            util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mock_compute
+        ),
+        mock.patch.object(util.Lookup, "instances", return_value={}),
+        mock.patch.object(
+            util.Lookup, "slurm_nodes", return_value={"testcl-ns-0": down, "testcl-ns-1": down}
+        ),
+        mock.patch.object(util.Lookup, "node_state", return_value=down),
+    ):
+        slurmsync.sync_instances()
+
+    down_cmds = [c.args[0] for c in mock_run.call_args_list if "state=down" in c.args[0]]
+    assert len(down_cmds) == 1
+    assert "testcl-ns-1" in down_cmds[0]
+    assert "testcl-ns-0" not in down_cmds[0]
+
+    # 2. Failed bulk + per-node scontrol lookup (returns None) fails safe and keeps node untouched
+    mock_run.reset_mock()
+    mock_run.side_effect = slurmsync.subprocess.CalledProcessError(1, "scontrol")
+    with (
+        mock.patch.object(
+            util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mock_compute
+        ),
+        mock.patch.object(util.Lookup, "instances", return_value={}),
+        mock.patch.object(
+            util.Lookup, "slurm_nodes", return_value={"testcl-ns-0": down, "testcl-ns-1": down}
+        ),
+        mock.patch.object(util.Lookup, "node_state", return_value=down),
+    ):
+        slurmsync.sync_instances()
+
+    cmds = [c.args[0] for c in mock_run.call_args_list]
+    # Bulk prefetch attempted only ONCE despite 2 failing DOWN nodes
+    assert sum("show nodes --json" in c for c in cmds) == 1
+    assert not any("state=down" in c for c in cmds)

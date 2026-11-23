@@ -171,7 +171,20 @@ def test_suspend_nodes_enables_retire_standalone_for_mig_nodes(mock_lookup, mock
 def test_suspend_mig_nodes_instance_lookup_error_trips_circuit_breaker(
     mock_compute_prop, mock_execute, mock_delete_instances
 ):
-    lkp = _lookup()
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "ns": TstNodeset(
+                nodeset_name="ns",
+                region="us-central1",
+                provisioning_engine="MIG",
+                node_count_static=2000,
+                node_count_dynamic_max=0,
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
     mock_compute = mock.MagicMock()
     mock_compute_prop.return_value = mock_compute
     mock_execute.side_effect = lambda req: req.execute()
@@ -181,7 +194,7 @@ def test_suspend_mig_nodes_instance_lookup_error_trips_circuit_breaker(
 
     with mock.patch.object(util.Lookup, "instance", side_effect=RuntimeError("503")) as mock_inst:
         suspend.suspend_mig_nodes(
-            ["testcl-ns-0", "testcl-ns-1", "testcl-ns-2", "testcl-ns-3"],
+            ["testcl-ns-0", "testcl-ns-1", "testcl-ns-1000", "testcl-ns-1001"],
             lkp,
             retire_standalone=True,
         )
