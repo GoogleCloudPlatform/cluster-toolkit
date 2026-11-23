@@ -60,8 +60,7 @@ variable "instance_image" {
     Image used to build chrome remote desktop node. The default image is
     family="ubuntu-2404-lts-amd64" and project="ubuntu-os-cloud".
 
-    An alternative image is family="debian-12" (or a pinned Debian 12 image such as
-    name="debian-12-bookworm-v20250610") and project="debian-cloud".
+    An alternative image is family="debian-12" and project="debian-cloud".
 
     Expected Fields:
     name: The name of the image. Mutually exclusive with family.
