@@ -48,7 +48,8 @@ type InputConstraints struct {
 	MaxExclusive    bool     `json:"max_exclusive,omitempty" yaml:"max_exclusive,omitempty"`
 	// Pattern is an RE2 regular expression. Like Terraform's regex() and JSON
 	// Schema's "pattern", it matches anywhere in the value unless it is
-	// anchored with ^ and $.
+	// anchored with ^ and $. When rules state different patterns, only one is
+	// reported; the others stay in Validations.
 	Pattern string `json:"pattern,omitempty" yaml:"pattern,omitempty"`
 	// AllowNull is set only when the rules explicitly accept null.
 	AllowNull bool `json:"allow_null,omitempty" yaml:"allow_null,omitempty"`
@@ -102,7 +103,9 @@ func buildInputConstraints(t cty.Type, groups ...[]ruleConstraints) *InputConstr
 	}
 	var all []ruleConstraints
 	for _, g := range groups {
-		all = append(all, g...)
+		for _, rc := range g {
+			all = append(all, gateRuleToType(rc, t))
+		}
 	}
 	if len(all) == 0 {
 		return nil
@@ -113,12 +116,35 @@ func buildInputConstraints(t cty.Type, groups ...[]ruleConstraints) *InputConstr
 	}
 	var sources []string
 	for _, rc := range all {
-		if rc.hasLimits() && rc.source != "" && !slices.Contains(sources, rc.source) {
+		if rc.source != "" && contributesLimit(rc, merged) && !slices.Contains(sources, rc.source) {
 			sources = append(sources, rc.source)
 		}
 	}
 	sort.Strings(sources)
 	return merged.toOutput(sources)
+}
+
+// gateRuleToType drops limits that cannot apply to an input of type t:
+// allowed values of a different type, and numeric bounds on a non-number
+// input. Dropping a limit only weakens the rule, so the result stays a
+// necessary condition. Untyped (any) inputs keep every limit.
+func gateRuleToType(rc ruleConstraints, t cty.Type) ruleConstraints {
+	if t == cty.DynamicPseudoType {
+		return rc
+	}
+	if rc.hasAllowed && slices.ContainsFunc(rc.allowed, func(v cty.Value) bool { return v.Type() != t }) {
+		rc.allowed, rc.hasAllowed, rc.caseInsensitive = nil, false, false
+	}
+	if t != cty.Number {
+		rc.min, rc.max = nil, nil
+	}
+	return rc
+}
+
+// contributesLimit reports whether rc states a limit that survives in merged.
+// A pattern counts only if it is the one reported, since merged keeps one.
+func contributesLimit(rc, merged ruleConstraints) bool {
+	return len(rc.allowed) > 0 || rc.min != nil || rc.max != nil || (rc.pattern != "" && rc.pattern == merged.pattern)
 }
 
 func (rc ruleConstraints) toOutput(sources []string) *InputConstraints {
@@ -166,6 +192,9 @@ func normalizeZero(f float64) float64 {
 }
 
 func ctyToPlain(v cty.Value) interface{} {
+	if v == cty.NilVal || v.IsNull() || !v.IsKnown() {
+		return nil
+	}
 	switch v.Type() {
 	case cty.String:
 		return v.AsString()
@@ -257,6 +286,9 @@ func intersectAllowed(primary, filter []cty.Value, fold bool) []cty.Value {
 }
 
 func valueKey(v cty.Value, fold bool) string {
+	if v == cty.NilVal || v.IsNull() || !v.IsKnown() {
+		return ""
+	}
 	switch v.Type() {
 	case cty.String:
 		s := v.AsString()
@@ -332,43 +364,24 @@ func binaryConstraints(varName string, e *hclsyntax.BinaryOpExpr) (ruleConstrain
 	return regexallConstraints(varName, e)
 }
 
-// orConstraints handles `var.X == null || S` and `S || var.X == null`. Any
-// other OR can accept values that S rejects, so nothing is derived from it.
-// Because HCL evaluates `||` left-to-right, `var.X == null || <anything>`
-// always short-circuits to true on null, whereas `S || var.X == null` only
-// accepts null when S itself evaluates without error on null.
+// orConstraints handles `var.X == null || S` with the null check on either
+// side. Any other OR can accept values that S rejects, so nothing is derived
+// from it. Terraform (>= 1.12, the toolkit's minimum) returns true for `||`
+// as soon as either operand is true, even if the other operand would fail on
+// null, so the null check allows null whichever side it is on.
 func orConstraints(varName string, e *hclsyntax.BinaryOpExpr) (ruleConstraints, bool) {
-	if isNullCheck(varName, e.LHS, hclsyntax.OpEqual) {
-		rc, _ := conditionConstraints(varName, e.RHS)
-		rc.null = nullAllowed
-		return rc, true
+	var other hclsyntax.Expression
+	switch {
+	case isNullCheck(varName, e.LHS, hclsyntax.OpEqual):
+		other = e.RHS
+	case isNullCheck(varName, e.RHS, hclsyntax.OpEqual):
+		other = e.LHS
+	default:
+		return ruleConstraints{}, false
 	}
-	if isNullCheck(varName, e.RHS, hclsyntax.OpEqual) {
-		rc, ok := conditionConstraints(varName, e.LHS)
-		if !ok {
-			return ruleConstraints{}, false
-		}
-		if isNullSafeCondition(varName, e.LHS) {
-			rc.null = nullAllowed
-		} else {
-			rc.null = nullUnknown
-		}
-		return rc, true
-	}
-	return ruleConstraints{}, false
-}
-
-// isNullSafeCondition reports whether expr is guaranteed to evaluate without
-// error when var.<varName> is null.
-func isNullSafeCondition(varName string, expr hclsyntax.Expression) bool {
-	call, ok := unwrapParens(expr).(*hclsyntax.FunctionCallExpr)
-	if !ok || call.ExpandFinal {
-		return false
-	}
-	if call.Name == "can" && len(call.Args) == 1 {
-		return true
-	}
-	return call.Name == "contains" && len(call.Args) == 2 && isVarRef(varName, call.Args[1])
+	rc, _ := conditionConstraints(varName, other)
+	rc.null = nullAllowed
+	return rc, true
 }
 
 // andConstraints keeps every part it understands: each side of && is a

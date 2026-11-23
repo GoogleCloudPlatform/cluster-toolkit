@@ -68,12 +68,12 @@ func TestConditionConstraints(t *testing.T) {
 			`{"allowed_values":["a"],"allow_null":true,"sources":["terraform"]}`},
 		{"can regex or null reversed", `can(regex("^a", var.x)) || var.x == null`,
 			`{"pattern":"^a","allow_null":true,"sources":["terraform"]}`},
-		{"bound or null reversed drops allow_null", `var.x > 0 || var.x == null`,
-			`{"min":0,"min_exclusive":true,"sources":["terraform"]}`},
-		{"folded contains or null reversed drops allow_null", `contains(["a"], lower(var.x)) || var.x == null`,
-			`{"allowed_values":["a"],"case_insensitive":true,"sources":["terraform"]}`},
-		{"regexall or null reversed drops allow_null", `length(regexall("^a", var.x)) > 0 || var.x == null`,
-			`{"pattern":"^a","sources":["terraform"]}`},
+		{"bound or null reversed", `var.x > 0 || var.x == null`,
+			`{"min":0,"min_exclusive":true,"allow_null":true,"sources":["terraform"]}`},
+		{"folded contains or null reversed", `contains(["a"], lower(var.x)) || var.x == null`,
+			`{"allowed_values":["a"],"case_insensitive":true,"allow_null":true,"sources":["terraform"]}`},
+		{"regexall or null reversed", `length(regexall("^a", var.x)) > 0 || var.x == null`,
+			`{"pattern":"^a","allow_null":true,"sources":["terraform"]}`},
 		{"negative zero normalized", `var.x >= -0`,
 			`{"min":0,"sources":["terraform"]}`},
 		{"ternary null true", `var.x == null ? true : contains(["MIGRATE", "TERMINATE"], var.x)`,
@@ -159,14 +159,83 @@ func TestConditionConstraints(t *testing.T) {
 
 func TestBuildInputConstraintsTypeGate(t *testing.T) {
 	rules := conditionRules(t, `contains(["a"], var.x)`)
-	for _, typ := range []cty.Type{cty.String, cty.Number, cty.Bool, cty.DynamicPseudoType} {
+	for _, typ := range []cty.Type{cty.String, cty.DynamicPseudoType} {
 		if buildInputConstraints(typ, rules) == nil {
 			t.Errorf("expected limits for type %s", typ.FriendlyName())
 		}
 	}
-	for _, typ := range []cty.Type{cty.List(cty.String), cty.Map(cty.String), cty.Object(map[string]cty.Type{"a": cty.String})} {
+	for _, typ := range []cty.Type{cty.Number, cty.Bool, cty.List(cty.String), cty.Map(cty.String), cty.Object(map[string]cty.Type{"a": cty.String})} {
 		if got := buildInputConstraints(typ, rules); got != nil {
 			t.Errorf("expected no limits for type %s, got %+v", typ.FriendlyName(), got)
+		}
+	}
+}
+
+func TestBuildInputConstraintsGatesTerraformLimits(t *testing.T) {
+	tests := []struct {
+		name string
+		typ  cty.Type
+		cond string
+		want string
+	}{
+		{"string enum on number input", cty.Number, `contains(["1", "2"], var.x)`, `null`},
+		{"bool enum on number input", cty.Number, `contains([true], var.x)`, `null`},
+		{"mixed enum on string input", cty.String, `contains(["a", 1], var.x)`, `null`},
+		{"number enum on number input", cty.Number, `contains([1, 2], var.x)`, `{"allowed_values":[1,2],"sources":["terraform"]}`},
+		{"bound on string input", cty.String, `var.x >= 1`, `null`},
+		{"bound on bool input", cty.Bool, `var.x <= 1`, `null`},
+		{"bound on number input", cty.Number, `var.x >= 1`, `{"min":1,"sources":["terraform"]}`},
+		{"enum kept when bound dropped", cty.String, `contains(["a"], var.x) && var.x >= 1`, `{"allowed_values":["a"],"sources":["terraform"]}`},
+		{"any input keeps everything", cty.DynamicPseudoType, `contains(["1"], var.x) && var.x >= 1`, `{"allowed_values":["1"],"min":1,"sources":["terraform"]}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := constraintsJSON(t, buildInputConstraints(tc.typ, conditionRules(t, tc.cond))); got != tc.want {
+				t.Errorf("want: %s\ngot:  %s", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestBuildInputConstraintsPatternSources(t *testing.T) {
+	list := func(items ...interface{}) []interface{} { return items }
+	meta := func(r ValidationRule) []ruleConstraints {
+		r.Inputs["vars"] = list("x")
+		return metadataVarInfo([]ValidationRule{r}, map[string]cty.Type{"x": cty.String})["x"].rules
+	}
+	regex := func(p string) ValidationRule {
+		return ValidationRule{Validator: "regex", Inputs: map[string]interface{}{"pattern": p}}
+	}
+	enum := ValidationRule{Validator: "allowed_enum", Inputs: map[string]interface{}{"allowed": list("abc")}}
+	tests := []struct {
+		name string
+		meta []ruleConstraints
+		tf   string
+		want string
+	}{
+		{"dropped pattern not credited", meta(regex("^a")), `can(regex("c$", var.x))`,
+			`{"pattern":"^a","sources":["metadata"]}`},
+		{"same pattern credits both", meta(regex("^a")), `can(regex("^a", var.x))`,
+			`{"pattern":"^a","sources":["metadata","terraform"]}`},
+		{"other limit still credited", meta(enum), `can(regex("^a", var.x))`,
+			`{"allowed_values":["abc"],"pattern":"^a","sources":["metadata","terraform"]}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := constraintsJSON(t, buildInputConstraints(cty.String, tc.meta, conditionRules(t, tc.tf))); got != tc.want {
+				t.Errorf("want: %s\ngot:  %s", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestNilValueGuards(t *testing.T) {
+	for _, v := range []cty.Value{cty.NilVal, cty.NullVal(cty.String), cty.UnknownVal(cty.Number)} {
+		if got := ctyToPlain(v); got != nil {
+			t.Errorf("ctyToPlain(%#v) = %v, want nil", v, got)
+		}
+		if got := valueKey(v, false); got != "" {
+			t.Errorf("valueKey(%#v) = %q, want empty", v, got)
 		}
 	}
 }
