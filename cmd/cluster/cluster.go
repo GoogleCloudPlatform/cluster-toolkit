@@ -30,6 +30,12 @@ var (
 	projectID   string
 )
 
+var (
+	// OnTelemetryProjectResolved is an optional hook wired by package cmd to
+	// propagate the resolved GCP project ID to the root telemetry collector.
+	OnTelemetryProjectResolved func(projectID string)
+)
+
 var gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
 	return gke.NewGKEOrchestrator()
 }
@@ -60,6 +66,9 @@ var ClusterCmd = &cobra.Command{
 
 			projectID = ambientProject
 			logging.Info("Using ambient project ID: %s", projectID)
+		}
+		if OnTelemetryProjectResolved != nil {
+			OnTelemetryProjectResolved(projectID)
 		}
 		return nil
 	},

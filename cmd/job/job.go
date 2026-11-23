@@ -35,6 +35,9 @@ var (
 )
 
 var (
+	// OnTelemetryProjectResolved is an optional hook wired by package cmd to
+	// propagate the resolved GCP project ID to the root telemetry collector.
+	OnTelemetryProjectResolved func(projectID string)
 	// gkeOrchestratorFactory overrides registry-based orchestrator construction when set in unit tests.
 	gkeOrchestratorFactory func() orchestrator.JobOrchestrator
 	orc                    orchestrator.JobOrchestrator
@@ -55,9 +58,13 @@ Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic kubeconfig detection, or
 		if err != nil {
 			return err
 		}
+		var det orchestrator.Detection
+		defer func() {
+			reportTelemetryProjectID(resolveTelemetryProjectID(projectID, det))
+		}()
 		savedClusterUsed := !cmd.Flags().Changed("cluster") && savedClusterName != ""
 
-		det, err := detectJobOrchestrator(cmd, savedClusterName, savedGKE)
+		det, err = detectJobOrchestrator(cmd, savedClusterName, savedGKE)
 		if err != nil {
 			return err
 		}
@@ -78,6 +85,22 @@ Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic kubeconfig detection, or
 
 		return initCommandOrchestrator(cmd, det)
 	},
+}
+
+func reportTelemetryProjectID(proj string) {
+	if OnTelemetryProjectResolved != nil {
+		OnTelemetryProjectResolved(proj)
+	}
+}
+
+func resolveTelemetryProjectID(proj string, det orchestrator.Detection) string {
+	if p := strings.TrimSpace(proj); p != "" {
+		return p
+	}
+	if det.Type == orchestrator.TypeGKE {
+		return gke.ExtractProjectIDFromContext(det.KubeContext)
+	}
+	return ""
 }
 
 func canOverrideSavedGKEWithK8sCluster(cmdName string, clusterChanged, explicitGKEFlags, savedGKE bool, savedClusterName string) bool {

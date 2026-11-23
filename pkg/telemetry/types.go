@@ -42,6 +42,7 @@ type Collector struct {
 	eventArgs        []string
 	eventStartTime   time.Time
 	blueprint        config.Blueprint
+	projectID        string
 	installationMode string
 	metadata         map[string]string
 

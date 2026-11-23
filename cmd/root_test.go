@@ -678,3 +678,20 @@ func TestExecute_PreRunTelemetryGuards(t *testing.T) {
 		}
 	})
 }
+
+func TestSetTelemetryProjectID_Wiring(t *testing.T) {
+	origCollector := telemetryCollector
+	t.Cleanup(func() { telemetryCollector = origCollector })
+
+	// Must not panic when telemetryCollector is nil.
+	telemetryCollector = nil
+	setTelemetryProjectID("ignored-when-nil")
+
+	cmd := &cobra.Command{Use: "submit"}
+	telemetryCollector = telemetry.NewCollector(cmd, nil, telemetry.SOURCE)
+
+	setTelemetryProjectID("wired-job-proj")
+	if got := telemetryCollector.GetProjectID(); got != "wired-job-proj" {
+		t.Errorf("telemetryCollector.GetProjectID() = %q, want %q", got, "wired-job-proj")
+	}
+}

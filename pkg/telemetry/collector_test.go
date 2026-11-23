@@ -3448,3 +3448,111 @@ func TestGetMachineCategory(t *testing.T) {
 		})
 	}
 }
+
+func TestCollector_ProjectIDResolutionAndConcordAttribution(t *testing.T) {
+	origFetchProject := fetchProjectName
+	origGetBilling := getProjectBillingAccount
+	t.Cleanup(func() {
+		fetchProjectName = origFetchProject
+		getProjectBillingAccount = origGetBilling
+	})
+
+	fetchProjectName = func(_ context.Context, projectID string) (string, error) {
+		return "projects/num-" + projectID, nil
+	}
+	getProjectBillingAccount = func(_ context.Context, projectID string) (string, error) {
+		return "billingAccounts/acct-" + projectID, nil
+	}
+
+	tests := []struct {
+		name             string
+		blueprintProject string
+		explicitProject  string
+		flagProject      string
+		wantProjectNum   string
+		wantBillingAcct  string
+		wantIsTestData   string
+	}{
+		{
+			name:             "Blueprint project_id takes precedence over SetProjectID and --project flag",
+			blueprintProject: "bp-proj",
+			explicitProject:  "override-proj",
+			flagProject:      "flag-proj",
+			wantProjectNum:   "num-bp-proj",
+			wantBillingAcct:  "acct-bp-proj",
+			wantIsTestData:   "false",
+		},
+		{
+			name:            "SetProjectID populates Concord fields and overrides --project flag",
+			explicitProject: "  saved-job-proj  ",
+			flagProject:     "flag-proj",
+			wantProjectNum:  "num-saved-job-proj",
+			wantBillingAcct: "acct-saved-job-proj",
+			wantIsTestData:  "false",
+		},
+		{
+			name:            "CLI --project flag acts as fallback when blueprint and SetProjectID are empty",
+			flagProject:     "cli-flag-proj",
+			wantProjectNum:  "num-cli-flag-proj",
+			wantBillingAcct: "acct-cli-flag-proj",
+			wantIsTestData:  "false",
+		},
+		{
+			name:            "Test project via SetProjectID marks IS_TEST_DATA true",
+			explicitProject: "hpc-toolkit-dev",
+			wantProjectNum:  "num-hpc-toolkit-dev",
+			wantBillingAcct: "acct-hpc-toolkit-dev",
+			wantIsTestData:  "true",
+		},
+		{
+			name:            "Empty everywhere leaves Concord project fields empty",
+			wantProjectNum:  "",
+			wantBillingAcct: "",
+			wantIsTestData:  "false",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := &cobra.Command{Use: "gcluster"}
+			jobCmd := &cobra.Command{Use: "job"}
+			submitCmd := &cobra.Command{Use: "submit"}
+			jobCmd.PersistentFlags().StringP("project", "p", "", "GCP Project ID")
+			root.AddCommand(jobCmd)
+			jobCmd.AddCommand(submitCmd)
+			if tt.flagProject != "" {
+				if err := jobCmd.PersistentFlags().Set("project", tt.flagProject); err != nil {
+					t.Fatalf("failed to set --project flag: %v", err)
+				}
+			}
+
+			c := NewCollector(submitCmd, nil, SOURCE)
+			if tt.blueprintProject != "" {
+				c.blueprint = config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"project_id": cty.StringVal(tt.blueprintProject),
+					}),
+				}
+			}
+			if tt.explicitProject != "" {
+				c.SetProjectID(tt.explicitProject)
+				if got := c.GetProjectID(); got != strings.TrimSpace(tt.explicitProject) {
+					t.Errorf("GetProjectID() = %q, want %q", got, strings.TrimSpace(tt.explicitProject))
+				}
+			}
+
+			c.CollectMetrics(0, nil)
+			if got, _ := c.GetMetadata(IS_TEST_DATA); got != tt.wantIsTestData {
+				t.Errorf("IS_TEST_DATA = %q, want %q", got, tt.wantIsTestData)
+			}
+
+			event := c.BuildConcordEvent()
+			if event.ProjectNumber != tt.wantProjectNum {
+				t.Errorf("ProjectNumber = %q, want %q", event.ProjectNumber, tt.wantProjectNum)
+			}
+			if event.BillingAccountId != tt.wantBillingAcct {
+				t.Errorf("BillingAccountId = %q, want %q", event.BillingAccountId, tt.wantBillingAcct)
+			}
+		})
+	}
+}

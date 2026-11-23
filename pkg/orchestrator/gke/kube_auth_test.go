@@ -3495,3 +3495,25 @@ func assertHasAPIGroupVersionBlankGuards(t *testing.T, nonBlankGV string) {
 		t.Fatalf("expected 0 kubectl calls on blank kubeContext, got %v", blankExec.calls)
 	}
 }
+
+func TestExtractProjectIDFromContext(t *testing.T) {
+	tests := []struct {
+		ctxName string
+		want    string
+	}{
+		{"gke_my-proj_us-central1_my-cluster", "my-proj"},
+		{"gke_my-proj-123_us-central1-a_cluster_with_underscores", "my-proj-123"},
+		{"  gke_trimmed-proj_europe-west4_c1  ", "trimmed-proj"},
+		{"gke_aws_us-west1_cluster_extra", ""},
+		{"gke_azure_eastus_cluster_extra", ""},
+		{"gke_attached_us-central1_cluster_extra", ""},
+		{"admin@onprem-k8s", ""},
+		{"gke_missing_cluster", ""},
+		{"", ""},
+	}
+	for _, tc := range tests {
+		if got := ExtractProjectIDFromContext(tc.ctxName); got != tc.want {
+			t.Errorf("ExtractProjectIDFromContext(%q) = %q, want %q", tc.ctxName, got, tc.want)
+		}
+	}
+}

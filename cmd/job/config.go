@@ -78,6 +78,7 @@ If run without any arguments, it automatically opens your default system text ed
 		if err := saveContext(ctx); err != nil {
 			return err
 		}
+		reportTelemetryProjectID(ctx.ProjectID)
 		cmd.Printf("Updated default for '%s' to '%s'\n", key, val)
 		return nil
 	},

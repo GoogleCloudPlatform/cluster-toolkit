@@ -71,13 +71,52 @@ func (c *Collector) GetMetadata(key string) (string, bool) {
 	return val, ok
 }
 
+// SetProjectID sets a resolved GCP project ID on the collector safely before
+// CollectMetrics and BuildConcordEvent run. Commands that do not operate on a
+// blueprint (such as `gcluster job *` and `gcluster cluster *`) use this so
+// telemetry can populate ProjectNumber, BillingAccountId, and is_test_data.
+func (c *Collector) SetProjectID(projectID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.projectID = strings.TrimSpace(projectID)
+}
+
+// GetProjectID returns the explicit project ID override set on the collector.
+func (c *Collector) GetProjectID() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.projectID
+}
+
+// resolveProjectID returns the effective GCP project ID for telemetry.
+// Must be called while holding c.mu.
+// Precedence: blueprint `project_id` > explicit SetProjectID > `--project` CLI flag.
+func (c *Collector) resolveProjectID() string {
+	if projectID := strings.TrimSpace(config.GetKeyFromBlueprint("project_id", c.blueprint)); projectID != "" {
+		return projectID
+	}
+	if c.projectID != "" {
+		return c.projectID
+	}
+	if c.eventCmd != nil {
+		if flag := c.eventCmd.Flag("project"); flag != nil {
+			if projectID := strings.TrimSpace(flag.Value.String()); projectID != "" {
+				return projectID
+			}
+		}
+	}
+	return ""
+}
+
 // Main function for collecting Telemetry metrics.
 func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	bpModulesList := getBpModulesList(c.blueprint)
-	projectID := config.GetKeyFromBlueprint("project_id", c.blueprint)
+	projectID := c.resolveProjectID()
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
 	c.metadata[BLUEPRINT] = getBlueprintName(c.blueprint)
@@ -112,7 +151,7 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	projectID := config.GetKeyFromBlueprint("project_id", c.blueprint)
+	projectID := c.resolveProjectID()
 
 	return ConcordEvent{
 		ConsoleType:      CLUSTER_TOOLKIT,

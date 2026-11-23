@@ -199,6 +199,17 @@ func isCanonicalGKEName(s string) bool {
 	return !isMultiCloudOrAttachedGKEName(s)
 }
 
+// ExtractProjectIDFromContext returns the GCP project ID encoded in a canonical
+// gcloud GKE context name ("gke_<project>_<location>_<cluster>"), or "" if the
+// context name is not a canonical GKE context (including multi-cloud/attached names).
+func ExtractProjectIDFromContext(ctxName string) string {
+	if !isCanonicalGKEName(ctxName) {
+		return ""
+	}
+	parts := strings.SplitN(strings.TrimSpace(ctxName), "_", 4)
+	return parts[1]
+}
+
 func isConnectGatewayHost(host string) bool {
 	for _, suffix := range []string{"connectgateway.googleapis.com", "connectgateway.mtls.googleapis.com"} {
 		if host == suffix || strings.HasSuffix(host, "-"+suffix) || strings.HasSuffix(host, "."+suffix) {
