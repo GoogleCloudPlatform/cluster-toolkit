@@ -72,6 +72,10 @@ type ExplainIndexResult struct {
 	Blueprints []ExplainBlueprintSummary `json:"blueprints" yaml:"blueprints"`
 	Modules    map[string][]string       `json:"modules" yaml:"modules"`
 	Hint       string                    `json:"hint" yaml:"hint"`
+	// BlueprintsDir is the folder the blueprints were read from.
+	BlueprintsDir string `json:"blueprints_dir,omitempty" yaml:"blueprints_dir,omitempty"`
+	// GclusterPath is the running gcluster binary, with symlinks resolved.
+	GclusterPath string `json:"gcluster_path,omitempty" yaml:"gcluster_path,omitempty"`
 }
 
 // ExplainBlueprintSummary is a compact entry in Mode 1.
@@ -342,6 +346,10 @@ func findExplainRepoRoot() string {
 			return root
 		}
 	}
+	// gcluster installed with pip, uv or pipx: examples are in <prefix>/share.
+	if share := installedShareDir(); share != "" {
+		return share
+	}
 	return cwd
 }
 
@@ -563,11 +571,18 @@ func buildExplainIndex(repoRoot string) (ExplainIndexResult, error) {
 		groupedMods[m.Category] = append(groupedMods[m.Category], m.Path)
 	}
 
-	return ExplainIndexResult{
-		Blueprints: bpSummaries,
-		Modules:    groupedMods,
-		Hint:       "Run './gcluster explain <path>' to inspect a blueprint/module, or './gcluster explain <specs...>' (e.g. 'slurm a3u lustre') to find the closest blueprint.",
-	}, nil
+	res := ExplainIndexResult{
+		Blueprints:   bpSummaries,
+		Modules:      groupedMods,
+		Hint:         "Run './gcluster explain <path>' to inspect a blueprint/module, or './gcluster explain <specs...>' (e.g. 'slurm a3u lustre') to find the closest blueprint.",
+		GclusterPath: realExecutable(),
+	}
+	if len(bpSummaries) > 0 {
+		if abs, err := filepath.Abs(repoRoot); err == nil {
+			res.BlueprintsDir = abs
+		}
+	}
+	return res, nil
 }
 
 var storageTagSuffixes = []struct {
@@ -596,9 +611,15 @@ func extractBlueprintStorageTags(bp catalog.BlueprintEntry) []string {
 }
 
 func printExplainIndexText(w io.Writer, res ExplainIndexResult) {
+	if res.GclusterPath != "" {
+		writef(w, "gcluster: %s\n", res.GclusterPath)
+	}
+	if res.BlueprintsDir != "" {
+		writef(w, "Blueprints from: %s\n\n", res.BlueprintsDir)
+	}
 	writef(w, "Available Blueprints (%d):\n", len(res.Blueprints))
 	if len(res.Blueprints) == 0 {
-		writeln(w, "  (no Cluster Toolkit checkout or gcluster_bundle found from current directory; blueprints are read from examples/ in a repo checkout or release bundle)")
+		writeln(w, "  (no Cluster Toolkit checkout, gcluster_bundle or pip/uv/pipx install found; blueprints are read from examples/ in a repo checkout, a release bundle, or <prefix>/share/cluster-toolkit next to an installed gcluster)")
 	} else {
 		for _, bp := range res.Blueprints {
 			printBlueprintSummaryLine(w, bp)
