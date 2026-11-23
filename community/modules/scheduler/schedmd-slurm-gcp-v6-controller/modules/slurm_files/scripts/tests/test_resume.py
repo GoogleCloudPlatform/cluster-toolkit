@@ -20,7 +20,7 @@ import unittest.mock
 import unittest
 import tempfile
 
-from common import TstCfg, TstNodeset, TstPartition # needed to import util
+from common import SOME_TS, TstCfg, TstNodeset, TstPartition # needed to import util
 import util
 import error_handler
 import resume
@@ -274,6 +274,8 @@ def test_resume_mig_nodes(mock_compute_prop, mock_execute):
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
 
   # Pass an FQDN to verify instance name normalization
   resume.resume_mig_nodes(["c-n-0.c.testproj.internal", "c-n-1"], excl_job_id=101, lkp=lkp)
@@ -301,6 +303,8 @@ def test_resume_mig_nodes_drift_update(mock_compute_prop, mock_execute):
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
   mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
       "instanceTemplate": "projects/p/global/instanceTemplates/t1"
   }
@@ -327,6 +331,8 @@ def test_resume_mig_nodes_drift_update_preserves_version_name(mock_compute_prop,
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
   mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
       "versions": [{"name": "primary-v1", "instanceTemplate": "t1"}]
   }
@@ -354,6 +360,8 @@ def test_resume_mig_nodes_no_drift(mock_compute_prop, mock_execute):
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
   mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
       "instanceTemplate": "projects/p/global/instanceTemplates/t1"
   }
@@ -376,6 +384,8 @@ def test_resume_mig_nodes_chunking(mock_compute_prop, mock_execute):
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
 
   # Resume 1200 nodes
   large_nodes = [f"c-n-{i}" for i in range(1200)]
@@ -403,6 +413,8 @@ def test_resume_mig_nodes_exception_handling(mock_compute_prop, mock_handle_fail
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
   mock_compute.regionInstanceGroupManagers().createInstances.side_effect = Exception("Quota Exceeded")
 
   resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=None, lkp=lkp)
@@ -426,6 +438,8 @@ def test_resume_mig_nodes_multi_mig_shard_continuity(mock_compute_prop, mock_exe
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
 
   # Shard 0 has c-n-0 existing; Shard 1 has no instances
   def mock_list_instances(project, region, instanceGroupManager, **kwargs):
@@ -463,6 +477,8 @@ def test_resume_mig_nodes_deduplication(mock_compute_prop, mock_execute):
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
   mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {"managedInstances": []}
 
   resume.resume_mig_nodes(["c-n-0", "c-n-0", "c-n-1", "c-n-1"], excl_job_id=None, lkp=lkp)
@@ -488,6 +504,8 @@ def test_resume_mig_nodes_async_operation_error(mock_compute_prop, mock_execute,
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
 
   # ensure_execute returns operation object with selfLink
   mock_execute.return_value = {
@@ -529,6 +547,8 @@ def test_resume_mig_nodes_inflight_deletion_timeout(mock_compute_prop, mock_hand
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
 
   # Instance is deleting and never finishes deleting during the timeout
   mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
@@ -565,6 +585,8 @@ def test_resume_mig_nodes_inflight_deletion_timeout_multinode_exclusive(mock_com
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
 
   # c-n-0 is deleting, c-n-1 is ready/not in MIG
   mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
@@ -602,6 +624,8 @@ def test_resume_mig_nodes_inflight_deletion_timeout_multishard_exclusive(mock_co
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
 
   # c-n-0 on Shard 0 is DELETING; c-n-1001 is on Shard 1
   def mock_list_instances(project, region, instanceGroupManager, **kwargs):
@@ -647,6 +671,8 @@ def test_resume_mig_nodes_stockout_multishard_exclusive(mock_compute_prop, mock_
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
 
   # Both shards have empty managed instances
   mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {"managedInstances": []}
@@ -712,6 +738,8 @@ def test_resume_mig_nodes_stockout_cleanup_previous_shards(mock_compute_prop, mo
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
 
   mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
       "instanceTemplate": "projects/p/global/instanceTemplates/t1"
@@ -759,6 +787,8 @@ def test_resume_mig_nodes_stockout_rollback_clears_cache_and_deletes_instances(
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
 
   mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
       "instanceTemplate": "projects/p/global/instanceTemplates/t1"
@@ -939,6 +969,8 @@ def test_resume_mig_nodes_gpu_topology_slices(mock_compute_prop, mock_execute):
     lkp = util.Lookup(cfg)
     mock_compute = unittest.mock.MagicMock()
     mock_compute_prop.return_value = mock_compute
+    mock_compute.instances().aggregatedList().execute.return_value = {}
+    mock_compute.instances().aggregatedList_next.return_value = None
     mock_execute.side_effect = lambda req: req.execute()
 
     # Empty existing instances
@@ -984,6 +1016,8 @@ def test_resume_mig_nodes_gpu_topology_stockout_multislice_exclusive(mock_comput
     lkp = util.Lookup(cfg)
     mock_compute = unittest.mock.MagicMock()
     mock_compute_prop.return_value = mock_compute
+    mock_compute.instances().aggregatedList().execute.return_value = {}
+    mock_compute.instances().aggregatedList_next.return_value = None
 
     # Empty existing instances
     mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
@@ -1034,6 +1068,8 @@ def test_resume_mig_nodes_inflight_deletion_timeout_multislice_cleanup(mock_comp
     lkp = util.Lookup(cfg)
     mock_compute = unittest.mock.MagicMock()
     mock_compute_prop.return_value = mock_compute
+    mock_compute.instances().aggregatedList().execute.return_value = {}
+    mock_compute.instances().aggregatedList_next.return_value = None
 
     def mock_list_instances(project, region, instanceGroupManager, **kwargs):
         mock_req = unittest.mock.MagicMock()
@@ -1107,6 +1143,8 @@ def test_resume_mig_nodes_non_exclusive_cleanup_on_failure(mock_compute_prop, mo
     lkp = util.Lookup(cfg)
     mock_compute = unittest.mock.MagicMock()
     mock_compute_prop.return_value = mock_compute
+    mock_compute.instances().aggregatedList().execute.return_value = {}
+    mock_compute.instances().aggregatedList_next.return_value = None
     mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {"managedInstances": []}
     mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
         "instanceTemplate": "projects/testproj/global/instanceTemplates/tmpl"
@@ -1156,6 +1194,8 @@ def test_resume_mig_nodes_no_cleanup_when_operation_unobservable(mock_compute_pr
     lkp = util.Lookup(cfg)
     mock_compute = unittest.mock.MagicMock()
     mock_compute_prop.return_value = mock_compute
+    mock_compute.instances().aggregatedList().execute.return_value = {}
+    mock_compute.instances().aggregatedList_next.return_value = None
     mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {"managedInstances": []}
     mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
         "instanceTemplate": "projects/testproj/global/instanceTemplates/tmpl"
@@ -1255,6 +1295,8 @@ def test_unobservable_operation_requeues_so_suspend_reclaims(
   lkp = util.Lookup(cfg)
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
+  mock_compute.instances().aggregatedList().execute.return_value = {}
+  mock_compute.instances().aggregatedList_next.return_value = None
   mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
       "instanceTemplate": "projects/p/global/instanceTemplates/t1"
   }
@@ -1374,3 +1416,260 @@ def test_mig_flex_tpu_resume(mocker):
     mock_handle_failure.assert_called_once()
     assert mock_handle_failure.call_args[0][0] == ["c-tpustatic-2", "c-tpustatic-3"]
     assert mock_handle_failure.call_args[0][3] == error_handler.Action.REQUEUE
+
+
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("resume.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_skips_running_legacy_standalone_vm(
+    mock_compute_prop, mock_execute, mock_handle_failure
+):
+  """A live standalone VM from pre-MIG upgrade must be skipped, never disrupted or 409'd."""
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      project="p",
+      provisioning_engine="MIG",
+      nodeset={"n": TstNodeset(nodeset_name="n", region="us-central1", node_count_static=2)},
+  )
+  lkp = util.Lookup(cfg)
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  legacy_running = util.Instance(
+      name="c-n-0",
+      zone="us-central1-a",
+      status="RUNNING",
+      creation_timestamp=SOME_TS,
+      role="compute",
+      resource_status=util.InstanceResourceStatus.from_json(None),
+      metadata={},
+      scheduling=util.NSDict({}),
+  )
+  with unittest.mock.patch.object(
+      util.Lookup,
+      "instance",
+      side_effect=lambda name: legacy_running if name == "c-n-0" else None,
+  ):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=None, lkp=lkp)
+
+  mock_handle_failure.assert_not_called()
+  create_call = mock_compute.regionInstanceGroupManagers().createInstances.call_args
+  assert create_call.kwargs["body"]["instances"] == [{"name": "c-n-1"}]
+
+
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("resume.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_blocks_terminated_legacy_vm_non_exclusive(
+    mock_compute_prop, mock_execute, mock_handle_failure
+):
+  """A stopped standalone VM outside the MIG is marked DOWN; healthy siblings still resume."""
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      project="p",
+      provisioning_engine="MIG",
+      nodeset={"n": TstNodeset(nodeset_name="n", region="us-central1", node_count_static=2)},
+  )
+  lkp = util.Lookup(cfg)
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  legacy_stopped = util.Instance(
+      name="c-n-0",
+      zone="us-central1-a",
+      status="TERMINATED",
+      creation_timestamp=SOME_TS,
+      role="compute",
+      resource_status=util.InstanceResourceStatus.from_json(None),
+      metadata={},
+      scheduling=util.NSDict({}),
+  )
+  with unittest.mock.patch.object(
+      util.Lookup,
+      "instance",
+      side_effect=lambda name: legacy_stopped if name == "c-n-0" else None,
+  ):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=None, lkp=lkp)
+
+  mock_handle_failure.assert_called_once()
+  args = mock_handle_failure.call_args.args
+  assert args[0] == ["c-n-0"]
+  assert "TERMINATED" in args[1]
+  assert "[" not in args[1]
+  assert args[3] == error_handler.Action.IGNORE
+  create_call = mock_compute.regionInstanceGroupManagers().createInstances.call_args
+  assert create_call.kwargs["body"]["instances"] == [{"name": "c-n-1"}]
+
+
+@unittest.mock.patch("suspend.suspend_mig_nodes")
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("resume.ensure_execute", return_value={})
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_terminated_legacy_vm_aborts_exclusive_multishard(
+    mock_compute_prop, mock_execute, mock_handle_failure, mock_suspend_mig
+):
+  """In an exclusive multi-shard job, a stopped standalone VM rolls back prior shards safely."""
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      project="p",
+      provisioning_engine="MIG",
+      nodeset={"n": TstNodeset(nodeset_name="n", region="us-central1", node_count_static=2000)},
+  )
+  lkp = util.Lookup(cfg)
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  legacy_stopped = util.Instance(
+      name="c-n-1001",
+      zone="us-central1-a",
+      status="TERMINATED",
+      creation_timestamp=SOME_TS,
+      role="compute",
+      resource_status=util.InstanceResourceStatus.from_json(None),
+      metadata={},
+      scheduling=util.NSDict({}),
+  )
+  with unittest.mock.patch.object(
+      util.Lookup,
+      "instance",
+      side_effect=lambda name: legacy_stopped if name == "c-n-1001" else None,
+  ):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1001"], excl_job_id=77, lkp=lkp)
+
+  # Shard 0 (c-n-0) rolled back with default retire_standalone=False
+  mock_suspend_mig.assert_called_once_with(["c-n-0"], lkp)
+  # c-n-1001 stays DOWN (Action.IGNORE), clean sibling c-n-0 is REQUEUEd
+  assert mock_handle_failure.call_count == 2
+  assert mock_handle_failure.call_args_list[0].args[0] == ["c-n-1001"]
+  assert mock_handle_failure.call_args_list[0].args[3] == error_handler.Action.IGNORE
+  assert mock_handle_failure.call_args_list[1].args[0] == ["c-n-0"]
+  assert mock_handle_failure.call_args_list[1].args[3] == error_handler.Action.REQUEUE
+
+
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("resume.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_skips_same_mig_owner_and_blocks_foreign_mig(
+    mock_compute_prop, mock_execute, mock_handle_failure
+):
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      project="p",
+      provisioning_engine="MIG",
+      nodeset={"n": TstNodeset(nodeset_name="n", region="us-central1", node_count_static=3)},
+  )
+  lkp = util.Lookup(cfg)
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  same_mig = util.Instance(
+      name="c-n-0",
+      zone="us-central1-a",
+      status="RUNNING",
+      creation_timestamp=SOME_TS,
+      role="compute",
+      resource_status=util.InstanceResourceStatus.from_json(None),
+      metadata={"created-by": "projects/1/regions/us-central1/instanceGroupManagers/c-n-mig-0"},
+      scheduling=util.NSDict({}),
+  )
+  other_mig = util.Instance(
+      name="c-n-1",
+      zone="us-central1-a",
+      status="RUNNING",
+      creation_timestamp=SOME_TS,
+      role="compute",
+      resource_status=util.InstanceResourceStatus.from_json(None),
+      metadata={"created-by": "projects/1/regions/us-central1/instanceGroupManagers/other-mig"},
+      scheduling=util.NSDict({}),
+  )
+  by_name = {"c-n-0": same_mig, "c-n-1": other_mig}
+  with unittest.mock.patch.object(util.Lookup, "instance", side_effect=lambda n: by_name.get(n)):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1", "c-n-2"], excl_job_id=None, lkp=lkp)
+
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[0] == ["c-n-1"]
+  assert "managed by different MIG (other-mig)" in mock_handle_failure.call_args.args[1]
+  assert "power_down" not in mock_handle_failure.call_args.args[1]
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
+  create_call = mock_compute.regionInstanceGroupManagers().createInstances.call_args
+  assert create_call.kwargs["body"]["instances"] == [{"name": "c-n-2"}]
+
+
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("resume.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_stopping_legacy_vm_reason(
+    mock_compute_prop, mock_execute, mock_handle_failure
+):
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      project="p",
+      provisioning_engine="MIG",
+      nodeset={"n": TstNodeset(nodeset_name="n", region="us-central1", node_count_static=2)},
+  )
+  lkp = util.Lookup(cfg)
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  stopping_vm = util.Instance(
+      name="c-n-0",
+      zone="us-central1-a",
+      status="STOPPING",
+      creation_timestamp=SOME_TS,
+      role="compute",
+      resource_status=util.InstanceResourceStatus.from_json(None),
+      metadata={},
+      scheduling=util.NSDict({}),
+  )
+  with unittest.mock.patch.object(
+      util.Lookup, "instance", side_effect=lambda n: stopping_vm if n == "c-n-0" else None
+  ):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=None, lkp=lkp)
+
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[0] == ["c-n-0"]
+  assert "stopping/deleting" in mock_handle_failure.call_args.args[1]
+  assert "power_down" not in mock_handle_failure.call_args.args[1]
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
+  create_call = mock_compute.regionInstanceGroupManagers().createInstances.call_args
+  assert create_call.kwargs["body"]["instances"] == [{"name": "c-n-1"}]
+
+
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("resume.ensure_execute", return_value={})
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_instance_lookup_error_trips_circuit_breaker(
+    mock_compute_prop, mock_execute, mock_handle_failure
+):
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      project="p",
+      provisioning_engine="MIG",
+      nodeset={"n": TstNodeset(nodeset_name="n", region="us-central1", node_count_static=4)},
+  )
+  lkp = util.Lookup(cfg)
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+
+  with unittest.mock.patch.object(
+      util.Lookup, "instance", side_effect=RuntimeError("503")
+  ) as mock_inst:
+    resume.resume_mig_nodes(["c-n-0", "c-n-1", "c-n-2", "c-n-3"], excl_job_id=None, lkp=lkp)
+
+  assert mock_inst.call_count == 1
+  mock_handle_failure.assert_not_called()
+  create_call = mock_compute.regionInstanceGroupManagers().createInstances.call_args
+  assert len(create_call.kwargs["body"]["instances"]) == 4

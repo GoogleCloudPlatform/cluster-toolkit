@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 import argparse
 import random
 import time
@@ -384,7 +384,7 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
             log.info(f"Waiting for in-flight deletion of {nodes_to_wait} in MIG {mig_name} before resuming...")
             for _ in range(10):
                 time.sleep(2)
-                lkp.get_mig_instances.cache_clear()
+                lkp.clear_mig_caches()
                 try:
                     mig_data = lkp.get_mig_instances(lkp.project, region, mig_name)
                     current_insts = {
@@ -397,6 +397,7 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                         break
                 except Exception:
                     pass
+            lkp.instances.cache_clear()
             if still_deleting:
                 log.error(f"Instances {still_deleting} still deleting in GCE after timeout; failing resume to trigger immediate requeue.")
                 if excl_job_id is not None:
@@ -407,8 +408,7 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                         try:
                             # Lazy import to avoid circular dependency between resume and suspend
                             import suspend
-                            lkp.get_mig_instances.cache_clear()
-                            lkp.get_mig_repairing_instances.cache_clear()
+                            lkp.clear_mig_caches()
                             suspend.suspend_mig_nodes(successful_creates, lkp)
                         except Exception as clean_err:
                             log.error(f"Failed cleaning up instances {successful_creates}: {clean_err}")
@@ -442,13 +442,55 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                     existing_mig_insts.update(affected_nodes)
 
         pic_instances: List[Dict[str, Any]] = []
+        legacy_blocking_nodes: List[Tuple[str, str]] = []
+        foreign_mig_blocking_nodes: List[Tuple[str, str, str]] = []
+        skipped_live_standalone = False
         seen_names = set()
+        check_gce_instances = True
         for node in mig_nodes:
             short_name = node.split(".")[0]
             if short_name in existing_mig_insts or short_name in seen_names:
                 log.info(f"Instance {short_name} already exists in MIG {mig_name} or duplicate; skipping createInstances.")
                 continue
             seen_names.add(short_name)
+            existing_inst = None
+            if check_gce_instances:
+                try:
+                    existing_inst = lkp.instance(short_name)
+                except Exception as e:
+                    log.warning(
+                        f"Could not list existing GCE instances; skipping standalone pre-check for MIG {mig_name}: {e}"
+                    )
+                    check_gce_instances = False
+            if existing_inst is not None:
+                owner_mig = util.instance_created_by_mig(existing_inst)
+                if owner_mig == mig_name:
+                    log.info(
+                        f"Instance {short_name} already belongs to MIG {mig_name} "
+                        f"(status={existing_inst.status}); skipping createInstances."
+                    )
+                    continue
+                if owner_mig is None and existing_inst.status in ("RUNNING", "PROVISIONING", "STAGING"):
+                    log.warning(
+                        f"Legacy standalone VM {short_name} ({existing_inst.status}) already exists "
+                        f"outside MIG {mig_name}; skipping createInstances to avoid disrupting it. "
+                        "Drain and run power_down to recreate it inside the MIG."
+                    )
+                    skipped_live_standalone = True
+                    continue
+                if owner_mig is not None:
+                    log.warning(
+                        f"Instance {short_name} ({existing_inst.status}) is managed by a different "
+                        f"MIG ({owner_mig}, expected {mig_name}); skipping createInstances."
+                    )
+                    foreign_mig_blocking_nodes.append((short_name, owner_mig, existing_inst.status or "UNKNOWN"))
+                    continue
+                log.warning(
+                    f"Legacy standalone VM {short_name} ({existing_inst.status}) blocks "
+                    f"MIG {mig_name} creation; marking DOWN instead of calling createInstances."
+                )
+                legacy_blocking_nodes.append((short_name, existing_inst.status or "UNKNOWN"))
+                continue
             inst: Dict[str, Any] = {"name": short_name}
             if excl_job_id is not None:
                 inst["preservedState"] = {
@@ -458,8 +500,78 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                 }
             pic_instances.append(inst)
 
+        if legacy_blocking_nodes or foreign_mig_blocking_nodes:
+            all_blocking_names: List[str] = []
+            if excl_job_id is not None and successful_creates:
+                log.warning(
+                    f"Aborting multi-slice exclusive job {excl_job_id}: cleaning up "
+                    f"{len(successful_creates)} previously created instances: "
+                    f"{to_hostlist(successful_creates)}"
+                )
+                try:
+                    import suspend
+                    lkp.clear_mig_caches()
+                    suspend.suspend_mig_nodes(successful_creates, lkp)
+                except Exception as clean_err:
+                    log.error(f"Failed cleaning up instances {successful_creates}: {clean_err}")
+            if legacy_blocking_nodes:
+                legacy_names = [name for name, _ in legacy_blocking_nodes]
+                statuses = sorted({status for _, status in legacy_blocking_nodes})
+                status_str = ",".join(statuses)
+                if statuses == ["STOPPING"]:
+                    block_reason = (
+                        f"Legacy standalone VM outside MIG {mig_name} is stopping/deleting; "
+                        "retry after deletion completes"
+                    )
+                else:
+                    block_reason = (
+                        f"Legacy standalone VM outside MIG {mig_name} ({status_str}); "
+                        "run power_down to retire before resuming"
+                    )
+                handle_resume_failure(
+                    legacy_names,
+                    block_reason,
+                    resume_data,
+                    error_handler.Action.IGNORE,
+                    f"Blocked by legacy standalone VM outside MIG {mig_name} ({status_str})",
+                )
+                all_blocking_names.extend(legacy_names)
+            if foreign_mig_blocking_nodes:
+                foreign_names = [name for name, _, _ in foreign_mig_blocking_nodes]
+                owners = ",".join(sorted({owner for _, owner, _ in foreign_mig_blocking_nodes}))
+                foreign_reason = (
+                    f"Existing VM managed by different MIG ({owners}); "
+                    f"remove from that MIG before resuming into {mig_name}"
+                )
+                handle_resume_failure(
+                    foreign_names,
+                    foreign_reason,
+                    resume_data,
+                    error_handler.Action.IGNORE,
+                    f"Blocked by VM managed by different MIG ({owners})",
+                )
+                all_blocking_names.extend(foreign_names)
+            if excl_job_id is not None:
+                blocking_set = set(all_blocking_names)
+                other_nodes = list(dict.fromkeys(
+                    n.split(".")[0] for n in nodes if n.split(".")[0] not in blocking_set
+                ))
+                if other_nodes:
+                    requeue_reason = f"Blocked by colliding GCE VM outside MIG {mig_name}"
+                    handle_resume_failure(
+                        other_nodes,
+                        requeue_reason,
+                        resume_data,
+                        error_handler.Action.REQUEUE,
+                        requeue_reason,
+                    )
+                return
+
         if not pic_instances:
-            log.info(f"All requested nodes already exist in MIG {mig_name}; nothing to create.")
+            if legacy_blocking_nodes or foreign_mig_blocking_nodes or skipped_live_standalone:
+                log.info(f"No new instances to create in MIG {mig_name}; requested nodes already exist outside the MIG or are blocked.")
+            else:
+                log.info(f"All requested nodes already exist in MIG {mig_name}; nothing to create.")
             continue
 
         for chunk in chunked(pic_instances, n=ZONAL_MIG_SIZE_LIMIT):
@@ -483,8 +595,7 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                     if op_res and "error" in op_res:
                         raise RuntimeError(f"createInstances operation failed: {op_res['error']}")
                 log.debug(f"createInstances completed for {mig_name}")
-                lkp.get_mig_instances.cache_clear()
-                lkp.get_mig_repairing_instances.cache_clear()
+                lkp.clear_mig_caches()
                 successful_creates.extend(chunk_nodes)
             except Exception as e:
                 log.error(f"Failed createInstances for MIG {mig_name} on nodes {to_hostlist(chunk_nodes)}: {e}")
@@ -513,8 +624,7 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                     try:
                         # Lazy import to avoid circular dependency between resume and suspend
                         import suspend
-                        lkp.get_mig_instances.cache_clear()
-                        lkp.get_mig_repairing_instances.cache_clear()
+                        lkp.clear_mig_caches()
                         suspend.suspend_mig_nodes(nodes_to_cleanup, lkp)
                     except Exception as clean_err:
                         log.error(f"Failed cleaning up instances {nodes_to_cleanup}: {clean_err}")
@@ -529,7 +639,7 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                 if excl_job_id is not None:
                     return
             finally:
-                lkp.get_mig_instances.cache_clear()
+                lkp.clear_mig_caches()
 
 
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
