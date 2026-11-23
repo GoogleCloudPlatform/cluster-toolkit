@@ -80,9 +80,9 @@ variable "enable_private_ipv6_google_access" {
 }
 
 variable "release_channel" {
-  description = "The release channel of this cluster. Accepted values are `UNSPECIFIED`, `RAPID`, `REGULAR`, `STABLE` and `EXTENDED`. Refer this documentation for more details: https://docs.cloud.google.com/kubernetes-engine/docs/concepts/release-channels#channels"
+  description = "The release channel of this cluster. Accepted values are `UNSPECIFIED`, `RAPID`, `REGULAR`, `STABLE` and `EXTENDED`. `UNSPECIFIED` (no release channel) is deprecated by GKE and is rejected when creating clusters for customers that do not already use it. To hold a cluster on its version while it is enrolled in a channel, use `maintenance_exclusions`. Refer this documentation for more details: https://docs.cloud.google.com/kubernetes-engine/docs/concepts/release-channels#channels"
   type        = string
-  default     = "UNSPECIFIED"
+  default     = "REGULAR"
 }
 
 variable "min_master_version" {

@@ -42,7 +42,7 @@ deployment_groups:
       # ...
 ```
 
-**Note** on `version_prefix`: At initial cluster creation (when `min_master_version` is unset and `release_channel` is `UNSPECIFIED`, the default), `version_prefix` selects the newest GKE version matching that prefix (for example, `"1.35."` or `"1.35.2-gke.100"`). Because `gke-cluster` lists `min_master_version` in `lifecycle.ignore_changes` on the cluster resource (and `version` in `ignore_changes` on its system node pools), modifying `version_prefix` after the cluster is created **does not upgrade an existing control plane**—see [Section 2.2](#22-upgrading-an-existing-cluster) for upgrading existing clusters via `release_channel`, `gcloud`, or the Cloud Console.
+**Note** on `version_prefix`: At initial cluster creation (when `min_master_version` is unset), `version_prefix` selects the newest GKE version matching that prefix (for example, `"1.35."` or `"1.35.2-gke.100"`) that is available in the cluster's `release_channel` (`REGULAR` by default). Because `gke-cluster` lists `min_master_version` in `lifecycle.ignore_changes` on the cluster resource (and `version` in `ignore_changes` on its system node pools), modifying `version_prefix` after the cluster is created **does not upgrade an existing control plane**—see [Section 2.2](#22-upgrading-an-existing-cluster) for upgrading existing clusters via `release_channel`, `gcloud`, or the Cloud Console.
 
 ##### Specifying Release Channels in Blueprint
 
@@ -51,6 +51,8 @@ GKE offers Release Channels (RAPID, REGULAR, STABLE) which can be configured in 
 * **RAPID Channel**: Receives new features and versions first.  
 * **REGULAR Channel**: The default channel, balanced between stability and new features.  
 * **STABLE Channel**: Receives versions after they have been thoroughly soaked in other channels.
+
+If `release_channel` is not set, `gke-cluster` enrolls the cluster in the `REGULAR` channel. `UNSPECIFIED` (no release channel) is deprecated by GKE and is rejected when creating clusters for customers that do not already use it. To hold a cluster on its version while it is enrolled in a channel, use `maintenance_exclusions`.
 
 Blueprint snippet:
 
