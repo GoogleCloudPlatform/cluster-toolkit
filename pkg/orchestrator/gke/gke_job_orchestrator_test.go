@@ -5462,15 +5462,81 @@ func TestSetKubeClientAndSetDynamicClientSync(t *testing.T) {
 	if orc.dynClient != dynB || orc.dynClientManaged || orc.dynClientContext != "" {
 		t.Fatalf("SetKubeClient(*DefaultKubeClient) did not sync dynClient/managed state")
 	}
-	// Replacing custom KubeClient via SetDynamicClient(dynA) installs *DefaultKubeClient.
+	// Replacing custom KubeClient via SetDynamicClient(dynA) installs *DefaultKubeClient,
+	// clears cached inventory, and releases air-gap claim.
 	orc.SetKubeClient(&MockKubeClient{})
+	orc.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice}
+	orc.claimAirGap()
+	if !shell.IsKnownAirGapped() {
+		t.Fatalf("expected air-gap active before SetDynamicClient")
+	}
 	orc.SetDynamicClient(dynA)
 	if d, ok := orc.kubeClient.(*DefaultKubeClient); !ok || d == nil || d.dynClient != dynA {
 		t.Fatalf("SetDynamicClient did not replace custom KubeClient with *DefaultKubeClient")
+	}
+	if orc.Inventory() != nil || shell.IsKnownAirGapped() {
+		t.Fatalf("SetDynamicClient must clear cached inventory and release air-gap claim")
 	}
 	// SetDynamicClient(nil) clears kubeClient instead of leaving empty *DefaultKubeClient.
 	orc.SetDynamicClient(nil)
 	if orc.kubeClient != nil || orc.dynClient != nil {
 		t.Fatalf("SetDynamicClient(nil) should clear both kubeClient and dynClient")
+	}
+}
+
+func primeOrchInventoryAndDynClient(orc *GKEOrchestrator, id string, managed bool) dynamic.Interface {
+	dyn := &stubDynClient{id: id}
+	if managed {
+		orc.dynClient = dyn
+		orc.dynClientManaged = true
+		orc.dynClientContext = "old-ctx"
+	} else {
+		orc.SetDynamicClient(dyn)
+	}
+	orc.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice}
+	orc.claimAirGap()
+	return dyn
+}
+
+func assertConfigureClearedState(t *testing.T, label string, orc *GKEOrchestrator, injected dynamic.Interface, wantKeep bool) {
+	t.Helper()
+	if orc.Inventory() != nil || shell.IsKnownAirGapped() {
+		t.Errorf("%s: must clear inventory and release air-gap", label)
+	}
+	if wantKeep && orc.dynClient != injected {
+		t.Errorf("%s: must preserve externally injected dynClient", label)
+	}
+	if !wantKeep && (orc.dynClient != nil || orc.dynClientManaged || orc.dynClientContext != "") {
+		t.Errorf("%s: must invalidate managed dynClient", label)
+	}
+}
+
+func TestConfigureKubectlAndK8sKubectl_InventoryAndDynClientLifecycle(t *testing.T) {
+	t.Setenv(shell.AirGappedEnvVar, "")
+	shell.SetDefaultAirGapped(false)
+	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
+
+	const probeCmd = "kubectl get --raw /version --request-timeout=5s"
+	for _, managed := range []bool{true, false} {
+		exec := NewMockExecutor(map[string][]shell.CommandResult{
+			probeCmd: {{ExitCode: 0, Stdout: `{"gitVersion":"v1.31.0"}`}},
+		})
+		orc := newTestGKEOrchestrator(exec)
+		orc.clusterDesc = testClusterDesc(true, true)
+		orc.kubeconfigLoader = staticLoader(kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext))
+		dyn := primeOrchInventoryAndDynClient(orc, "gke", managed)
+		if err := orc.configureKubectl(testCluster, testLocation, testProject); err != nil {
+			t.Fatalf("configureKubectl(managed=%v) error = %v", managed, err)
+		}
+		assertConfigureClearedState(t, fmt.Sprintf("configureKubectl(managed=%v)", managed), orc, dyn, !managed)
+
+		k8sOrc := NewGKEOrchestrator()
+		k8sOrc.kubeContext = "existing-ctx"
+		k8sOrc.k8sCluster = "existing-cluster"
+		k8sDyn := primeOrchInventoryAndDynClient(k8sOrc, "k8s", managed)
+		if err := k8sOrc.configureK8sKubectl("existing-cluster"); err != nil {
+			t.Fatalf("configureK8sKubectl(managed=%v) error = %v", managed, err)
+		}
+		assertConfigureClearedState(t, fmt.Sprintf("configureK8sKubectl(managed=%v)", managed), k8sOrc, k8sDyn, !managed)
 	}
 }
