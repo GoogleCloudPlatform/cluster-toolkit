@@ -6,7 +6,7 @@ metadata:
   namespace: ${namespace}
   labels:
   %{~ for key, val in labels ~}
-    ${key}: ${jsonencode(val)}
+    ${jsonencode(key)}: ${jsonencode(val)}
   %{~ endfor ~}
 spec:
   accessModes:
