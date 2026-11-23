@@ -5144,14 +5144,12 @@ blueprints:
 - path: community/examples/hpc-build-slurm-image.yaml
   blueprint_name: hpc-build-slurm-image
   scheduler: slurm
-  description: "This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, hpc-rocky-linux-9 in the case of this example."
+  description: "This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, aci-cpu-rocky-linux-9-amd64 in the case of this example."
   machine_types: [n2d-standard-2]
   workloads: [hpc]
   required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
     build_from_git_ref: 6.13.2
-    build_from_image_family: hpc-rocky-linux-9
-    build_from_image_project: cloud-hpc-image-public
     built_image_family: my-custom-slurm
     built_instance_image:
       family: $(vars.built_image_family)
@@ -5159,9 +5157,12 @@ blueprints:
     compute_machine_type: n2d-standard-2
     controller_machine_type: n2d-standard-4
     deployment_name: build-slurm-1
+    disk_size_gb: 50
     image_build_machine_type: n2d-standard-16
     project_id: null
     region: us-central1
+    source_image_family: aci-cpu-rocky-linux-9-amd64
+    source_image_project: advanced-compute-images
     zone: us-central1-a
   modules:
   - id: network
@@ -5172,7 +5173,7 @@ blueprints:
   - id: slurm-custom-image
     source: modules/packer/custom-image
     use: [network, slurm-build-script]
-    settings: [image_family, machine_type, source_image_family, source_image_project_id]
+    settings: [disk_size, image_family, machine_type, source_image_family, source_image_project_id]
   - id: debug_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
@@ -6111,7 +6112,7 @@ blueprints:
   - id: custom-image
     source: modules/packer/custom-image
     use: [network1, htcondor_install_script]
-    settings: [disk_size, image_family, source_image_family]
+    settings: [disk_size, image_family, source_image_family, source_image_project_id]
   - id: htcondor_service_accounts
     source: community/modules/scheduler/htcondor-service-accounts
   - id: htcondor_setup
