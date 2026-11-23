@@ -2036,7 +2036,7 @@ func TestGCETPUHardwareResolver(t *testing.T) {
 		{"tpu-v7x-slice", "tpu7x"},
 		{"TPU_V7X", "tpu7x"},
 		{"ironwood", "tpu7x"},
-		{"tpu7l", "tpu7l"},
+		{"tpu7custom", "tpu7custom"},
 		{"ct5l-hightpu-4t", "v5e"},
 		{"TPU_V5_LITE", "v5e"},
 		{"TPU_V4", "v4"},

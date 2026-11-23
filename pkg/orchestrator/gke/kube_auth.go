@@ -720,11 +720,11 @@ func firstNonWarningLine(stderr, stdout string) string {
 	return ""
 }
 
-func firstOutputLine(stderr, stdout string) string {
-	if line := firstLine(strings.TrimSpace(stderr)); line != "" {
+func firstOutputLine(primary, fallback string) string {
+	if line := firstLine(strings.TrimSpace(primary)); line != "" {
 		return line
 	}
-	return firstLine(strings.TrimSpace(stdout))
+	return firstLine(strings.TrimSpace(fallback))
 }
 
 func scanNonWarningLine(s string) string {

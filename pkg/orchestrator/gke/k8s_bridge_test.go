@@ -186,8 +186,8 @@ func TestDiscoverK8sInventory_ErrorPropagation(t *testing.T) {
 	t.Setenv(k8s.LabelSchemeEnvVar, "bogus")
 	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
 	orc.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeGeneric}
-	if _, err := orc.DiscoverK8sInventory(); err == nil || !strings.Contains(err.Error(), k8s.LabelSchemeEnvVar) || strings.Contains(err.Error(), "--k8s-label-scheme") {
-		t.Errorf("expected GCLUSTER_LABEL_SCHEME error without --k8s-label-scheme, got: %v", err)
+	if _, err := orc.DiscoverK8sInventory(); err == nil || !strings.Contains(err.Error(), k8s.LabelSchemeEnvVar) || strings.Contains(err.Error(), "--") {
+		t.Errorf("expected GCLUSTER_LABEL_SCHEME error without CLI flag hints, got: %v", err)
 	}
 	if orc.inventory != nil {
 		t.Errorf("expected failed DiscoverK8sInventory to clear stale cached inventory")

@@ -241,8 +241,8 @@ func TestParseAndResolveLabelScheme(t *testing.T) {
 			return ""
 		})
 		if tc.wantErrSubstr != "" {
-			if err == nil || !strings.Contains(err.Error(), tc.wantErrSubstr) || strings.Contains(err.Error(), "--k8s-label-scheme") {
-				t.Errorf("ResolveLabelSchemeOverride(%q) err=%v want %q without --k8s-label-scheme", tc.env, err, tc.wantErrSubstr)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErrSubstr) || strings.Contains(err.Error(), "--") {
+				t.Errorf("ResolveLabelSchemeOverride(%q) err=%v want %q without CLI flag hints", tc.env, err, tc.wantErrSubstr)
 			}
 			continue
 		}
@@ -544,10 +544,10 @@ func TestDiscoverInventory_PoolAggregationGPUsAndMilliCPU(t *testing.T) {
 
 func TestDiscoverInventory_SliceEnrichmentReadinessAndPrimaryIsolation(t *testing.T) {
 	t.Parallel()
-	// Primary TPU pool is worker tpu7x (4 chips); also have control-plane TPU node and a tpu7l slice.
+	// Primary TPU pool is worker tpu7x (4 chips); also have control-plane TPU node and a v5p slice.
 	ctrlTPU := makeNode("ctrl-tpu", map[string]string{
 		ControlPlaneRoleLabel: "",
-		TPUSliceTypeLabel:     "tpu7l",
+		TPUSliceTypeLabel:     "v5p",
 	}, map[string]interface{}{"google.com/tpu": "4"}, true)
 	tpu1 := makeNode("tpu-1", map[string]string{
 		TPUSliceTypeLabel: "tpu7x",
@@ -570,7 +570,7 @@ func TestDiscoverInventory_SliceEnrichmentReadinessAndPrimaryIsolation(t *testin
 		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
 			NodeGVR: {ctrlTPU, tpu1, tpu2Unready, tpu3, tpu4},
 			TPUSliceGVR: {
-				makeSliceCRD("a-other-family", "", "tpu7l", "2x2x1", "True", "READY", nil),
+				makeSliceCRD("a-other-family", "", "v5p", "2x2x1", "True", "READY", nil),
 				makeSliceCRD("partial-slice", "", "tpu7x", "2x2x2", "True", "READY", nil),
 				makeSliceCRD("healthy-slice", "", "tpu7x", "2x2x2", "True", "READY", nil),
 			},
@@ -580,7 +580,7 @@ func TestDiscoverInventory_SliceEnrichmentReadinessAndPrimaryIsolation(t *testin
 	if err != nil {
 		t.Fatalf("DiscoverInventory failed: %v", err)
 	}
-	// Worker tpu7x pool beats control-plane tpu7l pool, and TotalTPUNodes isolates to tpu7x (4 nodes, not 5).
+	// Worker tpu7x pool beats control-plane v5p pool, and TotalTPUNodes isolates to tpu7x (4 nodes, not 5).
 	if inv.TPU == nil || inv.TPU.TPUType != "tpu7x" || inv.TPU.TotalTPUNodes != 4 || inv.TPU.ReadyTPUNodes != 3 {
 		t.Fatalf("unexpected primary TPU isolation: %+v", inv.TPU)
 	}
@@ -854,8 +854,8 @@ func TestDiscoverInventory_PoolKeyDisambiguationAndSystemTaints(t *testing.T) {
 
 func TestDiscoverInventory_SelfReviewEdgeCases(t *testing.T) {
 	t.Parallel()
-	// 1. Restarting 8t nodes (no allocatable google.com/tpu) enriching a 4x4 v6e CRD update ChipsPerNode to 8
-	//    (NodesPerSlice=2) and keep slice Ready; secondary 1t pool and control-plane TPU node are excluded from primary counts.
+	// Restarting 8t nodes (no allocatable google.com/tpu) enriching a 4x4 v6e CRD update ChipsPerNode to 8
+	// (NodesPerSlice=2) and keep slice Ready; secondary 1t pool and control-plane TPU node are excluded from primary counts.
 	node8tA := makeNode("v6e-8t-1", map[string]string{
 		InstanceTypeLabel: "ct6e-standard-8t",
 		TPUSliceTypeLabel: "v6e",
@@ -927,7 +927,7 @@ func TestDiscoverInventory_UnreadyFallbackAndFailClosedSkipsTrees(t *testing.T) 
 		t.Errorf("expected 'no active slice' when only mismatched-shape slice exists, got:\n%s", joined)
 	}
 
-	// 3. Auto fail-closed must return before calling listTPUPartitionTrees.
+	// Auto fail-closed must return before calling listTPUPartitionTrees.
 	lister3 := &fakeDiscoveryLister{
 		errGVR: map[schema.GroupVersionResource]error{
 			NodeGVR:     apierrors.NewForbidden(NodeGVR.GroupResource(), "", errors.New("forbidden")),
