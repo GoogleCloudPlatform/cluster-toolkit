@@ -51,7 +51,8 @@ type InputConstraints struct {
 	// anchored with ^ and $. When rules state different patterns, only one is
 	// reported; the others stay in Validations.
 	Pattern string `json:"pattern,omitempty" yaml:"pattern,omitempty"`
-	// AllowNull is set only when the rules explicitly accept null.
+	// AllowNull is set only when the rules explicitly accept null. When false/omitted,
+	// null may be rejected or simply not covered by the parsed rules.
 	AllowNull bool `json:"allow_null,omitempty" yaml:"allow_null,omitempty"`
 	// Sources lists which kinds of rules state limits for this input:
 	// "metadata" (metadata.yaml validators) and/or "terraform" (validation
@@ -125,9 +126,10 @@ func buildInputConstraints(t cty.Type, groups ...[]ruleConstraints) *InputConstr
 }
 
 // gateRuleToType drops limits that cannot apply to an input of type t:
-// allowed values of a different type, and numeric bounds on a non-number
-// input. Dropping a limit only weakens the rule, so the result stays a
-// necessary condition. Untyped (any) inputs keep every limit.
+// allowed values of a different type, numeric bounds on a non-number input,
+// and pattern / case-insensitivity on a non-string input. Dropping a limit
+// only weakens the rule, so the result stays a necessary condition. Untyped
+// (any) inputs keep every limit.
 func gateRuleToType(rc ruleConstraints, t cty.Type) ruleConstraints {
 	if t == cty.DynamicPseudoType {
 		return rc
@@ -137,6 +139,10 @@ func gateRuleToType(rc ruleConstraints, t cty.Type) ruleConstraints {
 	}
 	if t != cty.Number {
 		rc.min, rc.max = nil, nil
+	}
+	if t != cty.String {
+		rc.pattern = ""
+		rc.caseInsensitive = false
 	}
 	return rc
 }

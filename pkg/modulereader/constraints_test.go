@@ -187,6 +187,8 @@ func TestBuildInputConstraintsGatesTerraformLimits(t *testing.T) {
 		{"bound on number input", cty.Number, `var.x >= 1`, `{"min":1,"sources":["terraform"]}`},
 		{"enum kept when bound dropped", cty.String, `contains(["a"], var.x) && var.x >= 1`, `{"allowed_values":["a"],"sources":["terraform"]}`},
 		{"any input keeps everything", cty.DynamicPseudoType, `contains(["1"], var.x) && var.x >= 1`, `{"allowed_values":["1"],"min":1,"sources":["terraform"]}`},
+		{"pattern on number input", cty.Number, `can(regex("^[0-9]+$", var.x))`, `null`},
+		{"pattern on string input", cty.String, `can(regex("^[0-9]+$", var.x))`, `{"pattern":"^[0-9]+$","sources":["terraform"]}`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -194,6 +196,15 @@ func TestBuildInputConstraintsGatesTerraformLimits(t *testing.T) {
 				t.Errorf("want: %s\ngot:  %s", tc.want, got)
 			}
 		})
+	}
+}
+
+func TestBuildInputConstraintsDropsCaseFlagOnNumbers(t *testing.T) {
+	rules := []ValidationRule{{Validator: "allowed_enum", Inputs: map[string]interface{}{
+		"vars": []interface{}{"x"}, "allowed": []interface{}{1, 2}, "case_sensitive": false}}}
+	got := constraintsJSON(t, buildInputConstraints(cty.Number, metadataVarInfo(rules, map[string]cty.Type{"x": cty.Number})["x"].rules))
+	if want := `{"allowed_values":[1,2],"sources":["metadata"]}`; got != want {
+		t.Errorf("want: %s\ngot:  %s", want, got)
 	}
 }
 

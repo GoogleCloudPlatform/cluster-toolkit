@@ -60,7 +60,7 @@ In `json` and `yaml` output, a module input can include a `constraints` object w
 * `allowed_values`, plus `case_insensitive: true` when the module ignores case.
 * `min` and `max`, plus `min_exclusive` / `max_exclusive` for `>` and `<`.
 * `pattern`: an RE2 regular expression. It matches anywhere in the value unless it starts with `^` and ends with `$`, like Terraform's `regex()` and JSON Schema `pattern` (the HTML `pattern` attribute needs a full match instead). If rules give different patterns, only one is listed; the others stay in `validations`.
-* `allow_null: true` when the rules explicitly accept null, and `sources` (`terraform` and/or `metadata`).
+* `allow_null: true` when the rules explicitly accept null (when omitted, null is either rejected or not covered by the parsed rules), and `sources` (`terraform` and/or `metadata`).
 
 Limits are only listed when they can be read exactly. Other rules, such as ones that depend on several inputs, stay in `validations` as messages.
 
