@@ -41,6 +41,24 @@ def _write_executable(path: str, content: str) -> None:
     os.chmod(path, os.stat(path).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
+def _clean_git_env(extra_env: dict = None) -> dict:
+    """Return os.environ without inherited GIT_* hook variables that break temp repos."""
+    env = os.environ.copy()
+    for key in (
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_COMMON_DIR",
+        "GIT_PREFIX",
+    ):
+        env.pop(key, None)
+    if extra_env:
+        env.update(extra_env)
+    return env
+
+
 def _git(cwd: str, *args: str) -> str:
     res = subprocess.run(
         ["git", *args],
@@ -48,6 +66,7 @@ def _git(cwd: str, *args: str) -> str:
         check=True,
         capture_output=True,
         text=True,
+        env=_clean_git_env(),
     )
     return res.stdout.strip()
 
@@ -149,6 +168,31 @@ for path in files:
         f.write(updated)
 """,
         )
+
+        # Fallback jq mock for minimal CI sandboxes where jq is not installed
+        if shutil.which("jq") is None:
+            _write_executable(
+                os.path.join(self.bin_dir, "jq"),
+                """#!/usr/bin/env python3
+import json
+import sys
+
+args = [a for a in sys.argv[1:] if a != "-r"]
+expr = args[0] if args else ""
+data = json.load(sys.stdin)
+if expr == "length":
+    print(len(data))
+elif "startswith" in expr or ".headRefName" in expr:
+    for item in data:
+        print(
+            f"  - #{item['number']}: {item['title']} "
+            f"({item['headRefName']} -> {item['baseRefName']}) {item['url']}"
+        )
+else:
+    sys.stderr.write(f"Unhandled mock jq expr: {expr}\\n")
+    sys.exit(1)
+""",
+            )
 
         # Mock gh CLI backed by local bare_repo and gh_state_dir
         _write_executable(
@@ -254,10 +298,8 @@ sys.exit(1)
 
     def _run_script(self, *args: str, extra_env: dict = None) -> subprocess.CompletedProcess:
         self._sync_gh_state()
-        env = os.environ.copy()
+        env = _clean_git_env(extra_env)
         env["PATH"] = f"{self.bin_dir}:{env['PATH']}"
-        if extra_env:
-            env.update(extra_env)
         return subprocess.run(
             ["bash", SCRIPT_PATH, *args],
             capture_output=True,
