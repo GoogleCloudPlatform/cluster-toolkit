@@ -65,7 +65,7 @@ func RegisterProviders() {
 
 func (g *GKEOrchestrator) configureK8sKubectl(clusterName string) error {
 	g.resetStorageCaches()
-	g.clearInventory()
+	g.inventory = nil
 	g.resetManagedDynamicClient()
 	trimmed := strings.TrimSpace(clusterName)
 	if strings.TrimSpace(g.kubeContext) != "" && (trimmed == "" || trimmed == g.k8sCluster || trimmed == g.kubeContext) {
@@ -95,15 +95,6 @@ func (g *GKEOrchestrator) configureK8sKubectl(clusterName string) error {
 		return fmt.Errorf("kubeconfig current-context %q was not found; run 'kubectl config get-contexts' or pass --cluster <context>", dangling)
 	}
 	return fmt.Errorf("no current-context configured in kubeconfig; run 'kubectl config use-context <context>' or pass --cluster <context>")
-}
-
-func (g *GKEOrchestrator) clearInventory() {
-	g.inventory = nil
-}
-
-// Inventory returns the cached pure-Kubernetes cluster inventory discovered for the current run, if any.
-func (g *GKEOrchestrator) Inventory() *k8s.Inventory {
-	return g.inventory
 }
 
 // DiscoverK8sInventory queries Kubernetes nodes, TPU Slices/PartitionTrees, and non-privileged API

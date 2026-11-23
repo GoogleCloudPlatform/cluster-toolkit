@@ -138,7 +138,6 @@ type PoolCapacity struct {
 	GPUType             string
 	TPUsPerNode         int
 	GPUsPerNode         int
-	CPUsPerNode         int
 	AllocatableCPUMilli int64
 	MemMiBPerNode       int
 	Topologies          []string
@@ -156,10 +155,7 @@ type SliceInfo struct {
 	Ready         bool
 	NodesPerSlice int
 	ChipsPerNode  int
-	OwnerName     string
-	ManagedBy     string
 	PartitionIDs  []string
-	FromCRD       bool
 }
 
 // PartitionTreeInfo describes a discovered partition.tpu.google.com PartitionTree resource.

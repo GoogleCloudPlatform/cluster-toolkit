@@ -37,6 +37,7 @@ var (
 	// that arrive as HTTP 403 / "Error from server (Forbidden)" and must not be mistaken for K8s RBAC.
 	dnsGatewayRejectedMarkers = []string{
 		"allow_external_traffic is disabled",
+		"container.clusters.connect",
 		"container.googleapis.com/clusters.connect",
 		"prohibited by organization's policy",
 		"vpcservicecontrols",
@@ -53,6 +54,9 @@ var (
 		"access denied by proxy",
 		"cloudflare",
 		"x-amzn-errortype",
+		"unable to connect to the server",
+		"getting credentials",
+		"oauth2:",
 	}
 )
 
@@ -81,10 +85,14 @@ func isNonRBACForbiddenText(lower string) bool {
 }
 
 // IsForbiddenError reports whether err indicates a Kubernetes RBAC 403 Forbidden error,
-// rejecting non-RBAC 403s from proxies/WAFs (unexpected server responses or HTML), GKE DNS gateways,
-// IAM clusters.connect, and VPC Service Controls.
+// rejecting transport/credential-plugin errors (*url.Error), non-RBAC 403s from proxies/WAFs
+// (unexpected server responses or HTML), GKE DNS gateways, IAM clusters.connect, and VPC Service Controls.
 func IsForbiddenError(err error) bool {
 	if err == nil {
+		return false
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
 		return false
 	}
 	if apierrors.IsUnexpectedServerError(err) {

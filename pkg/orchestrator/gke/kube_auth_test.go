@@ -3385,3 +3385,108 @@ func TestConfigureKubectl_RefreshesStalePathExecOnlyOnMissingBinary(t *testing.T
 		}
 	})
 }
+
+func TestHasAPIGroupVersion(t *testing.T) {
+	const testGroupVersion = "kueue.x-k8s.io"
+	const rawCmd = "kubectl get --raw /apis/kueue.x-k8s.io --request-timeout=10s"
+
+	t.Run("present API group returns true, pins context, and bounds timeout", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			rawCmd: {{ExitCode: 0, Stdout: `{"kind":"APIGroup"}`}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.kubeContext = "k8s-ctx"
+
+		ok, err := orc.HasAPIGroupVersion(testGroupVersion)
+		if err != nil || !ok {
+			t.Fatalf("HasAPIGroupVersion = (%v, %v), want (true, nil)", ok, err)
+		}
+		mockExec.assertAllKubectlPinned(t, "k8s-ctx")
+		if len(mockExec.timeouts) != 1 || mockExec.timeouts[0] != apiGroupProbeTimeout {
+			t.Errorf("timeouts = %v, want [%v]", mockExec.timeouts, apiGroupProbeTimeout)
+		}
+	})
+
+	t.Run("404 NotFound markers in stderr or stdout return false without error", func(t *testing.T) {
+		for _, res := range []shell.CommandResult{
+			{ExitCode: 1, Stderr: "Error from server (NotFound): group missing"},
+			{ExitCode: 1, Stderr: "the server could not find the requested resource"},
+			{ExitCode: 1, Stdout: "404 page not found"},
+		} {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{rawCmd: {res}})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.kubeContext = "generic-ctx"
+
+			ok, err := orc.HasAPIGroupVersion(testGroupVersion)
+			if err != nil || ok {
+				t.Errorf("res %+v: HasAPIGroupVersion = (%v, %v), want (false, nil)", res, ok, err)
+			}
+			if !slices.Equal(mockExec.timeouts, []time.Duration{apiGroupProbeTimeout}) {
+				t.Errorf("timeouts = %v, want [%v]", mockExec.timeouts, apiGroupProbeTimeout)
+			}
+			mockExec.assertAllKubectlPinned(t, "generic-ctx")
+		}
+	})
+}
+
+func TestHasAPIGroupVersion_ErrorsAndBlankInputs(t *testing.T) {
+	t.Parallel()
+	const testGroupVersion = "kueue.x-k8s.io"
+	const rawCmd = "kubectl get --raw /apis/kueue.x-k8s.io --request-timeout=10s"
+	errExecNotFound := errors.New(`exec: "kubectl": executable file not found in $PATH`)
+	errWarnOnly := errors.New("exit status 1")
+
+	for _, tc := range []struct {
+		name          string
+		res           shell.CommandResult
+		wantErrSubstr string
+		wantWrapped   error
+	}{
+		{name: "deadline exceeded wrapped before stderr", res: shell.CommandResult{ExitCode: 0, Stderr: "404 page not found", Err: context.DeadlineExceeded}, wantErrSubstr: "timed out", wantWrapped: context.DeadlineExceeded},
+		{name: "skips WARNING and klog WMMDD lines", res: shell.CommandResult{ExitCode: 1, Stderr: "WARNING: kubeconfig perm\nW1120 12:00:00.000000 1 loader.go:1] warn\nError from server (Forbidden): denied"}, wantErrSubstr: "Forbidden"},
+		{name: "stderr warnings only fall through to stdout", res: shell.CommandResult{ExitCode: 1, Stderr: "\nWARNING: deprecated\nW1120 12:00:00.000000 1 loader.go:1] warn", Stdout: "proxy 503 unavailable"}, wantErrSubstr: "503 unavailable"},
+		{name: "stderr warnings only with empty stdout wraps res.Err", res: shell.CommandResult{ExitCode: 1, Stderr: "WARNING: deprecated\nW1120 12:00:00.000000 1 loader.go:1] warn", Err: errWarnOnly}, wantErrSubstr: "exit status 1", wantWrapped: errWarnOnly},
+		{name: "non-klog W1234x line is preserved", res: shell.CommandResult{ExitCode: 1, Stderr: "W1234x real error"}, wantErrSubstr: "W1234x real error"},
+		{name: "port 4040 connection refused", res: shell.CommandResult{ExitCode: 1, Stderr: "dial tcp 127.0.0.1:4040: connect: connection refused"}, wantErrSubstr: "connection refused"},
+		{name: "kubectl not in PATH wraps res.Err", res: shell.CommandResult{ExitCode: 1, Err: errExecNotFound}, wantErrSubstr: "executable file not found", wantWrapped: errExecNotFound},
+		{name: "stdout error fallback", res: shell.CommandResult{ExitCode: 1, Stdout: "gateway 502 bad gateway"}, wantErrSubstr: "502 bad gateway"},
+		{name: "empty output falls back to exit status", res: shell.CommandResult{ExitCode: 2}, wantErrSubstr: "exit status 2"},
+	} {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{rawCmd: {tc.res}})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.kubeContext = "err-ctx"
+		ok, err := orc.HasAPIGroupVersion(testGroupVersion)
+		if err == nil || ok {
+			t.Errorf("%s: expected error from HasAPIGroupVersion, got (%v, %v)", tc.name, ok, err)
+			continue
+		}
+		if tc.wantWrapped != nil && !errors.Is(err, tc.wantWrapped) {
+			t.Errorf("%s: expected wrapped %v, got %v", tc.name, tc.wantWrapped, err)
+		}
+		if !strings.Contains(err.Error(), tc.wantErrSubstr) || strings.HasSuffix(err.Error(), ": ") {
+			t.Errorf("%s: err = %q, want substring %q", tc.name, err.Error(), tc.wantErrSubstr)
+		}
+		if !slices.Equal(mockExec.timeouts, []time.Duration{apiGroupProbeTimeout}) {
+			t.Errorf("%s: timeouts = %v, want [%v]", tc.name, mockExec.timeouts, apiGroupProbeTimeout)
+		}
+		mockExec.assertAllKubectlPinned(t, "err-ctx")
+	}
+	assertHasAPIGroupVersionBlankGuards(t, testGroupVersion)
+}
+
+func assertHasAPIGroupVersionBlankGuards(t *testing.T, nonBlankGV string) {
+	t.Helper()
+	blankExec := NewMockExecutor(nil)
+	orcBlank := newTestGKEOrchestrator(blankExec)
+	for _, blank := range []string{"  ", "/ /", "/ / /", "///"} {
+		if ok, err := orcBlank.HasAPIGroupVersion(blank); err != nil || ok {
+			t.Fatalf("HasAPIGroupVersion(%q) = (%v, %v), want (false, nil)", blank, ok, err)
+		}
+	}
+	if ok, err := orcBlank.HasAPIGroupVersion(nonBlankGV); err == nil || ok || !strings.Contains(err.Error(), "--context") {
+		t.Fatalf("blank kubeContext HasAPIGroupVersion(%q) = (%v, %v), want explicit --context error", nonBlankGV, ok, err)
+	}
+	if len(blankExec.calls) != 0 {
+		t.Fatalf("expected 0 kubectl calls on blank kubeContext, got %v", blankExec.calls)
+	}
+}

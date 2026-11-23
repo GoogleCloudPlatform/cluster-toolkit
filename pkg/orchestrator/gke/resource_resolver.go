@@ -905,7 +905,7 @@ var gceTPUTypeTokens = []struct {
 	canonical string
 	tokens    []string
 }{
-	{canonical: "v6e", tokens: []string{"ct6e", "v6e"}},
+	{canonical: "v6e", tokens: []string{"ct6e", "v6e", "trillium"}},
 	{canonical: "v5p", tokens: []string{"ct5p", "v5p"}},
 	{canonical: "v5e", tokens: []string{"ct5lp", "ct5l", "v5e", "v5lite", "v5-lite"}},
 	{canonical: "v4", tokens: []string{"ct4p", "tpu-v4"}},
@@ -916,7 +916,7 @@ func (gceTPUHardwareResolver) IsTPUMachine(machineType string) bool {
 	if s == "" {
 		return false
 	}
-	return config.IsTPU(s) || isTPU7xToken(s) || isV5LiteShorthand(s)
+	return isKnownGCETPUMachinePrefix(s) || isGCEAcceleratorShorthand(s)
 }
 
 func (gceTPUHardwareResolver) NormalizeTPUType(raw string) string {
@@ -924,15 +924,16 @@ func (gceTPUHardwareResolver) NormalizeTPUType(raw string) string {
 	if s == "" {
 		return ""
 	}
-	if isTPU7xToken(s) {
+	norm := strings.ReplaceAll(s, "_", "-")
+	if isTPU7xToken(norm) {
 		return "tpu7x"
 	}
 	for _, entry := range gceTPUTypeTokens {
-		if containsAnyToken(s, entry.tokens) {
+		if containsAnyToken(norm, entry.tokens) {
 			return entry.canonical
 		}
 	}
-	if s == "v4" || strings.HasPrefix(s, "v4-") {
+	if norm == "v4" || strings.HasPrefix(norm, "v4-") {
 		return "v4"
 	}
 	return s
@@ -961,8 +962,10 @@ func (r gceTPUHardwareResolver) ChipsPerNode(machineType string) int {
 	}
 	lower := strings.ToLower(trimmed)
 	resolved := resolveGCETPUShorthand(lower)
-	if n, ok := parseStrictChipSuffix(resolved); ok {
-		return n
+	if isKnownGCETPUMachinePrefix(resolved) {
+		if n, ok := parseStrictChipSuffix(resolved); ok {
+			return n
+		}
 	}
 	if n := extraTPUShorthandChips(lower); n > 0 {
 		return n
@@ -988,6 +991,15 @@ func isTPU7xToken(s string) bool {
 	}
 	if strings.Contains(s, "tpu-7x") || s == "v7x" || strings.HasPrefix(s, "v7x-") || strings.Contains(s, "ironwood") {
 		return true
+	}
+	return false
+}
+
+func isTPU7xShorthand(s string) bool {
+	for _, base := range []string{"tpu7", "tpu7x", "tpu-7x", "tpu-v7x", "v7x", "ironwood"} {
+		if s == base || strings.HasPrefix(s, base+"-") {
+			return true
+		}
 	}
 	return false
 }
@@ -1027,10 +1039,10 @@ func parseStrictChipSuffix(machineType string) (int, bool) {
 }
 
 func extraTPUShorthandChips(lower string) int {
-	if lower == "tpu7-1" || lower == "tpu7x-1" {
+	if lower == "tpu7-1" || lower == "tpu7x-1" || lower == "v7x-1" {
 		return 1
 	}
-	if strings.HasPrefix(lower, "tpu7-") || strings.HasPrefix(lower, "tpu7x-") {
+	if strings.HasPrefix(lower, "tpu7-") || strings.HasPrefix(lower, "tpu7x-") || strings.HasPrefix(lower, "v7x-") {
 		return 4
 	}
 	return 0
@@ -1056,7 +1068,7 @@ func isGCEAcceleratorShorthand(raw string) bool {
 	if _, hasChipSuffix := parseStrictChipSuffix(s); hasChipSuffix {
 		return false
 	}
-	if isTPU7xToken(s) || isV5LiteShorthand(s) {
+	if isTPU7xShorthand(s) || isV5LiteShorthand(s) {
 		return true
 	}
 	return isKnownGCEFamilyShorthand(s)
@@ -1081,15 +1093,15 @@ func defaultGCETPUMachineType(tpuType string, chipsPerNode int) string {
 		if chipsPerNode == 1 {
 			return "tpu7x-standard-1t"
 		}
-		return "tpu7x-standard-4t"
+		return config.ResolveMachineType("tpu7x")
 	case "v6e":
-		return fmt.Sprintf("ct6e-standard-%dt", normalizeGCEChipCount(chipsPerNode))
+		return config.ResolveMachineType(fmt.Sprintf("v6e-%d", normalizeGCEChipCount(chipsPerNode)))
 	case "v5p":
-		return "ct5p-hightpu-4t"
+		return config.ResolveMachineType("v5p-8")
 	case "v5e":
-		return fmt.Sprintf("ct5lp-hightpu-%dt", normalizeGCEChipCount(chipsPerNode))
+		return config.ResolveMachineType(fmt.Sprintf("v5e-%d", normalizeGCEChipCount(chipsPerNode)))
 	case "v4":
-		return "ct4p-hightpu-4t"
+		return config.ResolveMachineType("v4-8")
 	default:
 		return ""
 	}

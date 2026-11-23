@@ -932,7 +932,7 @@ func (g *GKEOrchestrator) endpointConnectivityError(clusterName string, attempts
 // GCLUSTER_REFRESH_CREDENTIALS=1 skips reuse.
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
 	g.resetStorageCaches()
-	g.clearInventory()
+	g.inventory = nil
 	if g.mode == orchestrator.TypeK8s {
 		return g.configureK8sKubectl(clusterName)
 	}

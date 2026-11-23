@@ -17,6 +17,7 @@ package k8s
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"reflect"
 	"slices"
 	"strings"
@@ -257,7 +258,7 @@ func TestDiscoverInventory_RealCRDSchemasAndV1Beta1Fallback(t *testing.T) {
 	noMatchSlice := &meta.NoResourceMatchError{PartialResource: TPUSliceGVR}
 	noMatchTree := &meta.NoResourceMatchError{PartialResource: TPUPartitionTreeGVR}
 
-	v1beta1Slice := makeSliceCRD("slice-ready", "", "tpu7x", "2x2x2", "True", "READY", []interface{}{"fin-pod12-r2-2x2x2-5"})
+	v1beta1Slice := makeSliceCRD("slice-ready", "", "tpu7x", "2x2x2", "True", "READY", []interface{}{"pod2-r2-2x2x2-5"})
 	v1beta1Tree := unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"metadata": map[string]interface{}{"name": "tree-v1beta1"},
@@ -319,19 +320,19 @@ func TestDiscoverInventory_V1Alpha1PartitionTreeLiveSchema(t *testing.T) {
 	liveTree := unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"metadata": map[string]interface{}{
-				"name":   "fin-pod10-r1-4x4x4-1",
+				"name":   "pod1-r1-4x4x4-1",
 				"labels": map[string]interface{}{TPUSliceTypeLabel: "tpu7x"},
 			},
 			"status": map[string]interface{}{
-				"partitionId":       "fin-pod10-r1-4x4x4-1",
+				"partitionId":       "pod1-r1-4x4x4-1",
 				"partitionTypeInfo": "IRONWOOD_4_4_4",
 				"childPartitions": []interface{}{
 					map[string]interface{}{
-						"partitionId":       "fin-pod10-r1-2x4x4-1",
+						"partitionId":       "pod1-r1-2x4x4-1",
 						"partitionTypeInfo": "IRONWOOD_2_4_4",
 						"childPartitions": []interface{}{
 							map[string]interface{}{
-								"partitionId":       "fin-pod10-r1-2x2x1-1",
+								"partitionId":       "pod1-r1-2x2x1-1",
 								"partitionTypeInfo": "IRONWOOD_2_2_1",
 							},
 						},
@@ -660,27 +661,50 @@ func TestDiscoverInventory_NilListerAndNilSummary(t *testing.T) {
 func TestSummaryLines_TPUAndExplicitModes(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name      string
-		inv       *Inventory
-		wantParts []string
+		name        string
+		inv         *Inventory
+		wantParts   []string
+		forbidParts []string
 	}{
 		{
-			name: "explicit with unavailable slices",
+			name: "explicit with unavailable slices and no API probe",
 			inv:  &Inventory{LabelScheme: SchemeTPUSlice, ExplicitMode: true, SliceInventoryUnavailable: true},
 			wantParts: []string{
-				"explicit mode",
+				"Kubernetes explicit mode active (label scheme: tpu-slice).",
 				"slice inventory unavailable",
 			},
+			forbidParts: []string{"TPU slice API present", "TPU slice API detected"},
 		},
 		{
-			name: "explicit with ready slice",
+			name: "explicit with ready slice and detected TPU slice API",
 			inv: &Inventory{
-				LabelScheme:  SchemeTPUSlice,
-				ExplicitMode: true,
-				Slices:       []SliceInfo{{Name: "s1", Ready: true}},
-				TPU:          &TPUInventory{DefaultSliceName: "s1"},
+				LabelScheme:        SchemeTPUSlice,
+				ExplicitMode:       true,
+				TPUSliceAPIPresent: true,
+				Slices:             []SliceInfo{{Name: "s1", Ready: true}},
+				TPU:                &TPUInventory{DefaultSliceName: "s1"},
 			},
-			wantParts: []string{"explicit mode", "Default slice: s1."},
+			wantParts: []string{"Kubernetes explicit mode active (label scheme: tpu-slice, TPU slice API detected).", "Default slice: s1."},
+		},
+		{
+			name: "healthy GKE TPU pool does not report missing slice",
+			inv: &Inventory{
+				LabelScheme: SchemeGKE,
+				TotalNodes:  4,
+				ReadyNodes:  4,
+				TPUPoolCap:  &PoolCapacity{NodePoolName: "tpu-v6e-pool", MachineType: "ct6e-standard-4t"},
+				TPU: &TPUInventory{
+					TPUType:       "v6e",
+					MachineType:   "ct6e-standard-4t",
+					TotalTPUNodes: 4,
+					ReadyTPUNodes: 4,
+					ChipsPerNode:  4,
+					Topology:      "2x2",
+					NodesPerSlice: 1,
+				},
+			},
+			wantParts:   []string{"TPU pool: ct6e-standard-4t", "4/4 ready nodes", "type=v6e", "pool=tpu-v6e-pool"},
+			forbidParts: []string{"no active slice", "no ready slice", "machine=ct6e-standard-4t"},
 		},
 		{
 			name: "tpu pool with ready slice and distinct node pool",
@@ -699,7 +723,7 @@ func TestSummaryLines_TPUAndExplicitModes(t *testing.T) {
 					DefaultSliceName: "s1",
 				},
 			},
-			wantParts: []string{"tpu7x", "pool=tpu-pool-a", "2/2 ready Kubernetes nodes", "Default slice: s1"},
+			wantParts: []string{"tpu7x", "pool=tpu-pool-a", "2/2 ready Kubernetes nodes", "Default slice: s1", "2/2 ready nodes"},
 		},
 		{
 			name: "tpu pool with unready slice",
@@ -737,7 +761,7 @@ func TestSummaryLines_TPUAndExplicitModes(t *testing.T) {
 	for _, tc := range cases {
 		joined := strings.Join(tc.inv.SummaryLines(), "\n")
 		tc.inv.LogSummary()
-		for _, bad := range []string{"<none>", "<unknown>", "(s)"} {
+		for _, bad := range append([]string{"<none>", "<unknown>", "(s)"}, tc.forbidParts...) {
 			if strings.Contains(joined, bad) {
 				t.Errorf("%s: unexpected %q in summary:\n%s", tc.name, bad, joined)
 			}
@@ -1164,5 +1188,118 @@ func TestDiscoverInventory_PartitionTree403NoFallbackAndCordonedTPUSlice(t *test
 	}
 	if invUntyped.TPU == nil || !slices.Equal(invUntyped.TPU.Topologies, []string{"2x2", "2x4"}) || invUntyped.TPU.Topology != "2x2" {
 		t.Errorf("untyped primary pool topology lost after applyDefaultSlice: %+v", invUntyped.TPU)
+	}
+}
+
+func TestDiscoverInventory_NonRBACNodeErrorFailsFast(t *testing.T) {
+	t.Parallel()
+	errs := []error{
+		errors.New("dial tcp 10.0.0.1:443: connect: connection refused"),
+		&url.Error{Op: "Get", URL: "https://10.0.0.1/api/v1/nodes", Err: errors.New("403 Forbidden")},
+	}
+	for _, nodeErr := range errs {
+		lister := &fakeDiscoveryLister{errGVR: map[schema.GroupVersionResource]error{NodeGVR: nodeErr}}
+		inv, err := DiscoverInventory(lister, nil, DiscoverOptions{})
+		if err == nil || inv != nil {
+			t.Fatalf("DiscoverInventory(nodeErr=%v) = (%+v, %v), want error without ExplicitMode", nodeErr, inv, err)
+		}
+	}
+}
+
+func TestDiscoverInventory_IntelGPUMetadataOnlyAndFallbackKeys(t *testing.T) {
+	t.Parallel()
+	metadataOnly := makeNode("intel-meta", map[string]string{
+		InstanceTypeLabel: "n2-standard-8",
+		GKENodePoolLabel:  "intel-meta-pool",
+	}, map[string]interface{}{
+		"cpu":                           "8",
+		"gpu.intel.com/millicores":      "1000",
+		"gpu.intel.com/i915_monitoring": "1",
+		"gpu.intel.com/memory.max":      "16Gi",
+		"gpu.intel.com/tiles":           "2",
+	}, true)
+	customKey := makeNode("intel-custom", map[string]string{
+		InstanceTypeLabel: "n2-standard-8",
+		GKENodePoolLabel:  "intel-custom-pool",
+	}, map[string]interface{}{
+		"cpu":                      "8",
+		"gpu.intel.com/millicores": "1000",
+		"gpu.intel.com/tiles":      "2",
+		"gpu.intel.com/custom-gpu": "2",
+	}, true)
+
+	inv, err := DiscoverInventory(&fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{NodeGVR: {metadataOnly, customKey}},
+	}, nil, DiscoverOptions{})
+	if err != nil {
+		t.Fatalf("DiscoverInventory failed: %v", err)
+	}
+	var foundMeta, foundCustom bool
+	for _, p := range inv.Pools {
+		switch p.NodePoolName {
+		case "intel-meta-pool":
+			foundMeta = true
+			if p.IsGPU || p.GPUsPerNode != 0 {
+				t.Errorf("metadata-only Intel pool misclassified as GPU: %+v", p)
+			}
+		case "intel-custom-pool":
+			foundCustom = true
+			if !p.IsGPU || p.GPUsPerNode != 2 || p.GPUType != "gpu.intel.com/custom-gpu" {
+				t.Errorf("custom Intel GPU pool = %+v, want 2 of gpu.intel.com/custom-gpu", p)
+			}
+		}
+	}
+	if !foundMeta || !foundCustom {
+		t.Errorf("missing expected Intel pools (foundMeta=%v foundCustom=%v): %v", foundMeta, foundCustom, inv.PoolNames)
+	}
+}
+
+func TestDiscoverInventory_Day2TPUPoolRankingAndTerminatingObjects(t *testing.T) {
+	t.Parallel()
+	// Healthy 4/4 TPU pool must beat a mostly-drained 1/8 TPU pool.
+	degraded := PoolCapacity{MachineType: "ct6e-standard-4t", TotalNodes: 8, ReadyNodes: 1}
+	healthy := PoolCapacity{MachineType: "ct6e-standard-8t", TotalNodes: 4, ReadyNodes: 4}
+	if !isBetterTPUPool("pool-healthy", healthy, false, "pool-degraded", &degraded, false) {
+		t.Errorf("expected healthy 4/4 TPU pool to beat degraded 1/8 TPU pool")
+	}
+
+	// Terminating Node, Slice, and PartitionTree (metadata.deletionTimestamp set) must not be ready/active.
+	const deletionTS = "2026-11-23T00:00:00Z"
+	termNode := makeNode("tpu-term", map[string]string{
+		InstanceTypeLabel: "tpu7x-standard-4t",
+		TPUSliceTypeLabel: "tpu7x",
+	}, map[string]interface{}{"cpu": "240", "google.com/tpu": "4"}, true)
+	termNode.Object["metadata"].(map[string]interface{})["deletionTimestamp"] = deletionTS
+
+	termSlice := makeSliceCRD("slice-term", "", "tpu7x", "2x2x2", "True", "READY", nil)
+	termSlice.Object["metadata"].(map[string]interface{})["deletionTimestamp"] = deletionTS
+
+	termTree := unstructured.Unstructured{Object: map[string]interface{}{
+		"metadata": map[string]interface{}{"name": "tree-term", "deletionTimestamp": deletionTS},
+		"status":   map[string]interface{}{"partitionId": "pod1_r1_4x4x4_1"},
+	}}
+	liveTree := unstructured.Unstructured{Object: map[string]interface{}{
+		"metadata": map[string]interface{}{"name": "tree-live"},
+		"status":   map[string]interface{}{"partitionId": "pod1_r1_4x4x4_1"},
+	}}
+
+	inv, err := DiscoverInventory(&fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR:             {termNode},
+			TPUSliceGVR:         {termSlice},
+			TPUPartitionTreeGVR: {termTree, liveTree},
+		},
+	}, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory failed: %v", err)
+	}
+	if inv.ReadyNodes != 0 || inv.TPU == nil || inv.TPU.ReadyTPUNodes != 0 || inv.TPU.DefaultSliceName != "" {
+		t.Errorf("terminating node/slice must not be ready or default: ReadyNodes=%d TPU=%+v", inv.ReadyNodes, inv.TPU)
+	}
+	if len(inv.Slices) != 1 || inv.Slices[0].Ready {
+		t.Errorf("terminating slice must have Ready=false, got %+v", inv.Slices)
+	}
+	if len(inv.PartitionTrees) != 1 || inv.PartitionTrees[0].Name != "tree-live" || inv.PartitionTrees[0].RootTopology != "4x4x4" {
+		t.Errorf("expected only live underscore PartitionTree with 4x4x4, got %+v", inv.PartitionTrees)
 	}
 }

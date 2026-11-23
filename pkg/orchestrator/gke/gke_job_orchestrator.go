@@ -87,7 +87,7 @@ func (g *GKEOrchestrator) SetExecutor(e Executor) {
 }
 
 func (g *GKEOrchestrator) SetDynamicClient(c dynamic.Interface) {
-	g.clearInventory()
+	g.inventory = nil
 	g.dynClient = c
 	g.dynClientManaged = false
 	g.dynClientContext = ""
@@ -102,7 +102,7 @@ func (g *GKEOrchestrator) SetDynamicClient(c dynamic.Interface) {
 }
 
 func (g *GKEOrchestrator) SetKubeClient(c KubeClient) {
-	g.clearInventory()
+	g.inventory = nil
 	if d, ok := c.(*DefaultKubeClient); ok && d == nil {
 		c = nil
 	}
@@ -131,7 +131,7 @@ func (g *GKEOrchestrator) resetStorageCaches() {
 // SubmitJob submits a job to the GKE cluster. It processes the job definition,
 // creates the required Kubernetes manifests (JobSet), and applies them to the cluster.
 func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
-	g.clearInventory()
+	g.inventory = nil
 	if g.mode == orchestrator.TypeK8s {
 		return orchestrator.UnsupportedK8sSubmitError()
 	}

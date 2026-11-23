@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"slices"
 	"testing"
 
@@ -203,8 +204,13 @@ func TestIsForbiddenError(t *testing.T) {
 		{"unexpected server response HTML 403", apierrors.NewGenericServerResponse(403, "list", schema.GroupResource{Resource: "nodes"}, "", "<html>403 Forbidden</html>", 0, false), false},
 		{"proxyconnect 403", errors.New("proxyconnect tcp: 403 Forbidden"), false},
 		{"GKE DNS allow_external_traffic", apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("allow_external_traffic is disabled")), false},
-		{"GKE IAM clusters.connect", errors.New("Error from server (Forbidden): container.googleapis.com/clusters.connect denied"), false},
+		{"GKE IAM clusters.connect full", errors.New("Error from server (Forbidden): container.googleapis.com/clusters.connect denied"), false},
+		{"GKE IAM clusters.connect short", errors.New("Error from server (Forbidden): Permission 'container.clusters.connect' denied"), false},
 		{"VPC-SC 403", errors.New("Error from server (Forbidden): Request is prohibited by organization's policy. vpcServiceControls"), false},
+		{"url.Error wrapping 403", &url.Error{Op: "Get", URL: "https://k8s.example.com/api/v1/nodes", Err: errors.New("403 Forbidden")}, false},
+		{"kubectl unable to connect 403", errors.New("Unable to connect to the server: 403 Forbidden"), false},
+		{"exec plugin getting credentials 403", errors.New("getting credentials: exec: gke-gcloud-auth-plugin returned 403 Forbidden"), false},
+		{"oauth2 token fetch 403", errors.New("oauth2: cannot fetch token: 403 Forbidden"), false},
 		{"other error", errors.New("connection refused"), false},
 	}
 	for _, tc := range cases {
