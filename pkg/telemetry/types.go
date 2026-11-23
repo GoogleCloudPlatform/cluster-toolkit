@@ -27,7 +27,8 @@ const (
 	clearcutProdURL         = "https://play.googleapis.com/log"
 	telemetryEndpointEnvVar = "GHPC_TELEMETRY_ENDPOINT"
 	configDirName           = "cluster-toolkit"
-	apiTimeout              = 15 * time.Second
+	projectLookupTimeout    = 3 * time.Second
+	projectCacheTTL         = 24 * time.Hour
 	uploadTimeout           = 10 * time.Second
 	shortTimeout            = 2 * time.Second
 	CLUSTER_TOOLKIT         = "CLUSTER_TOOLKIT"
@@ -43,6 +44,7 @@ type Collector struct {
 	eventStartTime   time.Time
 	blueprint        config.Blueprint
 	projectID        string
+	projectIDSet     bool
 	installationMode string
 	metadata         map[string]string
 

@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // setupTestEnv creates a clean temporary directory and forces os.UserConfigDir()
@@ -240,5 +241,55 @@ func TestInitUserConfig_ExistingIsGoogler(t *testing.T) {
 	}
 	if *cached != false {
 		t.Errorf("Expected IsGoogler to be false, got true")
+	}
+}
+
+func TestCachedProjectMetadata(t *testing.T) {
+	setupTestEnv(t)
+	if err := InitUserConfig(); err != nil {
+		t.Fatalf("InitUserConfig failed: %v", err)
+	}
+
+	if _, ok := GetCachedProjectMetadata("my-proj", time.Hour); ok {
+		t.Fatal("expected cache miss before storing metadata")
+	}
+
+	want := ProjectMetadata{
+		ProjectNumber:    "123456789",
+		BillingAccountID: "012345-6789AB-CDEF01",
+		UpdatedAt:        time.Now().UTC(),
+	}
+	if err := SetCachedProjectMetadata("my-proj", want); err != nil {
+		t.Fatalf("SetCachedProjectMetadata failed: %v", err)
+	}
+
+	got, ok := GetCachedProjectMetadata("my-proj", time.Hour)
+	if !ok {
+		t.Fatal("expected cache hit after SetCachedProjectMetadata")
+	}
+	if got.ProjectNumber != want.ProjectNumber || got.BillingAccountID != want.BillingAccountID {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+
+	// Verify persistence across InitUserConfig reload.
+	globalUserConfig = UserConfig{}
+	if err := InitUserConfig(); err != nil {
+		t.Fatalf("InitUserConfig reload failed: %v", err)
+	}
+	got, ok = GetCachedProjectMetadata("my-proj", time.Hour)
+	if !ok || got.ProjectNumber != want.ProjectNumber || got.BillingAccountID != want.BillingAccountID {
+		t.Errorf("after reload got (%+v, %v), want (%+v, true)", got, ok, want)
+	}
+
+	// Verify TTL expiration.
+	expired := ProjectMetadata{
+		ProjectNumber: "999",
+		UpdatedAt:     time.Now().UTC().Add(-2 * time.Hour),
+	}
+	if err := SetCachedProjectMetadata("expired-proj", expired); err != nil {
+		t.Fatalf("SetCachedProjectMetadata(expired) failed: %v", err)
+	}
+	if _, ok := GetCachedProjectMetadata("expired-proj", time.Hour); ok {
+		t.Error("expected cache miss for expired entry")
 	}
 }

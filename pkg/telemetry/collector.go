@@ -26,6 +26,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -72,14 +73,15 @@ func (c *Collector) GetMetadata(key string) (string, bool) {
 }
 
 // SetProjectID sets a resolved GCP project ID on the collector safely before
-// CollectMetrics and BuildConcordEvent run. Commands that do not operate on a
-// blueprint (such as `gcluster job *` and `gcluster cluster *`) use this so
-// telemetry can populate ProjectNumber, BillingAccountId, and is_test_data.
+// CollectMetrics and BuildConcordEvent run. Passing "" explicitly suppresses
+// fallback project attribution (for example, on non-GKE Kubernetes or offline
+// commands).
 func (c *Collector) SetProjectID(projectID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.projectID = strings.TrimSpace(projectID)
+	c.projectIDSet = true
 }
 
 // GetProjectID returns the explicit project ID override set on the collector.
@@ -92,13 +94,13 @@ func (c *Collector) GetProjectID() string {
 
 // resolveProjectID returns the effective GCP project ID for telemetry.
 // Must be called while holding c.mu.
-// Precedence: blueprint `project_id` > explicit SetProjectID > `--project` CLI flag.
+// Precedence: explicit SetProjectID (including "" to suppress) > blueprint `project_id` > `--project` CLI flag.
 func (c *Collector) resolveProjectID() string {
+	if c.projectIDSet {
+		return c.projectID
+	}
 	if projectID := strings.TrimSpace(config.GetKeyFromBlueprint("project_id", c.blueprint)); projectID != "" {
 		return projectID
-	}
-	if c.projectID != "" {
-		return c.projectID
 	}
 	if c.eventCmd != nil {
 		if flag := c.eventCmd.Flag("project"); flag != nil {
@@ -148,23 +150,82 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 
 // Method to collect Concord metrics and build event.
 func (c *Collector) BuildConcordEvent() ConcordEvent {
+	// Snapshot command latency and collector state before performing any network RPCs
+	// so telemetry lookups neither hold c.mu nor inflate reported command latency.
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
+	latencyMs := getLatencyMs(c.eventStartTime)
 	projectID := c.resolveProjectID()
+	eventName := getCommandName(c.eventCmd)
+	eventMetadata := getEventMetadataKVPairs(c.metadata)
+	c.mu.Unlock()
+
+	projectNumber, billingAccountID := resolveProjectIdentifiers(projectID)
 
 	return ConcordEvent{
 		ConsoleType:      CLUSTER_TOOLKIT,
 		EventType:        "gclusterCLI",
-		EventName:        getCommandName(c.eventCmd),
-		EventMetadata:    getEventMetadataKVPairs(c.metadata),
-		ProjectNumber:    getProjectNumber(projectID),
+		EventName:        eventName,
+		EventMetadata:    eventMetadata,
+		ProjectNumber:    projectNumber,
 		ClientInstallId:  getClientInstallId(),
-		BillingAccountId: getBillingAccountId(projectID),
+		BillingAccountId: billingAccountID,
 		ReleaseVersion:   getReleaseVersion(),
 		IsGoogler:        getIsGoogler(),
-		LatencyMs:        getLatencyMs(c.eventStartTime),
+		LatencyMs:        latencyMs,
 	}
+}
+
+// resolveProjectIdentifiers looks up ProjectNumber and BillingAccountId for projectID
+// using the local cache first, and falling back to bounded concurrent GCP RPCs.
+func resolveProjectIdentifiers(projectID string) (string, string) {
+	if projectID == "" {
+		return "", ""
+	}
+	if cached, ok := config.GetCachedProjectMetadata(projectID, projectCacheTTL); ok {
+		return cached.ProjectNumber, cached.BillingAccountID
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), projectLookupTimeout)
+	defer cancel()
+
+	var (
+		projectNumber    string
+		billingAccountID string
+		projErr          error
+		billErr          error
+		wg               sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		projectName, err := fetchProjectName(ctx, projectID)
+		projErr = err
+		if err == nil && projectName != "" {
+			projectNumber = strings.TrimPrefix(projectName, "projects/")
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		billingAccount, err := getProjectBillingAccount(ctx, projectID)
+		billErr = err
+		if err == nil && billingAccount != "" {
+			billingAccountID = strings.TrimPrefix(billingAccount, "billingAccounts/")
+		}
+	}()
+	wg.Wait()
+
+	// Only cache outcomes where both lookups either succeeded or returned an
+	// authenticated PermissionDenied. Missing ADC, Unauthenticated, NotFound,
+	// or network errors must not poison the 24h cache.
+	if isCacheableProjectLookupErr(projErr) && isCacheableProjectLookupErr(billErr) {
+		_ = config.SetCachedProjectMetadata(projectID, config.ProjectMetadata{
+			ProjectNumber:    projectNumber,
+			BillingAccountID: billingAccountID,
+			UpdatedAt:        time.Now().UTC(),
+		})
+	}
+
+	return projectNumber, billingAccountID
 }
 
 /** Private functions **/
@@ -267,7 +328,7 @@ func getProjectNumber(projectID string) string {
 		return ""
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), projectLookupTimeout)
 	defer cancel()
 
 	projectName, err := fetchProjectName(ctx, projectID)
@@ -458,7 +519,7 @@ func getBillingAccountId(projectID string) string {
 		return ""
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), projectLookupTimeout)
 	defer cancel()
 
 	billingAccount, err := getProjectBillingAccount(ctx, projectID)

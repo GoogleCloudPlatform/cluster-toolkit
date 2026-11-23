@@ -51,16 +51,18 @@ var JobCmd = &cobra.Command{
 Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic kubeconfig detection, or GCLUSTER_AIR_GAPPED=true in disconnected environments.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Name() == "gke-template-extract" {
+			reportTelemetryProjectID("")
 			return nil
 		}
 
+		projectFlagChanged := cmd.Flags().Changed("project")
 		savedClusterName, savedGKE, err := applySavedContextDefaults(cmd)
 		if err != nil {
 			return err
 		}
 		var det orchestrator.Detection
 		defer func() {
-			reportTelemetryProjectID(resolveTelemetryProjectID(projectID, det))
+			reportTelemetryProjectID(resolveTelemetryProjectID(projectID, projectFlagChanged, det))
 		}()
 		savedClusterUsed := !cmd.Flags().Changed("cluster") && savedClusterName != ""
 
@@ -83,6 +85,8 @@ Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic kubeconfig detection, or
 		}
 		logging.Info("Orchestrator: %s (%s)", det.Type, det.Reason)
 
+		// Report before initCommandOrchestrator so FatalHook paths observe the resolved project.
+		reportTelemetryProjectID(resolveTelemetryProjectID(projectID, projectFlagChanged, det))
 		return initCommandOrchestrator(cmd, det)
 	},
 }
@@ -93,12 +97,24 @@ func reportTelemetryProjectID(proj string) {
 	}
 }
 
-func resolveTelemetryProjectID(proj string, det orchestrator.Detection) string {
+func resolveTelemetryProjectID(proj string, projectFlagChanged bool, det orchestrator.Detection) string {
+	if det.Type == orchestrator.TypeK8s {
+		return ""
+	}
+	if det.Type == "" {
+		if projectFlagChanged {
+			return strings.TrimSpace(proj)
+		}
+		return ""
+	}
 	if p := strings.TrimSpace(proj); p != "" {
 		return p
 	}
 	if det.Type == orchestrator.TypeGKE {
-		return gke.ExtractProjectIDFromContext(det.KubeContext)
+		if p := gke.ExtractProjectIDFromContext(det.KubeContext); p != "" {
+			return p
+		}
+		return gke.ExtractProjectIDFromContext(det.ClusterName)
 	}
 	return ""
 }

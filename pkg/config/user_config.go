@@ -21,16 +21,27 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 )
 
 const configFileName = "telemetry_config.json"
 
+// ProjectMetadata caches resolved GCP project identifiers for telemetry so
+// repeated CLI invocations avoid redundant Resource Manager and Billing RPCs.
+type ProjectMetadata struct {
+	ProjectNumber    string    `json:"project_number,omitempty"`
+	BillingAccountID string    `json:"billing_account_id,omitempty"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
 // UserConfig holds the in-memory state of the user information and telemetry preferences.
 type UserConfig struct {
-	UserID           string `json:"user_id"`
-	TelemetryEnabled bool   `json:"telemetry_enabled"`
-	IsGoogler        *bool  `json:"is_googler,omitempty"`
+	UserID           string                     `json:"user_id"`
+	TelemetryEnabled bool                       `json:"telemetry_enabled"`
+	IsGoogler        *bool                      `json:"is_googler,omitempty"`
+	ProjectCache     map[string]ProjectMetadata `json:"project_cache,omitempty"`
 }
 
 // globalUserConfig is the package-level variable holding the state during execution
@@ -117,6 +128,51 @@ func SetIsGoogler(isGoogler bool) error {
 
 	err := SaveToFile()
 	if err != nil {
+		return fmt.Errorf("failed to save state to file: %v", err)
+	}
+	return nil
+}
+
+// GetCachedProjectMetadata returns cached project metadata for projectID if it
+// exists and is newer than ttl.
+func GetCachedProjectMetadata(projectID string, ttl time.Duration) (ProjectMetadata, bool) {
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return ProjectMetadata{}, false
+	}
+
+	mu.RLock()
+	defer mu.RUnlock()
+
+	entry, ok := globalUserConfig.ProjectCache[projectID]
+	if !ok || entry.UpdatedAt.IsZero() {
+		return ProjectMetadata{}, false
+	}
+	if ttl > 0 && time.Since(entry.UpdatedAt) >= ttl {
+		return ProjectMetadata{}, false
+	}
+	return entry, true
+}
+
+// SetCachedProjectMetadata stores resolved project metadata for projectID and
+// persists it to disk.
+func SetCachedProjectMetadata(projectID string, meta ProjectMetadata) error {
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return nil
+	}
+	if meta.UpdatedAt.IsZero() {
+		meta.UpdatedAt = time.Now().UTC()
+	}
+
+	mu.Lock()
+	if globalUserConfig.ProjectCache == nil {
+		globalUserConfig.ProjectCache = make(map[string]ProjectMetadata)
+	}
+	globalUserConfig.ProjectCache[projectID] = meta
+	mu.Unlock()
+
+	if err := SaveToFile(); err != nil {
 		return fmt.Errorf("failed to save state to file: %v", err)
 	}
 	return nil

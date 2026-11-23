@@ -50,6 +50,7 @@ var ClusterCmd = &cobra.Command{
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		orc = gkeOrchestratorFactory()
 
+		projectID = strings.TrimSpace(projectID)
 		if projectID == "" {
 
 			result := shell.ExecuteCommandWithTimeout(shell.DefaultLocalCommandTimeout, "gcloud", "config", "get-value", "project")
@@ -60,7 +61,7 @@ var ClusterCmd = &cobra.Command{
 
 			ambientProject := strings.TrimSpace(result.Stdout)
 
-			if result.ExitCode != 0 || ambientProject == "" {
+			if result.ExitCode != 0 || ambientProject == "" || ambientProject == "(unset)" {
 				return fmt.Errorf("no Google Cloud project specified. Please provide one via the '--project' flag or set a default project using 'gcloud config set project <PROJECT_ID>'")
 			}
 

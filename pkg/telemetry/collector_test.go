@@ -27,11 +27,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestNewCollector(t *testing.T) {
@@ -3467,6 +3470,7 @@ func TestCollector_ProjectIDResolutionAndConcordAttribution(t *testing.T) {
 	tests := []struct {
 		name             string
 		blueprintProject string
+		setExplicit      bool
 		explicitProject  string
 		flagProject      string
 		wantProjectNum   string
@@ -3474,24 +3478,35 @@ func TestCollector_ProjectIDResolutionAndConcordAttribution(t *testing.T) {
 		wantIsTestData   string
 	}{
 		{
-			name:             "Blueprint project_id takes precedence over SetProjectID and --project flag",
+			name:             "SetProjectID overrides accidental args[0] blueprint collision and --project flag",
 			blueprintProject: "bp-proj",
-			explicitProject:  "override-proj",
+			setExplicit:      true,
+			explicitProject:  "  actual-job-proj  ",
+			flagProject:      "flag-proj",
+			wantProjectNum:   "num-actual-job-proj",
+			wantBillingAcct:  "acct-actual-job-proj",
+			wantIsTestData:   "false",
+		},
+		{
+			name:             "Explicit SetProjectID empty suppresses both blueprint and --project flag fallback",
+			blueprintProject: "bp-proj",
+			setExplicit:      true,
+			explicitProject:  "",
+			flagProject:      "flag-proj",
+			wantProjectNum:   "",
+			wantBillingAcct:  "",
+			wantIsTestData:   "false",
+		},
+		{
+			name:             "Blueprint project_id is used when SetProjectID was never called",
+			blueprintProject: "bp-proj",
 			flagProject:      "flag-proj",
 			wantProjectNum:   "num-bp-proj",
 			wantBillingAcct:  "acct-bp-proj",
 			wantIsTestData:   "false",
 		},
 		{
-			name:            "SetProjectID populates Concord fields and overrides --project flag",
-			explicitProject: "  saved-job-proj  ",
-			flagProject:     "flag-proj",
-			wantProjectNum:  "num-saved-job-proj",
-			wantBillingAcct: "acct-saved-job-proj",
-			wantIsTestData:  "false",
-		},
-		{
-			name:            "CLI --project flag acts as fallback when blueprint and SetProjectID are empty",
+			name:            "CLI --project flag acts as fallback when blueprint and SetProjectID are unset",
 			flagProject:     "cli-flag-proj",
 			wantProjectNum:  "num-cli-flag-proj",
 			wantBillingAcct: "acct-cli-flag-proj",
@@ -3499,6 +3514,7 @@ func TestCollector_ProjectIDResolutionAndConcordAttribution(t *testing.T) {
 		},
 		{
 			name:            "Test project via SetProjectID marks IS_TEST_DATA true",
+			setExplicit:     true,
 			explicitProject: "hpc-toolkit-dev",
 			wantProjectNum:  "num-hpc-toolkit-dev",
 			wantBillingAcct: "acct-hpc-toolkit-dev",
@@ -3514,6 +3530,9 @@ func TestCollector_ProjectIDResolutionAndConcordAttribution(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			isolateTelemetryTestEnv(t)
+			t.Setenv("GHPC_AI_ASSISTED", "false")
+
 			root := &cobra.Command{Use: "gcluster"}
 			jobCmd := &cobra.Command{Use: "job"}
 			submitCmd := &cobra.Command{Use: "submit"}
@@ -3534,7 +3553,7 @@ func TestCollector_ProjectIDResolutionAndConcordAttribution(t *testing.T) {
 					}),
 				}
 			}
-			if tt.explicitProject != "" {
+			if tt.setExplicit {
 				c.SetProjectID(tt.explicitProject)
 				if got := c.GetProjectID(); got != strings.TrimSpace(tt.explicitProject) {
 					t.Errorf("GetProjectID() = %q, want %q", got, strings.TrimSpace(tt.explicitProject))
@@ -3552,6 +3571,150 @@ func TestCollector_ProjectIDResolutionAndConcordAttribution(t *testing.T) {
 			}
 			if event.BillingAccountId != tt.wantBillingAcct {
 				t.Errorf("BillingAccountId = %q, want %q", event.BillingAccountId, tt.wantBillingAcct)
+			}
+		})
+	}
+}
+
+func TestBuildConcordEvent_LatencyExcludesRPCTimeAndCachesProjectLookup(t *testing.T) {
+	isolateTelemetryTestEnv(t)
+	t.Setenv("GHPC_AI_ASSISTED", "false")
+
+	origFetchProject := fetchProjectName
+	origGetBilling := getProjectBillingAccount
+	t.Cleanup(func() {
+		fetchProjectName = origFetchProject
+		getProjectBillingAccount = origGetBilling
+	})
+
+	var projCalls, billCalls atomic.Int32
+	fetchProjectName = func(_ context.Context, projectID string) (string, error) {
+		projCalls.Add(1)
+		time.Sleep(150 * time.Millisecond)
+		return "projects/12345", nil
+	}
+	getProjectBillingAccount = func(_ context.Context, projectID string) (string, error) {
+		billCalls.Add(1)
+		time.Sleep(150 * time.Millisecond)
+		return "", status.Error(codes.PermissionDenied, "billing denied")
+	}
+
+	cmd := &cobra.Command{Use: "submit"}
+	c := NewCollector(cmd, nil, SOURCE)
+	c.SetProjectID("cached-proj")
+	c.CollectMetrics(0, nil)
+	// Reset start time right before BuildConcordEvent so any RPC sleep would visibly inflate LatencyMs.
+	c.eventStartTime = time.Now()
+
+	event1 := c.BuildConcordEvent()
+	if event1.ProjectNumber != "12345" || event1.BillingAccountId != "" {
+		t.Fatalf("event1 = (%q, %q), want (12345, '')", event1.ProjectNumber, event1.BillingAccountId)
+	}
+	if event1.LatencyMs >= 100 {
+		t.Errorf("LatencyMs = %d ms, want < 100ms (must exclude 150ms telemetry RPC sleep)", event1.LatencyMs)
+	}
+	if projCalls.Load() != 1 || billCalls.Load() != 1 {
+		t.Fatalf("first call RPC counts = (%d, %d), want (1, 1)", projCalls.Load(), billCalls.Load())
+	}
+
+	// Second call for the same project must hit local cache (including cached permanent billing denial).
+	c2 := NewCollector(cmd, nil, SOURCE)
+	c2.SetProjectID("cached-proj")
+	c2.CollectMetrics(0, nil)
+	event2 := c2.BuildConcordEvent()
+	if event2.ProjectNumber != "12345" || event2.BillingAccountId != "" {
+		t.Fatalf("event2 = (%q, %q), want (12345, '')", event2.ProjectNumber, event2.BillingAccountId)
+	}
+	if projCalls.Load() != 1 || billCalls.Load() != 1 {
+		t.Errorf("second call should hit cache; RPC counts = (%d, %d), want (1, 1)", projCalls.Load(), billCalls.Load())
+	}
+}
+
+func TestIsTransientRPCError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"PermissionDenied", status.Error(codes.PermissionDenied, "denied"), false},
+		{"NotFound", status.Error(codes.NotFound, "missing"), false},
+		{"InvalidArgument", status.Error(codes.InvalidArgument, "bad"), false},
+		{"Unauthenticated", status.Error(codes.Unauthenticated, "no auth"), false},
+		{"FailedPrecondition", status.Error(codes.FailedPrecondition, "precond"), false},
+		{"Unavailable", status.Error(codes.Unavailable, "retry"), true},
+		{"ResourceExhausted", status.Error(codes.ResourceExhausted, "quota"), true},
+		{"DeadlineExceeded", status.Error(codes.DeadlineExceeded, "timeout"), true},
+		{"Aborted", status.Error(codes.Aborted, "aborted"), true},
+		{"Internal", status.Error(codes.Internal, "internal"), true},
+		{"context.DeadlineExceeded", context.DeadlineExceeded, true},
+		{"generic error", errors.New("generic"), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isTransientRPCError(tc.err); got != tc.want {
+				t.Errorf("isTransientRPCError(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolveProjectIdentifiers_DoesNotPoisonCacheOnAuthOrTransientErrors(t *testing.T) {
+	origFetchProject := fetchProjectName
+	origGetBilling := getProjectBillingAccount
+	t.Cleanup(func() {
+		fetchProjectName = origFetchProject
+		getProjectBillingAccount = origGetBilling
+	})
+
+	nonCacheableErrors := []struct {
+		name string
+		err  error
+	}{
+		{"missing ADC", errors.New("google: could not find default credentials")},
+		{"Unauthenticated", status.Error(codes.Unauthenticated, "token expired")},
+		{"NotFound", status.Error(codes.NotFound, "project not created yet")},
+		{"Unavailable", status.Error(codes.Unavailable, "transient outage")},
+	}
+
+	for _, tc := range nonCacheableErrors {
+		t.Run(tc.name, func(t *testing.T) {
+			isolateTelemetryTestEnv(t)
+
+			var failFirst atomic.Bool
+			failFirst.Store(true)
+			var projAttempts atomic.Int32
+			fetchProjectName = func(_ context.Context, projectID string) (string, error) {
+				projAttempts.Add(1)
+				if failFirst.Load() {
+					return "", tc.err
+				}
+				return "projects/98765", nil
+			}
+			getProjectBillingAccount = func(_ context.Context, projectID string) (string, error) {
+				if failFirst.Load() {
+					return "", tc.err
+				}
+				return "billingAccounts/ABCDEF", nil
+			}
+
+			num1, bill1 := resolveProjectIdentifiers("retry-proj")
+			if num1 != "" || bill1 != "" {
+				t.Fatalf("first call = (%q, %q), want empty on %s", num1, bill1, tc.name)
+			}
+
+			// Subsequent lookup must NOT be poisoned by the failed first call.
+			failFirst.Store(false)
+			num2, bill2 := resolveProjectIdentifiers("retry-proj")
+			if num2 != "98765" || bill2 != "ABCDEF" {
+				t.Fatalf("second call = (%q, %q), want (98765, ABCDEF)", num2, bill2)
+			}
+
+			// Third call should now hit the populated cache without calling fetchProjectName again.
+			callsAfterPopulate := projAttempts.Load()
+			num3, bill3 := resolveProjectIdentifiers("retry-proj")
+			if num3 != "98765" || bill3 != "ABCDEF" || projAttempts.Load() != callsAfterPopulate {
+				t.Fatalf("third call = (%q, %q, calls=%d), want cached (98765, ABCDEF, calls=%d)", num3, bill3, projAttempts.Load(), callsAfterPopulate)
 			}
 		})
 	}
