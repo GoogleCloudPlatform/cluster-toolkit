@@ -185,18 +185,29 @@ func TestDiscoverK8sInventory_ErrorPropagation(t *testing.T) {
 	t.Setenv(k8s.LabelSchemeEnvVar, "")
 	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
 	orc.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeGeneric}
-	if _, err := orc.DiscoverK8sInventory("invalid"); err == nil || !strings.Contains(err.Error(), k8s.LabelSchemeEnvVar) || strings.Contains(err.Error(), "--k8s-label-scheme") {
-		t.Errorf("expected GCLUSTER_LABEL_SCHEME error without --k8s-label-scheme, got: %v", err)
+	if _, err := orc.DiscoverK8sInventory("invalid"); err == nil || !strings.Contains(err.Error(), "invalid label scheme") {
+		t.Errorf("expected source-neutral invalid label scheme error, got: %v", err)
+	} else if strings.Contains(err.Error(), k8s.LabelSchemeEnvVar) || strings.Contains(err.Error(), "--k8s-label-scheme") {
+		t.Errorf("flag-value error must not misattribute to env/flag: %v", err)
 	}
 	if orc.inventory != nil {
 		t.Errorf("expected failed DiscoverK8sInventory to clear stale cached inventory")
 	}
 
+	t.Setenv(k8s.LabelSchemeEnvVar, "bogus")
+	if _, err := orc.DiscoverK8sInventory(""); err == nil || !strings.Contains(err.Error(), k8s.LabelSchemeEnvVar) || strings.Contains(err.Error(), "--k8s-label-scheme") {
+		t.Errorf("expected GCLUSTER_LABEL_SCHEME error without --k8s-label-scheme, got: %v", err)
+	}
+	t.Setenv(k8s.LabelSchemeEnvVar, "")
+
 	orcNoClient := NewGKEOrchestrator()
 	if _, err := orcNoClient.DiscoverK8sInventory(""); !errors.Is(err, errKubeClientUninitialized) {
 		t.Errorf("expected errKubeClientUninitialized, got %v", err)
 	}
+}
 
+func TestDiscoverK8sInventory_LazyManagedClientInit(t *testing.T) {
+	t.Parallel()
 	orcBrokenKube := NewGKEOrchestrator()
 	orcBrokenKube.kubeContext = "broken-ctx"
 	orcBrokenKube.kubeconfigLoader = func() (*clientcmdapi.Config, error) {
@@ -204,6 +215,14 @@ func TestDiscoverK8sInventory_ErrorPropagation(t *testing.T) {
 	}
 	if _, err := orcBrokenKube.DiscoverK8sInventory(""); err == nil || !strings.Contains(err.Error(), "unreadable kubeconfig") {
 		t.Errorf("expected wrapped getDynamicClient error, got: %v", err)
+	}
+
+	orcLazy := NewGKEOrchestrator()
+	orcLazy.kubeContext = testContext
+	orcLazy.kubeconfigLoader = staticLoader(kubeconfigWith("https://127.0.0.1:6443", nil, nil, testContext))
+	kc, err := orcLazy.requireKubeClientForDiscovery()
+	if err != nil || kc == nil || orcLazy.dynClient == nil || !orcLazy.dynClientManaged || orcLazy.dynClientContext != testContext {
+		t.Errorf("lazy managed client init = (kc=%v, err=%v, managed=%v, ctx=%q), want initialized managed client", kc != nil, err, orcLazy.dynClientManaged, orcLazy.dynClientContext)
 	}
 }
 

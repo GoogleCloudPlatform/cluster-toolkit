@@ -223,16 +223,17 @@ func toAnyMap(in map[string]string) map[string]interface{} {
 func TestParseAndResolveLabelScheme(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		flag, env string
-		want      LabelScheme
-		wantErr   bool
+		flag, env       string
+		want            LabelScheme
+		wantErrSubstr   string
+		forbidErrSubstr string
 	}{
-		{"", "", SchemeAuto, false},
-		{"tpu-slice", "gke", SchemeTPUSlice, false},
-		{"  GKE ", "", SchemeGKE, false},
-		{"", "generic", SchemeGeneric, false},
-		{"invalid", "", "", true},
-		{"", "bogus", "", true},
+		{"", "", SchemeAuto, "", ""},
+		{"tpu-slice", "gke", SchemeTPUSlice, "", ""},
+		{"  GKE ", "", SchemeGKE, "", ""},
+		{"", "generic", SchemeGeneric, "", ""},
+		{"invalid", "", "", "invalid label scheme", LabelSchemeEnvVar},
+		{"", "bogus", "", LabelSchemeEnvVar, "--k8s-label-scheme"},
 	}
 	for _, tc := range cases {
 		got, err := ResolveLabelSchemeOverride(tc.flag, func(k string) string {
@@ -241,14 +242,14 @@ func TestParseAndResolveLabelScheme(t *testing.T) {
 			}
 			return ""
 		})
-		if (err != nil) != tc.wantErr {
-			t.Errorf("ResolveLabelSchemeOverride(%q,%q) err=%v wantErr=%v", tc.flag, tc.env, err, tc.wantErr)
+		if tc.wantErrSubstr != "" {
+			if err == nil || !strings.Contains(err.Error(), tc.wantErrSubstr) || strings.Contains(err.Error(), "--k8s-label-scheme") || strings.Contains(err.Error(), tc.forbidErrSubstr) {
+				t.Errorf("ResolveLabelSchemeOverride(%q,%q) err=%v want %q without %q", tc.flag, tc.env, err, tc.wantErrSubstr, tc.forbidErrSubstr)
+			}
+			continue
 		}
-		if err != nil && strings.Contains(err.Error(), "--k8s-label-scheme") {
-			t.Errorf("error must not reference unwired --k8s-label-scheme flag: %v", err)
-		}
-		if err == nil && got != tc.want {
-			t.Errorf("got %q, want %q", got, tc.want)
+		if err != nil || got != tc.want {
+			t.Errorf("ResolveLabelSchemeOverride(%q,%q) = (%q, %v), want (%q, nil)", tc.flag, tc.env, got, err, tc.want)
 		}
 	}
 }
@@ -385,8 +386,11 @@ func TestDiscoverInventory_PartitionTreeDoesNotSetTPUSliceAPIPresent(t *testing.
 	if err != nil {
 		t.Fatalf("DiscoverInventory failed: %v", err)
 	}
-	if inv.TPUSliceAPIPresent || inv.LabelScheme != SchemeGeneric {
-		t.Fatalf("PartitionTree must not set TPUSliceAPIPresent: got api=%v scheme=%q", inv.TPUSliceAPIPresent, inv.LabelScheme)
+	if inv.TPUSliceAPIPresent || inv.LabelScheme != SchemeGeneric || inv.TPU != nil || len(inv.PartitionTrees) != 0 {
+		t.Fatalf("generic cluster without Slice API must not fabricate TPU/PartitionTree inventory: api=%v scheme=%q TPU=%+v trees=%+v", inv.TPUSliceAPIPresent, inv.LabelScheme, inv.TPU, inv.PartitionTrees)
+	}
+	if slices.Contains(lister.calls, TPUPartitionTreeGVR) || slices.Contains(lister.calls, TPUPartitionTreeV1Beta1GVR) {
+		t.Errorf("must skip PartitionTree listing after Slice NotFound on generic cluster; calls=%v", lister.calls)
 	}
 }
 
@@ -1301,5 +1305,54 @@ func TestDiscoverInventory_Day2TPUPoolRankingAndTerminatingObjects(t *testing.T)
 	}
 	if len(inv.PartitionTrees) != 1 || inv.PartitionTrees[0].Name != "tree-live" || inv.PartitionTrees[0].RootTopology != "4x4x4" {
 		t.Errorf("expected only live underscore PartitionTree with 4x4x4, got %+v", inv.PartitionTrees)
+	}
+}
+
+func TestDiscoverInventory_MultiShape8tPoolAndSingleChipPartitionTree(t *testing.T) {
+	t.Parallel()
+	// 1. ct6e-standard-8t pool (without node slice-name labels) must reject a 2x2 slice (4 chips)
+	// while selecting a ready 2x4 v6e Slice CRD and computing NodesPerSlice=1 using 8 chips/node.
+	node8t := makeNode("v6e-8t-0", map[string]string{
+		InstanceTypeLabel: "ct6e-standard-8t",
+		TPUSliceTypeLabel: "v6e",
+	}, map[string]interface{}{"cpu": "120", "google.com/tpu": "8"}, true)
+	inv8t, err := DiscoverInventory(&fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR: {node8t},
+			TPUSliceGVR: {
+				makeSliceCRD("a-slice-2x2", "", "v6e", "2x2", "True", "READY", nil),
+				makeSliceCRD("b-slice-2x4", "", "v6e", "2x4", "True", "READY", nil),
+			},
+		},
+	}, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory(8t) failed: %v", err)
+	}
+	if inv8t.TPU == nil || inv8t.TPU.DefaultSliceName != "b-slice-2x4" || inv8t.TPU.ChipsPerNode != 8 || inv8t.TPU.NodesPerSlice != 1 {
+		t.Fatalf("8t pool slice matching = %+v, want DefaultSliceName=b-slice-2x4 ChipsPerNode=8 NodesPerSlice=1", inv8t.TPU)
+	}
+
+	// 2. Explicit-mode 1x1 and 1x1x1 PartitionTrees (no nodes, no slices) must infer 1t host shapes.
+	forbiddenNodes := apierrors.NewForbidden(NodeGVR.GroupResource(), "", errors.New("forbidden"))
+	for _, tc := range []struct {
+		tpuType, topo, wantMachine string
+	}{
+		{"v6e", "1x1", "ct6e-standard-1t"},
+		{"tpu7x", "1x1x1", "tpu7x-standard-1t"},
+	} {
+		pt := unstructured.Unstructured{Object: map[string]interface{}{
+			"metadata": map[string]interface{}{"name": "pt-" + tc.tpuType},
+			"status":   map[string]interface{}{"acceleratorType": tc.tpuType, "root": map[string]interface{}{"topology": tc.topo}},
+		}}
+		invPT, err := DiscoverInventory(&fakeDiscoveryLister{
+			byGVR:  map[schema.GroupVersionResource][]unstructured.Unstructured{TPUPartitionTreeGVR: {pt}},
+			errGVR: map[schema.GroupVersionResource]error{NodeGVR: forbiddenNodes},
+		}, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+		if err != nil {
+			t.Fatalf("DiscoverInventory(pt %s) failed: %v", tc.tpuType, err)
+		}
+		if invPT.TPU == nil || invPT.TPU.MachineType != tc.wantMachine || invPT.TPU.ChipsPerNode != 1 || invPT.TPU.NodesPerSlice != 1 {
+			t.Errorf("single-chip PartitionTree(%s/%s) = %+v, want machine=%s chips=1 nodes=1", tc.tpuType, tc.topo, invPT.TPU, tc.wantMachine)
+		}
 	}
 }

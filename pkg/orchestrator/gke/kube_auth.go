@@ -685,7 +685,10 @@ func (g *GKEOrchestrator) HasAPIGroupVersion(groupVersion string) (bool, error) 
 		return false, fmt.Errorf("failed to query Kubernetes API group %q: timed out after %v: %w", gv, apiGroupProbeTimeout, res.Err)
 	}
 	if res.ExitCode == 0 && res.Err == nil {
-		return true, nil
+		if isJSONObject(res.Stdout) {
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: unexpected non-JSON response %q", gv, firstOutputLine(res.Stdout, res.Stderr))
 	}
 	combined := res.Stderr + "\n" + res.Stdout
 	if isAPIGroupNotFoundText(combined) {
@@ -697,10 +700,15 @@ func (g *GKEOrchestrator) HasAPIGroupVersion(groupVersion string) (bool, error) 
 	if res.Err != nil {
 		return false, fmt.Errorf("failed to query Kubernetes API group %q: %w", gv, res.Err)
 	}
-	if fallback := firstNonWarningFallback(res.Stderr, res.Stdout); fallback != "" {
+	if fallback := firstOutputLine(res.Stderr, res.Stdout); fallback != "" {
 		return false, fmt.Errorf("failed to query Kubernetes API group %q: %s", gv, fallback)
 	}
 	return false, fmt.Errorf("failed to query Kubernetes API group %q: exit status %d", gv, res.ExitCode)
+}
+
+func isJSONObject(raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	return strings.HasPrefix(trimmed, "{") && json.Valid([]byte(trimmed))
 }
 
 func firstNonWarningLine(stderr, stdout string) string {
@@ -712,7 +720,7 @@ func firstNonWarningLine(stderr, stdout string) string {
 	return ""
 }
 
-func firstNonWarningFallback(stderr, stdout string) string {
+func firstOutputLine(stderr, stdout string) string {
 	if line := firstLine(strings.TrimSpace(stderr)); line != "" {
 		return line
 	}

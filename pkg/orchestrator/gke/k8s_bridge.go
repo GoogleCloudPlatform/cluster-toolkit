@@ -27,7 +27,7 @@ import (
 
 var (
 	registerProvidersOnce      sync.Once
-	errKubeClientUninitialized = errors.New("Kubernetes API client is not initialized for node inventory discovery")
+	errKubeClientUninitialized = errors.New("Kubernetes API client is not initialized for cluster discovery")
 )
 
 func init() {
@@ -133,7 +133,7 @@ func (g *GKEOrchestrator) requireKubeClientForDiscovery() (KubeClient, error) {
 			return nil, errKubeClientUninitialized
 		}
 		if _, err := g.getDynamicClient(); err != nil {
-			return nil, fmt.Errorf("failed to initialize Kubernetes API client for node inventory discovery: %w", err)
+			return nil, fmt.Errorf("failed to initialize Kubernetes API client for cluster discovery: %w", err)
 		}
 	}
 	if g.kubeClient == nil {

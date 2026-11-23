@@ -3451,6 +3451,8 @@ func TestHasAPIGroupVersion_ErrorsAndBlankInputs(t *testing.T) {
 		{name: "kubectl not in PATH wraps res.Err", res: shell.CommandResult{ExitCode: 1, Err: errExecNotFound}, wantErrSubstr: "executable file not found", wantWrapped: errExecNotFound},
 		{name: "stdout error fallback", res: shell.CommandResult{ExitCode: 1, Stdout: "gateway 502 bad gateway"}, wantErrSubstr: "502 bad gateway"},
 		{name: "empty output falls back to exit status", res: shell.CommandResult{ExitCode: 2}, wantErrSubstr: "exit status 2"},
+		{name: "exit 0 non-JSON HTML proxy response", res: shell.CommandResult{ExitCode: 0, Stdout: "<html>login</html>"}, wantErrSubstr: "non-JSON"},
+		{name: "exit 0 empty stdout", res: shell.CommandResult{ExitCode: 0, Stdout: "   "}, wantErrSubstr: "non-JSON"},
 	} {
 		mockExec := NewMockExecutor(map[string][]shell.CommandResult{rawCmd: {tc.res}})
 		orc := newTestGKEOrchestrator(mockExec)

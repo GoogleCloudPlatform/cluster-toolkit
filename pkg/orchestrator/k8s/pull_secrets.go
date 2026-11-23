@@ -42,11 +42,18 @@ var (
 		"prohibited by organization's policy",
 		"vpcservicecontrols",
 	}
-	nonRBACProxyHTMLMarkers = []string{
+	// nonRBACHTMLMarkers identify HTML error pages that can arrive inside a typed 403 StatusError
+	// from apierrors.NewGenericServerResponse when a proxy/WAF responds with text/html.
+	nonRBACHTMLMarkers = []string{
 		"<!doctype",
 		"<html",
 		"</html>",
 		"<title>",
+	}
+	// nonRBACFallbackMarkers identify proxy, WAF, transport, and credential-plugin errors on the
+	// unstructured string fallback path (checked after typed StatusReasonForbidden so K8s usernames
+	// or resource names containing words like "cloudflare" or "oauth2:" are not misclassified).
+	nonRBACFallbackMarkers = []string{
 		"proxyconnect",
 		"tunnel connection failed",
 		"received unexpected response",
@@ -63,20 +70,11 @@ var (
 // IsDNSGatewayRejectedText reports whether text indicates a GKE DNS gateway, IAM clusters.connect,
 // or VPC Service Controls 403 rejection rather than a Kubernetes RBAC denial.
 func IsDNSGatewayRejectedText(text string) bool {
-	lower := strings.ToLower(text)
-	for _, m := range dnsGatewayRejectedMarkers {
-		if strings.Contains(lower, m) {
-			return true
-		}
-	}
-	return false
+	return containsAnyMarker(strings.ToLower(text), dnsGatewayRejectedMarkers)
 }
 
-func isNonRBACForbiddenText(lower string) bool {
-	if IsDNSGatewayRejectedText(lower) {
-		return true
-	}
-	for _, m := range nonRBACProxyHTMLMarkers {
+func containsAnyMarker(lower string, markers []string) bool {
+	for _, m := range markers {
 		if strings.Contains(lower, m) {
 			return true
 		}
@@ -99,12 +97,15 @@ func IsForbiddenError(err error) bool {
 		return false
 	}
 	msg := strings.ToLower(strings.TrimSpace(err.Error()))
-	if isNonRBACForbiddenText(msg) {
+	if IsDNSGatewayRejectedText(msg) || containsAnyMarker(msg, nonRBACHTMLMarkers) {
 		return false
 	}
 	var statusErr apierrors.APIStatus
 	if errors.As(err, &statusErr) {
 		return statusErr.Status().Reason == metav1.StatusReasonForbidden
+	}
+	if containsAnyMarker(msg, nonRBACFallbackMarkers) {
+		return false
 	}
 	return strings.Contains(msg, "error from server (forbidden)") ||
 		strings.Contains(msg, "403 forbidden") ||

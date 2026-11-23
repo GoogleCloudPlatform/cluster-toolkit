@@ -15,6 +15,7 @@
 package k8s
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -70,7 +71,7 @@ func ParseLabelScheme(raw string) (LabelScheme, error) {
 	case string(SchemeGeneric):
 		return SchemeGeneric, nil
 	default:
-		return "", fmt.Errorf("invalid %s value %q: allowed values are tpu-slice, gke, generic", LabelSchemeEnvVar, raw)
+		return "", fmt.Errorf("invalid label scheme %q: allowed values are tpu-slice, gke, generic", raw)
 	}
 }
 
@@ -84,7 +85,12 @@ func ResolveLabelSchemeOverride(flagValue string, getenv func(string) string) (L
 	if getenv == nil {
 		getenv = os.Getenv
 	}
-	return ParseLabelScheme(getenv(LabelSchemeEnvVar))
+	envVal := getenv(LabelSchemeEnvVar)
+	scheme, err := ParseLabelScheme(envVal)
+	if err != nil {
+		return "", fmt.Errorf("invalid %s value %q: allowed values are tpu-slice, gke, generic", LabelSchemeEnvVar, envVal)
+	}
+	return scheme, nil
 }
 
 func resolveTPUType(hw TPUHardwareResolver, raw string) string {
@@ -461,7 +467,9 @@ func queryTPUSliceCRDs(lister ResourceLister, apiChecker APIGroupChecker, probeE
 	if err := checkAutoSchemeFailClosed(override, inv, signals, apiChecker, probeErr, out.sliceErr); err != nil {
 		return crdDiscoveryResult{}, err
 	}
-	out.trees, out.treeErr = listTPUPartitionTrees(lister, hw)
+	if inv.TPUSliceAPIPresent || signals.hasTPUSliceLabels || override == SchemeTPUSlice || out.sliceFound {
+		out.trees, out.treeErr = listTPUPartitionTrees(lister, hw)
+	}
 	return out, nil
 }
 
@@ -670,7 +678,7 @@ func addNodeToPool(builders map[poolGroupKey]*poolBuilder, snap nodeSnapshot) {
 	b.allMachineType = minNonEmpty(b.allMachineType, snap.machineType)
 	b.allTPUType = minNonEmpty(b.allTPUType, snap.tpuType)
 	b.allGPUType = minNonEmpty(b.allGPUType, snap.gpuType)
-	b.allCPUMilli = minPositiveInt64(b.allCPUMilli, snap.cpuMilli)
+	b.allCPUMilli = minPositive(b.allCPUMilli, snap.cpuMilli)
 	b.allMemMiB = minPositive(b.allMemMiB, snap.memMiB)
 	b.allTPUs = minPositive(b.allTPUs, snap.tpus)
 	b.allGPUs = minPositive(b.allGPUs, snap.gpus)
@@ -680,7 +688,7 @@ func addNodeToPool(builders map[poolGroupKey]*poolBuilder, snap nodeSnapshot) {
 		b.readyMachineType = minNonEmpty(b.readyMachineType, snap.machineType)
 		b.readyTPUType = minNonEmpty(b.readyTPUType, snap.tpuType)
 		b.readyGPUType = minNonEmpty(b.readyGPUType, snap.gpuType)
-		b.readyCPUMilli = minPositiveInt64(b.readyCPUMilli, snap.cpuMilli)
+		b.readyCPUMilli = minPositive(b.readyCPUMilli, snap.cpuMilli)
 		b.readyMemMiB = minPositive(b.readyMemMiB, snap.memMiB)
 		b.readyTPUs = minPositive(b.readyTPUs, snap.tpus)
 		b.readyGPUs = minPositive(b.readyGPUs, snap.gpus)
@@ -699,7 +707,7 @@ func finalizeBuilderCapacity(b *poolBuilder) PoolCapacity {
 		c.MachineType = firstNonEmpty(b.readyMachineType, b.allMachineType)
 		c.TPUType = firstNonEmpty(b.readyTPUType, b.allTPUType)
 		c.GPUType = firstNonEmpty(b.readyGPUType, b.allGPUType)
-		c.AllocatableCPUMilli = preferPositiveInt64(b.readyCPUMilli, b.allCPUMilli)
+		c.AllocatableCPUMilli = preferPositive(b.readyCPUMilli, b.allCPUMilli)
 		c.MemMiBPerNode = preferPositive(b.readyMemMiB, b.allMemMiB)
 		c.TPUsPerNode = preferPositive(b.readyTPUs, b.allTPUs)
 		c.GPUsPerNode = preferPositive(b.readyGPUs, b.allGPUs)
@@ -741,19 +749,14 @@ func addNodeToSliceAgg(agg map[string]*nodeSliceAgg, snap nodeSnapshot) {
 }
 
 func comparePoolGroupKeys(a, b poolGroupKey) int {
-	for _, c := range []int{
+	return cmp.Or(
 		strings.Compare(a.poolKey, b.poolKey),
 		strings.Compare(a.nodePool, b.nodePool),
 		strings.Compare(a.class, b.class),
 		strings.Compare(a.accelType, b.accelType),
 		compareBool(a.controlPlane, b.controlPlane),
 		compareBool(a.systemPool, b.systemPool),
-	} {
-		if c != 0 {
-			return c
-		}
-	}
-	return 0
+	)
 }
 
 func compareBool(a, b bool) int {
@@ -1101,7 +1104,10 @@ func parseTPUSlice(obj unstructured.Unstructured, hw TPUHardwareResolver) SliceI
 		chipsHint = 1
 	}
 	tpuType := resolveTPUType(hw, rawType)
-	machineType := inferTPUMachine(hw, tpuType, "", chipsHint)
+	var machineType string
+	if chipsHint > 0 || !isMultiHostShapeTPUFamily(tpuType) {
+		machineType = inferTPUMachine(hw, tpuType, "", chipsHint)
+	}
 	chips := chipsPerNodeForMachine(hw, machineType)
 	if chips == 0 && chipsHint > 0 {
 		chips = chipsHint
@@ -1119,6 +1125,10 @@ func parseTPUSlice(obj unstructured.Unstructured, hw TPUHardwareResolver) SliceI
 		ChipsPerNode:  chips,
 		PartitionIDs:  partitionIDs,
 	}
+}
+
+func isMultiHostShapeTPUFamily(tpuType string) bool {
+	return tpuType == "v5e" || tpuType == "v6e"
 }
 
 // listTPUPartitionTrees queries partition.tpu.google.com/v1alpha1 and falls back to v1beta1
@@ -1143,16 +1153,11 @@ func listTPUPartitionTrees(lister ResourceLister, hw TPUHardwareResolver) ([]Par
 }
 
 func comparePartitionTrees(a, b PartitionTreeInfo) int {
-	for _, c := range []int{
+	return cmp.Or(
 		strings.Compare(a.Name, b.Name),
 		strings.Compare(a.TPUType, b.TPUType),
 		strings.Compare(a.RootTopology, b.RootTopology),
-	} {
-		if c != 0 {
-			return c
-		}
-	}
-	return 0
+	)
 }
 
 // parsePartitionTree supports both observed partition.tpu.google.com CRD layouts:
@@ -1167,10 +1172,11 @@ func parsePartitionTree(obj unstructured.Unstructured, hw TPUHardwareResolver) P
 		rootNode = nested
 	}
 
+	inferredPrefix, _ := splitPartitionTypeInfo(nestedString(rootNode, "partitionTypeInfo"))
 	rawType := firstNonEmpty(
 		nestedString(obj.Object, "status", "acceleratorType"),
 		labels[TPUSliceTypeLabel],
-		inferTypeFromPartitionTypeInfo(nestedString(rootNode, "partitionTypeInfo")),
+		inferredPrefix,
 	)
 	rootTopo := extractNodeTopology(rootNode)
 	var allTopos []string
@@ -1206,7 +1212,7 @@ func extractNodeTopology(node map[string]interface{}) string {
 	if topo := strings.ToLower(strings.TrimSpace(nestedString(node, "topology"))); topo != "" {
 		return topo
 	}
-	if topo := extractTopologyFromPartitionTypeInfo(nestedString(node, "partitionTypeInfo")); topo != "" {
+	if _, topo := splitPartitionTypeInfo(nestedString(node, "partitionTypeInfo")); topo != "" {
 		return topo
 	}
 	return extractTopologyFromPartitionID(nestedString(node, "partitionId"))
@@ -1236,18 +1242,6 @@ func splitPartitionTypeInfo(info string) (prefix, topology string) {
 	return strings.Join(parts[:cut], "_"), strings.Join(dims, "x")
 }
 
-// extractTopologyFromPartitionTypeInfo parses trailing dimension tokens from v1alpha1
-// partitionTypeInfo strings such as "IRONWOOD_4_4_4" -> "4x4x4".
-func extractTopologyFromPartitionTypeInfo(info string) string {
-	_, topo := splitPartitionTypeInfo(info)
-	return topo
-}
-
-func inferTypeFromPartitionTypeInfo(info string) string {
-	prefix, _ := splitPartitionTypeInfo(info)
-	return prefix
-}
-
 // extractTopologyFromPartitionID extracts a "<d1>x<d2>[x<d3>]" token from partition IDs
 // such as "pod1-r1-4x4x4-1" or "pod1_r1_4x4x4_1" -> "4x4x4".
 func extractTopologyFromPartitionID(id string) string {
@@ -1270,13 +1264,7 @@ func mergeNodeDerivedSlices(inv *Inventory, nodeSlices map[string]*nodeSliceAgg,
 	for i := range inv.Slices {
 		byName[inv.Slices[i].Name] = append(byName[inv.Slices[i].Name], i)
 	}
-	names := make([]string, 0, len(nodeSlices))
-	for name := range nodeSlices {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-
-	for _, name := range names {
+	for _, name := range slices.Sorted(maps.Keys(nodeSlices)) {
 		agg := nodeSlices[name]
 		if indices, exists := byName[name]; exists {
 			for _, idx := range indices {
@@ -1467,9 +1455,37 @@ func poolTPUTypeMatches(pool PoolCapacity, tpu *TPUInventory) bool {
 
 func applySliceAndTreeMetadata(inv *Inventory, primaryPool *PoolCapacity, poolTopos []string, tpu *TPUInventory, hw TPUHardwareResolver) {
 	applyDefaultSlice(inv, tpu)
-	tpu.Topologies = collectAllTopologies(inv, poolTopos, tpu, hw)
+	backfillTPUFromPartitionTrees(inv, tpu, hw)
+	tpu.Topologies = collectAllTopologies(inv, poolTopos, tpu)
 	if tpu.DefaultSliceName == "" && tpu.Topology == "" {
 		tpu.Topology = pickFallbackTopology(inv, primaryPool, tpu)
+	}
+	if tpu.MachineType == "" && tpu.TPUType != "" {
+		chipsHint := tpu.ChipsPerNode
+		if chipsHint == 0 && isSingleChipTopology(tpu.Topology) {
+			chipsHint = 1
+		}
+		tpu.MachineType = inferTPUMachine(hw, tpu.TPUType, "", chipsHint)
+	}
+}
+
+func backfillTPUFromPartitionTrees(inv *Inventory, tpu *TPUInventory, hw TPUHardwareResolver) {
+	if tpu.TPUType != "" {
+		return
+	}
+	for _, pt := range inv.PartitionTrees {
+		if pt.TPUType == "" {
+			continue
+		}
+		tpu.TPUType = pt.TPUType
+		if tpu.MachineType == "" {
+			chipsHint := tpu.ChipsPerNode
+			if chipsHint == 0 && isSingleChipTopology(pt.RootTopology) {
+				chipsHint = 1
+			}
+			tpu.MachineType = inferTPUMachine(hw, tpu.TPUType, "", chipsHint)
+		}
+		return
 	}
 }
 
@@ -1507,7 +1523,7 @@ func firstMatchingPartitionTreeRoot(trees []PartitionTreeInfo, tpuType string, r
 	return ""
 }
 
-func collectAllTopologies(inv *Inventory, poolTopos []string, tpu *TPUInventory, hw TPUHardwareResolver) []string {
+func collectAllTopologies(inv *Inventory, poolTopos []string, tpu *TPUInventory) []string {
 	allTopos := append([]string(nil), poolTopos...)
 	for _, s := range inv.Slices {
 		if s.Topology != "" && sliceMatchesPrimaryTPU(s, tpu) {
@@ -1515,12 +1531,6 @@ func collectAllTopologies(inv *Inventory, poolTopos []string, tpu *TPUInventory,
 		}
 	}
 	for _, pt := range inv.PartitionTrees {
-		if tpu.TPUType == "" && pt.TPUType != "" {
-			tpu.TPUType = pt.TPUType
-			if tpu.MachineType == "" {
-				tpu.MachineType = inferTPUMachine(hw, tpu.TPUType, "", tpu.ChipsPerNode)
-			}
-		}
 		if tpuTypesCompatible(tpu.TPUType, pt.TPUType) {
 			allTopos = append(allTopos, pt.SupportedTopologies...)
 		}
@@ -1542,7 +1552,15 @@ func sliceMatchesPrimaryTPU(s SliceInfo, tpu *TPUInventory) bool {
 	if tpu.ChipsPerNode > 0 && s.ChipsPerNode > 0 && s.ChipsPerNode != tpu.ChipsPerNode {
 		return false
 	}
-	return true
+	return sliceTopologyFitsHostChips(s, tpu)
+}
+
+func sliceTopologyFitsHostChips(s SliceInfo, tpu *TPUInventory) bool {
+	if tpu.ChipsPerNode <= 0 || s.ChipsPerNode > 0 || s.Topology == "" {
+		return true
+	}
+	totalChips, ok := parseTopologyChipCount(s.Topology)
+	return !ok || totalChips%tpu.ChipsPerNode == 0
 }
 
 func applyDefaultSlice(inv *Inventory, tpu *TPUInventory) {
@@ -1657,7 +1675,7 @@ func minNonEmpty(cur, cand string) string {
 	return cur
 }
 
-func minPositive(cur, cand int) int {
+func minPositive[T ~int | ~int64](cur, cand T) T {
 	if cand <= 0 {
 		return cur
 	}
@@ -1667,24 +1685,7 @@ func minPositive(cur, cand int) int {
 	return cur
 }
 
-func minPositiveInt64(cur, cand int64) int64 {
-	if cand <= 0 {
-		return cur
-	}
-	if cur <= 0 || cand < cur {
-		return cand
-	}
-	return cur
-}
-
-func preferPositive(primary, fallback int) int {
-	if primary > 0 {
-		return primary
-	}
-	return fallback
-}
-
-func preferPositiveInt64(primary, fallback int64) int64 {
+func preferPositive[T ~int | ~int64](primary, fallback T) T {
 	if primary > 0 {
 		return primary
 	}

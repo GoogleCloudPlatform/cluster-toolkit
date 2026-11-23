@@ -901,14 +901,36 @@ func calculateFullNodeCPURequestMilli(vCPUs int, hasGCSFuse bool) int64 {
 	return max(100, request)
 }
 
-var gceTPUTypeTokens = []struct {
-	canonical string
-	tokens    []string
-}{
-	{canonical: "v6e", tokens: []string{"ct6e", "v6e", "trillium"}},
-	{canonical: "v5p", tokens: []string{"ct5p", "v5p"}},
-	{canonical: "v5e", tokens: []string{"ct5lp", "ct5l", "v5e", "v5lite", "v5-lite"}},
-	{canonical: "v4", tokens: []string{"ct4p", "tpu-v4"}},
+// gceTPUFamilies centralizes GCE/GKE/TPU-slice family tokens and observed cluster-label shorthands
+// (such as ironwood, v7x, tpu7x-podslice, v5lite-*, and tpu-v*-slice) locally to gceTPUHardwareResolver
+// without expanding user-facing config.AcceleratorShorthandMap.
+var gceTPUFamilies = []gceTPUFamilySpec{
+	{
+		canonical:      "tpu7x",
+		normTokens:     []string{"tpu7x", "tpu-v7x", "tpu-7x", "ironwood"},
+		shorthandBases: []string{"tpu7", "tpu7x", "tpu-7x", "tpu-v7x", "v7x", "ironwood"},
+		tpu7xChipRules: true,
+	},
+	{
+		canonical:      "v6e",
+		normTokens:     []string{"ct6e", "v6e", "trillium"},
+		shorthandBases: []string{"v6e", "tpu-v6e"},
+	},
+	{
+		canonical:      "v5p",
+		normTokens:     []string{"ct5p", "v5p"},
+		shorthandBases: []string{"v5p", "tpu-v5p"},
+	},
+	{
+		canonical:      "v5e",
+		normTokens:     []string{"ct5lp", "ct5l", "v5e", "v5lite", "v5-lite"},
+		shorthandBases: []string{"v5e", "v5lite", "v5-lite", "v5litepod", "tpu-v5e", "tpu-v5-lite", "tpu-v5-lite-podslice", "tpu-v5-lite-device"},
+	},
+	{
+		canonical:      "v4",
+		normTokens:     []string{"ct4p", "tpu-v4"},
+		shorthandBases: []string{"v4", "tpu-v4"},
+	},
 }
 
 func (gceTPUHardwareResolver) IsTPUMachine(machineType string) bool {
@@ -916,7 +938,7 @@ func (gceTPUHardwareResolver) IsTPUMachine(machineType string) bool {
 	if s == "" {
 		return false
 	}
-	return isKnownGCETPUMachinePrefix(s) || isGCEAcceleratorShorthand(s)
+	return isKnownGCETPUMachine(s) || isGCEAcceleratorShorthand(s)
 }
 
 func (gceTPUHardwareResolver) NormalizeTPUType(raw string) string {
@@ -925,16 +947,10 @@ func (gceTPUHardwareResolver) NormalizeTPUType(raw string) string {
 		return ""
 	}
 	norm := strings.ReplaceAll(s, "_", "-")
-	if isTPU7xToken(norm) {
-		return "tpu7x"
-	}
-	for _, entry := range gceTPUTypeTokens {
-		if containsAnyToken(norm, entry.tokens) {
-			return entry.canonical
+	for _, fam := range gceTPUFamilies {
+		if matchesNormalizedTPUFamily(norm, fam) {
+			return fam.canonical
 		}
-	}
-	if norm == "v4" || strings.HasPrefix(norm, "v4-") {
-		return "v4"
 	}
 	return s
 }
@@ -962,50 +978,27 @@ func (r gceTPUHardwareResolver) ChipsPerNode(machineType string) int {
 	}
 	lower := strings.ToLower(trimmed)
 	resolved := resolveGCETPUShorthand(lower)
-	if isKnownGCETPUMachinePrefix(resolved) {
+	if isKnownGCETPUMachine(resolved) {
 		if n, ok := parseStrictChipSuffix(resolved); ok {
 			return n
 		}
-	}
-	if n := extraTPUShorthandChips(lower); n > 0 {
-		return n
-	}
-	if isKnownGCETPUMachinePrefix(resolved) {
 		return config.AcceleratorsPerVM(resolved)
 	}
-	return 0
+	return extraTPUShorthandChips(lower)
 }
 
-func containsAnyToken(s string, tokens []string) bool {
-	for _, tok := range tokens {
-		if strings.Contains(s, tok) {
+func matchesNormalizedTPUFamily(norm string, fam gceTPUFamilySpec) bool {
+	for _, tok := range fam.normTokens {
+		if strings.Contains(norm, tok) {
+			return true
+		}
+	}
+	for _, base := range fam.shorthandBases {
+		if norm == base || strings.HasPrefix(norm, base+"-") {
 			return true
 		}
 	}
 	return false
-}
-
-func isTPU7xToken(s string) bool {
-	if s == "tpu7" || strings.HasPrefix(s, "tpu7-") || strings.Contains(s, "tpu7x") || strings.Contains(s, "tpu-v7x") {
-		return true
-	}
-	if strings.Contains(s, "tpu-7x") || s == "v7x" || strings.HasPrefix(s, "v7x-") || strings.Contains(s, "ironwood") {
-		return true
-	}
-	return false
-}
-
-func isTPU7xShorthand(s string) bool {
-	for _, base := range []string{"tpu7", "tpu7x", "tpu-7x", "tpu-v7x", "v7x", "ironwood"} {
-		if s == base || strings.HasPrefix(s, base+"-") {
-			return true
-		}
-	}
-	return false
-}
-
-func isV5LiteShorthand(s string) bool {
-	return s == "v5lite" || strings.HasPrefix(s, "v5lite-") || s == "v5-lite" || strings.HasPrefix(s, "v5-lite-")
 }
 
 // resolveGCETPUShorthand delegates official shorthands to config.ResolveMachineType
@@ -1039,16 +1032,24 @@ func parseStrictChipSuffix(machineType string) (int, bool) {
 }
 
 func extraTPUShorthandChips(lower string) int {
-	if lower == "tpu7-1" || lower == "tpu7x-1" || lower == "v7x-1" {
+	fam, rest, ok := matchGCEFamilyShorthand(lower)
+	if !ok || !fam.tpu7xChipRules {
+		return 0
+	}
+	if rest == "1" {
 		return 1
 	}
-	if strings.HasPrefix(lower, "tpu7-") || strings.HasPrefix(lower, "tpu7x-") || strings.HasPrefix(lower, "v7x-") {
-		return 4
-	}
-	return 0
+	return 4
 }
 
-func isKnownGCETPUMachinePrefix(lower string) bool {
+func isKnownGCETPUMachine(lower string) bool {
+	switch lower {
+	case "tpu7x-standard", "ct6e-standard", "ct5p-hightpu", "ct5lp-hightpu", "ct5l-hightpu", "ct4p-hightpu":
+		return true
+	}
+	if _, hasChipSuffix := parseStrictChipSuffix(lower); !hasChipSuffix {
+		return false
+	}
 	for _, prefix := range []string{"tpu7x-", "ct6e-", "ct5p-", "ct5lp-", "ct5l-", "ct4p-"} {
 		if strings.HasPrefix(lower, prefix) {
 			return true
@@ -1059,32 +1060,32 @@ func isKnownGCETPUMachinePrefix(lower string) bool {
 
 func isGCEAcceleratorShorthand(raw string) bool {
 	s := strings.ToLower(strings.TrimSpace(raw))
-	if s == "" {
+	if s == "" || isKnownGCETPUMachine(s) {
 		return false
 	}
 	if resolved := resolveGCETPUShorthand(s); resolved != s {
 		return true
 	}
-	if _, hasChipSuffix := parseStrictChipSuffix(s); hasChipSuffix {
-		return false
-	}
-	if isTPU7xShorthand(s) || isV5LiteShorthand(s) {
-		return true
-	}
-	return isKnownGCEFamilyShorthand(s)
+	_, _, ok := matchGCEFamilyShorthand(s)
+	return ok
 }
 
-func isKnownGCEFamilyShorthand(s string) bool {
-	switch s {
-	case "v4", "v5e", "v5p", "v6e", "v5litepod":
-		return true
-	}
-	for _, prefix := range []string{"tpu-v4", "tpu-v5", "tpu-v6", "tpu-v7", "v4-", "v5e-", "v5p-", "v6e-", "v5litepod-"} {
-		if strings.HasPrefix(s, prefix) {
-			return true
+func matchGCEFamilyShorthand(s string) (gceTPUFamilySpec, string, bool) {
+	for _, fam := range gceTPUFamilies {
+		for _, base := range fam.shorthandBases {
+			if s == base {
+				return fam, "", true
+			}
+			if rest, hasPrefix := strings.CutPrefix(s, base+"-"); hasPrefix && isValidShorthandSuffix(rest) {
+				return fam, rest, true
+			}
 		}
 	}
-	return false
+	return gceTPUFamilySpec{}, "", false
+}
+
+func isValidShorthandSuffix(rest string) bool {
+	return (rest != "" && isAllDigits(rest)) || rest == "slice" || rest == "podslice"
 }
 
 func defaultGCETPUMachineType(tpuType string, chipsPerNode int) string {

@@ -194,6 +194,8 @@ func TestIsForbiddenError(t *testing.T) {
 	}{
 		{"nil", nil, false},
 		{"typed 403", apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "", errors.New("forbidden")), true},
+		{"typed 403 for cloudflare user", apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New(`User "cloudflare-ci" cannot list resource "nodes"`)), true},
+		{"typed 403 for oauth2 resource", apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "oauth2:token", errors.New("forbidden")), true},
 		{"kubectl stderr", errors.New("Error from server (Forbidden): secrets is forbidden: User cannot list"), true},
 		{"wrapped 403 Forbidden", errors.New(`insufficient RBAC permissions to read ClusterQueue "default" (403 Forbidden)`), true},
 		{"structured is forbidden suffix", errors.New(`persistentvolumeclaims "pvc" is forbidden`), true},

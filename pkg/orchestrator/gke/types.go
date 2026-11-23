@@ -224,6 +224,13 @@ type GKEOrchestrator struct {
 // gceTPUHardwareResolver implements k8s.TPUHardwareResolver using GCE machine-type conventions.
 type gceTPUHardwareResolver struct{}
 
+type gceTPUFamilySpec struct {
+	canonical      string
+	normTokens     []string
+	shorthandBases []string
+	tpu7xChipRules bool
+}
+
 // Types for GetClusterInfo unmarshaling
 type gkeNodePool struct {
 	Name   string `json:"name"`
