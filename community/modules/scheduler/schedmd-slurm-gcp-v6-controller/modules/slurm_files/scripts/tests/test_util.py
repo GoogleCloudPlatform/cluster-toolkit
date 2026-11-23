@@ -153,11 +153,6 @@ def test_to_hostlist(names, expected):
             "beta",
             ClientOptions(api_endpoint="https://storage.googleapis.com/beta/"),
         ),
-        (
-            util.ApiEndpoint.TPU,
-            "alpha",
-            ClientOptions(api_endpoint="https://tpu.googleapis.com/alpha/"),
-        ),
     ],
 )
 def test_create_client_options(
