@@ -114,7 +114,7 @@ steps:
               echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/ml-slurm.yaml"
               cd /workspace
 
-              DEPLOYMENT_NAME="ml-slurm-v6-$$BUILD_ID_SHORT"
+              DEPLOYMENT_NAME="mlslm-$$BUILD_ID_SHORT"
               BLUEPRINT="examples/ml-slurm.yaml"
               BP_NAME=\$(grep -m1 '^blueprint_name:' "\$$BLUEPRINT" 2>/dev/null | awk '{print \$$2}')
 
@@ -130,7 +130,7 @@ steps:
               bash tools/add_ttl_label.sh \$$BLUEPRINT
               python3 tools/fix_vpc_name.py \$$BLUEPRINT "${_TEST_PREFIX}"
 
-              ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/multigroup-integration-test.yml \
+              ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
                 --extra-vars="test_prefix=${_TEST_PREFIX}" --extra-vars="use_fixed_vpc=true" \
                 --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
                 --extra-vars="@tools/cloud-build/daily-tests/tests/ml-slurm.yml" \
