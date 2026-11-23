@@ -125,9 +125,9 @@ V_BRANCH="version/${NEW_TAG}"
 
 gh repo clone "${REPO}" "${GITDIR}" -- --filter=blob:none --no-checkout --origin "${REMOTE_NAME}"
 cd "${GITDIR}"
-git fetch "${REMOTE_NAME}" \
-	"refs/heads/main:refs/remotes/${REMOTE_NAME}/main" \
-	"refs/heads/develop:refs/remotes/${REMOTE_NAME}/develop"
+git fetch "${REMOTE_NAME}" "refs/heads/main:refs/remotes/${REMOTE_NAME}/main"
+# Fetch develop branch optionally, as it may not exist on forks or custom repositories.
+git fetch "${REMOTE_NAME}" "refs/heads/develop:refs/remotes/${REMOTE_NAME}/develop" >/dev/null 2>&1 || true
 
 if git ls-remote --exit-code --heads "${REMOTE_NAME}" "refs/heads/${BRANCH_NAME}" >/dev/null 2>&1; then
 	git fetch "${REMOTE_NAME}" "refs/heads/${BRANCH_NAME}:refs/remotes/${REMOTE_NAME}/${BRANCH_NAME}"
@@ -137,13 +137,15 @@ if git ls-remote --exit-code --heads "${REMOTE_NAME}" "refs/heads/${BRANCH_NAME}
 		exit 1
 	fi
 
-	MERGE_BASE_DEVELOP=$(git merge-base "${REMOTE_NAME}/${BRANCH_NAME}" "${REMOTE_NAME}/develop")
-	DEVELOP_ONLY_COMMITS=$(git rev-list --count "${REMOTE_NAME}/main..${MERGE_BASE_DEVELOP}")
-	if [ "${DEVELOP_ONLY_COMMITS}" -gt 0 ]; then
-		echo "ERROR: Hotfix branch '${BRANCH_NAME}' contains ${DEVELOP_ONLY_COMMITS} commit(s) from 'develop' that are not on 'main':" >&2
-		git log --oneline -n 10 "${REMOTE_NAME}/main..${MERGE_BASE_DEVELOP}" >&2
-		echo "Hotfix branches must be cut directly from 'main', never from 'develop'." >&2
-		exit 1
+	if git rev-parse --verify --quiet "${REMOTE_NAME}/develop" >/dev/null 2>&1; then
+		MERGE_BASE_DEVELOP=$(git merge-base "${REMOTE_NAME}/${BRANCH_NAME}" "${REMOTE_NAME}/develop")
+		DEVELOP_ONLY_COMMITS=$(git rev-list --count "${REMOTE_NAME}/main..${MERGE_BASE_DEVELOP}")
+		if [ "${DEVELOP_ONLY_COMMITS}" -gt 0 ]; then
+			echo "ERROR: Hotfix branch '${BRANCH_NAME}' contains ${DEVELOP_ONLY_COMMITS} commit(s) from 'develop' that are not on 'main':" >&2
+			git log --oneline -n 10 "${REMOTE_NAME}/main..${MERGE_BASE_DEVELOP}" >&2
+			echo "Hotfix branches must be cut directly from 'main', never from 'develop'." >&2
+			exit 1
+		fi
 	fi
 
 	git switch -c "${BRANCH_NAME}" "${REMOTE_NAME}/${BRANCH_NAME}"

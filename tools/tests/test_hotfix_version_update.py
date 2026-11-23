@@ -433,6 +433,20 @@ sys.exit(1)
         self.assertIn("https://github.com/example-fork/cluster-toolkit/pull/", prs[0]["url"])
         self.assertIn("gh pr create -R example-fork/cluster-toolkit --base develop --head main", res.stdout)
 
+    def test_works_on_main_only_remote_without_develop_branch(self) -> None:
+        # Remove develop from remote so only main and hotfix-v1.109.1 exist
+        _git(self.work_repo, "push", "origin", "--delete", "develop")
+        _git(self.work_repo, "switch", "-c", "hotfix-v1.109.1", "main")
+        with open(os.path.join(self.work_repo, "pkg/fix.go"), "w", encoding="utf-8") as f:
+            f.write("package pkg\n// fix crash\n")
+        _git(self.work_repo, "add", ".")
+        _git(self.work_repo, "commit", "-m", "fix: resolve crash")
+        _git(self.work_repo, "push", "-u", "origin", "hotfix-v1.109.1")
+
+        res = self._run_script("-r", "example-fork/cluster-toolkit", "-b", "hotfix-v1.109.1")
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+        self.assertEqual(len(self._created_prs()), 2)
+
 
 class ReleaseWorkflowContractTest(unittest.TestCase):
     def _run_release_step(self, workflow_path: str, branch: str) -> subprocess.CompletedProcess:
