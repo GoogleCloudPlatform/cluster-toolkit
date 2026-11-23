@@ -78,7 +78,7 @@ var (
 		"instance_count",    // VM instances and Batch login nodes use 'instance_count' to define static nodes. Default is 1.
 		"target_size",       // Used by HTCondor execute points and MIGs for pool capacity.
 	}
-	staticNodeCountInlineKeys   = []string{"nodeset", "nodeset_tpu", "partition"} // Combine top-level explicit keys and complex inline object list keys for Slurm V6.
+	staticNodeCountInlineKeys   = []string{"nodeset", "partition"} // Combine top-level explicit keys and complex inline object list keys for Slurm V6.
 	dynamicMinNodeCountSettings = []string{
 		"autoscaling_min_node_count",
 		"autoscaling_total_min_nodes",
@@ -463,7 +463,7 @@ func extractAdditionalDisks(m config.Module, bp config.Blueprint, addStorageType
 }
 
 func extractInlineNodesets(m config.Module, bp config.Blueprint, addStorageType func(string)) {
-	for _, key := range []string{"nodeset", "nodeset_tpu", "partitions", "partition", "login_nodes"} {
+	for _, key := range []string{"nodeset", "partitions", "partition", "login_nodes"} {
 		if m.Settings.Has(key) {
 			if val, err := bp.Eval(m.Settings.Get(key)); err == nil {
 				processCtyList(val, func(itemUnmarked cty.Value) {

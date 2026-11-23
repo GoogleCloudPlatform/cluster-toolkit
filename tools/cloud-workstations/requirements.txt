@@ -128,7 +128,6 @@ google-api-core[grpc]==2.24.1 \
     #   google-cloud-core
     #   google-cloud-secret-manager
     #   google-cloud-storage
-    #   google-cloud-tpu
 google-api-python-client==2.93.0 \
     --hash=sha256:62ee28e96031a10a1c341f226a75ac6a4f16bdb1d888dc8222b2cdca133d0031 \
     --hash=sha256:f34abb671afd488bd19d30721ea20fb30d3796ddd825d6f91f26d8c718a9f07d
@@ -145,7 +144,6 @@ google-auth==2.38.0 \
     #   google-cloud-core
     #   google-cloud-secret-manager
     #   google-cloud-storage
-    #   google-cloud-tpu
 google-auth-httplib2==0.2.0 \
     --hash=sha256:38aa7badf48f974f1eb9861794e9c0cb2a0511a4ec0679b1f886d108f5640e05 \
     --hash=sha256:b65a0a2123300dd71281a7bf6e64d65a0759287df52729bdd1ae2e47dc311a3d
@@ -170,10 +168,6 @@ google-cloud-secret-manager==2.23.0 \
 google-cloud-storage==2.10.0 \
     --hash=sha256:934b31ead5f3994e5360f9ff5750982c5b6b11604dc072bc452c25965e076dc7 \
     --hash=sha256:9433cf28801671de1c80434238fb1e7e4a1ba3087470e90f70c928ea77c2b9d7
-    # via -r requirements.in
-google-cloud-tpu==1.23.0 \
-    --hash=sha256:385c8d9c2bcfd563ab8a0f443eeb76c29e02a9a6b0e4372c5ff0d5b894659047 \
-    --hash=sha256:ae869b1b717f76158bde7327b219df9a9052a3617061239fd772660793456cfd
     # via -r requirements.in
 google-crc32c==1.5.0 \
     --hash=sha256:024894d9d3cfbc5943f8f230e23950cd4906b2fe004c72e29b209420a1e6b05a \
@@ -408,7 +402,6 @@ proto-plus==1.26.0 \
     #   -r requirements.in
     #   google-api-core
     #   google-cloud-secret-manager
-    #   google-cloud-tpu
 protobuf==5.29.6 \
     --hash=sha256:36ade6ff88212e91aef4e687a971a11d7d24d6948a66751abc1b3238648f5d05 \
     --hash=sha256:62e8a3114992c7c647bce37dcc93647575fc52d50e48de30c6fcb28a6a291eb1 \
@@ -425,7 +418,6 @@ protobuf==5.29.6 \
     #   -r requirements.in
     #   google-api-core
     #   google-cloud-secret-manager
-    #   google-cloud-tpu
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status

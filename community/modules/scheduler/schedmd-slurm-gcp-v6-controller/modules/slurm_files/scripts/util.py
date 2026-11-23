@@ -175,7 +175,6 @@ class ApiEndpoint(Enum):
     COMPUTE = "compute"
     BQ = "bq"
     STORAGE = "storage"
-    TPU = "tpu"
     SECRET = "secret_manager"
 
 
