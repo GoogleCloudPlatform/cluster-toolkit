@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/ext/tryfunc"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/function"
@@ -37,10 +38,15 @@ import (
 
 var labelLoopRe = regexp.MustCompile(`%\{~?\s*for\s+[^}]*\bin\s+labels\b`)
 
+// stubTemplateFuncs and sharedTemplateVars stub only the functions and variables
+// the discovered templates use today. If a template adds a new one, add it here
+// or in sharedTemplateVars; otherwise this test fails with
+// "Call to unknown function" or "Unknown variable".
 func stubTemplateFuncs() map[string]function.Function {
 	return map[string]function.Function{
 		"jsonencode": stdlib.JSONEncodeFunc,
 		"length":     stdlib.LengthFunc,
+		"try":        tryfunc.TryFunc,
 		"indent": function.New(&function.Spec{
 			Params: []function.Parameter{{Type: cty.Number}, {Type: cty.String}},
 			Type:   function.StaticReturnType(cty.String),
