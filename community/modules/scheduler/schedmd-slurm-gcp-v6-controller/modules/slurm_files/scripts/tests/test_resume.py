@@ -2307,15 +2307,75 @@ def test_resume_mig_nodes_member_already_exists_preserves_live_vm(
   mock_handle_failure.assert_called_once()
   assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
 
-  # 6. Synchronous MEMBER_ALREADY_EXISTS exception -> no delete of conflicting node
+  # 6. Synchronous already-exists / HTTP 409 exceptions -> no delete of conflicting node
+  for label, err_exc in (
+      ("plain_code", RuntimeError("HttpError 409: MEMBER_ALREADY_EXISTS")),
+      (
+          "camel_error_details",
+          type(
+              "FakeErr",
+              (RuntimeError,),
+              {"error_details": [{"domain": "global", "reason": "alreadyExists"}]},
+          )("The resource 'projects/p/zones/us-central1-a/instances/c-n-0' already exists"),
+      ),
+      (
+          "resp_409",
+          type(
+              "FakeHttp409",
+              (RuntimeError,),
+              {"resp": type("Resp", (), {"status": 409})()},
+          )("Conflict"),
+      ),
+      (
+          "camel_reason_no_409",
+          type(
+              "FakeCamelOnly",
+              (RuntimeError,),
+              {"error_details": [{"reason": "alreadyExists"}]},
+          )("generic wrapper message"),
+      ),
+  ):
+    mock_suspend.reset_mock()
+    mock_handle_failure.reset_mock()
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.side_effect = [
+        {"managedInstances": []},
+    ]
+    mock_execute.side_effect = err_exc
+    with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+      resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=util.Lookup(cfg))
+    mock_suspend.assert_not_called()
+    mock_handle_failure.assert_called_once()
+    assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE, label
+
+  # Negative check: real HttpError-shaped 503 stockout still cleans up chunk
   mock_suspend.reset_mock()
   mock_handle_failure.reset_mock()
   mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.side_effect = [
       {"managedInstances": []},
   ]
-  mock_execute.side_effect = RuntimeError("HttpError 409: MEMBER_ALREADY_EXISTS")
+  mock_execute.side_effect = type(
+      "FakeHttp503",
+      (RuntimeError,),
+      {
+          "resp": type("Resp", (), {"status": 503})(),
+          "error_details": [{"reason": "backendError"}],
+      },
+  )("ZONE_RESOURCE_POOL_EXHAUSTED")
   with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
     resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=util.Lookup(cfg))
-  mock_suspend.assert_not_called()
-  mock_handle_failure.assert_called_once()
-  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
+  mock_suspend.assert_called_once()
+  assert mock_suspend.call_args.args[0] == ["c-n-0"]
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.REQUEUE
+
+  # 7. Real googleapiclient HttpError helper unit check (status 409 / alreadyExists)
+  from googleapiclient.errors import HttpError
+  import httplib2
+  body = (
+      b'{"error": {"code": 409, "message": "The resource \'c-n-0\' already exists", '
+      b'"errors": [{"message": "The resource \'c-n-0\' already exists", '
+      b'"domain": "global", "reason": "alreadyExists"}]}}'
+  )
+  real_409 = HttpError(httplib2.Response({"status": "409"}), body)
+  assert resume._exc_has_already_exists(real_409) is True
+  real_400 = HttpError(httplib2.Response({"status": "400"}), b'{"error": {"message": "bad req"}}')
+  assert resume._exc_has_already_exists(real_400) is False

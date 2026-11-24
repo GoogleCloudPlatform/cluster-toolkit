@@ -314,6 +314,11 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
 
 
 _MIG_ALREADY_EXISTS_CODES = frozenset(("MEMBER_ALREADY_EXISTS", "RESOURCE_ALREADY_EXISTS"))
+_MIG_ALREADY_EXISTS_REASONS = frozenset((
+    "ALREADYEXISTS",
+    "MEMBERALREADYEXISTS",
+    "RESOURCEALREADYEXISTS",
+))
 
 
 def _extract_op_error_codes(op_error: Any) -> set[str]:
@@ -333,16 +338,20 @@ def _extract_op_error_codes(op_error: Any) -> set[str]:
 
 
 def _exc_has_already_exists(exc: Exception) -> bool:
-    """Return True if an exception reports an already-existing MIG member or GCE resource."""
+    """Return True if an exception reports an HTTP 409 conflict or already-existing MIG/GCE resource."""
+    resp = getattr(exc, "resp", None)
+    if getattr(resp, "status", None) == 409:
+        return True
     err_details = getattr(exc, "error_details", None)
     if isinstance(err_details, list):
         for err in err_details:
             if isinstance(err, dict):
-                code = str(err.get("reason") or err.get("code") or "").strip().upper()
-                if code in _MIG_ALREADY_EXISTS_CODES:
-                    return True
+                for key in ("reason", "code"):
+                    raw = str(err.get(key) or "").strip()
+                    if raw and raw.replace("_", "").upper() in _MIG_ALREADY_EXISTS_REASONS:
+                        return True
     msg = str(exc).upper()
-    return any(code in msg for code in _MIG_ALREADY_EXISTS_CODES)
+    return any(code in msg for code in _MIG_ALREADY_EXISTS_CODES) or "ALREADY EXISTS" in msg
 
 
 def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Lookup, resume_data: Optional[ResumeData] = None) -> None:
