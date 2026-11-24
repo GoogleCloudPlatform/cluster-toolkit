@@ -2915,6 +2915,7 @@ func TestGeneratePathwaysManifest_UserEnvReplacesNamedDefault(t *testing.T) {
 	}{
 		{list: workloadEnvList, container: "pathways-head/workload-container", name: "JAX_PLATFORMS", value: "proxy,cpu"},
 		{list: workloadEnvList, container: "pathways-head/workload-container", name: "PATHWAYS_HEAD", value: "custom-head:29000"},
+		{list: workloadEnvList, container: "pathways-head/workload-container", name: "PATHWAYS_HEAD", value: ""},
 		{list: proxyEnvList, container: "pathways-head/pathways-proxy", name: "ABSL_FLAGS", value: "--pathways_pipe_unreachable_timeout=120s"},
 		{list: serverEnvList, container: "pathways-head/pathways-rm", name: "ABSL_FLAGS", value: "--pathways_pipe_unreachable_timeout=120s"},
 	} {
@@ -3171,6 +3172,10 @@ func TestPathwaysWorkerBackoffLimit(t *testing.T) {
 		{1000000, 2304, math.MaxInt32},
 		{math.MaxInt32, 1, math.MaxInt32},
 		{math.MaxInt32, 2304, math.MaxInt32},
+		{math.MaxInt, 2, math.MaxInt32},
+		{1, math.MaxInt, math.MaxInt32},
+		{-1, 8, 32},
+		{0, 0, 0},
 	} {
 		if got := pathwaysWorkerBackoffLimit(tc.maxSliceRestarts, tc.nodesPerSlice); got != tc.want {
 			t.Errorf("pathwaysWorkerBackoffLimit(%d, %d) = %d, want %d", tc.maxSliceRestarts, tc.nodesPerSlice, got, tc.want)
@@ -4658,6 +4663,7 @@ func TestGenerateWorkloadManifests_GPUUserEnvReplacesVerboseDefaults(t *testing.
 			assertUserEnvReplacesDefaults(t, func(t *testing.T, mutate func(*orchestrator.JobDefinition)) map[string]map[string]string {
 				orc := newGPUDerivationTestOrc(t)
 				job := gpuDerivationJobDef("gpu-env-job")
+				job.Verbose = true
 				job.Env = nil // the baseline must carry no user env
 				mutate(&job)
 				profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&job)
@@ -4672,7 +4678,15 @@ func TestGenerateWorkloadManifests_GPUUserEnvReplacesVerboseDefaults(t *testing.
 				if err != nil {
 					t.Fatalf("%s render failed: %v", tc.name, err)
 				}
-				return envByContainer(t, tc.specs(t, manifest))
+				envs := envByContainer(t, tc.specs(t, manifest))
+				if len(job.Env) == 0 {
+					for k, m := range envs {
+						if _, ok := m["NCCL_DEBUG"]; !ok {
+							t.Fatalf("baseline %s %s missing NCCL_DEBUG verbose default: %+v", tc.name, k, m)
+						}
+					}
+				}
+				return envs
 			}, workloadEnvList)
 		})
 	}

@@ -647,7 +647,11 @@ const (
 // int32, so the result is capped at MaxInt32, the value Kubernetes itself defaults it to when backoffLimitPerIndex is
 // set.
 func pathwaysWorkerBackoffLimit(maxSliceRestarts, nodesPerSlice int) int {
-	limit := int64(max(maxSliceRestarts, minPathwaysWorkerRestartsPerVM)) * int64(nodesPerSlice)
+	if nodesPerSlice <= 0 {
+		return 0
+	}
+	perVM := min(max(maxSliceRestarts, minPathwaysWorkerRestartsPerVM), math.MaxInt32)
+	limit := int64(perVM) * int64(min(nodesPerSlice, math.MaxInt32))
 	return int(min(limit, math.MaxInt32))
 }
 

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -517,6 +518,9 @@ func keepPortForwardAlive(ctx context.Context, cmd *exec.Cmd, pipeDone <-chan st
 }
 
 func runLocalCommand(command string, port int, env map[string]string, sigCh <-chan os.Signal) error {
+	if v, ok := env["JAX_BACKEND_TARGET"]; ok {
+		logging.Warn("Ignoring --env JAX_BACKEND_TARGET=%q in SPS terminal mode; using local port-forward grpc://127.0.0.1:%d instead.", v, port)
+	}
 	cmd := exec.Command("bash", "-c", command)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.Env = localCommandEnv(os.Environ(), env, port)
@@ -546,8 +550,8 @@ func runLocalCommand(command string, port int, env map[string]string, sigCh <-ch
 // --env, and JAX_BACKEND_TARGET always targets the port-forward, whose local port is only known here.
 func localCommandEnv(base []string, env map[string]string, port int) []string {
 	out := append(slices.Clone(base), "JAX_PLATFORMS=proxy")
-	for k, v := range env {
-		out = append(out, k+"="+v)
+	for _, k := range slices.Sorted(maps.Keys(env)) {
+		out = append(out, k+"="+env[k])
 	}
 	return append(out, fmt.Sprintf("JAX_BACKEND_TARGET=grpc://127.0.0.1:%d", port))
 }

@@ -560,7 +560,7 @@ When a workload pod is evicted, cancelled, or preempted (e.g. on Spot VMs or Kue
 
 #### Pathways Jobs
 
-* The workload runs in the `pathways-head` pod, which keeps the Kubernetes default grace period of 30 s whatever `--grace-period` is set to: cleanup after `SIGTERM`, including a final checkpoint, must finish within 30 s. `--grace-period` sets how long the worker pods may take to stop. It has no effect on `--pathways-run-sps-workload` runs, which have no worker pods.
+* The workload runs in the `pathways-head` pod, which keeps the Kubernetes default grace period of 30s whatever `--grace-period` is set to: cleanup after `SIGTERM`, including a final checkpoint, must finish within 30s. `--grace-period` sets how long the worker pods may take to stop. It has no effect on `--pathways-run-sps-workload` runs, which have no worker pods.
 * With `--pathways-colocated-python-sidecar-image`, each worker pod takes the full `--grace-period` to stop, because the sidecar exits only when it is killed. A long grace period therefore delays JobSet restarts, and keeps the TPU nodes in use for that long after the JobSet finishes.
 
 ### 6.5 Topology & Scheduler
@@ -1227,14 +1227,14 @@ Every release tag exists in all three repositories:
 To choose a version, take the sidecar tag for the JAX version of your workload. The workload must run the same Python, JAX, jaxlib and cloudpickle versions as the sidecar, which lists them in `/opt/venv/server_constraints.txt`:
 
 ```shell
-docker run --rm --entrypoint cat \
+docker run --rm --platform linux/amd64 --entrypoint cat \
   us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/colocated_python_sidecar:jax-0.11.2 \
   /opt/venv/server_constraints.txt
 ```
 
 How `gcluster` picks the server and proxy images:
 
-* **Public sidecar** (`us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/colocated_python_sidecar`, with or without a tag or digest): every server or proxy image that you don't pass is set to the `cloud-pathways` image with the sidecar's tag, and `gcluster` logs the images it chose. If the sidecar reference has no release tag (for example, it is pinned by digest only), `gcluster` uses `latest` and warns. Images that you pass are always used as given, and `gcluster` never derives one image from another: if you pass only `--pathways-server-image` or only `--pathways-proxy-server-image`, the other one is still the `cloud-pathways` image of the sidecar's release, and `gcluster` warns.
+* **Public sidecar** (`us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/colocated_python_sidecar`, with or without a tag or digest): every server or proxy image that you don't pass is set to the `cloud-pathways` image with the sidecar's tag, and `gcluster` logs the images it chose. If the sidecar reference has no release tag (for example, it is pinned by digest only), `gcluster` uses `latest` and warns. If it includes both a release tag and a digest (for example `:jax-0.11.2@sha256:...`), `gcluster` uses that tag for the server and proxy images and warns that container runtimes pull the sidecar by digest instead. Images that you pass are always used as given, and `gcluster` does not derive `--pathways-proxy-server-image` from `--pathways-server-image` (or vice versa): if you pass `--pathways-server-image`, `--pathways-proxy-server-image`, or `--pathways-worker-image` while leaving other server/proxy images unset, the unset ones still use the `cloud-pathways` image of the sidecar's release, and `gcluster` warns.
 * **Any other sidecar**, including one that you built from the public sidecar image: `gcluster` can't tell which release it belongs to. Every server or proxy image that you don't pass stays at the `gcluster` default (`us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest` and `us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest`), and `gcluster` warns. These defaults don't work with the public sidecar or with images built from it, so pass `--pathways-server-image` and `--pathways-proxy-server-image` from `cloud-pathways` with the tag of your sidecar's base image.
 * **No sidecar:** the `gcluster` defaults apply.
 
@@ -1244,7 +1244,7 @@ For example, to run a workload with the public sidecar for JAX 0.11.2, pinned to
 
 ```shell
 ./gcluster job submit \
-  --name my-pathways-sidecar-job \
+  --name my-sidecar-job \
   --image <CONTAINER_IMAGE> \
   --command "python train_pathways.py" \
   --compute-type v6e-16 \
@@ -1257,7 +1257,7 @@ For a sidecar that you built from that public image and pushed to your own regis
 
 ```shell
 ./gcluster job submit \
-  --name my-pathways-custom-sidecar-job \
+  --name custom-sidecar-job \
   --image <CONTAINER_IMAGE> \
   --command "python train_pathways.py" \
   --compute-type v6e-16 \
@@ -1328,7 +1328,7 @@ First, use the `gke-template-extract` command to extract the embedded default te
 
 *(Use `--overwrite` if the directory already contains files you want to replace).*
 
-Extracted templates match the `gcluster` version that generated them. After upgrading `gcluster`, re-extract the defaults and re-apply your changes so you pick up template-level feature updates and bug fixes; `gcluster` warns when it detects stale patterns.
+Extracted templates match the `gcluster` version that generated them. After upgrading `gcluster`, re-extract the defaults and re-apply your changes so you pick up template-level feature updates and bug fixes; `gcluster` warns or returns an error when it detects stale patterns.
 
 #### 2. Modify the templates
 
@@ -1478,7 +1478,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | :--- | :--- | :--- |
 | `-q, --queue` | `string` | Name of the Kueue `LocalQueue` to submit the job to (Auto-discovered by default). |
 | `--priority` | `string` | Priority class name assigned to the job queue (supports default classes like `low`, `medium`, `high`, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used. |
-| `--grace-period` | `string` | Buffer period given to pods to save checkpoints before forced termination (Default: `30s`). On Pathways jobs it applies to the worker pods; `pathways-head`, where the workload runs, keeps the Kubernetes default of 30 s (see section 6.4). |
+| `--grace-period` | `string` | Buffer period given to pods to save checkpoints before forced termination (Default: `30s`). On Pathways jobs it applies to the worker pods; `pathways-head`, where the workload runs, keeps the Kubernetes default of `30s` (see [section 6.4](#64-graceful-termination--signal-handling)). |
 | `--gke-mtc-enabled` | `flag` | If present, enables Multi-Tier Checkpointing (MTC) for the workload. |
 | `--gke-mtc-ramdisk-dir` | `string` | The ramdisk directory path for local checkpoints in MTC (required when `--gke-mtc-enabled` is set). |
 | `--enable-ml-diagnostics` | `bool` | Enables ML Diagnostics for the workload. Uses the GKE managed webhook (`managed-mldiagnostics-gke: "true"`, requiring `gke-cluster` setting `enable_ml_diagnostics: true`) by default, or injects the native `ai-telemetry-collector` sidecar on Kubernetes 1.29+ TPU pods when `--ml-diagnostics-image` or `GCLUSTER_TELEMETRY_IMAGE` is set (adding pod label `tpu-workload-name: <name>`, port `tpu-metrics`, and `TPU_RUNTIME_METRICS_PORTS="8431,8432,8433,8434,8435,8436,8437,8438"` unless overridden via `--env` / `--pathways-worker-env`; for `--pathways` jobs, injected only on TPU `worker` pods). |

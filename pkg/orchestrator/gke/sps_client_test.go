@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
 
@@ -413,6 +414,11 @@ func TestLocalCommandEnv(t *testing.T) {
 			want: map[string]string{"PATH": "/usr/bin", "JAX_PLATFORMS": "proxy,cpu", "FOO": "bar", "JAX_BACKEND_TARGET": target},
 		},
 		{
+			name: "--env JAX_PLATFORMS empty string still replaces the default",
+			env:  map[string]string{"JAX_PLATFORMS": ""},
+			want: map[string]string{"PATH": "/usr/bin", "JAX_PLATFORMS": "", "JAX_BACKEND_TARGET": target},
+		},
+		{
 			name: "JAX_BACKEND_TARGET always points at the port-forward",
 			env:  map[string]string{"JAX_BACKEND_TARGET": "grpc://10.0.0.2:29000"},
 			want: map[string]string{"PATH": "/usr/bin", "JAX_PLATFORMS": "proxy", "JAX_BACKEND_TARGET": target},
@@ -424,6 +430,21 @@ func TestLocalCommandEnv(t *testing.T) {
 			}
 		})
 	}
+	t.Run("runLocalCommand warns when ignoring --env JAX_BACKEND_TARGET", func(t *testing.T) {
+		if _, err := exec.LookPath("bash"); err != nil {
+			t.Skip("bash not found in PATH")
+		}
+		snapshot, restore := logging.CaptureForTesting(t)
+		err := runLocalCommand("true", 43210, map[string]string{"JAX_BACKEND_TARGET": "grpc://10.0.0.2:29000"}, nil)
+		restore()
+		if err != nil {
+			t.Fatalf("runLocalCommand failed: %v", err)
+		}
+		_, errOut := snapshot()
+		if !strings.Contains(errOut, "Ignoring --env JAX_BACKEND_TARGET") || !strings.Contains(errOut, "127.0.0.1:43210") {
+			t.Errorf("expected JAX_BACKEND_TARGET warning, got %q", errOut)
+		}
+	})
 }
 
 func TestReadSPSInstance_RejectsNonRunningHeadPod(t *testing.T) {
@@ -560,6 +581,7 @@ func TestSubmitSPSClusterWorkload_ValidatesClusterMounts(t *testing.T) {
 // TestSubmitSPSClusterWorkload_ResolvesProxyBeforeBuild pins that a proxy image gcluster cannot derive fails the
 // submission before the container image build.
 func TestSubmitSPSClusterWorkload_ResolvesProxyBeforeBuild(t *testing.T) {
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{})
 	orc := newTestGKEOrchestrator(mockExec)
 	job := orchestrator.JobDefinition{
@@ -582,8 +604,15 @@ func TestSubmitSPSClusterWorkload_ResolvesProxyBeforeBuild(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "different digests") {
 		t.Fatalf("submitSPSClusterWorkload() = %v, want the digest error", err)
 	}
+	// Verify no kubectl calls ran before the fast-fail (Crane builds run in-process, verified by the positive control below).
 	if len(mockExec.calls) != 0 {
-		t.Errorf("expected no commands before the digest error (no image build), got %v", mockExec.calls)
+		t.Errorf("expected no kubectl commands before the digest error, got %v", mockExec.calls)
+	}
+	// Positive control: once --pathways-proxy-server-image is provided, execution advances into BuildContainerImage.
+	jobWithProxy := job
+	jobWithProxy.Pathways.ProxyServerImage = "proxy:pinned"
+	if err := orc.submitSPSClusterWorkload(jobWithProxy, inst); err == nil || !strings.Contains(err.Error(), "crane-based image build failed") {
+		t.Fatalf("with explicit proxy image, expected BuildContainerImage error, got: %v", err)
 	}
 }
 
@@ -728,24 +757,11 @@ func TestResolveSPSClientPathways(t *testing.T) {
 
 	t.Run("fails when ProxyServerImage is empty", func(t *testing.T) {
 		inst := baseInst
+		inst.ServerImage = "custom-registry.io/my-rm:v1"
 		inst.ProxyImage = ""
 		_, err := resolveSPSClientPathways(orchestrator.PathwaysJobDefinition{}, inst)
-		if err == nil || !strings.Contains(err.Error(), "pass --pathways-proxy-server-image") {
-			t.Errorf("got err = %v, want --pathways-proxy-server-image error", err)
-		}
-	})
-
-	t.Run("explains why a digest-pinned server image has no derivable proxy", func(t *testing.T) {
-		inst := baseInst
-		inst.ServerImage = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server@sha256:abcdef"
-		inst.ProxyImage = proxyImageFor(inst.ServerImage)
-		_, err := resolveSPSClientPathways(orchestrator.PathwaysJobDefinition{}, inst)
-		if err == nil || !strings.Contains(err.Error(), "different digests") || !strings.Contains(err.Error(), "pass --pathways-proxy-server-image") {
-			t.Errorf("got err = %v, want a digest explanation and a --pathways-proxy-server-image hint", err)
-		}
-		got, err := resolveSPSClientPathways(orchestrator.PathwaysJobDefinition{ProxyServerImage: "proxy:pinned"}, inst)
-		if err != nil || got.ProxyServerImage != "proxy:pinned" {
-			t.Errorf("with --pathways-proxy-server-image: got (%q, %v), want (\"proxy:pinned\", nil)", got.ProxyServerImage, err)
+		if err == nil || !strings.Contains(err.Error(), "pass --pathways-proxy-server-image") || strings.Contains(err.Error(), "different digests") {
+			t.Errorf("got err = %v, want generic --pathways-proxy-server-image error (without digest text)", err)
 		}
 	})
 
@@ -757,4 +773,27 @@ func TestResolveSPSClientPathways(t *testing.T) {
 			t.Errorf("got err = %v, want --pathways-gcs-location error", err)
 		}
 	})
+}
+
+func TestResolveSPSClientPathways_DigestPinnedServer(t *testing.T) {
+	for _, srv := range []string{
+		"us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server@sha256:abcdef",
+		"us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest@sha256:abcdef",
+	} {
+		inst := spsInstance{
+			Name:         "sps-inst",
+			HeadNodePool: "cpu-np",
+			ServerImage:  srv,
+			ProxyImage:   proxyImageFor(srv),
+			GCSLocation:  "gs://my-bucket/sps",
+		}
+		_, err := resolveSPSClientPathways(orchestrator.PathwaysJobDefinition{}, inst)
+		if err == nil || !strings.Contains(err.Error(), "different digests") || !strings.Contains(err.Error(), "pass --pathways-proxy-server-image") {
+			t.Errorf("server %q: got err = %v, want a digest explanation and a --pathways-proxy-server-image hint", srv, err)
+		}
+		got, err := resolveSPSClientPathways(orchestrator.PathwaysJobDefinition{ProxyServerImage: "proxy:pinned"}, inst)
+		if err != nil || got.ProxyServerImage != "proxy:pinned" {
+			t.Errorf("server %q with --pathways-proxy-server-image: got (%q, %v), want (\"proxy:pinned\", nil)", srv, got.ProxyServerImage, err)
+		}
+	}
 }

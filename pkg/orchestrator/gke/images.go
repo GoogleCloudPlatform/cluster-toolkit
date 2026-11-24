@@ -42,7 +42,7 @@ const (
 
 // publicPathwaysReleaseTag matches the release tags of the public Pathways images: jax-<version> (rolling),
 // <yyyymmdd>-jax_<version> (one day's build) and latest (the newest JAX version).
-var publicPathwaysReleaseTag = regexp.MustCompile(`^(latest|jax-[0-9.]+|[0-9]{8}-jax_[0-9.]+)$`)
+var publicPathwaysReleaseTag = regexp.MustCompile(`^(latest|jax-[0-9]+(?:\.[0-9]+)*|[0-9]{8}-jax_[0-9]+(?:\.[0-9]+)*)$`)
 
 // resolvePathwaysImages fills in the Pathways server, proxy and worker images the user did not set. With the public
 // colocated Python sidecar every missing server or proxy image comes from publicPathwaysImageRepo at the sidecar's
@@ -51,8 +51,8 @@ var publicPathwaysReleaseTag = regexp.MustCompile(`^(latest|jax-[0-9.]+|[0-9]{8}
 func resolvePathwaysImages(p orchestrator.PathwaysJobDefinition) (orchestrator.PathwaysJobDefinition, string, bool) {
 	var msg string
 	var warn bool
-	if tag, exact, ok := publicSidecarRelease(p.ColocatedPythonSidecarImage); ok {
-		msg, warn = fillFromPublicSidecarRelease(&p, tag, exact)
+	if tag, exact, pinnedByDigest, ok := publicSidecarRelease(p.ColocatedPythonSidecarImage); ok {
+		msg, warn = fillFromPublicSidecarRelease(&p, tag, exact, pinnedByDigest)
 	} else if p.ColocatedPythonSidecarImage != "" {
 		msg = customSidecarNotice(p)
 		warn = msg != ""
@@ -70,41 +70,48 @@ func resolvePathwaysImages(p orchestrator.PathwaysJobDefinition) (orchestrator.P
 }
 
 // publicSidecarRelease reports whether image is the public sidecar and returns its release tag. exact is false when
-// the reference names no release (a bare digest or another tag), in which case the tag is latest.
-func publicSidecarRelease(image string) (tag string, exact, ok bool) {
+// the reference names no release (a bare digest or another tag), in which case the tag is latest. pinnedByDigest is
+// true when the reference includes a digest (@sha256:...), which container runtimes pull instead of the tag.
+func publicSidecarRelease(image string) (tag string, exact, pinnedByDigest, ok bool) {
 	rest, found := strings.CutPrefix(image, publicPathwaysSidecarImage)
 	if !found || (rest != "" && rest[0] != ':' && rest[0] != '@') {
-		return "", false, false
+		return "", false, false, false
 	}
 	ref, _, hasDigest := strings.Cut(rest, "@")
 	switch {
 	case ref == "" && !hasDigest:
-		return "latest", true, true // A bare reference pulls latest.
+		return "latest", true, false, true // A bare reference pulls latest.
 	case ref != "" && publicPathwaysReleaseTag.MatchString(ref[1:]):
-		return ref[1:], true, true
+		return ref[1:], true, hasDigest, true
 	default:
-		return "latest", false, true
+		return "latest", false, hasDigest, true
 	}
 }
 
 // proxyImageFor derives the proxy image that matches an SPS server image, as pathwaysutils does.
 func proxyImageFor(serverImage string) string {
 	// Pathways server and proxy images never share a digest, so only a tag can carry over.
-	if strings.Contains(serverImage, "@") || !strings.Contains(serverImage, "/server:") {
+	if strings.Contains(serverImage, "@") {
 		return ""
 	}
-	return strings.Replace(serverImage, "/server:", "/proxy_server:", 1)
-}
-
-// pathwaysProxyUsed reports whether the rendered JobSet runs pathways-proxy: a deploy-SPS head runs only
-// pathways-rm, and each SPS client brings its own proxy.
-func pathwaysProxyUsed(p orchestrator.PathwaysJobDefinition) bool {
-	return !p.DeploySPS
+	if prefix, ok := strings.CutSuffix(serverImage, "/server"); ok && prefix != "" {
+		return prefix + "/proxy_server:latest"
+	}
+	i := strings.LastIndex(serverImage, "/server:")
+	if i <= 0 {
+		return ""
+	}
+	tag := serverImage[i+len("/server:"):]
+	if tag == "" || strings.Contains(tag, "/") {
+		return ""
+	}
+	return serverImage[:i] + "/proxy_server:" + tag
 }
 
 // pathwaysImageNouns names the images the rendered JobSet runs besides the sidecar, and the flags that set them.
-func pathwaysImageNouns(p orchestrator.PathwaysJobDefinition) (images, flags string) {
-	if !pathwaysProxyUsed(p) {
+// A deploy-SPS head runs only pathways-rm, because each SPS client brings its own proxy.
+func pathwaysImageNouns(deploySPS bool) (images, flags string) {
+	if deploySPS {
 		return "server image", "--pathways-server-image"
 	}
 	return "server or proxy image", "--pathways-server-image and --pathways-proxy-server-image"
@@ -112,7 +119,7 @@ func pathwaysImageNouns(p orchestrator.PathwaysJobDefinition) (images, flags str
 
 // fillFromPublicSidecarRelease sets every missing server or proxy image to the public image of the given release and
 // returns the message describing what it chose.
-func fillFromPublicSidecarRelease(p *orchestrator.PathwaysJobDefinition, tag string, exact bool) (string, bool) {
+func fillFromPublicSidecarRelease(p *orchestrator.PathwaysJobDefinition, tag string, exact, pinnedByDigest bool) (string, bool) {
 	var chosen, kept []string
 	if p.ServerImage == "" {
 		p.ServerImage = publicPathwaysServerImage + ":" + tag
@@ -120,7 +127,7 @@ func fillFromPublicSidecarRelease(p *orchestrator.PathwaysJobDefinition, tag str
 	} else {
 		kept = append(kept, "--pathways-server-image")
 	}
-	if pathwaysProxyUsed(*p) {
+	if !p.DeploySPS {
 		if p.ProxyServerImage == "" {
 			p.ProxyServerImage = publicPathwaysProxyImage + ":" + tag
 			chosen = append(chosen, "proxy image "+p.ProxyServerImage)
@@ -128,22 +135,41 @@ func fillFromPublicSidecarRelease(p *orchestrator.PathwaysJobDefinition, tag str
 			kept = append(kept, "--pathways-proxy-server-image")
 		}
 	}
+	if p.WorkerImage != "" {
+		kept = append(kept, "--pathways-worker-image")
+	}
 	if len(chosen) == 0 {
 		return "", false
 	}
-	images, flags := pathwaysImageNouns(*p)
+	return formatPublicSidecarNotice(p.ColocatedPythonSidecarImage, p.DeploySPS, chosen, kept, tag, exact, pinnedByDigest)
+}
+
+func formatPublicSidecarNotice(sidecar string, deploySPS bool, chosen, kept []string, tag string, exact, pinnedByDigest bool) (string, bool) {
+	images, flags := pathwaysImageNouns(deploySPS)
 	msg := fmt.Sprintf("Using the Pathways %s for the public colocated Python sidecar %s: with the public sidecar, gcluster sets every Pathways %s you do not pass to the %s image of the sidecar's release.",
-		strings.Join(chosen, " and "), p.ColocatedPythonSidecarImage, images, publicPathwaysImageRepo)
-	warn := false
+		strings.Join(chosen, " and "), sidecar, images, publicPathwaysImageRepo)
+	var pinNote string
+	switch {
+	case !exact:
+		pinNote = fmt.Sprintf(" The sidecar reference names no release tag (jax-<version>, <yyyymmdd>-jax_<version> or latest), so gcluster uses the latest release; pass %s to pin the images.", flags)
+	case pinnedByDigest:
+		pinNote = fmt.Sprintf(" The sidecar reference is pinned by digest, so container runtimes pull that digest instead of the %q tag; pass %s to pin matching images.", tag, flags)
+	}
 	if len(kept) > 0 {
-		warn = true
-		msg += fmt.Sprintf(" It does not derive that image from the %s you passed, so make sure the images work together, or pass %s yourself.", strings.Join(kept, " and "), flags)
+		target := "that image"
+		if len(chosen) > 1 {
+			target = "those images"
+		}
+		tail := ""
+		if pinNote == "" {
+			tail = ", or pass " + flags + " yourself"
+		}
+		msg += fmt.Sprintf(" It does not derive %s from the %s you passed, so make sure the images work together%s.", target, strings.Join(kept, " and "), tail)
 	}
-	if !exact {
-		warn = true
-		msg += fmt.Sprintf(" The sidecar reference names no release tag (jax-<version>, <yyyymmdd>-jax_<version> or latest), so gcluster uses the latest release; pass %s to pin the images.", flags)
-	}
-	if !warn {
+	warn := len(kept) > 0 || pinNote != ""
+	if pinNote != "" {
+		msg += pinNote
+	} else if !warn {
 		msg += fmt.Sprintf(" Pass %s to use other images.", flags)
 	}
 	return msg + " See " + pathwaysSidecarImagesDoc + ".", warn
@@ -156,15 +182,19 @@ func customSidecarNotice(p orchestrator.PathwaysJobDefinition) string {
 	if p.ServerImage == "" {
 		defaulted = append(defaulted, "server image "+defaultPathwaysServerImage)
 	}
-	if pathwaysProxyUsed(p) && p.ProxyServerImage == "" {
+	if !p.DeploySPS && p.ProxyServerImage == "" {
 		defaulted = append(defaulted, "proxy image "+defaultPathwaysProxyImage)
 	}
 	if len(defaulted) == 0 {
 		return ""
 	}
-	_, flags := pathwaysImageNouns(p)
-	return fmt.Sprintf("Using gcluster's default Pathways %s with the colocated Python sidecar %s. The server and proxy images should ideally come from the same Pathways release as the sidecar's base image, and gcluster cannot verify before submission that the images work together, so please make sure the images you run are correct; for example, a sidecar built from %s needs %s from %s with the same tag. See %s.",
-		strings.Join(defaulted, " and "), p.ColocatedPythonSidecarImage, publicPathwaysSidecarImage, flags, publicPathwaysImageRepo, pathwaysSidecarImagesDoc)
+	subject := "server and proxy images"
+	if p.DeploySPS {
+		subject = "server image"
+	}
+	_, flags := pathwaysImageNouns(p.DeploySPS)
+	return fmt.Sprintf("Using gcluster's default Pathways %s with the colocated Python sidecar %s. The %s should ideally come from the same Pathways release as the sidecar's base image, and gcluster cannot verify before submission that the images work together, so please make sure the images you run are correct; for example, a sidecar built from %s needs %s from %s with the same tag. See %s.",
+		strings.Join(defaulted, " and "), p.ColocatedPythonSidecarImage, subject, publicPathwaysSidecarImage, flags, publicPathwaysImageRepo, pathwaysSidecarImagesDoc)
 }
 
 // activeWorkloadImages returns the distinct images the rendered pods pull: the workload image, the ML

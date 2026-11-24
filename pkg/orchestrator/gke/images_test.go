@@ -20,9 +20,11 @@ import (
 
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/shell"
 
 	"github.com/google/go-cmp/cmp"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 const (
@@ -92,10 +94,11 @@ func TestResolvePathwaysImages(t *testing.T) {
 			wantMsg: []string{testPublicRepo + "/server:latest"},
 		},
 		{
-			name:    "public sidecar with a tag and a digest uses the tag",
-			in:      orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + ":jax-0.11.2@sha256:abcdef"},
-			want:    publicImages("jax-0.11.2"),
-			wantMsg: []string{testPublicRepo + "/server:jax-0.11.2"},
+			name:     "public sidecar with a tag and a digest uses the tag and warns",
+			in:       orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + ":jax-0.11.2@sha256:abcdef"},
+			want:     publicImages("jax-0.11.2"),
+			wantMsg:  []string{testPublicRepo + "/server:jax-0.11.2", testPublicRepo + "/proxy_server:jax-0.11.2", "pinned by digest", "to pin matching images"},
+			wantWarn: true,
 		},
 		{
 			name:     "public sidecar pinned by digest only",
@@ -112,10 +115,17 @@ func TestResolvePathwaysImages(t *testing.T) {
 			wantWarn: true,
 		},
 		{
+			name:     "public sidecar with a malformed dot-only version tag falls back to latest",
+			in:       orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + ":jax-.."},
+			want:     publicImages("latest"),
+			wantMsg:  []string{testPublicRepo + "/server:latest", "names no release tag"},
+			wantWarn: true,
+		},
+		{
 			name:     "public sidecar with only the server image set",
 			in:       orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + ":jax-0.11.2", ServerImage: testDefaultServer},
 			want:     pathwaysImages{testDefaultServer, testPublicRepo + "/proxy_server:jax-0.11.2", testDefaultServer},
-			wantMsg:  []string{testPublicRepo + "/proxy_server:jax-0.11.2", "--pathways-server-image", "--pathways-proxy-server-image"},
+			wantMsg:  []string{testPublicRepo + "/proxy_server:jax-0.11.2", "that image from the --pathways-server-image", "--pathways-proxy-server-image"},
 			notInMsg: []string{testPublicRepo + "/server:"},
 			wantWarn: true,
 		},
@@ -123,8 +133,16 @@ func TestResolvePathwaysImages(t *testing.T) {
 			name:     "public sidecar with only the proxy image set",
 			in:       orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + ":jax-0.11.2", ProxyServerImage: testDefaultProxy},
 			want:     pathwaysImages{testPublicRepo + "/server:jax-0.11.2", testDefaultProxy, testPublicRepo + "/server:jax-0.11.2"},
-			wantMsg:  []string{testPublicRepo + "/server:jax-0.11.2", "--pathways-server-image", "--pathways-proxy-server-image"},
+			wantMsg:  []string{testPublicRepo + "/server:jax-0.11.2", "that image from the --pathways-proxy-server-image", "--pathways-server-image"},
 			notInMsg: []string{testPublicRepo + "/proxy_server:"},
+			wantWarn: true,
+		},
+		{
+			name:     "public sidecar pinned by digest with only the server image set does not duplicate flag advice",
+			in:       orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + "@sha256:abcdef", ServerImage: testDefaultServer},
+			want:     pathwaysImages{testDefaultServer, testPublicRepo + "/proxy_server:latest", testDefaultServer},
+			wantMsg:  []string{testPublicRepo + "/proxy_server:latest", "make sure the images work together.", "names no release tag", "to pin the images."},
+			notInMsg: []string{"yourself"},
 			wantWarn: true,
 		},
 		{
@@ -133,10 +151,11 @@ func TestResolvePathwaysImages(t *testing.T) {
 			want: pathwaysImages{"server:v1", "proxy:v1", "server:v1"},
 		},
 		{
-			name:    "public sidecar keeps an explicit worker image",
-			in:      orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + ":jax-0.11.2", WorkerImage: "worker:v1"},
-			want:    pathwaysImages{testPublicRepo + "/server:jax-0.11.2", testPublicRepo + "/proxy_server:jax-0.11.2", "worker:v1"},
-			wantMsg: []string{testPublicRepo + "/server:jax-0.11.2"},
+			name:     "public sidecar keeps an explicit worker image and warns",
+			in:       orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + ":jax-0.11.2", WorkerImage: "worker:v1"},
+			want:     pathwaysImages{testPublicRepo + "/server:jax-0.11.2", testPublicRepo + "/proxy_server:jax-0.11.2", "worker:v1"},
+			wantMsg:  []string{testPublicRepo + "/server:jax-0.11.2", "those images from the --pathways-worker-image"},
+			wantWarn: true,
 		},
 		{
 			name:     "deploy-SPS with the public sidecar names only the server, the head runs no proxy",
@@ -144,6 +163,14 @@ func TestResolvePathwaysImages(t *testing.T) {
 			want:     pathwaysImages{testPublicRepo + "/server:jax-0.11.2", testDefaultProxy, testPublicRepo + "/server:jax-0.11.2"},
 			wantMsg:  []string{testPublicRepo + "/server:jax-0.11.2"},
 			notInMsg: []string{"proxy"},
+		},
+		{
+			name:     "deploy-SPS with the public sidecar pinned by digest only omits proxy flag",
+			in:       orchestrator.PathwaysJobDefinition{DeploySPS: true, ColocatedPythonSidecarImage: testPublicSidecar + "@sha256:abcdef"},
+			want:     pathwaysImages{testPublicRepo + "/server:latest", testDefaultProxy, testPublicRepo + "/server:latest"},
+			wantMsg:  []string{testPublicRepo + "/server:latest", "--pathways-server-image"},
+			notInMsg: []string{"proxy"},
+			wantWarn: true,
 		},
 		{
 			name: "deploy-SPS with the public sidecar and an explicit server image",
@@ -166,9 +193,25 @@ func TestResolvePathwaysImages(t *testing.T) {
 			wantWarn: true,
 		},
 		{
+			name:     "custom sidecar with only the proxy image set",
+			in:       orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testCustomSidecar, ProxyServerImage: "proxy:v1"},
+			want:     pathwaysImages{testDefaultServer, "proxy:v1", testDefaultServer},
+			wantMsg:  []string{testDefaultServer},
+			notInMsg: []string{testDefaultProxy},
+			wantWarn: true,
+		},
+		{
 			name: "custom sidecar with both images set",
 			in:   orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testCustomSidecar, ServerImage: "server:v1", ProxyServerImage: "proxy:v1"},
 			want: pathwaysImages{"server:v1", "proxy:v1", "server:v1"},
+		},
+		{
+			name:     "deploy-SPS with a custom sidecar and no server image omits proxy from warning",
+			in:       orchestrator.PathwaysJobDefinition{DeploySPS: true, ColocatedPythonSidecarImage: testCustomSidecar},
+			want:     pathwaysImages{testDefaultServer, testDefaultProxy, testDefaultServer},
+			wantMsg:  []string{testDefaultServer, "The server image should ideally come from the same Pathways release", "--pathways-server-image"},
+			notInMsg: []string{"proxy"},
+			wantWarn: true,
 		},
 		{
 			name: "deploy-SPS with a custom sidecar and an explicit server image",
@@ -191,6 +234,9 @@ func TestResolvePathwaysImages(t *testing.T) {
 			if got.ColocatedPythonSidecarImage != tc.in.ColocatedPythonSidecarImage {
 				t.Errorf("sidecar image = %q, want it unchanged (%q)", got.ColocatedPythonSidecarImage, tc.in.ColocatedPythonSidecarImage)
 			}
+			if warn != tc.wantWarn {
+				t.Errorf("warning = %v, want %v (message: %q)", warn, tc.wantWarn, msg)
+			}
 			if len(tc.wantMsg) == 0 {
 				if msg != "" {
 					t.Errorf("message = %q, want none", msg)
@@ -206,9 +252,6 @@ func TestResolvePathwaysImages(t *testing.T) {
 				if strings.Contains(msg, s) {
 					t.Errorf("message %q contains %q", msg, s)
 				}
-			}
-			if warn != tc.wantWarn {
-				t.Errorf("warning = %v, want %v", warn, tc.wantWarn)
 			}
 		})
 	}
@@ -253,6 +296,8 @@ func TestGeneratePathwaysManifest_PublicSidecarImages(t *testing.T) {
 			if tc.wantProxy {
 				got["pathways-proxy"] = containerImage(specs["pathways-head"], "pathways-proxy")
 				wantImages["pathways-proxy"] = want.Proxy
+			} else if c := findContainer(specs["pathways-head"], "pathways-proxy"); c != nil {
+				t.Errorf("deploy-SPS must not render pathways-proxy container, got %+v", c)
 			}
 			if diff := cmp.Diff(wantImages, got); diff != "" {
 				t.Errorf("container images mismatch (-want +got):\n%s", diff)
@@ -261,25 +306,103 @@ func TestGeneratePathwaysManifest_PublicSidecarImages(t *testing.T) {
 			if !strings.Contains(infoOut, want.Server) || strings.Contains(errOut, want.Server) {
 				t.Errorf("want the chosen server image %q on the info log only; info log %q, warning log %q", want.Server, infoOut, errOut)
 			}
+			if tc.wantProxy && !strings.Contains(infoOut, want.Proxy) {
+				t.Errorf("want the chosen proxy image %q on the info log; got %q", want.Proxy, infoOut)
+			}
+			if !tc.wantProxy && strings.Contains(infoOut, "proxy") {
+				t.Errorf("deploy-SPS info log should not mention proxy; got %q", infoOut)
+			}
 		})
 	}
 }
 
-// TestGeneratePathwaysManifest_SidecarImageWarning pins that a resolver warning reaches the warning log, not the
-// info log.
-func TestGeneratePathwaysManifest_SidecarImageWarning(t *testing.T) {
-	snapshot, restore := logging.CaptureForTesting(t)
-	_, err := generatePathwaysTestManifest(t, "", false, testCustomSidecar, "", nil, func(job *orchestrator.JobDefinition) {
-		job.Pathways.ServerImage, job.Pathways.ProxyServerImage, job.Pathways.WorkerImage = "", "", ""
+// TestGeneratePathwaysManifest_PublicSidecarPullSecretDiscovery pins that resolvePathwaysImages runs before
+// resolveImagePullSecrets so repo-scoped secrets match the auto-selected cloud-pathways server and proxy images.
+func TestGeneratePathwaysManifest_PublicSidecarPullSecretDiscovery(t *testing.T) {
+	setupMockMachineConfig(t)
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe n2-standard-2 --zone=us-central1-a --format=json": {{ExitCode: 0, Stdout: `{"guestCpus": 2}`}},
 	})
-	restore()
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.projectID = "mock-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "default-pool", Config: gkeNodePoolConfig{MachineType: "n2-standard-2"}},
+	}
+	orc.kubeClient = &MockKubeClient{
+		Objects: map[string][]unstructured.Unstructured{
+			"secrets": {
+				makeDockerConfigSecret("cloud-pw-server-sec", testPublicRepo+"/server"),
+				makeDockerConfigSecret("cloud-pw-proxy-sec", testPublicRepo+"/proxy_server"),
+			},
+		},
+	}
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pw-pullsec",
+		ComputeType:     "n2-standard-2",
+		ClusterLocation: "us-central1",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+		CommandToRun:    "python train.py",
+		IsPathwaysJob:   true,
+		Pathways: orchestrator.PathwaysJobDefinition{
+			GCSLocation:                 "gs://bucket/pw",
+			HeadNodePool:                "cpu-np",
+			ColocatedPythonSidecarImage: testPublicSidecar + ":jax-0.11.2",
+		},
+	}
+	profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("resolveHardwareRequirements failed: %v", err)
+	}
+	manifest, err := orc.GeneratePathwaysManifest(job, "registry.local/workload:v1", profile, isDyn, isStat)
 	if err != nil {
 		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
 	}
-	infoOut, errOut := snapshot()
-	const want = "should ideally come from the same Pathways release"
-	if !strings.Contains(errOut, want) || strings.Contains(infoOut, want) {
-		t.Errorf("want the custom-sidecar notice on the warning log only; warning log %q, info log %q", errOut, infoOut)
+	specs := pathwaysPodSpecs(t, manifest)
+	for _, podName := range []string{"pathways-head", "worker"} {
+		var got []string
+		for _, s := range specs[podName].ImagePullSecrets {
+			got = append(got, s.Name)
+		}
+		if diff := cmp.Diff([]string{"cloud-pw-server-sec", "cloud-pw-proxy-sec"}, got); diff != "" {
+			t.Errorf("%s imagePullSecrets mismatch (-want +got):\n%s", podName, diff)
+		}
+	}
+}
+
+// TestGeneratePathwaysManifest_SidecarImageWarning pins that a resolver warning reaches the warning log, not the
+// info log, and that no-sidecar submissions emit neither notice.
+func TestGeneratePathwaysManifest_SidecarImageWarning(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		sidecar string
+		want    string
+	}{
+		{name: "custom sidecar warns", sidecar: testCustomSidecar, want: "should ideally come from the same Pathways release"},
+		{name: "public sidecar tag@digest warns", sidecar: testPublicSidecar + ":jax-0.11.2@sha256:abcdef", want: "pinned by digest"},
+		{name: "no sidecar is silent", sidecar: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot, restore := logging.CaptureForTesting(t)
+			_, err := generatePathwaysTestManifest(t, "", false, tc.sidecar, "", nil, func(job *orchestrator.JobDefinition) {
+				job.Pathways.ServerImage, job.Pathways.ProxyServerImage, job.Pathways.WorkerImage = "", "", ""
+			})
+			restore()
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+			infoOut, errOut := snapshot()
+			if tc.want == "" {
+				if strings.Contains(infoOut, "Using the Pathways") || strings.Contains(errOut, "colocated Python sidecar") {
+					t.Errorf("expected no sidecar image notice; info log %q, warning log %q", infoOut, errOut)
+				}
+				return
+			}
+			if !strings.Contains(errOut, tc.want) || strings.Contains(infoOut, tc.want) {
+				t.Errorf("want notice containing %q on the warning log only; warning log %q, info log %q", tc.want, errOut, infoOut)
+			}
+		})
 	}
 }
 
@@ -295,6 +418,24 @@ func TestProxyImageFor(t *testing.T) {
 		{
 			serverImage: "us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/server:jax-0.11.2",
 			want:        "us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/proxy_server:jax-0.11.2",
+		},
+		{
+			serverImage: "us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/server",
+			want:        "us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/proxy_server:latest",
+		},
+		// Empty trailing tag and leading-slash refs must not be rewritten.
+		{
+			serverImage: "us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/server:",
+			want:        "",
+		},
+		{
+			serverImage: "/server",
+			want:        "",
+		},
+		// Intermediate path segments containing /server: must not be rewritten as the image name.
+		{
+			serverImage: "registry.local/server:8080/my-rm:v1",
+			want:        "",
 		},
 		// Pathways server and proxy images never share a digest, so a digest-pinned server has no derivable proxy.
 		{

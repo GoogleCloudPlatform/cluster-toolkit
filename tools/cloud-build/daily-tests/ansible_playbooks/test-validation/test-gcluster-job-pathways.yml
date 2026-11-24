@@ -163,7 +163,7 @@
       | selectattr('name', 'equalto', 'TEST_WORKER_VAR') | selectattr('value', 'equalto', 'worker_val') | list | length > 0
     # 4. Assert worker backoffLimitPerIndex and backoffLimit match --pathways-max-slice-restarts
     #    (backoffLimit is max(N, 4) * nodesPerSlice, so N=5 gives 5 * parallelism) and that workers
-    #    restart in place, which Pathways requires after every client disconnect.
+    #    use restartPolicy: OnFailure. The default N=0 policy is tested by the live run below and Go unit tests.
     - >
       (dry_run_yaml.spec.replicatedJobs
       | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec') | first).backoffLimitPerIndex == 5
@@ -414,7 +414,7 @@
       fail_msg: >-
         The Pathways JobSet ended {{ jobset_status.stdout.split('|')[0] }} after
         {{ jobset_status.stdout.split('|')[1] | default('0', true) }} restarts; a workload that exits 0 must complete
-        the JobSet without restarting it.
+        the JobSet without restarting it (check the diagnostics below if a Spot TPU preemption caused a restart).
 
   rescue:
   - name: "FAILURE: Job failed execution. Gathering GCluster diagnostic inspection."
