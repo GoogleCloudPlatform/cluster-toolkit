@@ -109,6 +109,7 @@ func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
 		resourcePolicyCache:      make(map[string]*GCEWorkloadPolicy),
 		// Never read the developer's real kubeconfig in unit tests.
 		kubeconfigLoader: func() (*clientcmdapi.Config, error) { return clientcmdapi.NewConfig(), nil },
+		preflightClient:  &fakePreflightClient{},
 	}
 }
 
