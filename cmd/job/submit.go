@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/imagebuilder"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -199,7 +200,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&pathways.RunSPSWorkload, "pathways-run-sps-workload", "", "Run --command on an existing SPS instance, given its JobSet name or endpoint. Without an image the command runs on this machine against the instance (like pathwaysutils run_workload) with JAX_PLATFORMS=proxy unless --env sets it, and always with a JAX_BACKEND_TARGET pointing at the port-forward; with --image or --base-image it runs in the cluster.")
 	SubmitCmd.Flags().StringVar(&pathways.GCSLocation, "pathways-gcs-location", "", "Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.")
 	SubmitCmd.Flags().IntVar(&pathways.ElasticSlices, "pathways-elastic-slices", 0, "Configures the number of elastic slices, potentially allowing for more flexible resource allocation.")
-	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 0, "Maximum number of times each worker pod in a slice can be replaced after it fails or its node is lost (defaults to 0, 4000 when --pathways-elastic-slices>0 or --pathways-headless is set, or 1000000 when --pathways-deploy-sps is set). Maps to backoffLimitPerIndex=N and backoffLimit=max(N,4)*nodesPerSlice on the worker Job; worker containers restart in place, as Pathways requires after each client disconnect, until their restarts summed across the slice reach backoffLimit.")
+	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 0, "Maximum number of times each worker pod in a slice can be replaced after it fails or its node is lost (defaults to 0, 4000 when --pathways-elastic-slices>0 or --pathways-headless is set, or 1000000 when --pathways-deploy-sps is set). Maps to backoffLimitPerIndex=N and backoffLimit=max(N,4)*nodesPerSlice (capped at 2147483647) on the worker Job; worker containers restart in place, as Pathways requires after each client disconnect, until their restarts summed across the slice reach backoffLimit.")
 	SubmitCmd.Flags().StringVar(&pathways.ProxyArgs, "pathways-proxy-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-proxy` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerArgs, "pathways-server-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-rm` (resource manager) executable.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
@@ -413,6 +414,9 @@ func validatePathwaysFlags(cmd *cobra.Command) error {
 		}
 		if pathways.MaxSliceRestarts < 0 {
 			return fmt.Errorf("--pathways-max-slice-restarts must be non-negative")
+		}
+		if pathways.MaxSliceRestarts > math.MaxInt32 {
+			return fmt.Errorf("--pathways-max-slice-restarts must be at most %d", math.MaxInt32)
 		}
 		return nil
 	}

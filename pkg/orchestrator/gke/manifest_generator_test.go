@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -3153,6 +3154,30 @@ func TestGeneratePathwaysManifest_DefaultImages(t *testing.T) {
 	}
 }
 
+// TestPathwaysWorkerBackoffLimit pins backoffLimit = max(N, 4) x VMs per slice, capped at MaxInt32 because the Job
+// field is an int32 (--pathways-deploy-sps defaults N to 1,000,000, which overflows on slices of more than 2,147 VMs).
+func TestPathwaysWorkerBackoffLimit(t *testing.T) {
+	for _, tc := range []struct {
+		maxSliceRestarts, nodesPerSlice, want int
+	}{
+		{0, 1, 4},
+		{0, 8, 32},
+		{1, 8, 32},
+		{4, 8, 32},
+		{5, 8, 40},
+		{4000, 8, 32000},
+		{1000000, 2147, 2147000000},
+		{1000000, 2148, math.MaxInt32},
+		{1000000, 2304, math.MaxInt32},
+		{math.MaxInt32, 1, math.MaxInt32},
+		{math.MaxInt32, 2304, math.MaxInt32},
+	} {
+		if got := pathwaysWorkerBackoffLimit(tc.maxSliceRestarts, tc.nodesPerSlice); got != tc.want {
+			t.Errorf("pathwaysWorkerBackoffLimit(%d, %d) = %d, want %d", tc.maxSliceRestarts, tc.nodesPerSlice, got, tc.want)
+		}
+	}
+}
+
 // TestGeneratePathwaysManifest_MaxSliceRestarts checks the worker Job retry settings derived from
 // --pathways-max-slice-restarts N: backoffLimitPerIndex N caps pod replacements per worker (0 makes a lost or
 // failed worker pod fail the Job, so the JobSet failurePolicy recreates every slice), while restartPolicy OnFailure with
@@ -3180,6 +3205,7 @@ func TestGeneratePathwaysManifest_MaxSliceRestarts(t *testing.T) {
 		{name: "flag set to 3 on 2 x v6e-32", maxSliceRestarts: 3, wantBackoffLimit: 32, wantBackoffLimitPerIndex: 3},
 		{name: "flag set to 5 on 2 x v6e-32", maxSliceRestarts: 5, wantBackoffLimit: 40, wantBackoffLimitPerIndex: 5},
 		{name: "elastic default 4000 on 2 x v6e-32", maxSliceRestarts: 4000, wantBackoffLimit: 32000, wantBackoffLimitPerIndex: 4000},
+		{name: "backoffLimit capped at MaxInt32 on 2 x v6e-32", maxSliceRestarts: 300000000, wantBackoffLimit: math.MaxInt32, wantBackoffLimitPerIndex: 300000000},
 	}
 
 	for _, tc := range tests {

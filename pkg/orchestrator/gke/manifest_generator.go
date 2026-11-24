@@ -24,6 +24,7 @@ import (
 	"hpc-toolkit/pkg/orchestrator/k8s"
 	"io"
 	"maps"
+	"math"
 	"path"
 	"slices"
 	"strings"
@@ -636,13 +637,21 @@ const (
 	pathwaysTemplateExtractHint = "If you use --gke-custom-templates-path, re-extract pathways_jobset.tmpl and base.tmpl with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations"
 	// workloadTemplateExtractHintFmt takes the workload template name (jobset.tmpl or job.tmpl).
 	workloadTemplateExtractHintFmt = "If you use --gke-custom-templates-path, re-extract %s and base.tmpl with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations"
-	// minPathwaysWorkerRestartsPerVM floors the worker Job backoffLimit. Pathways workers exit (code 1) by design
-	// whenever their client disconnects, and rely on an in-place restart. Under restartPolicy OnFailure the Job
-	// fails once container restarts summed over a slice's running worker pods (sidecars included, counted over the
-	// pods' lifetime) reach backoffLimit, so allow 4 per VM: the budget XPK (vms_per_slice*4) and the pathways-job
-	// controller (NumVMs*4) use for non-elastic workers.
+	// minPathwaysWorkerRestartsPerVM is the per-VM floor of the worker Job backoffLimit; see pathwaysWorkerBackoffLimit.
 	minPathwaysWorkerRestartsPerVM = 4
 )
+
+// pathwaysWorkerBackoffLimit returns the worker Job backoffLimit for --pathways-max-slice-restarts and the number of
+// VMs per slice. Pathways workers exit (code 1) by design whenever their client disconnects, and rely on an in-place
+// restart. Under restartPolicy OnFailure the Job fails once container restarts summed over a slice's running worker
+// pods (sidecars included, counted over the pods' lifetime) reach backoffLimit, so allow at least 4 per VM: the budget
+// XPK (vms_per_slice*4) and the pathways-job controller (NumVMs*4) use for non-elastic workers. backoffLimit is an
+// int32, so the result is capped at MaxInt32, the value Kubernetes itself defaults it to when backoffLimitPerIndex is
+// set.
+func pathwaysWorkerBackoffLimit(maxSliceRestarts, nodesPerSlice int) int {
+	limit := int64(max(maxSliceRestarts, minPathwaysWorkerRestartsPerVM)) * int64(nodesPerSlice)
+	return int(min(limit, math.MaxInt32))
+}
 
 // GeneratePathwaysManifest generates the Kubernetes JobSet manifest for a Pathways job.
 func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) (string, error) {
@@ -844,7 +853,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		}
 	}
 
-	workerBackoffLimit := max(opts.Pathways.MaxSliceRestarts, minPathwaysWorkerRestartsPerVM) * opts.NodesPerSlice
+	workerBackoffLimit := pathwaysWorkerBackoffLimit(opts.Pathways.MaxSliceRestarts, opts.NodesPerSlice)
 
 	var proxyArgsList []string
 	if opts.Pathways.ProxyArgs != "" {
