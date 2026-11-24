@@ -170,14 +170,14 @@ description of our support for Windows images.
 <tr>
   <th>Shared filestore</th>
   <th></th>
-  <td>✓</td>
+  <td></td>
   <td><a href="../examples/hpc-slurm.yaml">✓</a></td>
-  <td><a href="../examples/hpc-slurm.yaml">✓</a></td>
+  <td><a href="../examples/ml-slurm-g4.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Startup script</th>
   <th></th>
-  <td>✓</td>
+  <td></td>
   <td><a href="../community/examples/hpc-slurm-ramble-gromacs.yaml">✓</a></td>
   <td>✓</td>
 </tr>

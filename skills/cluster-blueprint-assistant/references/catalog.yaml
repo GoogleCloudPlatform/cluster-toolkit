@@ -5352,7 +5352,7 @@ blueprints:
   required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
     authorized_ssh_ranges: []
-    build_slurm_from_git_ref: 6.13.2
+    build_slurm_from_git_ref: 6.13.3
     built_instance_image:
       family: slurm-rocky9
       project: $(vars.project_id)
@@ -6243,8 +6243,8 @@ blueprints:
     sharedfs_name: "$(\"${vars.deployment_name}-sharedfs\")"
     slurm_cluster_name: slurmdesktop
     slurm_image:
-      family: aci-cpu-rocky-linux-9-slurm-2605-amd64
-      project: advanced-compute-images
+      family: slurm-gcp-6-12-hpc-rocky-linux-9
+      project: schedmd-slurm-public
     viz_machine_type: n2-standard-8
     zone: us-central1-a
   modules:

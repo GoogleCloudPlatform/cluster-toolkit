@@ -27,7 +27,8 @@ vars:
   #never ends up in a disk image; see docs/hybrid-slurm-cluster/README.md.
   key_export_dir: /slurm/key_distribution
 
-  # Set this variable to overwrite the default Slurm version. Must match the
+  # Required, never empty: install_hybrid.sh uses it to pick the generated
+  # config format, and the compute image is rebuilt to it. Must match the
   # Slurm version of your on-prem controller.
   slurm_version: "26.05.4"
 
@@ -44,7 +45,7 @@ vars:
 
   # Must be a Slurm image: Slurm is rebuilt over the installed copy, not
   # installed from scratch. Match its Slurm release to slurm_version where
-  # possible; see docs/vm-images.md#publicly-published-slurm-images
+  # possible; see https://cloud.google.com/compute/docs/images/workload/aci-images
   source_image_family: aci-cpu-rocky-linux-9-slurm-2605-amd64
   source_image_project: advanced-compute-images
   custom_image:
@@ -96,8 +97,7 @@ deployment_groups:
         source: $(ghpc_stage("./hybrid-scripts/align_slurm_ids.sh"))
         destination: align_slurm_ids.sh
         args: "$(vars.slurm_uid) $(vars.slurm_gid)"
-      #Optionally build a specific Slurm version into the image. Leave
-      #vars.slurm_version empty ("") to skip; the script no-ops on an empty arg.
+      #Build the Slurm version set in vars.slurm_version into the image.
       - type: shell
         source: $(ghpc_stage("./hybrid-scripts/custom_slurm_version.sh"))
         destination: custom_slurm_version.sh

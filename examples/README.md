@@ -440,7 +440,6 @@ are configured with:
 [c3]: https://cloud.google.com/blog/products/compute/introducing-c3-machines-with-googles-custom-intel-ipu
 [h3]: https://cloud.google.com/compute/docs/compute-optimized-machines#h3_series
 [a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
-[g2]: https://cloud.google.com/compute/docs/gpus#l4-gpus
 [compact placement]: https://cloud.google.com/compute/docs/instances/define-instance-placement
 [GVNIC]: https://cloud.google.com/compute/docs/networking/using-gvnic
 [Tier_1]: https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration

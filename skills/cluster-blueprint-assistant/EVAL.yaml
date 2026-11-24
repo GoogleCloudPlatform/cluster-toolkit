@@ -86,7 +86,7 @@ cases:
   - "copy"
   - "new partition"
   script_validators:
-  - 'python3 -c "import os,yaml; docs=[d for p in os.environ.get(\"CTK_NEW_YAMLS\",\"\").splitlines() for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(d.get(\"ai_assisted\") is True and \"deployment_groups\" in d for d in docs) and any(\"c3-standard-88\" in yaml.dump(d) for d in docs)"'
+  - 'python3 -c "import os,yaml; docs=[d for p in os.environ.get(\"CTK_NEW_YAMLS\",\"\").splitlines() for d in yaml.safe_load_all(open(p)) if isinstance(d,dict)]; assert any(d.get(\"ai_assisted\") is True and \"deployment_groups\" in d for d in docs) and any(\"c3-standard-88\" in yaml.dump(d) for d in docs) and all((d.get(\"vars\") or {}).get(\"compute_machine_type\") != \"c3-standard-88\" for d in docs)"'
   expectations:
   - "The agent recognized that the hardware-named h3 partition cannot be overridden via deployment.yaml and created a new blueprint copy marked with ai_assisted: true."
   - "The copied blueprint configures the c3-standard-88 machine type while leaving examples/hpc-slurm.yaml untouched."

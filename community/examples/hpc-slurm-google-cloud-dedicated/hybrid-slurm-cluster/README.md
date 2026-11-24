@@ -192,7 +192,7 @@ From your Cluster Toolkit directory, create the deployment definition:
 
 ### One-Time Setup: Build Custom Slurm OS Image with Packer
 
-In Google Cloud Dedicated (GCD), public SchedMD marketplace images are not available. A custom Slurm VM image (Rocky Linux 9 with Slurm v6) must be built inside the project using the embedded `build-slurm` Packer deployment group in `primary-cluster.yaml`.
+In Google Cloud Dedicated (GCD), public Advanced Compute Images (`advanced-compute-images`) are not available. A custom Slurm VM image (Rocky Linux 9 with Slurm v6) must be built inside the project using the embedded `build-slurm` Packer deployment group in `primary-cluster.yaml`.
 
 > [!NOTE]
 > **This build step is only required ONCE per project/environment.**
