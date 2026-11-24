@@ -636,6 +636,12 @@ const (
 	pathwaysTemplateExtractHint = "If you use --gke-custom-templates-path, re-extract pathways_jobset.tmpl and base.tmpl with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations"
 	// workloadTemplateExtractHintFmt takes the workload template name (jobset.tmpl or job.tmpl).
 	workloadTemplateExtractHintFmt = "If you use --gke-custom-templates-path, re-extract %s and base.tmpl with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations"
+	// minPathwaysWorkerRestartsPerVM floors the worker Job backoffLimit. Pathways workers exit (code 1) by design
+	// whenever their client disconnects, and rely on an in-place restart. Under restartPolicy OnFailure the Job
+	// fails once container restarts summed over a slice's running worker pods (sidecars included, counted over the
+	// pods' lifetime) reach backoffLimit, so allow 4 per VM: the budget XPK (vms_per_slice*4) and the pathways-job
+	// controller (NumVMs*4) use for non-elastic workers.
+	minPathwaysWorkerRestartsPerVM = 4
 )
 
 // GeneratePathwaysManifest generates the Kubernetes JobSet manifest for a Pathways job.
@@ -690,6 +696,7 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		return "", err
 	}
 	warnPathwaysHostNetworkManifest(buf.String(), opts, data.HostNetworkEnabled)
+	warnPathwaysWorkerRestartPolicy(buf.String())
 
 	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
 	if err := ValidateJobSetManifest(manifest); err != nil {
@@ -813,6 +820,20 @@ func warnPathwaysHostNetworkManifest(jobSet string, opts ManifestOptions, hostNe
 	return false
 }
 
+// warnPathwaysWorkerRestartPolicy logs a warning when a custom or stale pathways_jobset.tmpl renders worker pods
+// with a restartPolicy other than OnFailure (an empty value is defaulted to OnFailure by the JobSet webhook).
+func warnPathwaysWorkerRestartPolicy(jobSet string) bool {
+	workerTmpl, _, err := extractPathwaysPodTemplates(jobSet)
+	if err != nil || workerTmpl == nil {
+		return false
+	}
+	if rp := workerTmpl.Spec.RestartPolicy; rp != "" && rp != corev1.RestartPolicyOnFailure {
+		logging.Warn("The rendered Pathways worker pods use restartPolicy %q. Pathways restarts each worker when its client disconnects, so without restartPolicy: OnFailure every disconnect, including the end of a run, fails a worker pod; with --pathways-max-slice-restarts 0 that fails the worker Job, so the JobSet restarts or fails instead of completing. %s", rp, pathwaysTemplateExtractHint)
+		return true
+	}
+	return false
+}
+
 func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
 	exclusiveTopology := ""
 	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
@@ -823,7 +844,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		}
 	}
 
-	workerBackoffLimit := opts.Pathways.MaxSliceRestarts * opts.NodesPerSlice
+	workerBackoffLimit := max(opts.Pathways.MaxSliceRestarts, minPathwaysWorkerRestartsPerVM) * opts.NodesPerSlice
 
 	var proxyArgsList []string
 	if opts.Pathways.ProxyArgs != "" {

@@ -274,11 +274,7 @@ spec:
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
 {{- end }}
-{{- if eq .WorkerBackoffLimitPerIndex 0 }}
-            restartPolicy: Never
-{{- else }}
             restartPolicy: OnFailure
-{{- end }}
 {{- with (.RenderBlock "pod_auth_and_priority" 12) }}{{"\n"}}{{(StructuralData .)}}{{- end }}
             terminationGracePeriodSeconds: {{.TerminationGracePeriodSeconds}}
 {{- if or .Pathways.ColocatedPythonSidecarImage .TelemetryCollectorImage }}

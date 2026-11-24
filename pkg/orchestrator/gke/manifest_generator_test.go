@@ -34,6 +34,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
@@ -1000,8 +1001,8 @@ func TestGeneratePathwaysManifest_RestartOnExitCodes(t *testing.T) {
 			if rj.Template.Spec.PodFailurePolicy != nil {
 				t.Errorf("expected worker to NOT have podFailurePolicy, but got %+v", rj.Template.Spec.PodFailurePolicy)
 			}
-			if rj.Template.Spec.Template.Spec.RestartPolicy != "Never" {
-				t.Errorf("expected worker restartPolicy to be Never, got %q", rj.Template.Spec.Template.Spec.RestartPolicy)
+			if rj.Template.Spec.Template.Spec.RestartPolicy != "OnFailure" {
+				t.Errorf("expected worker restartPolicy to be OnFailure, got %q", rj.Template.Spec.Template.Spec.RestartPolicy)
 			}
 		}
 	}
@@ -1046,7 +1047,7 @@ func TestManifestGeneration_Matrix_Pathways_RestartOnExitCodes(t *testing.T) {
 			wantHeadPFP:        false,
 			wantHeadRestart:    "Never",
 			wantWorkerPFP:      false,
-			wantWorkerRestart:  "Never",
+			wantWorkerRestart:  "OnFailure",
 		},
 		{
 			name:               "pathways, with restart-on-exit-codes",
@@ -1055,7 +1056,7 @@ func TestManifestGeneration_Matrix_Pathways_RestartOnExitCodes(t *testing.T) {
 			wantHeadPFP:        true,
 			wantHeadRestart:    "Never",
 			wantWorkerPFP:      false,
-			wantWorkerRestart:  "Never",
+			wantWorkerRestart:  "OnFailure",
 		},
 	}
 
@@ -3152,35 +3153,33 @@ func TestGeneratePathwaysManifest_DefaultImages(t *testing.T) {
 	}
 }
 
+// TestGeneratePathwaysManifest_MaxSliceRestarts checks the worker Job retry settings derived from
+// --pathways-max-slice-restarts N: backoffLimitPerIndex N caps pod replacements per worker (0 makes a lost or
+// failed worker pod fail the Job, so the JobSet failurePolicy recreates every slice), while restartPolicy OnFailure with
+// backoffLimit max(N,4) x VMs lets a worker restart in place, which Pathways relies on after its client
+// disconnects at the end of every run.
 func TestGeneratePathwaysManifest_MaxSliceRestarts(t *testing.T) {
+	type workerJobPolicy struct {
+		BackoffLimit         *int32
+		BackoffLimitPerIndex *int32
+		MaxFailedIndexes     *int32
+		PodReplacementPolicy *batchv1.PodReplacementPolicy
+		PodFailurePolicy     *batchv1.PodFailurePolicy
+		RestartPolicy        corev1.RestartPolicy
+	}
+	replaceFailed := batchv1.Failed
+	zero := int32(0)
 	tests := []struct {
 		name                     string
 		maxSliceRestarts         int
-		wantBackoffLimit         string
-		wantBackoffLimitPerIndex string
-		wantRestartPolicy        string
+		wantBackoffLimit         int32
+		wantBackoffLimitPerIndex int32
 	}{
-		{
-			name:                     "flag set to 5 on 2 x v6e-32",
-			maxSliceRestarts:         5,
-			wantBackoffLimit:         "backoffLimit: 40",
-			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 5",
-			wantRestartPolicy:        "restartPolicy: OnFailure",
-		},
-		{
-			name:                     "non-elastic default 0 on 2 x v6e-32",
-			maxSliceRestarts:         0,
-			wantBackoffLimit:         "backoffLimit: 0",
-			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 0",
-			wantRestartPolicy:        "restartPolicy: Never",
-		},
-		{
-			name:                     "elastic default 4000 on 2 x v6e-32",
-			maxSliceRestarts:         4000,
-			wantBackoffLimit:         "backoffLimit: 32000",
-			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 4000",
-			wantRestartPolicy:        "restartPolicy: OnFailure",
-		},
+		{name: "non-elastic default 0 on 2 x v6e-32", maxSliceRestarts: 0, wantBackoffLimit: 32, wantBackoffLimitPerIndex: 0},
+		{name: "flag set to 1 on 2 x v6e-32", maxSliceRestarts: 1, wantBackoffLimit: 32, wantBackoffLimitPerIndex: 1},
+		{name: "flag set to 3 on 2 x v6e-32", maxSliceRestarts: 3, wantBackoffLimit: 32, wantBackoffLimitPerIndex: 3},
+		{name: "flag set to 5 on 2 x v6e-32", maxSliceRestarts: 5, wantBackoffLimit: 40, wantBackoffLimitPerIndex: 5},
+		{name: "elastic default 4000 on 2 x v6e-32", maxSliceRestarts: 4000, wantBackoffLimit: 32000, wantBackoffLimitPerIndex: 4000},
 	}
 
 	for _, tc := range tests {
@@ -3235,19 +3234,32 @@ func TestGeneratePathwaysManifest_MaxSliceRestarts(t *testing.T) {
 				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
 			}
 
-			parts := strings.Split(manifest, "name: worker")
-			if len(parts) < 2 {
+			_, templates := parseStrictJobSetTemplates(t, manifest)
+			worker, ok := templates["worker"]
+			if !ok {
 				t.Fatalf("worker replicatedJob not found in manifest:\n%s", manifest)
 			}
-			workerManifest := parts[1]
-			if !strings.Contains(workerManifest, tc.wantBackoffLimit) {
-				t.Errorf("worker spec missing %q\nGot:\n%s", tc.wantBackoffLimit, workerManifest)
+			got := workerJobPolicy{
+				BackoffLimit:         worker.Spec.BackoffLimit,
+				BackoffLimitPerIndex: worker.Spec.BackoffLimitPerIndex,
+				MaxFailedIndexes:     worker.Spec.MaxFailedIndexes,
+				PodReplacementPolicy: worker.Spec.PodReplacementPolicy,
+				PodFailurePolicy:     worker.Spec.PodFailurePolicy,
+				RestartPolicy:        worker.Spec.Template.Spec.RestartPolicy,
 			}
-			if !strings.Contains(workerManifest, tc.wantBackoffLimitPerIndex) {
-				t.Errorf("worker spec missing %q\nGot:\n%s", tc.wantBackoffLimitPerIndex, workerManifest)
+			want := workerJobPolicy{
+				BackoffLimit:         &tc.wantBackoffLimit,
+				BackoffLimitPerIndex: &tc.wantBackoffLimitPerIndex,
+				MaxFailedIndexes:     &zero,
+				PodReplacementPolicy: &replaceFailed,
+				RestartPolicy:        corev1.RestartPolicyOnFailure,
 			}
-			if !strings.Contains(workerManifest, tc.wantRestartPolicy) {
-				t.Errorf("worker spec missing %q\nGot:\n%s", tc.wantRestartPolicy, workerManifest)
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("worker Job retry settings mismatch (-want +got):\n%s", diff)
+			}
+			head := templates["pathways-head"]
+			if head.Spec.BackoffLimit == nil || *head.Spec.BackoffLimit != 0 || head.Spec.Template.Spec.RestartPolicy != corev1.RestartPolicyNever {
+				t.Errorf("pathways-head backoffLimit = %v, restartPolicy = %q; want 0 and Never", head.Spec.BackoffLimit, head.Spec.Template.Spec.RestartPolicy)
 			}
 		})
 	}
@@ -6276,6 +6288,58 @@ func TestGeneratePathwaysManifest_HostNetworkAndCredentials(t *testing.T) {
 				if got := envValues(findContainer(head, "workload-container"), credEnv); !reflect.DeepEqual(got, tc.wantWorkloadCreds) {
 					t.Errorf("workload-container %s = %v, want %v", credEnv, got, tc.wantWorkloadCreds)
 				}
+			}
+		})
+	}
+}
+
+// TestWarnPathwaysWorkerRestartPolicy renders a default (non-elastic) Pathways job with the embedded template and
+// with a pathways_jobset.tmpl extracted before workers always restarted in place; only the stale template, whose
+// workers use restartPolicy Never, triggers the warning.
+func TestWarnPathwaysWorkerRestartPolicy(t *testing.T) {
+	legacyDir := writeLegacyPathwaysTemplate(t)
+	const warnPrefix = "The rendered Pathways worker pods use restartPolicy"
+	for _, tc := range []struct {
+		name          string
+		templatesPath string
+		wantPolicy    corev1.RestartPolicy
+		wantWarn      bool
+	}{
+		{name: "embedded template", wantPolicy: corev1.RestartPolicyOnFailure},
+		{name: "stale custom template", templatesPath: legacyDir, wantPolicy: corev1.RestartPolicyNever, wantWarn: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot, restore := logging.CaptureForTesting(t)
+			manifest, err := generatePathwaysTestManifest(t, tc.templatesPath, false, "", "", nil)
+			restore()
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+			if got := pathwaysPodSpecs(t, manifest)["worker"].RestartPolicy; got != tc.wantPolicy {
+				t.Fatalf("worker restartPolicy = %q, want %q", got, tc.wantPolicy)
+			}
+			_, errOut := snapshot()
+			if got := strings.Contains(errOut, warnPrefix); got != tc.wantWarn {
+				t.Errorf("GeneratePathwaysManifest restartPolicy warning = %v, want %v (log: %q)", got, tc.wantWarn, errOut)
+			}
+			if tc.wantWarn && (!strings.Contains(errOut, fmt.Sprintf("restartPolicy %q", tc.wantPolicy)) || !strings.Contains(errOut, pathwaysTemplateExtractHint)) {
+				t.Errorf("warning does not name restartPolicy %q or the re-extract hint: %q", tc.wantPolicy, errOut)
+			}
+		})
+	}
+
+	const jobSetHeader = "apiVersion: jobset.x-k8s.io/v1alpha2\nkind: JobSet\nspec:\n  replicatedJobs:\n"
+	for _, tc := range []struct {
+		name     string
+		manifest string
+	}{
+		{name: "JobSet without workers", manifest: jobSetHeader + "  - name: pathways-head\n"},
+		// The JobSet webhook defaults an omitted restartPolicy to OnFailure.
+		{name: "worker without restartPolicy", manifest: jobSetHeader + "  - name: worker\n    template:\n      spec:\n        template:\n          spec:\n            containers:\n            - name: pathways-worker\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if warnPathwaysWorkerRestartPolicy(tc.manifest) {
+				t.Error("warnPathwaysWorkerRestartPolicy() = true, want false")
 			}
 		})
 	}
