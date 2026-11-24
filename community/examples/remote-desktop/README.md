@@ -32,17 +32,11 @@ listens on a `0700` per-user unix socket, so other local users cannot reach it.
 ## GPU desktops
 
 The visualization desktop can use hardware OpenGL. Rather than ship a
-near-identical second blueprint, apply these four changes to
+near-identical second blueprint, apply these three changes to
 `hpc-slurm-remote-desktop.yaml`:
 
 ```yaml
 vars:
-  # Debian is the only slurm-gcp family shipping an NVIDIA driver with graphics
-  # (not merely compute) support. A compute driver ships no libEGL_nvidia and
-  # cannot render.
-  slurm_image:
-    family: slurm-gcp-6-12-debian-12
-    project: schedmd-slurm-public
   viz_machine_type: g2-standard-8
 
 # on the viz-desktop module:
@@ -56,11 +50,17 @@ deployment_groups:
       on_host_maintenance: TERMINATE
 ```
 
+The blueprint's default image, `aci-cpu-rocky-linux-9-slurm-2605-amd64`, carries
+an NVIDIA driver with graphics (not merely compute) support, so no image change
+is needed. The Ubuntu `aci-gpu-u2404-*` images carry a compute-only driver: it
+ships no `libEGL_nvidia` and cannot render until the matching
+`libnvidia-gl-<branch>-server` package is added to the image.
+
 `vnc_backend: turbovnc` is required and is already the visualization desktop's
 setting. TurboVNC reaches the GPU through VirtualGL's EGL back end; TigerVNC
-offloads GL only through `-rendernode`, which needs a DRM render node that GCE's
-NVIDIA images never create. Without a usable GPU the session falls back to
-software rendering rather than failing, and the broker logs why at startup.
+offloads GL only through `-rendernode`. Without a usable GPU the session falls
+back to software rendering rather than failing, and the broker logs why at
+startup.
 
 ## Getting Started
 

@@ -34,18 +34,15 @@ def first_render_node():
 def gpu_display():
     """VGL_DISPLAY value naming a usable GPU, or None if there is none.
 
-    Prefers a DRM render node when one exists, because it names the device
-    unambiguously. GCE's NVIDIA images do not provide one - nvidia_drm is built
-    without KMS, exposes no "modeset" parameter and creates no /dev/dri - so
-    fall back to an EGL device ID, which VirtualGL also accepts and which is
-    enumerated through EGL itself with no dependency on DRM.
+    VirtualGL's EGL back end accepts an EGL device ID or a DRM card path, but
+    rejects a DRM render node with "Invalid EGL device", and the session then
+    fails to start. So the render node is never used here, even on images
+    whose NVIDIA driver creates one; it is only for backends that take
+    "-rendernode" themselves.
     """
-    render_node = first_render_node()
-    if render_node:
-        return str(render_node)
     # EGL access goes through /dev/nvidia*, which is world-readable, so no
-    # supplementary group membership is needed (unlike /dev/dri, which is
-    # root:render). egl0 is the first enumerated device; these images carry a
+    # supplementary group membership is needed (unlike /dev/dri/card*, which is
+    # root:video). egl0 is the first enumerated device; these images carry a
     # single GPU.
     if Path("/dev/nvidia0").exists() or Path("/dev/nvidiactl").exists():
         return "egl0"

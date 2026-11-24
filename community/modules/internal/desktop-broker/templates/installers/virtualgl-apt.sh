@@ -14,12 +14,13 @@
 
 # VirtualGL provides hardware OpenGL for backends that cannot offload it
 # themselves (TurboVNC has no "-rendernode" equivalent). Its EGL back end
-# renders against a DRM render node directly, so no second X server bound to the
+# renders on the GPU through its EGL device, so no second X server bound to the
 # GPU is needed.
 #
-# No NVIDIA driver is installed here: use an image that already carries one, such
-# as slurm-gcp-6-12-ubuntu-2204-lts-nvidia-570. Without a driver there is no
-# render node and the desktop falls back to software rendering.
+# No NVIDIA driver is installed here: use an image that already carries one with
+# graphics support. The aci-gpu-u2404-* images carry a compute-only driver, so
+# hardware GL on them also needs the matching libnvidia-gl-<branch>-server
+# package. Without a usable driver the desktop falls back to software rendering.
 #
 # NOTE: this file is read with file(), not templatefile(), so shell variables use
 # a single "$" - "$${...}" would survive into the rendered script and bash would

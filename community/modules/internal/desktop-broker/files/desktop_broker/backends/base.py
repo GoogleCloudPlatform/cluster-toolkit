@@ -75,8 +75,8 @@ class VNCBackend:
             return None
         if gpu.gpu_display() is None:
             return (
-                "no usable GPU device was found (neither a /dev/dri render node "
-                "nor /dev/nvidia*). The image most likely has no NVIDIA driver, "
+                "no usable GPU device was found (no /dev/nvidia*). The image "
+                "most likely has no NVIDIA driver, "
                 "or only a compute driver without graphics support - a compute "
                 "driver ships no libEGL_nvidia and cannot render."
             )

@@ -89,6 +89,33 @@ def test_tigervnc_explains_it_cannot_use_an_egl_device(monkeypatch):
     assert turbo.accelerated() is True
 
 
+def test_virtualgl_gets_the_egl_device_despite_a_render_node(monkeypatch):
+    """VirtualGL rejects a DRM render node, so one must never be handed to it.
+
+    Images whose NVIDIA driver creates /dev/dri/renderD128 used to get that
+    path as VGL_DISPLAY, and the session died with "Invalid EGL device".
+    """
+    from desktop_broker.backends import gpu
+
+    monkeypatch.setattr(
+        gpu, "first_render_node", lambda: gpu.Path("/dev/dri/renderD128")
+    )
+    monkeypatch.setattr(
+        gpu.Path, "exists", lambda self: str(self) == "/dev/nvidia0"
+    )
+    assert gpu.gpu_display() == "egl0"
+
+
+def test_no_nvidia_device_means_no_virtualgl_device(monkeypatch):
+    from desktop_broker.backends import gpu
+
+    monkeypatch.setattr(
+        gpu, "first_render_node", lambda: gpu.Path("/dev/dri/renderD128")
+    )
+    monkeypatch.setattr(gpu.Path, "exists", lambda self: False)
+    assert gpu.gpu_display() is None
+
+
 def test_software_rendering_is_forced_when_not_accelerated():
     backend = backends.create("turbovnc", "1920x1080", gpu_acceleration=False)
     assert backend.environment() == {"LIBGL_ALWAYS_SOFTWARE": "1"}
