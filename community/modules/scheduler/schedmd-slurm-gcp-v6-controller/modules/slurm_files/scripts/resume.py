@@ -313,6 +313,38 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
     return {chunk.name: chunk for chunk in chunks}
 
 
+_MIG_ALREADY_EXISTS_CODES = frozenset(("MEMBER_ALREADY_EXISTS", "RESOURCE_ALREADY_EXISTS"))
+
+
+def _extract_op_error_codes(op_error: Any) -> set[str]:
+    """Extract upper-cased GCE error codes from a regional operation ``error`` payload."""
+    if not isinstance(op_error, dict):
+        return set()
+    errs = op_error.get("errors")
+    if not isinstance(errs, list):
+        return set()
+    codes: set[str] = set()
+    for err in errs:
+        if isinstance(err, dict):
+            code = str(err.get("code") or "").strip().upper()
+            if code:
+                codes.add(code)
+    return codes
+
+
+def _exc_has_already_exists(exc: Exception) -> bool:
+    """Return True if an exception reports an already-existing MIG member or GCE resource."""
+    err_details = getattr(exc, "error_details", None)
+    if isinstance(err_details, list):
+        for err in err_details:
+            if isinstance(err, dict):
+                code = str(err.get("reason") or err.get("code") or "").strip().upper()
+                if code in _MIG_ALREADY_EXISTS_CODES:
+                    return True
+    msg = str(exc).upper()
+    return any(code in msg for code in _MIG_ALREADY_EXISTS_CODES)
+
+
 def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Lookup, resume_data: Optional[ResumeData] = None) -> None:
     """Provisions nodes via MIG createInstances with Per-Instance Config and preserved state."""
     if not nodes:
@@ -320,36 +352,77 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
 
     # Group nodes by target MIG (to support multiple MIGs for >1000 nodes)
     nodes_by_mig: Dict[str, List[str]] = {}
+    short_to_expected_mig: Dict[str, str] = {}
     for node in nodes:
         mig_name = lkp.node_mig_name(node)
         nodes_by_mig.setdefault(mig_name, []).append(node)
+        short_to_expected_mig.setdefault(node.split(".")[0], mig_name)
 
+    _live_statuses = frozenset(("RUNNING", "PROVISIONING", "STAGING", "REPAIRING"))
     successful_creates: List[str] = []
     skipped_live_standalone_nodes: set[str] = set()
+    non_live_standalone_nodes: set[str] = set()
+    foreign_mig_nodes: set[str] = set()
+    already_member_nodes: set[str] = set()
+    verified_safe_to_requeue: set[str] = set()
     check_gce_instances = True
 
-    def _is_live_standalone(short_name: str) -> bool:
+    def _partition_abort_nodes(
+        candidate_short_nodes: List[str],
+    ) -> Tuple[List[str], List[str]]:
+        """Partition abort targets into ``(requeue_safe, ignore_only)``.
+
+        Live standalone VMs (``RUNNING``/``PROVISIONING``/``STAGING``/``REPAIRING``) are
+        excluded from both lists so they are never powered down or marked ``DOWN``.
+        Non-live standalone VMs (e.g. ``STOPPING``/``SUSPENDING``/``SUSPENDED``/
+        ``TERMINATED``), foreign-MIG VMs, and unverified nodes when GCE instance lookup
+        fails (fail closed) are routed to ``ignore_only`` (``Action.IGNORE``) so an abort
+        never runs ``state=power_down`` against unmanaged or external VMs.
+        """
         nonlocal check_gce_instances
-        if short_name in skipped_live_standalone_nodes:
-            return True
-        if not check_gce_instances:
-            return False
-        try:
-            inst = lkp.instance(short_name)
-        except Exception as e:
-            log.warning(
-                f"Could not inspect GCE instance {short_name} during abort protection: {e}"
-            )
-            check_gce_instances = False
-            return False
-        if (
-            inst is not None
-            and util.instance_created_by_mig(inst) is None
-            and inst.status in ("RUNNING", "PROVISIONING", "STAGING")
-        ):
-            skipped_live_standalone_nodes.add(short_name)
-            return True
-        return False
+        requeue_nodes: List[str] = []
+        ignore_nodes: List[str] = []
+        for sn in dict.fromkeys(candidate_short_nodes):
+            if sn in skipped_live_standalone_nodes:
+                continue
+            if sn in non_live_standalone_nodes or sn in foreign_mig_nodes or sn in already_member_nodes:
+                ignore_nodes.append(sn)
+                continue
+            if sn in verified_safe_to_requeue:
+                requeue_nodes.append(sn)
+                continue
+            if not check_gce_instances:
+                ignore_nodes.append(sn)
+                continue
+            try:
+                inst = lkp.instance(sn)
+            except Exception as e:
+                log.warning(
+                    f"Could not inspect GCE instance {sn} during abort protection; "
+                    f"downgrading unverified node(s) from power_down to DOWN: {e}"
+                )
+                check_gce_instances = False
+                ignore_nodes.append(sn)
+                continue
+            if inst is None:
+                verified_safe_to_requeue.add(sn)
+                requeue_nodes.append(sn)
+                continue
+            owner_mig = util.instance_created_by_mig(inst)
+            expected_mig = short_to_expected_mig.get(sn)
+            if owner_mig is None:
+                if inst.status in _live_statuses:
+                    skipped_live_standalone_nodes.add(sn)
+                else:
+                    non_live_standalone_nodes.add(sn)
+                    ignore_nodes.append(sn)
+            elif expected_mig is None or owner_mig == expected_mig:
+                verified_safe_to_requeue.add(sn)
+                requeue_nodes.append(sn)
+            else:
+                foreign_mig_nodes.add(sn)
+                ignore_nodes.append(sn)
+        return requeue_nodes, ignore_nodes
 
     for mig_name, mig_nodes in nodes_by_mig.items():
         nodeset = lkp.node_nodeset(mig_nodes[0])
@@ -390,15 +463,24 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
         # 2. Per-Instance Config (PIC) - Lightweight instance name binding for static Slurm hostnames
         existing_mig_insts = set()
         deleting_mig_insts = set()
+        mig_list_success = False
         try:
             mig_data = lkp.get_mig_instances(lkp.project, region, mig_name)
             for m in mig_data.get("managedInstances", []):
                 name = m.get("name") or (m.get("instance") or "").split("/")[-1]
-                if m.get("currentAction") in ("DELETING", "ABANDONING") or m.get("instanceStatus") in ("STOPPING", "DELETING"):
+                current_action = m.get("currentAction")
+                if current_action in ("DELETING", "ABANDONING") or m.get("instanceStatus") in ("STOPPING", "DELETING"):
                     if name:
                         deleting_mig_insts.add(name)
+                        verified_safe_to_requeue.add(name)
                 elif name:
                     existing_mig_insts.add(name)
+                    # Leave CREATING* slots unverified so abort handling still checks
+                    # GCE ownership via lkp.instance() in case an orphan CREATING slot
+                    # collides with a live standalone VM.
+                    if current_action not in ("CREATING", "CREATING_WITHOUT_RETRIES"):
+                        verified_safe_to_requeue.add(name)
+            mig_list_success = True
         except Exception as e:
             log.warning(f"Could not check existing instances for MIG {mig_name}: {e}")
 
@@ -426,7 +508,13 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
             lkp.instances.cache_clear()
             if still_deleting:
                 log.error(f"Instances {still_deleting} still deleting in GCE after timeout; failing resume to trigger immediate requeue.")
+                verified_safe_to_requeue.update(still_deleting)
                 if excl_job_id is not None:
+                    # Partition abort targets BEFORE rollback so suspend_mig_nodes()'s
+                    # instances.cache_clear() does not drop the lookup cache first.
+                    requeue_nodes, ignore_nodes = _partition_abort_nodes(
+                        [n.split(".")[0] for n in nodes]
+                    )
                     if successful_creates:
                         log.warning(
                             f"Aborting multi-slice exclusive job {excl_job_id}: cleaning up {len(successful_creates)} previously created instances: {to_hostlist(successful_creates)}"
@@ -439,14 +527,18 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                         except Exception as clean_err:
                             log.error(f"Failed cleaning up instances {successful_creates}: {clean_err}")
                     # Multi-node exclusive job cannot proceed without all nodes across all shards.
-                    # Reset all nodes in the request and abort createInstances immediately.
-                    all_short_nodes = [
-                        sn for sn in dict.fromkeys(n.split(".")[0] for n in nodes)
-                        if not _is_live_standalone(sn)
-                    ]
-                    if all_short_nodes:
+                    # Reset verified MIG/absent nodes and downgrade external/unverified nodes to DOWN.
+                    if ignore_nodes:
                         handle_resume_failure(
-                            all_short_nodes,
+                            ignore_nodes,
+                            "GCP MIG Error: Instances still in-flight deleting after timeout (skipped power_down for unverified/external VM)",
+                            resume_data,
+                            error_handler.Action.IGNORE,
+                            "MIG in-flight deletion timeout",
+                        )
+                    if requeue_nodes:
+                        handle_resume_failure(
+                            requeue_nodes,
                             "GCP MIG Error: Instances still in-flight deleting after timeout",
                             resume_data,
                             error_handler.Action.REQUEUE,
@@ -461,13 +553,22 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                             job_nodes = {n.split(".")[0] for n in job.nodes_alloc}
                             if job_nodes & still_deleting:
                                 affected_nodes.update(job_nodes)
-                    nodes_to_fail = [
+                    affected_candidates = [
                         sn for sn in dict.fromkeys(n.split(".")[0] for n in mig_nodes)
-                        if sn in affected_nodes and not _is_live_standalone(sn)
+                        if sn in affected_nodes
                     ]
-                    if nodes_to_fail:
+                    requeue_nodes, ignore_nodes = _partition_abort_nodes(affected_candidates)
+                    if ignore_nodes:
                         handle_resume_failure(
-                            nodes_to_fail,
+                            ignore_nodes,
+                            "GCP MIG Error: Instances still in-flight deleting after timeout (skipped power_down for unverified/external VM)",
+                            resume_data,
+                            error_handler.Action.IGNORE,
+                            "MIG in-flight deletion timeout",
+                        )
+                    if requeue_nodes:
+                        handle_resume_failure(
+                            requeue_nodes,
                             "GCP MIG Error: Instances still in-flight deleting after timeout",
                             resume_data,
                             error_handler.Action.REQUEUE,
@@ -478,6 +579,7 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
         pic_instances: List[Dict[str, Any]] = []
         legacy_blocking_nodes: List[Tuple[str, str]] = []
         same_mig_blocking_nodes: List[Tuple[str, str]] = []
+        mig_list_unknown_nodes: List[Tuple[str, str]] = []
         foreign_mig_blocking_nodes: List[Tuple[str, str]] = []
         skipped_live_standalone = False
         seen_names = set()
@@ -488,9 +590,11 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                 continue
             seen_names.add(short_name)
             existing_inst = None
+            inst_lookup_ok = False
             if check_gce_instances:
                 try:
                     existing_inst = lkp.instance(short_name)
+                    inst_lookup_ok = True
                 except Exception as e:
                     log.warning(
                         f"Could not list existing GCE instances; skipping standalone pre-check for MIG {mig_name}: {e}"
@@ -499,11 +603,19 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
             if existing_inst is not None:
                 owner_mig = util.instance_created_by_mig(existing_inst)
                 if owner_mig == mig_name:
-                    if existing_inst.status in ("RUNNING", "PROVISIONING", "STAGING"):
+                    verified_safe_to_requeue.add(short_name)
+                    if existing_inst.status in _live_statuses:
                         log.info(
                             f"Instance {short_name} already belongs to MIG {mig_name} "
                             f"(status={existing_inst.status}); skipping createInstances."
                         )
+                        continue
+                    if not mig_list_success:
+                        log.warning(
+                            f"Instance {short_name} ({existing_inst.status}) carries created-by={mig_name} "
+                            "while listManagedInstances() failed; leaving existing VM untouched instead of treating it as absent."
+                        )
+                        mig_list_unknown_nodes.append((short_name, existing_inst.status or "UNKNOWN"))
                         continue
                     action_desc = "requeuing" if existing_inst.status == "STOPPING" else "marking DOWN"
                     log.warning(
@@ -512,7 +624,7 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                     )
                     same_mig_blocking_nodes.append((short_name, existing_inst.status or "UNKNOWN"))
                     continue
-                if owner_mig is None and existing_inst.status in ("RUNNING", "PROVISIONING", "STAGING"):
+                if owner_mig is None and existing_inst.status in _live_statuses:
                     log.warning(
                         f"Legacy standalone VM {short_name} ({existing_inst.status}) already exists "
                         f"outside MIG {mig_name}; skipping createInstances to avoid disrupting it. "
@@ -526,14 +638,18 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                         f"Instance {short_name} ({existing_inst.status}) is managed by a different "
                         f"MIG ({owner_mig}, expected {mig_name}); skipping createInstances."
                     )
+                    foreign_mig_nodes.add(short_name)
                     foreign_mig_blocking_nodes.append((short_name, owner_mig))
                     continue
                 log.warning(
                     f"Legacy standalone VM {short_name} ({existing_inst.status}) blocks "
                     f"MIG {mig_name} creation; marking DOWN instead of calling createInstances."
                 )
+                non_live_standalone_nodes.add(short_name)
                 legacy_blocking_nodes.append((short_name, existing_inst.status or "UNKNOWN"))
                 continue
+            if inst_lookup_ok:
+                verified_safe_to_requeue.add(short_name)
             inst: Dict[str, Any] = {"name": short_name}
             if excl_job_id is not None:
                 inst["preservedState"] = {
@@ -543,60 +659,118 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                 }
             pic_instances.append(inst)
 
-        if legacy_blocking_nodes or same_mig_blocking_nodes or foreign_mig_blocking_nodes:
-            all_blocking_names: List[str] = []
+        if (
+            legacy_blocking_nodes
+            or same_mig_blocking_nodes
+            or mig_list_unknown_nodes
+            or foreign_mig_blocking_nodes
+        ):
             blocking_comments: List[str] = []
-            if excl_job_id is not None and successful_creates:
-                log.warning(
-                    f"Aborting multi-slice exclusive job {excl_job_id}: cleaning up "
-                    f"{len(successful_creates)} previously created instances: "
-                    f"{to_hostlist(successful_creates)}"
+            stopping_names = [
+                name for name, status in same_mig_blocking_nodes if status == "STOPPING"
+            ]
+            other_same_mig = [
+                (name, status)
+                for name, status in same_mig_blocking_nodes
+                if status != "STOPPING"
+            ]
+            # Pre-partition unscanned abort candidates BEFORE rollback clears lkp.instances().
+            requeue_other: List[str] = []
+            ignore_other: List[str] = []
+            if excl_job_id is not None:
+                direct_blocking_set = (
+                    {name for name, _ in legacy_blocking_nodes}
+                    | {name for name, _ in other_same_mig}
+                    | {name for name, _ in mig_list_unknown_nodes}
+                    | {name for name, _ in foreign_mig_blocking_nodes}
                 )
-                try:
-                    import suspend
-                    lkp.clear_mig_caches()
-                    suspend.suspend_mig_nodes(successful_creates, lkp)
-                except Exception as clean_err:
-                    log.error(f"Failed cleaning up instances {successful_creates}: {clean_err}")
+                requeue_other, ignore_other = _partition_abort_nodes([
+                    sn for sn in dict.fromkeys(n.split(".")[0] for n in nodes)
+                    if sn not in direct_blocking_set
+                ])
+                if successful_creates:
+                    log.warning(
+                        f"Aborting multi-slice exclusive job {excl_job_id}: cleaning up "
+                        f"{len(successful_creates)} previously created instances: "
+                        f"{to_hostlist(successful_creates)}"
+                    )
+                    try:
+                        import suspend
+                        lkp.clear_mig_caches()
+                        suspend.suspend_mig_nodes(successful_creates, lkp)
+                    except Exception as clean_err:
+                        log.error(f"Failed cleaning up instances {successful_creates}: {clean_err}")
             if legacy_blocking_nodes:
-                legacy_names = [name for name, _ in legacy_blocking_nodes]
-                statuses = sorted({status for _, status in legacy_blocking_nodes})
-                status_str = ",".join(statuses)
-                if statuses == ["STOPPING"]:
-                    block_reason = (
+                legacy_stopping = [
+                    name for name, status in legacy_blocking_nodes if status == "STOPPING"
+                ]
+                legacy_other = [
+                    (name, status)
+                    for name, status in legacy_blocking_nodes
+                    if status != "STOPPING"
+                ]
+                if legacy_stopping:
+                    stop_reason = (
                         f"Legacy standalone VM outside MIG {mig_name} is stopping/deleting; "
                         "retry after deletion completes"
                     )
-                else:
+                    stop_comment = (
+                        f"Blocked by legacy standalone VM outside MIG {mig_name} (STOPPING)"
+                    )
+                    handle_resume_failure(
+                        legacy_stopping,
+                        stop_reason,
+                        resume_data,
+                        error_handler.Action.IGNORE,
+                        stop_comment,
+                    )
+                    blocking_comments.append(stop_comment)
+                if legacy_other:
+                    legacy_names = [name for name, _ in legacy_other]
+                    statuses = sorted({status for _, status in legacy_other})
+                    status_str = ",".join(statuses)
                     block_reason = (
                         f"Legacy standalone VM outside MIG {mig_name} ({status_str}); "
                         "run power_down to retire before resuming"
                     )
-                legacy_comment = f"Blocked by legacy standalone VM outside MIG {mig_name} ({status_str})"
+                    legacy_comment = (
+                        f"Blocked by legacy standalone VM outside MIG {mig_name} ({status_str})"
+                    )
+                    handle_resume_failure(
+                        legacy_names,
+                        block_reason,
+                        resume_data,
+                        error_handler.Action.IGNORE,
+                        legacy_comment,
+                    )
+                    blocking_comments.append(legacy_comment)
+            if mig_list_unknown_nodes:
+                unknown_names = [name for name, _ in mig_list_unknown_nodes]
+                unknown_statuses = sorted({status for _, status in mig_list_unknown_nodes})
+                unknown_status_str = ",".join(unknown_statuses)
+                unknown_reason = (
+                    f"MIG Error (LIST_UNAVAILABLE): could not list MIG {mig_name} managed "
+                    f"instances while VM is {unknown_status_str}; retrying next sync"
+                )
+                unknown_comment = (
+                    f"MIG {mig_name} listing unavailable ({unknown_status_str})"
+                )
                 handle_resume_failure(
-                    legacy_names,
-                    block_reason,
+                    unknown_names,
+                    unknown_reason,
                     resume_data,
                     error_handler.Action.IGNORE,
-                    legacy_comment,
+                    unknown_comment,
                 )
-                all_blocking_names.extend(legacy_names)
-                blocking_comments.append(legacy_comment)
-            if same_mig_blocking_nodes:
-                stopping_names = [
-                    name for name, status in same_mig_blocking_nodes if status == "STOPPING"
-                ]
-                other_same_mig = [
-                    (name, status)
-                    for name, status in same_mig_blocking_nodes
-                    if status != "STOPPING"
-                ]
-                if stopping_names:
+                blocking_comments.append(unknown_comment)
+            if stopping_names:
+                stopping_comment = f"Waiting on MIG {mig_name} VM deletion (STOPPING)"
+                blocking_comments.append(stopping_comment)
+                if excl_job_id is None:
                     stopping_reason = (
                         f"Instance from MIG {mig_name} is stopping/deleting; "
                         "retry after deletion completes"
                     )
-                    stopping_comment = f"Waiting on MIG {mig_name} VM deletion (STOPPING)"
                     handle_resume_failure(
                         stopping_names,
                         stopping_reason,
@@ -604,28 +778,25 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                         error_handler.Action.REQUEUE,
                         stopping_comment,
                     )
-                    all_blocking_names.extend(stopping_names)
-                    blocking_comments.append(stopping_comment)
-                if other_same_mig:
-                    other_names = [name for name, _ in other_same_mig]
-                    other_statuses = sorted({status for _, status in other_same_mig})
-                    other_status_str = ",".join(other_statuses)
-                    other_reason = (
-                        f"Instance carrying created-by={mig_name} ({other_status_str}) is absent "
-                        "from MIG; delete it directly in GCE before resuming"
-                    )
-                    other_comment = (
-                        f"Blocked by VM carrying created-by={mig_name} ({other_status_str}) absent from MIG"
-                    )
-                    handle_resume_failure(
-                        other_names,
-                        other_reason,
-                        resume_data,
-                        error_handler.Action.IGNORE,
-                        other_comment,
-                    )
-                    all_blocking_names.extend(other_names)
-                    blocking_comments.append(other_comment)
+            if other_same_mig:
+                other_names = [name for name, _ in other_same_mig]
+                other_statuses = sorted({status for _, status in other_same_mig})
+                other_status_str = ",".join(other_statuses)
+                other_reason = (
+                    f"Instance carrying created-by={mig_name} ({other_status_str}) is absent "
+                    "from MIG; delete it directly in GCE before resuming"
+                )
+                other_comment = (
+                    f"Blocked by VM carrying created-by={mig_name} ({other_status_str}) absent from MIG"
+                )
+                handle_resume_failure(
+                    other_names,
+                    other_reason,
+                    resume_data,
+                    error_handler.Action.IGNORE,
+                    other_comment,
+                )
+                blocking_comments.append(other_comment)
             if foreign_mig_blocking_nodes:
                 foreign_names = [name for name, _ in foreign_mig_blocking_nodes]
                 owners = ",".join(sorted({owner for _, owner in foreign_mig_blocking_nodes}))
@@ -641,18 +812,20 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                     error_handler.Action.IGNORE,
                     foreign_comment,
                 )
-                all_blocking_names.extend(foreign_names)
                 blocking_comments.append(foreign_comment)
             if excl_job_id is not None:
-                blocking_set = set(all_blocking_names)
-                other_nodes = [
-                    sn for sn in dict.fromkeys(n.split(".")[0] for n in nodes)
-                    if sn not in blocking_set and not _is_live_standalone(sn)
-                ]
-                if other_nodes:
-                    requeue_reason = "; ".join(blocking_comments)
+                requeue_reason = "; ".join(blocking_comments)
+                if ignore_other:
                     handle_resume_failure(
-                        other_nodes,
+                        ignore_other,
+                        f"{requeue_reason} (skipped power_down for unverified/external VM)",
+                        resume_data,
+                        error_handler.Action.IGNORE,
+                        requeue_reason,
+                    )
+                if requeue_other:
+                    handle_resume_failure(
+                        requeue_other,
                         requeue_reason,
                         resume_data,
                         error_handler.Action.REQUEUE,
@@ -664,6 +837,7 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
             if (
                 legacy_blocking_nodes
                 or same_mig_blocking_nodes
+                or mig_list_unknown_nodes
                 or foreign_mig_blocking_nodes
                 or skipped_live_standalone
             ):
@@ -677,6 +851,9 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
             # False only while the outcome is unknown (request accepted, operation not yet
             # observed terminal). Deleting there would kill healthy VMs.
             observed_terminal_failure = True
+            # True when createInstances hit MEMBER/RESOURCE_ALREADY_EXISTS so rollback cleanup
+            # never deletes a concurrently created or pre-existing VM in this chunk.
+            skip_chunk_cleanup = False
             try:
                 pic_req = lkp.compute.regionInstanceGroupManagers().createInstances(
                     project=lkp.project,
@@ -691,19 +868,99 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                     op_res = wait_for_operation(res)
                     observed_terminal_failure = True
                     if op_res and "error" in op_res:
-                        raise RuntimeError(f"createInstances operation failed: {op_res['error']}")
+                        op_error = op_res["error"]
+                        err_codes = _extract_op_error_codes(op_error)
+                        if err_codes == {"MEMBER_ALREADY_EXISTS"}:
+                            lkp.clear_mig_caches()
+                            try:
+                                refreshed = lkp.get_mig_instances(lkp.project, region, mig_name)
+                            except Exception as list_err:
+                                log.warning(
+                                    f"createInstances hit MEMBER_ALREADY_EXISTS for MIG {mig_name} and "
+                                    f"listManagedInstances() failed ({list_err}); skipping inline cleanup "
+                                    "to avoid deleting an existing MIG instance."
+                                )
+                                skip_chunk_cleanup = True
+                                raise RuntimeError(f"createInstances operation failed: {op_error}") from list_err
+                            active_now: set[str] = set()
+                            for m in refreshed.get("managedInstances", []):
+                                if not isinstance(m, dict):
+                                    continue
+                                if (
+                                    m.get("currentAction") in ("DELETING", "ABANDONING")
+                                    or m.get("instanceStatus") in ("STOPPING", "DELETING")
+                                ):
+                                    continue
+                                name = m.get("name") or (m.get("instance") or "").split("/")[-1]
+                                if name:
+                                    active_now.add(name)
+                            existing_in_chunk = [n for n in chunk_nodes if n in active_now]
+                            missing_items = [item for item in chunk if item["name"] not in active_now]
+                            if existing_in_chunk and not missing_items:
+                                log.info(
+                                    f"createInstances skipped for MIG {mig_name}: requested node(s) "
+                                    f"({to_hostlist(existing_in_chunk)}) are already active in the MIG."
+                                )
+                                already_member_nodes.update(existing_in_chunk)
+                                continue
+                            if existing_in_chunk and missing_items:
+                                log.info(
+                                    f"createInstances hit MEMBER_ALREADY_EXISTS for MIG {mig_name}; "
+                                    f"skipping already-active node(s) ({to_hostlist(existing_in_chunk)}) "
+                                    f"and retrying remaining {len(missing_items)} node(s)."
+                                )
+                                already_member_nodes.update(existing_in_chunk)
+                                chunk = missing_items
+                                chunk_nodes = [item["name"] for item in chunk]
+                                retry_req = lkp.compute.regionInstanceGroupManagers().createInstances(
+                                    project=lkp.project,
+                                    region=region,
+                                    instanceGroupManager=mig_name,
+                                    body={"instances": chunk}
+                                )
+                                retry_res = ensure_execute(retry_req)
+                                log.debug(f"createInstances retry submitted for {mig_name}: {retry_res}")
+                                if isinstance(retry_res, dict) and "selfLink" in retry_res:
+                                    observed_terminal_failure = False
+                                    retry_op = wait_for_operation(retry_res)
+                                    observed_terminal_failure = True
+                                    if retry_op and "error" in retry_op:
+                                        if _extract_op_error_codes(retry_op["error"]) & _MIG_ALREADY_EXISTS_CODES:
+                                            skip_chunk_cleanup = True
+                                        raise RuntimeError(f"createInstances operation failed: {retry_op['error']}")
+                                log.debug(f"createInstances retry completed for {mig_name}")
+                                lkp.clear_mig_caches()
+                                successful_creates.extend(chunk_nodes)
+                                verified_safe_to_requeue.update(chunk_nodes)
+                                continue
+                            skip_chunk_cleanup = True
+                        elif err_codes & _MIG_ALREADY_EXISTS_CODES:
+                            skip_chunk_cleanup = True
+                        raise RuntimeError(f"createInstances operation failed: {op_error}")
                 log.debug(f"createInstances completed for {mig_name}")
                 lkp.clear_mig_caches()
                 successful_creates.extend(chunk_nodes)
+                verified_safe_to_requeue.update(chunk_nodes)
             except Exception as e:
                 log.error(f"Failed createInstances for MIG {mig_name} on nodes {to_hostlist(chunk_nodes)}: {e}")
+                if not skip_chunk_cleanup and _exc_has_already_exists(e):
+                    skip_chunk_cleanup = True
+                if skip_chunk_cleanup:
+                    already_member_nodes.update(chunk_nodes)
                 reason = getattr(e, "_get_reason", lambda: str(e))()
                 action, admin_comment = error_handler.classify_gcp_error(reason, str(e))
-                nodes_to_cleanup = (
-                    list(dict.fromkeys(successful_creates + chunk_nodes))
-                    if excl_job_id is not None
-                    else list(chunk_nodes)
-                )
+                if skip_chunk_cleanup:
+                    nodes_to_cleanup = (
+                        list(dict.fromkeys(successful_creates))
+                        if excl_job_id is not None
+                        else []
+                    )
+                else:
+                    nodes_to_cleanup = (
+                        list(dict.fromkeys(successful_creates + chunk_nodes))
+                        if excl_job_id is not None
+                        else list(chunk_nodes)
+                    )
                 deferred_reclaim = bool(nodes_to_cleanup) and not observed_terminal_failure
                 if deferred_reclaim:
                     log.warning(
@@ -715,6 +972,13 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                     # `state=down` alone may never reclaim the VMs we declined to delete.
                     action = error_handler.Action.REQUEUE
                     admin_comment = "MIG createInstances outcome unobserved; requeued so suspend reclaims instances"
+                raw_failed = (
+                    [n.split(".")[0] for n in nodes]
+                    if excl_job_id is not None
+                    else chunk_nodes
+                )
+                # Partition abort targets BEFORE suspend_mig_nodes() clears lkp.instances().
+                requeue_nodes, ignore_nodes = _partition_abort_nodes(raw_failed)
                 if nodes_to_cleanup:
                     log.warning(
                         f"Cleaning up {len(nodes_to_cleanup)} failed/aborted MIG instances: {to_hostlist(nodes_to_cleanup)}"
@@ -726,22 +990,39 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                         suspend.suspend_mig_nodes(nodes_to_cleanup, lkp)
                     except Exception as clean_err:
                         log.error(f"Failed cleaning up instances {nodes_to_cleanup}: {clean_err}")
-                failed_nodes = (
-                    [
-                        sn for sn in dict.fromkeys(n.split(".")[0] for n in nodes)
-                        if not _is_live_standalone(sn)
-                    ]
-                    if excl_job_id is not None
-                    else chunk_nodes
-                )
-                if failed_nodes:
-                    handle_resume_failure(
-                        failed_nodes,
-                        f"GCP Error: {reason}",
-                        resume_data,
-                        action,
-                        admin_comment,
-                    )
+                if action == error_handler.Action.REQUEUE:
+                    if ignore_nodes:
+                        if deferred_reclaim:
+                            log.warning(
+                                f"Unobserved createInstances for {to_hostlist(ignore_nodes)} could not be "
+                                "reclaimed via state=power_down because GCE instance ownership could not be "
+                                "verified; manually check and power_down any newly created MIG instances."
+                            )
+                        handle_resume_failure(
+                            ignore_nodes,
+                            f"GCP Error: {reason} (skipped power_down for unverified/external VM)",
+                            resume_data,
+                            error_handler.Action.IGNORE,
+                            admin_comment,
+                        )
+                    if requeue_nodes:
+                        handle_resume_failure(
+                            requeue_nodes,
+                            f"GCP Error: {reason}",
+                            resume_data,
+                            error_handler.Action.REQUEUE,
+                            admin_comment,
+                        )
+                else:
+                    down_nodes = list(dict.fromkeys(requeue_nodes + ignore_nodes))
+                    if down_nodes:
+                        handle_resume_failure(
+                            down_nodes,
+                            f"GCP Error: {reason}",
+                            resume_data,
+                            action,
+                            admin_comment,
+                        )
                 if excl_job_id is not None:
                     return
             finally:

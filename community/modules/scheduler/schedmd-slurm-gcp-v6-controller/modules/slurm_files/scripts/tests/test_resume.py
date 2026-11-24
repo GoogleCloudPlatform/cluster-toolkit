@@ -1910,3 +1910,412 @@ def test_resume_mig_nodes_job_abort_protects_live_standalone_vm_from_power_down(
   assert mock_handle_failure.call_args.args[3] == error_handler.Action.REQUEUE
   create_call_del = mock_compute_del.regionInstanceGroupManagers().createInstances.call_args
   assert create_call_del.kwargs["body"]["instances"] == [{"name": "c-n-2"}]
+
+
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("resume.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_abort_fails_closed_on_lookup_error_and_protects_non_live_standalone(
+    mock_compute_prop, mock_execute, mock_handle_failure
+):
+  """Lookup failures must downgrade unverified nodes to IGNORE; unscanned standalone never REQUEUEd."""
+  multishard_cfg = TstCfg(
+      slurm_cluster_name="c",
+      project="p",
+      provisioning_engine="MIG",
+      nodeset={"n": TstNodeset(nodeset_name="n", region="us-central1", node_count_static=2000)},
+  )
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+
+  # 1. Non-exclusive failure after instance lookup trips -> fail closed to IGNORE (not power_down)
+  lkp1 = util.Lookup(multishard_cfg)
+  mock_execute.side_effect = RuntimeError("ZONE_RESOURCE_POOL_EXHAUSTED")
+  with (
+      unittest.mock.patch("suspend.suspend_mig_nodes"),
+      unittest.mock.patch.object(util.Lookup, "instance", side_effect=RuntimeError("503")),
+  ):
+    resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=lkp1)
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[0] == ["c-n-0"]
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
+
+  # 2. Multi-shard exclusive abort: shard 0 creates c-n-0 cleanly, shard 1 fails createInstances,
+  #    instance lookup raises 503 on unscanned c-n-1001. Partition runs BEFORE suspend_mig_nodes rollback.
+  mock_handle_failure.reset_mock()
+  mock_execute.side_effect = [{}, RuntimeError("ZONE_RESOURCE_POOL_EXHAUSTED")]
+  call_order = []
+
+  def _inst_side(name):
+    call_order.append(f"inst:{name}")
+    if name == "c-n-0":
+      return None
+    if name == "c-n-1000":
+      return None
+    raise RuntimeError("503")
+
+  def _suspend_side(nodes, lkp):
+    call_order.append("suspend")
+
+  lkp2 = util.Lookup(multishard_cfg)
+  with (
+      unittest.mock.patch("suspend.suspend_mig_nodes", side_effect=_suspend_side),
+      unittest.mock.patch.object(util.Lookup, "instance", side_effect=_inst_side),
+  ):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1000", "c-n-1001"], excl_job_id=50, lkp=lkp2)
+  # Wait: c-n-1001 lookup happens in shard 1 pre-check tripping breaker BEFORE createInstances fails
+  assert call_order[-1] == "suspend"
+  assert mock_handle_failure.call_count == 2
+  assert mock_handle_failure.call_args_list[0].args[0] == ["c-n-1001"]
+  assert mock_handle_failure.call_args_list[0].args[3] == error_handler.Action.IGNORE
+  assert mock_handle_failure.call_args_list[1].args[0] == ["c-n-0", "c-n-1000"]
+  assert mock_handle_failure.call_args_list[1].args[3] == error_handler.Action.REQUEUE
+
+  # 3. Unscanned standalone VMs in REPAIRING (skipped) and SUSPENDED/STOPPING/TERMINATED (IGNORE)
+  mock_handle_failure.reset_mock()
+  mock_execute.side_effect = RuntimeError("ZONE_RESOURCE_POOL_EXHAUSTED")
+  insts = {
+      "c-n-1000": util.Instance(
+          name="c-n-1000",
+          zone="us-central1-a",
+          status="REPAIRING",
+          creation_timestamp=SOME_TS,
+          role="compute",
+          resource_status=util.InstanceResourceStatus.from_json(None),
+          metadata={},
+          scheduling=util.NSDict({}),
+      ),
+      "c-n-1001": util.Instance(
+          name="c-n-1001",
+          zone="us-central1-a",
+          status="SUSPENDED",
+          creation_timestamp=SOME_TS,
+          role="compute",
+          resource_status=util.InstanceResourceStatus.from_json(None),
+          metadata={},
+          scheduling=util.NSDict({}),
+      ),
+      "c-n-1002": util.Instance(
+          name="c-n-1002",
+          zone="us-central1-a",
+          status="TERMINATED",
+          creation_timestamp=SOME_TS,
+          role="compute",
+          resource_status=util.InstanceResourceStatus.from_json(None),
+          metadata={},
+          scheduling=util.NSDict({}),
+      ),
+  }
+  lkp3 = util.Lookup(multishard_cfg)
+  with (
+      unittest.mock.patch("suspend.suspend_mig_nodes"),
+      unittest.mock.patch.object(util.Lookup, "instance", side_effect=lambda n: insts.get(n)),
+  ):
+    resume.resume_mig_nodes(
+        ["c-n-0", "c-n-1000", "c-n-1001", "c-n-1002"], excl_job_id=51, lkp=lkp3
+    )
+  assert mock_handle_failure.call_count == 2
+  # Unscanned SUSPENDED & TERMINATED downgraded to IGNORE; REPAIRING skipped completely
+  assert mock_handle_failure.call_args_list[0].args[0] == ["c-n-1001", "c-n-1002"]
+  assert mock_handle_failure.call_args_list[0].args[3] == error_handler.Action.IGNORE
+  assert mock_handle_failure.call_args_list[1].args[0] == ["c-n-0"]
+  assert mock_handle_failure.call_args_list[1].args[3] == error_handler.Action.REQUEUE
+
+
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("resume.ensure_execute", return_value={})
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_list_failure_legacy_split_and_single_requeue_batch(
+    mock_compute_prop, mock_execute, mock_handle_failure
+):
+  """Verify mig_list_success guard, mixed legacy split, and single exclusive REQUEUE batch."""
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      project="p",
+      provisioning_engine="MIG",
+      nodeset={"n": TstNodeset(nodeset_name="n", region="us-central1", node_count_static=5)},
+  )
+  same_mig_meta = {
+      "created-by": "projects/1/regions/us-central1/instanceGroupManagers/c-n-mig-0"
+  }
+
+  # 1. listManagedInstances() fails -> same-MIG STOPPING/TERMINATED must NOT claim "absent" or REQUEUE
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.side_effect = (
+      RuntimeError("503")
+  )
+  by_name_err = {
+      "c-n-0": util.Instance(
+          name="c-n-0", zone="us-central1-a", status="STOPPING", creation_timestamp=SOME_TS,
+          role="compute", resource_status=util.InstanceResourceStatus.from_json(None),
+          metadata=same_mig_meta, scheduling=util.NSDict({}),
+      ),
+      "c-n-1": util.Instance(
+          name="c-n-1", zone="us-central1-a", status="TERMINATED", creation_timestamp=SOME_TS,
+          role="compute", resource_status=util.InstanceResourceStatus.from_json(None),
+          metadata=same_mig_meta, scheduling=util.NSDict({}),
+      ),
+  }
+  lkp1 = util.Lookup(cfg)
+  with unittest.mock.patch.object(util.Lookup, "instance", side_effect=lambda n: by_name_err.get(n)):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=None, lkp=lkp1)
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[0] == ["c-n-0", "c-n-1"]
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
+  assert "LIST_UNAVAILABLE" in mock_handle_failure.call_args.args[1]
+  assert "delete it directly" not in mock_handle_failure.call_args.args[1]
+
+  # 2. Mixed legacy_blocking_nodes (STOPPING + TERMINATED) split with distinct messages
+  mock_handle_failure.reset_mock()
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.side_effect = None
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  by_name_leg = {
+      "c-n-0": util.Instance(
+          name="c-n-0", zone="us-central1-a", status="STOPPING", creation_timestamp=SOME_TS,
+          role="compute", resource_status=util.InstanceResourceStatus.from_json(None),
+          metadata={}, scheduling=util.NSDict({}),
+      ),
+      "c-n-1": util.Instance(
+          name="c-n-1", zone="us-central1-a", status="TERMINATED", creation_timestamp=SOME_TS,
+          role="compute", resource_status=util.InstanceResourceStatus.from_json(None),
+          metadata={}, scheduling=util.NSDict({}),
+      ),
+  }
+  lkp2 = util.Lookup(cfg)
+  with unittest.mock.patch.object(util.Lookup, "instance", side_effect=lambda n: by_name_leg.get(n)):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=None, lkp=lkp2)
+  assert mock_handle_failure.call_count == 2
+  assert mock_handle_failure.call_args_list[0].args[0] == ["c-n-0"]
+  assert "stopping/deleting" in mock_handle_failure.call_args_list[0].args[1]
+  assert "power_down" not in mock_handle_failure.call_args_list[0].args[1]
+  assert mock_handle_failure.call_args_list[0].args[3] == error_handler.Action.IGNORE
+  assert mock_handle_failure.call_args_list[1].args[0] == ["c-n-1"]
+  assert "run power_down" in mock_handle_failure.call_args_list[1].args[1]
+  assert mock_handle_failure.call_args_list[1].args[3] == error_handler.Action.IGNORE
+
+  # 3. Exclusive job batches same-MIG STOPPING + clean siblings into ONE single Action.REQUEUE call
+  mock_handle_failure.reset_mock()
+  by_name_excl = {
+      "c-n-0": util.Instance(
+          name="c-n-0", zone="us-central1-a", status="STOPPING", creation_timestamp=SOME_TS,
+          role="compute", resource_status=util.InstanceResourceStatus.from_json(None),
+          metadata=same_mig_meta, scheduling=util.NSDict({}),
+      ),
+      "c-n-1": util.Instance(
+          name="c-n-1", zone="us-central1-a", status="TERMINATED", creation_timestamp=SOME_TS,
+          role="compute", resource_status=util.InstanceResourceStatus.from_json(None),
+          metadata=same_mig_meta, scheduling=util.NSDict({}),
+      ),
+  }
+  lkp3 = util.Lookup(cfg)
+  with unittest.mock.patch.object(util.Lookup, "instance", side_effect=lambda n: by_name_excl.get(n)):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1", "c-n-2"], excl_job_id=77, lkp=lkp3)
+  assert mock_handle_failure.call_count == 2
+  assert mock_handle_failure.call_args_list[0].args[0] == ["c-n-1"]
+  assert mock_handle_failure.call_args_list[0].args[3] == error_handler.Action.IGNORE
+  assert mock_handle_failure.call_args_list[1].args[0] == ["c-n-0", "c-n-2"]
+  assert mock_handle_failure.call_args_list[1].args[3] == error_handler.Action.REQUEUE
+  assert "STOPPING" in mock_handle_failure.call_args_list[1].args[4]
+  assert "TERMINATED" in mock_handle_failure.call_args_list[1].args[4]
+
+
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("resume.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_creating_slot_rechecks_standalone_ownership_on_abort(
+    mock_compute_prop, mock_execute, mock_handle_failure
+):
+  """Orphan CREATING* slot must NOT bypass standalone VM protection on exclusive abort."""
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      project="p",
+      provisioning_engine="MIG",
+      nodeset={"n": TstNodeset(nodeset_name="n", region="us-central1", node_count_static=5)},
+  )
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": [
+          {"name": "c-n-0", "currentAction": "CREATING"},
+          {"name": "c-n-1", "currentAction": "CREATING_WITHOUT_RETRIES"},
+          {"name": "c-n-2", "currentAction": "CREATING"},
+      ]
+  }
+  by_name = {
+      # c-n-0 collides with live standalone VM -> MUST be excluded from abort completely
+      "c-n-0": util.Instance(
+          name="c-n-0", zone="us-central1-a", status="RUNNING", creation_timestamp=SOME_TS,
+          role="compute", resource_status=util.InstanceResourceStatus.from_json(None),
+          metadata={}, scheduling=util.NSDict({}),
+      ),
+      # c-n-1 collides with non-live standalone VM -> MUST downgrade to Action.IGNORE
+      "c-n-1": util.Instance(
+          name="c-n-1", zone="us-central1-a", status="TERMINATED", creation_timestamp=SOME_TS,
+          role="compute", resource_status=util.InstanceResourceStatus.from_json(None),
+          metadata={}, scheduling=util.NSDict({}),
+      ),
+      # c-n-2 is genuinely absent -> safe to Action.REQUEUE
+  }
+  mock_execute.side_effect = RuntimeError("ZONE_RESOURCE_POOL_EXHAUSTED")
+  lkp = util.Lookup(cfg)
+  with (
+      unittest.mock.patch("suspend.suspend_mig_nodes"),
+      unittest.mock.patch.object(util.Lookup, "instance", side_effect=lambda n: by_name.get(n)),
+  ):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1", "c-n-2", "c-n-3"], excl_job_id=88, lkp=lkp)
+  assert mock_handle_failure.call_count == 2
+  assert mock_handle_failure.call_args_list[0].args[0] == ["c-n-1"]
+  assert mock_handle_failure.call_args_list[0].args[3] == error_handler.Action.IGNORE
+  assert mock_handle_failure.call_args_list[1].args[0] == ["c-n-2", "c-n-3"]
+  assert mock_handle_failure.call_args_list[1].args[3] == error_handler.Action.REQUEUE
+
+  # Same orphan CREATING slot under instance-lookup 503 -> fails closed to Action.IGNORE
+  mock_handle_failure.reset_mock()
+  lkp_err = util.Lookup(cfg)
+  with (
+      unittest.mock.patch("suspend.suspend_mig_nodes"),
+      unittest.mock.patch.object(util.Lookup, "instance", side_effect=RuntimeError("503")),
+  ):
+    resume.resume_mig_nodes(["c-n-0", "c-n-3"], excl_job_id=89, lkp=lkp_err)
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[0] == ["c-n-0", "c-n-3"]
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
+
+
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("suspend.suspend_mig_nodes")
+@unittest.mock.patch("resume.wait_for_operation")
+@unittest.mock.patch("resume.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_member_already_exists_preserves_live_vm(
+    mock_compute_prop, mock_execute, mock_wait_op, mock_suspend, mock_handle_failure
+):
+  """MEMBER_ALREADY_EXISTS during concurrent resume must never delete an existing MIG VM."""
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      project="p",
+      provisioning_engine="MIG",
+      nodeset={"n": TstNodeset(nodeset_name="n", region="us-central1", node_count_static=2000)},
+  )
+  member_err_op = {
+      "status": "DONE",
+      "error": {
+          "errors": [{
+              "code": "MEMBER_ALREADY_EXISTS",
+              "message": "Resource c-n-0 is already a member of c-n-mig-0.",
+          }]
+      },
+  }
+  self_link = {"name": "op-1", "selfLink": "https://.../operations/op-1"}
+
+  # 1. Single node concurrently created -> re-list sees active c-n-0 -> skip cleanup & failure
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.side_effect = [
+      {"managedInstances": []},
+      {"managedInstances": [{"name": "c-n-0", "currentAction": "CREATING"}]},
+  ]
+  mock_execute.return_value = self_link
+  mock_wait_op.return_value = member_err_op
+  with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=util.Lookup(cfg))
+  mock_suspend.assert_not_called()
+  mock_handle_failure.assert_not_called()
+
+  # 2. Partial batch [c-n-0, c-n-1]: c-n-0 already active -> retry ONLY c-n-1 and succeed
+  mock_compute.regionInstanceGroupManagers().createInstances.reset_mock()
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.side_effect = [
+      {"managedInstances": []},
+      {"managedInstances": [{"name": "c-n-0", "currentAction": "NONE", "instanceStatus": "RUNNING"}]},
+  ]
+  mock_wait_op.side_effect = [member_err_op, {"status": "DONE"}]
+  with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=None, lkp=util.Lookup(cfg))
+  mock_suspend.assert_not_called()
+  mock_handle_failure.assert_not_called()
+  retry_call = mock_compute.regionInstanceGroupManagers().createInstances.call_args_list[-1]
+  assert retry_call.kwargs["body"]["instances"] == [{"name": "c-n-1"}]
+
+  # 3. Exclusive partial batch: retry of c-n-1 fails with stockout -> cleanup ONLY c-n-1,
+  #    downgrade c-n-0 to IGNORE (never power_down) and REQUEUE c-n-1
+  mock_suspend.reset_mock()
+  mock_handle_failure.reset_mock()
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.side_effect = [
+      {"managedInstances": []},
+      {"managedInstances": [{"name": "c-n-0", "currentAction": "NONE", "instanceStatus": "RUNNING"}]},
+  ]
+  mock_wait_op.side_effect = [
+      member_err_op,
+      {"status": "DONE", "error": {"errors": [{"code": "ZONE_RESOURCE_POOL_EXHAUSTED", "message": "out"}]}},
+  ]
+  with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=42, lkp=util.Lookup(cfg))
+  mock_suspend.assert_called_once()
+  assert mock_suspend.call_args.args[0] == ["c-n-1"]
+  assert mock_handle_failure.call_count == 2
+  assert mock_handle_failure.call_args_list[0].args[0] == ["c-n-0"]
+  assert mock_handle_failure.call_args_list[0].args[3] == error_handler.Action.IGNORE
+  assert mock_handle_failure.call_args_list[1].args[0] == ["c-n-1"]
+  assert mock_handle_failure.call_args_list[1].args[3] == error_handler.Action.REQUEUE
+
+  # 4. Mixed error (MEMBER_ALREADY_EXISTS + stockout) on shard 1 of exclusive job ->
+  #    roll back ONLY shard 0 (c-n-0), never delete shard 1 (c-n-1000)
+  mock_suspend.reset_mock()
+  mock_handle_failure.reset_mock()
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.side_effect = [
+      {"managedInstances": []},
+      {"managedInstances": []},
+  ]
+  mock_wait_op.side_effect = [
+      {"status": "DONE"},
+      {
+          "status": "DONE",
+          "error": {
+              "errors": [
+                  {"code": "MEMBER_ALREADY_EXISTS", "message": "already member"},
+                  {"code": "ZONE_RESOURCE_POOL_EXHAUSTED", "message": "stockout"},
+              ]
+          },
+      },
+  ]
+  with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1000"], excl_job_id=43, lkp=util.Lookup(cfg))
+  mock_suspend.assert_called_once()
+  assert mock_suspend.call_args.args[0] == ["c-n-0"]
+  assert mock_handle_failure.call_args_list[0].args[0] == ["c-n-1000"]
+  assert mock_handle_failure.call_args_list[0].args[3] == error_handler.Action.IGNORE
+  assert mock_handle_failure.call_args_list[1].args[0] == ["c-n-0"]
+  assert mock_handle_failure.call_args_list[1].args[3] == error_handler.Action.REQUEUE
+
+  # 5. MEMBER_ALREADY_EXISTS followed by listManagedInstances 503 -> fail-closed: no delete
+  mock_suspend.reset_mock()
+  mock_handle_failure.reset_mock()
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.side_effect = [
+      {"managedInstances": []},
+      RuntimeError("503"),
+  ]
+  mock_wait_op.side_effect = [member_err_op]
+  with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=util.Lookup(cfg))
+  mock_suspend.assert_not_called()
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
+
+  # 6. Synchronous MEMBER_ALREADY_EXISTS exception -> no delete of conflicting node
+  mock_suspend.reset_mock()
+  mock_handle_failure.reset_mock()
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.side_effect = [
+      {"managedInstances": []},
+  ]
+  mock_execute.side_effect = RuntimeError("HttpError 409: MEMBER_ALREADY_EXISTS")
+  with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=util.Lookup(cfg))
+  mock_suspend.assert_not_called()
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE

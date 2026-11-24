@@ -674,3 +674,150 @@ def test_sync_instances_drain_repair_uses_lazy_bulk_reason_cache(
     mock_being_repaired.assert_called_once_with("testcl-ns-0")
     mock_call_rr.assert_called_once_with("testcl-ns-0", "XID")
     mock_store_op.assert_called_once_with("testcl-ns-0", "op-123", "XID")
+
+
+@mock.patch("slurmsync.run")
+@mock.patch("slurmsync.lookup")
+def test_sync_instances_mig_list_failure_circuit_breaker_and_no_power_down(mock_lookup, mock_run):
+    """A failing listManagedInstances() must trip once per tick and not power_down DOWN nodes."""
+    lkp, mock_compute = _make_lookup([])
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.side_effect = (
+        RuntimeError("503")
+    )
+    mock_lookup.return_value = lkp
+    term0 = _make_instance("testcl-ns-0", status="TERMINATED")
+    term1 = _make_instance("testcl-ns-1", status="TERMINATED")
+    idle = slurmsync.NodeState(base="IDLE", flags=frozenset())
+    down = slurmsync.NodeState(base="DOWN", flags=frozenset())
+
+    states = {
+        "testcl-ns-0": idle,
+        "testcl-ns-1": idle,
+        "testcl-ns-2": down,
+        "testcl-ns-3": slurmsync.NodeState(base="IDLE", flags=frozenset(("POWERED_DOWN",))),
+    }
+    with (
+        mock.patch.object(
+            util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mock_compute
+        ),
+        mock.patch.object(
+            util.Lookup, "instances", return_value={"testcl-ns-0": term0, "testcl-ns-1": term1}
+        ),
+        mock.patch.object(util.Lookup, "slurm_nodes", return_value=states),
+        mock.patch.object(util.Lookup, "node_state", side_effect=lambda n: states.get(n)),
+    ):
+        slurmsync.sync_instances()
+
+    assert mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.call_count == 1
+    cmds = [c.args[0] for c in mock_run.call_args_list]
+    assert not any("power_down" in c for c in cmds)
+    assert not any("power_up" in c for c in cmds)
+    assert slurmsync._failed_migs is None
+
+
+@mock.patch("slurmsync.lookup")
+def test_slurmsync_power_down_flags_and_creating_retry_safety(mock_lookup):
+    """Active MIG slots must not resume mid-suspend, power_up mid-repair, or wipe DOWN reasons."""
+    lkp, mock_compute = _make_lookup([
+        {"name": "testcl-ns-0", "currentAction": "RECREATING"},
+        {"name": "testcl-ns-1", "currentAction": "CREATING"},
+        {"name": "testcl-ns-2", "currentAction": "CREATING_WITHOUT_RETRIES"},
+        {"name": "testcl-ns-3", "currentAction": "DELETING"},
+    ])
+    mock_lookup.return_value = lkp
+    with (
+        mock.patch.object(
+            util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mock_compute
+        ),
+        mock.patch.object(util.Lookup, "instances", return_value={}),
+    ):
+        powering_down = slurmsync.NodeState(base="IDLE", flags=frozenset(("POWERING_DOWN",)))
+        with mock.patch.object(util.Lookup, "node_state", return_value=powering_down):
+            assert isinstance(slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionUnchanged)
+            assert isinstance(slurmsync.get_node_action("testcl-ns-1"), slurmsync.NodeActionUnchanged)
+            assert isinstance(slurmsync.get_node_action("testcl-ns-3"), slurmsync.NodeActionIdle)
+
+        idle_pd = slurmsync.NodeState(base="IDLE", flags=frozenset(("POWERED_DOWN",)))
+        with mock.patch.object(util.Lookup, "node_state", return_value=idle_pd):
+            assert isinstance(slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionUnchanged)
+            assert isinstance(slurmsync.get_node_action("testcl-ns-1"), slurmsync.NodeActionUnchanged)
+            assert isinstance(slurmsync.get_node_action("testcl-ns-3"), slurmsync.NodeActionPowerUp)
+
+        down_plain = slurmsync.NodeState(base="DOWN", flags=frozenset())
+        with mock.patch.object(util.Lookup, "node_state", return_value=down_plain):
+            assert isinstance(slurmsync.get_node_action("testcl-ns-1"), slurmsync.NodeActionUnchanged)
+            assert isinstance(slurmsync.get_node_action("testcl-ns-2"), slurmsync.NodeActionUnchanged)
+            assert isinstance(slurmsync.get_node_action("testcl-ns-3"), slurmsync.NodeActionPowerDown)
+
+        # DOWN+POWERED_DOWN (down~) still resets cleanly to idle~
+        down_pd = slurmsync.NodeState(base="DOWN", flags=frozenset(("POWERED_DOWN",)))
+        with mock.patch.object(util.Lookup, "node_state", return_value=down_pd):
+            assert isinstance(slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionIdle)
+            assert isinstance(slurmsync.get_node_action("testcl-ns-1"), slurmsync.NodeActionIdle)
+
+
+@mock.patch("slurmsync.lookup")
+def test_slurmsync_verifying_refreshing_and_live_standalone_creating_collision(mock_lookup):
+    """Exempt VERIFYING/REFRESHING healthy slots and avoid DOWNing live standalone collisions."""
+    for action in ("VERIFYING", "REFRESHING"):
+        lkp, mock_compute = _make_lookup([
+            {
+                "name": "testcl-ns-0",
+                "currentAction": action,
+                "instanceStatus": "RUNNING",
+                "lastAttempt": {
+                    "errors": {"errors": [{"code": "QUOTA_EXCEEDED", "message": "old"}]}
+                },
+            },
+            {
+                "name": "testcl-ns-1",
+                "currentAction": action,
+                # Omit instanceStatus so slurmsync's own is_healthy_or_booting guard runs
+                "lastAttempt": {
+                    "errors": {"errors": [{"code": "QUOTA_EXCEEDED", "message": "old"}]}
+                },
+            },
+        ])
+        mock_lookup.return_value = lkp
+        running0 = _make_instance("testcl-ns-0", status="RUNNING")
+        running1 = _make_instance("testcl-ns-1", status="RUNNING")
+        idle = slurmsync.NodeState(base="IDLE", flags=frozenset())
+        with (
+            mock.patch.object(
+                util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mock_compute
+            ),
+            mock.patch.object(
+                util.Lookup, "instances", return_value={"testcl-ns-0": running0, "testcl-ns-1": running1}
+            ),
+            mock.patch.object(util.Lookup, "node_state", return_value=idle),
+        ):
+            assert lkp.get_mig_instance_errors("testproj", "us-central1", "testcl-ns-mig-0").get(
+                "testcl-ns-0"
+            ) is None
+            assert isinstance(slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionUnchanged)
+            assert isinstance(slurmsync.get_node_action("testcl-ns-1"), slurmsync.NodeActionUnchanged)
+
+    # Live standalone VM (no created-by metadata) colliding with orphan CREATING slot error
+    lkp_col, mock_compute_col = _make_lookup([
+        {
+            "name": "testcl-ns-0",
+            "currentAction": "CREATING",
+            "lastAttempt": {
+                "errors": {"errors": [{"code": "RESOURCE_ALREADY_EXISTS", "message": "exists"}]}
+            },
+        }
+    ])
+    mock_lookup.return_value = lkp_col
+    for status in ("RUNNING", "REPAIRING"):
+        live_standalone = _make_instance("testcl-ns-0", status=status, metadata={})
+        alloc = slurmsync.NodeState(base="ALLOCATED", flags=frozenset())
+        with (
+            mock.patch.object(
+                util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mock_compute_col
+            ),
+            mock.patch.object(util.Lookup, "instances", return_value={"testcl-ns-0": live_standalone}),
+            mock.patch.object(util.Lookup, "node_state", return_value=alloc),
+        ):
+            assert isinstance(
+                slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionUnchanged
+            )

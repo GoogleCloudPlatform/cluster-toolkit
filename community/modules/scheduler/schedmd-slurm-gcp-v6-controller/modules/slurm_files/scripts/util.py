@@ -2257,6 +2257,20 @@ class Lookup:
         return repairing
 
     @lru_cache()
+    def get_mig_creating_instances(self, project: str, region: str, self_link: str) -> Set[str]:
+        """Returns the set of short instance names currently in CREATING state in a given MIG."""
+        mig_insts = self.get_mig_instances(project, region, self_link)
+        creating: Set[str] = set()
+        for m_inst in mig_insts.get("managedInstances", []):
+            if not isinstance(m_inst, dict):
+                continue
+            if m_inst.get("currentAction") in ("CREATING", "CREATING_WITHOUT_RETRIES"):
+                name = m_inst.get("name") or (m_inst.get("instance") or "").split("/")[-1]
+                if name:
+                    creating.add(name)
+        return creating
+
+    @lru_cache()
     def get_mig_instance_errors(
         self, project: str, region: str, self_link: str
     ) -> Dict[str, Tuple[str, str, str]]:
@@ -2264,9 +2278,10 @@ class Lookup:
 
         Reads ``lastAttempt.errors.errors`` from ``listManagedInstances()`` so error state
         tracks the active managed slot with zero extra GCE RPCs and without surfacing stale
-        historical entries from ``listErrors()``. Healthy/booting slots (``currentAction ==
-        "NONE"`` and ``instanceStatus`` in ``RUNNING``/``PROVISIONING``/``STAGING``) and
-        tearing-down slots (``DELETING`` / ``ABANDONING``) are excluded.
+        historical entries from ``listErrors()``. Healthy/booting slots (``currentAction``
+        in ``NONE``/``VERIFYING``/``REFRESHING`` with ``instanceStatus`` in
+        ``RUNNING``/``PROVISIONING``/``STAGING``) and tearing-down slots
+        (``DELETING`` / ``ABANDONING``) are excluded.
         """
         mig_insts = self.get_mig_instances(project, region, self_link)
         errors: Dict[str, Tuple[str, str, str]] = {}
@@ -2277,7 +2292,11 @@ class Lookup:
             inst_status = str(m_inst.get("instanceStatus") or "")
             if action in ("DELETING", "ABANDONING"):
                 continue
-            if action == "NONE" and inst_status in ("RUNNING", "PROVISIONING", "STAGING"):
+            if action in ("NONE", "VERIFYING", "REFRESHING") and inst_status in (
+                "RUNNING",
+                "PROVISIONING",
+                "STAGING",
+            ):
                 continue
             last_attempt = m_inst.get("lastAttempt")
             if not isinstance(last_attempt, dict):
@@ -2303,6 +2322,7 @@ class Lookup:
         self.get_mig_instances.cache_clear()
         self.get_mig_instance_names.cache_clear()
         self.get_mig_repairing_instances.cache_clear()
+        self.get_mig_creating_instances.cache_clear()
         self.get_mig_instance_errors.cache_clear()
 
     @lru_cache()

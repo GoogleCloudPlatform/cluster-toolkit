@@ -201,3 +201,112 @@ def test_suspend_mig_nodes_instance_lookup_error_trips_circuit_breaker(
 
     assert mock_inst.call_count == 1
     mock_delete_instances.assert_not_called()
+
+
+@mock.patch("suspend.delete_instances")
+@mock.patch("util.ensure_execute")
+@mock.patch.object(util.Lookup, "compute", new_callable=mock.PropertyMock)
+def test_suspend_mig_nodes_mig_list_failure_routes_by_ownership_and_guards_dual_outage(
+    mock_compute_prop, mock_execute, mock_delete_instances
+):
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "ns": TstNodeset(
+                nodeset_name="ns",
+                region="us-central1",
+                provisioning_engine="MIG",
+                node_count_static=2000,
+                node_count_dynamic_max=0,
+            ),
+        },
+    )
+    same_mig = _inst(
+        "testcl-ns-0",
+        created_by="projects/p/regions/us-central1/instanceGroupManagers/testcl-ns-mig-0",
+    )
+    standalone = _inst("testcl-ns-1")
+    foreign_mig = _inst(
+        "testcl-ns-2",
+        created_by="projects/p/regions/us-central1/instanceGroupManagers/other-mig-0",
+    )
+    by_name = {"testcl-ns-0": same_mig, "testcl-ns-1": standalone, "testcl-ns-2": foreign_mig}
+
+    # 1. listManagedInstances fails with retire_standalone=True -> standalone goes to delete_instances
+    lkp = util.Lookup(cfg)
+    mock_compute = mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.side_effect = RuntimeError("503")
+    mock_execute.side_effect = lambda req: req.execute()
+    with mock.patch.object(util.Lookup, "instance", side_effect=lambda n: by_name.get(n)):
+        suspend.suspend_mig_nodes(
+            ["testcl-ns-0", "testcl-ns-1", "testcl-ns-2"],
+            lkp,
+            retire_standalone=True,
+        )
+    del_call = mock_compute.regionInstanceGroupManagers().deleteInstances.call_args
+    assert del_call.kwargs["body"]["instances"] == ["zones/us-central1-a/instances/testcl-ns-0"]
+    mock_delete_instances.assert_called_once_with(["testcl-ns-1"], lkp=lkp)
+    assert mock_compute.regionInstanceGroupManagers().deletePerInstanceConfigs.call_count == 1
+
+    # 2. listManagedInstances fails with retire_standalone=False (rollback) -> skips standalone VM
+    mock_delete_instances.reset_mock()
+    mock_compute.regionInstanceGroupManagers().deleteInstances.reset_mock()
+    lkp_rb = util.Lookup(cfg)
+    with mock.patch.object(util.Lookup, "instance", side_effect=lambda n: by_name.get(n)):
+        suspend.suspend_mig_nodes(
+            ["testcl-ns-0", "testcl-ns-1", "testcl-ns-2"],
+            lkp_rb,
+            retire_standalone=False,
+        )
+    del_call_rb = mock_compute.regionInstanceGroupManagers().deleteInstances.call_args
+    assert del_call_rb.kwargs["body"]["instances"] == ["zones/us-central1-a/instances/testcl-ns-0"]
+    mock_delete_instances.assert_not_called()
+
+    # 3. Dual outage on shard 0 (listManagedInstances + instance lookup fail) -> skips PIC cleanup on shard 0,
+    #    does not crash, trips breaker once, still deletes healthy shard 1.
+    mock_compute2 = mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute2
+    def _list_side_effect(**kwargs):
+        req = mock.MagicMock()
+        if kwargs.get("instanceGroupManager") == "testcl-ns-mig-0":
+            req.execute.side_effect = RuntimeError("503")
+        else:
+            req.execute.return_value = {
+                "managedInstances": [
+                    {"instance": "projects/p/zones/us-central1-a/instances/testcl-ns-1000"}
+                ]
+            }
+        return req
+    mock_compute2.regionInstanceGroupManagers().listManagedInstances.side_effect = _list_side_effect
+    lkp_dual = util.Lookup(cfg)
+    with mock.patch.object(util.Lookup, "instance", side_effect=RuntimeError("503")) as mock_inst:
+        suspend.suspend_mig_nodes(
+            ["testcl-ns-0", "testcl-ns-1", "testcl-ns-1000"],
+            lkp_dual,
+            retire_standalone=True,
+        )
+    assert mock_inst.call_count == 1
+    pic_calls = mock_compute2.regionInstanceGroupManagers().deletePerInstanceConfigs.call_args_list
+    assert len(pic_calls) == 1
+    assert pic_calls[0].kwargs["instanceGroupManager"] == "testcl-ns-mig-1"
+    mock_delete_instances.assert_not_called()
+
+    # 4. Unplaced MIG slot falls back to region zones when instance lookup raises 503
+    mock_compute3 = mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute3
+    mock_compute3.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+        "managedInstances": [{"name": "testcl-ns-0"}]
+    }
+    mock_compute3.regions().get().execute.return_value = {
+        "zones": ["projects/p/zones/us-central1-a", "projects/p/zones/us-central1-b"]
+    }
+    lkp_unplaced = util.Lookup(cfg)
+    with mock.patch.object(util.Lookup, "instance", side_effect=RuntimeError("503")):
+        suspend.suspend_mig_nodes(["testcl-ns-0"], lkp_unplaced, retire_standalone=True)
+    fb_call = mock_compute3.regionInstanceGroupManagers().deleteInstances.call_args
+    assert fb_call.kwargs["body"]["instances"] == [
+        "zones/us-central1-a/instances/testcl-ns-0",
+        "zones/us-central1-b/instances/testcl-ns-0",
+    ]

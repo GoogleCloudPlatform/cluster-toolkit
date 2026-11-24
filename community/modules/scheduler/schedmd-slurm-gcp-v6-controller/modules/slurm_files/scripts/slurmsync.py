@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 from itertools import chain
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Dict, Tuple, List, Optional, Protocol, Any
+from typing import Dict, Set, Tuple, List, Optional, Protocol, Any
 from functools import lru_cache
 
 import util
@@ -290,9 +290,14 @@ def _is_instance_managed_by_mig(
     """Return True if ``inst`` is managed by ``mig_name`` (fails safe on API error)."""
     if util.instance_created_by_mig(inst) == mig_name:
         return True
+    mig_key = (region, mig_name)
+    if _failed_migs is not None and mig_key in _failed_migs:
+        return True
     try:
         return short_nodename in lkp.get_mig_instance_names(lkp.project, region, mig_name)
     except Exception as e:
+        if _failed_migs is not None:
+            _failed_migs.add(mig_key)
         log.debug(f"Could not verify MIG membership for {short_nodename} in {mig_name}: {e}")
         return True
 
@@ -301,6 +306,7 @@ _REASON_SUFFIX_RE = re.compile(r"\s*\[[^\[\]]+@[^\[\]]+\]\s*$")
 _node_reasons_cache: Optional[Dict[str, str]] = None
 _prefetch_node_reasons_enabled: bool = False
 _node_reasons_prefetched: bool = False
+_failed_migs: Optional[Set[Tuple[str, str]]] = None
 
 
 def _normalize_reason(reason: Optional[str]) -> Optional[str]:
@@ -375,44 +381,71 @@ def get_node_action(nodename: str) -> NodeAction:
     inst = lkp.instance(short_nodename)
 
     # For MIG compute nodes, detect active GCE Auto-Healing repairs and surface MIG slot errors
+    mig_list_failed = False
+    active_mig_repairing = False
+    active_mig_creating = False
+    active_mig_err = False
     if lkp.is_node_mig(nodename) and not lkp.is_tpu_node(nodename):
+        mig_key: Optional[Tuple[str, str]] = None
         try:
             mig_name = lkp.node_mig_name(nodename)
             region = lkp.node_region(nodename)
-            repairing = lkp.get_mig_repairing_instances(lkp.project, region, mig_name)
-            mig_errors = lkp.get_mig_instance_errors(lkp.project, region, mig_name)
-            mig_err = mig_errors.get(short_nodename)
-            in_power_down = state is not None and bool(state.flags & _POWER_DOWN_FLAGS)
+            mig_key = (region, mig_name)
+            if _failed_migs is not None and mig_key in _failed_migs:
+                mig_list_failed = True
+            else:
+                repairing = lkp.get_mig_repairing_instances(lkp.project, region, mig_name)
+                creating = lkp.get_mig_creating_instances(lkp.project, region, mig_name)
+                mig_errors = lkp.get_mig_instance_errors(lkp.project, region, mig_name)
+                mig_err = mig_errors.get(short_nodename)
+                in_power_down = state is not None and bool(state.flags & _POWER_DOWN_FLAGS)
+                active_mig_repairing = short_nodename in repairing
+                active_mig_creating = short_nodename in creating
+                active_mig_err = mig_err is not None
 
-            if short_nodename in repairing:
-                if state is None:
-                    return NodeActionUnchanged()
-                if not in_power_down:
-                    if mig_err is not None:
-                        return _action_for_mig_error(short_nodename, state, mig_err)
-                    if state.base != "DOWN":
-                        return NodeActionDown(reason=_MIG_REPAIRING_REASON)
-                    return NodeActionUnchanged()
-            elif mig_err is not None:
-                err_action, err_code, err_msg = mig_err
-                is_healthy_or_booting = (
-                    inst is not None
-                    and inst.status in ("RUNNING", "PROVISIONING", "STAGING")
-                    and err_action == "NONE"
-                )
-                if not is_healthy_or_booting and state is not None and not in_power_down:
-                    if "POWERING_UP" in state.flags and err_code.upper() in _MIG_TRANSIENT_CAPACITY_CODES:
+                if active_mig_repairing:
+                    if state is None:
+                        return NodeActionUnchanged()
+                    if not in_power_down:
+                        if mig_err is not None:
+                            return _action_for_mig_error(short_nodename, state, mig_err)
+                        if state.base != "DOWN":
+                            return NodeActionDown(reason=_MIG_REPAIRING_REASON)
+                        return NodeActionUnchanged()
+                elif mig_err is not None:
+                    err_action, err_code, err_msg = mig_err
+                    if (
+                        err_action in ("CREATING", "CREATING_WITHOUT_RETRIES")
+                        and inst is not None
+                        and inst.status in ("RUNNING", "PROVISIONING", "STAGING", "REPAIRING")
+                        and util.instance_created_by_mig(inst) is None
+                    ):
                         log.warning(
-                            f"MIG {mig_name} slot {short_nodename} queued on capacity ({err_code}): {err_msg}"
+                            f"MIG {mig_name} slot {short_nodename} ({err_code}) collides with a live "
+                            "standalone VM; leaving Slurm state untouched. Drain and power_down to migrate it."
                         )
                         return NodeActionUnchanged()
-                    return _action_for_mig_error(short_nodename, state, mig_err)
+                    is_healthy_or_booting = (
+                        inst is not None
+                        and inst.status in ("RUNNING", "PROVISIONING", "STAGING")
+                        and err_action in ("NONE", "VERIFYING", "REFRESHING")
+                    )
+                    if not is_healthy_or_booting and state is not None and not in_power_down:
+                        if "POWERING_UP" in state.flags and err_code.upper() in _MIG_TRANSIENT_CAPACITY_CODES:
+                            log.warning(
+                                f"MIG {mig_name} slot {short_nodename} queued on capacity ({err_code}): {err_msg}"
+                            )
+                            return NodeActionUnchanged()
+                        return _action_for_mig_error(short_nodename, state, mig_err)
 
-            if inst and inst.status == "RUNNING" and state is not None and state.base == "DOWN" and not in_power_down:
-                if _is_mig_managed_reason(get_node_reason(short_nodename)):
-                    log.info(f"{short_nodename} recovered by MIG auto-healing; resuming node to idle")
-                    return NodeActionIdle()
+                if inst and inst.status == "RUNNING" and state is not None and state.base == "DOWN" and not in_power_down:
+                    if _is_mig_managed_reason(get_node_reason(short_nodename)):
+                        log.info(f"{short_nodename} recovered by MIG auto-healing; resuming node to idle")
+                        return NodeActionIdle()
         except Exception as e:
+            mig_list_failed = True
+            if _failed_migs is not None and mig_key is not None:
+                _failed_migs.add(mig_key)
             log.debug(f"Failed to check managed instance repair status for {nodename}: {e}")
 
     power_flags = frozenset(
@@ -437,16 +470,22 @@ def get_node_action(nodename: str) -> NodeAction:
         if state.base == "DOWN" and "POWERED_DOWN" in state.flags:
             return NodeActionIdle()
         if "POWERING_DOWN" in state.flags:
+            if active_mig_repairing or active_mig_creating or active_mig_err or mig_list_failed:
+                return NodeActionUnchanged()
             return NodeActionIdle()
         if "COMPLETING" in state.flags:
             return NodeActionDown(reason="Unbacked instance")
         if state.base != "DOWN" and not power_flags:
             return NodeActionDown(reason="Unbacked instance")
         if state.base == "DOWN" and not power_flags:
+            if active_mig_creating or mig_list_failed:
+                return NodeActionUnchanged()
             return NodeActionPowerDown()
         if "NOT_RESPONDING" in state.flags:
             return NodeActionPowerDown()
         if "POWERED_DOWN" in state.flags and lkp.is_static_node(nodename):
+            if active_mig_repairing or active_mig_creating or active_mig_err or mig_list_failed:
+                return NodeActionUnchanged()
             return NodeActionPowerUp()
     elif (
         state is not None
@@ -613,7 +652,7 @@ def sync_placement_groups():
 
 
 def sync_instances():
-    global _node_reasons_cache, _prefetch_node_reasons_enabled, _node_reasons_prefetched
+    global _node_reasons_cache, _prefetch_node_reasons_enabled, _node_reasons_prefetched, _failed_migs
     compute_instances = {
         name for name, inst in lookup().instances().items() if inst.role == "compute"
     }
@@ -623,6 +662,7 @@ def sync_instances():
     _node_reasons_cache = None
     _prefetch_node_reasons_enabled = True
     _node_reasons_prefetched = False
+    _failed_migs = set()
     try:
         for action, nodes in util.groupby_unsorted(list(compute_instances | slurm_nodes), get_node_action):
             action.apply(list(nodes))
@@ -630,6 +670,7 @@ def sync_instances():
         _node_reasons_cache = None
         _prefetch_node_reasons_enabled = False
         _node_reasons_prefetched = False
+        _failed_migs = None
 
 
 def reconfigure_slurm() -> bool:
