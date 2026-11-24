@@ -152,6 +152,9 @@ func (g *GKEOrchestrator) readSPSInstance(ref, ns string) (spsInstance, error) {
 
 // runSPSWorkload runs job.CommandToRun on an existing SPS instance: on this machine when no image is given, in the cluster otherwise.
 func (g *GKEOrchestrator) runSPSWorkload(job orchestrator.JobDefinition) error {
+	if !g.jobSetEnabled() {
+		return g.validateTier3Flags(&job)
+	}
 	logging.Info("Configuring kubectl for GKE cluster '%s'...", job.ClusterName)
 	if err := g.configureKubectl(job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
 		return err
@@ -173,12 +176,7 @@ func (g *GKEOrchestrator) runSPSWorkload(job orchestrator.JobDefinition) error {
 	if err := g.validateJobConflicts(job); err != nil {
 		return err
 	}
-	if job.KueueQueueName == "" {
-		job.KueueQueueName = inst.KueueQueueName
-	}
-	if inst.HeadNodePool == "" {
-		inst.HeadNodePool = g.autoDetectCPUNodePool()
-	}
+	g.applySPSKueueAndHeadDefaults(&job, &inst)
 	if job.Pathways, err = resolveSPSClientPathways(job.Pathways, inst); err != nil {
 		return err
 	}
@@ -188,6 +186,17 @@ func (g *GKEOrchestrator) runSPSWorkload(job orchestrator.JobDefinition) error {
 		return g.runSPSWorkloadLocally(job, inst, ns)
 	}
 	return g.submitSPSClusterWorkload(job, inst)
+}
+
+func (g *GKEOrchestrator) applySPSKueueAndHeadDefaults(job *orchestrator.JobDefinition, inst *spsInstance) {
+	if !g.kueueEnabled() {
+		job.KueueQueueName = ""
+	} else if job.KueueQueueName == "" {
+		job.KueueQueueName = inst.KueueQueueName
+	}
+	if inst.HeadNodePool == "" {
+		inst.HeadNodePool = g.autoDetectCPUNodePool()
+	}
 }
 
 func (g *GKEOrchestrator) submitSPSClusterWorkload(job orchestrator.JobDefinition, inst spsInstance) error {

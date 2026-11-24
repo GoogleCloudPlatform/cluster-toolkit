@@ -53,7 +53,7 @@ const (
 	ControlPlaneRoleLabel = "node-role.kubernetes.io/control-plane"
 	MasterRoleLabel       = "node-role.kubernetes.io/master"
 
-	gkeSystemTaintKey = "components.gke.io/gke-managed-components"
+	GKESystemTaintKey = "components.gke.io/gke-managed-components"
 	gkeDefaultPool    = "default-pool"
 )
 
@@ -164,7 +164,9 @@ func calculateNodesFromTopology(topology string, chipsPerNode int) int {
 	return totalChips / chipsPerNode
 }
 
-func isNotFoundOrNoMatchError(err error) bool {
+// IsNotFoundOrNoMatchError reports whether err indicates a missing Kubernetes API resource,
+// CRD, or object (typed NotFound/NoMatch or equivalent kubectl stderr text).
+func IsNotFoundOrNoMatchError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -476,7 +478,7 @@ func checkAutoSchemeFailClosed(override LabelScheme, inv *Inventory, signals nod
 	if apiChecker != nil && probeErr == nil {
 		return nil
 	}
-	if sliceErr == nil || isNotFoundOrNoMatchError(sliceErr) {
+	if sliceErr == nil || IsNotFoundOrNoMatchError(sliceErr) {
 		return nil
 	}
 	if probeErr != nil {
@@ -489,7 +491,7 @@ func logDeferredDiscoveryWarnings(probeErr, sliceErr, treeErr error, inv *Invent
 	if probeErr != nil {
 		logging.Warn("Failed to probe Kubernetes API group %s: %v", TPUSliceAPIGroupVersion, probeErr)
 	}
-	if sliceErr != nil && !isNotFoundOrNoMatchError(sliceErr) {
+	if sliceErr != nil && !IsNotFoundOrNoMatchError(sliceErr) {
 		inv.SliceInventoryUnavailable = true
 		if IsForbiddenError(sliceErr) {
 			logging.Info("Skipping TPU Slice inventory (lacking permission to list slices).")
@@ -497,7 +499,7 @@ func logDeferredDiscoveryWarnings(probeErr, sliceErr, treeErr error, inv *Invent
 			logging.Warn("Failed to list TPU Slice resources: %v", sliceErr)
 		}
 	}
-	if treeErr != nil && !isNotFoundOrNoMatchError(treeErr) {
+	if treeErr != nil && !IsNotFoundOrNoMatchError(treeErr) {
 		if IsForbiddenError(treeErr) {
 			logging.Info("Skipping TPU PartitionTree inventory (lacking permission to list partitiontrees).")
 		} else {
@@ -1054,7 +1056,7 @@ func isSystemPoolNode(node unstructured.Unstructured, nodePool string) bool {
 		}
 		key, _ := taint["key"].(string)
 		val, _ := taint["value"].(string)
-		if (key == gkeSystemTaintKey || key == "CriticalAddonsOnly") && (val == "" || val == "true") {
+		if (key == GKESystemTaintKey || key == "CriticalAddonsOnly") && (val == "" || val == "true") {
 			return true
 		}
 	}
@@ -1065,7 +1067,7 @@ func isSystemPoolNode(node unstructured.Unstructured, nodePool string) bool {
 // status.conditions Ready) and falls back to v1beta1 strictly on NotFound/NoMatch.
 func listTPUSlices(lister ResourceLister, hw TPUHardwareResolver) ([]SliceInfo, bool, error) {
 	items, err := lister.ListResources(TPUSliceGVR, "", "", "")
-	if err != nil && isNotFoundOrNoMatchError(err) {
+	if err != nil && IsNotFoundOrNoMatchError(err) {
 		items, err = lister.ListResources(TPUSliceV1Beta1GVR, "", "", "")
 	}
 	if err != nil {
@@ -1136,7 +1138,7 @@ func isAmbiguousEightChipSlice(hw TPUHardwareResolver, tpuType string, totalChip
 // strictly on NotFound/NoMatch.
 func listTPUPartitionTrees(lister ResourceLister, hw TPUHardwareResolver) ([]PartitionTreeInfo, error) {
 	items, err := lister.ListResources(TPUPartitionTreeGVR, "", "", "")
-	if err != nil && isNotFoundOrNoMatchError(err) {
+	if err != nil && IsNotFoundOrNoMatchError(err) {
 		items, err = lister.ListResources(TPUPartitionTreeV1Beta1GVR, "", "", "")
 	}
 	if err != nil {
@@ -1648,13 +1650,18 @@ func nestedString(obj map[string]interface{}, fields ...string) string {
 	return strings.TrimSpace(val)
 }
 
-func firstNonEmpty(vals ...string) string {
+// FirstNonEmpty returns the first trimmed non-empty string in vals.
+func FirstNonEmpty(vals ...string) string {
 	for _, v := range vals {
 		if trimmed := strings.TrimSpace(v); trimmed != "" {
 			return trimmed
 		}
 	}
 	return ""
+}
+
+func firstNonEmpty(vals ...string) string {
+	return FirstNonEmpty(vals...)
 }
 
 func minNonEmpty(cur, cand string) string {

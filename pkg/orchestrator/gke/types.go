@@ -176,37 +176,64 @@ func (c DefaultMachineTypeClient) GetMachineType(project, zone, machineType stri
 type DefaultKubeClient struct {
 	dynClient        dynamic.Interface
 	kubeconfigLoader k8s.KubeconfigLoader
+	jobSetEnabled    func() bool
 }
 
 type DefaultExecutor struct{}
 
-type GKEOrchestrator struct {
-	mode                        orchestrator.Type
-	executor                    Executor
-	projectID                   string
-	clusterZones                []string
-	nodePoolSAs                 []string
-	capacity                    ClusterCapacity
-	clusterDesc                 gkeCluster
-	dynClient                   dynamic.Interface
-	kubeClient                  KubeClient
-	namespace                   string
-	machineTypeClient           MachineTypeClient
+// submissionSession holds per-submission transient state reset at the start of every SubmitJob call.
+// Keeping these fields isolated ensures reused GKEOrchestrator instances never leak stale inventory,
+// add-on decisions, slicing flags, or cluster-scoped caches across submissions.
+type submissionSession struct {
 	acceleratorToMachineType    map[string]string
-	machineCapCache             map[string]MachineTypeCap
 	resolvedHeadNodePool        string
 	machineTypeToThreadsPerCore map[string]string
-	napEnabled                  bool
-	napLimits                   map[string]int64
 	dynamicSlicingCache         map[string]bool
 	staticSlicingCache          map[string]bool
 	topologyCache               map[string]string
 	resourcePolicyCache         map[string]*GCEWorkloadPolicy
 	slicingTopologiesChecked    bool
 	slicingTopologiesDetected   bool
-	gkeCustomTemplatesPath      string
-	httpClient                  HTTPClient
-	httpOnce                    sync.Once
+	// inspectedPVCs caches per-submit PVC metadata inspected during ValidateClusterMounts.
+	inspectedPVCs  map[string]pvcInspectResult
+	nfsAuthChecked bool
+	// inventory caches pure-Kubernetes node, slice, and label-scheme discovery results for the current run.
+	inventory *k8s.Inventory
+	// addons caches the resolved 3-state JobSet/Kueue matrix once per submission.
+	addons         addonPlan
+	probeSetAirGap bool
+}
+
+func newSubmissionSession() submissionSession {
+	return submissionSession{
+		acceleratorToMachineType: make(map[string]string),
+		dynamicSlicingCache:      make(map[string]bool),
+		staticSlicingCache:       make(map[string]bool),
+		topologyCache:            make(map[string]string),
+		resourcePolicyCache:      make(map[string]*GCEWorkloadPolicy),
+		inspectedPVCs:            make(map[string]pvcInspectResult),
+	}
+}
+
+type GKEOrchestrator struct {
+	mode              orchestrator.Type
+	executor          Executor
+	projectID         string
+	clusterZones      []string
+	nodePoolSAs       []string
+	capacity          ClusterCapacity
+	clusterDesc       gkeCluster
+	dynClient         dynamic.Interface
+	kubeClient        KubeClient
+	namespace         string
+	machineTypeClient MachineTypeClient
+	machineCapCache   map[string]MachineTypeCap
+	napEnabled        bool
+	napLimits         map[string]int64
+	submissionSession
+	gkeCustomTemplatesPath string
+	httpClient             HTTPClient
+	httpOnce               sync.Once
 	// kubeconfigLoader reads the merged kubeconfig. nil means the default
 	// client-go loading rules (KUBECONFIG env or ~/.kube/config).
 	kubeconfigLoader k8s.KubeconfigLoader
@@ -214,13 +241,13 @@ type GKEOrchestrator struct {
 	kubeContext      string
 	dynClientManaged bool
 	dynClientContext string
-	k8sCluster       string
-	// inspectedPVCs caches per-submit PVC metadata inspected during ValidateClusterMounts.
-	inspectedPVCs   map[string]pvcInspectResult
-	nfsAuthChecked  bool
+	k8sCluster      string
 	preflightClient storagePreflightClient
-	// inventory caches pure-Kubernetes node, slice, and label-scheme discovery results for the current run.
-	inventory *k8s.Inventory
+	// connectivity lazily probes outbound GitHub reachability once per run when an add-on install is considered.
+	connectivity *connectivityChecker
+	// isInteractiveFunc and promptLineFunc allow race-free test injection of TTY detection and 3-way prompt reads.
+	isInteractiveFunc func() bool
+	promptLineFunc    func(string) (string, bool)
 }
 
 // gceTPUHardwareResolver implements k8s.TPUHardwareResolver using GCE machine-type conventions.
@@ -693,6 +720,7 @@ type jobSetInfo struct {
 	expectedPods    int
 	expectedStreams int
 	queried         bool
+	isBatchJob      bool
 }
 
 func (info jobSetInfo) terminal() bool {
@@ -1061,4 +1089,72 @@ type kubectlServerVersion struct {
 
 type kubectlVersionOutput struct {
 	ServerVersion *kubectlServerVersion `json:"serverVersion"`
+}
+
+// addonState represents the 3-state classification of an optional Kubernetes workload add-on (JobSet or Kueue),
+// plus an explicit Disabled state when pinned off by environment variable.
+type addonState int
+
+const (
+	addonStateUnknown addonState = iota
+	addonStateInstalled
+	addonStatePartial
+	addonStateMissing
+	addonStateDisabled
+)
+
+type jobSetAddonProbe struct {
+	state     addonState
+	crdExists bool
+	epReady   bool
+	epErr     error
+	checkedEP bool
+}
+
+type kueueAddonProbe struct {
+	state          addonState
+	crdExists      bool
+	dep            *kueueDeployment
+	currentVersion string
+}
+
+type addonPlan struct {
+	resolved      bool
+	jobSetEnabled bool
+	kueueEnabled  bool
+}
+
+// connectivityChecker lazily checks outbound GitHub reachability once per run.
+// When an offline probe runs without an explicit GCLUSTER_AIR_GAPPED=false override,
+// GKEOrchestrator caches the offline state via shell.SetDefaultAirGapped(true) for the run.
+type connectivityChecker struct {
+	getenv func(string) string
+	probe  func(ctx context.Context) bool
+	once   sync.Once
+	online bool
+}
+
+// batchJobInfoJSON captures the fields needed by GetJobLogs when falling back to a standalone batch/v1 Job.
+type batchJobInfoJSON struct {
+	Metadata struct {
+		Name   string            `json:"name"`
+		Labels map[string]string `json:"labels"`
+	} `json:"metadata"`
+	Spec struct {
+		Suspend     *bool `json:"suspend"`
+		Parallelism *int  `json:"parallelism"`
+		Completions *int  `json:"completions"`
+		Template    struct {
+			Spec struct {
+				InitContainers []struct{ Name string } `json:"initContainers"`
+				Containers     []struct{ Name string } `json:"containers"`
+			} `json:"spec"`
+		} `json:"template"`
+	} `json:"spec"`
+	Status struct {
+		Conditions []struct {
+			Type   string `json:"type"`
+			Status string `json:"status"`
+		} `json:"conditions"`
+	} `json:"status"`
 }

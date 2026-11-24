@@ -1986,7 +1986,7 @@ func assertHappyPathKueueReinstallOrder(t *testing.T) {
 	t.Cleanup(func() { shell.PromptYesNo = origPrompt })
 	shell.PromptYesNo = func(string) bool { return true }
 
-	manifestPath := filepath.Join(home, ".gcluster", "generated", "kueue.yaml")
+	manifestPath := filepath.Join(home, ".gcluster", "generated", kueueManifestFile("gke-ctx"))
 	var events []string
 	applyMustFail := false
 	mock := &mockExecutor{
@@ -2046,7 +2046,7 @@ func recordKueueReinstallEvent(full string, events *[]string) {
 	if strings.Contains(full, "delete crd") {
 		*events = append(*events, "delete")
 	}
-	if strings.Contains(full, "apply -f") && strings.HasSuffix(full, "kueue.yaml") {
+	if strings.Contains(full, "apply -f") && strings.HasSuffix(full, kueueManifestFile("gke-ctx")) {
 		*events = append(*events, "apply")
 	}
 }

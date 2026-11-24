@@ -612,6 +612,11 @@ func forEachWorkloadObject(manifestContent string, visit func(kind, jobName stri
 			if err := visit("Job", "", jDoc.Labels, jDoc.Spec.PodFailurePolicy, &jDoc.Spec.Template); err != nil {
 				return err
 			}
+		case "Service":
+			var svc corev1.Service
+			if err := k8syaml.Unmarshal([]byte(doc), &svc); err != nil {
+				return fmt.Errorf("failed to parse Service manifest spec: %w", err)
+			}
 		}
 	}
 	return nil

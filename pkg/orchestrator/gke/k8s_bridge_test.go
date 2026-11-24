@@ -207,14 +207,17 @@ func TestDiscoverK8sInventory_LazyManagedClientInit(t *testing.T) {
 	orcBrokenKube.kubeconfigLoader = func() (*clientcmdapi.Config, error) {
 		return nil, errors.New("unreadable kubeconfig")
 	}
-	if _, err := orcBrokenKube.DiscoverK8sInventory(); err == nil || !strings.Contains(err.Error(), "unreadable kubeconfig") {
-		t.Errorf("expected wrapped getDynamicClient error, got: %v", err)
+	if _, err := orcBrokenKube.requireKubeClient(); err == nil || !strings.Contains(err.Error(), "unreadable kubeconfig") || strings.Contains(err.Error(), "node inventory discovery") {
+		t.Errorf("requireKubeClient() = %v, want raw getDynamicClient error without node-inventory wrapper", err)
+	}
+	if _, err := orcBrokenKube.DiscoverK8sInventory(); err == nil || !strings.Contains(err.Error(), "node inventory discovery") || !strings.Contains(err.Error(), "unreadable kubeconfig") {
+		t.Errorf("expected wrapped getDynamicClient error for node inventory discovery, got: %v", err)
 	}
 
 	orcLazy := NewGKEOrchestrator()
 	orcLazy.kubeContext = testContext
 	orcLazy.kubeconfigLoader = staticLoader(kubeconfigWith("https://127.0.0.1:6443", nil, nil, testContext))
-	kc, err := orcLazy.requireKubeClientForDiscovery()
+	kc, err := orcLazy.requireKubeClient()
 	if err != nil || kc == nil || orcLazy.dynClient == nil || !orcLazy.dynClientManaged || orcLazy.dynClientContext != testContext {
 		t.Errorf("lazy managed client init = (kc=%v, err=%v, managed=%v, ctx=%q), want initialized managed client", kc != nil, err, orcLazy.dynClientManaged, orcLazy.dynClientContext)
 	}
@@ -263,11 +266,25 @@ func TestConfigureKubectlAndK8sKubectl_InventoryAndDynClientLifecycle(t *testing
 		assertConfigureClearedState(t, fmt.Sprintf("configureKubectl(managed=%v)", managed), orc, dyn, !managed)
 
 		k8sOrc := NewGKEOrchestrator()
-		k8sOrc.kubeContext = "existing-ctx"
-		k8sOrc.k8sCluster = "existing-cluster"
+		k8sOrc.kubeContext = "ctx-a"
+		k8sOrc.k8sCluster = "cluster-a"
+		k8sOrc.kubeconfigLoader = staticLoader(&clientcmdapi.Config{
+			CurrentContext: "ctx-a",
+			Clusters: map[string]*clientcmdapi.Cluster{
+				"cluster-a": {Server: "https://10.0.0.1:6443"},
+				"cluster-b": {Server: "https://10.0.0.2:6443"},
+			},
+			Contexts: map[string]*clientcmdapi.Context{
+				"ctx-a": {Cluster: "cluster-a"},
+				"ctx-b": {Cluster: "cluster-b"},
+			},
+		})
 		k8sDyn := primeOrchInventoryAndDynClient(k8sOrc, "k8s", managed)
-		if err := k8sOrc.configureK8sKubectl("existing-cluster"); err != nil {
-			t.Fatalf("configureK8sKubectl(managed=%v) error = %v", managed, err)
+		if err := k8sOrc.configureK8sKubectl("cluster-b"); err != nil {
+			t.Fatalf("configureK8sKubectl(switch ctx-a->ctx-b, managed=%v) error = %v", managed, err)
+		}
+		if k8sOrc.kubeContext != "ctx-b" || k8sOrc.k8sCluster != "cluster-b" {
+			t.Errorf("configureK8sKubectl(switch) = (ctx=%q, cluster=%q), want (ctx-b, cluster-b)", k8sOrc.kubeContext, k8sOrc.k8sCluster)
 		}
 		assertConfigureClearedState(t, fmt.Sprintf("configureK8sKubectl(managed=%v)", managed), k8sOrc, k8sDyn, !managed)
 	}

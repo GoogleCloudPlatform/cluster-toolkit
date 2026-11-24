@@ -18,8 +18,10 @@ If you use `--build-context` to build images on-the-fly:
 
 * `GCLUSTER_REFRESH_CREDENTIALS`: Set to `1` to make every `gcluster job` command re-run `gcloud container clusters get-credentials` instead of reusing an existing, verified `kubeconfig` context for the cluster. See [Cluster connectivity and kubeconfig reuse](#101-cluster-connectivity-and-kubeconfig-reuse) for when this is useful.
 * `GCLUSTER_TELEMETRY_IMAGE`: Container image URI for the ML Diagnostics collector native sidecar on Kubernetes 1.29+ TPU workloads when `--enable-ml-diagnostics` is passed without `--ml-diagnostics-image` (switches GKE jobs from the managed webhook to native sidecar injection). Pass `--ml-diagnostics-image=""` to ignore it for one submission.
-* `GCLUSTER_ORCHESTRATOR`: Override automatic orchestrator detection (`gke` or `k8s`). When unset, `gcluster` inspects your `KUBECONFIG` context (`gke-gcloud-auth-plugin`, `*.gke.goog`, legacy `gcp` auth-provider, canonical `gke_` context naming, or `-gke.` API server version) and routes generic Kubernetes clusters to `k8s` mode for `list` (`JobSet`s labeled `gcluster.google.com/workload`), `logs`, `cancel`, and `inspect` without requiring `--project`, `--location`, or `gcloud` (`gcluster job submit` currently requires a GKE cluster). When `gcluster job config` defaults are saved, setting `GCLUSTER_ORCHESTRATOR=k8s` bypasses all saved `cluster`, `project`, and `location` defaults, while passing `--cluster <k8s-context>` (when different from any saved `cluster`) on `list`, `logs`, `cancel`, or `inspect` overrides `cluster` and ignores saved `project` and `location` defaults with a warning.
-* `GCLUSTER_AIR_GAPPED`: Set to `true` (or `1` / `yes` / `on`) in disconnected or air-gapped environments to skip the live API server version probe during orchestrator detection, block outbound GitHub manifest downloads for automatic JobSet or Kueue installation/re-installation (requiring pre-installed controllers), and skip CLI telemetry collection and uploads for the current process without changing your saved telemetry preference. Setting `false` / `0` / `no` / `off` disables air-gapped mode for the current command (for example, overriding an exported `GCLUSTER_AIR_GAPPED=true`) without overriding `gcluster telemetry off`.
+* `GCLUSTER_ORCHESTRATOR`: Override automatic orchestrator detection (`gke` or `k8s`). When unset, `gcluster` inspects your `KUBECONFIG` context (`gke-gcloud-auth-plugin`, `*.gke.goog`, legacy `gcp` auth-provider, canonical `gke_` context naming, or `-gke.` API server version) and routes generic Kubernetes clusters to `k8s` mode for `list` (`JobSet`s and standalone `batch/v1` Jobs labeled `gcluster.google.com/workload`), `logs`, `cancel`, and `inspect` without requiring `--project`, `--location`, or `gcloud` (`gcluster job submit` currently requires a GKE cluster). When `gcluster job config` defaults are saved, setting `GCLUSTER_ORCHESTRATOR=k8s` bypasses all saved `cluster`, `project`, and `location` defaults, while passing `--cluster <k8s-context>` (when different from any saved `cluster`) on `list`, `logs`, `cancel`, or `inspect` overrides `cluster` and ignores saved `project` and `location` defaults with a warning.
+* `GCLUSTER_AIR_GAPPED`: Set to `true` (or `1` / `yes` / `on`) in disconnected or air-gapped environments to skip the live API server version probe during orchestrator detection, skip outbound GitHub connectivity probes and automatic JobSet or Kueue installation/re-installation (continuing with installed Kubernetes APIs instead), and skip CLI telemetry collection and uploads for the current process without changing your saved telemetry preference. When unset and a required add-on (`JobSet` or `Kueue`) is missing, `gcluster` runs a bounded lazy connectivity probe (`1.5s`) and caches offline mode for the rest of the command if GitHub is unreachable; users in strict zero-packet or VPN-monitored networks should set `GCLUSTER_AIR_GAPPED=true` explicitly. Setting `false` / `0` / `no` / `off` disables air-gapped mode for the current command without overriding `gcluster telemetry off`.
+* `GCLUSTER_DISABLE_KUEUE`: Set to `1` (or `true`) to skip Kueue queueing and omit `kueue.x-k8s.io/queue-name` even when Kueue is installed.
+* `GCLUSTER_DISABLE_JOBSET`: Set to `1` (or `true`) to disable `JobSet` rendering and use a standalone `batch/v1` Indexed `Job` plus headless `Service` (single-slice non-Pathways workloads).
 
 > [!NOTE]
 > ### Automated Prerequisite Checks Overview
@@ -27,6 +29,10 @@ If you use `--build-context` to build images on-the-fly:
 > When you run `gcluster job` commands, prerequisite checks match the detected orchestrator:
 >
 > * **Kubernetes (`k8s`) mode** (`list`, `logs`, `cancel`, `inspect`): Checks only that `kubectl` is installed (zero `gcloud` or Google Cloud credential checks).
+> * **Optional Add-On Adaptation (`JobSet` & `Kueue`)**: Before submitting, `gcluster` classifies both `JobSet` and `Kueue` once as `Installed`, `Partial` (fails fast without overwriting), or `Missing`. When an add-on is `Missing`:
+>   * When connected and interactive, `gcluster` offers a single 3-way prompt (`[1] install / [2] continue with installed APIs / [3] cancel`).
+>   * When connected and non-interactive, GKE installs on fresh clusters after `kubectl auth can-i` checks.
+>   * When air-gapped, `gcluster` never installs add-ons and adapts to installed APIs (omitting `kueue.x-k8s.io/queue-name` without Kueue, or rendering a standalone `batch/v1` Indexed `Job` + headless `Service` without JobSet). On `--dry-run-out`, connected `gke` mode renders standard `JobSet` manifests matching live GKE submission unless `GCLUSTER_DISABLE_JOBSET`, `GCLUSTER_DISABLE_KUEUE`, or `GCLUSTER_AIR_GAPPED=true` is set.
 > * **GKE (`gke`) mode**:
 >   * **Google Cloud SDK**: Verifies `gcloud` is installed.
 >   * **Gcloud Authentication**: Checks if authenticated and if Application Default Credentials (ADC) are valid.
@@ -46,14 +52,14 @@ If you use `--build-context` to build images on-the-fly:
 
 ### Confirmation Prompts
 
-Some `gcluster job` commands ask for confirmation before certain changes, for example before creating default Kueue queues or re-installing Kueue on the cluster. Each prompt reads one line from standard input:
+Some `gcluster job` commands ask for confirmation before cluster changes, for example before creating default Kueue queues, re-installing an outdated Kueue deployment, or choosing how to handle missing JobSet/Kueue add-ons. Each prompt reads one line from standard input:
 
-* Enter (an empty line), `y` or `yes` means yes; `n` or `no` means no (case-insensitive). Any other answer is rejected, and the prompt asks again and reads the next line.
-* If standard input is closed or ends before an answer (for example, `</dev/null`, or `<NUL` on Windows), the answer is no and the command stops with an error. If standard input stays open but sends nothing, the prompt waits.
+* **Yes/No prompts (`[Y/n]`):** Enter (an empty line), `y`, or `yes` means yes; `n` or `no` means no (case-insensitive). Any other answer is rejected and re-prompted. If standard input is closed or ends before an answer (for example, `</dev/null`, or `<NUL` on Windows), the answer is `no` and the command stops with an error.
+* **Missing add-on prompts (`[1/2/3]`):** When JobSet and/or Kueue are missing on a cluster and both stdin and stdout are interactive TTYs, `gcluster job submit` displays a numbered menu (`[1]` Install missing add-ons, `[2]` Continue with installed APIs, `[3]` Cancel). If standard input ends at the prompt (EOF), submission is canceled. When running non-interactively (for example, `</dev/null` or piped stdout), the menu is skipped: connected GKE clusters auto-install missing add-ons, while generic/air-gapped `k8s` clusters (or offline GKE runs) continue using only the APIs already installed.
 * A heredoc or file can answer several prompts, one line each, but which prompts appear, and in what order, depends on the cluster's state and the `gcluster` version (`--skip-prereqs` skips only local prerequisite checks, not these cluster prompts). For example, when Kueue is outdated, a Kueue re-installation prompt appears before the queue prompt, so an answer meant for the queue prompt can approve the re-installation.
 
 > [!WARNING]
-> Any `y` or empty line on standard input can approve the Kueue re-installation prompt, which deletes all Kueue resources and all queued or suspended workloads in the cluster. Piping `yes` approves every prompt. For unattended runs, redirect standard input from `/dev/null` so unexpected prompts are declined, and pass `--queue` with an existing LocalQueue so the queue prompt does not appear.
+> Any `y` or empty line on standard input can approve the Kueue re-installation prompt, which deletes all Kueue resources and all queued or suspended workloads in the cluster. Piping `yes` approves every prompt. For unattended runs, redirect standard input from `/dev/null` so destructive yes/no prompts are declined, pass `--queue` with an existing LocalQueue so the queue prompt does not appear, and set `GCLUSTER_DISABLE_JOBSET=1` / `GCLUSTER_DISABLE_KUEUE=1` (or `GCLUSTER_AIR_GAPPED=1`) if you do not want non-interactive GKE runs to auto-install missing add-ons.
 
 ### 1.1 Multi-Tier Checkpointing (MTC) Prerequisites
 
@@ -1337,7 +1343,7 @@ Open the extracted `.tmpl` files in your preferred editor. Workload manifests ar
 * `jobset.tmpl`: Standard (non-Pathways) `JobSet` wrapper used by `gcluster job submit`. Delegates shared labels, network settings, and `pod_template` to `base.tmpl`.
 * `pathways_jobset.tmpl`: Pathways (`--pathways`) `JobSet` manifest. Defines `pathways-head` and `worker` pod specs inline while reusing `workload_labels`, `jobset_network`, `pod_auth_and_priority`, `pod_placement`, and `telemetry_sidecar` from `base.tmpl`.
 * `base.tmpl`: Shared named `{{- define "<block>" -}}` blocks rendered at a target YAML column width via `{{(StructuralData (.RenderBlock "<block>" <indent>))}}`. To add custom sidecars, pod annotations, or volumes to standard workloads, edit `pod_template` in `base.tmpl`. If you add a default environment variable to a container, wrap it in `{{- if not ($.Env.Has "NAME") }}` ... `{{- end }}` (use the container's own list, such as `$.PathwaysWorkerEnv`, in `pathways_jobset.tmpl`) so a value the user passes for the same name replaces it instead of duplicating it.
-* `job.tmpl`: Standalone `batch/v1` Indexed `Job` and headless `Service` template (reserved for upcoming single-slice `Job` support; `gcluster job submit` does not render `job.tmpl` yet).
+* `job.tmpl`: Standalone `batch/v1` Indexed `Job` and headless `Service` template used automatically by `gcluster job submit` when JobSet is absent or disabled (`GCLUSTER_DISABLE_JOBSET=1`).
 * `filestore.tmpl` & `gcs_fuse_pv_pvc.tmpl`: Storage templates used when provisioning Filestore, generic NFS (`nfs://`), and Cloud Storage FUSE storage-profile `PersistentVolume` / `PersistentVolumeClaim` resources.
 * `local_queue.tmpl` & `priority_classes.tmpl`: Kueue templates used when bootstrapping default `LocalQueue` and `PriorityClass` resources.
 
@@ -1413,14 +1419,14 @@ Prints the current saved configuration defaults and configuration file path.
 ```
 
 ### 9.3 `submit` Flags
-The `gcluster job submit` command deploys a container image as a job (Kubernetes JobSet) on a GKE cluster, integrated with Kueue for advanced queuing. It can use pre-built images or build images on-the-fly without a local Docker daemon (powered internally by the [Crane](https://github.com/google/go-containerregistry/blob/main/cmd/crane/README.md) container utility).
+The `gcluster job submit` command deploys a container image as a job (Kubernetes `JobSet`, or a standalone `batch/v1` Indexed `Job` + headless `Service` when `JobSet` is absent) on a GKE cluster, with optional Kueue integration. It can use pre-built images or build images on-the-fly without a local Docker daemon (powered internally by the [Crane](https://github.com/google/go-containerregistry/blob/main/cmd/crane/README.md) container utility).
 
 #### 9.3.1 General Flags
 *These flags control core workload execution, identity, and basic build context options regardless of the underlying hardware paradigm.*
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-n, --name` | `string` | Name of the job (JobSet) to create. Used for Kubernetes resources. Maximum of 28 characters for standard workloads, or 22 characters when `--pathways` is enabled. *(Required)* |
+| `-n, --name` | `string` | Name of the job (`JobSet` or standalone `batch/v1` `Job`) to create. Used for Kubernetes resources. Maximum of 28 characters for standard workloads, or 22 characters when `--pathways` is enabled. *(Required)* |
 | `-e, --command` | `string` | Command to execute inside the container (e.g., `'python app.py'`). *(Required except when `--pathways-headless` or `--pathways-deploy-sps` is set)* |
 | `--compute-type` | `string` | The hardware target for the job. GPU/TPU shorthands (e.g., `h100-80gb-8`, `l4-1`, `v6e-8`) and machine types from `gcluster`'s built-in shorthand map (e.g., `a3-highgpu-8g`) resolve without a matching node pool, so they also work on NAP clusters. Any other GCE machine type (e.g., `n2-standard-32`) or a GKE accelerator label (e.g., `nvidia-l4`) is resolved against the cluster's existing node pools. *(Required except when `--pathways-run-sps-workload` is set)* The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed. |
 | `-i, --image` | `string` | Full registry path of a pre-built container image to run. Either `--image`, **or** both `--base-image` and `--build-context`, is required and the two forms are mutually exclusive (except when `--pathways-headless` or `--pathways-deploy-sps` is set, where no image is needed, or when `--pathways-run-sps-workload` is used in terminal mode). |
@@ -1501,7 +1507,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 
 | Flag | Type | Description |
 | :--- | :--- | :--- |
-| `--status` | `string` | Filter jobs by status (`Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`). `job list` derives status from the JobSet object (`Suspended` while queued in Kueue, `Running` once admitted, `Succeeded`, or `Failed`), so it never reports `Pending` on GKE or Kubernetes and an admitted job whose pods are still unscheduled shows `Running`. For admission and pod details, use `gcluster job inspect --name <job-name> --show` or `kubectl get pods -l jobset.sigs.k8s.io/jobset-name=<job-name>`. |
+| `--status` | `string` | Filter jobs by status (`Pending`, `Running`, `Succeeded`, `Failed`, `Suspended`). For `JobSet` workloads, `job list` derives status from the `JobSet` object (`Suspended` while queued in Kueue, `Running` once admitted, `Succeeded`, or `Failed`); standalone `batch/v1` Indexed `Job` workloads can also report `Pending` before pods become active. For admission and pod details, use `gcluster job inspect --name <job-name> --show`, `kubectl get pods -l jobset.sigs.k8s.io/jobset-name=<job-name>`, or `kubectl get pods -l gcluster.google.com/workload=<job-name>`. |
 | `--name-contains` | `string` | Filter jobs by name containing the specified string. |
 
 ### 9.5 `logs` Flags
