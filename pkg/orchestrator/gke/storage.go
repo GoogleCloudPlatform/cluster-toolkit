@@ -1596,15 +1596,16 @@ func (sm *StorageManager) recreateStaleGatewayPV(pvName string, existing existin
 	if existing.Metadata.Labels[managedByLabel] != managedByValue {
 		return fmt.Errorf(
 			"gateway PV %q already exists in %s state (left behind after its PVC was deleted) and cannot rebind. "+
-				"It is not labelled %s=%s, so gcluster will not delete it. Delete it with `kubectl delete pv %s` and resubmit",
-			pvName, phase, managedByLabel, managedByValue, pvName)
+				"It is not labelled %s=%s, so gcluster will not delete it. Delete it with `%s` and resubmit",
+			pvName, phase, managedByLabel, managedByValue,
+			kubectlCommandLine(sm.orchestrator.kubeContext, "delete", "pv", pvName))
 	}
 
 	logging.Info("Recreating stale gateway PV %q (%s)", pvName, phase)
 	res := sm.orchestrator.kubectl("delete", "pv", pvName,
 		"--ignore-not-found", "--wait=true", "--timeout=60s")
 	if res.ExitCode != 0 {
-		return fmt.Errorf("failed to delete stale gateway PV %q: %s", pvName, strings.TrimSpace(res.Stderr))
+		return fmt.Errorf("failed to delete stale gateway PV %q: %s", pvName, kubectlFailureDetail(res))
 	}
 	return nil
 }
@@ -1625,14 +1626,28 @@ func (sm *StorageManager) waitForGatewayRelease(pvName, pvcName, ns string) erro
 	if res.ExitCode == 0 {
 		return nil
 	}
-	if gone := sm.orchestrator.kubectl("get", "pv", pvName, "--ignore-not-found", "-o", "name"); gone.ExitCode == 0 && strings.TrimSpace(gone.Stdout) == "" {
+	gone := sm.orchestrator.kubectl("get", "pv", pvName, "--ignore-not-found", kubectlReadTimeout, "-o", "name")
+	if gone.ExitCode != 0 {
+		return fmt.Errorf("failed to verify deletion of gateway PV %q after wait failed (%s): %s",
+			pvName, kubectlFailureDetail(res), kubectlFailureDetail(gone))
+	}
+	if strings.TrimSpace(gone.Stdout) == "" {
 		return nil
 	}
+	waitDetail := kubectlFailureDetail(res)
+	lowerWait := strings.ToLower(waitDetail)
+	isTimeout := strings.Contains(lowerWait, "timed out") || strings.Contains(lowerWait, "deadline exceeded")
+	if !isTimeout || k8s.IsForbiddenError(errors.New(waitDetail)) || strings.Contains(lowerWait, "an error occurred while waiting") {
+		return fmt.Errorf("failed to wait for gateway PV %q to finish deleting: %s", pvName, waitDetail)
+	}
+	kubeCtx := sm.orchestrator.kubeContext
 	return fmt.Errorf(
 		"gateway PV %q is being deleted and is waiting for PVC %s/%s to be released. "+
-			"Cancel the jobs that mount it (`kubectl describe pvc %s -n %s` lists them under Used By), "+
-			"then run `kubectl delete pvc %s -n %s` and resubmit",
-		pvName, ns, pvcName, pvcName, ns, pvcName, ns)
+			"Cancel the jobs that mount it (`%s` lists them under Used By), "+
+			"then run `%s` and resubmit",
+		pvName, ns, pvcName,
+		kubectlCommandLine(kubeCtx, "describe", "pvc", pvcName, "-n", ns),
+		kubectlCommandLine(kubeCtx, "delete", "pvc", pvcName, "-n", ns, "--ignore-not-found"))
 }
 
 func unmanagedGatewayWarning(pvName, manifest string) string {
@@ -2802,46 +2817,53 @@ func (g *GKEOrchestrator) verifyStorageGateways(manifest, jobSetName string) err
 		return nil
 	}
 	for _, claim := range claims {
-		removed, err := g.gatewayRemoved(ns, claim)
+		removed, pvName, err := g.gatewayRemoved(ns, claim)
 		if err != nil {
 			logging.Warn("Could not verify storage gateway '%s': %v", claim, err)
 			continue
 		}
 		if removed {
+			if pvName == "" {
+				pvName = sanitizePVCName(claim + "-" + ns)
+			}
 			return g.rollBackJob(ns, jobSetName, fmt.Errorf("storage gateway %q was removed by a concurrent cleanup; resubmit to recreate it "+
-				"(if it fails again, run `kubectl delete pvc %s -n %s` and delete its PV)", claim, claim, ns))
+				"(if it fails again, run `%s` and `%s`)",
+				claim,
+				kubectlCommandLine(g.kubeContext, "delete", "pvc", claim, "-n", ns, "--ignore-not-found"),
+				kubectlCommandLine(g.kubeContext, "delete", "pv", pvName, "--ignore-not-found")))
 		}
 	}
 	return nil
 }
 
-// gatewayRemoved reports whether the gateway PVC or its PV is gone, being deleted, or still bound to a deleted PVC.
-func (g *GKEOrchestrator) gatewayRemoved(ns, claim string) (bool, error) {
+// gatewayRemoved reports whether the gateway PVC or its PV is gone, being deleted, or still bound to a deleted PVC,
+// along with the PVC's spec.volumeName when available.
+func (g *GKEOrchestrator) gatewayRemoved(ns, claim string) (bool, string, error) {
 	pvc, err := g.kubeClient.GetResource(pvcGVR, ns, claim)
 	if apierrors.IsNotFound(err) {
-		return true, nil
+		return true, "", nil
 	}
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	pvName, _, _ := unstructured.NestedString(pvc.Object, "spec", "volumeName")
 	if pvc.GetDeletionTimestamp() != nil || pvName == "" {
-		return pvc.GetDeletionTimestamp() != nil, nil
+		return pvc.GetDeletionTimestamp() != nil, pvName, nil
 	}
 	pv, err := g.kubeClient.GetResource(pvGVR, "", pvName)
 	if apierrors.IsNotFound(err) {
-		return true, nil
+		return true, pvName, nil
 	}
 	if err != nil {
-		return false, err
+		return false, pvName, err
 	}
 	boundUID, _, _ := unstructured.NestedString(pv.Object, "spec", "claimRef", "uid")
-	return pv.GetDeletionTimestamp() != nil || (boundUID != "" && boundUID != string(pvc.GetUID())), nil
+	return pv.GetDeletionTimestamp() != nil || (boundUID != "" && boundUID != string(pvc.GetUID())), pvName, nil
 }
 
 func (g *GKEOrchestrator) rollBackJob(ns, jobSetName string, cause error) error {
 	if err := g.kubeClient.DeleteJobSet(ns, jobSetName); err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("%w; rolling back job %q also failed, delete it with `kubectl delete jobset %s -n %s`: %v", cause, jobSetName, jobSetName, ns, err)
+		return fmt.Errorf("%w; rolling back job %q also failed, delete it with `%s`: %v", cause, jobSetName, kubectlCommandLine(g.kubeContext, "delete", "jobset", jobSetName, "-n", ns), err)
 	}
 	return fmt.Errorf("job %q was not started: %w", jobSetName, cause)
 }

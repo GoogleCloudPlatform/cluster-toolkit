@@ -16,6 +16,10 @@ package gke
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
@@ -53,6 +57,7 @@ import (
 func TestMain(m *testing.M) {
 	_ = os.Unsetenv(refreshCredentialsEnv)
 	_ = os.Unsetenv(shell.AirGappedEnvVar)
+	_ = os.Unsetenv(k8s.LabelSchemeEnvVar)
 	shell.SetDefaultAirGapped(false)
 	os.Exit(m.Run())
 }
@@ -1047,7 +1052,7 @@ func TestShouldUseDNSEndpoint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := shouldUseDNSEndpoint(tt.clusterDesc.ControlPlaneEndpointsConfig)
+			got := tt.clusterDesc.shouldUseDNSEndpoint()
 			if got != tt.wantEndpoint {
 				t.Errorf("shouldUseDNSEndpoint() = %v, want %v", got, tt.wantEndpoint)
 			}
@@ -1232,7 +1237,7 @@ func TestRefreshGKEAuth_DNSEndpoint(t *testing.T) {
 			mockExec := NewMockExecutor(tt.mockResponses)
 			orc := newTestGKEOrchestrator(mockExec)
 			orc.clusterDesc = tt.clusterDesc
-			err := orc.refreshGKEAuth("my-cluster", "us-central1-a", "my-project", shouldUseDNSEndpoint(tt.clusterDesc.ControlPlaneEndpointsConfig))
+			err := orc.refreshGKEAuth("my-cluster", "us-central1-a", "my-project", tt.clusterDesc.shouldUseDNSEndpoint())
 			if (err != nil) != tt.wantErr {
 				t.Errorf("refreshGKEAuth() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -3041,5 +3046,450 @@ func TestImagePullSecrets_NamespaceResolutionFailureFailsFast(t *testing.T) {
 	opts, err := orc.PrepareManifestOptions(job, "registry.local/app:v1", profile, false, false)
 	if err != nil || !strings.Contains(opts.ImagePullSecrets, "ns-sec") {
 		t.Fatalf("explicit --gke-namespace must bypass resolution and discover ns-sec: opts=%q err=%v", opts.ImagePullSecrets, err)
+	}
+}
+
+func validTestCertPEM(t *testing.T) []byte {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("ecdsa.GenerateKey: %v", err)
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &x509.Certificate{}, &x509.Certificate{}, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("x509.CreateCertificate: %v", err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+}
+
+func TestEvaluateExistingContext_TLSConfirmUsableAndServerWhitespace(t *testing.T) {
+	desc := testClusterDesc(true, true)
+	caBytes := []byte(testCAPEM)
+	realPEM := validTestCertPEM(t)
+	missingCAFile := filepath.Join(t.TempDir(), "missing-ca.crt")
+
+	tests := []struct {
+		name       string
+		mutate     func(cfg *clientcmdapi.Config)
+		wantReuse  bool
+		wantReason string
+	}{
+		{
+			name: "DNS-mode valid PEM CA data is reusable",
+			mutate: func(cfg *clientcmdapi.Config) {
+				cfg.Clusters[testContext].CertificateAuthorityData = realPEM
+			},
+			wantReuse: true,
+		},
+		{
+			name: "DNS-mode valid user impersonation is reusable",
+			mutate: func(cfg *clientcmdapi.Config) {
+				cfg.AuthInfos[testContext].Impersonate = "system:serviceaccount:default:runner"
+				cfg.AuthInfos[testContext].ImpersonateGroups = []string{"system:authenticated"}
+			},
+			wantReuse: true,
+		},
+		{
+			name: "DNS-mode insecure-skip-tls-verify is rejected",
+			mutate: func(cfg *clientcmdapi.Config) {
+				cfg.Clusters[testContext].InsecureSkipTLSVerify = true
+			},
+			wantReason: "insecure-skip-tls-verify",
+		},
+		{
+			name: "IP-mode insecure-skip-tls-verify with CA data is rejected",
+			mutate: func(cfg *clientcmdapi.Config) {
+				cfg.Clusters[testContext].Server = "https://" + testPublicIP
+				cfg.Clusters[testContext].CertificateAuthorityData = caBytes
+				cfg.Clusters[testContext].InsecureSkipTLSVerify = true
+			},
+			wantReason: "insecure-skip-tls-verify",
+		},
+		{
+			name: "DNS-mode external certificate-authority file is rejected hermetically",
+			mutate: func(cfg *clientcmdapi.Config) {
+				cfg.Clusters[testContext].CertificateAuthority = missingCAFile
+			},
+			wantReason: "certificate authority",
+		},
+		{
+			name: "DNS-mode invalid PEM certificate-authority-data is rejected",
+			mutate: func(cfg *clientcmdapi.Config) {
+				cfg.Clusters[testContext].CertificateAuthorityData = []byte("not-a-pem-block")
+			},
+			wantReason: "not valid PEM",
+		},
+		{
+			name: "trailing whitespace on cluster server is rejected",
+			mutate: func(cfg *clientcmdapi.Config) {
+				cfg.Clusters[testContext].Server = "https://" + testDNSHost + " "
+			},
+			wantReason: "does not match any endpoint",
+		},
+		{
+			name: "post-slash whitespace on cluster server is rejected",
+			mutate: func(cfg *clientcmdapi.Config) {
+				cfg.Clusters[testContext].Server = "https://" + testDNSHost + "/ "
+			},
+			wantReason: "does not match any endpoint",
+		},
+		{
+			name: "untrimmed exec command whitespace is rejected",
+			mutate: func(cfg *clientcmdapi.Config) {
+				cfg.AuthInfos[testContext].Exec.Command = " gke-gcloud-auth-plugin "
+			},
+			wantReason: "leading or trailing whitespace",
+		},
+		{
+			name: "ConfirmUsable rejects empty exec env variable name",
+			mutate: func(cfg *clientcmdapi.Config) {
+				cfg.AuthInfos[testContext].Exec.Env = []clientcmdapi.ExecEnvVar{{Name: "", Value: "1"}}
+			},
+			wantReason: "invalid kubeconfig context",
+		},
+		{
+			name: "ConfirmUsable rejects unsupported proxy-url scheme",
+			mutate: func(cfg *clientcmdapi.Config) {
+				cfg.Clusters[testContext].ProxyURL = "socks5h://127.0.0.1:1080"
+			},
+			wantReason: "invalid kubeconfig context",
+		},
+		{
+			name: "ConfirmUsable rejects partial impersonation without user",
+			mutate: func(cfg *clientcmdapi.Config) {
+				cfg.AuthInfos[testContext].ImpersonateGroups = []string{"system:masters"}
+			},
+			wantReason: "invalid kubeconfig context",
+		},
+		{
+			name: "non-DNS-1123 context namespace does not block reuse (validated at targeting time)",
+			mutate: func(cfg *clientcmdapi.Config) {
+				cfg.Contexts[testContext].Namespace = "INVALID_NAMESPACE"
+			},
+			wantReuse: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext)
+			tc.mutate(cfg)
+			got := evaluateExistingContext(cfg, testCluster, testLocation, testProject, desc)
+			if got.reusable() != tc.wantReuse {
+				t.Fatalf("reusable() = %v (reason=%q), want %v", got.reusable(), got.reason, tc.wantReuse)
+			}
+			if tc.wantReason != "" && !strings.Contains(got.reason, tc.wantReason) {
+				t.Errorf("reason = %q, want substring %q", got.reason, tc.wantReason)
+			}
+		})
+	}
+
+	ipCfg := kubeconfigWith("https://"+testPublicIP, caBytes, gkeExec(), testContext)
+	blankCADesc := testClusterDesc(true, true)
+	blankCADesc.MasterAuth.ClusterCaCertificate = "   "
+	if got := evaluateExistingContext(ipCfg, testCluster, testLocation, testProject, blankCADesc); got.reusable() || !strings.Contains(got.reason, "carries no CA") {
+		t.Fatalf("whitespace-only MasterAuth CA: reusable=%v reason=%q, want carries no CA", got.reusable(), got.reason)
+	}
+	paddedCADesc := testClusterDesc(true, true)
+	paddedCADesc.MasterAuth.ClusterCaCertificate += "\n"
+	if got := evaluateExistingContext(ipCfg, testCluster, testLocation, testProject, paddedCADesc); !got.reusable() {
+		t.Fatalf("newline-padded MasterAuth CA must be reusable, got reason=%q", got.reason)
+	}
+}
+
+func TestHasStaticCredentials_AllEightFields(t *testing.T) {
+	desc := testClusterDesc(true, true)
+	cases := []struct {
+		name   string
+		mutate func(auth *clientcmdapi.AuthInfo)
+	}{
+		{"Token", func(a *clientcmdapi.AuthInfo) { a.Token = "tok" }},
+		{"TokenFile", func(a *clientcmdapi.AuthInfo) { a.TokenFile = "/path/to/token" }},
+		{"Username", func(a *clientcmdapi.AuthInfo) { a.Username = "alice" }},
+		{"Password", func(a *clientcmdapi.AuthInfo) { a.Password = "secret" }},
+		{"ClientCertificate", func(a *clientcmdapi.AuthInfo) { a.ClientCertificate = "/path/to/client.crt" }},
+		{"ClientCertificateData", func(a *clientcmdapi.AuthInfo) { a.ClientCertificateData = []byte("cert") }},
+		{"ClientKey", func(a *clientcmdapi.AuthInfo) { a.ClientKey = "/path/to/client.key" }},
+		{"ClientKeyData", func(a *clientcmdapi.AuthInfo) { a.ClientKeyData = []byte("key") }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext)
+			tc.mutate(cfg.AuthInfos[testContext])
+			got := evaluateExistingContext(cfg, testCluster, testLocation, testProject, desc)
+			if got.reusable() || !strings.Contains(got.reason, "static credentials with exec") {
+				t.Fatalf("field %s: reusable=%v reason=%q, want static credentials rejection", tc.name, got.reusable(), got.reason)
+			}
+		})
+	}
+	clean := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext)
+	if hasStaticCredentials(clean.AuthInfos[testContext]) {
+		t.Fatal("clean exec AuthInfo must not report static credentials")
+	}
+}
+
+func TestConfigureKubectl_PreservesNamespaceAndTrimsIdentifiers(t *testing.T) {
+	t.Run("invalid DNS-1123 namespace keeps the context and its target without get-credentials", func(t *testing.T) {
+		cfg := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext)
+		cfg.Contexts[testContext].Namespace = "INVALID_NAMESPACE"
+
+		exec := newExactExecutor(map[string][]shell.CommandResult{
+			probeCmd: {{ExitCode: 0}},
+		})
+		orc := newTestGKEOrchestrator(exec)
+		orc.clusterDesc = testClusterDesc(true, true)
+		orc.kubeconfigLoader = staticLoader(cfg)
+
+		if err := orc.configureKubectl(" "+testCluster+" ", " "+testLocation+" ", " "+testProject+" "); err != nil {
+			t.Fatalf("configureKubectl() error = %v; calls=%v", err, exec.calls)
+		}
+		if !slices.Equal(exec.calls, []string{probeCmd}) {
+			t.Fatalf("calls = %v, want [%q] (an invalid namespace must not rewrite kubeconfig)", exec.calls, probeCmd)
+		}
+		if ns, err := orc.getCurrentNamespace(testCluster, testLocation, testProject); err != nil || ns != "INVALID_NAMESPACE" {
+			t.Fatalf("target namespace = %q (err=%v), want INVALID_NAMESPACE so validateTargetNamespaceExists fails fast instead of using default", ns, err)
+		}
+	})
+
+	for _, tc := range []struct {
+		name   string
+		rawNS  string
+		wantNS string
+	}{
+		{
+			name:   "non-DNS-1123 namespace is preserved on refresh instead of resetting to default",
+			rawNS:  "INVALID_NAMESPACE",
+			wantNS: "INVALID_NAMESPACE",
+		},
+		{
+			name:   "whitespace-padded namespace is restored trimmed on refresh",
+			rawNS:  " team-ns ",
+			wantNS: "team-ns",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(refreshCredentialsEnv, "1")
+			cfg := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext)
+			cfg.Contexts[testContext].Namespace = tc.rawNS
+
+			wantSetNS := "kubectl config set-context " + testContext + " --namespace=" + tc.wantNS
+			exec := newExactExecutor(map[string][]shell.CommandResult{
+				getCredsIP: {{ExitCode: 0}},
+				wantSetNS:  {{ExitCode: 0}},
+				probeCmd:   {{ExitCode: 0}},
+			})
+			orc := newTestGKEOrchestrator(exec)
+			orc.clusterDesc = testClusterDesc(true, true)
+			orc.kubeconfigLoader = staticLoader(cfg)
+
+			if err := orc.configureKubectl(" "+testCluster+" ", " "+testLocation+" ", " "+testProject+" "); err != nil {
+				t.Fatalf("configureKubectl() error = %v; calls=%v", err, exec.calls)
+			}
+			if !slices.Equal(exec.calls, []string{getCredsIP, wantSetNS, probeCmd}) {
+				t.Fatalf("calls = %v, want [%q, %q, %q]", exec.calls, getCredsIP, wantSetNS, probeCmd)
+			}
+		})
+	}
+
+	t.Run("gkeContextName and refreshGKEAuth trim identifier whitespace directly", func(t *testing.T) {
+		if got := gkeContextName(" "+testProject+" ", " "+testLocation+" ", " "+testCluster+" "); got != testContext {
+			t.Fatalf("gkeContextName() = %q, want %q", got, testContext)
+		}
+		exec := newExactExecutor(map[string][]shell.CommandResult{
+			getCredsIP: {{ExitCode: 0}},
+		})
+		orc := newTestGKEOrchestrator(exec)
+		if err := orc.refreshGKEAuth(" "+testCluster+" ", " "+testLocation+" ", " "+testProject+" ", false); err != nil {
+			t.Fatalf("refreshGKEAuth() error = %v; calls=%v", err, exec.calls)
+		}
+	})
+}
+
+func TestConfigureKubectl_RefreshesStalePathExecOnlyOnMissingBinary(t *testing.T) {
+	t.Run("stale path-qualified exec binary refreshes credentials across Unix and Windows missing-binary errors", func(t *testing.T) {
+		for _, tc := range []struct {
+			cmd    string
+			stderr string
+		}{
+			{
+				cmd:    "/opt/old-sdk/bin/gke-gcloud-auth-plugin",
+				stderr: "Unable to connect to the server: getting credentials: exec: fork/exec /opt/old-sdk/bin/gke-gcloud-auth-plugin: no such file or directory",
+			},
+			{
+				cmd:    `C:\old-sdk\bin\gke-gcloud-auth-plugin.exe`,
+				stderr: `Unable to connect to the server: getting credentials: exec: executable C:\old-sdk\bin\gke-gcloud-auth-plugin.exe not found`,
+			},
+			{
+				cmd:    `C:\old-sdk\bin\gke-gcloud-auth-plugin.exe`,
+				stderr: `Unable to connect to the server: getting credentials: exec: CreateProcess C:\old-sdk\bin\gke-gcloud-auth-plugin.exe: The system cannot find the file specified.`,
+			},
+		} {
+			execCfg := gkeExec()
+			execCfg.Command = tc.cmd
+			cfg := kubeconfigWith("https://"+testDNSHost, nil, execCfg, testContext)
+
+			exec := newExactExecutor(map[string][]shell.CommandResult{
+				probeCmd:   {{ExitCode: 1, Stderr: tc.stderr}, {ExitCode: 0}},
+				getCredsIP: {{ExitCode: 0}},
+				setNSCmd:   {{ExitCode: 0}},
+			})
+			orc := newTestGKEOrchestrator(exec)
+			orc.clusterDesc = testClusterDesc(true, true)
+			orc.kubeconfigLoader = staticLoader(cfg)
+
+			if err := orc.configureKubectl(testCluster, testLocation, testProject); err != nil {
+				t.Fatalf("configureKubectl(%q) error = %v; calls=%v", tc.stderr, err, exec.calls)
+			}
+			if exec.count(getCredsIP) != 1 || exec.count(probeCmd) != 2 {
+				t.Fatalf("expected refresh + re-probe for stale path binary; calls=%v", exec.calls)
+			}
+		}
+	})
+
+	t.Run("path-qualified exec plugin exiting non-zero on missing ADC file fails fast without get-credentials", func(t *testing.T) {
+		execCfg := gkeExec()
+		execCfg.Command = "/opt/sdk/bin/gke-gcloud-auth-plugin"
+		cfg := kubeconfigWith("https://"+testDNSHost, nil, execCfg, testContext)
+
+		adcStderr := "Unable to connect to the server: getting credentials: open /missing/adc.json: no such file or directory: exec: executable /opt/sdk/bin/gke-gcloud-auth-plugin failed with exit code 1"
+		exec := newExactExecutor(map[string][]shell.CommandResult{
+			probeCmd: {{ExitCode: 1, Stderr: adcStderr}},
+		})
+		orc := newTestGKEOrchestrator(exec)
+		orc.clusterDesc = testClusterDesc(true, true)
+		orc.kubeconfigLoader = staticLoader(cfg)
+
+		err := orc.configureKubectl(testCluster, testLocation, testProject)
+		if err == nil || !strings.Contains(err.Error(), "Re-fetching cluster credentials will not help") {
+			t.Fatalf("expected terminal auth failure without refresh, got err=%v", err)
+		}
+		if exec.count(getCredsIP)+exec.count(getCredsDNS) != 0 {
+			t.Fatalf("must not invoke get-credentials when plugin binary ran and exited non-zero; calls=%v", exec.calls)
+		}
+	})
+
+	t.Run("bare PATH gke-gcloud-auth-plugin not found still fails fast with install hint", func(t *testing.T) {
+		cfg := kubeconfigWith("https://"+testDNSHost, nil, gkeExec(), testContext)
+		exec := newExactExecutor(map[string][]shell.CommandResult{
+			probeCmd: {{ExitCode: 1, Stderr: "Unable to connect to the server: getting credentials: exec: executable gke-gcloud-auth-plugin not found"}},
+		})
+		orc := newTestGKEOrchestrator(exec)
+		orc.clusterDesc = testClusterDesc(true, true)
+		orc.kubeconfigLoader = staticLoader(cfg)
+
+		err := orc.configureKubectl(" "+testCluster+" ", " "+testLocation+" ", " "+testProject+" ")
+		if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("GKE cluster %q", testCluster)) || !strings.Contains(err.Error(), "Re-fetching cluster credentials will not help") {
+			t.Fatalf("expected terminal auth failure for bare binary missing from PATH, got err=%v", err)
+		}
+		if exec.count(getCredsIP)+exec.count(getCredsDNS) != 0 {
+			t.Fatalf("must not invoke get-credentials when bare plugin binary is missing from PATH; calls=%v", exec.calls)
+		}
+	})
+}
+
+func TestHasAPIGroupVersion(t *testing.T) {
+	const testGroupVersion = "kueue.x-k8s.io"
+	const rawCmd = "kubectl get --raw /apis/kueue.x-k8s.io --request-timeout=10s"
+
+	t.Run("present API group returns true, pins context, and bounds timeout", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			rawCmd: {{ExitCode: 0, Stdout: `{"kind":"APIGroup"}`}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.kubeContext = "k8s-ctx"
+
+		ok, err := orc.HasAPIGroupVersion(testGroupVersion)
+		if err != nil || !ok {
+			t.Fatalf("HasAPIGroupVersion = (%v, %v), want (true, nil)", ok, err)
+		}
+		mockExec.assertAllKubectlPinned(t, "k8s-ctx")
+		if len(mockExec.timeouts) != 1 || mockExec.timeouts[0] != apiGroupProbeTimeout {
+			t.Errorf("timeouts = %v, want [%v]", mockExec.timeouts, apiGroupProbeTimeout)
+		}
+	})
+
+	t.Run("404 NotFound markers in stderr or stdout return false without error", func(t *testing.T) {
+		for _, res := range []shell.CommandResult{
+			{ExitCode: 1, Stderr: "Error from server (NotFound): group missing"},
+			{ExitCode: 1, Stderr: "the server could not find the requested resource"},
+			{ExitCode: 1, Stdout: "404 page not found"},
+		} {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{rawCmd: {res}})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.kubeContext = "generic-ctx"
+
+			ok, err := orc.HasAPIGroupVersion(testGroupVersion)
+			if err != nil || ok {
+				t.Errorf("res %+v: HasAPIGroupVersion = (%v, %v), want (false, nil)", res, ok, err)
+			}
+			if !slices.Equal(mockExec.timeouts, []time.Duration{apiGroupProbeTimeout}) {
+				t.Errorf("timeouts = %v, want [%v]", mockExec.timeouts, apiGroupProbeTimeout)
+			}
+			mockExec.assertAllKubectlPinned(t, "generic-ctx")
+		}
+	})
+}
+
+func TestHasAPIGroupVersion_ErrorsAndBlankInputs(t *testing.T) {
+	t.Parallel()
+	const testGroupVersion = "kueue.x-k8s.io"
+	const rawCmd = "kubectl get --raw /apis/kueue.x-k8s.io --request-timeout=10s"
+	errExecNotFound := errors.New(`exec: "kubectl": executable file not found in $PATH`)
+	errWarnOnly := errors.New("exit status 1")
+
+	for _, tc := range []struct {
+		name          string
+		res           shell.CommandResult
+		wantErrSubstr string
+		wantWrapped   error
+	}{
+		{name: "deadline exceeded wrapped before stderr", res: shell.CommandResult{ExitCode: 0, Stderr: "404 page not found", Err: context.DeadlineExceeded}, wantErrSubstr: "timed out", wantWrapped: context.DeadlineExceeded},
+		{name: "skips WARNING and klog WMMDD lines", res: shell.CommandResult{ExitCode: 1, Stderr: "WARNING: kubeconfig perm\nW1120 12:00:00.000000 1 loader.go:1] warn\nError from server (Forbidden): denied"}, wantErrSubstr: "Forbidden"},
+		{name: "stderr warnings only fall through to stdout", res: shell.CommandResult{ExitCode: 1, Stderr: "\nWARNING: deprecated\nW1120 12:00:00.000000 1 loader.go:1] warn", Stdout: "proxy 503 unavailable"}, wantErrSubstr: "503 unavailable"},
+		{name: "stderr warnings only with empty stdout wraps res.Err", res: shell.CommandResult{ExitCode: 1, Stderr: "WARNING: deprecated\nW1120 12:00:00.000000 1 loader.go:1] warn", Err: errWarnOnly}, wantErrSubstr: "exit status 1", wantWrapped: errWarnOnly},
+		{name: "non-klog W1234x line is preserved", res: shell.CommandResult{ExitCode: 1, Stderr: "W1234x real error"}, wantErrSubstr: "W1234x real error"},
+		{name: "port 4040 connection refused", res: shell.CommandResult{ExitCode: 1, Stderr: "dial tcp 127.0.0.1:4040: connect: connection refused"}, wantErrSubstr: "connection refused"},
+		{name: "kubectl not in PATH wraps res.Err", res: shell.CommandResult{ExitCode: 1, Err: errExecNotFound}, wantErrSubstr: "executable file not found", wantWrapped: errExecNotFound},
+		{name: "stdout error fallback", res: shell.CommandResult{ExitCode: 1, Stdout: "gateway 502 bad gateway"}, wantErrSubstr: "502 bad gateway"},
+		{name: "empty output falls back to exit status", res: shell.CommandResult{ExitCode: 2}, wantErrSubstr: "exit status 2"},
+		{name: "exit 0 non-JSON HTML proxy response", res: shell.CommandResult{ExitCode: 0, Stdout: "<html>login</html>"}, wantErrSubstr: "non-JSON"},
+		{name: "exit 0 empty stdout", res: shell.CommandResult{ExitCode: 0, Stdout: "   "}, wantErrSubstr: "non-JSON"},
+	} {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{rawCmd: {tc.res}})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.kubeContext = "err-ctx"
+		ok, err := orc.HasAPIGroupVersion(testGroupVersion)
+		if err == nil || ok {
+			t.Errorf("%s: expected error from HasAPIGroupVersion, got (%v, %v)", tc.name, ok, err)
+			continue
+		}
+		if tc.wantWrapped != nil && !errors.Is(err, tc.wantWrapped) {
+			t.Errorf("%s: expected wrapped %v, got %v", tc.name, tc.wantWrapped, err)
+		}
+		if !strings.Contains(err.Error(), tc.wantErrSubstr) || strings.HasSuffix(err.Error(), ": ") {
+			t.Errorf("%s: err = %q, want substring %q", tc.name, err.Error(), tc.wantErrSubstr)
+		}
+		if !slices.Equal(mockExec.timeouts, []time.Duration{apiGroupProbeTimeout}) {
+			t.Errorf("%s: timeouts = %v, want [%v]", tc.name, mockExec.timeouts, apiGroupProbeTimeout)
+		}
+		mockExec.assertAllKubectlPinned(t, "err-ctx")
+	}
+	assertHasAPIGroupVersionBlankGuards(t, testGroupVersion)
+}
+
+func assertHasAPIGroupVersionBlankGuards(t *testing.T, nonBlankGV string) {
+	t.Helper()
+	blankExec := NewMockExecutor(nil)
+	orcBlank := newTestGKEOrchestrator(blankExec)
+	for _, blank := range []string{"  ", "/ /", "/ / /", "///"} {
+		if ok, err := orcBlank.HasAPIGroupVersion(blank); err != nil || ok {
+			t.Fatalf("HasAPIGroupVersion(%q) = (%v, %v), want (false, nil)", blank, ok, err)
+		}
+	}
+	if ok, err := orcBlank.HasAPIGroupVersion(nonBlankGV); err == nil || ok || !strings.Contains(err.Error(), "--context") {
+		t.Fatalf("blank kubeContext HasAPIGroupVersion(%q) = (%v, %v), want explicit --context error", nonBlankGV, ok, err)
+	}
+	if len(blankExec.calls) != 0 {
+		t.Fatalf("expected 0 kubectl calls on blank kubeContext, got %v", blankExec.calls)
 	}
 }

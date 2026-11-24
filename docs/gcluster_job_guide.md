@@ -1470,7 +1470,7 @@ Every `gcluster job` command first makes `kubectl` target your cluster. A GKE co
 
 `gcluster` handles this as follows:
 
-1. **Reuse first.** If your `kubeconfig` already contains a context for the cluster (`gke_<project>_<location>_<cluster>`) that *verifiably* belongs to it — its server is one of the cluster's endpoints, its pinned CA matches the cluster CA (IP endpoint only), and it authenticates through `gke-gcloud-auth-plugin` — `gcluster` runs a short (5s) connectivity probe against that context and, on success, **uses it as-is** without calling `gcloud container clusters get-credentials`. Your namespace and endpoint choice are preserved. You will see:
+1. **Reuse first.** If your `kubeconfig` already contains a context for the cluster (`gke_<project>_<location>_<cluster>`) that *verifiably* belongs to it — its server is one of the cluster's endpoints, its pinned CA matches the cluster CA (IP endpoint only), it keeps TLS verification on and doesn't point at a CA file (no `insecure-skip-tls-verify` or `certificate-authority`), and it authenticates through `gke-gcloud-auth-plugin` — `gcluster` runs a short (5s) connectivity probe against that context and, on success, **uses it as-is** without calling `gcloud container clusters get-credentials`. Your namespace and endpoint choice are preserved. You will see:
 
    ```text
    Reusing existing kubeconfig context 'gke_my-project_us-central1_my-cluster' (DNS endpoint).

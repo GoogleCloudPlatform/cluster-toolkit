@@ -19,6 +19,7 @@ package gke
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -28,12 +29,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
+	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
@@ -74,12 +77,12 @@ func (m endpointMode) other() endpointMode {
 // shouldUseDNSEndpoint picks the default mode for a first get-credentials call.
 // IP is preferred when a public IP endpoint exists (DNS can hit HTTP 431 behind
 // some proxies); DNS is used when it is the only externally reachable option.
-func shouldUseDNSEndpoint(cfg *controlPlaneEndpointsConfig) bool {
-	if cfg == nil || cfg.DnsEndpointConfig == nil || !cfg.DnsEndpointConfig.AllowExternalTraffic {
+func (c gkeCluster) shouldUseDNSEndpoint() bool {
+	if !c.dnsEndpointAvailable() {
 		return false
 	}
-	ipCfg := cfg.IPEndpointsConfig
-	return ipCfg == nil || (ipCfg.Enabled != nil && !*ipCfg.Enabled) || !ipCfg.EnablePublicEndpoint
+	ipCfg := c.ControlPlaneEndpointsConfig.IPEndpointsConfig
+	return !c.ipEndpointAvailable() || ipCfg == nil || !ipCfg.EnablePublicEndpoint
 }
 
 // ipEndpointAvailable reports whether the cluster exposes any IP control-plane endpoint.
@@ -125,7 +128,7 @@ func (c gkeCluster) dnsEndpointAvailable() bool {
 
 // gkeContextName is the context name gcloud writes for a cluster.
 func gkeContextName(projectID, location, clusterName string) string {
-	return fmt.Sprintf("gke_%s_%s_%s", projectID, location, clusterName)
+	return fmt.Sprintf("gke_%s_%s_%s", strings.TrimSpace(projectID), strings.TrimSpace(location), strings.TrimSpace(clusterName))
 }
 
 func gkeNamedContext(cfg *clientcmdapi.Config, clusterName, location, projectID string) (string, *clientcmdapi.Context, bool) {
@@ -398,7 +401,7 @@ func evaluateExistingContext(cfg *clientcmdapi.Config, clusterName, location, pr
 	}
 	// Tools such as Terraform or Helm may write the default HTTPS port explicitly;
 	// knownEndpoints() registers bare https://<host>, so drop it before matching.
-	server := strings.ToLower(strings.TrimRight(strings.TrimSpace(cluster.Server), "/"))
+	server := strings.ToLower(strings.TrimRight(cluster.Server, "/"))
 	server = strings.TrimSuffix(server, ":443")
 	mode, known := desc.knownEndpoints()[server]
 	if !known {
@@ -407,31 +410,57 @@ func evaluateExistingContext(cfg *clientcmdapi.Config, clusterName, location, pr
 	}
 	check.mode = mode
 
-	if mode == endpointModeIP {
-		if desc.MasterAuth == nil || desc.MasterAuth.ClusterCaCertificate == "" {
-			check.reason = "cannot verify certificate authority: cluster description carries no CA"
-			return check
-		}
-		if len(cluster.CertificateAuthorityData) == 0 {
-			check.reason = "certificate authority data is missing or file-based in kubeconfig"
-			return check
-		}
-		if base64.StdEncoding.EncodeToString(cluster.CertificateAuthorityData) != desc.MasterAuth.ClusterCaCertificate {
-			check.reason = "certificate authority mismatch (cluster may have been recreated)"
-			return check
-		}
+	if reason := validateClusterTLS(cluster, mode, desc); reason != "" {
+		check.reason = reason
+		return check
 	}
-
 	if reason := validateGKEExecAuth(cfg.AuthInfos[kubeCtx.AuthInfo], kubeCtx.AuthInfo); reason != "" {
 		check.reason = reason
+		return check
+	}
+	// Namespace is a targeting concern (validateTargetNamespaceExists reports a bad one) and kubectl
+	// does not enforce DNS-1123 on it, so keep it out of the reuse decision.
+	usable, ctxCopy := *cfg, *kubeCtx
+	ctxCopy.Namespace = ""
+	usable.Contexts = map[string]*clientcmdapi.Context{name: &ctxCopy}
+	if err := clientcmd.ConfirmUsable(usable, name); err != nil {
+		check.reason = fmt.Sprintf("invalid kubeconfig context: %v", err)
 		return check
 	}
 	return check
 }
 
+func validateClusterTLS(cluster *clientcmdapi.Cluster, mode endpointMode, desc gkeCluster) string {
+	if cluster.InsecureSkipTLSVerify {
+		return "cluster has insecure-skip-tls-verify enabled"
+	}
+	if cluster.CertificateAuthority != "" {
+		return "certificate authority data is file-based in kubeconfig"
+	}
+	if mode == endpointModeDNS {
+		if len(cluster.CertificateAuthorityData) > 0 && !x509.NewCertPool().AppendCertsFromPEM(cluster.CertificateAuthorityData) {
+			return "certificate authority data is not valid PEM"
+		}
+		return ""
+	}
+	if desc.MasterAuth == nil || strings.TrimSpace(desc.MasterAuth.ClusterCaCertificate) == "" {
+		return "cannot verify certificate authority: cluster description carries no CA"
+	}
+	if len(cluster.CertificateAuthorityData) == 0 {
+		return "certificate authority data is missing or file-based in kubeconfig"
+	}
+	if base64.StdEncoding.EncodeToString(cluster.CertificateAuthorityData) != strings.TrimSpace(desc.MasterAuth.ClusterCaCertificate) {
+		return "certificate authority mismatch (cluster may have been recreated)"
+	}
+	return ""
+}
+
 func validateGKEExecAuth(auth *clientcmdapi.AuthInfo, userName string) string {
 	if k8s.ExecPluginBaseName(auth) != gkeAuthPluginBinary {
 		return fmt.Sprintf("user %q does not authenticate via %s", userName, gkeAuthPluginBinary)
+	}
+	if auth.Exec.Command != strings.TrimSpace(auth.Exec.Command) {
+		return fmt.Sprintf("user %q exec command %q contains leading or trailing whitespace", userName, auth.Exec.Command)
 	}
 	if auth.AuthProvider != nil {
 		return fmt.Sprintf("user %q specifies both auth-provider and exec authentication", userName)
@@ -486,17 +515,6 @@ var (
 		"unable to read token file",
 		"error loading config file",
 	}
-	// GKE's DNS endpoint returns plain-text HTTP 403 before requests reach kube-apiserver
-	// when external DNS access is disabled, container.clusters.connect IAM is denied, or
-	// VPC Service Controls blocks access. client-go formats these as
-	// "Error from server (Forbidden): ...", which must trigger IP fallback rather than
-	// being mistaken for a reachable cluster with Kubernetes RBAC restrictions on /version.
-	probeDNSGatewayRejectedMarkers = []string{
-		"allow_external_traffic is disabled",
-		"container.googleapis.com/clusters.connect",
-		"prohibited by organization's policy",
-		"vpcservicecontrols",
-	}
 	// Only the apiserver's status error counts as RBAC-forbidden; a forward proxy's "403 Forbidden" on CONNECT is a connectivity failure.
 	probeForbiddenMarkers    = []string{"error from server (forbidden)"}
 	probeConnectivityMarkers = []string{
@@ -545,7 +563,7 @@ func classifyProbeFailure(stderr string) probeOutcome {
 		return probeInvalid
 	case contains(probeAuthMarkers):
 		return probeAuth
-	case contains(probeDNSGatewayRejectedMarkers):
+	case k8s.IsDNSGatewayRejectedText(s):
 		return probeConnectivity
 	case contains(probeForbiddenMarkers):
 		return probeForbidden
@@ -648,31 +666,83 @@ func (g *GKEOrchestrator) kubectlStream(args ...string) error {
 	return g.executor.ExecuteCommandStream("kubectl", k8s.WithContext(g.kubeContext, args)...)
 }
 
+const apiGroupProbeTimeout = 15 * time.Second
+
 // HasAPIGroupVersion checks whether the Kubernetes apiserver serves /apis/<groupVersion>
-// via the non-privileged API discovery endpoint.
+// via the non-privileged API discovery endpoint (implements k8s.APIGroupChecker).
 func (g *GKEOrchestrator) HasAPIGroupVersion(groupVersion string) (bool, error) {
-	gv := strings.Trim(strings.TrimSpace(groupVersion), "/")
+	gv := strings.TrimFunc(groupVersion, func(r rune) bool {
+		return r == '/' || unicode.IsSpace(r)
+	})
 	if gv == "" {
 		return false, nil
 	}
-	res := g.kubectl("get", "--raw", "/apis/"+gv, kubectlReadTimeout)
-	if res.ExitCode == 0 {
-		return true, nil
+	if strings.TrimSpace(g.kubeContext) == "" {
+		return false, fmt.Errorf("internal error: refusing to query Kubernetes API group %q without an explicit --context", gv)
 	}
-	errText := strings.TrimSpace(res.Stderr)
-	if errText == "" {
-		errText = strings.TrimSpace(res.Stdout)
+	res := g.kubectlWithTimeout(apiGroupProbeTimeout, "get", "--raw", "/apis/"+gv, kubectlReadTimeout)
+	if errors.Is(res.Err, context.DeadlineExceeded) {
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: timed out after %v: %w", gv, apiGroupProbeTimeout, res.Err)
 	}
-	if errText == "" && res.Err != nil {
-		errText = strings.TrimSpace(res.Err.Error())
+	if res.ExitCode == 0 && res.Err == nil {
+		if isJSONObject(res.Stdout) {
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: unexpected non-JSON response %q", gv, firstOutputLine(res.Stdout, res.Stderr))
 	}
-	if errText == "" {
-		errText = fmt.Sprintf("exit status %d", res.ExitCode)
-	}
-	if isAPIGroupNotFoundText(errText) {
+	combined := res.Stderr + "\n" + res.Stdout
+	if isAPIGroupNotFoundText(combined) {
 		return false, nil
 	}
-	return false, fmt.Errorf("failed to query Kubernetes API group %q: %s", gv, firstLine(errText))
+	if errLine := firstNonWarningLine(res.Stderr, res.Stdout); errLine != "" {
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: %s", gv, errLine)
+	}
+	if res.Err != nil {
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: %w", gv, res.Err)
+	}
+	if fallback := firstOutputLine(res.Stderr, res.Stdout); fallback != "" {
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: %s", gv, fallback)
+	}
+	return false, fmt.Errorf("failed to query Kubernetes API group %q: exit status %d", gv, res.ExitCode)
+}
+
+func isJSONObject(raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	return strings.HasPrefix(trimmed, "{") && json.Valid([]byte(trimmed))
+}
+
+func firstNonWarningLine(stderr, stdout string) string {
+	for _, block := range []string{stderr, stdout} {
+		if line := scanNonWarningLine(block); line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
+func firstOutputLine(primary, fallback string) string {
+	if line := firstLine(strings.TrimSpace(primary)); line != "" {
+		return line
+	}
+	return firstLine(strings.TrimSpace(fallback))
+}
+
+func scanNonWarningLine(s string) string {
+	for _, raw := range strings.Split(s, "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || isKubectlWarningLine(line) {
+			continue
+		}
+		return line
+	}
+	return ""
+}
+
+func isKubectlWarningLine(line string) bool {
+	if strings.HasPrefix(strings.ToUpper(line), "WARNING:") {
+		return true
+	}
+	return len(line) >= 6 && line[0] == 'W' && line[5] == ' ' && isAllDigits(line[1:5])
 }
 
 func isAPIGroupNotFoundText(text string) bool {
@@ -706,7 +776,7 @@ func (c gkeCluster) endpointModeAvailable(mode endpointMode) bool {
 // seen to be unreachable is demoted rather than dropped.
 func (g *GKEOrchestrator) endpointModeOrder(avoid endpointMode) []endpointMode {
 	preferred := endpointModeIP
-	if shouldUseDNSEndpoint(g.clusterDesc.ControlPlaneEndpointsConfig) {
+	if g.clusterDesc.shouldUseDNSEndpoint() {
 		preferred = endpointModeDNS
 	}
 	var order []endpointMode
@@ -723,6 +793,9 @@ func (g *GKEOrchestrator) endpointModeOrder(avoid endpointMode) []endpointMode {
 
 // refreshGKEAuth runs `gcloud container clusters get-credentials`.
 func (g *GKEOrchestrator) refreshGKEAuth(clusterName, clusterLocation, projectID string, useDNSEndpoint bool) error {
+	clusterName = strings.TrimSpace(clusterName)
+	clusterLocation = strings.TrimSpace(clusterLocation)
+	projectID = strings.TrimSpace(projectID)
 	args := []string{"container", "clusters", "get-credentials", clusterName, "--location", clusterLocation, "--project", projectID}
 	if useDNSEndpoint {
 		args = append(args, "--dns-endpoint")
@@ -768,6 +841,39 @@ func (g *GKEOrchestrator) refreshCredentialsPreservingNamespace(clusterName, clu
 		return err
 	}
 	return g.restoreNamespaceContext(gkeContextName(projectID, clusterLocation, clusterName), originalNamespace)
+}
+
+func isMissingExecBinaryStderr(stderr string) bool {
+	lower := strings.ToLower(stderr)
+	if strings.Contains(lower, "failed with exit code") || !strings.Contains(lower, "getting credentials") {
+		return false
+	}
+	for _, marker := range []string{
+		"no such file or directory",
+		"not found",
+		"cannot find the ",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *GKEOrchestrator) hasMissingPathExecBinary(contextName, stderr string) bool {
+	if !isMissingExecBinaryStderr(stderr) {
+		return false
+	}
+	cfg, err := g.loadKubeconfig()
+	if err != nil || cfg == nil {
+		return false
+	}
+	kubeCtx := cfg.Contexts[contextName]
+	if kubeCtx == nil {
+		return false
+	}
+	auth := cfg.AuthInfos[kubeCtx.AuthInfo]
+	return auth != nil && auth.Exec != nil && strings.ContainsAny(auth.Exec.Command, `/\`)
 }
 
 // regenerateKubeContext fetches credentials per endpoint mode in order, moving
@@ -834,16 +940,21 @@ func (g *GKEOrchestrator) endpointConnectivityError(clusterName string, attempts
 // GCLUSTER_REFRESH_CREDENTIALS=1 skips reuse.
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
 	g.resetStorageCaches()
+	g.inventory = nil
 	if g.mode == orchestrator.TypeK8s {
 		return g.configureK8sKubectl(clusterName)
 	}
 	g.kubeContext = ""
+	g.resetManagedDynamicClient()
 	defer func() {
 		if g.kubeContext == "" {
 			g.resetManagedDynamicClient()
 		}
 	}()
 	avoid := endpointModeUnknown
+	clusterName = strings.TrimSpace(clusterName)
+	clusterLocation = strings.TrimSpace(clusterLocation)
+	projectID = strings.TrimSpace(projectID)
 
 	if forceCredentialRefresh() {
 		logging.Info("%s is set; refreshing GKE credentials for cluster '%s'...", refreshCredentialsEnv, clusterName)
@@ -863,6 +974,10 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 		logging.Info("Reusing existing kubeconfig context '%s' (%s endpoint); use 'kubectl --context %s' for manual commands. Set %s=1 to force a credential refresh.", check.contextName, check.mode, check.contextName, refreshCredentialsEnv)
 		return nil
 	case probeAuth:
+		if g.hasMissingPathExecBinary(check.contextName, stderr) {
+			logging.Warn("Existing kubeconfig context '%s' references a missing %s path (%s). Refreshing credentials...", check.contextName, gkeAuthPluginBinary, firstLine(stderr))
+			break
+		}
 		return authFailureError(clusterName, stderr)
 	case probeConnectivity:
 		logging.Warn("Existing kubeconfig context '%s' (%s endpoint) is unreachable from here (%s). Refreshing credentials...", check.contextName, check.mode, firstLine(stderr))
@@ -880,17 +995,14 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 // usableKubeClient returns the Kubernetes API client for best-effort discovery, or nil when none can be
 // built yet (no pinned context, or an unreadable kubeconfig).
 func (g *GKEOrchestrator) usableKubeClient() KubeClient {
-	if g.needsDynamicClientInit() {
-		g.resetManagedDynamicClient()
-		if g.dynClient == nil && g.kubeContext == "" {
-			return nil
-		}
-		if _, err := g.getDynamicClient(); err != nil {
+	kc, err := g.requireKubeClientForDiscovery()
+	if err != nil {
+		if !errors.Is(err, errKubeClientUninitialized) {
 			logging.Warn("Kubernetes API client unavailable for cluster discovery (context %q): %v", g.kubeContext, err)
-			return nil
 		}
+		return nil
 	}
-	return g.kubeClient
+	return kc
 }
 
 // activeWorkloadImages returns the distinct images the rendered pods pull: the workload image, the ML

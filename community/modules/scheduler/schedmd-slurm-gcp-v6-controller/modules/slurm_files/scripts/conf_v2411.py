@@ -96,8 +96,6 @@ class TopologyBuilder:
 
 def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
     bldr = TopologyBuilder()
-    for ns in lkp.cfg.nodeset_tpu.values():
-        conf.add_tpu_nodeset_topology(ns, bldr, lkp)
     for ns in lkp.cfg.nodeset.values():
         conf.add_nodeset_topology(ns, bldr, lkp)
     return bldr
@@ -145,10 +143,6 @@ class SlurmConfigGeneratorV2411(conf.SlurmConfigGenerator):
     @property
     def use_gpu_type(self) -> bool:
         return False
-
-    def install_jobsubmit_lua(self) -> None:
-        # 24.11 does not support or need job_submit.lua
-        pass
 
     def generate_topology_data(self) -> Tuple[bool, Any]:
         return gen_topology_conf(self.lkp)

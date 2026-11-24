@@ -55,6 +55,15 @@ gcluster explain [MODULE | BLUEPRINT | SPECS...] [flags]
 * `-d, --deployment-file <string>`: Optional companion deployment YAML file when explaining a blueprint.
 * `-f, --format <string>`: Output format: `text`, `yaml`, or `json` (default `"text"`).
 
+In `json` and `yaml` output, a module input can include a `constraints` object with limits the module states in a simple form, in its Terraform `validation` blocks or `metadata.yaml` validators:
+
+* `allowed_values`, plus `case_insensitive: true` when the module ignores case.
+* `min` and `max`, plus `min_exclusive` / `max_exclusive` for `>` and `<`.
+* `pattern`: an RE2 regular expression. It matches anywhere in the value unless it starts with `^` and ends with `$`, like Terraform's `regex()` and JSON Schema `pattern` (the HTML `pattern` attribute needs a full match instead). If rules give different patterns, only one is listed; the others stay in `validations`.
+* `allow_null: true` when the rules explicitly accept null (when omitted, null is either rejected or not covered by the parsed rules), and `sources` (`terraform` and/or `metadata`).
+
+Limits are only listed when they can be read exactly. Other rules, such as ones that depend on several inputs, stay in `validations` as messages.
+
 ### Examples - explain
 
 ```bash
@@ -82,7 +91,7 @@ gcluster deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 
 ### Flags - deploy
 
-* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. When not set, an existing deployment keeps the `ghpc_creator` label it was created with (or none); a new deployment gets it for `@google.com` accounts. Changing this flag on an existing deployment changes labels on every resource and forces replacement of immutable ones such as instance templates.
 * `-a, --artifacts <string>`: Artifacts directory (automatically configured if unset).
 * `--auto-approve`: Automatically approve proposed changes without prompting.
 * `--backend-config <strings>`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
@@ -117,7 +126,7 @@ gcluster create <BLUEPRINT_FILE> [flags]
 
 ### Flags - create
 
-* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. When not set, an existing deployment keeps the `ghpc_creator` label it was created with (or none); a new deployment gets it for `@google.com` accounts. Changing this flag on an existing deployment changes labels on every resource and forces replacement of immutable ones such as instance templates.
 * `--backend-config strings`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
 * `-d, --deployment-file string`: Deployment file to override blueprint variables and backend configuration.
 * `--force`: Forces overwrite of existing deployment directory. If set, `--overwrite-deployment` is implied and no validation is performed on the existing deployment directory.
@@ -167,7 +176,7 @@ gcluster expand BLUEPRINT_NAME [flags]
 
 ### Flags - expand
 
-* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. When not set, an existing deployment keeps the `ghpc_creator` label it was created with (or none); a new deployment gets it for `@google.com` accounts. Changing this flag on an existing deployment changes labels on every resource and forces replacement of immutable ones such as instance templates.
 * `--backend-config strings`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
 * `-d, --deployment-file string`: Deployment file to override blueprint variables and backend configuration.
 * `-o, --out string`: Output file for the expanded HPC Environment Definition (default `"expanded.yaml"`).

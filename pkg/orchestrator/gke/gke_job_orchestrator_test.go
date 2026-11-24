@@ -16,7 +16,6 @@ package gke
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +26,7 @@ import (
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"github.com/google/go-cmp/cmp"
@@ -76,15 +76,17 @@ func setupMockMachineConfig(t *testing.T) {
 	config.ClearMachineTypeCache()
 	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", mockJSON)
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	t.Setenv("GCLUSTER_LABEL_SCHEME", "")
 	t.Cleanup(config.ClearMachineTypeCache)
 }
 
 type MockExecutor struct {
 	responses   map[string][]shell.CommandResult
 	callCount   map[string]int
-	calls       []string // every command passed to ExecuteCommand, in order
-	streamCalls []string // commands passed to ExecuteCommandStream
-	contexts    []string // --context values stripped from kubectl calls, in order
+	calls       []string        // every command passed to ExecuteCommand, in order
+	streamCalls []string        // commands passed to ExecuteCommandStream
+	contexts    []string        // --context values stripped from kubectl calls, in order
+	timeouts    []time.Duration // timeouts passed to ExecuteCommandWithTimeout, in order
 }
 
 func NewMockExecutor(responses map[string][]shell.CommandResult) *MockExecutor {
@@ -133,7 +135,8 @@ func (m *MockExecutor) ExecuteCommand(name string, args ...string) shell.Command
 	}
 }
 
-func (m *MockExecutor) ExecuteCommandWithTimeout(_ time.Duration, name string, args ...string) shell.CommandResult {
+func (m *MockExecutor) ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) shell.CommandResult {
+	m.timeouts = append(m.timeouts, timeout)
 	return m.ExecuteCommand(name, args...)
 }
 
@@ -5090,59 +5093,35 @@ func TestBuildContainerImage_OfflineDryRunFallbackAndLiveError(t *testing.T) {
 	}
 }
 
-func TestHasAPIGroupVersion(t *testing.T) {
-	const testGroupVersion = "kueue.x-k8s.io"
-	const rawCmd = "kubectl get --raw /apis/kueue.x-k8s.io --request-timeout=10s"
+type stubDynClient struct {
+	dynamic.Interface
+	id string
+}
 
-	t.Run("present API group returns true and pins context", func(t *testing.T) {
-		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
-			rawCmd: {{ExitCode: 0, Stdout: `{"kind":"APIGroup"}`}},
-		})
-		orc := newTestGKEOrchestrator(mockExec)
-		orc.kubeContext = "k8s-ctx"
+func TestSetKubeClientAndSetDynamicClientSync(t *testing.T) {
+	t.Parallel()
+	orc := NewGKEOrchestrator()
+	dynA := &stubDynClient{id: "a"}
+	dynB := &stubDynClient{id: "b"}
+	orc.dynClient = dynA
+	orc.dynClientManaged = true
+	orc.dynClientContext = "ctx-a"
 
-		ok, err := orc.HasAPIGroupVersion(testGroupVersion)
-		if err != nil || !ok {
-			t.Fatalf("HasAPIGroupVersion = (%v, %v), want (true, nil)", ok, err)
-		}
-		mockExec.assertAllKubectlPinned(t, "k8s-ctx")
-	})
-
-	t.Run("404 NotFound returns false without error", func(t *testing.T) {
-		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
-			rawCmd: {{ExitCode: 1, Stderr: "Error from server (NotFound): the server could not find the requested resource"}},
-		})
-		orc := newTestGKEOrchestrator(mockExec)
-		orc.kubeContext = "generic-ctx"
-
-		ok, err := orc.HasAPIGroupVersion(testGroupVersion)
-		if err != nil || ok {
-			t.Fatalf("HasAPIGroupVersion = (%v, %v), want (false, nil)", ok, err)
-		}
-	})
-
-	t.Run("non-404 errors including port 4040, missing kubectl, Forbidden, and empty-stderr fallbacks propagate", func(t *testing.T) {
-		for _, tc := range []struct {
-			name string
-			res  shell.CommandResult
-		}{
-			{name: "port 4040 connection refused", res: shell.CommandResult{ExitCode: 1, Stderr: "dial tcp 127.0.0.1:4040: connect: connection refused"}},
-			{name: "kubectl not in PATH", res: shell.CommandResult{ExitCode: 1, Err: errors.New(`exec: "kubectl": executable file not found in $PATH`)}},
-			{name: "RBAC Forbidden", res: shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): forbidden"}},
-			{name: "stdout error fallback", res: shell.CommandResult{ExitCode: 1, Stdout: "gateway 502 bad gateway"}},
-			{name: "empty output falls back to exit status", res: shell.CommandResult{ExitCode: 2}},
-		} {
-			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
-				rawCmd: {tc.res},
-			})
-			orc := newTestGKEOrchestrator(mockExec)
-			if ok, err := orc.HasAPIGroupVersion(testGroupVersion); err == nil || ok || strings.HasSuffix(err.Error(), ": ") {
-				t.Errorf("%s: expected informative error from HasAPIGroupVersion, got (%v, %v)", tc.name, ok, err)
-			}
-		}
-		orcBlank := newTestGKEOrchestrator(NewMockExecutor(nil))
-		if ok, err := orcBlank.HasAPIGroupVersion("  "); err != nil || ok {
-			t.Fatalf("blank HasAPIGroupVersion = (%v, %v), want (false, nil)", ok, err)
-		}
-	})
+	orc.SetKubeClient(&DefaultKubeClient{dynClient: dynB})
+	if orc.dynClient != dynB || orc.dynClientManaged || orc.dynClientContext != "" {
+		t.Fatalf("SetKubeClient(*DefaultKubeClient) did not sync dynClient/managed state")
+	}
+	orc.SetKubeClient(&MockKubeClient{})
+	orc.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice}
+	orc.SetDynamicClient(dynA)
+	if d, ok := orc.kubeClient.(*DefaultKubeClient); !ok || d == nil || d.dynClient != dynA {
+		t.Fatalf("SetDynamicClient did not replace custom KubeClient with *DefaultKubeClient")
+	}
+	if orc.inventory != nil {
+		t.Fatalf("SetDynamicClient must clear cached inventory")
+	}
+	orc.SetDynamicClient(nil)
+	if orc.kubeClient != nil || orc.dynClient != nil {
+		t.Fatalf("SetDynamicClient(nil) should clear both kubeClient and dynClient")
+	}
 }
