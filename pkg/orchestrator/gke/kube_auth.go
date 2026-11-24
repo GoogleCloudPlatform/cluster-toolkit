@@ -1005,33 +1005,6 @@ func (g *GKEOrchestrator) usableKubeClient() KubeClient {
 	return kc
 }
 
-// activeWorkloadImages returns the distinct images the rendered pods pull: the workload image, the ML
-// Diagnostics telemetry sidecar image when enabled, and, for Pathways, the server, proxy, worker, and
-// colocated sidecar images of the selected deployment mode.
-func activeWorkloadImages(job orchestrator.JobDefinition, fullImageName, telemetryImage string) []string {
-	raw := []string{fullImageName}
-	if job.IsPathwaysJob {
-		pw := job.Pathways
-		if pw.Headless || pw.DeploySPS {
-			raw = nil
-		}
-		if pw.RunSPSWorkload == "" {
-			raw = append(raw, pw.ServerImage, pw.WorkerImage, pw.ColocatedPythonSidecarImage)
-		}
-		if !pw.DeploySPS {
-			raw = append(raw, pw.ProxyServerImage)
-		}
-	}
-	raw = append(raw, telemetryImage)
-	var images []string
-	for _, img := range raw {
-		if img != "" && !slices.Contains(images, img) {
-			images = append(images, img)
-		}
-	}
-	return images
-}
-
 // resolveImagePullSecrets returns the user's --image-pull-secret value verbatim when it was given (an empty value
 // attaches none), otherwise the dockerconfigjson secrets in the target namespace matching the workload's images
 // (including the ML Diagnostics telemetry sidecar image when sidecar injection is active).

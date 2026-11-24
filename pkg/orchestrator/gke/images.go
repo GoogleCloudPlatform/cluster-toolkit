@@ -17,9 +17,11 @@ package gke
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 )
 
 const (
@@ -163,4 +165,40 @@ func customSidecarNotice(p orchestrator.PathwaysJobDefinition) string {
 	_, flags := pathwaysImageNouns(p)
 	return fmt.Sprintf("Using gcluster's default Pathways %s with the colocated Python sidecar %s. The server and proxy images should ideally come from the same Pathways release as the sidecar's base image, and gcluster cannot verify before submission that the images work together, so please make sure the images you run are correct; for example, a sidecar built from %s needs %s from %s with the same tag. See %s.",
 		strings.Join(defaulted, " and "), p.ColocatedPythonSidecarImage, publicPathwaysSidecarImage, flags, publicPathwaysImageRepo, pathwaysSidecarImagesDoc)
+}
+
+// activeWorkloadImages returns the distinct images the rendered pods pull: the workload image, the ML
+// Diagnostics telemetry sidecar image when enabled, and, for Pathways, the server, proxy, worker, and
+// colocated sidecar images of the selected deployment mode.
+func activeWorkloadImages(job orchestrator.JobDefinition, fullImageName, telemetryImage string) []string {
+	raw := []string{fullImageName}
+	if job.IsPathwaysJob {
+		pw := job.Pathways
+		if pw.Headless || pw.DeploySPS {
+			raw = nil
+		}
+		if pw.RunSPSWorkload == "" {
+			raw = append(raw, pw.ServerImage, pw.WorkerImage, pw.ColocatedPythonSidecarImage)
+		}
+		if !pw.DeploySPS {
+			raw = append(raw, pw.ProxyServerImage)
+		}
+	}
+	raw = append(raw, telemetryImage)
+	var images []string
+	for _, img := range raw {
+		if img != "" && !slices.Contains(images, img) {
+			images = append(images, img)
+		}
+	}
+	return images
+}
+
+// ambientTelemetryImage returns GCLUSTER_TELEMETRY_IMAGE unless --ml-diagnostics-image was given explicitly
+// (an explicit empty value opts out of the environment default, mirroring --image-pull-secret="").
+func ambientTelemetryImage(job orchestrator.JobDefinition) string {
+	if job.MLDiagnosticsImageSpecified {
+		return ""
+	}
+	return k8s.TelemetryImageFromEnv()
 }
