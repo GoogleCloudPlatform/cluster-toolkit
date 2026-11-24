@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -684,7 +685,7 @@ func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) 
 
 	if job.PriorityClassName != "" {
 		validators = append(validators, func() error {
-			return g.ensureAndValidatePriorityClass(job.PriorityClassName)
+			return g.validatePriorityClassForMode(job.PriorityClassName)
 		})
 	}
 
@@ -706,6 +707,31 @@ func (g *GKEOrchestrator) getenv() func(string) string {
 func (g *GKEOrchestrator) isEnvTruthy(key string) bool {
 	v, _ := shell.ParseBoolEnv(g.getenv()(key))
 	return v
+}
+
+func (g *GKEOrchestrator) labelScheme() k8s.LabelScheme {
+	if g.inventory != nil {
+		return g.inventory.LabelScheme
+	}
+	return k8s.SchemeAuto
+}
+
+func (g *GKEOrchestrator) hasGKENodePoolLabel() bool {
+	if g.mode != orchestrator.TypeK8s {
+		return true
+	}
+	if g.inventory == nil {
+		return false
+	}
+	if g.inventory.LabelScheme == k8s.SchemeGKE {
+		return true
+	}
+	for _, pool := range g.inventory.Pools {
+		if pool.NodePoolName != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *GKEOrchestrator) jobSetEnabled() bool {
@@ -992,7 +1018,7 @@ func (g *GKEOrchestrator) resolveClusterAddons(job *orchestrator.JobDefinition, 
 		return err
 	}
 
-	actions, err := g.decideAddonActions(jsProbe, kueueProbe, dryRun)
+	actions, err := g.decideAddonActions(job, jsProbe, kueueProbe, dryRun)
 	if err != nil {
 		return err
 	}
@@ -1041,9 +1067,13 @@ func (g *GKEOrchestrator) verifyInstalledAddonsReadOnly(jsProbe jobSetAddonProbe
 	return nil
 }
 
-func (g *GKEOrchestrator) decideAddonActions(jsProbe jobSetAddonProbe, kueueProbe kueueAddonProbe, dryRun bool) (addonActions, error) {
+func (g *GKEOrchestrator) decideAddonActions(job *orchestrator.JobDefinition, jsProbe jobSetAddonProbe, kueueProbe kueueAddonProbe, dryRun bool) (addonActions, error) {
 	missingJobSet := jsProbe.state == addonStateMissing
 	missingKueue := kueueProbe.state == addonStateMissing
+	if missingKueue && g.labelScheme() == k8s.SchemeTPUSlice {
+		logging.Info("Kueue is not installed; continuing without Kueue (native slice scheduler handles queueing on tpu-slice clusters).")
+		missingKueue = false
+	}
 	outdatedKueue := kueueProbe.state == addonStateInstalled && g.needsKueueUpgrade(kueueProbe)
 	if !missingJobSet && !missingKueue && !outdatedKueue {
 		return addonActions{}, nil
@@ -1218,6 +1248,49 @@ func (g *GKEOrchestrator) promptMissingAddons(missingJobSet, missingKueue, outda
 	}
 }
 
+func (g *GKEOrchestrator) validatePriorityClassForMode(requested string) error {
+	if requested == "" {
+		return nil
+	}
+	if g.mode == orchestrator.TypeK8s {
+		return g.validateK8sPriorityClass(requested)
+	}
+	return g.ensureAndValidatePriorityClass(requested)
+}
+
+// validateK8sPriorityClass validates --priority in TypeK8s mode using a read-only kubectl get priorityclass
+// check without installing default PriorityClasses. 403 Forbidden warns and proceeds; NotFound fails fast.
+func (g *GKEOrchestrator) validateK8sPriorityClass(requested string) error {
+	res := g.kubectl("get", "priorityclass", requested, "-o", "name", kubectlReadTimeout)
+	if res.ExitCode == 0 {
+		return nil
+	}
+	errText := commandErrorText(res)
+	if res.ExitCode == -1 {
+		return fmt.Errorf("failed to verify PriorityClass %q: %s", requested, firstLine(errText))
+	}
+	rawErr := errors.New(errText)
+	lower := strings.ToLower(errText)
+	if k8s.IsNotFoundOrNoMatchError(rawErr) || strings.Contains(lower, "(notfound)") || strings.Contains(lower, "notfound") {
+		return fmt.Errorf("priority class %q does not exist in the cluster; run '%s' to view available priority classes", requested, kubectlCommandLine(g.kubeContext, "get", "priorityclasses"))
+	}
+	if k8s.IsForbiddenError(rawErr) {
+		logging.Warn("Insufficient RBAC permissions to verify PriorityClass %q (403 Forbidden). Proceeding with job submission.", requested)
+		return nil
+	}
+	return fmt.Errorf("failed to verify PriorityClass %q: %s", requested, firstLine(errText))
+}
+
+func commandErrorText(res shell.CommandResult) string {
+	if text := strings.TrimSpace(res.Stderr + "\n" + res.Stdout); text != "" {
+		return text
+	}
+	if res.Err != nil {
+		return res.Err.Error()
+	}
+	return fmt.Sprintf("exit code %d", res.ExitCode)
+}
+
 func (g *GKEOrchestrator) getKubeClient() KubeClient {
 	g.syncKubeClient()
 	return g.kubeClient
@@ -1317,7 +1390,8 @@ func (g *GKEOrchestrator) validateTier3FlagsWithWarn(job *orchestrator.JobDefini
 	return nil
 }
 
-// validateTier3Workload enforces the GKE multi-host TPU co-scheduling guard when JobSet is absent/disabled.
+// validateTier3Workload enforces the Tier-3 static slice reuse guard and GKE multi-host co-scheduling guard
+// when JobSet is absent/disabled.
 func (g *GKEOrchestrator) validateTier3Workload(job *orchestrator.JobDefinition) error {
 	if err := g.validateTier3FlagsWithWarn(job, false); err != nil {
 		return err
@@ -1329,12 +1403,122 @@ func (g *GKEOrchestrator) validateTier3Workload(job *orchestrator.JobDefinition)
 	if !isTPU {
 		return nil
 	}
-	pinnedPool := strings.TrimSpace(job.NodeConstraint[k8s.GKENodePoolLabel])
-	if job.NodesPerSlice > 1 && (pinnedPool == "" || strings.Contains(pinnedPool, "|")) {
-		return fmt.Errorf("multi-host TPU workloads (nodes_per_slice=%d) without JobSet on GKE cannot guarantee intra-node-pool pod co-scheduling and may split pods across TPU node pools; install/enable JobSet (or unset %s if set), or pin a single TPU node pool via --node-constraint %s=<node-pool>",
-			job.NodesPerSlice, disableJobSetEnvVar, k8s.GKENodePoolLabel)
+	if g.mode != orchestrator.TypeK8s || g.labelScheme() == k8s.SchemeGKE {
+		pinnedPool := strings.TrimSpace(job.NodeConstraint[k8s.GKENodePoolLabel])
+		if job.NodesPerSlice > 1 && (pinnedPool == "" || strings.Contains(pinnedPool, "|")) {
+			return fmt.Errorf("multi-host TPU workloads (nodes_per_slice=%d) without JobSet on GKE cannot guarantee intra-node-pool pod co-scheduling and may split pods across TPU node pools; install/enable JobSet (or unset %s if set), or pin a single TPU node pool via --node-constraint %s=<node-pool>",
+				job.NodesPerSlice, disableJobSetEnvVar, k8s.GKENodePoolLabel)
+		}
+		return nil
 	}
+	if g.labelScheme() != k8s.SchemeTPUSlice {
+		return nil
+	}
+
+	requestedSlice := strings.TrimSpace(job.NodeConstraint[k8s.TPUSliceNameLabel])
+	if requestedSlice != "" {
+		return g.validateExplicitTier3Slice(job, requestedSlice)
+	}
+	return g.bindDefaultTier3ReadySlice(job)
+}
+
+func (g *GKEOrchestrator) validateExplicitTier3Slice(job *orchestrator.JobDefinition, sliceName string) error {
+	if strings.Contains(sliceName, "|") {
+		return fmt.Errorf("standalone batch/v1 Indexed Job without JobSet cannot target multiple TPU slices (%q); specify a single existing READY slice via --node-constraint %s=<ready-slice-name>",
+			sliceName, k8s.TPUSliceNameLabel)
+	}
+	if g.inventory == nil || g.inventory.SliceInventoryUnavailable {
+		logging.Info("JobSet is unavailable; targeting explicitly named TPU slice %q via standalone batch/v1 Indexed Job.", sliceName)
+		return nil
+	}
+	slice, found := g.findSliceByName(sliceName)
+	if !found {
+		return fmt.Errorf("standalone batch/v1 Indexed Job without JobSet cannot dynamically provision TPU slice %q (not found in cluster inventory). Ask your cluster administrator to install/enable JobSet (or unset %s if set), or target an existing READY slice via --node-constraint %s=<ready-slice-name>",
+			sliceName, disableJobSetEnvVar, k8s.TPUSliceNameLabel)
+	}
+	if !slice.Ready {
+		return fmt.Errorf("standalone batch/v1 Indexed Job without JobSet requires a READY TPU slice, but slice %q is not READY (state=%q). Wait for the slice to become READY or ask your cluster administrator to install/enable JobSet for dynamic provisioning",
+			sliceName, slice.State)
+	}
+	if err := validateSliceHardwareMatch(job, sliceName, slice); err != nil {
+		return err
+	}
+	if slice.NodesPerSlice > 0 {
+		job.NodesPerSlice = slice.NodesPerSlice
+	}
+	logging.Info("JobSet is unavailable; reusing existing READY TPU slice %q (type=%s, topology=%s) via standalone batch/v1 Indexed Job.", slice.Name, slice.TPUType, slice.Topology)
 	return nil
+}
+
+func (g *GKEOrchestrator) bindDefaultTier3ReadySlice(job *orchestrator.JobDefinition) error {
+	resolver := gceTPUHardwareResolver{}
+	jobTPUType := resolver.NormalizeTPUType(k8s.FirstNonEmpty(job.MachineType, job.ComputeType))
+	chipsPerNode := resolver.ChipsPerNode(job.MachineType)
+	if g.inventory == nil || g.inventory.SliceInventoryUnavailable {
+		return fmt.Errorf("standalone batch/v1 Indexed Job without JobSet cannot dynamically provision a new TPU slice when slice inventory is unavailable (type=%s, topology=%s). Ask your cluster administrator to install/enable JobSet (or unset %s if set), or pass --node-constraint %s=<ready-slice-name> to reuse an existing READY slice",
+			jobTPUType, job.Topology, disableJobSetEnvVar, k8s.TPUSliceNameLabel)
+	}
+	matched, found := g.findMatchingReadyTPUSlice(jobTPUType, job.Topology, chipsPerNode)
+	if !found {
+		return fmt.Errorf("standalone batch/v1 Indexed Job without JobSet cannot dynamically provision a new TPU slice (type=%s, topology=%s): no matching READY slice exists in cluster inventory. Ask your cluster administrator to install/enable JobSet (or unset %s if set), or pass --node-constraint %s=<ready-slice-name> to reuse an existing READY slice",
+			jobTPUType, job.Topology, disableJobSetEnvVar, k8s.TPUSliceNameLabel)
+	}
+	cloned := maps.Clone(job.NodeConstraint)
+	if cloned == nil {
+		cloned = make(map[string]string)
+	}
+	cloned[k8s.TPUSliceNameLabel] = matched.Name
+	job.NodeConstraint = cloned
+	if matched.NodesPerSlice > 0 {
+		job.NodesPerSlice = matched.NodesPerSlice
+	}
+	logging.Info("JobSet is unavailable; reusing existing READY TPU slice %q (type=%s, topology=%s) via standalone batch/v1 Indexed Job.", matched.Name, matched.TPUType, matched.Topology)
+	return nil
+}
+
+func (g *GKEOrchestrator) findSliceByName(name string) (k8s.SliceInfo, bool) {
+	if g.inventory == nil {
+		return k8s.SliceInfo{}, false
+	}
+	for _, s := range g.inventory.Slices {
+		if s.Name == name {
+			return s, true
+		}
+	}
+	return k8s.SliceInfo{}, false
+}
+
+func readyTPUSliceMatches(s k8s.SliceInfo, tpuType, topology string, chipsPerNode int) bool {
+	if !s.Ready {
+		return false
+	}
+	if tpuType != "" && (s.TPUType == "" || !strings.EqualFold(tpuType, s.TPUType)) {
+		return false
+	}
+	if chipsPerNode > 0 && s.ChipsPerNode > 0 && s.ChipsPerNode != chipsPerNode {
+		return false
+	}
+	if topology != "" {
+		return s.Topology != "" && strings.EqualFold(topology, s.Topology)
+	}
+	return true
+}
+
+func (g *GKEOrchestrator) findMatchingReadyTPUSlice(tpuType, topology string, chipsPerNode int) (k8s.SliceInfo, bool) {
+	if g.inventory == nil {
+		return k8s.SliceInfo{}, false
+	}
+	if g.inventory.TPU != nil && g.inventory.TPU.DefaultSliceName != "" {
+		if def, ok := g.findSliceByName(g.inventory.TPU.DefaultSliceName); ok && readyTPUSliceMatches(def, tpuType, topology, chipsPerNode) {
+			return def, true
+		}
+	}
+	for _, s := range g.inventory.Slices {
+		if readyTPUSliceMatches(s, tpuType, topology, chipsPerNode) {
+			return s, true
+		}
+	}
+	return k8s.SliceInfo{}, false
 }
 
 // Initialize fetches GKE cluster metadata and resolves the cluster location,
@@ -1417,6 +1601,10 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 		return nil
 	}
 
+	if g.mode == orchestrator.TypeK8s {
+		return g.configureK8sKueueEnvironment(job, ns)
+	}
+
 	explicitQueue := job.KueueQueueName != ""
 	localQueue, discovered, err := g.resolveKueueQueue(job.KueueQueueName, ns)
 	if err != nil {
@@ -1440,6 +1628,69 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 	return nil
 }
 
+// configureK8sKueueEnvironment resolves Kueue queueing on TypeK8s clusters where Kueue is installed,
+// without ever creating default ClusterQueues/LocalQueues or calling ensureClusterQueueCoverage.
+func (g *GKEOrchestrator) configureK8sKueueEnvironment(job *orchestrator.JobDefinition, ns string) error {
+	if job.KueueQueueName != "" {
+		return g.resolveExplicitK8sLocalQueue(job, ns)
+	}
+
+	res := g.kubectl("get", "localqueue", "-n", ns, "-o", "jsonpath={.items[*].metadata.name}", kubectlReadTimeout)
+	if res.ExitCode != 0 {
+		errText := commandErrorText(res)
+		rawErr := errors.New(errText)
+		if k8s.IsNotFoundOrNoMatchError(rawErr) {
+			logging.Info("Kueue LocalQueue API is not available in namespace %q; omitting kueue.x-k8s.io/queue-name and submitting unqueued.", ns)
+			job.KueueQueueName = ""
+			return nil
+		}
+		if k8s.IsForbiddenError(rawErr) || job.DryRunManifest != "" {
+			logging.Warn("Unable to list Kueue LocalQueues in namespace %q (%s); omitting kueue.x-k8s.io/queue-name.", ns, firstLine(errText))
+			job.KueueQueueName = ""
+			return nil
+		}
+		return fmt.Errorf("failed to query LocalQueues in namespace %s: %s", ns, errText)
+	}
+
+	queues := strings.Fields(strings.TrimSpace(res.Stdout))
+	if len(queues) == 0 {
+		logging.Info("No Kueue LocalQueues found in namespace %q; omitting kueue.x-k8s.io/queue-name and submitting unqueued.", ns)
+		job.KueueQueueName = ""
+		return nil
+	}
+	selected, err := selectDiscoveredLocalQueue(queues)
+	if err != nil {
+		return err
+	}
+	job.KueueQueueName = selected
+	return nil
+}
+
+func (g *GKEOrchestrator) resolveExplicitK8sLocalQueue(job *orchestrator.JobDefinition, ns string) error {
+	cleanName, err := parseKueueQueueName(job.KueueQueueName)
+	if err != nil {
+		return err
+	}
+	if job.DryRunManifest == "" {
+		exists, err := g.checkLocalQueueExists(cleanName, ns)
+		if err != nil {
+			if k8s.IsForbiddenError(err) {
+				logging.Warn("Insufficient RBAC permissions to verify LocalQueue %q in namespace %q (403 Forbidden); proceeding with --queue %s.", cleanName, ns, cleanName)
+			} else {
+				return fmt.Errorf("failed to check if LocalQueue %q exists in namespace %q: %w", cleanName, ns, err)
+			}
+		} else if !exists {
+			available := g.listLocalQueues(ns)
+			if len(available) > 0 {
+				return fmt.Errorf("LocalQueue %q does not exist in namespace %q (available: %s); specify an existing LocalQueue with --queue or ask your cluster administrator to create it", cleanName, ns, strings.Join(available, ", "))
+			}
+			return fmt.Errorf("LocalQueue %q does not exist in namespace %q; ask your cluster administrator to create it or omit --queue to submit unqueued", cleanName, ns)
+		}
+	}
+	logging.Info("Using provided Kueue LocalQueue: %s", cleanName)
+	job.KueueQueueName = cleanName
+	return nil
+}
 // ensureLocalQueueExists verifies that the specified LocalQueue exists in the namespace, prompting to create it if missing.
 func (g *GKEOrchestrator) ensureLocalQueueExists(localQueue, ns string, discovered, explicitQueue bool) error {
 	if discovered {

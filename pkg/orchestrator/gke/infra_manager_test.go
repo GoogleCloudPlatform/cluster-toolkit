@@ -3019,6 +3019,11 @@ func TestResolveClusterAddons_PolicyMatrix(t *testing.T) {
 			dryRun: true, wantErr: "Kueue is only partly installed",
 		},
 		{
+			name: "tpu_slice_missing_kueue_silent_continue_zero_probe_zero_prompt",
+			mode: orchestrator.TypeK8s, scheme: k8s.SchemeTPUSlice, jsState: addonStateInstalled, kueueState: addonStateMissing,
+			interactive: true, connected: true, wantJobSet: true, wantKueue: false,
+		},
+		{
 			name: "interactive_connected_k8s_both_missing_choice_continue_single_prompt",
 			mode: orchestrator.TypeK8s, scheme: k8s.SchemeGeneric, jsState: addonStateMissing, kueueState: addonStateMissing,
 			interactive: true, promptAnswers: []string{"invalid", "2"}, connected: true,
@@ -3236,6 +3241,86 @@ func TestConnectivityChecker_ExplicitAirGapEnvOverridesDefault(t *testing.T) {
 	}
 }
 
+func TestConfigureClusterEnvironment_TypeK8sLocalQueueResolution(t *testing.T) {
+	tests := []struct {
+		name      string
+		kueueOn   bool
+		inQueue   string
+		responses map[string][]shell.CommandResult
+		wantQueue string
+		wantErr   string
+	}{
+		{
+			name:      "zero_localqueues_omits_queue_label",
+			kueueOn:   true,
+			responses: map[string][]shell.CommandResult{"kubectl get localqueue": {{ExitCode: 0, Stdout: ""}}},
+			wantQueue: "",
+		},
+		{
+			name:      "one_localqueue_auto_discovered",
+			kueueOn:   true,
+			responses: map[string][]shell.CommandResult{"kubectl get localqueue": {{ExitCode: 0, Stdout: "team-lq"}}},
+			wantQueue: "team-lq",
+		},
+		{
+			name:    "explicit_missing_localqueue_fails_with_available_list",
+			kueueOn: true,
+			inQueue: "missing-q",
+			responses: map[string][]shell.CommandResult{
+				"kubectl get localqueue missing-q -n ml-ns": {{ExitCode: 1, Stderr: `Error from server (NotFound): localqueues "missing-q" not found`}},
+				"kubectl get localqueue -n ml-ns":           {{ExitCode: 0, Stdout: "team-lq"}},
+			},
+			wantErr: `LocalQueue "missing-q" does not exist in namespace "ml-ns" (available: team-lq)`,
+		},
+		{
+			name:      "multiple_localqueues_defaults_to_default_local_queue",
+			kueueOn:   true,
+			responses: map[string][]shell.CommandResult{"kubectl get localqueue": {{ExitCode: 0, Stdout: "custom-a default"}}},
+			wantQueue: defaultLocalQueue,
+		},
+		{
+			name:      "forbidden_list_localqueues_omits_queue_label",
+			kueueOn:   true,
+			responses: map[string][]shell.CommandResult{"kubectl get localqueue": {{ExitCode: 1, Stderr: `Error from server (Forbidden): localqueues.kueue.x-k8s.io is forbidden`}}},
+			wantQueue: "",
+		},
+		{
+			name:      "kueue_disabled_omits_explicit_queue",
+			kueueOn:   false,
+			inQueue:   "ignored-q",
+			wantQueue: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(tc.responses)
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.mode = orchestrator.TypeK8s
+			orc.namespace = "ml-ns"
+			orc.addons = addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: tc.kueueOn}
+
+			job := &orchestrator.JobDefinition{ClusterName: "k8s", KueueQueueName: tc.inQueue}
+			err := orc.configureClusterEnvironment(job)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("configureClusterEnvironment() err = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("configureClusterEnvironment() err = %v", err)
+			}
+			if job.KueueQueueName != tc.wantQueue {
+				t.Errorf("KueueQueueName = %q, want %q", job.KueueQueueName, tc.wantQueue)
+			}
+			if len(commandsWithPrefix(mockExec, "kubectl apply")) != 0 {
+				t.Errorf("must never apply ClusterQueue/LocalQueue in TypeK8s mode")
+			}
+		})
+	}
+}
+
 func TestResolveClusterAddons_OlderKueuePreservedInTypeK8s(t *testing.T) {
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 		"kubectl get crd jobsets.jobset.x-k8s.io":                                        {{ExitCode: 0, Stdout: "crd/jobsets"}},
@@ -3251,6 +3336,230 @@ func TestResolveClusterAddons_OlderKueuePreservedInTypeK8s(t *testing.T) {
 	}
 	if len(commandsWithPrefix(mockExec, "kubectl delete")) != 0 || len(commandsWithPrefix(mockExec, "kubectl apply")) != 0 {
 		t.Errorf("older Kueue on TypeK8s must never be deleted or overwritten; calls=%v", mockExec.calls)
+	}
+}
+
+func TestValidateTier3Workload_StaticSliceReuseGuard(t *testing.T) {
+	t.Parallel()
+	readyInv := &k8s.Inventory{
+		LabelScheme: k8s.SchemeTPUSlice,
+		TPU:         &k8s.TPUInventory{TPUType: "tpu7x", MachineType: "tpu7x-standard-4t", DefaultSliceName: "ready-slice", Topology: "2x2x1", NodesPerSlice: 1, ChipsPerNode: 4},
+		Slices: []k8s.SliceInfo{
+			{Name: "pending-slice", TPUType: "tpu7x", Topology: "2x2x2", Ready: false, State: "CREATING", NodesPerSlice: 2},
+			{Name: "ready-slice", TPUType: "tpu7x", Topology: "2x2x1", Ready: true, State: "READY", NodesPerSlice: 1},
+		},
+	}
+
+	tests := []struct {
+		name      string
+		inv       *k8s.Inventory
+		job       orchestrator.JobDefinition
+		wantErr   string
+		wantSlice string
+	}{
+		{
+			name:    "rejects_multi_slice_without_jobset",
+			inv:     readyInv,
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 2},
+			wantErr: "multi-slice workloads (--num-slices=2) require JobSet",
+		},
+		{
+			name:    "rejects_pathways_without_jobset",
+			inv:     readyInv,
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, IsPathwaysJob: true},
+			wantErr: "Pathways workloads (--pathways / --pathways-run-sps-workload) require JobSet",
+		},
+		{
+			name:      "allows_explicit_ready_slice_reuse",
+			inv:       readyInv,
+			job:       orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "ready-slice"}},
+			wantSlice: "ready-slice",
+		},
+		{
+			name:    "rejects_explicit_non_ready_slice",
+			inv:     readyInv,
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x2", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "pending-slice"}},
+			wantErr: "is not READY",
+		},
+		{
+			name:    "rejects_explicit_missing_slice",
+			inv:     readyInv,
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "does-not-exist"}},
+			wantErr: "cannot dynamically provision TPU slice",
+		},
+		{
+			name:    "rejects_explicit_topology_mismatch",
+			inv:     readyInv,
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x2", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "ready-slice"}},
+			wantErr: "does not match slice",
+		},
+		{
+			name:      "auto_reuses_matching_ready_default_slice",
+			inv:       readyInv,
+			job:       orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
+			wantSlice: "ready-slice",
+		},
+		{
+			name:    "rejects_dynamic_provisioning_when_no_ready_slice_matches_topology",
+			inv:     readyInv,
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "4x4x4", NumSlices: 1},
+			wantErr: "no matching READY slice exists",
+		},
+		{
+			name:    "rejects_slice_inventory_unavailable_without_named_slice",
+			inv:     &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice, ExplicitMode: true, SliceInventoryUnavailable: true},
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
+			wantErr: "cannot dynamically provision a new TPU slice when slice inventory is unavailable",
+		},
+		{
+			name:      "allows_slice_inventory_unavailable_with_named_slice",
+			inv:       &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice, ExplicitMode: true, SliceInventoryUnavailable: true},
+			job:       orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "precreated-slice"}},
+			wantSlice: "precreated-slice",
+		},
+		{
+			name:      "allows_nodes_200_slices_403_with_named_slice",
+			inv:       &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice, ExplicitMode: false, SliceInventoryUnavailable: true},
+			job:       orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "precreated-slice"}},
+			wantSlice: "precreated-slice",
+		},
+		{
+			name:    "rejects_nodes_403_slices_200_empty_with_unknown_named_slice",
+			inv:     &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice, ExplicitMode: true, SliceInventoryUnavailable: false},
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "nonexistent-slice"}},
+			wantErr: "cannot dynamically provision TPU slice",
+		},
+		{
+			name:    "rejects_pipe_delimited_multi_slice_in_explicit_mode",
+			inv:     &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice, ExplicitMode: true, SliceInventoryUnavailable: true},
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "slice-a|slice-b"}},
+			wantErr: "cannot target multiple TPU slices",
+		},
+		{
+			name: "explicit_mode_with_populated_slices_enforces_ready_validation",
+			inv: &k8s.Inventory{
+				LabelScheme:  k8s.SchemeTPUSlice,
+				ExplicitMode: true,
+				Slices:       []k8s.SliceInfo{{Name: "pending-slice", TPUType: "tpu7x", Topology: "2x2x1", Ready: false, State: "Provisioning"}},
+			},
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "pending-slice"}},
+			wantErr: "is not READY",
+		},
+		{
+			name: "explicit_mode_with_populated_ready_slice_auto_binds",
+			inv: &k8s.Inventory{
+				LabelScheme:  k8s.SchemeTPUSlice,
+				ExplicitMode: true,
+				Slices:       []k8s.SliceInfo{{Name: "ready-s", TPUType: "tpu7x", Topology: "2x2x1", Ready: true, NodesPerSlice: 1}},
+			},
+			job:       orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
+			wantSlice: "ready-s",
+		},
+		{
+			name: "rejects_ready_slice_with_empty_tpu_type_when_type_requested",
+			inv: &k8s.Inventory{
+				LabelScheme: k8s.SchemeTPUSlice,
+				Slices:      []k8s.SliceInfo{{Name: "untyped-slice", TPUType: "", Topology: "2x2x1", Ready: true}},
+			},
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
+			wantErr: "no matching READY slice exists",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{
+				mode: orchestrator.TypeK8s,
+				submissionSession: submissionSession{
+					inventory: tc.inv,
+					addons:    addonPlan{resolved: true, jobSetEnabled: false, kueueEnabled: false},
+				},
+			}
+			job := tc.job
+			err := orc.validateTier3Workload(&job)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("validateTier3Workload() err = %v, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("validateTier3Workload() unexpected err = %v", err)
+			}
+			if got := job.NodeConstraint[k8s.TPUSliceNameLabel]; got != tc.wantSlice {
+				t.Errorf("bound slice = %q, want %q", got, tc.wantSlice)
+			}
+		})
+	}
+}
+
+func TestValidateK8sPriorityClass(t *testing.T) {
+	tests := []struct {
+		name      string
+		requested string
+		res       shell.CommandResult
+		wantErr   string
+	}{
+		{
+			name:      "exists_succeeds",
+			requested: "high",
+			res:       shell.CommandResult{ExitCode: 0, Stdout: "priorityclass.scheduling.k8s.io/high\n"},
+		},
+		{
+			name:      "forbidden_warns_and_proceeds",
+			requested: "high",
+			res:       shell.CommandResult{ExitCode: 1, Stderr: `Error from server (Forbidden): priorityclasses.scheduling.k8s.io "high" is forbidden`},
+		},
+		{
+			name:      "not_found_fails_fast",
+			requested: "missing-pc",
+			res:       shell.CommandResult{ExitCode: 1, Stderr: `Error from server (NotFound): priorityclasses.scheduling.k8s.io "missing-pc" not found`},
+			wantErr:   `priority class "missing-pc" does not exist`,
+		},
+		{
+			name:      "user_controlled_forbidden_name_does_not_bypass_not_found",
+			requested: "403-forbidden-pc",
+			res:       shell.CommandResult{ExitCode: 1, Stderr: `Error from server (NotFound): priorityclasses.scheduling.k8s.io "403-forbidden-pc" not found`},
+			wantErr:   `priority class "403-forbidden-pc" does not exist`,
+		},
+		{
+			name:      "other_error_fails_fast",
+			requested: "missing-pc",
+			res:       shell.CommandResult{ExitCode: 1, Stderr: "Unable to connect to the server: i/o timeout"},
+			wantErr:   "failed to verify PriorityClass",
+		},
+		{
+			name:      "empty_output_falls_back_to_err",
+			requested: "missing-pc",
+			res:       shell.CommandResult{ExitCode: 1, Err: errors.New("connection refused")},
+			wantErr:   "connection refused",
+		},
+		{
+			name:      "exec_missing_binary_not_misclassified_as_missing_priorityclass",
+			requested: "high",
+			res:       shell.CommandResult{ExitCode: -1, Err: errors.New(`exec: "kubectl": executable file not found in $PATH`)},
+			wantErr:   "failed to verify PriorityClass",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+				"kubectl get priorityclass": {tc.res},
+			})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.mode = orchestrator.TypeK8s
+			err := orc.validatePriorityClassForMode(tc.requested)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("validatePriorityClassForMode() err = %v, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("validatePriorityClassForMode() unexpected err = %v", err)
+			}
+		})
 	}
 }
 
@@ -3303,6 +3612,36 @@ func TestProbeURLConnectivity_StatusCodesAndTimeout(t *testing.T) {
 		next, _ := http.NewRequest(http.MethodHead, "http://github.com/", nil)
 		if err := checkConnectivityProbeRedirect(next, []*http.Request{prev}, "github.com"); err == nil || !strings.Contains(err.Error(), "downgrade") {
 			t.Errorf("checkConnectivityProbeRedirect(https->http) = %v, want scheme downgrade error", err)
+		}
+	})
+}
+
+func TestConfigureK8sKueueEnvironment_RBACAndNoMatchResilience(t *testing.T) {
+	t.Run("explicit_queue_403_warns_and_proceeds", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get localqueue team-q -n ml": {{ExitCode: 1, Stderr: `Error from server (Forbidden): localqueues.kueue.x-k8s.io "team-q" is forbidden`}},
+		}))
+		orc.mode = orchestrator.TypeK8s
+		job := orchestrator.JobDefinition{KueueQueueName: "team-q"}
+		if err := orc.configureK8sKueueEnvironment(&job, "ml"); err != nil {
+			t.Fatalf("configureK8sKueueEnvironment(403 explicit queue) err = %v, want nil", err)
+		}
+		if job.KueueQueueName != "team-q" {
+			t.Errorf("KueueQueueName = %q, want team-q", job.KueueQueueName)
+		}
+	})
+
+	t.Run("nomatch_localqueue_crd_omits_queue_and_succeeds", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get localqueue -n ml": {{ExitCode: 1, Stderr: `error: the server doesn't have a resource type "localqueue"`}},
+		}))
+		orc.mode = orchestrator.TypeK8s
+		job := orchestrator.JobDefinition{}
+		if err := orc.configureK8sKueueEnvironment(&job, "ml"); err != nil {
+			t.Fatalf("configureK8sKueueEnvironment(NoMatch) err = %v, want nil", err)
+		}
+		if job.KueueQueueName != "" {
+			t.Errorf("KueueQueueName = %q, want empty", job.KueueQueueName)
 		}
 	})
 }

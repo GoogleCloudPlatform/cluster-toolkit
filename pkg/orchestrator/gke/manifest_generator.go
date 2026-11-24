@@ -115,7 +115,7 @@ func (g *GKEOrchestrator) generateWorkloadManifest(opts ManifestOptions, profile
 		opts.ComputeType = ""
 	}
 
-	resourcesString, err := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 16)
+	resourcesString, err := g.buildResourcesStringWithGPUKey(cpuLimit, memoryLimit, gpuLimit, g.resolveGPUResourceName(opts, profile), tpuLimit, 16)
 	if err != nil {
 		return "", err
 	}
@@ -152,6 +152,10 @@ func (g *GKEOrchestrator) generateWorkloadManifest(opts ManifestOptions, profile
 }
 
 func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent int) (string, error) {
+	return g.buildResourcesStringWithGPUKey(cpu, mem, gpu, "nvidia.com/gpu", tpu, indent)
+}
+
+func (g *GKEOrchestrator) buildResourcesStringWithGPUKey(cpu, mem, gpu, gpuResourceName, tpu string, indent int) (string, error) {
 	limits := corev1.ResourceList{}
 	if cpu != "" {
 		q, err := resource.ParseQuantity(cpu)
@@ -172,7 +176,7 @@ func (g *GKEOrchestrator) buildResourcesString(cpu, mem, gpu, tpu string, indent
 		if err != nil {
 			return "", fmt.Errorf("failed to parse GPU quantity %q: %w", gpu, err)
 		}
-		limits[corev1.ResourceName("nvidia.com/gpu")] = q
+		limits[corev1.ResourceName(k8s.FirstNonEmpty(gpuResourceName, "nvidia.com/gpu"))] = q
 	}
 	if tpu != "" {
 		q, err := resource.ParseQuantity(tpu)
@@ -213,6 +217,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		MachineType:        job.MachineType,
 		IsTPU:              config.IsTPU(job.MachineType) || config.IsTPU(originalAccelType),
 		IsNAP:              job.GKENAPProvisioning != "",
+		OmitGKENodePool:    !g.hasGKENodePoolLabel(),
 	}
 
 	pathwaysInstanceType := derivePathwaysInstanceType(g.GenerateGKENodeSelectorLabel(originalAccelType), job.MachineType, originalAccelType, schedOpts.Topology)
@@ -281,7 +286,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 
 	sm.AddVolumeOptions(&opts, mountInfos)
 
-	if _, err = g.resolveResourcesAndGates(&opts, profile.IsCPUMachine, profile.CapacityCount, job); err != nil {
+	if _, err = g.resolveResourcesAndGates(&opts, profile, job); err != nil {
 		return ManifestOptions{}, err
 	}
 
@@ -691,7 +696,7 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(opts, profile)
 	var resStr string
 	if err == nil {
-		resStr, err = g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 14)
+		resStr, err = g.buildResourcesStringWithGPUKey(cpuLimit, memoryLimit, gpuLimit, g.resolveGPUResourceName(opts, profile), tpuLimit, 14)
 		if err != nil {
 			return "", err
 		}
@@ -858,7 +863,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
 		if opts.NodesPerSlice <= 1 {
 			exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname"
-		} else {
+		} else if g.hasGKENodePoolLabel() {
 			exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
 		}
 	}

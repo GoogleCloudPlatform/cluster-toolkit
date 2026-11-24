@@ -1394,7 +1394,66 @@ func TestDiscoverInventory_SingleHost1tAnd8tSliceRejection(t *testing.T) {
 	}
 }
 
-func TestIsNotFoundOrNoMatchError(t *testing.T) {
+func TestDiscoverInventory_ObservedSelectorLabelsAndGPUResourceNames(t *testing.T) {
+	t.Parallel()
+	migNode := makeNode("mig-0", map[string]string{
+		InstanceTypeLabel:     "a3-mig-host",
+		NvidiaGPUProductLabel: "NVIDIA-A100-SXM4-80GB",
+	}, map[string]interface{}{
+		"cpu":                    "64",
+		"nvidia.com/mig-1g.10gb": "2",
+		"nvidia.com/mig-3g.40gb": "1",
+	}, true)
+	amdNode := makeNode("amd-0", map[string]string{
+		InstanceTypeLabel: "mi300x-node",
+	}, map[string]interface{}{
+		"cpu":         "128",
+		"amd.com/gpu": "8",
+	}, true)
+
+	inv, err := DiscoverInventory(&fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR: {migNode, amdNode},
+		},
+	}, &fakeAPIGroupChecker{}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory failed: %v", err)
+	}
+	assertObservedGPUPool(t, inv, "a3-mig-host", 2, "nvidia.com/mig-1g.10gb", "a3-mig-host", "NVIDIA-A100-SXM4-80GB")
+	assertObservedGPUPool(t, inv, "mi300x-node", 8, "amd.com/gpu", "mi300x-node", "")
+}
+
+func assertObservedGPUPool(t *testing.T, inv *Inventory, machineType string, wantGPUs int, wantRes, wantInst, wantProd string) {
+	t.Helper()
+	for _, p := range inv.Pools {
+		if p.MachineType != machineType {
+			continue
+		}
+		if p.GPUsPerNode != wantGPUs || p.GPUResourceName != wantRes || p.InstanceTypeLabel != wantInst || p.GPUProductLabel != wantProd {
+			t.Errorf("pool %q = %+v, want gpus=%d res=%q inst=%q prod=%q", machineType, p, wantGPUs, wantRes, wantInst, wantProd)
+		}
+		return
+	}
+	t.Fatalf("missing pool %q in %+v", machineType, inv.Pools)
+}
+
+func TestObservedLabel_ConflictAndMissingClearValue(t *testing.T) {
+	t.Parallel()
+	var conflict observedLabel
+	conflict.observe("a")
+	conflict.observe("b")
+	if got := conflict.resolved(); got != "" {
+		t.Errorf("conflicting observedLabel.resolved() = %q, want empty", got)
+	}
+	var missing observedLabel
+	missing.observe("a")
+	missing.observe("")
+	if got := missing.resolved(); got != "" {
+		t.Errorf("partial observedLabel.resolved() = %q, want empty", got)
+	}
+}
+
+func TestIsNotFoundOrNoMatchErrorAndFirstNonEmpty(t *testing.T) {
 	t.Parallel()
 	gr := schema.GroupResource{Group: "jobset.x-k8s.io", Resource: "jobsets"}
 	cases := []struct {
@@ -1417,6 +1476,7 @@ func TestIsNotFoundOrNoMatchError(t *testing.T) {
 		{name: "kubectl_could_not_find_resource", err: errors.New(`the server could not find the requested resource`), want: true},
 		{name: "forbidden_on_resource_named_notfound", err: errors.New(`Error from server (Forbidden): jobs.batch "job-notfound" is forbidden`), want: false},
 		{name: "missing_exec_plugin_not_found", err: errors.New(`exec: "gke-gcloud-auth-plugin": executable file not found in $PATH`), want: false},
+		{name: "generic_error", err: errors.New("connection refused"), want: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1433,5 +1493,11 @@ func TestIsNotFoundOrNoMatchError(t *testing.T) {
 	}
 	if !IsNoMatchError(&meta.NoKindMatchError{GroupKind: schema.GroupKind{Group: "jobset.x-k8s.io", Kind: "JobSet"}}) {
 		t.Errorf("IsNoMatchError must return true for *meta.NoKindMatchError")
+	}
+	if got := firstNonEmpty("", "   ", "  first  ", "second"); got != "first" {
+		t.Errorf("firstNonEmpty = %q, want first", got)
+	}
+	if got := firstNonEmpty("", " "); got != "" {
+		t.Errorf("firstNonEmpty(blank) = %q, want empty", got)
 	}
 }

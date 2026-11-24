@@ -343,8 +343,10 @@ type permissionCheck struct {
 }
 
 type JobProfile struct {
-	IsCPUMachine  bool
-	CapacityCount int
+	IsCPUMachine        bool
+	CapacityCount       int
+	AllocatableCPUMilli int64
+	GPUResourceName     string
 }
 
 type ManifestOptions struct {

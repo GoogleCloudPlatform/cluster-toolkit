@@ -352,6 +352,7 @@ func resetCommandFlags(cmd *cobra.Command) {
 }
 
 func resetJobFlags() {
+	detectedOrchestratorType = ""
 	pathways = orchestrator.PathwaysJobDefinition{}
 	resetCommandFlags(JobCmd)
 	nodeConstraint = make(map[string]string)
@@ -2249,4 +2250,57 @@ func TestValidateBuildContext_OCIRegistries(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestSubmitCmd_EmptyComputeTypeRejectedAndNumNodesSpecifiedPropagated(t *testing.T) {
+	kcPath := filepath.Join(t.TempDir(), "kubeconfig")
+	kcYAML := "apiVersion: v1\nkind: Config\ncurrent-context: k8s-ctx\nclusters:\n- name: c\n  cluster:\n    server: https://127.0.0.1:6443\ncontexts:\n- name: k8s-ctx\n  context:\n    cluster: c\n    namespace: default\n"
+	if err := os.WriteFile(kcPath, []byte(kcYAML), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, rawVal := range []string{"", "   "} {
+		for _, orchType := range []orchestrator.Type{orchestrator.TypeK8s, orchestrator.TypeGKE} {
+			setupSubmitTestEnv(t)
+			t.Setenv("KUBECONFIG", kcPath)
+			t.Setenv("GCLUSTER_ORCHESTRATOR", string(orchType))
+			args := []string{
+				"submit",
+				"--name", "empty-ct-job",
+				"--image", "busybox",
+				"--command", "echo hi",
+				"--compute-type=" + rawVal,
+			}
+			if orchType == orchestrator.TypeGKE {
+				args = append(args, "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "test-project")
+			}
+			_, err := executeCommand(JobCmd, args...)
+			if err == nil || !strings.Contains(err.Error(), `flag "compute-type" cannot be empty`) {
+				t.Fatalf("orch=%s compute-type=%q err = %v, want empty compute-type error", orchType, rawVal, err)
+			}
+		}
+	}
+
+	setupSubmitTestEnv(t)
+	t.Setenv("KUBECONFIG", kcPath)
+	t.Setenv("GCLUSTER_ORCHESTRATOR", "gke")
+	mockOrc := &mockOrchestrator{}
+	oldFactory := gkeOrchestratorFactory
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+	t.Cleanup(func() { gkeOrchestratorFactory = oldFactory })
+	if _, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "num-nodes-flag-job",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--compute-type", "n2-standard-4",
+		"--image", "busybox",
+		"--command", "echo hi",
+		"--num-nodes", "2",
+	); err != nil {
+		t.Fatalf("submit with --num-nodes failed: %v", err)
+	}
+	if !mockOrc.SubmittedJob.NumNodesSpecified || mockOrc.SubmittedJob.NodesPerSlice != 2 {
+		t.Errorf("captured NumNodesSpecified=%v NodesPerSlice=%d, want (true, 2)", mockOrc.SubmittedJob.NumNodesSpecified, mockOrc.SubmittedJob.NodesPerSlice)
+	}
 }

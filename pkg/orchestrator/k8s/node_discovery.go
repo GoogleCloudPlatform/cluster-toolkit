@@ -90,37 +90,17 @@ func ResolveLabelSchemeOverride(getenv func(string) string) (LabelScheme, error)
 	return scheme, nil
 }
 
-func resolveTPUType(hw TPUHardwareResolver, raw string) string {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return ""
-	}
-	if hw != nil {
-		return hw.NormalizeTPUType(trimmed)
-	}
-	return strings.ToLower(trimmed)
+func (noopHardwareResolver) IsTPUMachine(string) bool { return false }
+
+func (noopHardwareResolver) NormalizeTPUType(raw string) string {
+	return strings.ToLower(strings.TrimSpace(raw))
 }
 
-func isTPUMachine(hw TPUHardwareResolver, raw string) bool {
-	if hw == nil || strings.TrimSpace(raw) == "" {
-		return false
-	}
-	return hw.IsTPUMachine(raw)
-}
-
-func inferTPUMachine(hw TPUHardwareResolver, tpuType, rawMachine string, chipsPerNode int) string {
-	if hw != nil {
-		return hw.InferTPUMachine(tpuType, rawMachine, chipsPerNode)
-	}
+func (noopHardwareResolver) InferTPUMachine(_, rawMachine string, _ int) string {
 	return strings.TrimSpace(rawMachine)
 }
 
-func chipsPerNodeForMachine(hw TPUHardwareResolver, machineType string) int {
-	if hw == nil || strings.TrimSpace(machineType) == "" {
-		return 0
-	}
-	return hw.ChipsPerNode(machineType)
-}
+func (noopHardwareResolver) ChipsPerNode(string) int { return 0 }
 
 // parseTopologyChipCount parses a 2D or 3D TPU topology string (e.g. "2x2", "2x2x2") into its chip count.
 func parseTopologyChipCount(topology string) (int, bool) {
@@ -227,6 +207,9 @@ func DiscoverInventory(lister ResourceLister, apiChecker APIGroupChecker, opts D
 
 	inv := &Inventory{Pools: make(map[string]PoolCapacity)}
 	hw := opts.HardwareResolver
+	if hw == nil {
+		hw = noopHardwareResolver{}
+	}
 
 	signals, err := discoverNodes(lister, inv, hw, override)
 	if err != nil {
@@ -582,11 +565,13 @@ func accumulateNodes(nodes []unstructured.Unstructured, inv *Inventory, hw TPUHa
 
 func extractNodeSnapshot(node unstructured.Unstructured, hw TPUHardwareResolver, override LabelScheme) nodeSnapshot {
 	labels := node.GetLabels()
-	cpuMilli, memMiB, tpus, gpus, inferredGPUType := parseNodeAllocatable(node)
+	cpuMilli, memMiB, tpus, gpus, inferredGPUType, gpuResourceName := parseNodeAllocatable(node)
 	hasTPUSlice, hasPartition := hasTPUSliceLabels(labels)
 	hasGKE := hasGKELabels(labels)
 
-	rawInstance := firstNonEmpty(labels[InstanceTypeLabel], labels[BetaInstanceTypeLabel])
+	observedInstanceLabel := strings.TrimSpace(labels[InstanceTypeLabel])
+	observedGPUProductLabel := strings.TrimSpace(labels[NvidiaGPUProductLabel])
+	rawInstance := firstNonEmpty(observedInstanceLabel, labels[BetaInstanceTypeLabel])
 	rawTPUType, topology := pickNodeTPULabels(labels, override)
 	sliceName := strings.TrimSpace(labels[TPUSliceNameLabel])
 	nodePool := strings.TrimSpace(labels[GKENodePoolLabel])
@@ -595,33 +580,36 @@ func extractNodeSnapshot(node unstructured.Unstructured, hw TPUHardwareResolver,
 		hasPartition = false
 	}
 
-	isTPU := tpus > 0 || rawTPUType != "" || topology != "" || sliceName != "" || isTPUMachine(hw, rawInstance)
+	isTPU := tpus > 0 || rawTPUType != "" || topology != "" || sliceName != "" || hw.IsTPUMachine(rawInstance)
 	tpuType, machineType := resolveNodeMachine(hw, isTPU, rawTPUType, rawInstance, tpus)
 
-	gpuType := firstNonEmpty(labels[GKEAcceleratorLabel], labels[NvidiaGPUProductLabel], inferredGPUType)
+	gpuType := firstNonEmpty(labels[GKEAcceleratorLabel], observedGPUProductLabel, inferredGPUType)
 	isGPU := !isTPU && (gpus > 0 || gpuType != "")
 	poolKey := firstNonEmpty(machineType, nodePool, fallbackClassPoolKey(isTPU, isGPU))
 
 	return nodeSnapshot{
-		ready:        isNodeReady(node),
-		cpuMilli:     cpuMilli,
-		memMiB:       memMiB,
-		tpus:         tpus,
-		gpus:         gpus,
-		isTPU:        isTPU,
-		isGPU:        isGPU,
-		tpuType:      tpuType,
-		gpuType:      gpuType,
-		machineType:  machineType,
-		poolKey:      poolKey,
-		nodePool:     nodePool,
-		topology:     topology,
-		sliceName:    sliceName,
-		hasTPUSlice:  hasTPUSlice,
-		hasGKE:       hasGKE,
-		hasPartition: hasPartition,
-		controlPlane: isControlPlaneNode(labels),
-		systemPool:   isSystemPoolNode(node, nodePool),
+		ready:             isNodeReady(node),
+		cpuMilli:          cpuMilli,
+		memMiB:            memMiB,
+		tpus:              tpus,
+		gpus:              gpus,
+		isTPU:             isTPU,
+		isGPU:             isGPU,
+		tpuType:           tpuType,
+		gpuType:           gpuType,
+		gpuResourceName:   gpuResourceName,
+		instanceTypeLabel: observedInstanceLabel,
+		gpuProductLabel:   observedGPUProductLabel,
+		machineType:       machineType,
+		poolKey:           poolKey,
+		nodePool:          nodePool,
+		topology:          topology,
+		sliceName:         sliceName,
+		hasTPUSlice:       hasTPUSlice,
+		hasGKE:            hasGKE,
+		hasPartition:      hasPartition,
+		controlPlane:      isControlPlaneNode(labels),
+		systemPool:        isSystemPoolNode(node, nodePool),
 	}
 }
 
@@ -640,12 +628,12 @@ func resolveNodeMachine(hw TPUHardwareResolver, isTPU bool, rawTPUType, rawInsta
 	if !isTPU {
 		return "", rawInstance
 	}
-	tpuType = resolveTPUType(hw, rawTPUType)
-	if tpuType == "" && isTPUMachine(hw, rawInstance) {
-		tpuType = resolveTPUType(hw, rawInstance)
+	tpuType = hw.NormalizeTPUType(rawTPUType)
+	if tpuType == "" && hw.IsTPUMachine(rawInstance) {
+		tpuType = hw.NormalizeTPUType(rawInstance)
 	}
 	if rawInstance != "" || tpus > 0 {
-		machineType = inferTPUMachine(hw, tpuType, rawInstance, tpus)
+		machineType = hw.InferTPUMachine(tpuType, rawInstance, tpus)
 	}
 	return tpuType, machineType
 }
@@ -709,6 +697,9 @@ func addNodeToPool(builders map[poolGroupKey]*poolBuilder, snap nodeSnapshot) {
 	b.allMachineType = minNonEmpty(b.allMachineType, snap.machineType)
 	b.allTPUType = minNonEmpty(b.allTPUType, snap.tpuType)
 	b.allGPUType = minNonEmpty(b.allGPUType, snap.gpuType)
+	b.allGPUResourceName = minNonEmpty(b.allGPUResourceName, snap.gpuResourceName)
+	b.allInstanceLabel.observe(snap.instanceTypeLabel)
+	b.allGPUProductLabel.observe(snap.gpuProductLabel)
 	b.allCPUMilli = minPositive(b.allCPUMilli, snap.cpuMilli)
 	b.allMemMiB = minPositive(b.allMemMiB, snap.memMiB)
 	b.allTPUs = minPositive(b.allTPUs, snap.tpus)
@@ -719,6 +710,9 @@ func addNodeToPool(builders map[poolGroupKey]*poolBuilder, snap nodeSnapshot) {
 		b.readyMachineType = minNonEmpty(b.readyMachineType, snap.machineType)
 		b.readyTPUType = minNonEmpty(b.readyTPUType, snap.tpuType)
 		b.readyGPUType = minNonEmpty(b.readyGPUType, snap.gpuType)
+		b.readyGPUResourceName = minNonEmpty(b.readyGPUResourceName, snap.gpuResourceName)
+		b.readyInstanceLabel.observe(snap.instanceTypeLabel)
+		b.readyGPUProductLabel.observe(snap.gpuProductLabel)
 		b.readyCPUMilli = minPositive(b.readyCPUMilli, snap.cpuMilli)
 		b.readyMemMiB = minPositive(b.readyMemMiB, snap.memMiB)
 		b.readyTPUs = minPositive(b.readyTPUs, snap.tpus)
@@ -734,23 +728,21 @@ func addNodeToPool(builders map[poolGroupKey]*poolBuilder, snap nodeSnapshot) {
 
 func finalizeBuilderCapacity(b *poolBuilder) PoolCapacity {
 	c := b.cap
-	if c.ReadyNodes > 0 {
-		c.MachineType = firstNonEmpty(b.readyMachineType, b.allMachineType)
-		c.TPUType = firstNonEmpty(b.readyTPUType, b.allTPUType)
-		c.GPUType = firstNonEmpty(b.readyGPUType, b.allGPUType)
-		c.AllocatableCPUMilli = preferPositive(b.readyCPUMilli, b.allCPUMilli)
-		c.MemMiBPerNode = preferPositive(b.readyMemMiB, b.allMemMiB)
-		c.TPUsPerNode = preferPositive(b.readyTPUs, b.allTPUs)
-		c.GPUsPerNode = preferPositive(b.readyGPUs, b.allGPUs)
+	c.MachineType = firstNonEmpty(b.readyMachineType, b.allMachineType)
+	c.TPUType = firstNonEmpty(b.readyTPUType, b.allTPUType)
+	c.GPUType = firstNonEmpty(b.readyGPUType, b.allGPUType)
+	c.GPUResourceName = firstNonEmpty(b.readyGPUResourceName, b.allGPUResourceName)
+	if b.cap.ReadyNodes > 0 {
+		c.InstanceTypeLabel = b.readyInstanceLabel.resolved()
+		c.GPUProductLabel = b.readyGPUProductLabel.resolved()
 	} else {
-		c.MachineType = b.allMachineType
-		c.TPUType = b.allTPUType
-		c.GPUType = b.allGPUType
-		c.AllocatableCPUMilli = b.allCPUMilli
-		c.MemMiBPerNode = b.allMemMiB
-		c.TPUsPerNode = b.allTPUs
-		c.GPUsPerNode = b.allGPUs
+		c.InstanceTypeLabel = b.allInstanceLabel.resolved()
+		c.GPUProductLabel = b.allGPUProductLabel.resolved()
 	}
+	c.AllocatableCPUMilli = cmp.Or(b.readyCPUMilli, b.allCPUMilli)
+	c.MemMiBPerNode = cmp.Or(b.readyMemMiB, b.allMemMiB)
+	c.TPUsPerNode = cmp.Or(b.readyTPUs, b.allTPUs)
+	c.GPUsPerNode = cmp.Or(b.readyGPUs, b.allGPUs)
 	c.Topologies = slices.Sorted(maps.Keys(b.topologies))
 	c.SliceNames = slices.Sorted(maps.Keys(b.slices))
 	return c
@@ -912,10 +904,19 @@ func isBetterCPUPool(candName string, cand PoolCapacity, candCtrl, candSys bool,
 	return candName < curName
 }
 
-func parseNodeAllocatable(node unstructured.Unstructured) (cpuMilli int64, memMiB, tpus, gpus int, inferredGPU string) {
-	alloc, found, err := unstructured.NestedMap(node.Object, "status", "allocatable")
+func nodeAllocatableMap(node unstructured.Unstructured) (map[string]interface{}, bool) {
+	rawAlloc, found, err := unstructured.NestedFieldNoCopy(node.Object, "status", "allocatable")
 	if err != nil || !found {
-		return 0, 0, 0, 0, ""
+		return nil, false
+	}
+	alloc, ok := rawAlloc.(map[string]interface{})
+	return alloc, ok
+}
+
+func parseNodeAllocatable(node unstructured.Unstructured) (cpuMilli int64, memMiB, tpus, gpus int, inferredGPU, gpuResourceName string) {
+	alloc, ok := nodeAllocatableMap(node)
+	if !ok {
+		return 0, 0, 0, 0, "", ""
 	}
 	if q, ok := parseQuantityField(alloc, "cpu"); ok {
 		cpuMilli = q.MilliValue()
@@ -926,24 +927,24 @@ func parseNodeAllocatable(node unstructured.Unstructured) (cpuMilli int64, memMi
 	if q, ok := parseQuantityField(alloc, "google.com/tpu"); ok {
 		tpus = int(q.Value())
 	}
-	gpus, inferredGPU = parseAllocatableGPUs(alloc)
-	return cpuMilli, memMiB, tpus, gpus, inferredGPU
+	gpus, inferredGPU, gpuResourceName = parseAllocatableGPUs(alloc)
+	return cpuMilli, memMiB, tpus, gpus, inferredGPU, gpuResourceName
 }
 
-func parseAllocatableGPUs(alloc map[string]interface{}) (int, string) {
+func parseAllocatableGPUs(alloc map[string]interface{}) (int, string, string) {
 	if q, ok := parseQuantityField(alloc, "nvidia.com/gpu"); ok && q.Value() > 0 {
-		return int(q.Value()), "nvidia"
+		return int(q.Value()), "nvidia", "nvidia.com/gpu"
 	}
 	if count, profile := parsePrefixGPUAllocatable(alloc, "nvidia.com/mig-"); count > 0 {
-		return count, profile
+		return count, profile, profile
 	}
 	if q, ok := parseQuantityField(alloc, "amd.com/gpu"); ok && q.Value() > 0 {
-		return int(q.Value()), "amd"
+		return int(q.Value()), "amd", "amd.com/gpu"
 	}
 	if count, profile := parseIntelGPUAllocatable(alloc); count > 0 {
-		return count, profile
+		return count, profile, profile
 	}
-	return 0, ""
+	return 0, "", ""
 }
 
 func parseIntelGPUAllocatable(alloc map[string]interface{}) (int, string) {
@@ -960,7 +961,7 @@ func parseIntelGPUAllocatable(alloc map[string]interface{}) (int, string) {
 		keys = append(keys, k)
 	}
 	slices.Sort(keys)
-	return sumGPUAllocatableKeys(alloc, keys)
+	return firstPositiveGPUAllocatableKey(alloc, keys)
 }
 
 func isIntelGPUMetadataKey(k string) bool {
@@ -980,21 +981,16 @@ func parsePrefixGPUAllocatable(alloc map[string]interface{}, prefix string) (int
 		}
 	}
 	slices.Sort(keys)
-	return sumGPUAllocatableKeys(alloc, keys)
+	return firstPositiveGPUAllocatableKey(alloc, keys)
 }
 
-func sumGPUAllocatableKeys(alloc map[string]interface{}, keys []string) (int, string) {
-	total := 0
-	firstProfile := ""
+func firstPositiveGPUAllocatableKey(alloc map[string]interface{}, keys []string) (int, string) {
 	for _, k := range keys {
 		if q, ok := parseQuantityField(alloc, k); ok && q.Value() > 0 {
-			total += int(q.Value())
-			if firstProfile == "" {
-				firstProfile = k
-			}
+			return int(q.Value()), k
 		}
 	}
-	return total, firstProfile
+	return 0, ""
 }
 
 func parseQuantityField(alloc map[string]interface{}, key string) (resource.Quantity, bool) {
@@ -1135,12 +1131,12 @@ func parseTPUSlice(obj unstructured.Unstructured, hw TPUHardwareResolver) SliceI
 	if totalChips == 1 {
 		chipsHint = 1
 	}
-	tpuType := resolveTPUType(hw, rawType)
+	tpuType := hw.NormalizeTPUType(rawType)
 	var machineType string
 	if !isAmbiguousEightChipSlice(hw, tpuType, totalChips) {
-		machineType = inferTPUMachine(hw, tpuType, "", chipsHint)
+		machineType = hw.InferTPUMachine(tpuType, "", chipsHint)
 	}
-	chips := chipsPerNodeForMachine(hw, machineType)
+	chips := hw.ChipsPerNode(machineType)
 	if chips == 0 && chipsHint > 0 {
 		chips = chipsHint
 	}
@@ -1163,8 +1159,8 @@ func isAmbiguousEightChipSlice(hw TPUHardwareResolver, tpuType string, totalChip
 	if totalChips != 8 || tpuType == "" {
 		return false
 	}
-	return chipsPerNodeForMachine(hw, inferTPUMachine(hw, tpuType, "", 8)) == 8 &&
-		chipsPerNodeForMachine(hw, inferTPUMachine(hw, tpuType, "", 4)) == 4
+	return hw.ChipsPerNode(hw.InferTPUMachine(tpuType, "", 8)) == 8 &&
+		hw.ChipsPerNode(hw.InferTPUMachine(tpuType, "", 4)) == 4
 }
 
 // listTPUPartitionTrees queries partition.tpu.google.com/v1alpha1 and falls back to v1beta1
@@ -1220,7 +1216,7 @@ func parsePartitionTree(obj unstructured.Unstructured, hw TPUHardwareResolver) P
 
 	return PartitionTreeInfo{
 		Name:                obj.GetName(),
-		TPUType:             resolveTPUType(hw, rawType),
+		TPUType:             hw.NormalizeTPUType(rawType),
 		RootTopology:        rootTopo,
 		SupportedTopologies: normalizeUniqueSorted(allTopos),
 	}
@@ -1317,20 +1313,20 @@ func preferredSliceAggValues(agg *nodeSliceAgg) (tpuType, machineType, topology 
 	tpuType = firstNonEmpty(agg.readyTPUType, agg.tpuType)
 	machineType = firstNonEmpty(agg.readyMachineType, agg.machineType)
 	topology = firstNonEmpty(agg.readyTopology, agg.topology)
-	chips = preferPositive(agg.readyChips, agg.chips)
+	chips = cmp.Or(agg.readyChips, agg.chips)
 	return tpuType, machineType, topology, chips
 }
 
 func buildNodeDerivedSlice(agg *nodeSliceAgg, hw TPUHardwareResolver) SliceInfo {
 	tpuType, machineType, topology, chips := preferredSliceAggValues(agg)
 	if chips == 0 && machineType != "" {
-		chips = chipsPerNodeForMachine(hw, machineType)
+		chips = hw.ChipsPerNode(machineType)
 	}
 	if chips == 0 && isSingleChipTopology(topology) {
 		chips = 1
 	}
 	if machineType == "" && chips > 0 && tpuType != "" {
-		machineType = inferTPUMachine(hw, tpuType, "", chips)
+		machineType = hw.InferTPUMachine(tpuType, "", chips)
 	}
 	nodesPerSlice := resolveSliceNodeCount(topology, chips, agg.totalNodes)
 	ready := sliceNodesReady(agg.readyNodes, agg.totalNodes, nodesPerSlice)
@@ -1368,11 +1364,11 @@ func updateEnrichedSliceChipsAndMachine(s *SliceInfo, nodeMachineType string, no
 	if nodeMachineType != "" || s.ChipsPerNode <= 0 || s.TPUType == "" {
 		return
 	}
-	curMachineChips := chipsPerNodeForMachine(hw, s.MachineType)
+	curMachineChips := hw.ChipsPerNode(s.MachineType)
 	if s.MachineType != "" && (curMachineChips == 0 || curMachineChips == s.ChipsPerNode) {
 		return
 	}
-	if inferred := inferTPUMachine(hw, s.TPUType, "", s.ChipsPerNode); inferred != "" {
+	if inferred := hw.InferTPUMachine(s.TPUType, "", s.ChipsPerNode); inferred != "" {
 		s.MachineType = inferred
 	}
 }
@@ -1382,7 +1378,7 @@ func resolveEnrichedSliceChips(s *SliceInfo, nodeMachineType string, nodeChips i
 		return nodeChips
 	}
 	if nodeMachineType != "" {
-		if c := chipsPerNodeForMachine(hw, nodeMachineType); c > 0 {
+		if c := hw.ChipsPerNode(nodeMachineType); c > 0 {
 			return c
 		}
 		if isSingleChipTopology(s.Topology) {
@@ -1394,7 +1390,7 @@ func resolveEnrichedSliceChips(s *SliceInfo, nodeMachineType string, nodeChips i
 		return 1
 	}
 	if s.ChipsPerNode == 0 && s.MachineType != "" {
-		return chipsPerNodeForMachine(hw, s.MachineType)
+		return hw.ChipsPerNode(s.MachineType)
 	}
 	return s.ChipsPerNode
 }
@@ -1431,13 +1427,13 @@ func buildTPUInventory(inv *Inventory, signals nodeSignals, hw TPUHardwareResolv
 		tpu.MachineType = primaryPool.MachineType
 		tpu.ChipsPerNode = primaryPool.TPUsPerNode
 		if tpu.ChipsPerNode == 0 && tpu.MachineType != "" {
-			tpu.ChipsPerNode = chipsPerNodeForMachine(hw, tpu.MachineType)
+			tpu.ChipsPerNode = hw.ChipsPerNode(tpu.MachineType)
 		}
 	}
 	poolTopos := accumulatePrimaryTPUPools(inv, signals, primaryCtrl, tpu, hw)
 	applySliceAndTreeMetadata(inv, primaryPool, poolTopos, tpu, hw)
 	if tpu.ChipsPerNode == 0 && tpu.MachineType != "" {
-		tpu.ChipsPerNode = chipsPerNodeForMachine(hw, tpu.MachineType)
+		tpu.ChipsPerNode = hw.ChipsPerNode(tpu.MachineType)
 	}
 	if tpu.NodesPerSlice == 0 {
 		tpu.NodesPerSlice = calculateNodesFromTopology(tpu.Topology, tpu.ChipsPerNode)
@@ -1474,7 +1470,7 @@ func poolMatchesPrimaryTPU(pool PoolCapacity, tpu *TPUInventory, hw TPUHardwareR
 	}
 	poolChips := pool.TPUsPerNode
 	if poolChips == 0 {
-		poolChips = chipsPerNodeForMachine(hw, pool.MachineType)
+		poolChips = hw.ChipsPerNode(pool.MachineType)
 	}
 	return tpu.ChipsPerNode == 0 || poolChips == 0 || poolChips == tpu.ChipsPerNode
 }
@@ -1501,7 +1497,7 @@ func applySliceAndTreeMetadata(inv *Inventory, primaryPool *PoolCapacity, poolTo
 		if chipsHint == 0 && isSingleChipTopology(tpu.Topology) {
 			chipsHint = 1
 		}
-		tpu.MachineType = inferTPUMachine(hw, tpu.TPUType, "", chipsHint)
+		tpu.MachineType = hw.InferTPUMachine(tpu.TPUType, "", chipsHint)
 	}
 }
 
@@ -1711,13 +1707,6 @@ func minPositive[T ~int | ~int64](cur, cand T) T {
 		return cand
 	}
 	return cur
-}
-
-func preferPositive[T ~int | ~int64](primary, fallback T) T {
-	if primary > 0 {
-		return primary
-	}
-	return fallback
 }
 
 func normalizeUniqueSorted(values []string) []string {

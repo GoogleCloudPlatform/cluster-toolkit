@@ -96,15 +96,15 @@ var (
 
 var SubmitCmd = &cobra.Command{
 	Use:   "submit",
-	Short: "Submits a workload on a GKE cluster using JobSet (or standalone batch/v1 Job).",
-	Long: `The 'submit' command deploys a workload on a GKE cluster using Kubernetes
-JobSet integrated with Kueue, or falls back to a standalone batch/v1 Indexed Job
-when JobSet is absent or disabled (single-slice, non-Pathways workloads). Image
-can be pre-built (--image) or built on-the-fly using Crane (--base-image with
---build-context).
+	Short: "Submits a workload on a GKE or Kubernetes cluster.",
+	Long: `The 'submit' command deploys a workload on a GKE or Kubernetes cluster using
+Kubernetes JobSet with optional Kueue integration, or falls back to a standalone
+batch/v1 Indexed Job when JobSet is absent or disabled (single-slice, non-Pathways
+workloads). Image can be pre-built (--image) or built on-the-fly using Crane
+(--base-image with --build-context).
 
 It accepts parameters for the container image, command to execute, accelerator type,
-and workload/queueing configurations like workload name, queue, nodes, and restarts.`,
+and workload scheduling configurations like workload name, queue, nodes, and restarts.`,
 	RunE: runSubmitCmd,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		pathways.RunSPSWorkload = strings.TrimSpace(pathways.RunSPSWorkload)
@@ -114,7 +114,11 @@ and workload/queueing configurations like workload name, queue, nodes, and resta
 		if err := validateWorkloadNameLength(workloadName, isPathwaysJob); err != nil {
 			return err
 		}
-		if computeType == "" && pathways.RunSPSWorkload == "" {
+		computeType = strings.TrimSpace(computeType)
+		if cmd.Flags().Changed("compute-type") && computeType == "" {
+			return fmt.Errorf("flag \"compute-type\" cannot be empty")
+		}
+		if computeType == "" && pathways.RunSPSWorkload == "" && detectedOrchestratorType != orchestrator.TypeK8s {
 			return fmt.Errorf("required flag(s) \"compute-type\" not set")
 		}
 
@@ -276,6 +280,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		KueueQueueName:                kueueQueueName,
 		NumSlices:                     numSlices,
 		NodesPerSlice:                 numNodes,
+		NumNodesSpecified:             cmd.Flags().Changed("num-nodes"),
 		MaxRestarts:                   restarts,
 		TtlSecondsAfterFinished:       ttlSeconds,
 		TerminationGracePeriodSeconds: gracePeriodSeconds,

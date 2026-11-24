@@ -6437,41 +6437,49 @@ func TestWarnPathwaysHostNetworkManifest(t *testing.T) {
 	}
 }
 
-func TestGenerateJobManifest_TypedServiceAndIndexedJobYAML(t *testing.T) {
-	g := newGPUDerivationTestOrc(t)
+func TestGenerateJobManifest_TypedServiceJobAndCustomGPUResourceKey(t *testing.T) {
+	g := newTestGKEOrchestrator(NewMockExecutor(nil))
+	g.mode = orchestrator.TypeK8s
 	g.namespace = "ml-ns"
+	g.inventory = &k8s.Inventory{
+		LabelScheme: k8s.SchemeGeneric,
+		PoolNames:   []string{"amd-pool"},
+		Pools: map[string]k8s.PoolCapacity{
+			"amd-pool": {
+				MachineType:     "mi300x-node",
+				IsGPU:           true,
+				GPUsPerNode:     8,
+				GPUType:         "amd",
+				GPUResourceName: "amd.com/gpu",
+				ReadyNodes:      2,
+			},
+		},
+	}
 
 	opts := ManifestOptions{
-		WorkloadName:                  "tier3-job",
-		FullImageName:                 "registry.local/train:v1",
+		WorkloadName:                  "amd-tier3",
+		FullImageName:                 "registry.local/rocm:v1",
 		CommandToRun:                  "python train.py",
-		ComputeType:                   "g2-standard-48",
-		MachineType:                   "g2-standard-48",
-		ClusterLocation:               "us-central1-a",
+		ComputeType:                   "mi300x-node",
+		MachineType:                   "mi300x-node",
 		NumSlices:                     1,
 		NodesPerSlice:                 2,
 		ParallelContainers:            1,
 		TtlSecondsAfterFinished:       3600,
 		TerminationGracePeriodSeconds: 30,
 	}
-	profile := JobProfile{IsCPUMachine: false, CapacityCount: 4}
+	profile := JobProfile{IsCPUMachine: false, CapacityCount: 8, GPUResourceName: "amd.com/gpu"}
 
 	manifest, err := g.GenerateJobManifest(opts, profile)
 	if err != nil {
 		t.Fatalf("GenerateJobManifest() err = %v", err)
 	}
-	if err := ValidateJobSetManifest(manifest); err != nil {
-		t.Fatalf("ValidateJobSetManifest(Service+Job) err = %v", err)
-	}
-	if err := ValidateJobSetManifest("apiVersion: v1\nkind: Service\nspec:\n  ports: \"not-a-list\"\n"); err == nil {
-		t.Fatalf("ValidateJobSetManifest(malformed Service) = nil, want parse error")
-	}
 	docs, err := splitYAMLDocuments(manifest)
 	if err != nil || len(docs) != 2 {
 		t.Fatalf("splitYAMLDocuments() len=%d err=%v, want 2 (Service + Job)", len(docs), err)
 	}
-	assertHeadlessServiceYAML(t, docs[0], "tier3-job")
-	assertIndexedJobYAML(t, docs[1], "tier3-job")
+	assertHeadlessServiceYAML(t, docs[0], "amd-tier3")
+	assertIndexedJobAMDGPUYAML(t, docs[1], "amd-tier3")
 }
 
 func assertHeadlessServiceYAML(t *testing.T, doc, name string) {
@@ -6488,7 +6496,7 @@ func assertHeadlessServiceYAML(t *testing.T, doc, name string) {
 	}
 }
 
-func assertIndexedJobYAML(t *testing.T, doc, name string) {
+func assertIndexedJobAMDGPUYAML(t *testing.T, doc, name string) {
 	t.Helper()
 	var job batchv1.Job
 	if err := k8syaml.Unmarshal([]byte(doc), &job); err != nil {
@@ -6501,7 +6509,26 @@ func assertIndexedJobYAML(t *testing.T, doc, name string) {
 		t.Errorf("expected Indexed completionMode, got %v", job.Spec.CompletionMode)
 	}
 	limits := job.Spec.Template.Spec.Containers[0].Resources.Limits
-	if qty, ok := limits[corev1.ResourceName("nvidia.com/gpu")]; !ok || qty.String() != "4" {
-		t.Errorf("GPU limits = %v, want nvidia.com/gpu=4", limits)
+	if qty, ok := limits[corev1.ResourceName("amd.com/gpu")]; !ok || qty.String() != "8" {
+		t.Errorf("GPU limits = %v, want amd.com/gpu=8", limits)
+	}
+	if _, hasNvidia := limits[corev1.ResourceName("nvidia.com/gpu")]; hasNvidia {
+		t.Errorf("AMD job must not request nvidia.com/gpu: %v", limits)
+	}
+}
+
+func TestPrepareJobSetTemplateData_ExclusiveTopologyByLabelScheme(t *testing.T) {
+	g := newTestGKEOrchestrator(NewMockExecutor(nil))
+	g.mode = orchestrator.TypeK8s
+	g.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeGeneric}
+	opts := ManifestOptions{NodesPerSlice: 2, ParallelContainers: 1}
+	data := g.prepareJobSetTemplateData(opts, []string{"echo"}, "", false, true)
+	if data.ExclusiveTopologyAnnotation != "" {
+		t.Errorf("multi-node non-GKE ExclusiveTopologyAnnotation = %q, want empty", data.ExclusiveTopologyAnnotation)
+	}
+	g.inventory.LabelScheme = k8s.SchemeGKE
+	dataGKE := g.prepareJobSetTemplateData(opts, []string{"echo"}, "", false, true)
+	if !strings.Contains(dataGKE.ExclusiveTopologyAnnotation, "cloud.google.com/gke-nodepool") {
+		t.Errorf("SchemeGKE multi-node ExclusiveTopologyAnnotation = %q, want gke-nodepool", dataGKE.ExclusiveTopologyAnnotation)
 	}
 }
