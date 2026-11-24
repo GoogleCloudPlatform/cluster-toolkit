@@ -216,7 +216,7 @@ variable "startup_script" {
 }
 
 variable "guest_accelerator" {
-  description = "List of the type and count of accelerator cards attached to the instance. Requires virtual workstation accelerator if Nvidia Grid Drivers are required. On the default Ubuntu 24.04 image (GRID R595), supports nvidia-tesla-t4-vws on N1 since R595 dropped Pascal/Volta GPU support."
+  description = "List of the type and count of accelerator cards attached to the instance. Requires virtual workstation accelerator if Nvidia Grid Drivers are required. On the default Ubuntu 24.04 image (GRID R595), only nvidia-tesla-t4-vws on N1 is supported; R595 dropped Pascal/Volta GPU support. For Pascal vWS GPUs (P4/P100), set instance_image to a Debian 12 image."
   type = list(object({
     type  = string,
     count = number
