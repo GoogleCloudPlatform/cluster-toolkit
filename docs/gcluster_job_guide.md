@@ -558,6 +558,11 @@ When a workload pod is evicted, cancelled, or preempted (e.g. on Spot VMs or Kue
 * Post-command cleanup commands in the user script (such as checkpoint flushes or artifact uploads to Cloud Storage) continue to run before the pod grace period expires.
 * If a workload is interrupted by `SIGTERM`, `gcluster` ensures it exits with code `143` even if cleanup commands exit `0`, preventing evicted pods from falsely reporting success.
 
+#### Pathways Jobs
+
+* The workload runs in the `pathways-head` pod, which keeps the Kubernetes default grace period of 30 s whatever `--grace-period` is set to: cleanup after `SIGTERM`, including a final checkpoint, must finish within 30 s. `--grace-period` sets how long the worker pods may take to stop. It has no effect on `--pathways-run-sps-workload` runs, which have no worker pods.
+* With `--pathways-colocated-python-sidecar-image`, each worker pod takes the full `--grace-period` to stop, because the sidecar exits only when it is killed. A long grace period therefore delays JobSet restarts, and keeps the TPU nodes in use for that long after the JobSet finishes.
+
 ### 6.5 Topology & Scheduler
 
 **Example 1: Topology Awareness**
@@ -1411,7 +1416,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | :--- | :--- | :--- |
 | `-q, --queue` | `string` | Name of the Kueue `LocalQueue` to submit the job to (Auto-discovered by default). |
 | `--priority` | `string` | Priority class name assigned to the job queue (supports default classes like `low`, `medium`, `high`, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used. |
-| `--grace-period` | `string` | Buffer period given to pods to save checkpoints before forced termination (Default: `30s`). |
+| `--grace-period` | `string` | Buffer period given to pods to save checkpoints before forced termination (Default: `30s`). On Pathways jobs it applies to the worker pods; `pathways-head`, where the workload runs, keeps the Kubernetes default of 30 s (see section 6.4). |
 | `--gke-mtc-enabled` | `flag` | If present, enables Multi-Tier Checkpointing (MTC) for the workload. |
 | `--gke-mtc-ramdisk-dir` | `string` | The ramdisk directory path for local checkpoints in MTC (required when `--gke-mtc-enabled` is set). |
 | `--enable-ml-diagnostics` | `bool` | Enables ML Diagnostics for the workload. Uses the GKE managed webhook (`managed-mldiagnostics-gke: "true"`, requiring `gke-cluster` setting `enable_ml_diagnostics: true`) by default, or injects the native `ai-telemetry-collector` sidecar on Kubernetes 1.29+ TPU pods when `--ml-diagnostics-image` or `GCLUSTER_TELEMETRY_IMAGE` is set (adding pod label `tpu-workload-name: <name>`, port `tpu-metrics`, and `TPU_RUNTIME_METRICS_PORTS="8431,8432,8433,8434,8435,8436,8437,8438"` unless overridden via `--env` / `--pathways-worker-env`; for `--pathways` jobs, injected only on TPU `worker` pods). |
