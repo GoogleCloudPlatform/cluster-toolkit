@@ -903,7 +903,10 @@ class RevokedIsRefusedTests(SimpleTestCase):
         parent = _filestore_parent(
             _filestore(enabled=True, cloud_state="m", cmek_revoked=True),
             cloud_state="m")
-        with mock.patch.object(filesystem, "_tf_dir_for_fs"), \
+        # an initialised directory, so the destroy is not skipped as having
+        # nothing applied
+        with mock.patch.object(filesystem, "_tf_dir_for_fs",
+                               return_value=str(tf_dir)), \
                 mock.patch.object(filesystem, "_get_credentials_file"), \
                 mock.patch.object(filesystem.utils,
                                   "run_terraform") as terraform:
@@ -1248,3 +1251,50 @@ class ImageStateBackendTests(SimpleTestCase):
         self.assertEqual(
             [g["group"] for g in blueprint["deployment_groups"]],
             ["builder-env", "packer-image"])
+
+
+class ImageKeyApplyIsRecordedFirstTests(SimpleTestCase):
+    """An image's key group records the apply before it runs.
+
+    The key and its grant can exist even when the builder env or Packer
+    fails after them, so the image must be frozen, and its key listed for
+    revocation, from the moment the key apply starts, as clusters and
+    Filestores are.
+    """
+
+    def _create(self, record_side_effect=None):
+        from ..cluster_manager import image
+        backend = _image_backend(_image(enabled=True))
+        backend._cmek_in_use = True
+        calls = self.calls = mock.Mock()
+        with mock.patch.object(
+                image.utils, "run_terraform",
+                side_effect=lambda _d, cmd, **_k: calls.terraform(cmd)), \
+                mock.patch.object(
+                    cmek, "record_apply_started",
+                    side_effect=record_side_effect or (
+                        lambda row: calls.record(row))):
+            backend._create_cmek_env()
+        return backend, calls
+
+    def test_the_apply_is_recorded_before_terraform_apply(self):
+        backend, calls = self._create()
+        self.assertEqual(calls.mock_calls, [
+            mock.call.terraform("init"), mock.call.terraform("validate"),
+            mock.call.record(backend.image), mock.call.terraform("apply")])
+
+    def test_a_key_revoked_since_queueing_is_never_applied(self):
+        error = cmek.CmekConfigError("revoked")
+        with self.assertRaises(cmek.CmekConfigError):
+            self._create(record_side_effect=error)
+        self.assertEqual(self.calls.mock_calls, [
+            mock.call.terraform("init"), mock.call.terraform("validate")])
+
+    def test_an_unencrypted_image_applies_no_key_group(self):
+        from ..cluster_manager import image
+        backend = _image_backend(_image(enabled=False))
+        with mock.patch.object(image.utils, "run_terraform") as run, \
+                mock.patch.object(cmek, "record_apply_started") as record:
+            backend._create_cmek_env()
+        run.assert_not_called()
+        record.assert_not_called()

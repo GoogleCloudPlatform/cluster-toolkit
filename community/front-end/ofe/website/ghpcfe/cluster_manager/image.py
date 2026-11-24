@@ -92,6 +92,9 @@ class ImageBackend:
             cmek.CmekConfigError: If the image's key was revoked.
         """
         try:
+            # The record was loaded when the build was queued: re-read it,
+            # so a key revoked since then is refused here.
+            cmek.keep_flags_current(self.image)
             cmek.assert_not_revoked(self.image)
         except cmek.CmekConfigError as err:
             # Refused before anything was done: the build's claim on the
@@ -451,7 +454,8 @@ deployment_groups:
                              arguments=["-var", "startup_script_file=startup_script.sh", "."])
             # The build succeeded, so the encryption choice is now in the
             # image: it stays fixed from here on. Stored at once, on its own,
-            # so nothing after this that fails can lose it.
+            # so nothing after this that fails can lose it. An encrypted
+            # image already stored it before its key group was applied.
             self.image.cmek_applied = True
             self.image.save(update_fields=["cmek_applied"])
             self.update_image_status("r")
@@ -487,6 +491,12 @@ deployment_groups:
             logger.info("Invoking Terraform Apply for the image key.")
             utils.run_terraform(terraform_dir, "init", extra_env=extra_env)
             utils.run_terraform(terraform_dir, "validate", extra_env=extra_env)
+            # Stored before the apply runs, as for clusters and Filestores:
+            # the apply can create the key and its grant even if the build
+            # fails after it, so the image's encryption is fixed from here
+            # and its key is listed for revocation. A key revoked since the
+            # build was queued is refused here, before anything is applied.
+            cmek.record_apply_started(self.image)
             utils.run_terraform(terraform_dir, "apply", extra_env=extra_env)
         except subprocess.CalledProcessError as cpe:
             self.update_image_status("e")

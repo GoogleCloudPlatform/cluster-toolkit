@@ -31,6 +31,8 @@
 
 <form action="" method="post" style="max-width:44rem;">
   {% csrf_token %}
+  {# the settings this page was loaded with; a save is refused if they changed since #}
+  <input type="hidden" name="loaded_digest" value="{{ loaded_digest }}" />
   {% for field in form %}
   <div class="form-group">
     {{ field.errors }}

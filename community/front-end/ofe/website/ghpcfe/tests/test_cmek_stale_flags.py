@@ -386,3 +386,63 @@ class KeepFlagsCurrentTests(SimpleTestCase):
         row.refresh_from_db.side_effect = ObjectDoesNotExist
         cmek.keep_flags_current(row)
         row.refresh_from_db.assert_called_once()
+
+
+class QueuedRevokeIsReadTests(SimpleTestCase):
+    """Every entry point re-reads the flags before refusing a revoked key.
+
+    The record is loaded when the task is queued. A key revoked before the
+    task runs must be refused at the first check, not reach the blueprint
+    generator or, for a Filestore, the reset that hides its Destroy button.
+    """
+
+    def test_reconfigure(self):
+        db = {}
+        cluster = stored(_cluster(enabled=True, status="r",
+                                  cloud_state="m"), db)
+        db["cmek_revoked"] = True
+        info = _cluster_info(cluster)
+        with mock.patch.object(info, "update") as update, \
+                self.assertRaises(cmek.CmekConfigError):
+            info.reconfigure_cluster()
+        update.assert_not_called()
+        self.assertEqual((db["status"], db["cloud_state"]), ("r", "m"))
+        self.assertIn("was revoked", db["status_message"])
+
+    def _filestore_view(self, view_name, generator):
+        from ..models import FilesystemImpl
+        from ..views import filesystems as v
+        db = {}
+        fs = stored(_filestore(enabled=True, cloud_state="m",
+                               impl_type=FilesystemImpl.GCPFILESTORE), db)
+        fs.gcpfilestorefilesystem = fs
+        db["cmek_revoked"] = True
+        view = getattr(v, view_name).__new__(getattr(v, view_name))
+        with mock.patch.object(v.cm_fs, generator) as generate, \
+                self.assertRaises(cmek.CmekConfigError):
+            view.cmd(None, None, fs)
+        generate.assert_not_called()
+        return db
+
+    def test_filestore_create_keeps_its_destroy_button(self):
+        db = self._filestore_view("BackendCreateFilesystem",
+                                  "create_filesystem")
+        self.assertEqual(db["cloud_state"], "m")
+        self.assertIn("was revoked", db["status_message"])
+
+    def test_filestore_update(self):
+        db = self._filestore_view("BackendUpdateFilesystem",
+                                  "update_filesystem")
+        self.assertEqual(db["cloud_state"], "m")
+        self.assertIn("was revoked", db["status_message"])
+
+    def test_image_build(self):
+        db = {}
+        backend = _image_backend(stored(_image(enabled=True, status="c"), db))
+        db["cmek_revoked"] = True
+        with mock.patch.object(backend, "_create_image_dir") as create, \
+                self.assertRaises(cmek.CmekConfigError):
+            backend.prepare()
+        create.assert_not_called()
+        self.assertEqual(db["status"], "n")
+        self.assertIn("was revoked", db["status_message"])

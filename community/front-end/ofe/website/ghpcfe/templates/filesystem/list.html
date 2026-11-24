@@ -76,12 +76,32 @@
               {% if fs.cloud_state == "nm" %}
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'fs-update' fs.id  %}">Edit</a>
               {% endif %}
+              {% comment %}
+                Same rules as the Filestore detail page: once an apply has
+                started (cmek_applied) the Filestore may hold cloud resources,
+                so it is destroyed, never only deleted. "um" and "dm" are
+                destroys that failed part way and are destroyed again. A
+                destroyed ("xm") or imported ("i") Filestore owns nothing in
+                the cloud, so its record can still be deleted here.
+                Other filesystem types have no such flag.
+              {% endcomment %}
+              {% with fstore=fs.gcpfilestorefilesystem %}
+              {% if fstore %}
+              {% if fstore.cloud_state == "xm" or fstore.cloud_state == "i" or fstore.cloud_state == "nm" and not fstore.cmek_applied %}
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'fs-delete' fs.id  %}">Delete</a>
+              {% endif %}
+              {% if fstore.cloud_state == "m" or fstore.cloud_state == "um" or fstore.cloud_state == "dm" or fstore.cloud_state == "nm" and fstore.cmek_applied %}
+              <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'fs-destroy' fs.id  %}">Destroy</a>
+              {% endif %}
+              {% else %}
               {% if fs.cloud_state == "xm" or fs.cloud_state == "i" or fs.cloud_state == "nm" %}
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'fs-delete' fs.id  %}">Delete</a>
               {% endif %}
               {% if fs.cloud_state == "m" %}
               <a class="dropdown-item btn btn-sm btn-secondary" href="{% url 'fs-destroy' fs.id  %}">Destroy</a>
               {% endif %}
+              {% endif %}
+              {% endwith %}
             </div>
           </div>
         </td>

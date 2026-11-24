@@ -703,7 +703,8 @@ def is_frozen(resource) -> bool:
     would mean recreating its disks, bucket or share. A resource is frozen
     once an apply with its choice has been started (`cmek_applied`, stored
     by record_apply_started before the apply runs, so a failed first apply
-    counts too; an image stores it once its build succeeds) or an
+    counts too; an encrypted image stores it before its key group is
+    applied, an unencrypted one once its build succeeds) or an
     administrator has revoked its key (`cmek_revoked`); both are stored, so
     they hold whatever state the record is in later. An unsaved resource has
     nothing deployed.

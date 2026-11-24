@@ -212,6 +212,34 @@ class NotLiveTests(ViewTestCase):
         self.rows[0].cmek_key_name = ""
         self.assert_not_found("cluster", 1)
 
+    def test_a_never_applied_row_is_neither_listed_nor_found(self):
+        # Key fields typed on the form, all three of them, but no apply was
+        # ever started: the key may be one OFE never created, so it is not
+        # offered for destruction.
+        self.rows[0].status = "n"
+        self.rows[0].cloud_state = "nm"
+        self.rows[0].cmek_applied = False
+        self.assert_not_found("cluster", 1)
+        request = RequestFactory().get("/")
+        request.user = ADMIN
+        listed = [k["resource_pk"] for k in
+                  v.CmekKeysView.as_view()(request).context_data["keys"]]
+        self.assertEqual(listed, [2])
+
+    def test_a_failed_first_apply_is_still_listed(self):
+        # The apply was started, so the key may exist; it stays revocable.
+        self.rows[0].status = "e"
+        self.rows[0].cloud_state = "nm"
+        self.rows[0].cmek_applied = True
+        request = RequestFactory().get("/")
+        request.user = ADMIN
+        listed = [k["resource_pk"] for k in
+                  v.CmekKeysView.as_view()(request).context_data["keys"]]
+        self.assertEqual(sorted(listed), [1, 2])
+        response, destroy = self.post("cluster", 1, {"path": PATH_A})
+        self.assertEqual(response.status_code, 302)
+        destroy.assert_called_once_with("{}", PATH_A)
+
     def test_a_pk_of_another_kind_is_not_found(self):
         # pk 1 is a cluster, not an image
         self.assert_not_found("image", 1)

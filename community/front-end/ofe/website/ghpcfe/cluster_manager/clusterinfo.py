@@ -170,7 +170,9 @@ class ClusterInfo:
     def reconfigure_cluster(self):
         try:
             # Refused before the blueprint is regenerated, so nothing
-            # applies a revoked key (update() checks it too).
+            # applies a revoked key (update() checks it too). Re-read
+            # first: the record was loaded when the reconfigure was queued.
+            cmek.keep_flags_current(self.cluster)
             cmek.assert_not_revoked(self.cluster)
             self.update()
         except Exception as err:  # pylint: disable=broad-except

@@ -179,6 +179,13 @@ Revoking a key is permanent in TKFE: a resource whose key was revoked can only
 be destroyed. Destroying a revoked cluster uses a teardown that skips the
 Terraform refresh; if it still fails, an administrator must first remove the
 cluster's encrypted objects from its Slurm bucket.
+The revoke list (`/cmek/keys/`) shows only resources whose key an apply has
+been started for. A resource that was never started has no key to revoke: it is
+not listed and its revoke page is not found. Delete it instead, or start it
+first. If two administrators edit the encryption settings (`/cmek/`) at once,
+the second save is refused with "The settings were changed since you loaded
+this page; reload and try again": reload the page, check the current values,
+and save again.
 `cloudkms.admin` contains no encrypt or decrypt permission, so TKFE does not
 decrypt data in normal operation. This is not a hard barrier: the role can
 change the IAM policy on keys, and the same service account also holds

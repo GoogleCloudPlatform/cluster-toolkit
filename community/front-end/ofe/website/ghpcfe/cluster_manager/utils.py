@@ -16,6 +16,7 @@
 
 import copy
 import datetime
+import fcntl
 import glob
 import json
 import logging
@@ -25,7 +26,9 @@ import re
 import secrets
 import shlex
 import socket
+import stat
 import subprocess
+import tempfile
 from pathlib import Path
 import shutil
 
@@ -119,20 +122,54 @@ def update_config_file(mutate, config_file=None):
     memoised copy is dropped afterwards, since a caller that changed the
     file and kept serving the previous document would be worse than not
     having written at all.
+
+    Two administrators can save at once, from different server processes.
+    The read, the change and the rename run under an exclusive lock, so the
+    second writer reads the first one's result instead of overwriting it,
+    and each writer has its own uniquely named temporary file, so neither
+    can truncate the other's. The lock is taken on the config file's
+    directory: the file itself is replaced by the rename, so a lock on it
+    would not be shared with the next writer, and the directory needs no
+    lock file of its own left beside the config. The temporary file is
+    removed if anything fails before the rename, and the config file keeps
+    its permissions.
     """
     config_file = Path(config_file or config_file_path())
-    with config_file.open("r", encoding="utf-8") as handle:
-        document = yaml.safe_load(handle) or {}
-    section = document.setdefault("config", {})
-    mutate(section)
-
-    tmp_path = config_file.with_suffix(config_file.suffix + ".tmp")
-    with tmp_path.open("w", encoding="utf-8") as handle:
-        yaml.safe_dump(document, handle, default_flow_style=False,
-                       sort_keys=False)
-    os.replace(tmp_path, config_file)
+    directory = os.open(config_file.parent, os.O_RDONLY)
+    try:
+        # released when the descriptor is closed
+        fcntl.flock(directory, fcntl.LOCK_EX)
+        with config_file.open("r", encoding="utf-8") as handle:
+            document = yaml.safe_load(handle) or {}
+        section = document.setdefault("config", {})
+        mutate(section)
+        _replace_config_file(config_file, document)
+    finally:
+        os.close(directory)
     invalidate_config_cache()
     return document
+
+
+def _replace_config_file(config_file, document):
+    """Write `document` to a new temporary file and rename it over the
+    config file, keeping the config file's permissions."""
+    mode = stat.S_IMODE(config_file.stat().st_mode)
+    handle = tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=config_file.parent,
+        prefix=f".{config_file.name}.", suffix=".tmp", delete=False)
+    tmp_path = handle.name
+    try:
+        with handle:
+            yaml.safe_dump(document, handle, default_flow_style=False,
+                           sort_keys=False)
+        os.chmod(tmp_path, mode)
+        os.replace(tmp_path, config_file)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 # Terraform state prefixes by resource kind, placed under this database's

@@ -17,6 +17,9 @@ Three settings, superusers only, off the sidebar. The form validates through the
 code that reads the file, so it cannot save something the engine would later
 refuse.
 """
+import fcntl
+import os
+import re
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -32,6 +35,25 @@ from ..views import cmek as cmek_views
 
 ADMIN = SimpleNamespace(is_authenticated=True, is_superuser=True,
                         is_staff=True)
+
+
+def _directory_is_locked(directory):
+    """Whether another descriptor holds the exclusive lock on `directory`.
+
+    A flock lock belongs to the open file description, so a descriptor
+    opened here is refused while update_config_file holds its own, even in
+    the same process. The probe asks for a shared lock, which only an
+    exclusive lock refuses, so a shared lock taken by mistake reads as
+    not locked.
+    """
+    probe = os.open(directory, os.O_RDONLY)
+    try:
+        fcntl.flock(probe, fcntl.LOCK_SH | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return True
+    finally:
+        os.close(probe)    # also releases the probe's lock if it got one
+    return False
 
 
 class FormTests(SimpleTestCase):
@@ -87,6 +109,14 @@ class FormTests(SimpleTestCase):
 class PersistenceTests(SimpleTestCase):
     """The write path, against a temporary file rather than the real config."""
 
+    def setUp(self):
+        # update_config_file drops the process-wide config cache, which holds
+        # the real configuration; leave it alone, so no later test reads a
+        # configuration other than the one it set up.
+        patcher = mock.patch.object(utils, "invalidate_config_cache")
+        self.invalidate = patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_it_writes_only_the_cmek_section(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "configuration.yaml"
@@ -104,6 +134,8 @@ class PersistenceTests(SimpleTestCase):
             self.assertEqual(got["server"]["gcp_project"], "keep-me")
             self.assertEqual(got["cmek"]["enforcement"], "required")
             self.assertEqual(got["cmek"]["key_ring_name"], "ofe-cmek")
+            # the running server reads the new settings, not its cached copy
+            self.invalidate.assert_called_once_with()
 
     def test_a_stale_setting_does_not_survive_the_write(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -122,6 +154,128 @@ class PersistenceTests(SimpleTestCase):
             self.assertNotIn("provisioning", got)
             self.assertEqual(got["enforcement"], "preferred")
             self.assertEqual(got["key_ring_name"], cmek.DEFAULT_KEY_RING)
+
+    def test_the_read_the_change_and_the_rename_hold_the_lock(self):
+        # Two admins saving at once, from any server process: the second
+        # writer waits on the config directory's lock, so each of the read,
+        # the change and the rename is checked to run while it is held. A
+        # writer can then neither read the file before the previous writer's
+        # rename nor rename after the next writer has read it.
+        real_load, real_replace = yaml.safe_load, os.replace
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "configuration.yaml"
+            path.write_text(yaml.safe_dump({"config": {}}))
+            held = {}
+
+            def load(stream):
+                held["read"] = _directory_is_locked(tmp)
+                return real_load(stream)
+
+            def replace(src, dst):
+                held["rename"] = _directory_is_locked(tmp)
+                return real_replace(src, dst)
+
+            def mutate(section):
+                held["change"] = _directory_is_locked(tmp)
+                section["b"] = 2
+
+            with mock.patch("yaml.safe_load", side_effect=load), \
+                    mock.patch("os.replace", side_effect=replace):
+                utils.update_config_file(mutate, config_file=path)
+            self.assertEqual(held,
+                             {"read": True, "change": True, "rename": True})
+            self.assertFalse(_directory_is_locked(tmp))
+            self.assertEqual(yaml.safe_load(path.read_text()),
+                             {"config": {"b": 2}})
+
+    def test_concurrent_writers_lose_neither_change(self):
+        # Writers started together all succeed, each change is kept, and no
+        # writer leaves its own temporary file behind.
+        import threading
+        import time
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "configuration.yaml"
+            path.write_text(yaml.safe_dump({"config": {}}))
+            errors = []
+            # bounded, so a writer that never releases the lock fails the
+            # test instead of hanging it
+            start = threading.Barrier(4, timeout=10)
+
+            def write(name):
+                def mutate(section):
+                    section[name] = True
+                try:
+                    start.wait()
+                    utils.update_config_file(mutate, config_file=path)
+                except Exception as err:  # pylint: disable=broad-except
+                    errors.append(err)
+
+            threads = [threading.Thread(target=write, args=(f"k{i}",),
+                                        daemon=True)
+                       for i in range(4)]
+            for thread in threads:
+                thread.start()
+            deadline = time.monotonic() + 15  # one bound for all writers
+            for thread in threads:
+                thread.join(timeout=max(0, deadline - time.monotonic()))
+            self.assertEqual([t.name for t in threads if t.is_alive()], [],
+                             "a writer did not finish")
+            self.assertEqual(errors, [])
+            got = yaml.safe_load(path.read_text())["config"]
+            self.assertEqual(sorted(got), ["k0", "k1", "k2", "k3"])
+            self.assertEqual([p.name for p in Path(tmp).iterdir()],
+                             ["configuration.yaml"])
+
+    def test_a_failed_write_leaves_the_file_and_no_temporary_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "configuration.yaml"
+            original = yaml.safe_dump({"config": {"server": {"a": 1}}})
+            path.write_text(original)
+            with mock.patch.object(utils.yaml, "safe_dump",
+                                   side_effect=OSError("disk full")), \
+                    self.assertRaises(OSError):
+                utils.update_config_file(
+                    lambda section: section.__setitem__("b", 2),
+                    config_file=path)
+            self.assertEqual(path.read_text(), original)
+            self.assertEqual([p.name for p in Path(tmp).iterdir()],
+                             ["configuration.yaml"])
+            self.invalidate.assert_not_called()  # nothing new to read
+
+    def test_the_temporary_file_is_made_beside_the_config_file(self):
+        # os.replace is atomic only within one file system, so the new file
+        # is written in the config file's own directory, never in TMPDIR.
+        real_replace = os.replace
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "configuration.yaml"
+            path.write_text(yaml.safe_dump({"config": {}}))
+            renamed = []
+
+            def replace(src, dst):
+                renamed.append((Path(os.fspath(src)), Path(os.fspath(dst))))
+                return real_replace(src, dst)
+
+            with mock.patch("os.replace", side_effect=replace):
+                utils.update_config_file(
+                    lambda section: section.__setitem__("b", 2),
+                    config_file=path)
+            self.assertEqual(len(renamed), 1)
+            src, dst = renamed[0]
+            self.assertEqual(dst, path)
+            self.assertEqual(src.parent, path.parent)
+            self.assertNotEqual(src.name, path.name)
+            self.assertEqual(yaml.safe_load(path.read_text()),
+                             {"config": {"b": 2}})
+
+    def test_the_file_keeps_its_permissions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "configuration.yaml"
+            path.write_text(yaml.safe_dump({"config": {}}))
+            path.chmod(0o640)
+            utils.update_config_file(
+                lambda section: section.__setitem__("b", 2),
+                config_file=path)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o640)
 
 
 class InvalidStoredSettingsTests(SimpleTestCase):
@@ -178,7 +332,8 @@ class InvalidStoredSettingsTests(SimpleTestCase):
     def test_a_valid_replacement_is_written(self):
         response, update, _messages = self.call("post", {
             "enforcement": "required", "key_project_id": "good-project",
-            "key_ring_name": "stored-ring"})
+            "key_ring_name": "stored-ring",
+            "loaded_digest": cmek_views._section_digest(self.STORED)})
         self.assertEqual(response.status_code, 302)
         update.assert_called_once()
         section = {"cmek": self.STORED["cmek"]}
@@ -186,6 +341,234 @@ class InvalidStoredSettingsTests(SimpleTestCase):
         self.assertEqual(section["cmek"], {
             "enforcement": "required", "key_project_id": "good-project",
             "key_ring_name": "stored-ring"})
+
+
+class StaleSaveTests(SimpleTestCase):
+    """A save from a page loaded before the settings last changed is refused.
+
+    A save replaces the whole section, so without this check an administrator
+    whose page still shows the old values would silently undo another's save.
+    These run the view against a real file under the real lock; the server's
+    cached copy of the configuration is stood in for by load_config.
+    """
+
+    INITIAL = {"server": {"gcp_project": "keep-me"},
+               "cmek": {"enforcement": "preferred",
+                        "key_ring_name": "ring-a"}}
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.path = Path(tmp.name) / "configuration.yaml"
+        self.write(self.INITIAL)
+        # the cache, re-read on every call unless a test says otherwise
+        self.load_config = self.patch(
+            cmek_views.utils, "load_config", side_effect=self.read)
+        self.patch(cmek_views.utils, "config_file_path",
+                   return_value=self.path)
+        # never refresh the process-wide configuration from the test's file
+        self.invalidate = self.patch(cmek_views.utils,
+                                     "invalidate_config_cache")
+        self.patch(cmek_views, "messages")
+
+    def patch(self, target, name, **kwargs):
+        patcher = mock.patch.object(target, name, **kwargs)
+        self.addCleanup(patcher.stop)
+        return patcher.start()
+
+    def write(self, config):
+        self.path.write_text(yaml.safe_dump({"config": config}))
+
+    def read(self, *_args, **_kwargs):
+        return yaml.safe_load(self.path.read_text())["config"]
+
+    @staticmethod
+    def call(method, data=None):
+        request = getattr(RequestFactory(), method)("/cmek/", data or {})
+        request.user = ADMIN
+        return cmek_views.CmekSettingsView.as_view()(request)
+
+    def load_page(self):
+        """GET the page and return the digest its form carries."""
+        response = self.call("get")
+        self.assertEqual(response.status_code, 200)
+        found = re.search(r'name="loaded_digest" value="([^"]*)"',
+                          response.render().content.decode())
+        self.assertIsNotNone(found, "the form carries no loaded_digest")
+        return found[1]
+
+    def save(self, digest, enforcement="preferred", key_ring_name="ring-a"):
+        data = {"enforcement": enforcement, "key_project_id": "",
+                "key_ring_name": key_ring_name}
+        if digest is not None:
+            data["loaded_digest"] = digest
+        return self.call("post", data)
+
+    def assertRefused(self, response, before):
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context_data["form"].non_field_errors(),
+                         [cmek_views.STALE_SETTINGS_MESSAGE])
+        self.assertIn(cmek_views.STALE_SETTINGS_MESSAGE,
+                      response.render().content.decode())
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_a_stale_page_cannot_undo_another_admins_save(self):
+        page_a = self.load_page()
+        page_b = self.load_page()
+        self.assertEqual(self.save(page_a, enforcement="required")
+                         .status_code, 302)
+        after_a = self.path.read_bytes()
+        self.invalidate.reset_mock()
+        # B's page still shows "preferred"; B changes only the key ring
+        response = self.save(page_b, enforcement="preferred",
+                             key_ring_name="ring-b")
+        self.assertRefused(response, after_a)
+        self.assertEqual(self.read()["cmek"]["enforcement"], "required")
+        self.assertEqual(self.read()["cmek"]["key_ring_name"], "ring-a")
+        # so the reload the message asks for shows the current settings
+        self.invalidate.assert_called_once_with()
+
+    def test_the_refused_page_cannot_be_resubmitted_over_the_change(self):
+        page_b = self.load_page()
+        self.save(self.load_page(), enforcement="required")
+        after_a = self.path.read_bytes()
+        refused = self.save(page_b, key_ring_name="ring-b")
+        found = re.search(r'name="loaded_digest" value="([^"]*)"',
+                          refused.render().content.decode())
+        self.assertEqual(found[1], page_b)
+        self.assertRefused(self.save(found[1], key_ring_name="ring-b"),
+                           after_a)
+
+    def test_a_page_reloaded_after_the_refusal_saves(self):
+        page_b = self.load_page()
+        self.assertEqual(self.save(self.load_page(), enforcement="required")
+                         .status_code, 302)
+        after_a = self.path.read_bytes()
+        self.assertRefused(self.save(page_b, key_ring_name="ring-b"), after_a)
+        response = self.save(self.load_page(), enforcement="required",
+                             key_ring_name="ring-b")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.read()["cmek"]["key_ring_name"], "ring-b")
+
+    def test_saves_from_fresh_pages_succeed_one_after_another(self):
+        self.assertEqual(self.save(self.load_page(), enforcement="required")
+                         .status_code, 302)
+        self.assertEqual(self.save(self.load_page(), enforcement="disabled",
+                                   key_ring_name="ring-c").status_code, 302)
+        got = self.read()
+        self.assertEqual(got["cmek"], {"enforcement": "disabled",
+                                       "key_ring_name": "ring-c"})
+        self.assertEqual(got["server"], {"gcp_project": "keep-me"})
+
+    def test_the_first_save_with_no_section_yet_succeeds(self):
+        self.write({"server": {"gcp_project": "keep-me"}})
+        response = self.save(self.load_page(), enforcement="required")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.read()["cmek"]["enforcement"], "required")
+
+    def test_adding_an_empty_section_makes_a_page_stale(self):
+        # A missing section has a digest of its own, so a page loaded before
+        # an empty `cmek:` section was added cannot overwrite it.
+        self.assertNotEqual(cmek_views._section_digest({}),
+                            cmek_views._section_digest({"cmek": {}}))
+        self.write({"server": {"gcp_project": "keep-me"}})
+        page = self.load_page()
+        self.write({"server": {"gcp_project": "keep-me"}, "cmek": {}})
+        before = self.path.read_bytes()
+        self.assertRefused(self.save(page, enforcement="required"), before)
+
+    def test_a_missing_or_garbled_loaded_value_is_refused(self):
+        before = self.path.read_bytes()
+        for digest in (None, "", "not-a-digest", "é" * 64):
+            with self.subTest(digest=digest):
+                self.assertRefused(self.save(digest, enforcement="required"),
+                                   before)
+
+    def test_the_check_is_against_the_file_not_the_cached_copy(self):
+        # The cache still holds what the page showed, but the file has
+        # changed underneath it; only the read made under the lock sees that.
+        self.load_config.side_effect = None
+        self.load_config.return_value = self.read()
+        page = self.load_page()
+        changed = dict(self.INITIAL,
+                       cmek={"enforcement": "required",
+                             "key_ring_name": "ring-a"})
+        self.write(changed)
+        before = self.path.read_bytes()
+        self.assertRefused(self.save(page, key_ring_name="ring-b"), before)
+
+
+class MixedKeyTypeSectionTests(SimpleTestCase):
+    """A hand-edited `cmek:` mapping whose keys are of mixed types.
+
+    json.dumps cannot sort such keys, so the digest used to raise and the
+    page returned a 500, leaving the settings unreachable.
+    """
+
+    MIXED = {"server": {"gcp_project": "keep-me"},
+             "cmek": {1: "a", "b": "c", "enforcement": "sometimes"}}
+    INITIAL = StaleSaveTests.INITIAL
+
+    # the file-backed page helpers of StaleSaveTests, without its tests
+    setUp = StaleSaveTests.setUp
+    patch = StaleSaveTests.patch
+    read = StaleSaveTests.read
+    call = StaleSaveTests.__dict__["call"]
+    load_page = StaleSaveTests.load_page
+    save = StaleSaveTests.save
+    assertRefused = StaleSaveTests.assertRefused
+
+    def write(self, config):
+        # safe_dump sorts keys by default, which mixed types cannot do
+        self.path.write_text(yaml.safe_dump({"config": config},
+                                            sort_keys=False))
+
+    def test_the_digest_is_computed_and_stable(self):
+        digest = cmek_views._section_digest(self.MIXED)
+        self.assertRegex(digest, r"^[0-9a-f]{64}$")
+        self.assertEqual(digest, cmek_views._section_digest(
+            {"cmek": dict(reversed(list(self.MIXED["cmek"].items())))}))
+        # a fixed value, so it cannot depend on the process (hash seed)
+        self.assertEqual(
+            cmek_views._section_digest({"cmek": {1: "a", "b": "c"}}),
+            "bc20373d7bbb36dfbe08d7cf0869547df46a8beb6f5d6b2367ed42630e74cac7")
+
+    def test_different_sections_give_different_digests(self):
+        digests = {cmek_views._section_digest({"cmek": section}) for section
+                   in ({1: "a", "b": "c"}, {"1": "a", "b": "c"},
+                       {1: "a", "b": "d"}, {1: "a"}, None, "required")}
+        self.assertEqual(len(digests), 6)
+
+    def test_a_section_containing_itself_has_a_digest(self):
+        section = {"enforcement": "required"}
+        section["self"] = section
+        self.assertRegex(cmek_views._section_digest({"cmek": section}),
+                         r"^[0-9a-f]{64}$")
+
+    def test_the_page_renders_with_the_section_shown_as_invalid(self):
+        self.write(self.MIXED)
+        messages = self.patch(cmek_views, "messages")
+        response = self.call("get")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('name="loaded_digest"',
+                      response.render().content.decode())
+        messages.warning.assert_called_once()
+        self.assertIn("sometimes", messages.warning.call_args[0][1])
+
+    def test_a_save_from_that_page_replaces_the_section(self):
+        self.write(self.MIXED)
+        response = self.save(self.load_page(), enforcement="required")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.read()["cmek"], {"enforcement": "required",
+                                               "key_ring_name": "ring-a"})
+        self.assertEqual(self.read()["server"], {"gcp_project": "keep-me"})
+
+    def test_a_save_from_a_different_page_is_refused_as_stale(self):
+        self.write(self.MIXED)
+        before = self.path.read_bytes()
+        self.assertRefused(
+            self.save(cmek_views._section_digest(self.INITIAL),
+                      enforcement="required"), before)
 
 
 class RoutingTests(SimpleTestCase):

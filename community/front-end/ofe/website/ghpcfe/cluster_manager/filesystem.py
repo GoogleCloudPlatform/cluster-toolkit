@@ -19,6 +19,8 @@ import json
 import logging
 import os
 import secrets
+import shlex
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -295,10 +297,100 @@ def start_filesystem(fs: Filesystem) -> None:
 
 
 def destroy_filesystem(fs: Filesystem) -> None:
+    """Effectively, just 'terraform destroy'.
+
+    A start that failed before its apply created anything leaves nothing to
+    destroy, so the destroy is skipped then, as for clusters and images. With
+    no group directory, `ghpc create` never wrote one and nothing was applied.
+
+    Otherwise `terraform init` runs first. The state is in the GCS bucket, and
+    whether anything was applied is read from there only once `.terraform`
+    records that backend. A retried start runs `ghpc create -w`, which moves
+    the earlier group directory, `.terraform` with it, into a backup; if the
+    retry then failed before its own `init`, the directory has no record of
+    the backend, and without this `init` the check would wrongly say nothing
+    was applied while the share and its key still exist. A failed `init`
+    raises, so the destroy fails and can be retried.
+    """
     target_dir = _tf_dir_for_fs(fs)
     extra_env = {"GOOGLE_APPLICATION_CREDENTIALS": _get_credentials_file(fs)}
 
+    if not os.path.isdir(target_dir):
+        logger.info("%s does not exist, so nothing was applied and there is "
+                    "nothing for Terraform to destroy", target_dir)
+        return
+    utils.run_terraform(target_dir, "init", extra_env=extra_env)
+    if not utils.terraform_may_have_applied(target_dir, extra_env):
+        logger.info("Nothing was applied from %s, so there is nothing for "
+                    "Terraform to destroy", target_dir)
+        return
     utils.run_terraform(target_dir, "destroy", extra_env=extra_env)
+
+
+def running_state_lock(fs: Filesystem):
+    """Return the lock info if a Terraform run holds a Filestore's state lock.
+
+    Returns None when the lock is free, the filesystem is not a Filestore, or
+    the lock is stale. Raises if the lock cannot be read.
+
+    A second destroy started while one runs would wait up to
+    utils.TERRAFORM_LOCK_TIMEOUT for the lock and meanwhile overwrite the
+    running destroy's log, which the detail page shows, so the destroy view
+    refuses it while this returns a lock.
+
+    The lock is read from the bucket by the Filestore's state prefix, not
+    through the group directory's record of the backend, which a failed
+    start retry can have moved away. A stale lock, left by a Terraform run
+    that was killed, must not block the destroy for good. It is recognised
+    by the rule utils._check_stale_state_lock applies before every Terraform
+    run: taken on this server, no terraform process here runs in the
+    Filestore's directory, and the same lock is still there when read again.
+    The destroy then goes ahead, and that check fails it with the command
+    that clears the lock.
+    """
+    # pylint: disable=protected-access
+    if _filestore(fs) is None:
+        return None
+    location = (utils.get_terraform_state_bucket(),
+                utils.terraform_state_prefix("filesystem", fs.id),
+                _get_credentials_file(fs))
+    info = utils._read_gcs_state_lock(*location)
+    if info is None:
+        return None
+    _, sep, host = str(info.get("Who", "")).rpartition("@")
+    if not sep or (utils._short_hostname(host)
+                   != utils._short_hostname(socket.gethostname())):
+        # Taken on another machine: its process cannot be checked from here.
+        return info
+    if utils._terraform_running_in(_tf_dir_for_fs(fs)):
+        return info
+    # The holder may have finished between the read and the process scan, or
+    # a new run taken the lock; only the same lock still present is stale.
+    again = utils._read_gcs_state_lock(*location)
+    if again is None:
+        return None
+    if again.get("ID") != info.get("ID"):
+        return again
+    logger.warning("The Terraform state lock of filesystem %s:%s was taken "
+                   "on this server and no Terraform process here holds it, "
+                   "so it is stale", fs.id, fs.name)
+    return None
+
+
+def force_unlock_command(fs: Filesystem, lock_id) -> str:
+    """The command that clears a Filestore's state lock.
+
+    It is the command utils._state_lock_message prints when a Terraform run
+    finds a lock, so the destroy view's refusal and the log give the same
+    command, the one the admin guide's "A resource reports a stale state
+    lock" section tells admins to run.
+    """
+    return (
+        f"cd {shlex.quote(str(_tf_dir_for_fs(fs)))} && "
+        "GOOGLE_APPLICATION_CREDENTIALS="
+        f"{shlex.quote(str(_get_credentials_file(fs)))} "
+        f"terraform force-unlock -force {lock_id}"
+    )
 
 
 def get_terraform_dir(fs: Filesystem) -> Path:

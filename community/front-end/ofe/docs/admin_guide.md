@@ -329,6 +329,75 @@ imported filesystem. Alternatively, system administrators can set up hybrid
 connectivity (such as extablishing network peering) before mounting the
 external filesystem located elsewhere on GCP.
 
+### Delete or destroy a filesystem
+
+A GCP Filestore has two ways to go, offered from the *Actions* menu on the
+*Filesystems* list and on the Filestore's detail page:
+
+- *Delete* only removes the record from OFE; it runs no Terraform. It is
+  offered for a Filestore that was never started (state `nm` and no apply
+  begun). On the *Filesystems* list it is also offered for a destroyed (`xm`)
+  or imported (`i`) Filestore, which owns nothing in the cloud. Once an apply
+  has begun, *Delete* is refused and *Destroy* is offered instead.
+- *Destroy* tears down the cloud resources and then archives the record. It is
+  offered for a running Filestore, for one whose start failed after an apply
+  began, for one whose destroy failed (shown as *Unknown*), and for one stuck
+  at *Destroying* (for example a destroy interrupted by a server restart).
+
+If a destroy fails, the Filestore is marked *Unknown* with a status message
+starting "Teardown failed:". Part of it may already be gone. Fix the cause
+named in the message if there is one, then use *Destroy* again to finish.
+Likewise, for a Filestore stuck at *Destroying*, use *Destroy* again to finish
+the job.
+
+A *Destroy* request is refused while another Terraform operation is running
+for the same Filestore. There are two messages:
+
+- "A Terraform operation is already running for this Filestore. Wait for it to
+  finish." OFE keeps a list, in the memory of the server process, of each
+  Filestore whose destroy it has started, and refuses a second *Destroy* until
+  that destroy ends. Only destroys are listed this way.
+- "A Terraform operation is already running for this Filestore:" followed by
+  who holds the lock and since when, the lock ID and the force-unlock command.
+  A start or update that is running is caught only once its Terraform run
+  holds the Filestore's Terraform state lock, which gives this message. See
+  [A resource reports a stale state lock](#a-resource-reports-a-stale-state-lock)
+  before clearing anything.
+
+If a destroy started from OFE hangs, or the first message persists with
+nothing running, restart the Django application, which runs under supervisord
+as the `gcluster-uvicorn-background` program, as in the restart step of
+[Upgrading an existing TKFE](#upgrading-an-existing-tkfe). Restarting clears
+the list; then, after the check below, use *Destroy* again. This relies on
+OFE running as a single server process, as deployed; do not run several
+uvicorn workers.
+
+Restarting stops only the server process: a Terraform process it started may
+still be running. Before using *Destroy* again, check on the service machine
+that no Terraform process is still working for that Filestore, with the
+command in
+[A resource reports a stale state lock](#a-resource-reports-a-stale-state-lock),
+and wait for it to finish or stop it first.
+
+After a restart the first message is gone, so it cannot name the directory to
+look for (the second message does, in its force-unlock command, if a
+Terraform process still holds the lock). A Filestore's
+Terraform directory is `<OFE directory>/fs/fs_<id>/<Filestore name>/primary`,
+where `<OFE directory>` is `/opt/gcluster/cluster-toolkit/community/front-end/ofe`
+as deployed, and `<id>` is the number at the end of the Filestore's page
+address (`/filesystem/filestore/detail/<id>`). If the command shows a
+Terraform process in that directory and you do not want to wait, stop it with
+`sudo kill <pid>` (the process belongs to the `gcluster` user), not `kill -9`,
+which leaves a stale lock. Send it once: Terraform then stops gracefully,
+which can take several minutes, and a second signal makes it exit at once and
+can leave a stale lock. Wait until the command no longer lists the process,
+then use *Destroy* again to finish the partial teardown. If it never exits,
+use `sudo kill -9 <pid>` as a last resort. That leaves a stale lock: use
+*Destroy* once, and it fails at once with "Teardown failed:" followed by the
+lock ID and the force-unlock command; clear the lock as in
+[A resource reports a stale state lock](#a-resource-reports-a-stale-state-lock),
+then use *Destroy* again.
+
 ## Cluster Management
 
 HPC clusters can be created after setting up the hosting VPC and any
@@ -1012,10 +1081,12 @@ back-end logic is handled, which can also help with certain issues.
 
 - If a cluster is stuck in 'i' state, it is normally OK to find the *Destroy*
   button from its *Actions* menu to destroy it.
-- For failed network/filesystem/cluster creations, one may need to SSH into the
-  service machine, locate the run-time data directory, and manually run
-  `terraform destroy` there for clean up cloud resources.
-- Certain database records might get corrupted and need to be removed for
-  failed clusters or network/filesystem components. This can be done from the
-  Django Admin site, although administrators need to exercise caution while
-  modifying the raw data in Django database.
+- For a Filestore whose start or destroy failed, use its *Destroy* button
+  (again, if needed): it cleans up whatever part of it exists. Only if
+  *Destroy* keeps failing, SSH into the service machine, locate the run-time
+  data directory, and manually run `terraform destroy` there as a last resort.
+  For failed network or cluster creations the same manual step may be needed.
+- As a last resort, certain database records might get corrupted and need to
+  be removed for failed clusters or network/filesystem components. This can be
+  done from the Django Admin site, although administrators need to exercise
+  caution while modifying the raw data in Django database.

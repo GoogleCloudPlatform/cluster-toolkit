@@ -17,6 +17,8 @@ Superusers only, and deliberately not in the sidebar: encryption is part of
 creating a resource, not a section of its own. Both are reached from the
 Advanced link on a resource form's encryption panel.
 """
+import hashlib
+import json
 import logging
 import re
 
@@ -32,6 +34,67 @@ from ..permissions import SuperUserRequiredMixin
 
 logger = logging.getLogger(__name__)
 
+STALE_SETTINGS_MESSAGE = ("The settings were changed since you loaded this "
+                          "page; reload and try again")
+
+
+class StaleSettingsError(Exception):
+    """The `cmek` section changed after the page being saved was loaded."""
+
+
+def _section_digest(config):
+    """A digest of the `cmek` section of the `config` mapping, as stored.
+
+    The section is hashed as read from the file, not as the form shows it, so
+    a change to it -- a value the form offers or one edited by hand -- marks
+    a page loaded before the change as stale. A missing section has a digest
+    of its own, so adding a section, even an empty one, counts as a change; a
+    bare `cmek:` line reads as no section. JSON writes keys and dates as text,
+    so a hand edit that only turns a key into the same text (1 to "1", when
+    no key of another type sits beside it) or a date into the same text is
+    not seen; a value that changes type (1 to "1") is.
+    """
+    section = (config or {}).get("cmek")
+    try:
+        canonical = json.dumps(section, sort_keys=True, default=str,
+                               separators=(",", ":"))
+    except (TypeError, ValueError, RecursionError):
+        # A hand-edited file can hold what JSON cannot sort or hold: keys of
+        # mixed types, or a section that contains itself. The digest must
+        # still exist, or the page could not be shown to fix the section.
+        canonical = json.dumps(_canonical_form(section), default=str,
+                               separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _canonical_form(value, _active=()):
+    """`value` as plain lists and strings that JSON can always write.
+
+    A mapping becomes its entries, each key and value in canonical form,
+    ordered by the key's type and text, so the same section gives the same
+    form in every process and sections that differ give different ones
+    (a key 1 and a key "1" stay apart). Only used when json.dumps cannot
+    take the value as it is.
+    """
+    if isinstance(value, (dict, list, tuple, set, frozenset)):
+        if id(value) in _active:
+            return ["cycle"]
+        _active = _active + (id(value),)
+    if isinstance(value, dict):
+        entries = [[_canonical_form(key, _active),
+                    _canonical_form(item, _active)]
+                   for key, item in value.items()]
+        entries.sort(key=lambda entry: json.dumps(
+            entry[0], sort_keys=True, default=str))
+        return ["map", entries]
+    if isinstance(value, (list, tuple)):
+        return ["seq", [_canonical_form(item, _active) for item in value]]
+    if isinstance(value, (set, frozenset)):
+        return ["set", sorted(
+            json.dumps(_canonical_form(item, _active), default=str)
+            for item in value)]
+    return [type(value).__name__, repr(value)]
+
 
 class CmekSettingsView(SuperUserRequiredMixin, FormView):
     """Edit the `cmek:` section of the server configuration.
@@ -39,10 +102,19 @@ class CmekSettingsView(SuperUserRequiredMixin, FormView):
     Admin only, like the key pages: the settings decide where every new
     resource's key lives, and the file they are written to is the server's
     own configuration.
+
+    A save replaces the whole section, so a page loaded before another
+    administrator's save would silently undo that save with the values it
+    still shows. The page therefore carries a digest of the section it was
+    rendered from (LOADED_FIELD), and a save is refused, with the file left
+    as it is, when the section read under the config file's lock no longer
+    matches it. The digest travels with the form rather than in the session,
+    so each of an administrator's tabs is checked against what it showed.
     """
 
     template_name = "cmek/settings.html"
     form_class = CmekSettingsForm
+    LOADED_FIELD = "loaded_digest"
 
     def _current(self):
         """The settings as they stand, as the form's initial values.
@@ -54,6 +126,8 @@ class CmekSettingsView(SuperUserRequiredMixin, FormView):
         back to the default.
         """
         config = utils.load_config()
+        # what this page shows, from the same read as the values themselves
+        self._loaded_digest = _section_digest(config)
         try:
             current = cmek.CmekSettings.from_config(config)
         except cmek.CmekConfigError as err:
@@ -91,14 +165,42 @@ class CmekSettingsView(SuperUserRequiredMixin, FormView):
         context = super().get_context_data(**kwargs)
         context["navtab"] = ""
         context["config_path"] = str(utils.config_file_path())
+        if self.request.method == "POST":
+            # A page shown again after a refused or invalid save still stands
+            # for the settings it was first loaded with. Handing it a fresh
+            # digest would let a resubmission overwrite a change its form
+            # never showed; only a reload brings the page up to date.
+            context["loaded_digest"] = self.request.POST.get(
+                self.LOADED_FIELD, "")
+        else:
+            context["loaded_digest"] = getattr(self, "_loaded_digest", None) \
+                or _section_digest(utils.load_config())
         return context
 
     def form_valid(self, form):
         settings = form.settings
+        # A missing or altered value matches no digest, so it is refused as
+        # stale rather than trusted.
+        loaded = self.request.POST.get(self.LOADED_FIELD, "")
+
+        def replace_section(section):
+            # Runs under update_config_file's lock, against the section as
+            # read there: raising aborts the write and leaves the file as it is.
+            if _section_digest(section) != loaded:
+                raise StaleSettingsError()
+            section["cmek"] = settings.to_config_section()
+
         try:
-            utils.update_config_file(
-                lambda section: section.__setitem__(
-                    "cmek", settings.to_config_section()))
+            utils.update_config_file(replace_section)
+        except StaleSettingsError:
+            logger.info("Refused a save of the encryption settings from a "
+                        "page loaded before they last changed")
+            # The page's values may have come from a copy of the file this
+            # process read before someone changed it; re-read it so the
+            # reload the message asks for shows the current settings.
+            utils.invalidate_config_cache()
+            form.add_error(None, STALE_SETTINGS_MESSAGE)
+            return self.form_invalid(form)
         except OSError as err:
             logger.exception("Could not write the encryption settings")
             form.add_error(
@@ -131,17 +233,27 @@ def _cmek_kinds():
     }
 
 
-def _live_rows(kind):
-    """The live, encrypted resources of one kind.
+def _live_rows(kind, pk=None):
+    """The live, encrypted resources of one kind whose key OFE has applied.
 
     Torn-down resources are excluded: their key is no longer this deployment's
     concern, and listing one would invite destroying a key nothing uses.
+
+    So are resources no apply has been started for (cmek.is_frozen). Their key
+    fields are only what was typed on the form, and a typed name can match a
+    key OFE never created; offering that key for destruction could destroy a
+    key that belongs to something else. A failed first apply counts as
+    applied, since it may already have created the key.
+
+    With `pk`, only that resource is considered.
     """
     model = _cmek_kinds()[kind][0]
     rows = model.objects.filter(cmek_enabled=True).exclude(cloud_state="xm")
     if kind == "cluster":
         rows = rows.exclude(status="d")
-    return rows
+    if pk is not None:
+        rows = rows.filter(pk=pk)
+    return [row for row in rows if cmek.is_frozen(row)]
 
 
 def _live_cmek_rows():
@@ -249,7 +361,7 @@ class CmekKeyDestroyView(SuperUserRequiredMixin, TemplateView):
         if kind not in _cmek_kinds():
             raise Http404(f"No encrypted resource kind {kind!r}")
         _model, label, route = _cmek_kinds()[kind]
-        row = _live_rows(kind).filter(pk=pk).first()
+        row = next(iter(_live_rows(kind, pk=pk)), None)
         path = cmek.resource_key_path(row) if row else ""
         if not path:
             raise Http404(f"No live encrypted {kind} {pk}")
