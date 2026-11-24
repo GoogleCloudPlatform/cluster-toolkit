@@ -206,7 +206,8 @@ kubectl get provisioningrequests.autoscaling.x-k8s.io -n <NAMESPACE> -o custom-c
 ## 2. Safety Guidelines & Blast Radius Protocol
 
 * **Safe Commands (Zero Turn Delay)**: Read-only commands (`kubectl get`, `kubectl describe`, `kubectl logs`) execute freely during diagnosis.
-* **Mutating Commands (Confirmation Strictly Required)**: Deleting workloads (`kubectl delete`), patching resources (`kubectl patch`), applying manifests (`kubectl apply`), tainting nodes (`kubectl taint`), evicting pods, restarting controllers, altering ClusterQueue quota, or changing stop policies must **NEVER** execute or be emitted as raw runnable commands on read-only diagnostic prompts (`"how do I verify/check/debug/diagnose..."`, `"why is..."`) without presenting a structured remediation plan and obtaining user confirmation.
+* **Diagnostic / Verification Prompts (Read-Only Output Only)**: On read-only diagnostic or verification prompts (`"how do I verify/check/debug/diagnose..."`, `"why is..."`), emit only read-only `kubectl get`, `kubectl describe`, or `kubectl logs` commands. **NEVER** emit raw runnable mutating CLI commands (`kubectl patch`, `kubectl apply`, `kubectl delete`, `kubectl edit`, `kubectl replace`, `kubectl taint`, `kubectl rollout restart`)—even inside a `[PROPOSED REMEDIATION PLAN]`. Describe potential config fixes conceptually in prose (for example, setting `stopPolicy: None` or switching `queueingStrategy` to `BestEffortFIFO`) and offer to draft a remediation plan if the user asks to apply changes.
+* **Explicit Modification / Unpause / Delete Requests (Confirmation Strictly Required)**: When explicitly asked to delete workloads (`kubectl delete`), patch resources (`kubectl patch`), apply manifests (`kubectl apply`), edit or replace resources (`kubectl edit`, `kubectl replace`), taint nodes (`kubectl taint`), evict pods, restart controllers (`kubectl rollout restart`), alter ClusterQueue quota, or change stop policies, **NEVER** execute autonomously—halt and emit a full `[PROPOSED REMEDIATION PLAN]` awaiting explicit `'yes'` confirmation.
 
 ### Required Remediation Plan Format:
 ```markdown
@@ -220,7 +221,7 @@ kubectl get provisioningrequests.autoscaling.x-k8s.io -n <NAMESPACE> -o custom-c
 
 ### Gated Remediation Patch Recipes (ONLY Inside [PROPOSED REMEDIATION PLAN] When Asked to Modify/Unpause):
 
-**On diagnostic or verification questions, output only read-only `kubectl get` / `describe` / `logs` commands; describe potential config fixes conceptually in prose without raw `kubectl patch` / `apply` / `delete` CLI blocks unless presenting a full `[PROPOSED REMEDIATION PLAN]` awaiting `'yes'`.**
+**Use these recipes ONLY when the user explicitly asks to modify, unpause, or delete a resource, and ONLY inside a `[PROPOSED REMEDIATION PLAN]` awaiting `'yes'`. On diagnostic or verification questions, output only read-only `kubectl get` / `describe` / `logs` commands; describe conceptual fixes in prose (never raw `kubectl patch` / `apply` / `delete` / `edit` / `replace` / `rollout restart` commands) and offer to draft a remediation plan if asked.**
 
 * **Unpausing a LocalQueue (`stopPolicy: None`)**:
   ```bash

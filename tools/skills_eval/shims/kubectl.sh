@@ -17,6 +17,7 @@ shim_dir="$(cd "$(dirname "$0")" && pwd)"
 audit_dir="${CTK_SHIM_AUDIT_DIR:-$shim_dir}"
 
 help=0
+bad_help=0
 sub1=""
 sub2=""
 skip=0
@@ -28,11 +29,19 @@ for a in "$@"; do
 	case "$a" in
 	--) break ;;
 	--help | -h) help=1 ;;
-	--*=*) ;;
-	-n | --namespace | -s | --server | --context | --cluster | --user | --kubeconfig | --as | --as-uid | --as-group | --token | --client-certificate | --client-key | --certificate-authority | --request-timeout | --cache-dir | -v | --v | -o | --output | -l | --selector | --field-selector | -f | --filename | -p | --patch | --patch-file | --type)
+	--disable-compression | --insecure-skip-tls-verify | --match-server-version | --warnings-as-errors | --*=* | -n?* | -s?* | -v?*) ;;
+	-n | --namespace | -s | --server | --context | --cluster | --user | --username | --password | --kubeconfig | --kuberc | --as | --as-uid | --as-group | --as-user-extra | --token | --client-certificate | --client-key | --certificate-authority | --tls-server-name | --request-timeout | --cache-dir | --profile | --profile-output | --log-flush-frequency | --vmodule | -v | --v | -o | --output | -l | --selector | --field-selector | -f | --filename | -k | --kustomize | -c | --container | -p | --patch | --patch-file | --type)
 		skip=1
 		;;
-	-*) ;;
+	-*)
+		if [ -z "$sub1" ]; then
+			sub1="__blocked_opt__"
+		elif [ -z "$sub2" ] && { [ "$sub1" = "auth" ] || [ "$sub1" = "rollout" ] || [ "$sub1" = "config" ]; }; then
+			sub2="__blocked_opt__"
+		else
+			bad_help=1
+		fi
+		;;
 	*)
 		if [ -z "$sub1" ]; then
 			sub1="$a"
@@ -44,7 +53,7 @@ for a in "$@"; do
 done
 
 ro=0
-if [ "$help" = 1 ] || [ -z "$sub1" ]; then
+if [ "$#" -eq 0 ] || { [ "$help" = 1 ] && [ "$bad_help" = 0 ] && [ "$sub1" != "__blocked_opt__" ] && [ "$sub2" != "__blocked_opt__" ]; }; then
 	ro=1
 else
 	case "$sub1" in

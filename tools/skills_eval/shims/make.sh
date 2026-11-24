@@ -21,7 +21,8 @@ real_mk="$shim_dir/make.real"
 
 custom=0
 force=0
-help_ver=0
+want_help=0
+want_ver=0
 skip=0
 numskip=0
 other=0
@@ -37,15 +38,31 @@ for a in "$@"; do
 		esac
 	fi
 	case "$a" in
-	-C | --directory | -f | --file | --makefile)
+	-C | --directory | -f | --file | --makefile | -E | --eval)
 		custom=1
 		skip=1
 		;;
-	--directory=* | --file=* | --makefile=* | -C* | -f*) custom=1 ;;
+	--directory=* | --file=* | --makefile=* | --eval=* | -C* | -f* | -E* | -[!-]*[CfE]*) custom=1 ;;
 	-I | --include-dir | -W | --what-if | -o | --old-file) skip=1 ;;
 	-j | --jobs | -l | --load-average | --max-load) numskip=1 ;;
 	-B | --always-make) force=1 ;;
-	-h | --help | -v | --version) help_ver=1 ;;
+	-h | --help) want_help=1 ;;
+	--version) want_ver=1 ;;
+	-v)
+		if [ "$#" -eq 1 ]; then
+			want_ver=1
+		else
+			other=1
+		fi
+		;;
+	-[!-]*)
+		case "$a" in
+		*B*) force=1 ;;
+		esac
+		case "$a" in
+		*[jl]) numskip=1 ;;
+		esac
+		;;
 	-* | *=*) ;;
 	gcluster | ghpc | all | build) ;;
 	*) other=1 ;;
@@ -53,8 +70,11 @@ for a in "$@"; do
 done
 
 if [ "$custom" = 0 ] && [ "$other" = 0 ]; then
-	if [ "$help_ver" = 1 ] && [ -x "$real_mk" ]; then
-		exec "$real_mk" "$@"
+	if [ "$want_help" = 1 ] && [ -x "$real_mk" ]; then
+		exec "$real_mk" --help
+	fi
+	if [ "$want_ver" = 1 ] && [ -x "$real_mk" ]; then
+		exec "$real_mk" --version
 	fi
 	if [ "$force" = 0 ] && [ -x "$real_gc" ]; then
 		echo "gcluster is already built and up to date."

@@ -27,6 +27,7 @@ real="$shim_dir/gcluster.real"
 echo "gcluster $*" >>"$audit_dir/invocations.log"
 
 help=0
+bad_help=0
 ver=0
 sub1=""
 sub2=""
@@ -41,11 +42,26 @@ for a in "$@"; do
 	--) break ;;
 	--help | -h) help=1 ;;
 	-v | --version) ver=1 ;;
-	--download-dependencies | --no-color | --skip-prereqs | --*=*) ;;
-	-l | -c | -p | -o | -d | -a | -f | -i | -B | -b | -e | -n | -q | -w | --write-to | --cluster | --config | --log-level | --location | --project | --gke-namespace | --validation-level | --out | --output | --deployment-file | --vars | --backend-config | --skip-validators | --artifacts | --format | --name | --image | --base-image | --command | --only | --skip | --dry-run-out | --compute-type | --env | --mount | --queue | --topology | --priority)
+	-s | -w | -c=* | -l=* | -p=* | --add-creator-label | --auto-approve | --await-job-completion | --download-dependencies | --enable-ml-diagnostics | --follow | --force | --gke-disable-parallel-containers | --gke-mtc-enabled | --json-output | --main-only | --no-color | --overwrite | --overwrite-deployment | --pathways | --pathways-deploy-sps | --pathways-headless | --robust | --show | --skip-gke-security-check | --skip-prereqs | --verbose | --*=*) ;;
+	-f)
+		if [ "$sub1" != "job" ] || [ "$sub2" != "logs" ]; then
+			skip=1
+		fi
+		;;
+	-B | -a | -b | -c | -d | -e | -i | -l | -n | -o | -p | -q | --artifacts | --backend-config | --base-image | --build-context | --cluster | --command | --compute-type | --cpu-affinity | --deployment-file | --dry-run-out | --env | --filter | --format | --gke-custom-templates-path | --gke-mtc-ramdisk-dir | --gke-namespace | --gke-nap-provisioning | --gke-nap-reservation | --gke-scheduler | --gke-ttl-after-finished | --grace-period | --image | --image-pull-secret | --location | --ml-diagnostics-image | --ml-diagnostics-telemetry-port | --mount | --name | --name-contains | --node-constraint | --num-nodes | --num-slices | --only | --out | --output | --output-dir | --parallelism | --pathways-colocated-python-sidecar-image | --pathways-elastic-slices | --pathways-gcs-location | --pathways-head-np | --pathways-max-slice-restarts | --pathways-proxy-args | --pathways-proxy-env | --pathways-proxy-server-image | --pathways-run-sps-workload | --pathways-server-args | --pathways-server-env | --pathways-server-image | --pathways-worker-args | --pathways-worker-env | --pathways-worker-image | --placement-policy | --platform | --priority | --project | --queue | --restart-on-exit-codes | --restarts | --service-account | --skip | --skip-validators | --status | --timeout | --topology | --validation-level | --vars)
 		skip=1
 		;;
-	-*) ;;
+	-*)
+		if [ -z "$sub1" ]; then
+			sub1="__blocked_opt__"
+		elif [ -z "$sub2" ] && { [ "$sub1" = "cluster" ] || [ "$sub1" = "job" ]; }; then
+			sub2="__blocked_opt__"
+		elif [ -z "$sub3" ] && [ "$sub1" = "job" ] && [ "$sub2" = "config" ]; then
+			sub3="__blocked_opt__"
+		else
+			bad_help=1
+		fi
+		;;
 	*)
 		if [ -z "$sub1" ]; then
 			sub1="$a"
@@ -57,6 +73,10 @@ for a in "$@"; do
 		;;
 	esac
 done
+
+if [ "$bad_help" = 1 ] || [ "$sub1" = "__blocked_opt__" ] || [ "$sub2" = "__blocked_opt__" ] || [ "$sub3" = "__blocked_opt__" ]; then
+	help=0
+fi
 
 ro=0
 if [ "$#" -eq 0 ] || [ "$help" = 1 ]; then

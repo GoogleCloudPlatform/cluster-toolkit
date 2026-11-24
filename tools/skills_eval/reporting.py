@@ -222,9 +222,9 @@ def resolve_changed_skills(base_ref: str, skills_dir: str = "skills", repo_root:
         return None
     mb = _git_q(["merge-base", ref, "HEAD"])
     diff = _git_q(
-        ["diff", "--name-only", mb.stdout.strip(), "HEAD"]
+        ["-c", "core.quotePath=false", "diff", "--name-only", "--no-renames", mb.stdout.strip(), "HEAD"]
         if (mb.returncode == 0 and mb.stdout.strip())
-        else ["diff", "--name-only", ref, "HEAD"]
+        else ["-c", "core.quotePath=false", "diff", "--name-only", "--no-renames", ref, "HEAD"]
     )
     if diff.returncode != 0:
         return None

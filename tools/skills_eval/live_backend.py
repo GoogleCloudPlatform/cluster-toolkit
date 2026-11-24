@@ -899,7 +899,11 @@ class LiveCLIEvaluatorBackend:
             }
             for raw_cmd in _coerce_to_string_list(cfg.get("script_validators")):
                 cmd = raw_cmd.replace("{project}", self.project)
-                v_res = self._exec(["bash", "-ec", cmd], wt, val_env, 30)
+                try:
+                    v_res = self._exec(["bash", "-ec", cmd], wt, val_env, 30)
+                except subprocess.TimeoutExpired:
+                    oracles.failed_validators.append(f"`{cmd}` (timed out after 30s)")
+                    continue
                 if v_res.returncode != 0:
                     err_snip = (v_res.stderr or v_res.stdout or "").strip()[-160:]
                     oracles.failed_validators.append(f"`{cmd}` (exit {v_res.returncode}{': ' + err_snip if err_snip else ''})")
@@ -967,6 +971,7 @@ class LiveCLIEvaluatorBackend:
             _write_file(os.path.join(judge_dir, ".gemini", "policies", "deny-all-tools.toml"), '[[rule]]\ndecision = "deny"\npriority = 1000\n')
             self._set_folder_trust(judge_dir, True)
             judge_env = self._build_agent_env(shim_dir=judge_shims)
+            parsed_obj: Optional[Dict[str, Any]] = None
             try:
                 for j_att in range(2):
                     if j_att > 0 and self._exec == self._default_exec:
@@ -974,6 +979,9 @@ class LiveCLIEvaluatorBackend:
                     res = self._exec(self._judge_command(judge_prompt), judge_dir, judge_env, min(self.timeout, 120))
                     text, judge_tel = _parse_gemini_json_output(res.stdout or "", res.stderr or "")
                     oracles.judge_tokens += int(judge_tel.get("total_tokens", 0) or 0)
+                    parsed_obj = _extract_first_json_dict(text, lambda c: isinstance(c.get("results"), list))
+                    if res.returncode == 0 and isinstance(parsed_obj, dict):
+                        break
                     if not (j_att == 0 and _TRANSIENT_API_ERR_RE.search(f"{res.stdout or ''}\n{res.stderr or ''}")):
                         break
             except subprocess.TimeoutExpired:
@@ -988,7 +996,6 @@ class LiveCLIEvaluatorBackend:
                 if res.returncode != 0 else f"LLM judge invoked {judge_tel['tool_calls_total']} tool call(s)"
             )
             return
-        parsed_obj = _extract_first_json_dict(text, lambda c: isinstance(c.get("results"), list))
         parsed = parsed_obj["results"] if isinstance(parsed_obj, dict) else None
         if not isinstance(parsed, list):
             oracles.failed_expectations.append("LLM judge returned non-JSON or missing 'results' list")

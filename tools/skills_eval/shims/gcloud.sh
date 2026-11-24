@@ -30,7 +30,7 @@ for a in "$@"; do
 	--help | -h) help=1 ;;
 	-v | --version) ver=1 ;;
 	--*=*) ;;
-	--project | --account | --configuration | --format | --filter | --flatten | --limit | --page-size | --sort-by | --verbosity | --zone | --region | --location | --cluster | --node-pool | --machine-type | --network | --subnetwork | --impersonate-service-account | --billing-project | --flags-file | --command | --log-http | --trace-token)
+	--project | --account | --configuration | --format | --filter | --flatten | --limit | --page-size | --sort-by | --verbosity | --zone | --region | --location | --cluster | --node-pool | --machine-type | --network | --subnetwork | --impersonate-service-account | --billing-project | --flags-file | --command | --access-token-file | --trace-token)
 		skip=1
 		;;
 	-*) ;;
@@ -68,7 +68,7 @@ elif [ "$n" -ge 2 ]; then
 		[ "$i" -eq 0 ] && continue
 		tok="${pos[$i]}"
 		case "$tok" in
-		delete* | create* | update* | patch* | set* | unset* | reset* | add* | remove* | rm | cp | mv | deploy* | submit* | cancel* | run | exec* | ssh | scp | start* | stop* | restart* | resize* | import* | export* | restore* | enable* | disable* | attach* | detach* | undelete* | move* | copy* | rollback* | upgrade* | drain* | cordon* | login | activate* | revoke* | print-* | sign-*)
+		delete | delete-* | destroy | destroy-* | create | create-* | update | update-* | patch | patch-* | set | set-* | unset | unset-* | reset | reset-* | add | add-* | remove | remove-* | rm | cp | mv | rsync | upload | upload-* | deploy | deploy-* | submit | submit-* | cancel | cancel-* | run | exec | exec-* | ssh | scp | start | start-* | stop | stop-* | restart | restart-* | resize | resize-disk | import | import-* | export | export-* | restore | restore-* | enable | enable-* | disable | disable-* | attach | attach-* | detach | detach-* | undelete | undelete-* | move | move-* | copy | copy-* | rollback | rollback-* | upgrade | upgrade-* | drain | drain-* | cordon | cordon-* | login | activate | activate-* | revoke | revoke-* | print-* | sign-* | get-credentials | install | insert | publish | access | decrypt)
 			if [ "$verb_idx" -lt 0 ]; then
 				bad=1
 				break

@@ -47,8 +47,11 @@ steps:
     TARGET_BASE="$${BASE_BRANCH:-$${RAW_BASE:-develop}}"
     git fetch --no-tags origin \
       "+refs/heads/$${TARGET_BASE}:refs/remotes/origin/$${TARGET_BASE}" \
-      "+refs/heads/main:refs/remotes/origin/main" \
-      2>/dev/null || true
+      || echo "[WARN] Failed to fetch base branch '$${TARGET_BASE}' from origin" >&2
+    if [ "$${TARGET_BASE}" != "main" ]; then
+      git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main" \
+        || echo "[WARN] Failed to fetch fallback branch 'main' from origin" >&2
+    fi
     if [ -n "${_COMPARE_REF}" ]; then
       git fetch --no-tags origin \
         "+refs/heads/*:refs/remotes/origin/*" "+refs/tags/*:refs/tags/*"
@@ -76,7 +79,8 @@ steps:
         for p in /workspace/live-eval-results.json \
           /workspace/live-eval-summary.md /workspace/live-logs; do
           if [ -e "$p" ]; then
-            gsutil -m cp -r "$p" "${DEST}/" 2>/dev/null || true
+            gsutil -m cp -r "$p" "${DEST}/" \
+              || echo "[WARN] Failed to archive $p to ${DEST}/" >&2
           fi
         done
       fi
