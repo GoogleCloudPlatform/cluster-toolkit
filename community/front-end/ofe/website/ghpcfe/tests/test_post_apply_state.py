@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""A failure after a successful `terraform apply` keeps the resource managed.
+"""A failure after a successful `gcluster deploy` keeps the resource managed.
 
-Once the apply succeeds the resource exists in the cloud, so a later failure
+Once the deploy succeeds the resource exists in the cloud, so a later failure
 (reading the state back from the bucket, or bookkeeping after it) must not
 mark it "New" or leave it "Creating": either hides the actions that manage or
 destroy it, and the resource keeps running and billing.
@@ -26,10 +26,13 @@ clusterinfo.py are loaded by path with their Django-dependent imports stubbed.
 import importlib.util
 import subprocess
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
 from unittest import mock
+
+import yaml
 
 OFE_DIR = Path(__file__).resolve().parents[3]
 CLUSTER_MANAGER = OFE_DIR / "website" / "ghpcfe" / "cluster_manager"
@@ -85,12 +88,18 @@ def _common_stubs(**models):
 
 
 def _load_vpc():
-    return _load(
-        "vpc",
-        _common_stubs(
-            VirtualNetwork=mock.MagicMock(), VirtualSubnet=mock.MagicMock()
-        ),
+    stubs = _common_stubs(
+        VirtualNetwork=mock.MagicMock(), VirtualSubnet=mock.MagicMock()
     )
+    stubs.update(
+        {
+            "website": _package("website"),
+            "website.settings": _module(
+                "website.settings", SITE_NAME="test-site"
+            ),
+        }
+    )
+    return _load("vpc", stubs)
 
 
 def _load_clusterinfo():
@@ -133,71 +142,118 @@ clusterinfo = _load_clusterinfo()
 STATE_PULL_FAILED = subprocess.CalledProcessError(
     1, ["terraform", "state", "pull"]
 )
-APPLY_FAILED = subprocess.CalledProcessError(1, ["terraform", "apply"])
+DEPLOY_FAILED = subprocess.CalledProcessError(1, ["gcluster", "deploy"])
 
 
 def _fake_vpc(cloud_state="cm"):
     vpc = mock.MagicMock()
     vpc.id = 7
+    vpc.name = "net"
+    vpc.cloud_id = ""
+    vpc.cloud_region = "europe-west4"
     vpc.cloud_state = cloud_state
+    vpc.cloud_credential.detail = '{"project_id": "p1"}'
     subnet = mock.MagicMock()
     subnet.id = 3
     subnet.is_managed = True
+    subnet.cloud_region = "europe-west4"
+    subnet.cidr = "10.0.0.0/24"
+    subnet.private_google_access_enabled = True
     vpc.subnets.all.return_value = [subnet]
     return vpc, subnet
 
 
 class StartVpcTests(unittest.TestCase):
-    """start_vpc never leaves a network stuck in "Creating"."""
+    """Networks are deployed with gcluster and never left "Creating"."""
 
-    def _start(self, vpc, state=None, state_error=None, apply_error=None):
-        with mock.patch.object(
-            vpc_module, "_tf_dir_for_vpc", return_value=Path("/x")
-        ), mock.patch.object(
-            utils, "run_terraform", side_effect=apply_error
-        ), mock.patch.object(
-            utils,
-            "get_terraform_state",
-            return_value=state,
-            side_effect=state_error,
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        for name, value in (
+            ("get_terraform_state_bucket", "bucket"),
+            ("terraform_state_prefix", "ns/vpcs/vpc_7"),
         ):
+            patcher = mock.patch.object(utils, name, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        patcher = mock.patch.object(
+            vpc_module, "_base_dir", return_value=self.dir
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _start(self, vpc, deploy_error=None):
+        def run(base_dir, *args, credentials_file=None):
+            if args[0] == "deploy" and deploy_error:
+                raise deploy_error
+
+        with mock.patch.object(
+            utils, "run_gcluster", side_effect=run
+        ) as run_gcluster, mock.patch.object(utils, "run_terraform") as tf:
             vpc_module.start_vpc(vpc)
+        tf.assert_not_called()
+        return run_gcluster
 
-    def test_state_read_failure_after_apply_keeps_vpc_managed(self):
-        for error in (STATE_PULL_FAILED, RuntimeError("bad state")):
-            with self.subTest(error=type(error).__name__):
-                vpc, _ = _fake_vpc()
-                with self.assertRaises(type(error)):
-                    self._start(vpc, state_error=error)
-                self.assertEqual(vpc.cloud_state, "m")
-                vpc.save.assert_called()
-
-    def test_missing_output_after_apply_keeps_vpc_managed(self):
-        vpc, _ = _fake_vpc()
-        with self.assertRaises(KeyError):
-            self._start(vpc, state={"outputs": {}})
-        self.assertEqual(vpc.cloud_state, "m")
-
-    def test_apply_failure_marks_vpc_unknown_not_creating(self):
+    def test_deploy_failure_marks_vpc_unknown_not_creating(self):
         vpc, _ = _fake_vpc()
         with self.assertRaises(subprocess.CalledProcessError):
-            self._start(vpc, apply_error=APPLY_FAILED)
+            self._start(vpc, deploy_error=DEPLOY_FAILED)
         self.assertEqual(vpc.cloud_state, "um")
         vpc.save.assert_called()
 
-    def test_success_records_ids(self):
+    def test_success_creates_then_deploys_and_records_names(self):
         vpc, subnet = _fake_vpc()
-        state = {
-            "outputs": {
-                "vpc_id": {"value": "net-1"},
-                "subnet-3": {"value": "sub-3"},
-            }
-        }
-        self._start(vpc, state=state)
+        run_gcluster = self._start(vpc)
+        commands = [c.args[1] for c in run_gcluster.call_args_list]
+        self.assertEqual(commands, ["create", "deploy"])
         self.assertEqual(vpc.cloud_state, "m")
-        self.assertEqual(vpc.cloud_id, "net-1")
-        self.assertEqual(subnet.cloud_id, "sub-3")
+        self.assertTrue(vpc.cloud_id.startswith("net-"))
+        self.assertEqual(subnet.cloud_id, f"{vpc.cloud_id}-subnet-3")
         self.assertEqual(subnet.cloud_state, "m")
+
+    def test_blueprint_lists_subnets(self):
+        vpc, _ = _fake_vpc()
+        self._start(vpc)
+        bp = yaml.safe_load((self.dir / "vpc.yaml").read_text())
+        self.assertEqual(
+            bp["terraform_backend_defaults"]["configuration"]["prefix"],
+            "ns/vpcs/vpc_7",
+        )
+        modules = bp["deployment_groups"][0]["modules"]
+        # Private service access lives in the Cloud SQL cluster blueprint.
+        self.assertEqual(
+            [m["source"] for m in modules],
+            ["modules/network/vpc", "modules/network/firewall-rules"],
+        )
+        self.assertEqual(modules[1]["use"], ["network"])
+        subnets = modules[0]["settings"]["subnetworks"]
+        self.assertEqual(
+            subnets,
+            [{
+                "subnet_name": f"{vpc.cloud_id}-subnet-3",
+                "subnet_region": "europe-west4",
+                "subnet_ip": "10.0.0.0/24",
+                "subnet_private_access": True,
+            }],
+        )
+
+    def test_existing_network_name_is_kept(self):
+        vpc, _ = _fake_vpc(cloud_state="m")
+        vpc.cloud_id = "net-abc123"
+        self._start(vpc)
+        self.assertEqual(vpc.cloud_id, "net-abc123")
+
+    def test_destroy_uses_gcluster(self):
+        vpc, _ = _fake_vpc(cloud_state="m")
+        vpc.cloud_id = "net-abc123"
+        with mock.patch.object(utils, "run_gcluster") as run_gcluster, \
+                mock.patch.object(utils, "run_terraform") as tf:
+            vpc_module.destroy_vpc(vpc)
+        self.assertEqual(run_gcluster.call_args.args[1:3],
+                         ("destroy", "net-abc123"))
+        tf.assert_not_called()
+        self.assertEqual(vpc.cloud_state, "xm")
 
 
 def _cluster_info(cloud_state):
@@ -212,7 +268,6 @@ def _cluster_info(cloud_state):
         "_set_credentials",
         "update",
         "_run_ghpc",
-        "_initialize_terraform",
     ):
         setattr(info, step, mock.MagicMock())
     return info
@@ -222,7 +277,7 @@ class ClusterPostApplyTests(unittest.TestCase):
     """A cluster stays managed once its apply has succeeded."""
 
     def _start(self, info, state_error=STATE_PULL_FAILED):
-        with mock.patch.object(utils, "run_terraform"), mock.patch.object(
+        with mock.patch.object(utils, "run_gcluster"), mock.patch.object(
             utils, "get_terraform_state", side_effect=state_error
         ):
             info.start_cluster(None)
@@ -254,7 +309,7 @@ class ClusterPostApplyTests(unittest.TestCase):
         self.assertEqual(info.cluster.status, "e")
 
     def test_reconfigure_failure_keeps_running_cluster_managed(self):
-        for failing_step in ("update", "_run_ghpc", "_initialize_terraform"):
+        for failing_step in ("update", "_run_ghpc"):
             with self.subTest(step=failing_step):
                 info = _cluster_info("m")
                 getattr(info, failing_step).side_effect = RuntimeError("x")
@@ -265,7 +320,7 @@ class ClusterPostApplyTests(unittest.TestCase):
 
     def test_reconfigure_state_read_failure_keeps_cluster_managed(self):
         info = _cluster_info("m")
-        with mock.patch.object(utils, "run_terraform"), mock.patch.object(
+        with mock.patch.object(utils, "run_gcluster"), mock.patch.object(
             utils, "get_terraform_state", side_effect=STATE_PULL_FAILED
         ):
             with self.assertRaises(subprocess.CalledProcessError):

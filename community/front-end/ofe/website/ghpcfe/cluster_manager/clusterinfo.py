@@ -24,7 +24,6 @@
 import json
 import logging
 import subprocess
-import os
 import re
 
 from django.template import engines as template_engines
@@ -51,13 +50,11 @@ class ClusterInfo:
     - Call update()
         - This will dump a new YAML file
     - Call start_cluster()
-        - Calls ghpc to create Terraform
-        - Initializes Terraform
-        - Applies Terraform"""
+        - Runs `gcluster create` on the blueprint
+        - Runs `gcluster deploy`"""
 
     def __init__(self, cluster):
         self.config = utils.load_config()
-        self.ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
 
         self.cluster = cluster
         self.cluster_dir = (
@@ -107,14 +104,13 @@ class ClusterInfo:
             self._set_credentials(credentials)
             self.update()
             self._run_ghpc()
-            self._initialize_terraform()
-            self._apply_terraform()
+            self._deploy_cluster()
 
             dash = grafana.create_cluster_dashboard(self.cluster)
             self.cluster.grafana_dashboard_url = dash.get("url", "")
             self.cluster.save()
 
-        # Not a lot we can do if terraform fails, it's on the admin user to
+        # Not a lot we can do if gcluster fails, it's on the admin user to
         # investigate and fix the errors shown in the log.
         # cloud_state is left alone: it becomes "m" as soon as the apply
         # succeeds, so a later failure keeps the cluster managed.
@@ -127,13 +123,12 @@ class ClusterInfo:
         try:
             self.update()
             self._run_ghpc()
-            self._initialize_terraform()
-            self._apply_terraform()
+            self._deploy_cluster()
             self.cluster.status = "r"
             self.cluster.cloud_state = "m"
             self.cluster.save()
 
-        # Not a lot we can do if terraform fails, it's on the admin user to
+        # Not a lot we can do if gcluster fails, it's on the admin user to
         # investigate and fix the errors shown in the log.
         # The cluster was running before this reconfigure and still exists,
         # so it stays managed.
@@ -143,7 +138,7 @@ class ClusterInfo:
             raise
 
     def stop_cluster(self):
-        self._destroy_terraform()
+        self._destroy_cluster()
 
     def get_cluster_access_key(self):
         return self.cluster.get_access_key()
@@ -400,49 +395,21 @@ class ClusterInfo:
                     self.config["server"]["gcs_bucket"], blobpath, rendered_file
                 )
 
-    def _initialize_terraform(self):
-        terraform_dir = self.get_terraform_dir()
-        extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": self._get_credentials_file()
-        }
-        try:
-            logger.info("Invoking Terraform Init")
-            utils.run_terraform(terraform_dir, "init", extra_env=extra_env)
-            utils.run_terraform(terraform_dir, "validate", extra_env=extra_env)
-            logger.info("Invoking Terraform Plan")
-            utils.run_terraform(terraform_dir, "plan", extra_env=extra_env)
-        except subprocess.CalledProcessError as cpe:
-            logger.error("Terraform exec failed", exc_info=cpe)
-            if cpe.stdout:
-                logger.info("  STDOUT:\n%s\n", cpe.stdout.decode("utf-8"))
-            if cpe.stderr:
-                logger.info("  STDERR:\n%s\n", cpe.stderr.decode("utf-8"))
-            raise
-
     def _run_ghpc(self):
-        target_dir = self.cluster_dir
         try:
-            logger.info("Invoking ghpc create")
-            log_out_fn = target_dir / "ghpc_create_log.stdout"
-            log_err_fn = target_dir / "ghpc_create_log.stderr"
-
-            env = os.environ.copy()
-            env['GOOGLE_APPLICATION_CREDENTIALS'] = self._get_credentials_file()
-
-            with log_out_fn.open("wb") as log_out:
-                with log_err_fn.open("wb") as log_err:
-                    subprocess.run(
-                        [self.ghpc_path, "create", "cluster.yaml", "-w", "--validation-level", "WARNING"],
-                        cwd=target_dir,
-                        stdout=log_out,
-                        stderr=log_err,
-                        check=True,
-                        env=env,
-                    )
+            logger.info("Invoking gcluster create")
+            utils.run_gcluster(
+                self.cluster_dir, "create", "cluster.yaml", "-w",
+                "--validation-level", "WARNING",
+                credentials_file=self._get_credentials_file(),
+            )
         except subprocess.CalledProcessError as cpe:
-            logger.error("ghpc exec failed", exc_info=cpe)
-            # No logs from stdout/err - get dumped to files
+            logger.error("gcluster create failed", exc_info=cpe)
             raise
+
+    def _gcluster_deploy_dir(self):
+        """The deployment folder `gcluster create` wrote (deployment_name)."""
+        return self.cluster.cloud_id
 
     def _get_tf_state_resource(self, state, filters):
         """Given a Terraform State json file, look for the Resource that matches
@@ -655,7 +622,7 @@ class ClusterInfo:
         if not updated_registry_ids:
             logger.warning("No ContainerRegistry entries were updated with repository or secret information.")
 
-    def _apply_terraform(self):
+    def _deploy_cluster(self):
         terraform_dir = self.get_terraform_dir()
 
         # Create C&C Subscription
@@ -665,10 +632,14 @@ class ClusterInfo:
             "GOOGLE_APPLICATION_CREDENTIALS": self._get_credentials_file()
         }
         try:
-            logger.info("Invoking Terraform Apply")
-            utils.run_terraform(terraform_dir, "apply", extra_env=extra_env)
+            logger.info("Invoking gcluster deploy")
+            utils.run_gcluster(
+                self.cluster_dir, "deploy", self._gcluster_deploy_dir(),
+                "--auto-approve",
+                credentials_file=self._get_credentials_file(),
+            )
 
-            # The apply succeeded, so the cluster's resources exist. Record
+            # The deploy succeeded, so the cluster's resources exist. Record
             # that before anything below can fail (reading the state back,
             # registry or node bookkeeping), so the cluster stays managed.
             self.cluster.internal_name = self.cluster.name
@@ -676,6 +647,7 @@ class ClusterInfo:
             self.cluster.save()
 
             # Look for Management and Login Nodes in the Terraform state
+            # (read-only; gcluster deploy leaves the group initialised)
             state = utils.get_terraform_state(terraform_dir, extra_env)
 
             # Extract and save Artifact Registry repository and secret information (if any)
@@ -755,25 +727,23 @@ class ClusterInfo:
         except subprocess.CalledProcessError as err:
             # We can error during provisioning, in which case Terraform
             # doesn't tear things down.
-            logger.error("Terraform apply failed", exc_info=err)
+            logger.error("gcluster deploy failed", exc_info=err)
             if err.stdout:
-                logger.info("TF stdout:\n%s\n", err.stdout.decode("utf-8"))
-            if err.stderr:
-                logger.info("TF stderr:\n%s\n", err.stderr.decode("utf-8"))
+                logger.info("gcluster output:\n%s\n", err.stdout.decode("utf-8"))
             raise
 
-    def _destroy_terraform(self):
-        terraform_dir = self.get_terraform_dir()
-        extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": self._get_credentials_file()
-        }
+    def _destroy_cluster(self):
         try:
-            logger.info("Invoking Terraform destroy")
+            logger.info("Invoking gcluster destroy")
             self.cluster.status = "t"
             self.cluster.cloud_state = "dm"
             self.cluster.save()
 
-            utils.run_terraform(terraform_dir, "destroy", extra_env=extra_env)
+            utils.run_gcluster(
+                self.cluster_dir, "destroy", self._gcluster_deploy_dir(),
+                "--auto-approve",
+                credentials_file=self._get_credentials_file(),
+            )
 
             # Dynamic compute nodes are created directly via the GCP API by
             # slurm-gcp at job-schedule time, so they are not in Terraform state
@@ -802,14 +772,12 @@ class ClusterInfo:
             self.cluster.save()
 
             c2.delete_cluster_subscription(self.cluster.id, controller_sa)
-            logger.info("Terraform destroy completed")
+            logger.info("gcluster destroy completed")
 
         except subprocess.CalledProcessError as err:
-            logger.error("Terraform destroy failed", exc_info=err)
+            logger.error("gcluster destroy failed", exc_info=err)
             if err.stdout:
-                logger.info("TF stdout:\n%s\n", err.stdout.decode("utf-8"))
-            if err.stderr:
-                logger.info("TF stderr:\n%s\n", err.stderr.decode("utf-8"))
+                logger.info("gcluster output:\n%s\n", err.stdout.decode("utf-8"))
             raise
 
     def _sweep_orphaned_compute_nodes(self):

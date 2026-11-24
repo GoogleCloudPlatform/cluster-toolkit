@@ -19,7 +19,6 @@ Frontend views will talk with functions here to perform real actions.
 
 import logging
 from . import utils
-from . import image_startup
 import json
 import subprocess
 import os
@@ -34,8 +33,7 @@ class ImageBackend:
 
     def __init__(self, image):
         self.config = utils.load_config()
-        self.ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
-        
+
         self.image = image
         self.image_dir = (
             self.config["baseDir"]
@@ -48,37 +46,24 @@ class ImageBackend:
 
     def prepare(self):
         """
-        Prepare the image creation process by following these steps:
+        Build the image:
 
-        1. Create the necessary directory structure for the image.
-        2. Generate a Cluster Toolkit blueprint to build the image.
-        3. Run the Cluster Toolkit (`gcluster`) to create the image based on the blueprint.
-        4. Set up the builder environment on Google Cloud Platform (GCP) using Terraform.
-        5. Create the image on GCP using Packer.
-        6. Destroy the builder environment after the image creation is complete.
+        1. Create the image directory and its credentials file.
+        2. Generate a Cluster Toolkit blueprint with two groups: builder-env
+           (a VPC and the startup script) and packer-image.
+        3. `gcluster create`, then `gcluster deploy`: it applies builder-env,
+           passes its outputs (subnetwork, startup script) to the Packer
+           group and runs the Packer build.
+        4. `gcluster destroy`: removes the builder network (the image stays).
 
-        This method handles the entire image creation process, from setting up the necessary
-        directories and configuration files to executing Cluster Toolkit and Packer to build
-        and finalize the image. If any step encounters an error, it logs the issue and marks
-        the image's status as "error" (status code 'e').
-
-        Note:
-        - This method assumes that the necessary tools (Cluster Toolkit, Terraform, and Packer)
-          are properly installed and configured on the system.
-        - The credentials file required for GCP authentication is created during the image
-          directory setup.
+        Any failure marks the image's status as "error" (status code 'e').
 
         Raises:
-            OSError: If there is an error while creating the image directory or writing to
-                     the credentials file.
-            IOError: If there is an error while writing to the credentials file.
-            subprocess.CalledProcessError: If any of the subprocess calls (gcluster, Terraform, or Packer)
-                                           encounter an error during execution.
+            subprocess.CalledProcessError: If a gcluster command fails.
         """
         self._create_image_dir()
         self._create_blueprint()
         self._run_ghpc()
-        self._create_builder_env()
         self._create_image()
         self._destroy_builder_env()
 
@@ -183,172 +168,51 @@ deployment_groups:
             raise
 
     def _run_ghpc(self):
-        target_dir = self.image_dir
         try:
             logger.info(f"Invoking gcluster create for the image {self.image.id}")
-            log_out_fn = target_dir / "ghpc_create_log.stdout"
-            log_err_fn = target_dir / "ghpc_create_log.stderr"
-
-            env = os.environ.copy()
-            env['GOOGLE_APPLICATION_CREDENTIALS'] = self._get_credentials_file()
-
-            with log_out_fn.open("wb") as log_out:
-                with log_err_fn.open("wb") as log_err:
-                    subprocess.run(
-                        [self.ghpc_path, "create", "image.yaml", "-w",
-                         "--validation-level", "WARNING"],
-                        cwd=target_dir,
-                        stdout=log_out,
-                        stderr=log_err,
-                        check=True,
-                        env=env,
-                    )
+            utils.run_gcluster(
+                self.image_dir, "create", "image.yaml", "-w",
+                "--validation-level", "WARNING",
+                credentials_file=self.credentials_file,
+            )
         except subprocess.CalledProcessError as cpe:
             self.update_image_status("e")
-            logger.error(f"gcluster exec failed for image {self.image.id}", exc_info=cpe)
-            # No logs from stdout/err - get dumped to files
-            raise
-      
-    def _run_ghpc_import_inputs(self):
-        """Bridge builder-env outputs into the packer group.
-
-        Mirrors the deployment instructions ghpc generates for
-        cross-group `use`: export-outputs from the applied builder
-        group, then import-inputs into the packer group.
-        """
-        target_dir = self.image_dir
-        log_out_fn = target_dir / "ghpc_import_log.stdout"
-        log_err_fn = target_dir / "ghpc_import_log.stderr"
-        env = os.environ.copy()
-        env["GOOGLE_APPLICATION_CREDENTIALS"] = self._get_credentials_file()
-        try:
-            with log_out_fn.open("ab") as log_out:
-                with log_err_fn.open("ab") as log_err:
-                    subprocess.run(
-                        [self.ghpc_path, "export-outputs",
-                         f"{self.blueprint_name}/builder-env"],
-                        cwd=target_dir,
-                        stdout=log_out,
-                        stderr=log_err,
-                        check=True,
-                        env=env,
-                    )
-                    subprocess.run(
-                        [self.ghpc_path, "import-inputs",
-                         f"{self.blueprint_name}/packer-image"],
-                        cwd=target_dir,
-                        stdout=log_out,
-                        stderr=log_err,
-                        check=True,
-                        env=env,
-                    )
-        except subprocess.CalledProcessError as cpe:
-            self.update_image_status("e")
-            logger.error(
-                f"gcluster export/import bridge failed for image "
-                f"{self.image.id}", exc_info=cpe)
+            logger.error(f"gcluster create failed for image {self.image.id}", exc_info=cpe)
             raise
 
-    def _create_builder_env(self):
-        """Setup builder environment on GCP."""
-        extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": self.credentials_file
-        }
-        try:
-            logger.info("Invoking Terraform Init for builder env.")
-            try:
-                terraform_dir = os.path.join(self.image_dir, f"{self.blueprint_name}/builder-env")
-                packer_dir = os.path.join(self.image_dir, f"{self.blueprint_name}/packer-image")
-            except OSError as e:
-                self.update_image_status("e")
-                logger.error(f"Error occurred while constructing terraform_dir: {e}")
-            utils.run_terraform(terraform_dir, "init", extra_env=extra_env)
-            utils.run_terraform(terraform_dir, "validate", extra_env=extra_env)
-            logger.info("Invoking Terraform Plan for builder env.")
-            utils.run_terraform(terraform_dir, "plan", extra_env=extra_env)
-            logger.info("Invoking Terraform Apply for builder env.")
-            utils.run_terraform(terraform_dir, "apply", extra_env=extra_env)
-            logger.info("Exporting startup script from builder env.")
-            utils.run_terraform(terraform_dir, "output", extra_env=extra_env, 
-                                arguments=[
-                                    "-raw",
-                                    "startup_script_scripts_for_image"],
-                                    )
-            # Wrapped so that the build cannot hang on the Packer plugin's
-            # own completion report; see image_startup.py.
-            with open(f"{terraform_dir}/terraform_output_log.stdout", encoding="utf-8") as src:
-                startup_script = image_startup.wrap_startup_script(src.read())
-            with open(f"{packer_dir}/custom-image/startup_script.sh", "w", encoding="utf-8") as dst:
-                dst.write(startup_script)
-            # The packer module uses the builder VPC (ghpc create rejects
-            # unused modules), so its subnetwork input arrives through the
-            # toolkit's cross-group bridge. startup_script arrives that way
-            # too, but the explicit startup_script_file -var below overrides it.
-            logger.info("Importing packer group inputs from builder env.")
-            self._run_ghpc_import_inputs()
-        except subprocess.CalledProcessError as cpe:
-            self.update_image_status("e")
-            logger.error(f"Terraform exec failed for builder env, image: {self.image.id}", exc_info=cpe)
-            if cpe.stdout:
-                logger.info("  STDOUT:\n%s\n", cpe.stdout.decode("utf-8"))
-            if cpe.stderr:
-                logger.info("  STDERR:\n%s\n", cpe.stderr.decode("utf-8"))
-            raise
-        
     def _create_image(self):
-        """Create image on GCP."""
-        extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": self.credentials_file
-        }
+        """Deploy both groups: the builder network, then the Packer build."""
         try:
-            logger.info("Invoking Packer Init for image.")
-            try:
-                packer_dir = os.path.join(self.image_dir, f"{self.blueprint_name}/packer-image/custom-image")
-            except OSError as e:
-                self.update_image_status("e")
-                logger.exception(f"Error occurred while constructing packer_dir: {e}")
-            utils.run_packer(packer_dir, "init", arguments=["."])
-            utils.run_packer(packer_dir, "validate", extra_env=extra_env,
-                             arguments=["-var", "startup_script_file=startup_script.sh", "."])
-            logger.info("Invoking Packer build for the image")
-            utils.run_packer(packer_dir, "build", extra_env=extra_env,
-                             arguments=["-var", "startup_script_file=startup_script.sh", "."])
+            logger.info(f"Invoking gcluster deploy for the image {self.image.id}")
+            utils.run_gcluster(
+                self.image_dir, "deploy", self.blueprint_name, "--auto-approve",
+                credentials_file=self.credentials_file,
+            )
             self.update_image_status("r")
-            
         except subprocess.CalledProcessError as cpe:
             self.update_image_status("e")
-            logger.exception(f"Packer image build failed for image: {self.image.id}", exc_info=cpe)
+            logger.error(f"gcluster deploy failed for image {self.image.id}", exc_info=cpe)
             if cpe.stdout:
-                logger.info("  STDOUT:\n%s\n", cpe.stdout.decode("utf-8"))
-            if cpe.stderr:
-                logger.info("  STDERR:\n%s\n", cpe.stderr.decode("utf-8"))
+                logger.info("gcluster output:\n%s\n", cpe.stdout.decode("utf-8"))
             raise
-        except Exception as e:
-            logger.exception(f"Unhandled error happened during image {self.image.id} creation.")
-        
+
     def _destroy_builder_env(self):
-        """Destroy builder environment on GCP."""
-        extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": self.credentials_file
-        }
+        """Destroy the builder network (gcluster keeps Packer images)."""
+        if not (self.image_dir / self.blueprint_name).is_dir():
+            return
         try:
-            logger.info("Invoking Terraform Destroy for builder env.")
-            try:
-                terraform_dir = os.path.join(self.image_dir, f"{self.blueprint_name}/builder-env")
-            except OSError as e:
-                self.update_image_status("e")
-                logger.error(f"Error occurred while constructing terraform_dir: {e}")
-            logger.info("Invoking Terraform Destroy for builder env.")
-            utils.run_terraform(terraform_dir, "destroy", extra_env=extra_env)
+            logger.info(f"Invoking gcluster destroy for the image {self.image.id}")
+            utils.run_gcluster(
+                self.image_dir, "destroy", self.blueprint_name, "--auto-approve",
+                credentials_file=self.credentials_file,
+            )
         except subprocess.CalledProcessError as cpe:
             self.update_image_status("e")
-            logger.error(f"Terraform exec failed for destroying builder env, image: {self.image.id}", exc_info=cpe)
+            logger.error(f"gcluster destroy failed for image {self.image.id}", exc_info=cpe)
             if cpe.stdout:
-                logger.info("  STDOUT:\n%s\n", cpe.stdout.decode("utf-8"))
-            if cpe.stderr:
-                logger.info("  STDERR:\n%s\n", cpe.stderr.decode("utf-8"))
+                logger.info("gcluster output:\n%s\n", cpe.stdout.decode("utf-8"))
             raise
-        
+
     def delete_image(self):
         project_id = json.loads(self.image.cloud_credential.detail)["project_id"]
         image_name = f"image-{self.image.name}"

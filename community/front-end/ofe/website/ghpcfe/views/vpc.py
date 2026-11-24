@@ -35,8 +35,6 @@ from ..models import (
 from ..forms import VPCForm, VPCImportForm, VirtualSubnetForm
 from ..cluster_manager import cloud_info
 from ..cluster_manager.vpc import (
-    create_subnet,
-    delete_subnet,
     create_vpc,
     start_vpc,
     destroy_vpc,
@@ -501,12 +499,11 @@ class VirtualSubnetView(SuperUserRequiredMixin, generic.TemplateView):
             for obj in formset.new_objects:
                 obj.cloud_credential = vpc.cloud_credential
                 obj.save()
-                create_subnet(obj)
+            # The network's blueprint is written from the saved subnets when
+            # its cloud changes are applied (cluster_manager.vpc.start_vpc).
             for obj, _ in formset.changed_objects:
                 obj.save()
-                create_subnet(obj)
             for obj in formset.deleted_objects:
-                delete_subnet(obj)
                 obj.delete()
 
             messages.success(

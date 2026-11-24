@@ -14,10 +14,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 {% endcomment %}
 
+{% comment %}
+Cloud SQL reaches the cluster's network through private service access.
+Networks used to get it from OFE's VPC template; the Toolkit's
+private-service-access module must be used by a module of the same
+blueprint, so it is created here, with the database that needs it.
+{% endcomment %}
+- source: modules/network/private-service-access
+  kind: terraform
+  id: slurm-psa
+  use: [hpc_network]
+
 - source: community/modules/database/slurm-cloudsql-federation
   kind: terraform
   id: slurm-sql
-  use: [hpc_network]
+  use: [hpc_network, slurm-psa]
   settings:
     sql_instance_name: sql-{{ cluster_id }}
     tier: "db-g1-small"

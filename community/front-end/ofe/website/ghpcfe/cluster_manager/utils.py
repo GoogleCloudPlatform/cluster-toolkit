@@ -146,14 +146,14 @@ def get_terraform_state_bucket():
 def write_backend_tf(target_dir, prefix):
     """Write a GCS backend configuration into a Terraform working directory.
 
-    For the resources copied from infrastructure_files/ (networks,
-    workbenches); Cluster Toolkit deployments get their backend from
+    For the resources copied from infrastructure_files/ (workbenches);
+    Cluster Toolkit deployments get their backend from
     `terraform_backend_defaults` in the blueprint.
 
     A file, unlike `-backend-config` at init, is found by every later
     terraform invocation in the directory, including ones that re-enter a
-    directory created earlier (see vpc.create_subnet). Idempotent: an existing
-    file is overwritten with the same content.
+    directory created earlier. Idempotent: an existing file is overwritten
+    with the same content.
     """
     target_dir = Path(target_dir)
     backend_file = target_dir / "backend.tf"
@@ -625,83 +625,50 @@ def run_terraform(target_dir, command, arguments=None, extra_env=None):
 
     return (log_out_fn, log_err_fn)
 
-def run_packer(target_dir, command, arguments=None, extra_env=None):
+# Every OFE blueprint (clusters, filesystems, images, networks) is created,
+# deployed and destroyed through gcluster; OFE no longer drives Terraform or
+# Packer for them. Only workbenches still use run_terraform() directly.
+GCLUSTER_PATH = "/opt/gcluster/cluster-toolkit/ghpc"
+GCLUSTER_LOG = "gcluster.log"
+
+
+def run_gcluster(base_dir, *args, credentials_file=None):
+    """Run `gcluster <args>` in base_dir as the resource's credential.
+
+    base_dir is the folder holding the blueprint; the deployment folder that
+    `gcluster create` writes is base_dir/<deployment_name>. stdout and stderr
+    are appended to base_dir/gcluster.log, which the resource's log view
+    shows. A failure raises subprocess.CalledProcessError, as the Terraform
+    helpers did, with the end of the log as its output.
     """
-    Run the Packer command with the specified arguments in the given target directory.
-
-    This function facilitates the execution of Packer commands from within a Python script.
-    It uses the `subprocess.run` method to invoke Packer and logs the output and any errors
-    generated during the execution.
-
-    Args:
-        target_dir (str): The target directory where Packer should be executed.
-        command (str): The Packer command to be executed (e.g., "build", "validate", etc.).
-        arguments (list, optional): Additional command-line arguments to pass to Packer.
-                                    Defaults to an empty list if not provided.
-        extra_env (dict, optional): Extra environment variables to set before running Packer.
-                                    Defaults to an empty dictionary if not provided.
-
-    Returns:
-        tuple: A tuple containing two `Path` objects representing the paths to the log files
-               where the standard output and standard error of the Packer command are logged.
-
-    Raises:
-        RuntimeError: If there is an error while executing the Packer command or if an
-                      exception is raised during the execution.
-
-    Note:
-    - The `target_dir` should be a valid directory path where Packer-related files and
-      configuration are located.
-    - The `command` should be a valid Packer command (e.g., "build", "validate").
-    - The `arguments` parameter allows users to provide additional command-line arguments
-      for Packer as a list of strings.
-    - The `extra_env` parameter allows users to set additional environment variables for
-      Packer execution as a dictionary.
-    - The standard output and standard error of the Packer command are logged to files in
-      the target directory with filenames in the format `packer_{command}_log.stdout`
-      and `packer_{command}_log.stderr`, respectively.
-
-    Example Usage:
-        >>> target_dir = "/path/to/packer/directory"
-        >>> command = "build"
-        >>> arguments = ["-var", "variable=value", "template.json"]
-        >>> extra_env = {"PACKER_LOG": "1"}
-        >>> run_packer(target_dir, command, arguments, extra_env)
-
-    """
-    arguments = arguments if arguments else []
-    extra_env = extra_env if extra_env else {}
-
-    # There is another binary called packer on the OS
-    # To make sure we using correct packer specify full path
-    cmdline = ["/usr/bin/packer", command]
-    cmdline.extend(arguments)
-
-    log_out_fn = Path(target_dir) / f"packer_{command}_log.stdout"
-    log_err_fn = Path(target_dir) / f"packer_{command}_log.stderr"
-
-    new_env = os.environ.copy()
-    new_env.pop("SSH_AUTH_SOCK", None)
-    new_env.update(extra_env)
-
-    try:
-        with log_out_fn.open("wb") as log_out, log_err_fn.open("wb") as log_err:
-            subprocess.run(
-                cmdline,
-                cwd=target_dir,
-                env=new_env,
-                stdout=log_out,
-                stderr=log_err,
-                check=True,
-            )
-    except subprocess.CalledProcessError as e:
-        # Handle the error from Packer command execution
-        raise RuntimeError(f"Packer command failed: {e}")
-    except Exception as E:
-        # At this point catch any other exception as well.
-        raise RuntimeError(f"Packer command failed: {E}")
-
-    return (log_out_fn, log_err_fn)
+    base_dir = Path(base_dir)
+    base_dir.mkdir(parents=True, exist_ok=True)
+    env = _terraform_env(
+        {"GOOGLE_APPLICATION_CREDENTIALS": str(credentials_file)}
+        if credentials_file else None
+    )
+    # Rocky Linux ships an unrelated `packer` (cracklib) in /usr/sbin; the
+    # HashiCorp one gcluster runs for Packer groups is /usr/bin/packer.
+    env["PATH"] = "/usr/bin:" + env.get("PATH", "")
+    cmdline = [GCLUSTER_PATH, "--no-color", *args]
+    log_fn = base_dir / GCLUSTER_LOG
+    with log_fn.open("a", encoding="utf-8") as log:
+        log.write(f"\n$ gcluster {' '.join(args)}\n")
+        log.flush()
+        returncode = subprocess.run(
+            cmdline,
+            cwd=base_dir,
+            env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            check=False,
+        ).returncode
+    if returncode != 0:
+        tail = log_fn.read_text(encoding="utf-8", errors="replace")[-4000:]
+        raise subprocess.CalledProcessError(
+            returncode, cmdline, output=tail.encode("utf-8")
+        )
+    return log_fn
 
 
 def copy_file(source_file, destination_file):
