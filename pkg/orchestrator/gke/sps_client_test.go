@@ -105,8 +105,17 @@ func TestProxyImageFor(t *testing.T) {
 			want:        "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest",
 		},
 		{
+			serverImage: "us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/server:jax-0.11.2",
+			want:        "us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/proxy_server:jax-0.11.2",
+		},
+		// Pathways server and proxy images never share a digest, so a digest-pinned server has no derivable proxy.
+		{
 			serverImage: "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server@sha256:abcdef",
-			want:        "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server@sha256:abcdef",
+			want:        "",
+		},
+		{
+			serverImage: "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest@sha256:abcdef",
+			want:        "",
 		},
 		{
 			serverImage: "custom-registry.io/my-rm:v1",
@@ -545,7 +554,7 @@ func TestSubmitSPSClusterWorkload_ValidatesClusterMounts(t *testing.T) {
 		orc := newTestGKEOrchestrator(mockExec)
 		err := orc.submitSPSClusterWorkload(baseJob, inst)
 		if err == nil || !strings.Contains(err.Error(), "pass --pathways-head-np") {
-			t.Fatalf("expected RWO PVC to pass ValidateClusterMounts and reach generateSPSClientManifest, got: %v", err)
+			t.Fatalf("expected RWO PVC to pass ValidateClusterMounts and reach the SPS client settings check, got: %v", err)
 		}
 		if got := orc.inspectedPVCs["default/train-pvc"].volumeName; got != "pv-sps-rwo" {
 			t.Errorf("expected inspectedPVCs[default/train-pvc].volumeName = pv-sps-rwo, got %q", got)
@@ -581,6 +590,36 @@ func TestSubmitSPSClusterWorkload_ValidatesClusterMounts(t *testing.T) {
 			t.Errorf("expected 0 kubectl calls when off-cloud Cloud URI fails fast, got: %v", mockExec.calls)
 		}
 	})
+}
+
+// TestSubmitSPSClusterWorkload_ResolvesProxyBeforeBuild pins that a proxy image gcluster cannot derive fails the
+// submission before the container image build.
+func TestSubmitSPSClusterWorkload_ResolvesProxyBeforeBuild(t *testing.T) {
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{})
+	orc := newTestGKEOrchestrator(mockExec)
+	job := orchestrator.JobDefinition{
+		WorkloadName:  "sps-build-check",
+		BaseImage:     "python:3.12",
+		BuildContext:  t.TempDir(),
+		NumSlices:     1,
+		NodesPerSlice: 1,
+		IsPathwaysJob: true,
+		Pathways:      orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-inst"},
+	}
+	inst := spsInstance{
+		Name:         "sps-inst",
+		HeadNodePool: "cpu-np",
+		ServerImage:  "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server@sha256:abcdef",
+		GCSLocation:  "gs://my-bucket/sps",
+	}
+	inst.ProxyImage = proxyImageFor(inst.ServerImage)
+	err := orc.submitSPSClusterWorkload(job, inst)
+	if err == nil || !strings.Contains(err.Error(), "different digests") {
+		t.Fatalf("submitSPSClusterWorkload() = %v, want the digest error", err)
+	}
+	if len(mockExec.calls) != 0 {
+		t.Errorf("expected no commands before the digest error (no image build), got %v", mockExec.calls)
+	}
 }
 
 func TestReadySPSProxyPod(t *testing.T) {
@@ -728,6 +767,20 @@ func TestResolveSPSClientPathways(t *testing.T) {
 		_, err := resolveSPSClientPathways(orchestrator.PathwaysJobDefinition{}, inst)
 		if err == nil || !strings.Contains(err.Error(), "pass --pathways-proxy-server-image") {
 			t.Errorf("got err = %v, want --pathways-proxy-server-image error", err)
+		}
+	})
+
+	t.Run("explains why a digest-pinned server image has no derivable proxy", func(t *testing.T) {
+		inst := baseInst
+		inst.ServerImage = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server@sha256:abcdef"
+		inst.ProxyImage = proxyImageFor(inst.ServerImage)
+		_, err := resolveSPSClientPathways(orchestrator.PathwaysJobDefinition{}, inst)
+		if err == nil || !strings.Contains(err.Error(), "different digests") || !strings.Contains(err.Error(), "pass --pathways-proxy-server-image") {
+			t.Errorf("got err = %v, want a digest explanation and a --pathways-proxy-server-image hint", err)
+		}
+		got, err := resolveSPSClientPathways(orchestrator.PathwaysJobDefinition{ProxyServerImage: "proxy:pinned"}, inst)
+		if err != nil || got.ProxyServerImage != "proxy:pinned" {
+			t.Errorf("with --pathways-proxy-server-image: got (%q, %v), want (\"proxy:pinned\", nil)", got.ProxyServerImage, err)
 		}
 	})
 

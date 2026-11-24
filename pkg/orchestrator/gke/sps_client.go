@@ -57,12 +57,11 @@ func spsInstanceRef(ref string) (name, endpoint string) {
 
 // proxyImageFor derives the proxy image that matches an SPS server image, as pathwaysutils does.
 func proxyImageFor(serverImage string) string {
-	for _, sep := range []string{":", "@"} {
-		if strings.Contains(serverImage, "/server"+sep) {
-			return strings.Replace(serverImage, "/server"+sep, "/proxy_server"+sep, 1)
-		}
+	// Pathways server and proxy images never share a digest, so only a tag can carry over.
+	if strings.Contains(serverImage, "@") || !strings.Contains(serverImage, "/server:") {
+		return ""
 	}
-	return ""
+	return strings.Replace(serverImage, "/server:", "/proxy_server:", 1)
 }
 
 func parseSPSClientTarget(name string, data []byte) (spsInstance, error) {
@@ -204,6 +203,12 @@ func (g *GKEOrchestrator) submitSPSClusterWorkload(job orchestrator.JobDefinitio
 	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
 		return err
 	}
+	// Resolve the client's Pathways settings before the image build, so a proxy image or node pool that gcluster
+	// cannot determine fails before anything is built and pushed.
+	var err error
+	if job.Pathways, err = resolveSPSClientPathways(job.Pathways, inst); err != nil {
+		return err
+	}
 	fullImageName, err := g.BuildContainerImage(job)
 	if err != nil {
 		return err
@@ -227,6 +232,9 @@ func resolveSPSClientPathways(p orchestrator.PathwaysJobDefinition, inst spsInst
 	}
 	if p.ProxyServerImage == "" {
 		p.ProxyServerImage = inst.ProxyImage
+	}
+	if p.ProxyServerImage == "" && strings.Contains(inst.ServerImage, "@") {
+		return p, fmt.Errorf("could not derive the proxy image from SPS server image %q: it is pinned by digest, and Pathways server and proxy images have different digests; pass --pathways-proxy-server-image with the proxy image of the same Pathways release", inst.ServerImage)
 	}
 	if p.ProxyServerImage == "" {
 		return p, fmt.Errorf("could not derive the proxy image from SPS server image %q; pass --pathways-proxy-server-image", inst.ServerImage)
