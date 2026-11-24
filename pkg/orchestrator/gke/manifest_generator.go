@@ -632,8 +632,6 @@ func ValidateJobSetManifest(manifestContent string) error {
 }
 
 const (
-	defaultPathwaysProxyImage   = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
-	defaultPathwaysServerImage  = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
 	pathwaysTemplateExtractHint = "If you use --gke-custom-templates-path, re-extract pathways_jobset.tmpl and base.tmpl with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations"
 	// workloadTemplateExtractHintFmt takes the workload template name (jobset.tmpl or job.tmpl).
 	workloadTemplateExtractHintFmt = "If you use --gke-custom-templates-path, re-extract %s and base.tmpl with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations"
@@ -656,16 +654,15 @@ func pathwaysWorkerBackoffLimit(maxSliceRestarts, nodesPerSlice int) int {
 // GeneratePathwaysManifest generates the Kubernetes JobSet manifest for a Pathways job.
 func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) (string, error) {
 	job.IsPathwaysJob = true
-	// Set default values for Pathways-specific fields if not provided
-	if job.Pathways.ProxyServerImage == "" {
-		job.Pathways.ProxyServerImage = defaultPathwaysProxyImage
-	}
-	if job.Pathways.ServerImage == "" {
-		job.Pathways.ServerImage = defaultPathwaysServerImage
-	}
-	if job.Pathways.WorkerImage == "" {
-		// WorkerImage defaults to ServerImage if not explicitly set
-		job.Pathways.WorkerImage = job.Pathways.ServerImage
+	var imageNotice string
+	var imageNoticeIsWarning bool
+	job.Pathways, imageNotice, imageNoticeIsWarning = resolvePathwaysImages(job.Pathways)
+	switch {
+	case imageNotice == "":
+	case imageNoticeIsWarning:
+		logging.Warn("%s", imageNotice)
+	default:
+		logging.Info("%s", imageNotice)
 	}
 
 	tmpl, baseBlocks, err := k8s.LoadWorkloadTemplate(g.gkeCustomTemplatesPath, k8s.PathwaysJobSetTemplate)

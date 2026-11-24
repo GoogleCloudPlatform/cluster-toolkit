@@ -55,15 +55,6 @@ func spsInstanceRef(ref string) (name, endpoint string) {
 	return ref, fmt.Sprintf(spsEndpointFormat, ref)
 }
 
-// proxyImageFor derives the proxy image that matches an SPS server image, as pathwaysutils does.
-func proxyImageFor(serverImage string) string {
-	// Pathways server and proxy images never share a digest, so only a tag can carry over.
-	if strings.Contains(serverImage, "@") || !strings.Contains(serverImage, "/server:") {
-		return ""
-	}
-	return strings.Replace(serverImage, "/server:", "/proxy_server:", 1)
-}
-
 func parseSPSClientTarget(name string, data []byte) (spsInstance, error) {
 	var js spsJobSetView
 	if err := json.Unmarshal(data, &js); err != nil {

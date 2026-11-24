@@ -95,41 +95,6 @@ func TestSPSInstanceRef(t *testing.T) {
 	}
 }
 
-func TestProxyImageFor(t *testing.T) {
-	tests := []struct {
-		serverImage string
-		want        string
-	}{
-		{
-			serverImage: "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest",
-			want:        "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest",
-		},
-		{
-			serverImage: "us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/server:jax-0.11.2",
-			want:        "us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/proxy_server:jax-0.11.2",
-		},
-		// Pathways server and proxy images never share a digest, so a digest-pinned server has no derivable proxy.
-		{
-			serverImage: "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server@sha256:abcdef",
-			want:        "",
-		},
-		{
-			serverImage: "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest@sha256:abcdef",
-			want:        "",
-		},
-		{
-			serverImage: "custom-registry.io/my-rm:v1",
-			want:        "",
-		},
-	}
-
-	for _, tc := range tests {
-		if got := proxyImageFor(tc.serverImage); got != tc.want {
-			t.Errorf("proxyImageFor(%q) = %q, want %q", tc.serverImage, got, tc.want)
-		}
-	}
-}
-
 func TestParseSPSClientTarget(t *testing.T) {
 	inst, err := parseSPSClientTarget("sps-j6080103", []byte(testSPSJobSetJSON))
 	if err != nil {

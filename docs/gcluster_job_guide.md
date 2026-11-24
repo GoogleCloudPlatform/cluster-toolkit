@@ -1206,6 +1206,68 @@ To run a containerized workload inside the cluster against an existing SPS insta
   --command "python train_pathways.py"
 ```
 
+#### Colocated Python sidecar images
+
+The colocated Python sidecar (`--pathways-colocated-python-sidecar-image`), the Pathways server (`pathways-rm` and `pathways-worker`) and the proxy (`pathways-proxy`) should come from the same Pathways release. `gcluster` cannot verify before submission that a set of images works together.
+
+The public images are published for each release in three repositories:
+
+| Image | Repository |
+| --- | --- |
+| Colocated Python sidecar | `us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/colocated_python_sidecar` |
+| Server | `us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/server` |
+| Proxy | `us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/proxy_server` |
+
+Every release tag exists in all three repositories:
+
+* `jax-<version>` (for example `jax-0.11.2`): the newest build for that JAX version. It moves when a new build is published.
+* `<yyyymmdd>-jax_<version>` (for example `20261124-jax_0.11.2`): the build of one day. Use it to pin a release.
+* `latest`: the newest build for the newest JAX version.
+
+To choose a version, take the sidecar tag for the JAX version of your workload. The workload must run the same Python, JAX, jaxlib and cloudpickle versions as the sidecar, which lists them in `/opt/venv/server_constraints.txt`:
+
+```shell
+docker run --rm --entrypoint cat \
+  us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/colocated_python_sidecar:jax-0.11.2 \
+  /opt/venv/server_constraints.txt
+```
+
+How `gcluster` picks the server and proxy images:
+
+* **Public sidecar** (`us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/colocated_python_sidecar`, with or without a tag or digest): every server or proxy image that you don't pass is set to the `cloud-pathways` image with the sidecar's tag, and `gcluster` logs the images it chose. If the sidecar reference has no release tag (for example, it is pinned by digest only), `gcluster` uses `latest` and warns. Images that you pass are always used as given, and `gcluster` never derives one image from another: if you pass only `--pathways-server-image` or only `--pathways-proxy-server-image`, the other one is still the `cloud-pathways` image of the sidecar's release, and `gcluster` warns.
+* **Any other sidecar**, including one that you built from the public sidecar image: `gcluster` can't tell which release it belongs to. Every server or proxy image that you don't pass stays at the `gcluster` default (`us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest` and `us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest`), and `gcluster` warns. These defaults don't work with the public sidecar or with images built from it, so pass `--pathways-server-image` and `--pathways-proxy-server-image` from `cloud-pathways` with the tag of your sidecar's base image.
+* **No sidecar:** the `gcluster` defaults apply.
+
+With `--pathways-deploy-sps`, the `pathways-head` pod runs no proxy, so only the server image counts in these rules.
+
+For example, to run a workload with the public sidecar for JAX 0.11.2, pinned to the build of one day, pass only the sidecar image; `gcluster` runs `pathways-rm`, `pathways-worker` and `pathways-proxy` from `cloud-pathways/server:20261124-jax_0.11.2` and `cloud-pathways/proxy_server:20261124-jax_0.11.2`:
+
+```shell
+./gcluster job submit \
+  --name my-pathways-sidecar-job \
+  --image <CONTAINER_IMAGE> \
+  --command "python train_pathways.py" \
+  --compute-type v6e-16 \
+  --pathways \
+  --pathways-gcs-location gs://BUCKET_NAME/pathways-artifacts \
+  --pathways-colocated-python-sidecar-image us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/colocated_python_sidecar:20261124-jax_0.11.2
+```
+
+For a sidecar that you built from that public image and pushed to your own registry, also pass the server and proxy images of the same release:
+
+```shell
+./gcluster job submit \
+  --name my-pathways-custom-sidecar-job \
+  --image <CONTAINER_IMAGE> \
+  --command "python train_pathways.py" \
+  --compute-type v6e-16 \
+  --pathways \
+  --pathways-gcs-location gs://BUCKET_NAME/pathways-artifacts \
+  --pathways-colocated-python-sidecar-image <SIDECAR_IMAGE> \
+  --pathways-server-image us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/server:20261124-jax_0.11.2 \
+  --pathways-proxy-server-image us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/proxy_server:20261124-jax_0.11.2
+```
+
 ---
 
 ### 8.3 Node auto-provisioning (NAP) and compute consumption
@@ -1386,9 +1448,9 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--topology` | `string` | TPU slice topology (e.g., `2x2x1`, `2x4`, `2x4x4`). Applies to TPU workloads only (rejected for GPU/CPU jobs). **Required for TPU 7x.** For other TPU types, when omitted, `gcluster` resolves it from a slice shorthand (e.g., `v6e-16` -> `4x4`) or auto-discovers it from matching TPU node pools on the cluster. |
 | `--pathways` | `flag` | If present, generates a manifest tailored for a Pathways distributed job paradigm. |
 | `--pathways-gcs-location` | `string` | GCS bucket location to store Pathways artifacts. *(Required when `--pathways` is set, except with `--pathways-run-sps-workload` which inherits it from the SPS instance)* |
-| `--pathways-proxy-server-image` | `string` | Container image for the Pathways proxy server. |
-| `--pathways-server-image` | `string` | Container image for the Pathways resource manager / server. |
-| `--pathways-worker-image` | `string` | Container image for the Pathways workers. |
+| `--pathways-proxy-server-image` | `string` | Container image for `pathways-proxy` (Default: `us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest`, or, with the public colocated Python sidecar, the `cloud-pathways/proxy_server` image of the sidecar's release; see [Colocated Python sidecar images](#colocated-python-sidecar-images)). With `--pathways-run-sps-workload` it defaults to the `proxy_server` image that matches the SPS instance's server image, and is required when that image is pinned by digest. |
+| `--pathways-server-image` | `string` | Container image for `pathways-rm` and, unless `--pathways-worker-image` is set, `pathways-worker` (Default: `us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest`, or, with the public colocated Python sidecar, the `cloud-pathways/server` image of the sidecar's release; see [Colocated Python sidecar images](#colocated-python-sidecar-images)). |
+| `--pathways-worker-image` | `string` | Container image for `pathways-worker` (Default: the server image). |
 | `--pathways-headless` | `flag` | If present, the user workload container will not be deployed in the `pathways-head` job. |
 | `--pathways-deploy-sps` | `flag` | If present, deploys a Shared Pathways Service (SPS) instance (`pathways-rm` on `pathways-head` without a proxy or workload container, plus the TPU worker pods). Mutually exclusive with `--pathways-headless`. |
 | `--pathways-run-sps-workload` | `string` | Name or endpoint (`<name>-pathways-head-0-0.<name>:29001`) of an existing SPS instance to run `--command` against. Runs locally in the terminal via a port-forwarded `pathways-proxy` pod when no image is specified, or inside the cluster when `--image` (or `--base-image` + `--build-context`) is passed. In terminal mode the local process gets `JAX_PLATFORMS=proxy` unless `--env` sets it, and always gets a `JAX_BACKEND_TARGET` pointing at the port-forward, even if `--env` sets one. |
@@ -1400,7 +1462,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--pathways-proxy-env` | `stringArray` | Custom environment variables injected specifically into the Pathways proxy container (KEY=VALUE). A variable that gcluster also sets in the container is replaced by your value. |
 | `--pathways-server-env` | `stringArray` | Custom environment variables injected specifically into the Pathways server container (KEY=VALUE). A variable that gcluster also sets in the container is replaced by your value. |
 | `--pathways-worker-env` | `stringArray` | Custom environment variables injected specifically into the Pathways worker containers (KEY=VALUE). A variable that gcluster also sets in the container is replaced by your value. |
-| `--pathways-colocated-python-sidecar-image` | `string` | Image for an optional Python-based sidecar container running alongside workers. Also passes `--sidecar_name=external` to `pathways-proxy` so Pathways routes colocated Python work to the sidecar, unless `--pathways-proxy-args` already sets `--sidecar_name`. |
+| `--pathways-colocated-python-sidecar-image` | `string` | Image for an optional Python-based sidecar container running alongside workers. Also passes `--sidecar_name=external` to `pathways-proxy` so Pathways routes colocated Python work to the sidecar, unless `--pathways-proxy-args` already sets `--sidecar_name`. The sidecar, server and proxy images should come from the same Pathways release; see [Colocated Python sidecar images](#colocated-python-sidecar-images) for how `gcluster` picks the server and proxy images and how to choose a version. |
 | `--pathways-head-np` | `string` | The node pool name to target for the Pathways head job. |
 
 #### 9.3.3 GPU Related Flags
