@@ -1691,9 +1691,9 @@ def test_resume_mig_nodes_blocks_non_running_same_mig_vm_absent_from_listing(
       "created-by": "projects/1/regions/us-central1/instanceGroupManagers/c-n-mig-0"
   }
 
-  for status, expected_substr, forbidden_substr in (
-      ("STOPPING", "stopping/deleting", "power_down"),
-      ("TERMINATED", "delete it directly in GCE", "power_down"),
+  for status, expected_action, expected_substr, forbidden_substr in (
+      ("STOPPING", error_handler.Action.REQUEUE, "stopping/deleting", "power_down"),
+      ("TERMINATED", error_handler.Action.IGNORE, "delete it directly in GCE", "power_down"),
   ):
     mock_handle_failure.reset_mock()
     lkp = util.Lookup(cfg)
@@ -1721,9 +1721,54 @@ def test_resume_mig_nodes_blocks_non_running_same_mig_vm_absent_from_listing(
     assert mock_handle_failure.call_args.args[0] == ["c-n-0"]
     assert expected_substr in mock_handle_failure.call_args.args[1]
     assert forbidden_substr not in mock_handle_failure.call_args.args[1]
-    assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
+    assert mock_handle_failure.call_args.args[3] == expected_action
     create_call = mock_compute.regionInstanceGroupManagers().createInstances.call_args
     assert create_call.kwargs["body"]["instances"] == [{"name": "c-n-1"}]
+
+  # Mixed batch: STOPPING gets REQUEUE and TERMINATED gets IGNORE separately
+  mock_handle_failure.reset_mock()
+  lkp_mix = util.Lookup(cfg)
+  mock_compute_mix = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute_mix
+  mock_compute_mix.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  by_name_mix = {
+      "c-n-0": util.Instance(
+          name="c-n-0",
+          zone="us-central1-a",
+          status="STOPPING",
+          creation_timestamp=SOME_TS,
+          role="compute",
+          resource_status=util.InstanceResourceStatus.from_json(None),
+          metadata=same_mig_meta,
+          scheduling=util.NSDict({}),
+      ),
+      "c-n-1": util.Instance(
+          name="c-n-1",
+          zone="us-central1-a",
+          status="TERMINATED",
+          creation_timestamp=SOME_TS,
+          role="compute",
+          resource_status=util.InstanceResourceStatus.from_json(None),
+          metadata=same_mig_meta,
+          scheduling=util.NSDict({}),
+      ),
+  }
+  with unittest.mock.patch.object(
+      util.Lookup, "instance", side_effect=lambda n: by_name_mix.get(n)
+  ):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1", "c-n-2"], excl_job_id=None, lkp=lkp_mix)
+
+  assert mock_handle_failure.call_count == 2
+  assert mock_handle_failure.call_args_list[0].args[0] == ["c-n-0"]
+  assert mock_handle_failure.call_args_list[0].args[3] == error_handler.Action.REQUEUE
+  assert "stopping/deleting" in mock_handle_failure.call_args_list[0].args[1]
+  assert mock_handle_failure.call_args_list[1].args[0] == ["c-n-1"]
+  assert mock_handle_failure.call_args_list[1].args[3] == error_handler.Action.IGNORE
+  assert "delete it directly in GCE" in mock_handle_failure.call_args_list[1].args[1]
+  create_call_mix = mock_compute_mix.regionInstanceGroupManagers().createInstances.call_args
+  assert create_call_mix.kwargs["body"]["instances"] == [{"name": "c-n-2"}]
 
 
 @unittest.mock.patch("resume.handle_resume_failure")
@@ -1838,3 +1883,30 @@ def test_resume_mig_nodes_job_abort_protects_live_standalone_vm_from_power_down(
   assert mock_handle_failure.call_args_list[0].args[3] == error_handler.Action.IGNORE
   assert mock_handle_failure.call_args_list[1].args[0] == ["c-n-1000"]
   assert mock_handle_failure.call_args_list[1].args[3] == error_handler.Action.REQUEUE
+
+  # Case 5: Non-exclusive in-flight deletion timeout excludes live standalone sibling
+  mock_handle_failure.reset_mock()
+  mock_compute_del = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute_del
+  mock_compute_del.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": [{"name": "c-n-1", "currentAction": "DELETING"}]
+  }
+  lkp_del = util.Lookup(cfg)
+  resume_data_del = resume.ResumeData(
+      jobs=[resume.ResumeJobData(job_id=99, partition="p", nodes_alloc=["c-n-0", "c-n-1"])]
+  )
+  with (
+      unittest.mock.patch("resume.time.sleep"),
+      unittest.mock.patch.object(
+          util.Lookup, "instance", side_effect=lambda n: live_standalone if n == "c-n-0" else None
+      ),
+  ):
+    resume.resume_mig_nodes(
+        ["c-n-0", "c-n-1", "c-n-2"], excl_job_id=None, lkp=lkp_del, resume_data=resume_data_del
+    )
+
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[0] == ["c-n-1"]
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.REQUEUE
+  create_call_del = mock_compute_del.regionInstanceGroupManagers().createInstances.call_args
+  assert create_call_del.kwargs["body"]["instances"] == [{"name": "c-n-2"}]

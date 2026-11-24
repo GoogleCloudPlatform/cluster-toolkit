@@ -461,14 +461,18 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                             job_nodes = {n.split(".")[0] for n in job.nodes_alloc}
                             if job_nodes & still_deleting:
                                 affected_nodes.update(job_nodes)
-                    nodes_to_fail = [n.split(".")[0] for n in mig_nodes if n.split(".")[0] in affected_nodes]
-                    handle_resume_failure(
-                        nodes_to_fail,
-                        "GCP MIG Error: Instances still in-flight deleting after timeout",
-                        resume_data,
-                        error_handler.Action.REQUEUE,
-                        "MIG in-flight deletion timeout",
-                    )
+                    nodes_to_fail = [
+                        sn for sn in dict.fromkeys(n.split(".")[0] for n in mig_nodes)
+                        if sn in affected_nodes and not _is_live_standalone(sn)
+                    ]
+                    if nodes_to_fail:
+                        handle_resume_failure(
+                            nodes_to_fail,
+                            "GCP MIG Error: Instances still in-flight deleting after timeout",
+                            resume_data,
+                            error_handler.Action.REQUEUE,
+                            "MIG in-flight deletion timeout",
+                        )
                     existing_mig_insts.update(affected_nodes)
 
         pic_instances: List[Dict[str, Any]] = []
@@ -501,9 +505,10 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                             f"(status={existing_inst.status}); skipping createInstances."
                         )
                         continue
+                    action_desc = "requeuing" if existing_inst.status == "STOPPING" else "marking DOWN"
                     log.warning(
                         f"Instance {short_name} ({existing_inst.status}) carries created-by={mig_name} "
-                        "but is absent from listManagedInstances(); marking DOWN instead of skipping."
+                        f"but is absent from listManagedInstances(); {action_desc} instead of skipping."
                     )
                     same_mig_blocking_nodes.append((short_name, existing_inst.status or "UNKNOWN"))
                     continue
@@ -578,31 +583,49 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                 all_blocking_names.extend(legacy_names)
                 blocking_comments.append(legacy_comment)
             if same_mig_blocking_nodes:
-                same_mig_names = [name for name, _ in same_mig_blocking_nodes]
-                same_statuses = sorted({status for _, status in same_mig_blocking_nodes})
-                same_status_str = ",".join(same_statuses)
-                if same_statuses == ["STOPPING"]:
-                    same_reason = (
+                stopping_names = [
+                    name for name, status in same_mig_blocking_nodes if status == "STOPPING"
+                ]
+                other_same_mig = [
+                    (name, status)
+                    for name, status in same_mig_blocking_nodes
+                    if status != "STOPPING"
+                ]
+                if stopping_names:
+                    stopping_reason = (
                         f"Instance from MIG {mig_name} is stopping/deleting; "
                         "retry after deletion completes"
                     )
-                else:
-                    same_reason = (
-                        f"Instance carrying created-by={mig_name} ({same_status_str}) is absent "
+                    stopping_comment = f"Waiting on MIG {mig_name} VM deletion (STOPPING)"
+                    handle_resume_failure(
+                        stopping_names,
+                        stopping_reason,
+                        resume_data,
+                        error_handler.Action.REQUEUE,
+                        stopping_comment,
+                    )
+                    all_blocking_names.extend(stopping_names)
+                    blocking_comments.append(stopping_comment)
+                if other_same_mig:
+                    other_names = [name for name, _ in other_same_mig]
+                    other_statuses = sorted({status for _, status in other_same_mig})
+                    other_status_str = ",".join(other_statuses)
+                    other_reason = (
+                        f"Instance carrying created-by={mig_name} ({other_status_str}) is absent "
                         "from MIG; delete it directly in GCE before resuming"
                     )
-                same_comment = (
-                    f"Blocked by VM carrying created-by={mig_name} ({same_status_str}) absent from MIG"
-                )
-                handle_resume_failure(
-                    same_mig_names,
-                    same_reason,
-                    resume_data,
-                    error_handler.Action.IGNORE,
-                    same_comment,
-                )
-                all_blocking_names.extend(same_mig_names)
-                blocking_comments.append(same_comment)
+                    other_comment = (
+                        f"Blocked by VM carrying created-by={mig_name} ({other_status_str}) absent from MIG"
+                    )
+                    handle_resume_failure(
+                        other_names,
+                        other_reason,
+                        resume_data,
+                        error_handler.Action.IGNORE,
+                        other_comment,
+                    )
+                    all_blocking_names.extend(other_names)
+                    blocking_comments.append(other_comment)
             if foreign_mig_blocking_nodes:
                 foreign_names = [name for name, _ in foreign_mig_blocking_nodes]
                 owners = ",".join(sorted({owner for _, owner in foreign_mig_blocking_nodes}))

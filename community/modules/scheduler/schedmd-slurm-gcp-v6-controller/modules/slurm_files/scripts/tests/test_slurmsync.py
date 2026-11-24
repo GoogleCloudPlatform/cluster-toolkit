@@ -619,3 +619,58 @@ def test_sync_instances_preserves_bracketed_manual_and_lookup_failure_reasons(
     # Bulk prefetch attempted only ONCE despite 2 failing DOWN nodes
     assert sum("show nodes --json" in c for c in cmds) == 1
     assert not any("state=down" in c for c in cmds)
+
+
+@mock.patch("slurmsync.repair.store_operation")
+@mock.patch("slurmsync.repair.call_rr_api", return_value="op-123")
+@mock.patch("slurmsync.repair.is_node_being_repaired", return_value=False)
+@mock.patch("slurmsync.run")
+@mock.patch("slurmsync.lookup")
+def test_sync_instances_drain_repair_uses_lazy_bulk_reason_cache(
+    mock_lookup, mock_run, mock_being_repaired, mock_call_rr, mock_store_op
+):
+    """DRAINed nodes checking repair.REPAIR_REASONS reuse the lazy bulk scontrol cache."""
+    cfg = TstCfg(
+        slurm_cluster_name="testcl",
+        project="testproj",
+        nodeset={
+            "ns": TstNodeset(
+                nodeset_name="ns",
+                region="us-central1",
+                provisioning_engine="BULK_INSERT",
+                node_count_static=4,
+                node_count_dynamic_max=0,
+            ),
+        },
+    )
+    lkp = util.Lookup(cfg)
+    mock_lookup.return_value = lkp
+    running0 = _make_instance("testcl-ns-0", status="RUNNING")
+    running1 = _make_instance("testcl-ns-1", status="RUNNING")
+    drain = slurmsync.NodeState(base="IDLE", flags=frozenset(("DRAIN",)))
+    mock_run.return_value = mock.MagicMock(
+        stdout=(
+            '{"nodes": ['
+            '{"name": "testcl-ns-0", "reason": "XID [admin@2026-11-23T00:00:00]"},'
+            '{"name": "testcl-ns-1", "reason": "manual drain [admin@2026-11-23T00:00:00]"}'
+            "]}"
+        )
+    )
+
+    with (
+        mock.patch.object(
+            util.Lookup, "instances", return_value={"testcl-ns-0": running0, "testcl-ns-1": running1}
+        ),
+        mock.patch.object(
+            util.Lookup, "slurm_nodes", return_value={"testcl-ns-0": drain, "testcl-ns-1": drain}
+        ),
+        mock.patch.object(util.Lookup, "node_state", return_value=drain),
+    ):
+        slurmsync.sync_instances()
+
+    cmds = [c.args[0] for c in mock_run.call_args_list]
+    assert sum("show nodes --json" in c for c in cmds) == 1
+    assert not any("show node " in c for c in cmds)
+    mock_being_repaired.assert_called_once_with("testcl-ns-0")
+    mock_call_rr.assert_called_once_with("testcl-ns-0", "XID")
+    mock_store_op.assert_called_once_with("testcl-ns-0", "op-123", "XID")
