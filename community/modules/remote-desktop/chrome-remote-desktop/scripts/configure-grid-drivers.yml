@@ -91,10 +91,10 @@
     register: lspci_nvidia
     changed_when: false
 
-  - name: Disable NVIDIA GSP firmware on Turing/Ada vWS GPUs (T4/L4)
+  - name: Disable NVIDIA GSP firmware on Turing vWS GPUs (T4)
     when:
     - ansible_distribution_release == "noble"
-    - lspci_nvidia.stdout is search("Tesla T4|\\bL4\\b|10de:(1eb8|27b8)")
+    - lspci_nvidia.stdout is search("Tesla T4|10de:1eb8")
     ansible.builtin.copy:
       dest: /etc/modprobe.d/nvidia-gsp.conf
       content: "options nvidia NVreg_EnableGpuFirmware=0\n"
