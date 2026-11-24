@@ -63,8 +63,8 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    project = "advanced-compute-images"
-    family  = "aci-cpu-rocky-linux-9-amd64"
+    project = "debian-cloud"
+    name    = "debian-12-bookworm-v20250610"
   }
 }
 
