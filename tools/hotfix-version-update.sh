@@ -76,7 +76,8 @@ if [ -z "${OLD_TAG}" ]; then
 	OLD_TAG=$(gh release list -R "${REPO}" --exclude-drafts --exclude-pre-releases -L 1 --json tagName --jq '.[0].tagName // empty')
 fi
 
-if [[ ! "${OLD_TAG}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+tag_regex='^v([0-9]+)\.([0-9]+)\.([0-9]+)$'
+if [[ ! "${OLD_TAG}" =~ $tag_regex ]]; then
 	echo "ERROR: Latest published release tag '${OLD_TAG}' does not match vX.Y.Z." >&2
 	exit 1
 fi
@@ -96,7 +97,8 @@ EXPECTED_BRANCH="hotfix-${NEW_TAG}"
 if [ -z "${BRANCH_NAME}" ]; then
 	BRANCH_NAME="${EXPECTED_BRANCH}"
 else
-	if [[ ! "${BRANCH_NAME}" =~ ^hotfix-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+	branch_regex='^hotfix-v[0-9]+\.[0-9]+\.[0-9]+$'
+	if [[ ! "${BRANCH_NAME}" =~ $branch_regex ]]; then
 		echo "ERROR: Hotfix branch '${BRANCH_NAME}' must match ^hotfix-v[0-9]+\\.[0-9]+\\.[0-9]+$ (expected '${EXPECTED_BRANCH}')." >&2
 		echo "Release workflows derive the GitHub release tag directly from the branch name." >&2
 		exit 1
