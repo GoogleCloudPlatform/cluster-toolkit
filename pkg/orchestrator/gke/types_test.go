@@ -141,3 +141,26 @@ func TestIsPermissionDenied(t *testing.T) {
 		})
 	}
 }
+
+func TestEnvVarsHas(t *testing.T) {
+	env := EnvVars{{Name: "JAX_PLATFORMS", Value: "proxy,cpu"}, {Name: "ABSL_FLAGS"}}
+	tests := []struct {
+		name string
+		list EnvVars
+		key  string
+		want bool
+	}{
+		{name: "nil list", list: nil, key: "JAX_PLATFORMS", want: false},
+		{name: "present", list: env, key: "JAX_PLATFORMS", want: true},
+		{name: "present with empty value", list: env, key: "ABSL_FLAGS", want: true},
+		{name: "absent", list: env, key: "PATHWAYS_HEAD", want: false},
+		{name: "names are case-sensitive", list: env, key: "jax_platforms", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.list.Has(tt.key); got != tt.want {
+				t.Errorf("EnvVars%v.Has(%q) = %v, want %v", tt.list, tt.key, got, tt.want)
+			}
+		})
+	}
+}

@@ -15,11 +15,14 @@
 package gke
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 const testSPSJobSetJSON = `{
@@ -210,9 +213,9 @@ func assertManifestStrings(t *testing.T, manifest string, want, unwanted []strin
 	}
 }
 
-func TestGenerateSPSClientManifest(t *testing.T) {
-	orc := NewGKEOrchestrator()
-	inst := spsInstance{
+// testSPSInstance is a two-instance tpu7x SPS deployment with the colocated Python sidecar.
+func testSPSInstance() spsInstance {
+	return spsInstance{
 		Name:           "sps-j6080103",
 		Endpoint:       "sps-j6080103-pathways-head-0-0.sps-j6080103:29001",
 		KueueQueueName: "",
@@ -224,6 +227,11 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 		InstanceCount:  2,
 		HasSidecar:     true,
 	}
+}
+
+func TestGenerateSPSClientManifest(t *testing.T) {
+	orc := NewGKEOrchestrator()
+	inst := testSPSInstance()
 
 	t.Run("in-cluster mode renders proxy initContainer and workload-container", func(t *testing.T) {
 		job := orchestrator.JobDefinition{
@@ -322,6 +330,53 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 	})
 }
 
+// renderSPSClientEnvManifest renders the SPS client JobSet for testSPSInstance and a job mutated by mutate,
+// without touching a cluster or a kubeconfig.
+func renderSPSClientEnvManifest(t *testing.T, templatesPath, image string, mutate func(*orchestrator.JobDefinition)) string {
+	t.Helper()
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.gkeCustomTemplatesPath = templatesPath
+	inst := testSPSInstance()
+	job := orchestrator.JobDefinition{
+		WorkloadName:              "sps-env-client",
+		NumSlices:                 2,
+		CommandToRun:              "python3 train.py",
+		ImagePullSecretsSpecified: true,
+		Pathways:                  orchestrator.PathwaysJobDefinition{RunSPSWorkload: inst.Name},
+	}
+	mutate(&job)
+	manifest, err := orc.generateSPSClientManifest(job, inst, image)
+	if err != nil {
+		t.Fatalf("generateSPSClientManifest failed: %v", err)
+	}
+	return manifest
+}
+
+// TestGenerateSPSClientManifest_UserEnvReplacesEveryTemplateDefault is the SPS client counterpart of
+// TestGeneratePathwaysManifest_UserEnvReplacesEveryTemplateDefault, for the in-cluster and terminal modes.
+func TestGenerateSPSClientManifest_UserEnvReplacesEveryTemplateDefault(t *testing.T) {
+	for _, tc := range []struct{ name, image string }{
+		{name: "in-cluster workload", image: "us-docker.pkg.dev/my-proj/img:latest"},
+		{name: "terminal mode proxy only"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assertUserEnvReplacesDefaults(t, func(t *testing.T, mutate func(*orchestrator.JobDefinition)) map[string]map[string]string {
+				return envByContainer(t, pathwaysPodSpecs(t, renderSPSClientEnvManifest(t, "", tc.image, mutate)))
+			}, workloadEnvList, proxyEnvList)
+		})
+	}
+}
+
+// TestGenerateSPSClientManifest_LegacyTemplateRendersUserEnv renders the SPS client with a pathways_jobset.tmpl
+// extracted before the env guards and user env vars that collide with no default: each must be added once to the
+// container its list feeds and nothing else may change.
+func TestGenerateSPSClientManifest_LegacyTemplateRendersUserEnv(t *testing.T) {
+	customDir := writeLegacyPathwaysTemplate(t)
+	assertUserEnvAddedOnce(t, func(t *testing.T, mutate func(*orchestrator.JobDefinition)) map[string]map[string]string {
+		return envByContainer(t, pathwaysPodSpecs(t, renderSPSClientEnvManifest(t, customDir, "us-docker.pkg.dev/my-proj/img:latest", mutate)))
+	}, workloadEnvList, proxyEnvList)
+}
+
 func TestReadForwardedPort(t *testing.T) {
 	t.Run("extracts local port from IPv4 and IPv6 kubectl port-forward output", func(t *testing.T) {
 		for _, line := range []string{
@@ -352,6 +407,49 @@ func TestReadForwardedPort(t *testing.T) {
 			t.Errorf("errOut = %q, want failure message", errOut.String())
 		}
 	})
+}
+
+// execEnv returns the variables, among those in want, that a process started by os/exec with this Env sees.
+func execEnv(env []string, want map[string]string) map[string]string {
+	vars := map[string]string{}
+	for _, kv := range (&exec.Cmd{Env: env}).Environ() {
+		k, v, _ := strings.Cut(kv, "=")
+		if _, ok := want[k]; ok {
+			vars[k] = v
+		}
+	}
+	return vars
+}
+
+func TestLocalCommandEnv(t *testing.T) {
+	shellEnv := []string{"PATH=/usr/bin", "JAX_PLATFORMS=cpu", "JAX_BACKEND_TARGET=grpc://10.0.0.1:29000"}
+	const target = "grpc://127.0.0.1:43210"
+	for _, tc := range []struct {
+		name string
+		env  map[string]string
+		want map[string]string
+	}{
+		{
+			name: "defaults replace the shell values",
+			want: map[string]string{"PATH": "/usr/bin", "JAX_PLATFORMS": "proxy", "JAX_BACKEND_TARGET": target},
+		},
+		{
+			name: "--env JAX_PLATFORMS replaces the default",
+			env:  map[string]string{"JAX_PLATFORMS": "proxy,cpu", "FOO": "bar"},
+			want: map[string]string{"PATH": "/usr/bin", "JAX_PLATFORMS": "proxy,cpu", "FOO": "bar", "JAX_BACKEND_TARGET": target},
+		},
+		{
+			name: "JAX_BACKEND_TARGET always points at the port-forward",
+			env:  map[string]string{"JAX_BACKEND_TARGET": "grpc://10.0.0.2:29000"},
+			want: map[string]string{"PATH": "/usr/bin", "JAX_PLATFORMS": "proxy", "JAX_BACKEND_TARGET": target},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if diff := cmp.Diff(tc.want, execEnv(localCommandEnv(shellEnv, tc.env, 43210), tc.want)); diff != "" {
+				t.Errorf("environment of the local command mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
 }
 
 func TestReadSPSInstance_RejectsNonRunningHeadPod(t *testing.T) {

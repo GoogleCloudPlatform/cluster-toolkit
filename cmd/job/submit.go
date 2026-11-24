@@ -164,7 +164,7 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&platform, "platform", "f", "linux/amd64", "Target platform for the image build (e.g., 'linux/amd64', 'linux/arm64'). Used with --base-image.")
 
 	SubmitCmd.Flags().StringArrayVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>], where <src> is gs://<bucket>[/<path>], filestore://<instance-or-ip>/<share>, nfs://<server>/<export>, <pvc-name>[/<sub-path>], or /host/path; mode can be 'ro' or 'rw', default 'ro'). profile= selects a GKE GCSFuse storage profile (training, checkpointing or serving) for gs:// sources and provisions a shared PV/PVC gateway instead of an inline CSI volume.")
-	SubmitCmd.Flags().StringArrayVar(&envVars, "env", []string{}, "Custom environment variables to pass to the workload container in KEY=VALUE format. Can be specified multiple times.")
+	SubmitCmd.Flags().StringArrayVar(&envVars, "env", []string{}, "Custom environment variables to pass to the workload container in KEY=VALUE format. Can be specified multiple times. A variable that gcluster also sets in the container is replaced by your value.")
 
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
 	SubmitCmd.Flags().StringVarP(&kueueQueueName, "queue", "q", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
@@ -186,7 +186,7 @@ func init() {
 	SubmitCmd.Flags().BoolVar(&awaitJobCompletion, "await-job-completion", false, "If true, gcluster will wait for the submitted job to complete.")
 	SubmitCmd.Flags().StringVar(&timeout, "timeout", "-1s", "Time to wait for job in seconds or string format (e.g. 1h, 10m). Default is max timeout (-1s).")
 	SubmitCmd.Flags().StringVar(&priority, "priority", "", "A priority class name (e.g., low, medium, high, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used.")
-	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging for the workload (TPUs and GPUs).")
+	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging for the workload (TPUs and GPUs). Values set for the same variables with --env (standard jobs) or --pathways-worker-env (Pathways jobs) take precedence.")
 	SubmitCmd.Flags().StringVar(&gkeNapProvisioning, "gke-nap-provisioning", "", "Compute provisioning model for GKE NAP. Allowed values: on-demand, spot, reservation.")
 	SubmitCmd.Flags().StringVar(&gkeNapReservation, "gke-nap-reservation", "", "Name of the Google Cloud Reservation for GKE NAP (required if --gke-nap-provisioning=reservation).")
 
@@ -196,16 +196,16 @@ func init() {
 	SubmitCmd.Flags().StringVar(&pathways.WorkerImage, "pathways-worker-image", "", "The image for the Pathways worker.")
 	SubmitCmd.Flags().BoolVar(&pathways.Headless, "pathways-headless", false, "If present, the user's workload container will not be deployed within the `pathways-head` job.")
 	SubmitCmd.Flags().BoolVar(&pathways.DeploySPS, "pathways-deploy-sps", false, "Deploy a Shared Pathways Service (SPS) instance with a resource-manager-only head pod and persistent TPU workers.")
-	SubmitCmd.Flags().StringVar(&pathways.RunSPSWorkload, "pathways-run-sps-workload", "", "Run --command on an existing SPS instance, given its JobSet name or endpoint. Without an image the command runs on this machine against the instance (like pathwaysutils run_workload); with --image or --base-image it runs in the cluster.")
+	SubmitCmd.Flags().StringVar(&pathways.RunSPSWorkload, "pathways-run-sps-workload", "", "Run --command on an existing SPS instance, given its JobSet name or endpoint. Without an image the command runs on this machine against the instance (like pathwaysutils run_workload) with JAX_PLATFORMS=proxy unless --env sets it, and always with a JAX_BACKEND_TARGET pointing at the port-forward; with --image or --base-image it runs in the cluster.")
 	SubmitCmd.Flags().StringVar(&pathways.GCSLocation, "pathways-gcs-location", "", "Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.")
 	SubmitCmd.Flags().IntVar(&pathways.ElasticSlices, "pathways-elastic-slices", 0, "Configures the number of elastic slices, potentially allowing for more flexible resource allocation.")
 	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 0, "Maximum times the workers in a slice can be restarted (defaults to 0, 4000 when --pathways-elastic-slices>0 or --pathways-headless is set, or 1000000 when --pathways-deploy-sps is set). Maps to backoffLimitPerIndex=N and backoffLimit=N*nodesPerSlice on the worker Job.")
 	SubmitCmd.Flags().StringVar(&pathways.ProxyArgs, "pathways-proxy-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-proxy` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerArgs, "pathways-server-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-rm` (resource manager) executable.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
-	SubmitCmd.Flags().StringArrayVar(&pathwaysProxyEnv, "pathways-proxy-env", []string{}, "Custom environment variables for the Pathways proxy container in KEY=VALUE format. Can be specified multiple times.")
-	SubmitCmd.Flags().StringArrayVar(&pathwaysServerEnv, "pathways-server-env", []string{}, "Custom environment variables for the Pathways server container in KEY=VALUE format. Can be specified multiple times.")
-	SubmitCmd.Flags().StringArrayVar(&pathwaysWorkerEnv, "pathways-worker-env", []string{}, "Custom environment variables for the Pathways worker container in KEY=VALUE format. Can be specified multiple times.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysProxyEnv, "pathways-proxy-env", []string{}, "Custom environment variables for the Pathways proxy container in KEY=VALUE format. Can be specified multiple times. A variable that gcluster also sets in the container is replaced by your value.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysServerEnv, "pathways-server-env", []string{}, "Custom environment variables for the Pathways server container in KEY=VALUE format. Can be specified multiple times. A variable that gcluster also sets in the container is replaced by your value.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysWorkerEnv, "pathways-worker-env", []string{}, "Custom environment variables for the Pathways worker container in KEY=VALUE format. Can be specified multiple times. A variable that gcluster also sets in the container is replaced by your value.")
 	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional colocated Python sidecar that runs in each Pathways worker pod and shares memory with the worker at /tmp/sidecar.")
 	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
 

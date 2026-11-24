@@ -23,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -711,6 +712,16 @@ type EnvVar struct {
 	Value string
 }
 
+// EnvVars is the env list rendered into one container. The embedded workload templates call Has on the Env and
+// Pathways*Env fields to skip a default the user sets, so data rendered by those templates must expose them as
+// EnvVars.
+type EnvVars []EnvVar
+
+// Has reports whether the list sets the variable name.
+func (e EnvVars) Has(name string) bool {
+	return slices.ContainsFunc(e, func(v EnvVar) bool { return v.Name == name })
+}
+
 type jobSetTemplateData struct {
 	WorkloadName string
 	// Namespace is the namespace resolved for the submission; rendered as metadata.namespace so a saved manifest
@@ -759,10 +770,10 @@ type jobSetTemplateData struct {
 	PathwaysRMAddress             string // remote resource manager for the proxy (SPS client); empty means the local head
 	ExclusiveTopologyAnnotation   string
 	Verbose                       bool
-	Env                           []EnvVar
-	PathwaysProxyEnv              []EnvVar
-	PathwaysServerEnv             []EnvVar
-	PathwaysWorkerEnv             []EnvVar
+	Env                           EnvVars
+	PathwaysProxyEnv              EnvVars
+	PathwaysServerEnv             EnvVars
+	PathwaysWorkerEnv             EnvVars
 	IsTPU                         bool
 	IsGPU                         bool
 	GKEMTCEnabled                 bool

@@ -1048,7 +1048,7 @@ func withDefaultEnvVar(env map[string]string, key, defaultVal string) map[string
 	return cloned
 }
 
-func sortedEnvVars(envMap map[string]string) []EnvVar {
+func sortedEnvVars(envMap map[string]string) EnvVars {
 	if len(envMap) == 0 {
 		return nil
 	}
@@ -1057,7 +1057,7 @@ func sortedEnvVars(envMap map[string]string) []EnvVar {
 		envKeys = append(envKeys, k)
 	}
 	slices.Sort(envKeys)
-	res := make([]EnvVar, len(envKeys))
+	res := make(EnvVars, len(envKeys))
 	for i, k := range envKeys {
 		res[i] = EnvVar{Name: k, Value: envMap[k]}
 	}

@@ -520,11 +520,7 @@ func keepPortForwardAlive(ctx context.Context, cmd *exec.Cmd, pipeDone <-chan st
 func runLocalCommand(command string, port int, env map[string]string, sigCh <-chan os.Signal) error {
 	cmd := exec.Command("bash", "-c", command)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	cmd.Env = os.Environ()
-	for k, v := range env {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
-	cmd.Env = append(cmd.Env, "JAX_PLATFORMS=proxy", fmt.Sprintf("JAX_BACKEND_TARGET=grpc://127.0.0.1:%d", port))
+	cmd.Env = localCommandEnv(os.Environ(), env, port)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start %q: %w", command, err)
 	}
@@ -544,6 +540,17 @@ func runLocalCommand(command string, port int, env map[string]string, sigCh <-ch
 			}
 		}
 	}
+}
+
+// localCommandEnv returns the environment of a command run on this machine against an SPS instance. os/exec keeps the
+// last value of a duplicate key, so JAX_PLATFORMS=proxy replaces a value exported in the shell but not one passed with
+// --env, and JAX_BACKEND_TARGET always targets the port-forward, whose local port is only known here.
+func localCommandEnv(base []string, env map[string]string, port int) []string {
+	out := append(slices.Clone(base), "JAX_PLATFORMS=proxy")
+	for k, v := range env {
+		out = append(out, k+"="+v)
+	}
+	return append(out, fmt.Sprintf("JAX_BACKEND_TARGET=grpc://127.0.0.1:%d", port))
 }
 
 func (g *GKEOrchestrator) deleteSPSClient(name, ns string) {
