@@ -269,15 +269,18 @@ class StartVpcTests(unittest.TestCase):
         subnet.id = 99999
         self._start(vpc)
         network = vpc.cloud_id
-        self.assertLessEqual(len(network), 42)
+        self.assertLessEqual(len(network), 27)
         derived = [
             network,
             subnet.cloud_id,
             f"psconnect-{network}",
             f"{network}-router",
-            # The vpc module's own rules, the longest suffixes.
             f"{network}-fw-allow-iap-ingress",
             f"{network}-fw-allow-ssh-ingress",
+            # The vpc module's Cloud NAT addresses, the longest: they include
+            # the region (up to 23 characters today, 25 allowed).
+            f"{network}-nat-ips-northamerica-northeast1-1",
+            f"{network}-nat-ips-{'r' * 25}-1",
         ]
         bp = yaml.safe_load((self.dir / "vpc.yaml").read_text())
         rules = bp["deployment_groups"][0]["modules"][2]["settings"]
@@ -285,6 +288,38 @@ class StartVpcTests(unittest.TestCase):
         for name in derived:
             with self.subTest(name=name):
                 self.assertLessEqual(len(name), 63)
+
+    def _network_settings(self):
+        bp = yaml.safe_load((self.dir / "vpc.yaml").read_text())
+        return bp["deployment_groups"][0]["modules"][0]["settings"]
+
+    def test_new_network_is_described_with_the_full_vpc_name(self):
+        vpc, _ = _fake_vpc()
+        vpc.name = "a-long-descriptive-network-name-for-the-team"
+        self._start(vpc)
+        self.assertEqual(self._network_settings()["network_description"],
+                         "OFE network a-long-descriptive-network-name-for-the-team")
+
+    def test_description_never_changes_after_first_apply(self):
+        # Changing it would make the vpc module recreate the network.
+        vpc, _ = _fake_vpc()
+        self._start(vpc)
+        vpc.name = "renamed"
+        self._start(vpc)
+        self.assertEqual(self._network_settings()["network_description"],
+                         "OFE network net")
+
+    def test_network_created_without_description_keeps_none(self):
+        vpc, _ = _fake_vpc(cloud_state="m")
+        vpc.cloud_id = "net-abc123"
+        self._start(vpc)
+        settings = self._network_settings()
+        del settings["network_description"]  # as written by earlier OFE
+        bp = yaml.safe_load((self.dir / "vpc.yaml").read_text())
+        bp["deployment_groups"][0]["modules"][0]["settings"] = settings
+        (self.dir / "vpc.yaml").write_text(yaml.safe_dump(bp))
+        self._start(vpc)
+        self.assertNotIn("network_description", self._network_settings())
 
     def test_existing_network_name_is_kept(self):
         vpc, _ = _fake_vpc(cloud_state="m")

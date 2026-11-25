@@ -51,11 +51,15 @@ _BLUEPRINT = "vpc.yaml"
 # Same rules as the earlier Terraform template: SSH from anywhere, and all
 # traffic between private (RFC 1918) addresses, whatever the subnet ranges.
 _INTERNAL_RANGES = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
-# GCP resource names are at most 63 characters, and the network's resources
-# are named after it: the longest suffix is the vpc module's
-# "-fw-allow-iap-ingress"/"-fw-allow-ssh-ingress" (21). So the network name
-# (prefix + "-" + 6 hex) must stay within 63 - 21 = 42: a 35-character prefix.
-_NAME_PREFIX_LEN = 35
+# GCP resource names are at most 63 characters, and the vpc module names the
+# network's resources after it. The longest is its Cloud NAT addresses,
+# "<network>-nat-ips-<region>-<index>": region names reach 23 characters
+# ("northamerica-northeast1"); allow 25 for future ones. The firewall rules
+# ("-fw-allow-iap-ingress", 21) are shorter.
+_MAX_REGION_LEN = 25
+_LONGEST_SUFFIX = len("-nat-ips-") + _MAX_REGION_LEN + len("-0")  # 36
+# Network name = prefix + "-" + 6 hex characters.
+_NAME_PREFIX_LEN = 63 - _LONGEST_SUFFIX - len("-abcdef")  # 20
 
 
 def create_vpc(vpc: VirtualNetwork) -> None:
@@ -85,8 +89,9 @@ def start_vpc(vpc: VirtualNetwork) -> None:
         subnet.save()
 
     base_dir = _base_dir(vpc)
+    description = _network_description(base_dir / _BLUEPRINT, vpc)
     (base_dir / _BLUEPRINT).write_text(
-        yaml.safe_dump(blueprint(vpc, subnets), sort_keys=False),
+        yaml.safe_dump(blueprint(vpc, subnets, description), sort_keys=False),
         encoding="utf-8",
     )
     creds = _credentials_file(vpc)
@@ -132,10 +137,35 @@ def destroy_vpc(vpc: VirtualNetwork) -> None:
     vpc.save()
 
 
-def blueprint(vpc: VirtualNetwork, subnets: list) -> dict:
+def _network_description(blueprint_file: Path, vpc: VirtualNetwork):
+    """The GCP description for the network: OFE's full VPC name, which the
+    network name may shorten (_NAME_PREFIX_LEN).
+    """
+    if blueprint_file.exists():
+        bp = yaml.safe_load(blueprint_file.read_text(encoding="utf-8"))
+        settings = bp["deployment_groups"][0]["modules"][0]["settings"]
+        return settings.get("network_description")
+    return f"OFE network {vpc.name}"
+
+
+def blueprint(vpc: VirtualNetwork, subnets: list, description=None) -> dict:
     """The network's Cluster Toolkit blueprint."""
     project_id = json.loads(vpc.cloud_credential.detail)["project_id"]
     network = vpc.cloud_id
+    network_settings = {
+        "network_name": network,
+        "subnetworks": [{
+            "subnet_name": s.cloud_id,
+            "subnet_region": s.cloud_region,
+            "subnet_ip": s.cidr,
+            "subnet_private_access": bool(s.private_google_access_enabled),
+        } for s in subnets],
+        "allowed_ssh_ip_ranges": ["0.0.0.0/0"],
+        # Replaced by the wider rule below.
+        "enable_internal_traffic": False,
+    }
+    if description:
+        network_settings["network_description"] = description
     return {
         "blueprint_name": f"vpc-{vpc.id}",
         "terraform_backend_defaults": {
@@ -156,19 +186,7 @@ def blueprint(vpc: VirtualNetwork, subnets: list) -> dict:
             "modules": [{
                 "id": "network",
                 "source": "modules/network/vpc",
-                "settings": {
-                    "network_name": network,
-                    "subnetworks": [{
-                        "subnet_name": s.cloud_id,
-                        "subnet_region": s.cloud_region,
-                        "subnet_ip": s.cidr,
-                        "subnet_private_access":
-                            bool(s.private_google_access_enabled),
-                    } for s in subnets],
-                    "allowed_ssh_ip_ranges": ["0.0.0.0/0"],
-                    # Replaced by the wider rule below.
-                    "enable_internal_traffic": False,
-                },
+                "settings": network_settings,
             }, {
                 # Named after the network (psconnect-<network>), which is
                 # unique, by the module's default.
