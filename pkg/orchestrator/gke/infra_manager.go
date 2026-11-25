@@ -127,7 +127,8 @@ func (g *GKEOrchestrator) checkResourceExists(kind, name, namespace string) (exi
 func (g *GKEOrchestrator) checkJobSetInstallPermissions() error {
 	if missing := g.missingPermissions(addonInstallPermissionChecks); len(missing) > 0 {
 		return fmt.Errorf("JobSet is not installed, and your account cannot install it: missing RBAC permissions [%s]. gcluster made no changes. "+
-			"Ask your cluster administrator to install JobSet (for example with jobset.install: true in the kubectl-apply module) or to run this command once", strings.Join(missing, ", "))
+			"Ask your cluster administrator to install JobSet (for example with jobset.install: true in the kubectl-apply module) or to run this command once, "+
+			"or set %s=1 to submit single-slice, non-Pathways workloads using a standalone batch/v1 Indexed Job", strings.Join(missing, ", "), disableJobSetEnvVar)
 	}
 	return nil
 }

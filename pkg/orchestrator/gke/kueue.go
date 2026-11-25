@@ -205,7 +205,7 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName, ns string) error {
 			return fmt.Errorf("failed to render clusterqueue: %w", err)
 		}
 		if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile, ""); err != nil {
-			return fmt.Errorf("failed to apply clusterqueue: %w", err)
+			return wrapKueueV1Beta2ApplyError("clusterqueue", err)
 		}
 	} else {
 		logging.Info("ClusterQueue '%s' already exists. Skipping ClusterQueue creation.", cqName)
@@ -218,7 +218,7 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName, ns string) error {
 	}
 
 	if err := g.applyManifests(localQueueBytes, localQueueManifestFile, ""); err != nil {
-		return fmt.Errorf("failed to apply localqueue: %w", err)
+		return wrapKueueV1Beta2ApplyError("localqueue", err)
 	}
 
 	logging.Info("Default queues created successfully.")
@@ -249,7 +249,7 @@ func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName, ns string) 
 			return fmt.Errorf("failed to render clusterqueue with new capacity: %w", err)
 		}
 		if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile, ""); err != nil {
-			return fmt.Errorf("failed to apply clusterqueue with new capacity: %w", err)
+			return wrapKueueV1Beta2ApplyError("clusterqueue with new capacity", err)
 		}
 		return nil
 	}
@@ -420,7 +420,7 @@ func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion, reason string
 func (g *GKEOrchestrator) checkKueuePermissions(action, version string) error {
 	logging.Info("Verifying cluster permissions for Kueue installation...")
 	if missing := g.missingPermissions(addonInstallPermissionChecks); len(missing) > 0 {
-		return fmt.Errorf("unable to %s Kueue to version %s: missing required RBAC permissions: [%s]. Please contact your cluster administrator", action, version, strings.Join(missing, ", "))
+		return fmt.Errorf("unable to %s Kueue to version %s: missing required RBAC permissions: [%s]. Please contact your cluster administrator, or set %s=1 to submit without Kueue", action, version, strings.Join(missing, ", "), disableKueueEnvVar)
 	}
 	return nil
 }
@@ -879,10 +879,18 @@ func (g *GKEOrchestrator) EnsureResourceFlavors() error {
 			return fmt.Errorf("failed to render ResourceFlavor %s: %w", name, err)
 		}
 		if err := g.applyManifests(rfBytes, fmt.Sprintf("resource-flavor-%s.yaml", name), ""); err != nil {
-			return fmt.Errorf("failed to apply ResourceFlavor %s: %w", name, err)
+			return wrapKueueV1Beta2ApplyError(fmt.Sprintf("ResourceFlavor %s", name), err)
 		}
 	}
 	return nil
+}
+
+func wrapKueueV1Beta2ApplyError(resource string, err error) error {
+	if k8s.IsNotFoundOrNoMatchError(err) {
+		return fmt.Errorf("failed to apply %s (kueue.x-k8s.io/%s): the installed Kueue version does not serve API %s; pass --queue with an existing LocalQueue, upgrade Kueue to %s+, or set %s=1: %w",
+			resource, kueueAPIVersion, kueueAPIVersion, defaultKueueVersion, disableKueueEnvVar, err)
+	}
+	return fmt.Errorf("failed to apply %s: %w", resource, err)
 }
 
 func (g *GKEOrchestrator) renderResourceFlavor(name string, nodeLabels map[string]string) ([]byte, error) {

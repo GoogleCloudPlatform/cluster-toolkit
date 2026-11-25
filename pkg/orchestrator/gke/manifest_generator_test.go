@@ -5462,6 +5462,29 @@ func TestSubmitWorkloadTemplate_DispatchesByJobKind(t *testing.T) {
 	}
 }
 
+func TestGenerateAndSubmitManifests_Tier3JobTemplateDispatch(t *testing.T) {
+	tier3Orc := newCustomTemplateTestOrc(t, "")
+	tier3Orc.submissionSession = submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: false}}
+	_, profile := newCustomTemplateBaseOpts()
+	job := newCPUPathwaysJob("dispatch-tier3")
+	job.IsPathwaysJob = false
+	job.DryRunManifest = filepath.Join(t.TempDir(), "tier3-manifest.yaml")
+	if err := tier3Orc.generateAndSubmitManifests(job, "img:v1", profile, false, false); err != nil {
+		t.Fatalf("generateAndSubmitManifests(Tier-3) failed: %v", err)
+	}
+	content, err := os.ReadFile(job.DryRunManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := string(content)
+	if !strings.Contains(rendered, "kind: Service") || !strings.Contains(rendered, "apiVersion: batch/v1") || !strings.Contains(rendered, "kind: Job\n") {
+		t.Errorf("expected standalone Service + batch/v1 Job manifest, got:\n%s", rendered)
+	}
+	if strings.Contains(rendered, "kind: JobSet") {
+		t.Errorf("Tier-3 dispatch must not render JobSet, got:\n%s", rendered)
+	}
+}
+
 // TestGeneratePathwaysManifest_PodFailurePolicyScopingByMode pins podFailurePolicyContainers on the Pathways head:
 // scoped to workload-container when the head runs the workload, pod-wide (no containerName) for headless and SPS
 // heads that have no workload container, and valid in every mode.

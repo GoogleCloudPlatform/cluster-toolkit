@@ -129,16 +129,21 @@ func (g *GKEOrchestrator) cancelFallbackOrReportNotFound(namespace, name, action
 		g.reclaimStorageGatewaysForWorkload(namespace, name, fallbackClaims, true)
 		return nil
 	}
-	logging.Info("Job '%s' was not found in namespace '%s'; it may already have been removed by --gke-ttl-after-finished. Checking for unused storage gateways...", name, namespace)
 	if jobSetAttempted {
+		logging.Info("Job '%s' was not found in namespace '%s'; it may already have been removed by --gke-ttl-after-finished. Checking for unused storage gateways...", name, namespace)
 		g.reclaimStorageGatewaysForWorkload(namespace, name, ownClaims, false)
 	} else {
+		logging.Info("Standalone batch/v1 Job '%s' was not found in namespace '%s' (%s is set; JobSets were not considered). Checking for unused storage gateways...", name, namespace, disableJobSetEnvVar)
 		// DeleteJobSet was not attempted (e.g. GCLUSTER_DISABLE_JOBSET=1), so a live JobSet
 		// with the same name may still exist; do not exempt it from grace-period or consumer checks.
 		g.reclaimStorageGatewaysForWorkload(namespace, "", nil, true)
 	}
 	if origErr != nil && apierrors.IsNotFound(origErr) && opErr != nil {
 		return opErr
+	}
+	if !jobSetAttempted {
+		return fmt.Errorf("%s operation failed for %s in namespace %s (%s is set; JobSets were not considered): %w",
+			strings.ToLower(actionVerb), name, namespace, disableJobSetEnvVar, apierrors.NewNotFound(jobGVR.GroupResource(), name))
 	}
 	return fmt.Errorf("%s operation failed for %s in namespace %s: %w",
 		strings.ToLower(actionVerb), name, namespace, apierrors.NewNotFound(jobGVR.GroupResource(), name))

@@ -6091,15 +6091,15 @@ func TestFindTargetWorkloadForBatchJobAndCustomTemplate(t *testing.T) {
 func TestBuildOwnerRefJSONPatchAndRollbackGuards(t *testing.T) {
 	t.Run("json_patch_preserves_existing_non_controller_owner_and_skips_conflicts", func(t *testing.T) {
 		isCtrl := true
-		patch, ok := buildOwnerRefJSONPatch([]metav1.OwnerReference{{UID: "webhook-uid", Kind: "ConfigMap"}}, "t3-job", "job-uid")
-		if !ok || !strings.Contains(string(patch), `"/metadata/ownerReferences/-"`) {
-			t.Fatalf("expected JSONPatch append to /metadata/ownerReferences/-, got (%s, %v)", string(patch), ok)
+		patch, conflict := buildOwnerRefJSONPatch([]metav1.OwnerReference{{UID: "webhook-uid", Kind: "ConfigMap"}}, "t3-job", "job-uid")
+		if conflict != "" || !strings.Contains(string(patch), `"/metadata/ownerReferences/-"`) {
+			t.Fatalf("expected JSONPatch append to /metadata/ownerReferences/-, got (%s, %q)", string(patch), conflict)
 		}
-		if _, ok := buildOwnerRefJSONPatch([]metav1.OwnerReference{{UID: "job-uid"}}, "t3-job", "job-uid"); ok {
-			t.Errorf("expected no-op when jobUID is already present")
+		if p, c := buildOwnerRefJSONPatch([]metav1.OwnerReference{{UID: "job-uid"}}, "t3-job", "job-uid"); len(p) != 0 || c != "" {
+			t.Errorf("expected quiet no-op when jobUID is already present, got (%s, %q)", string(p), c)
 		}
-		if _, ok := buildOwnerRefJSONPatch([]metav1.OwnerReference{{UID: "other-ctrl", Controller: &isCtrl}}, "t3-job", "job-uid"); ok {
-			t.Errorf("expected skip when another controller ownerRef already exists")
+		if p, c := buildOwnerRefJSONPatch([]metav1.OwnerReference{{Kind: "Job", Name: "old-job", UID: "other-ctrl", Controller: &isCtrl}}, "t3-job", "job-uid"); len(p) != 0 || !strings.Contains(c, "old-job") {
+			t.Errorf("expected conflict owner when another controller ownerRef already exists, got (%s, %q)", string(p), c)
 		}
 	})
 
@@ -6134,6 +6134,52 @@ func TestBuildOwnerRefJSONPatchAndRollbackGuards(t *testing.T) {
 			t.Errorf("403 rollback must preserve service and warn with cancel hint: deleted=%v warn=%q", mockForb.Deleted, warnForb)
 		}
 	})
+}
+
+func TestAttachOwnerRefConflictWarnsAndBatchList403IsInfo(t *testing.T) {
+	dyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			if gvr == jobGVR {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": "new-job-uid", "labels": map[string]interface{}{workloadLabel: name}},
+				}}, nil
+			}
+			return &unstructured.Unstructured{Object: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name": name, "namespace": ns, "uid": "svc-uid",
+					"labels": map[string]interface{}{workloadLabel: name},
+					"ownerReferences": []interface{}{
+						map[string]interface{}{"kind": "Job", "name": "stale-job", "uid": "old-uid", "controller": true},
+					},
+				},
+			}}, nil
+		},
+	}
+	orc := &GKEOrchestrator{namespace: "ml", dynClient: dyn}
+	orc.syncKubeClient()
+	snap, restore := logging.CaptureForTesting(t)
+	orc.attachBatchJobServiceOwnerRefWithTarget("t3-job", "", "", "")
+	_, warnLogs := snap()
+	restore()
+	if !strings.Contains(warnLogs, "already controlled by Job/stale-job") || !strings.Contains(warnLogs, "gcluster job cancel t3-job") {
+		t.Errorf("expected conflicting controller warning with cancel hint, got:\n%s", warnLogs)
+	}
+
+	listMock := &MockKubeClient{
+		Namespace: "ml",
+		ListErrs:  map[string]error{"jobs": apierrors.NewForbidden(jobGVR.GroupResource(), "", errors.New("denied"))},
+	}
+	listOrc := &GKEOrchestrator{kubeClient: listMock}
+	snapList, restoreList := logging.CaptureForTesting(t)
+	_, err := listOrc.listWorkloadsWithFallback("ml")
+	_, listWarn := snapList()
+	restoreList()
+	if err != nil {
+		t.Fatalf("listWorkloadsWithFallback(403 jobs) err = %v, want nil", err)
+	}
+	if listWarn != "" {
+		t.Errorf("403 on secondary batch/v1 Job list should log Info, not Warn; got:\n%s", listWarn)
+	}
 }
 
 func TestStrictTier3ConflictAgainstJobSetOwnedObjects(t *testing.T) {

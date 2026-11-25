@@ -340,7 +340,11 @@ func (g *GKEOrchestrator) listWorkloadsWithFallback(ns string) ([]orchestrator.J
 	}
 	batchJobs, batchErr := g.listStandaloneBatchJobs(ns)
 	if batchErr != nil {
-		logging.Warn("Unable to list standalone batch/v1 Jobs in namespace %q: %v", ns, batchErr)
+		if k8s.IsForbiddenError(batchErr) {
+			logging.Info("Skipping standalone batch/v1 Job listing in namespace %q due to RBAC permissions: %v", ns, batchErr)
+		} else {
+			logging.Warn("Unable to list standalone batch/v1 Jobs in namespace %q: %v", ns, batchErr)
+		}
 		return list, nil
 	}
 	seen := make(map[string]bool, len(list))
@@ -1739,8 +1743,13 @@ func (g *GKEOrchestrator) attachBatchJobServiceOwnerRefWithTarget(name, clusterN
 	if !ok {
 		return
 	}
-	patchBytes, ok := buildOwnerRefJSONPatch(svcObj.GetOwnerReferences(), name, jobUID)
-	if !ok {
+	patchBytes, conflictOwner := buildOwnerRefJSONPatch(svcObj.GetOwnerReferences(), name, jobUID)
+	if conflictOwner != "" {
+		logging.Warn("Headless Service %q in namespace %q is already controlled by %s; skipping Job ownerReference patch. Run '%s' to clean up the Service after the Job expires.",
+			name, ns, conflictOwner, g.formatCancelHintInNamespace(name, clusterName, location, projectID, ns))
+		return
+	}
+	if len(patchBytes) == 0 {
 		return
 	}
 	if _, err := g.dynClient.Resource(serviceGVR).Namespace(ns).Patch(ctx, name, k8stypes.JSONPatchType, patchBytes, metav1.PatchOptions{}); err != nil {
@@ -1748,13 +1757,13 @@ func (g *GKEOrchestrator) attachBatchJobServiceOwnerRefWithTarget(name, clusterN
 	}
 }
 
-func buildOwnerRefJSONPatch(existing []metav1.OwnerReference, name, jobUID string) ([]byte, bool) {
+func buildOwnerRefJSONPatch(existing []metav1.OwnerReference, name, jobUID string) ([]byte, string) {
 	for _, ref := range existing {
 		if string(ref.UID) == jobUID {
-			return nil, false
+			return nil, ""
 		}
 		if ref.Controller != nil && *ref.Controller {
-			return nil, false
+			return nil, fmt.Sprintf("%s/%s (uid %s)", ref.Kind, ref.Name, ref.UID)
 		}
 	}
 	ownerRef := map[string]interface{}{
@@ -1775,9 +1784,9 @@ func buildOwnerRefJSONPatch(existing []metav1.OwnerReference, name, jobUID strin
 	}
 	patchBytes, err := json.Marshal([]interface{}{patchOp})
 	if err != nil {
-		return nil, false
+		return nil, ""
 	}
-	return patchBytes, true
+	return patchBytes, ""
 }
 
 func (g *GKEOrchestrator) formatCancelHintInNamespace(name, clusterName, location, projectID, ns string) string {

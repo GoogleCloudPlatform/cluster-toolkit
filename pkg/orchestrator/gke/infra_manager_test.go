@@ -3461,21 +3461,50 @@ func TestResolveClusterAddons_ContinueSkipsDestructiveKueueUpgradeAndProbeRetrie
 }
 
 func TestKueueTolerationsAndWebhookPerms(t *testing.T) {
-	raw := "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: kueue-controller-manager\nspec:\n  template:\n    spec:\n      containers:\n      - name: manager\n"
+	raw := "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: kueue-controller-manager\nspec:\n  template:\n    spec:\n      containers:\n      - name: manager\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: other-controller\nspec:\n  template:\n    spec:\n      containers:\n      - name: other\n"
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
 	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
-	cleaned, err := orc.cleanAndProcessManifests([]byte(raw), orc.injectKueueControllerTolerations)
+	orc.kubeContext = "gke_p_us-central1_c"
+	orc.httpClient = &mockHTTPClient{getFunc: func(string) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(raw)),
+		}, nil
+	}}
+	manifestPath, err := orc.prepareKueueManifest(defaultKueueVersion)
 	if err != nil {
-		t.Fatalf("cleanAndProcessManifests(kueue) err = %v", err)
+		t.Fatalf("prepareKueueManifest() err = %v", err)
 	}
-	out := string(cleaned)
+	cleaned, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) err = %v", manifestPath, err)
+	}
+	var docs []string
+	for _, part := range strings.Split(string(cleaned), "---") {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			docs = append(docs, trimmed)
+		}
+	}
+	if len(docs) != 2 {
+		t.Fatalf("expected 2 YAML docs in prepared Kueue manifest, got %d:\n%s", len(docs), string(cleaned))
+	}
 	for _, want := range []string{"nvidia.com/gpu", k8s.GKESystemTaintKey} {
-		if !strings.Contains(out, want) {
-			t.Errorf("Kueue controller manifest missing toleration %q:\n%s", want, out)
+		if !strings.Contains(docs[0], want) {
+			t.Errorf("kueue-controller-manager missing toleration %q:\n%s", want, docs[0])
+		}
+		if strings.Contains(docs[1], want) {
+			t.Errorf("non-Kueue Deployment must not receive toleration %q:\n%s", want, docs[1])
 		}
 	}
 	if !slices.Contains(addonInstallPermissionChecks, permissionCheck{"create", "mutatingwebhookconfigurations.admissionregistration.k8s.io"}) ||
 		!slices.Contains(addonInstallPermissionChecks, permissionCheck{"create", "validatingwebhookconfigurations.admissionregistration.k8s.io"}) {
 		t.Errorf("addonInstallPermissionChecks missing webhook create checks: %+v", addonInstallPermissionChecks)
+	}
+	if wrapped := wrapKueueV1Beta2ApplyError("localqueue", errors.New(`no matches for kind "LocalQueue" in version "kueue.x-k8s.io/v1beta2"`)); !strings.Contains(wrapped.Error(), "--queue") || !strings.Contains(wrapped.Error(), disableKueueEnvVar) {
+		t.Errorf("wrapKueueV1Beta2ApplyError(NoMatch) = %v, want actionable --queue / %s hint", wrapped, disableKueueEnvVar)
 	}
 }
 
@@ -3485,6 +3514,9 @@ func TestValidateTier3Workload_GKECoSchedulingAndOfflineProbeWarn(t *testing.T) 
 		submissionSession: submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: false}},
 	}
 	multiHostJob := orchestrator.JobDefinition{MachineType: "ct6e-standard-4t", Topology: "2x4", NodesPerSlice: 2, NumSlices: 1}
+	if err := gkeTier3.validatePostHardwareChecks(&StorageManager{orchestrator: gkeTier3}, &multiHostJob); err == nil || !strings.Contains(err.Error(), k8s.GKENodePoolLabel) {
+		t.Fatalf("validatePostHardwareChecks(multi-host GKE unpinned) err = %v, want nodepool pinning error", err)
+	}
 	if err := gkeTier3.validateTier3Workload(&multiHostJob); err == nil || !strings.Contains(err.Error(), k8s.GKENodePoolLabel) {
 		t.Fatalf("validateTier3Workload(multi-host GKE unpinned) err = %v, want nodepool pinning error", err)
 	}

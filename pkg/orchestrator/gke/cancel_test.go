@@ -833,11 +833,49 @@ func TestCancelJob_DisableJobSetProtectsLiveJobSetPVC(t *testing.T) {
 				return ""
 			},
 		}
-		if err := orc.CancelJob("train-1", cancelOpts); err == nil || !apierrors.IsNotFound(err) {
-			t.Fatalf("CancelJob(live JobSet under DISABLE_JOBSET) err = %v, want NotFound", err)
+		if err := orc.CancelJob("train-1", cancelOpts); err == nil || !apierrors.IsNotFound(err) || !strings.Contains(err.Error(), disableJobSetEnvVar) {
+			t.Fatalf("CancelJob(live JobSet under DISABLE_JOBSET) err = %v, want NotFound noting %s", err, disableJobSetEnvVar)
 		}
 		if len(mock.Deleted["persistentvolumeclaims"]) != 0 || len(mock.Deleted["persistentvolumes"]) != 0 {
 			t.Fatalf("live JobSet PVC/PV must never be reclaimed under %s=1, deleted=%v", disableJobSetEnvVar, mock.Deleted)
+		}
+	})
+}
+
+func TestCancelJob_BatchJobDeletePreservesSameNamedLiveJobSetPVC(t *testing.T) {
+	t.Run("deleting_same_named_batch_job_preserves_expired_pvc_used_by_live_jobset", func(t *testing.T) {
+		pvc := gatewayPVC(testClaim, testPV, 2*time.Hour)
+		pvc.SetAnnotations(map[string]string{
+			lastClaimedByAnnotation: "shared",
+			lastClaimedAtAnnotation: time.Now().Add(-2 * time.Hour).Format(time.RFC3339Nano),
+		})
+		mock := &MockKubeClient{
+			Namespace: "default",
+			Objects: map[string][]unstructured.Unstructured{
+				"persistentvolumeclaims": {pvc},
+				"persistentvolumes":      {*managedStorageObject("PersistentVolume", testPV)},
+				"jobs":                   {makeTestOwnedBatchJob("shared", "1")},
+				"services":               {makeTestOwnedService("shared", "1")},
+				"jobsets":                {*jobSetWithClaims("shared", false, testClaim)},
+			},
+		}
+		orc := cancelTestOrchestrator(mock)
+		orc.connectivity = &connectivityChecker{
+			getenv: func(k string) string {
+				if k == disableJobSetEnvVar {
+					return "1"
+				}
+				return ""
+			},
+		}
+		if err := orc.CancelJob("shared", cancelOpts); err != nil {
+			t.Fatalf("CancelJob(shared batch Job) err = %v, want nil", err)
+		}
+		if !reflect.DeepEqual(mock.Deleted["jobs"], []string{"shared"}) {
+			t.Errorf("expected standalone batch/v1 Job deletion, deleted=%v", mock.Deleted)
+		}
+		if len(mock.Deleted["persistentvolumeclaims"]) != 0 || len(mock.Deleted["persistentvolumes"]) != 0 {
+			t.Fatalf("live same-named JobSet PVC/PV must not be reclaimed when cancelling batch Job, deleted=%v", mock.Deleted)
 		}
 	})
 
