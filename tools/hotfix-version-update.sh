@@ -163,7 +163,7 @@ EXISTING_VERSION_PR=$(gh pr list -R "${REPO}" --state open --base "${BRANCH_NAME
 git switch -c "${V_BRANCH}" "${BRANCH_NAME}"
 echo "Updating Toolkit version references from ${OLD_TAG} to ${NEW_TAG}..."
 if [ -n "$(git ls-files '*.go' '*versions.tf')" ]; then
-	git ls-files -z '*.go' '*versions.tf' | xargs -0 -r git sed "v${OLD_MAJOR}\.${OLD_MINOR}\.${OLD_PATCH}" "${NEW_TAG}" --
+	git ls-files -z '*.go' '*versions.tf' | xargs -0 git sed "v${OLD_MAJOR}\.${OLD_MINOR}\.${OLD_PATCH}" "${NEW_TAG}" --
 fi
 
 VERSION_PR_URL=""
@@ -210,11 +210,9 @@ else
 	echo "  gh pr create -R ${REPO} --draft --base main --head ${BRANCH_NAME} --label release-bugfix --title \"Hotfix release ${NEW_TAG}\" --body \"Emergency hotfix release ${NEW_TAG} cut from main (${OLD_TAG}).\""
 fi
 
-PR_NUM_HINT="<PR_NUM>"
+PR_NUM_HINT="<HOTFIX_MAIN_PR_NUM>"
 if [ -n "${HOTFIX_MAIN_PR_URL}" ]; then
 	PR_NUM_HINT="${HOTFIX_MAIN_PR_URL##*/}"
-elif [ -n "${VERSION_PR_URL}" ]; then
-	PR_NUM_HINT="${VERSION_PR_URL##*/}"
 fi
 
 echo
