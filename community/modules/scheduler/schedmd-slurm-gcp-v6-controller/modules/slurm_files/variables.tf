@@ -368,12 +368,6 @@ variable "nodeset_dyn" {
   default     = []
 }
 
-variable "nodeset_tpu" {
-  description = "Cluster nodenets (TPU), as a list."
-  type        = list(any)
-  default     = []
-}
-
 variable "cloud_parameters" {
   description = "cloud.conf options. Default behavior defined in scripts/conf.py"
   type = object({

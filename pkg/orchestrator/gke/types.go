@@ -20,8 +20,10 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -41,9 +43,9 @@ import (
 
 const (
 	// tpuTopologyLabel is the GKE label for TPU topology.
-	tpuTopologyLabel = "cloud.google.com/gke-tpu-topology"
+	tpuTopologyLabel = k8s.GKETPUTopologyLabel
 	// nodePoolLabel is the GKE label for the node pool name.
-	nodePoolLabel = "cloud.google.com/gke-nodepool"
+	nodePoolLabel = k8s.GKENodePoolLabel
 	// placementPolicyNameLabel selects nodes carrying a named GCE compact placement or workload policy.
 	placementPolicyNameLabel = "cloud.google.com/placement-policy-name"
 	// placementGroupLabel is the GKE-managed compact placement group identifier used by NAP.
@@ -172,12 +174,14 @@ func (c DefaultMachineTypeClient) GetMachineType(project, zone, machineType stri
 
 // DefaultKubeClient implements KubeClient using the actual dynamic client.
 type DefaultKubeClient struct {
-	dynClient dynamic.Interface
+	dynClient        dynamic.Interface
+	kubeconfigLoader k8s.KubeconfigLoader
 }
 
 type DefaultExecutor struct{}
 
 type GKEOrchestrator struct {
+	mode                        orchestrator.Type
 	executor                    Executor
 	projectID                   string
 	clusterZones                []string
@@ -205,9 +209,28 @@ type GKEOrchestrator struct {
 	httpOnce                    sync.Once
 	// kubeconfigLoader reads the merged kubeconfig. nil means the default
 	// client-go loading rules (KUBECONFIG env or ~/.kube/config).
-	kubeconfigLoader kubeconfigLoader
+	kubeconfigLoader k8s.KubeconfigLoader
 	// kubeContext is the context set by configureKubectl; all kubectl and dynamic-client calls use it.
-	kubeContext string
+	kubeContext      string
+	dynClientManaged bool
+	dynClientContext string
+	k8sCluster       string
+	// inspectedPVCs caches per-submit PVC metadata inspected during ValidateClusterMounts.
+	inspectedPVCs   map[string]pvcInspectResult
+	nfsAuthChecked  bool
+	preflightClient storagePreflightClient
+	// inventory caches pure-Kubernetes node, slice, and label-scheme discovery results for the current run.
+	inventory *k8s.Inventory
+}
+
+// gceTPUHardwareResolver implements k8s.TPUHardwareResolver using GCE machine-type conventions.
+type gceTPUHardwareResolver struct{}
+
+type gceTPUFamilySpec struct {
+	canonical      string
+	normTokens     []string
+	shorthandBases []string
+	tpu7xChipRules bool
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -228,16 +251,16 @@ type gkeClusterDescribe struct {
 
 func (c gkeClusterDescribe) String() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Cluster Resource Summary for: %s\n", c.Name))
-	sb.WriteString(fmt.Sprintf("Location: %s\n", c.Location))
+	fmt.Fprintf(&sb, "Cluster Resource Summary for: %s\n", c.Name)
+	fmt.Fprintf(&sb, "Location: %s\n", c.Location)
 	sb.WriteString("------------------------------------------\n")
 	for _, np := range c.NodePools {
-		sb.WriteString(fmt.Sprintf("NodePool: %s\n", np.Name))
-		sb.WriteString(fmt.Sprintf("  MachineType: %s\n", np.Config.MachineType))
+		fmt.Fprintf(&sb, "NodePool: %s\n", np.Name)
+		fmt.Fprintf(&sb, "  MachineType: %s\n", np.Config.MachineType)
 		if np.Count > 0 {
-			sb.WriteString(fmt.Sprintf("  Count: %d\n", np.Count))
+			fmt.Fprintf(&sb, "  Count: %d\n", np.Count)
 		}
-		sb.WriteString(fmt.Sprintf("  Status: %s\n", np.Status))
+		fmt.Fprintf(&sb, "  Status: %s\n", np.Status)
 		sb.WriteString("\n")
 	}
 	return sb.String()
@@ -333,6 +356,8 @@ type ManifestOptions struct {
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
 	MLDiagnosticsEnabled          bool
+	TelemetryCollectorImage       string
+	TelemetryCollectorPort        int
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
@@ -344,8 +369,38 @@ type StorageManager struct {
 	getFilestoreIP  func(ctx context.Context, projectID, location, nameOrIP string, isIP bool) (string, string, int64, error)
 	filestoreClient filestoreClient
 	instancesCache  []*filestorepb.Instance
-	preflightClient storagePreflightClient
 	now             func() time.Time // stamps last-claimed-at; nil means time.Now
+}
+
+type pvcInspectResult struct {
+	volumeName       string
+	storageClassName string
+	provisioner      string
+}
+
+type userPVCRequest struct {
+	claim       string
+	firstDest   string
+	firstRWSrc  string
+	firstRWDest string
+	needsRW     bool
+}
+
+type pvcInspectJSON struct {
+	Metadata struct {
+		Annotations       map[string]string `json:"annotations"`
+		DeletionTimestamp string            `json:"deletionTimestamp"`
+	} `json:"metadata"`
+	Spec struct {
+		VolumeName       string   `json:"volumeName"`
+		StorageClassName string   `json:"storageClassName"`
+		AccessModes      []string `json:"accessModes"`
+		VolumeMode       string   `json:"volumeMode"`
+	} `json:"spec"`
+	Status struct {
+		Phase       string   `json:"phase"`
+		AccessModes []string `json:"accessModes"`
+	} `json:"status"`
 }
 
 type storagePreflightClient interface {
@@ -358,8 +413,8 @@ type storagePreflightClient interface {
 
 type gcpPreflightClient struct {
 	storage *gcs.Service
-	iam     *iamapi.Service
-	crm     *crm.Service
+	iam     func() (*iamapi.Service, error)
+	crm     func() (*crm.Service, error)
 }
 
 type iamBinding struct {
@@ -369,9 +424,10 @@ type iamBinding struct {
 
 // DataLocations is set only for custom dual-region buckets.
 type bucketLocation struct {
-	Location      string
-	LocationType  string
-	DataLocations []string
+	Location              string
+	LocationType          string
+	DataLocations         []string
+	HierarchicalNamespace bool
 }
 
 type profileMount struct {
@@ -404,9 +460,10 @@ type mountSegments struct {
 	ProfileSet bool
 }
 
-// mountBuildState maps generated PV name -> Pod volume name to de-duplicate gateways within a job.
+// mountBuildState maps generated PV/PVC keys -> Pod volume name to de-duplicate volumes within a job.
 type mountBuildState struct {
 	gatewayVolumeNames map[string]string
+	pvcNeedsSidecar    map[string]bool
 }
 
 // MountInfo represents parsed volume mount options
@@ -422,6 +479,27 @@ type MountInfo struct {
 	Attributes          map[string]string
 }
 
+type GatewayMetadataParams struct {
+	ManagedByLabel          string
+	ManagedByValue          string
+	StorageTypeLabel        string
+	StorageType             string
+	LastClaimedAtAnnotation string
+	LastClaimedAt           string
+	LastClaimedByAnnotation string
+	LastClaimedBy           string
+}
+
+type filestoreTemplateParams struct {
+	PVName    string
+	PVCName   string
+	Namespace string
+	Share     string
+	IP        string
+	Capacity  string
+	GatewayMetadataParams
+}
+
 type GCSFusePVPVCTemplateParams struct {
 	PVName           string
 	PVCName          string
@@ -431,15 +509,7 @@ type GCSFusePVPVCTemplateParams struct {
 	VolumeHandle     string
 	MountOptions     []string
 	VolumeAttributes map[string]string
-	ManagedByLabel   string
-	ManagedByValue   string
-	StorageTypeLabel string
-	StorageType      string
-
-	LastClaimedAtAnnotation string
-	LastClaimedAt           string
-	LastClaimedByAnnotation string
-	LastClaimedBy           string
+	GatewayMetadataParams
 }
 
 type existingGatewayPV struct {
@@ -457,6 +527,11 @@ type existingGatewayPV struct {
 			VolumeHandle     string            `yaml:"volumeHandle"`
 			VolumeAttributes map[string]string `yaml:"volumeAttributes"`
 		} `yaml:"csi"`
+		NFS *struct {
+			Path     string `yaml:"path" json:"path,omitempty"`
+			Server   string `yaml:"server" json:"server,omitempty"`
+			ReadOnly bool   `yaml:"readOnly" json:"readOnly,omitempty"`
+		} `yaml:"nfs" json:"nfs,omitempty"`
 	} `yaml:"spec"`
 	Status struct {
 		Phase string `yaml:"phase"`
@@ -553,7 +628,7 @@ type gkeCluster struct {
 	Autoscaling                 gkeClusterAutoscaling        `json:"autoscaling"`
 	ControlPlaneEndpointsConfig *controlPlaneEndpointsConfig `json:"controlPlaneEndpointsConfig,omitempty"`
 	AddonsConfig                *gkeAddonsConfig             `json:"addonsConfig,omitempty"`
-	// Endpoint is the legacy top-level control-plane IP (public, or private for private clusters).
+	// Endpoint is the legacy top-level control-plane endpoint (IP, or DNS host when IP endpoints are disabled).
 	Endpoint             string                   `json:"endpoint,omitempty"`
 	MasterAuth           *gkeMasterAuth           `json:"masterAuth,omitempty"`
 	PrivateClusterConfig *gkePrivateClusterConfig `json:"privateClusterConfig,omitempty"`
@@ -583,6 +658,7 @@ type controlPlaneEndpointsConfig struct {
 }
 
 type ipEndpointsConfig struct {
+	Enabled              *bool  `json:"enabled,omitempty"`
 	EnablePublicEndpoint bool   `json:"enablePublicEndpoint,omitempty"`
 	PublicEndpoint       string `json:"publicEndpoint,omitempty"`
 	PrivateEndpoint      string `json:"privateEndpoint,omitempty"`
@@ -611,11 +687,12 @@ type JobSetStatus struct {
 }
 
 type jobSetInfo struct {
-	terminalState string
-	suspended     bool
-	firstJob      string
-	expectedPods  int
-	queried       bool
+	terminalState   string
+	suspended       bool
+	firstJob        string
+	expectedPods    int
+	expectedStreams int
+	queried         bool
 }
 
 func (info jobSetInfo) terminal() bool {
@@ -635,8 +712,21 @@ type EnvVar struct {
 	Value string
 }
 
+// EnvVars is the env list rendered into one container. The embedded workload templates call Has on the Env and
+// Pathways*Env fields to skip a default the user sets, so data rendered by those templates must expose them as
+// EnvVars.
+type EnvVars []EnvVar
+
+// Has reports whether the list sets the variable name.
+func (e EnvVars) Has(name string) bool {
+	return slices.ContainsFunc(e, func(v EnvVar) bool { return v.Name == name })
+}
+
 type jobSetTemplateData struct {
-	WorkloadName                  string
+	WorkloadName string
+	// Namespace is the namespace resolved for the submission; rendered as metadata.namespace so a saved manifest
+	// applies to the same namespace as the PV/PVC documents appended to it. Empty when unresolved (dry-run offline).
+	Namespace                     string
 	ClusterName                   string
 	Containers                    []ContainerData
 	ProjectID                     string
@@ -673,26 +763,32 @@ type jobSetTemplateData struct {
 	GCSFuseEnabled                bool
 	HostNetworkEnabled            bool
 	Pathways                      orchestrator.PathwaysJobDefinition
-	PathwaysProxyEnabled          bool // pathways-head runs pathways-proxy (false for an SPS server)
-	PathwaysWorkloadEnabled       bool // pathways-head runs the user's workload (false for headless and SPS)
+	PathwaysProxyEnabled          bool   // pathways-head runs pathways-proxy (false for an SPS server)
+	PathwaysWorkloadEnabled       bool   // pathways-head runs the user's workload (false for headless and SPS)
+	PathwaysRMEnabled             bool   // pathways-head runs pathways-rm (false for an SPS client)
+	PathwaysWorkersEnabled        bool   // the JobSet has TPU workers (false for an SPS client)
+	PathwaysRMAddress             string // remote resource manager for the proxy (SPS client); empty means the local head
 	ExclusiveTopologyAnnotation   string
 	Verbose                       bool
-	Env                           []EnvVar
-	PathwaysProxyEnv              []EnvVar
-	PathwaysServerEnv             []EnvVar
-	PathwaysWorkerEnv             []EnvVar
+	Env                           EnvVars
+	PathwaysProxyEnv              EnvVars
+	PathwaysServerEnv             EnvVars
+	PathwaysWorkerEnv             EnvVars
 	IsTPU                         bool
 	IsGPU                         bool
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
 	MLDiagnosticsEnabled          bool
+	TelemetryCollectorImage       string
+	TelemetryCollectorPort        int
 	Subdomain                     string
 	baseBlocks                    map[string]*yamltemplate.Template
 }
 
 type jobSetValidationSpec struct {
-	metav1.TypeMeta `json:",inline"`
-	Spec            struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata"`
+	Spec              struct {
 		ReplicatedJobs []struct {
 			Name     string                  `json:"name"`
 			Template batchv1.JobTemplateSpec `json:"template"`
@@ -874,6 +970,20 @@ type spsInstanceSummary struct {
 	SidecarJAX    string // from running sidecar container or image tag
 }
 
+// spsInstance is what an SPS client needs to know about the instance it runs on.
+type spsInstance struct {
+	Name           string
+	Endpoint       string
+	KueueQueueName string
+	HeadNodePool   string
+	ServerImage    string
+	ProxyImage     string
+	GCSLocation    string
+	InstanceType   string
+	InstanceCount  int
+	HasSidecar     bool
+}
+
 type spsContainerView struct {
 	Name  string   `json:"name"`
 	Image string   `json:"image"`
@@ -881,11 +991,15 @@ type spsContainerView struct {
 }
 
 type spsPodSpecView struct {
+	NodeSelector   map[string]string  `json:"nodeSelector"`
 	InitContainers []spsContainerView `json:"initContainers"`
 	Containers     []spsContainerView `json:"containers"`
 }
 
 type spsJobSetView struct {
+	Metadata struct {
+		Labels map[string]string `json:"labels"`
+	} `json:"metadata"`
 	Spec struct {
 		Suspend        bool `json:"suspend"`
 		ReplicatedJobs []struct {
@@ -911,4 +1025,40 @@ type spsJobSetView struct {
 			Ready int    `json:"ready"`
 		} `json:"replicatedJobsStatus"`
 	} `json:"status"`
+}
+
+// endpointMode identifies which control-plane endpoint a kubeconfig cluster entry targets.
+type endpointMode int
+
+const (
+	endpointModeUnknown endpointMode = iota
+	endpointModeIP                   // public/private IP; subject to authorized networks
+	endpointModeDNS                  // *.gke.goog; IAM-gated, bypasses authorized networks
+)
+
+// kubeContextCheck is the static verdict on an existing kubeconfig context.
+type kubeContextCheck struct {
+	contextName string
+	mode        endpointMode
+	reason      string // non-empty when the context must not be reused
+}
+
+// probeOutcome classifies a connectivity probe result.
+type probeOutcome int
+
+const (
+	probeOK           probeOutcome = iota
+	probeForbidden                 // reachable and authenticated; RBAC denies /version
+	probeConnectivity              // this endpoint is unreachable or untrusted from here
+	probeAuth                      // credentials are broken; another endpoint will not help
+	probeInvalid                   // empty/blank context name refused before running kubectl
+	probeUnknown
+)
+
+type kubectlServerVersion struct {
+	GitVersion string `json:"gitVersion"`
+}
+
+type kubectlVersionOutput struct {
+	ServerVersion *kubectlServerVersion `json:"serverVersion"`
 }

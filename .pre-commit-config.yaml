@@ -47,7 +47,8 @@ repos:
   - id: terraform-readme
     name: terraform-readme
     entry: tools/autodoc/terraform_docs.sh
-    language: script
+    language: golang
+    additional_dependencies: [github.com/terraform-docs/terraform-docs@v0.24.0]
     types: [terraform]
     exclude: (\.terraform|pkg\/.*$)|(tools/validate_configs/golden_copies/.*)
     pass_filenames: true
@@ -55,7 +56,8 @@ repos:
   - id: packer-readme
     name: packer-readme
     entry: tools/autodoc/terraform_docs.sh
-    language: script
+    language: golang
+    additional_dependencies: [github.com/terraform-docs/terraform-docs@v0.24.0]
     files: ^.*\.pkr\.hcl$
     exclude: (pkg\/.*$)|(tools/validate_configs/golden_copies/.*)
     pass_filenames: true
@@ -78,7 +80,8 @@ repos:
     require_serial: true
   - id: addlicense
     name: addlicense
-    language: system
+    language: golang
+    additional_dependencies: [github.com/google/addlicense@v1.2.0]
     entry: addlicense
     args: ['-c', '"Google LLC"', '-l', 'apache']
     exclude: docs/videos/healthcare-and-life-sciences/lysozyme-example/submit.sh
@@ -98,7 +101,7 @@ repos:
     language: python
     language_version: python3
     additional_dependencies: ['pyyaml>=6.0.1']
-    files: '^(skills/.*|tools/run_eval\.py|tools/tests/test_run_eval\.py)$'
+    files: '^(AGENTS\.md|skills/.*|tools/run_eval\.py|tools/tests/test_run_eval\.py)$'
     pass_filenames: false
     require_serial: true
   - id: catalog-gen
@@ -134,8 +137,6 @@ repos:
     - requests
     - httplib2
     - more-executors
-
-    - google-cloud-tpu
     types: [python]
     pass_filenames: false
 
@@ -156,8 +157,6 @@ repos:
     - pytest
     - pytest-unordered
     - more-executors
-
-    - google-cloud-tpu
     types: [python]
     pass_filenames: false
 
@@ -170,9 +169,17 @@ repos:
 
   - id: go-unit-tests-community-health-check
     name: go-unit-tests-community-health-check
-    entry: bash -c 'cd community/cluster-health-check && go test -timeout 30s -short -v ./...'
+    entry: bash -c 'unset $(git rev-parse --local-env-vars) && cd community/cluster-health-check && go test -timeout 30s -short -v ./...'
     language: system
     files: ^community/cluster-health-check/.*\.go$
+    pass_filenames: false
+
+  - id: go-unit-tests
+    name: go-unit-tests
+    entry: bash -c 'unset $(git rev-parse --local-env-vars) && go test -tags=unit -timeout 30s -short -v $(go list ./... | grep -v /vendor/)'
+    language: system
+    files: \.go$
+    exclude: ^community/cluster-health-check/
     pass_filenames: false
 
   - id: go-mod-tidy-community-health-check
@@ -182,16 +189,35 @@ repos:
     files: ^community/cluster-health-check/(go\.mod|go\.sum|.*\.go)$
     pass_filenames: false
 
+  - id: go-imports
+    name: go imports
+    language: golang
+    additional_dependencies: [golang.org/x/tools/cmd/goimports@v0.50.0]
+    entry: goimports -l -w
+    files: '\.go$'
+
+  - id: go-cyclo
+    name: go-cyclo
+    language: golang
+    additional_dependencies: [github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0]
+    entry: gocyclo
+    args: [-over=13]
+    files: '\.go$'
+
+  - id: shfmt
+    name: shfmt
+    language: golang
+    additional_dependencies: [mvdan.cc/sh/v3/cmd/shfmt@v3.14.1]
+    entry: shfmt -w
+    types: [shell]
+    exclude: ".*tpl|.*unlinted"
+
 - repo: https://github.com/dnephin/pre-commit-golang
   rev: v0.5.1
   hooks:
   - id: go-fmt
   - id: go-vet
     exclude: ^community/cluster-health-check/
-  - id: go-imports
-  - id: go-cyclo
-    args: [-over=13]
-  - id: go-unit-tests
   - id: go-mod-tidy
 # Disabled temporarily due to https://github.com/go-critic/go-critic/issues/1388
 # - repo: https://github.com/tekwizely/pre-commit-golang
@@ -202,6 +228,7 @@ repos:
   rev: v2.13.1
   hooks:
   - id: golangci-lint
+    entry: golangci-lint run --new-from-rev HEAD
 - repo: https://github.com/adrienverge/yamllint
   rev: v1.34.0
   hooks:
@@ -225,10 +252,14 @@ repos:
   rev: "3.0.0"
   hooks:
   - id: script-must-have-extension
+- repo: https://github.com/shellcheck-py/shellcheck-py
+  rev: v0.11.0.1
+  hooks:
   - id: shellcheck
+    # jumanjihouse hook passed -e SC1091 by default and ran in parallel
+    args: [-e, SC1091]
+    require_serial: false
     exclude: ".*unlinted"
-  - id: shfmt
-    exclude: ".*tpl|.*unlinted"
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.5.0
   hooks:

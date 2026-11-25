@@ -175,6 +175,9 @@ func (g *GKEOrchestrator) checkResourceExists(kind, name, namespace string) (exi
 }
 
 func (g *GKEOrchestrator) installJobSetOnFreshCluster() error {
+	if shell.IsKnownAirGapped() {
+		return fmt.Errorf("JobSet is not installed and cannot be downloaded when %s is enabled; pre-install JobSet %s on the cluster first", shell.AirGappedEnvVar, defaultJobSetVersion)
+	}
 	logging.Info("JobSet CRD %s and Service %s/%s not found. Checking the permissions needed to install JobSet...", jobSetCRDName, jobSetNamespace, jobSetWebhookServiceName)
 	if missing := g.missingPermissions(jobSetInstallPermissionChecks); len(missing) > 0 {
 		return fmt.Errorf("JobSet is not installed, and your account cannot install it: missing RBAC permissions [%s]. gcluster made no changes. "+
@@ -239,7 +242,7 @@ func (g *GKEOrchestrator) installJobSetCRD(jobSetManifestsURL string) error {
 	if err != nil {
 		return err
 	}
-	if err := g.applyManifestFile(manifestPath); err != nil {
+	if err := g.applyManifestFile(manifestPath, ""); err != nil {
 		return fmt.Errorf("%w\nJobSet may now be partly installed, and later runs of gcluster will not modify it. To finish the installation, run:\n  %s",
 			err, kubectlCommandLine(g.kubeContext, "apply", "-f", manifestPath))
 	}
@@ -498,6 +501,9 @@ func (g *GKEOrchestrator) getHTTPClient() HTTPClient {
 }
 
 func (g *GKEOrchestrator) downloadManifests(url string) ([]byte, error) {
+	if shell.IsKnownAirGapped() {
+		return nil, fmt.Errorf("cannot download %s when %s is enabled; pre-install the controller manifests on the cluster first", url, shell.AirGappedEnvVar)
+	}
 	logging.Info("Downloading manifests from %s", url)
 	resp, err := g.getHTTPClient().Get(url)
 	if err != nil {
@@ -523,6 +529,16 @@ func (g *GKEOrchestrator) cleanJobSetManifests(manifestBytes []byte) ([]byte, er
 	})
 }
 
+func isManifestObject(doc interface{}) (map[interface{}]interface{}, bool) {
+	data, ok := doc.(map[interface{}]interface{})
+	if !ok {
+		return nil, false
+	}
+	apiVer, _ := data["apiVersion"].(string)
+	kind, _ := data["kind"].(string)
+	return data, strings.TrimSpace(apiVer) != "" && strings.TrimSpace(kind) != ""
+}
+
 func (g *GKEOrchestrator) cleanAndProcessManifests(manifestBytes []byte, processFn func(map[interface{}]interface{})) ([]byte, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(manifestBytes))
 	var cleanedManifests bytes.Buffer
@@ -535,30 +551,26 @@ func (g *GKEOrchestrator) cleanAndProcessManifests(manifestBytes []byte, process
 			}
 			return nil, fmt.Errorf("failed to decode YAML document: %w", err)
 		}
-
 		if doc == nil {
 			continue
 		}
-
-		if data, ok := doc.(map[interface{}]interface{}); ok {
-			g.removeDescriptionFields(data)
-			if processFn != nil {
-				processFn(data)
-			}
-			cleanedBytes, err := yaml.Marshal(data)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal cleaned YAML: %w", err)
-			}
-			cleanedManifests.Write(cleanedBytes)
-			cleanedManifests.WriteString("---\n")
-		} else {
-			cleanedBytes, err := yaml.Marshal(doc)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal YAML document: %w", err)
-			}
-			cleanedManifests.Write(cleanedBytes)
-			cleanedManifests.WriteString("---\n")
+		data, ok := isManifestObject(doc)
+		if !ok {
+			return nil, fmt.Errorf("failed to decode YAML document: expected Kubernetes manifest object with apiVersion and kind")
 		}
+		g.removeDescriptionFields(data)
+		if processFn != nil {
+			processFn(data)
+		}
+		cleanedBytes, err := yaml.Marshal(data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal cleaned YAML: %w", err)
+		}
+		cleanedManifests.Write(cleanedBytes)
+		cleanedManifests.WriteString("---\n")
+	}
+	if cleanedManifests.Len() == 0 {
+		return nil, fmt.Errorf("failed to decode YAML document: manifest stream is empty")
 	}
 	return cleanedManifests.Bytes(), nil
 }
@@ -623,14 +635,16 @@ func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interf
 	}
 }
 
-// applyManifests saves manifests under ~/.gcluster/generated and applies them.
-func (g *GKEOrchestrator) applyManifests(manifests []byte, filename string) error {
+// applyManifests saves manifests under ~/.gcluster/generated and applies them. A non-empty namespace is passed
+// as `kubectl apply -n`, so objects that declare no metadata.namespace land in the target namespace; add-on
+// manifests that are cluster-scoped or declare their own namespace pass "".
+func (g *GKEOrchestrator) applyManifests(manifests []byte, filename, namespace string) error {
 	logging.Info("Applying manifests for %s...", filename)
 	filePath, err := writeGeneratedManifest(manifests, filename)
 	if err != nil {
 		return err
 	}
-	return g.applyManifestFile(filePath)
+	return g.applyManifestFile(filePath, namespace)
 }
 
 // writeGeneratedManifest saves manifests as ~/.gcluster/generated/<filename> and returns the file's path.
@@ -653,10 +667,18 @@ func writeGeneratedManifest(manifests []byte, filename string) (string, error) {
 	return filePath, nil
 }
 
-func (g *GKEOrchestrator) applyManifestFile(filePath string) error {
-	res := g.kubectl("apply", "-f", filePath)
+func (g *GKEOrchestrator) applyManifestFile(filePath, namespace string) error {
+	args := []string{"apply"}
+	if namespace != "" {
+		args = append(args, "-n", namespace)
+	}
+	res := g.kubectl(append(args, "-f", filePath)...)
 	if res.ExitCode != 0 {
-		return fmt.Errorf("kubectl apply failed with exit code %d: %s\n%s", res.ExitCode, res.Stderr, res.Stdout)
+		out := strings.TrimSpace(strings.TrimSpace(res.Stderr) + "\n" + strings.TrimSpace(res.Stdout))
+		if namespace != "" {
+			return fmt.Errorf("kubectl apply in namespace %q failed with exit code %d: %s", namespace, res.ExitCode, out)
+		}
+		return fmt.Errorf("kubectl apply failed with exit code %d: %s", res.ExitCode, out)
 	}
 	logging.Info("Manifests applied successfully.")
 	return nil
@@ -736,17 +758,14 @@ func (g *GKEOrchestrator) pinnedContextNamespace() (string, bool) {
 		return "", false
 	}
 	cfg, err := g.loadKubeconfig()
-	if err != nil {
+	if err != nil || cfg == nil {
 		return "", false
 	}
 	kubeCtx := cfg.Contexts[g.kubeContext]
 	if kubeCtx == nil {
 		return "", false
 	}
-	if kubeCtx.Namespace == "" {
-		return "default", true
-	}
-	return kubeCtx.Namespace, true
+	return k8s.ContextNamespace(kubeCtx), true
 }
 
 func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, projectID string) error {
@@ -785,6 +804,9 @@ func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, p
 // handling regional fallback if necessary.
 func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
 	g.projectID = projectID
+	if g.mode == orchestrator.TypeK8s {
+		return location, nil
+	}
 
 	logging.Info("Fetching GKE cluster metadata for '%s'...", clusterName)
 	res := g.executor.ExecuteCommandWithTimeout(shell.DefaultCloudAPITimeout, "gcloud", "container", "clusters", "describe", clusterName,

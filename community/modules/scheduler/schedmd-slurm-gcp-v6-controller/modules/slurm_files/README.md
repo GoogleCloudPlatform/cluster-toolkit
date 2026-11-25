@@ -48,7 +48,6 @@ No modules.
 | [google_storage_bucket_object.nodeset_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.nodeset_dyn_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.nodeset_startup_scripts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
-| [google_storage_bucket_object.nodeset_tpu_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.prolog_scripts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.task_epilog_scripts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.task_prolog_scripts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
@@ -101,7 +100,6 @@ No modules.
 | <a name="input_nodeset"></a> [nodeset](#input\_nodeset) | Cluster nodenets, as a list. | `list(any)` | `[]` | no |
 | <a name="input_nodeset_dyn"></a> [nodeset\_dyn](#input\_nodeset\_dyn) | Cluster nodenets (dynamic), as a list. | `list(any)` | `[]` | no |
 | <a name="input_nodeset_startup_scripts"></a> [nodeset\_startup\_scripts](#input\_nodeset\_startup\_scripts) | List of scripts to be ran on compute VM startup in the specific nodeset. | <pre>map(list(object({<br/>    filename = string<br/>    content  = string<br/>  })))</pre> | `{}` | no |
-| <a name="input_nodeset_tpu"></a> [nodeset\_tpu](#input\_nodeset\_tpu) | Cluster nodenets (TPU), as a list. | `list(any)` | `[]` | no |
 | <a name="input_output_dir"></a> [output\_dir](#input\_output\_dir) | Directory where this module will write its files to. These files include:<br/>cloud.conf; cloud\_gres.conf; config.yaml; resume.py; suspend.py; and util.py. | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID. | `string` | n/a | yes |
 | <a name="input_prolog_scripts"></a> [prolog\_scripts](#input\_prolog\_scripts) | List of scripts to be used for Prolog. Programs for the slurmd to execute<br/>whenever it is asked to run a job step from a new job allocation.<br/>See https://slurm.schedmd.com/slurm.conf.html#OPT_Prolog. | <pre>list(object({<br/>    filename = string<br/>    content  = optional(string)<br/>    source   = optional(string)<br/>  }))</pre> | `[]` | no |

@@ -38,7 +38,7 @@ var (
 )
 
 func init() {
-	InspectCmd.Flags().StringVar(&inspectWorkloadName, "name", "", "Specific workload name to inspect.")
+	InspectCmd.Flags().StringVarP(&inspectWorkloadName, "name", "n", "", "Specific workload name to inspect.")
 	InspectCmd.Flags().StringVarP(&inspectOutputPath, "output", "o", "", "Custom path/filename to write logs to.")
 	InspectCmd.Flags().BoolVarP(&inspectShow, "show", "s", false, "Print output to terminal in addition to file.")
 	InspectCmd.Flags().StringVar(&inspectFilter, "filter", "", "Filter inspect output to a specific component (allowed values: pathways-sps).")

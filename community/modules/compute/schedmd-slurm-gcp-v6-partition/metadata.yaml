@@ -26,5 +26,6 @@ ghpc:
     error_message: "'partition_name' must start with a lowercase letter and can only contain lowercase letters, numbers, and hyphens."
   - validator: exclusive
     inputs:
-      vars: [nodeset, nodeset_dyn, nodeset_tpu]
-    error_message: "A partition can contain at most one type of nodeset."
+      vars: [nodeset, nodeset_dyn]
+      min_set: 1
+    error_message: "A partition must contain exactly one type of nodeset (nodeset or nodeset_dyn)"

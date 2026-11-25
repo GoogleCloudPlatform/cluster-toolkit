@@ -22,11 +22,8 @@ vars:
   region: us-central1
   zone: us-central1-a
   instance_image:
-    family: ubuntu-2204-lts
+    family: ubuntu-2404-lts-amd64
     project: ubuntu-os-cloud
-  # instance_image:
-  #   family: debian-12
-  #   project: debian-cloud
 
 deployment_groups:
 - group: primary

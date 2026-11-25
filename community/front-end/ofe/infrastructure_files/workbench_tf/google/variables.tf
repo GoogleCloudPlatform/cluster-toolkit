@@ -44,6 +44,17 @@ variable "create_project" {
   default     = false
 }
 
+variable "data_disk_size_gb" {
+  description = "Size in GB, up to 64000, of the instance's data disk (/home/jupyter). Billed in addition to the boot disk."
+  type        = number
+  default     = 100
+
+  validation {
+    condition     = var.data_disk_size_gb > 0 && var.data_disk_size_gb <= 64000
+    error_message = "The 'data_disk_size_gb' setting must be greater than 0 and at most 64000."
+  }
+}
+
 variable "enable_services" {
   description = "Enable the necessary APIs on the project.  When using an existing project, this can be set to false."
   type        = bool
@@ -56,7 +67,7 @@ variable "folder_id" {
   default     = ""
 }
 
-# Deprecated, replaced by instance_image
+# Deprecated; kept so an old tfvars setting fails clearly
 # tflint-ignore: terraform_unused_declarations
 variable "image_family" {
   description = "DEPRECATED: Image of the AI notebook."
@@ -65,11 +76,11 @@ variable "image_family" {
 
   validation {
     condition     = var.image_family == null
-    error_message = "The 'image_family' setting is deprecated, please use 'var.instance_image' with the fields 'project' and 'family' or 'name'."
+    error_message = "The 'image_family' setting is no longer supported: Workbench Instances use the default Workbench image."
   }
 }
 
-# Deprecated, replaced by instance_image
+# Deprecated; kept so an old tfvars setting fails clearly
 # tflint-ignore: terraform_unused_declarations
 variable "image_project" {
   description = "DEPRECATED: Google Cloud project where the image is hosted."
@@ -78,35 +89,12 @@ variable "image_project" {
 
   validation {
     condition     = var.image_project == null
-    error_message = "The 'image_project' setting is deprecated, please use 'var.instance_image' with the fields 'project' and 'family' or 'name'."
+    error_message = "The 'image_project' setting is no longer supported: Workbench Instances use the default Workbench image."
   }
 }
 
-variable "instance_image" {
-  description = <<-EOD
-    Image of the AI notebook.
-
-    Expected Fields:
-    name: The name of the image. Mutually exclusive with family.
-    family: The image family to use. Mutually exclusive with name.
-    project: The project where the image is hosted.
-    EOD
-  type        = map(string)
-  default = {
-    project = "deeplearning-platform-release"
-    family  = "tf-latest-cpu"
-  }
-
-  validation {
-    condition     = can(coalesce(var.instance_image.project))
-    error_message = "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
-  }
-
-  validation {
-    condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
-    error_message = "In var.instance_image, exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
-  }
-}
+# No instance_image variable: Workbench Instances always use the default
+# Workbench image (see main.tf).
 
 variable "ip_cidr_range" {
   description = "Unique IP CIDR Range for AI Notebooks subnet"

@@ -18,34 +18,42 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"slices"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type stubResourceLister struct {
-	items []unstructured.Unstructured
-	err   error
-	gotNS string
-	gotFS string
-	sa    *unstructured.Unstructured
-	saErr error
-	gotSA string
+	items       []unstructured.Unstructured
+	err         error
+	gotGVR      schema.GroupVersionResource
+	gotNS       string
+	gotFS       string
+	sa          *unstructured.Unstructured
+	saErr       error
+	returnNilSA bool
+	gotSA       string
 }
 
 func (s *stubResourceLister) GetResource(gvr schema.GroupVersionResource, _, name string) (*unstructured.Unstructured, error) {
 	s.gotSA = name
+	if s.returnNilSA {
+		return nil, nil
+	}
 	if s.saErr != nil || s.sa != nil {
 		return s.sa, s.saErr
 	}
 	return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
 }
 
-func (s *stubResourceLister) ListResources(_ schema.GroupVersionResource, ns, _, fs string) ([]unstructured.Unstructured, error) {
+func (s *stubResourceLister) ListResources(gvr schema.GroupVersionResource, ns, _, fs string) ([]unstructured.Unstructured, error) {
+	s.gotGVR = gvr
 	s.gotNS = ns
 	s.gotFS = fs
 	return s.items, s.err
@@ -186,7 +194,25 @@ func TestIsForbiddenError(t *testing.T) {
 	}{
 		{"nil", nil, false},
 		{"typed 403", apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "", errors.New("forbidden")), true},
+		{"typed 403 for cloudflare user", apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New(`User "cloudflare-ci" cannot list resource "nodes"`)), true},
+		{"typed 403 for oauth2 resource", apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "oauth2:token", errors.New("forbidden")), true},
 		{"kubectl stderr", errors.New("Error from server (Forbidden): secrets is forbidden: User cannot list"), true},
+		{"wrapped 403 Forbidden", errors.New(`insufficient RBAC permissions to read ClusterQueue "default" (403 Forbidden)`), true},
+		{"structured is forbidden suffix", errors.New(`persistentvolumeclaims "pvc" is forbidden`), true},
+		{"non-403 server timeout echoing forbidden resource name", errors.New("Error from server (Timeout): request did not complete (get persistentvolumeclaims forbidden-pvc)"), false},
+		{"proxy HTML 403", errors.New("<html><title>403 Forbidden</title></html>"), false},
+		{"unexpected server error 403", &apierrors.StatusError{ErrStatus: metav1.Status{Code: 403, Reason: metav1.StatusReasonUnknown, Message: "403 Forbidden from gateway"}}, false},
+		{"unexpected server response plain 403", apierrors.NewGenericServerResponse(403, "list", schema.GroupResource{Resource: "nodes"}, "", "plain proxy 403", 0, true), false},
+		{"unexpected server response HTML 403", apierrors.NewGenericServerResponse(403, "list", schema.GroupResource{Resource: "nodes"}, "", "<html>403 Forbidden</html>", 0, false), false},
+		{"proxyconnect 403", errors.New("proxyconnect tcp: 403 Forbidden"), false},
+		{"GKE DNS allow_external_traffic", apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("allow_external_traffic is disabled")), false},
+		{"GKE IAM clusters.connect full", errors.New("Error from server (Forbidden): container.googleapis.com/clusters.connect denied"), false},
+		{"GKE IAM clusters.connect short", errors.New("Error from server (Forbidden): Permission 'container.clusters.connect' denied"), false},
+		{"VPC-SC 403", errors.New("Error from server (Forbidden): Request is prohibited by organization's policy. vpcServiceControls"), false},
+		{"url.Error wrapping 403", &url.Error{Op: "Get", URL: "https://k8s.example.com/api/v1/nodes", Err: errors.New("403 Forbidden")}, false},
+		{"kubectl unable to connect 403", errors.New("Unable to connect to the server: 403 Forbidden"), false},
+		{"exec plugin getting credentials 403", errors.New("getting credentials: exec: gke-gcloud-auth-plugin returned 403 Forbidden"), false},
+		{"oauth2 token fetch 403", errors.New("oauth2: cannot fetch token: 403 Forbidden"), false},
 		{"other error", errors.New("connection refused"), false},
 	}
 	for _, tc := range cases {
@@ -217,6 +243,9 @@ func TestDiscoverImagePullSecrets_ListErrorsAndNamespaceDefault(t *testing.T) {
 	okLister := &stubResourceLister{items: []unstructured.Unstructured{makeTestDockerSecret("sec-1", "registry.local")}}
 	if got := DiscoverImagePullSecrets(okLister, "team-ns", "", []string{"registry.local/app:v1"}); got != "sec-1" || okLister.gotNS != "team-ns" || okLister.gotFS != "type=kubernetes.io/dockerconfigjson" {
 		t.Errorf("got (%q, ns=%q, fs=%q), want (\"sec-1\", \"team-ns\", \"type=kubernetes.io/dockerconfigjson\")", got, okLister.gotNS, okLister.gotFS)
+	}
+	if okLister.gotGVR != SecretGVR {
+		t.Errorf("listed %v, want %v", okLister.gotGVR, SecretGVR)
 	}
 }
 
@@ -301,5 +330,12 @@ func TestDiscoverImagePullSecrets_DefersToServiceAccount(t *testing.T) {
 		if got := DiscoverImagePullSecrets(lister, "team-ns", tc.sa, images); got != tc.want || lister.gotSA != tc.wantSA {
 			t.Errorf("%s: got (%q, sa=%q), want (%q, sa=%q)", tc.name, got, lister.gotSA, tc.want, tc.wantSA)
 		}
+	}
+	nilSALister := &stubResourceLister{
+		items:       []unstructured.Unstructured{makeTestDockerSecret("sec-1", "registry.local")},
+		returnNilSA: true,
+	}
+	if got := DiscoverImagePullSecrets(nilSALister, "team-ns", "default", images); got != "sec-1" {
+		t.Errorf("(nil, nil) ServiceAccount lookup: got %q, want sec-1", got)
 	}
 }

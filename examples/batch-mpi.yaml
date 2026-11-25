@@ -167,6 +167,8 @@ deployment_groups:
       task_count: 2 # This provisions 2 compute nodes (in mpi_mode, task_count_per_node defaults to 1)
       mpi_mode: true
       allow_automatic_updates: false
+      # Optionally reuse an existing Cloud Storage bucket or bucket path for startup scripts:
+      # startup_script_path: gs://my-startup-scripts-bucket
 
   - id: batch-login
     source: modules/scheduler/batch-login-node

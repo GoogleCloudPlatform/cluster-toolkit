@@ -2720,3 +2720,116 @@ func TestDefaultKubeClient_ListResourcesFieldSelectorAndLazySync(t *testing.T) {
 		t.Errorf("expected empty fieldSelector passthrough on generic ListResources, got %q (err=%v)", gotFieldSelector, err)
 	}
 }
+
+const applyManifestTestJobSet = `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: ns-apply
+spec:
+  replicatedJobs:
+  - name: main-job
+    replicas: 1
+    template:
+      spec:
+        template:
+          spec:
+            restartPolicy: Never
+            containers:
+            - name: workload-container
+              image: busybox
+`
+
+// applyManifestTestJobSetWithPVC is the shape SubmitJob produces for a job with a storage mount: an unnamespaced
+// JobSet followed by a PVC document that declares the resolved namespace.
+const applyManifestTestJobSetWithPVC = applyManifestTestJobSet + `---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ns-apply-data
+  namespace: team-a
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 5Gi
+`
+
+// kubectl apply must target the namespace SubmitJob resolved (--gke-namespace or the pinned context's
+// namespace) even when the manifest declares none, which is the case for custom templates extracted before
+// metadata.namespace was rendered; every read path already uses that namespace.
+func TestApplyManifest_AppliesInTargetNamespace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	manifestPath := filepath.Join(home, ".gcluster", "generated", "ns-apply.yaml")
+
+	cases := []struct {
+		name        string
+		namespace   string
+		manifest    string
+		applyResult shell.CommandResult
+		wantCalls   []string
+		wantErr     []string
+	}{
+		{
+			name: "resolved namespace", namespace: "team-a", manifest: applyManifestTestJobSet,
+			applyResult: shell.CommandResult{ExitCode: 0},
+			wantCalls:   []string{"kubectl apply -n team-a -f " + manifestPath},
+		},
+		{
+			name: "no resolved namespace keeps the context default", namespace: "", manifest: applyManifestTestJobSet,
+			applyResult: shell.CommandResult{ExitCode: 0},
+			wantCalls:   []string{"kubectl apply -f " + manifestPath},
+		},
+		{
+			// A multi-document manifest is written verbatim and applied with a single -n; kubectl accepts documents
+			// that declare the same namespace as the flag.
+			name: "multi-document manifest with a namespaced PVC", namespace: "team-a", manifest: applyManifestTestJobSetWithPVC,
+			applyResult: shell.CommandResult{ExitCode: 0},
+			wantCalls:   []string{"kubectl apply -n team-a -f " + manifestPath},
+		},
+		{
+			name: "apply failure names the namespace and trims kubectl output", namespace: "team-a", manifest: applyManifestTestJobSet,
+			applyResult: shell.CommandResult{ExitCode: 1, Stderr: "Error from server (Forbidden): jobsets.jobset.x-k8s.io is forbidden\n"},
+			wantCalls:   []string{"kubectl apply -n team-a -f " + manifestPath},
+			wantErr:     []string{`kubectl apply in namespace "team-a" failed with exit code 1: Error from server (Forbidden)`},
+		},
+		{
+			name: "apply failure without a namespace keeps the generic message", namespace: "", manifest: applyManifestTestJobSet,
+			applyResult: shell.CommandResult{ExitCode: 1, Stderr: "connection refused"},
+			wantCalls:   []string{"kubectl apply -f " + manifestPath},
+			wantErr:     []string{"kubectl apply failed with exit code 1: connection refused"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{"kubectl apply": {tc.applyResult}})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.kubeContext = jobSetTestKubeContext
+			orc.namespace = tc.namespace
+			err := orc.ApplyManifest(tc.manifest, "", "ns-apply")
+			if len(tc.wantErr) == 0 && err != nil {
+				t.Fatalf("ApplyManifest() error = %v", err)
+			}
+			for _, want := range tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), want) {
+					t.Fatalf("ApplyManifest() error = %v, want substring %q", err, want)
+				}
+			}
+			if err != nil && strings.HasSuffix(err.Error(), "\n") {
+				t.Errorf("error message has a trailing newline: %q", err.Error())
+			}
+			if got := commandsWithPrefix(mockExec, "kubectl apply"); !slices.Equal(got, tc.wantCalls) {
+				t.Errorf("kubectl apply calls = %q, want %q", got, tc.wantCalls)
+			}
+			written, readErr := os.ReadFile(manifestPath)
+			if readErr != nil {
+				t.Fatalf("generated manifest not written: %v", readErr)
+			}
+			if string(written) != tc.manifest {
+				t.Errorf("generated manifest was altered before apply:\n%s", string(written))
+			}
+			assertEveryKubectlCallPinned(t, mockExec, jobSetTestKubeContext)
+		})
+	}
+}

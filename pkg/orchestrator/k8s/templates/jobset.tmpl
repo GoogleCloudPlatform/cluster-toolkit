@@ -2,6 +2,9 @@ apiVersion: jobset.x-k8s.io/v1alpha2
 kind: JobSet
 metadata:
   name: {{.WorkloadName}}
+{{- if .Namespace }}
+  namespace: {{.Namespace}}
+{{- end }}
   labels:
 {{(StructuralData (.RenderBlock "workload_labels" 4))}}
 {{- if .ExclusiveTopologyAnnotation }}

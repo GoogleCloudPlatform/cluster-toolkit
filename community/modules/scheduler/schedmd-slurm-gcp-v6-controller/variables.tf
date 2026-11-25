@@ -458,49 +458,6 @@ variable "nodeset" {
   }
 }
 
-variable "nodeset_tpu" {
-  description = "Define TPU nodesets, as a list."
-  type = list(object({
-    node_count_static      = optional(number, 0)
-    node_count_dynamic_max = optional(number, 5)
-    nodeset_name           = string
-    enable_public_ip       = optional(bool, false)
-    node_type              = string
-    accelerator_config = optional(object({
-      topology = string
-      version  = string
-      }), {
-      topology = ""
-      version  = ""
-    })
-    tf_version   = string
-    preemptible  = optional(bool, false)
-    preserve_tpu = optional(bool, false)
-    zone         = string
-    data_disks   = optional(list(string), [])
-    docker_image = optional(string, "")
-    network_storage = optional(list(object({
-      server_ip               = string
-      remote_mount            = string
-      local_mount             = string
-      local_mount_owner       = optional(string)
-      local_mount_permissions = optional(string)
-      fs_type                 = string
-      mount_options           = string
-      client_install_runner   = optional(map(string))
-      mount_runner            = optional(map(string))
-    })), [])
-    subnetwork = string
-    service_account = optional(object({
-      email  = optional(string)
-      scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
-    }))
-    project_id = string
-    reserved   = optional(string, false)
-  }))
-  default = []
-}
-
 
 variable "nodeset_dyn" {
   description = "Defines dynamic nodesets, as a list."
@@ -523,7 +480,6 @@ EOD
     partition_conf        = optional(map(string), {})
     partition_nodeset     = optional(list(string), [])
     partition_nodeset_dyn = optional(list(string), [])
-    partition_nodeset_tpu = optional(list(string), [])
     enable_job_exclusive  = optional(bool, false)
   }))
 

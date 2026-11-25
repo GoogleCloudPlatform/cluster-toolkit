@@ -16,8 +16,11 @@ package job
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/imagebuilder"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -25,7 +28,9 @@ import (
 	"slices"
 	"time"
 
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"strings"
@@ -64,12 +69,14 @@ var (
 	gkeScheduler           string
 	platform               string
 
-	awaitJobCompletion  bool
-	timeout             string
-	priority            string
-	verbose             bool
-	enableMLDiagnostics bool
-	volumeStr           []string
+	awaitJobCompletion         bool
+	timeout                    string
+	priority                   string
+	verbose                    bool
+	enableMLDiagnostics        bool
+	mlDiagnosticsImage         string
+	mlDiagnosticsTelemetryPort int
+	volumeStr                  []string
 
 	gkeMtcEnabled          bool
 	gkeMtcRamdiskDirectory string
@@ -101,6 +108,9 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 		if err := validateWorkloadNameLength(workloadName, isPathwaysJob); err != nil {
 			return err
 		}
+		if computeType == "" && pathways.RunSPSWorkload == "" {
+			return fmt.Errorf("required flag(s) \"compute-type\" not set")
+		}
 
 		if !pathways.Headless && !pathways.DeploySPS && commandToRun == "" {
 			return fmt.Errorf("required flag \"command\" not set")
@@ -112,11 +122,6 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 
 		if err := validatePathwaysFlags(cmd); err != nil {
 			return err
-		}
-		if !skipPrereqs && buildContext != "" && !pathways.Headless && !pathways.DeploySPS {
-			if err := ensureBuildPrerequisites(cmd, projectID, location); err != nil {
-				return err
-			}
 		}
 
 		if err := validateGKENAPFlags(); err != nil {
@@ -131,6 +136,16 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 
 		if err := validateRestartOnExitCodes(restartOnExitCodes); err != nil {
 			return err
+		}
+
+		if err := validateMLDiagnosticsFlags(cmd); err != nil {
+			return err
+		}
+
+		if !skipPrereqs && buildContext != "" && !pathways.Headless && !pathways.DeploySPS {
+			if err := ensureBuildPrerequisites(cmd, projectID, location); err != nil {
+				return err
+			}
 		}
 
 		priority = strings.ToLower(priority)
@@ -149,8 +164,8 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&dryRunManifest, "dry-run-out", "o", "", "Path to output the generated Kubernetes manifest instead of applying it.")
 	SubmitCmd.Flags().StringVarP(&platform, "platform", "f", "linux/amd64", "Target platform for the image build (e.g., 'linux/amd64', 'linux/arm64'). Used with --base-image.")
 
-	SubmitCmd.Flags().StringArrayVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>], mode can be 'ro' or 'rw', default 'ro'). profile= selects a GKE GCSFuse storage profile (training, checkpointing or serving) for gs:// sources and provisions a shared PV/PVC gateway instead of an inline CSI volume.")
-	SubmitCmd.Flags().StringArrayVar(&envVars, "env", []string{}, "Custom environment variables to pass to the workload container in KEY=VALUE format. Can be specified multiple times.")
+	SubmitCmd.Flags().StringArrayVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>], where <src> is gs://<bucket>[/<path>], filestore://<instance-or-ip>/<share>, nfs://<server>/<export>, <pvc-name>[/<sub-path>], or /host/path; mode can be 'ro' or 'rw', default 'ro'). profile= selects a GKE GCSFuse storage profile (training, checkpointing or serving) for gs:// sources and provisions a shared PV/PVC gateway instead of an inline CSI volume.")
+	SubmitCmd.Flags().StringArrayVar(&envVars, "env", []string{}, "Workload container env var in KEY=VALUE format (repeatable). Replaces matching gcluster defaults.")
 
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
 	SubmitCmd.Flags().StringVarP(&kueueQueueName, "queue", "q", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
@@ -158,7 +173,7 @@ func init() {
 	SubmitCmd.Flags().IntVar(&numSlices, "num-slices", 1, "The number of independent groups/slices to use.")
 	SubmitCmd.Flags().IntVar(&restarts, "restarts", 1, "Maximum number of restarts for the JobSet before failing.")
 	SubmitCmd.Flags().StringVar(&ttlAfterFinished, "gke-ttl-after-finished", "1h", "Time to retain the JobSet after it finishes (e.g. 5m, 1h).")
-	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Time to wait before forcefully terminating a pod (e.g. 30s, 2m). Gives the workload time to save checkpoints or clean up distributed state during cancellation or preemption events (like Spot VM evictions).")
+	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Pod termination grace period (e.g. 30s, 2m). On Pathways jobs, applies only to worker pods (pathways-head keeps 30s; ignored by --pathways-run-sps-workload).")
 	SubmitCmd.Flags().BoolVar(&gkeDisableParallelContainers, "gke-disable-parallel-containers", false, "Disable parallel containers for TPU7x on GKE.")
 
 	SubmitCmd.Flags().StringVar(&placementPolicy, "placement-policy", "", "Name of an existing GCE compact placement or workload policy attached to the target node pool. Under NAP on machines that support compact placement it is also used as the GKE placement group identifier.")
@@ -166,41 +181,43 @@ func init() {
 	SubmitCmd.Flags().StringVar(&cpuAffinityStr, "cpu-affinity", "", "CPU affinity rules (e.g., 'numa').")
 	SubmitCmd.Flags().IntSliceVar(&restartOnExitCodes, "restart-on-exit-codes", nil, "List of exit codes that should not trigger a job failure.")
 	SubmitCmd.Flags().StringVar(&imagePullSecrets, "image-pull-secret", "", "Comma-separated list of secrets for pulling images. If omitted, matching dockerconfigjson secrets in the target namespace are attached; pass \"\" to attach none.")
-	SubmitCmd.Flags().StringVar(&serviceAccountName, "service-account", "", "Service account name for the pods.")
+	SubmitCmd.Flags().StringVar(&serviceAccountName, "service-account", "", "Kubernetes ServiceAccount for the pods (GKE Workload Identity). On TPU and Pathways jobs, setting it disables hostNetwork.")
 	SubmitCmd.Flags().StringVar(&topology, "topology", "", "TPU slice topology (e.g., 2x2x1).")
 	SubmitCmd.Flags().StringVar(&gkeScheduler, "gke-scheduler", "", "Kubernetes Scheduler name (e.g., gke.io/topology-aware-auto).")
 	SubmitCmd.Flags().BoolVar(&awaitJobCompletion, "await-job-completion", false, "If true, gcluster will wait for the submitted job to complete.")
 	SubmitCmd.Flags().StringVar(&timeout, "timeout", "-1s", "Time to wait for job in seconds or string format (e.g. 1h, 10m). Default is max timeout (-1s).")
 	SubmitCmd.Flags().StringVar(&priority, "priority", "", "A priority class name (e.g., low, medium, high, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used.")
-	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging for the workload (TPUs and GPUs).")
+	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose TPU/GPU logging. Matching --env or --pathways-worker-env values take precedence.")
 	SubmitCmd.Flags().StringVar(&gkeNapProvisioning, "gke-nap-provisioning", "", "Compute provisioning model for GKE NAP. Allowed values: on-demand, spot, reservation.")
 	SubmitCmd.Flags().StringVar(&gkeNapReservation, "gke-nap-reservation", "", "Name of the Google Cloud Reservation for GKE NAP (required if --gke-nap-provisioning=reservation).")
 
 	SubmitCmd.Flags().BoolVar(&isPathwaysJob, "pathways", false, "If present, gcluster will generate a manifest for a Pathways job.")
-	SubmitCmd.Flags().StringVar(&pathways.ProxyServerImage, "pathways-proxy-server-image", "", "The image for the Pathways proxy server.")
-	SubmitCmd.Flags().StringVar(&pathways.ServerImage, "pathways-server-image", "", "The image for the Pathways server.")
-	SubmitCmd.Flags().StringVar(&pathways.WorkerImage, "pathways-worker-image", "", "The image for the Pathways worker.")
+	SubmitCmd.Flags().StringVar(&pathways.ProxyServerImage, "pathways-proxy-server-image", "", "Image for pathways-proxy (defaults to pathways/proxy_server:latest, the public colocated sidecar release, or derived from the SPS instance; required for digest-pinned SPS servers).")
+	SubmitCmd.Flags().StringVar(&pathways.ServerImage, "pathways-server-image", "", "Image for pathways-rm and default for pathways-worker (defaults to pathways/server:latest, or the public colocated sidecar release).")
+	SubmitCmd.Flags().StringVar(&pathways.WorkerImage, "pathways-worker-image", "", "Image for pathways-worker (defaults to --pathways-server-image).")
 	SubmitCmd.Flags().BoolVar(&pathways.Headless, "pathways-headless", false, "If present, the user's workload container will not be deployed within the `pathways-head` job.")
 	SubmitCmd.Flags().BoolVar(&pathways.DeploySPS, "pathways-deploy-sps", false, "Deploy a Shared Pathways Service (SPS) instance with a resource-manager-only head pod and persistent TPU workers.")
+	SubmitCmd.Flags().StringVar(&pathways.RunSPSWorkload, "pathways-run-sps-workload", "", "Run --command against an existing SPS JobSet name or endpoint. Without an image, runs locally via port-forward (sets JAX_PLATFORMS=proxy unless overridden via --env); with --image or --base-image, runs in-cluster.")
 	SubmitCmd.Flags().StringVar(&pathways.GCSLocation, "pathways-gcs-location", "", "Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.")
 	SubmitCmd.Flags().IntVar(&pathways.ElasticSlices, "pathways-elastic-slices", 0, "Configures the number of elastic slices, potentially allowing for more flexible resource allocation.")
-	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 0, "Maximum times the workers in a slice can be restarted (defaults to 0, 4000 when --pathways-elastic-slices>0 or --pathways-headless is set, or 1000000 when --pathways-deploy-sps is set). Maps to backoffLimitPerIndex=N and backoffLimit=N*nodesPerSlice on the worker Job.")
+	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 0, "Max failed-pod replacements (N) per worker index (default 0; 4000 if elastic/headless; 1000000 if deploy-SPS). Sets backoffLimitPerIndex=N and backoffLimit=max(N,4)*nodesPerSlice (min 4 per node, max 2147483647).")
 	SubmitCmd.Flags().StringVar(&pathways.ProxyArgs, "pathways-proxy-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-proxy` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerArgs, "pathways-server-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-rm` (resource manager) executable.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
-	SubmitCmd.Flags().StringArrayVar(&pathwaysProxyEnv, "pathways-proxy-env", []string{}, "Custom environment variables for the Pathways proxy container in KEY=VALUE format. Can be specified multiple times.")
-	SubmitCmd.Flags().StringArrayVar(&pathwaysServerEnv, "pathways-server-env", []string{}, "Custom environment variables for the Pathways server container in KEY=VALUE format. Can be specified multiple times.")
-	SubmitCmd.Flags().StringArrayVar(&pathwaysWorkerEnv, "pathways-worker-env", []string{}, "Custom environment variables for the Pathways worker container in KEY=VALUE format. Can be specified multiple times.")
-	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional colocated Python sidecar that runs in each Pathways worker pod and shares memory with the worker at /tmp/sidecar.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysProxyEnv, "pathways-proxy-env", []string{}, "Pathways proxy container env var in KEY=VALUE format (repeatable). Replaces matching gcluster defaults.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysServerEnv, "pathways-server-env", []string{}, "Pathways server container env var in KEY=VALUE format (repeatable). Replaces matching gcluster defaults.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysWorkerEnv, "pathways-worker-env", []string{}, "Pathways worker container env var in KEY=VALUE format (repeatable). Replaces matching gcluster defaults.")
+	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Optional colocated Python sidecar image sharing /tmp/sidecar with workers. Auto-matches public cloud-pathways server/proxy tags; pass matching image flags for custom or digest-only sidecars.")
 	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
 
 	SubmitCmd.Flags().BoolVar(&gkeMtcEnabled, "gke-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")
 	SubmitCmd.Flags().StringVar(&gkeMtcRamdiskDirectory, "gke-mtc-ramdisk-dir", "", "Ramdisk directory path for Multi-Tier Checkpointing (MTC). Required when --gke-mtc-enabled is set.")
-	SubmitCmd.Flags().BoolVar(&enableMLDiagnostics, "enable-ml-diagnostics", false, "Enables ML Diagnostics for the workload. Requires the target cluster to have ML Diagnostics explicitly enabled.")
+	SubmitCmd.Flags().BoolVar(&enableMLDiagnostics, "enable-ml-diagnostics", false, "Enables ML Diagnostics for the workload (uses the GKE managed webhook by default, or injects the collector native sidecar on Kubernetes 1.29+ TPU pods when --ml-diagnostics-image or GCLUSTER_TELEMETRY_IMAGE is set).")
+	SubmitCmd.Flags().StringVar(&mlDiagnosticsImage, "ml-diagnostics-image", "", "Container image for the ML Diagnostics telemetry collector native sidecar on Kubernetes 1.29+ TPU workloads (requires --enable-ml-diagnostics; overrides GCLUSTER_TELEMETRY_IMAGE, and --ml-diagnostics-image=\"\" ignores it so GKE uses the managed webhook).")
+	SubmitCmd.Flags().IntVar(&mlDiagnosticsTelemetryPort, "ml-diagnostics-telemetry-port", k8s.DefaultTelemetryCollectorPort, "Prometheus metrics port exposed by the ML Diagnostics collector sidecar (requires --enable-ml-diagnostics with --ml-diagnostics-image or GCLUSTER_TELEMETRY_IMAGE on GKE; ports 8431-8438, 8471, 8476-8479, and 13133 are reserved).")
 	SubmitCmd.Flags().StringVar(&gkeCustomTemplatesPath, "gke-custom-templates-path", "", "Path to a local directory containing custom GKE templates overrides.")
 
 	_ = SubmitCmd.MarkFlagRequired("name")
-	_ = SubmitCmd.MarkFlagRequired("compute-type")
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
@@ -235,6 +252,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 
 	jobTopology := strings.ToLower(strings.TrimSpace(topology))
 	applyPathwaysSubmitDefaults(cmd)
+	resolvedMLDiagImg, resolvedMLDiagPort := resolveSubmitMLDiagnostics(cmd)
 
 	jobDef := orchestrator.JobDefinition{
 		ImageName:                     imageName,
@@ -269,6 +287,9 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		PriorityClassName:             priority,
 		Verbose:                       verbose,
 		MLDiagnosticsEnabled:          enableMLDiagnostics,
+		MLDiagnosticsImage:            resolvedMLDiagImg,
+		MLDiagnosticsImageSpecified:   cmd.Flags().Changed("ml-diagnostics-image"),
+		MLDiagnosticsTelemetryPort:    resolvedMLDiagPort,
 		GKEMTCEnabled:                 gkeMtcEnabled,
 		GKEMTCRamdiskDirectory:        gkeMtcRamdiskDirectory,
 		GkeCustomTemplatesPath:        gkeCustomTemplatesPath,
@@ -353,9 +374,17 @@ func applyPathwaysSubmitDefaults(cmd *cobra.Command) {
 	} else if (pathways.ElasticSlices > 0 || pathways.Headless) && !cmd.Flags().Changed("pathways-max-slice-restarts") {
 		pathways.MaxSliceRestarts = defaultElasticMaxSliceRestarts
 	}
+	if pathways.RunSPSWorkload != "" && !cmd.Flags().Changed("restarts") {
+		restarts = 0
+	}
 	pathways.ProxyEnv = parseEnvFlags(pathwaysProxyEnv)
 	pathways.ServerEnv = parseEnvFlags(pathwaysServerEnv)
 	pathways.WorkerEnv = parseEnvFlags(pathwaysWorkerEnv)
+}
+
+// isSPSTerminalRun reports whether --pathways-run-sps-workload runs the command on this machine (no image given).
+func isSPSTerminalRun() bool {
+	return pathways.RunSPSWorkload != "" && imageName == "" && baseImage == "" && buildContext == ""
 }
 
 func validateWorkloadNameLength(name string, isPathways bool) error {
@@ -374,10 +403,10 @@ func validateWorkloadNameLength(name string, isPathways bool) error {
 
 func validatePathwaysFlags(cmd *cobra.Command) error {
 	if isPathwaysJob {
-		if err := validateDeploySPSFlags(); err != nil {
+		if err := validateSPSModeFlags(cmd); err != nil {
 			return err
 		}
-		if pathways.GCSLocation == "" {
+		if pathways.GCSLocation == "" && pathways.RunSPSWorkload == "" {
 			return fmt.Errorf("pathways-gcs-location is required when using --pathways")
 		}
 		if pathways.ElasticSlices < 0 {
@@ -386,12 +415,51 @@ func validatePathwaysFlags(cmd *cobra.Command) error {
 		if pathways.MaxSliceRestarts < 0 {
 			return fmt.Errorf("--pathways-max-slice-restarts must be non-negative")
 		}
+		if pathways.MaxSliceRestarts > math.MaxInt32 {
+			return fmt.Errorf("--pathways-max-slice-restarts must be at most %d", math.MaxInt32)
+		}
 		return nil
 	}
 	if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{}) || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 || hasChangedPathwaysFlags(cmd) {
 		return fmt.Errorf("pathways flags specified but --pathways flag is missing")
 	}
 	return nil
+}
+
+var unsupportedRunSPSWorkloadFlags = []string{
+	"compute-type",
+	"num-nodes",
+	"topology",
+	"gpus",
+	"pathways-server-image",
+	"pathways-worker-image",
+	"pathways-colocated-python-sidecar-image",
+	"pathways-server-args",
+	"pathways-worker-args",
+	"pathways-server-env",
+	"pathways-worker-env",
+	"pathways-elastic-slices",
+	"pathways-max-slice-restarts",
+	"gke-mtc-enabled",
+	"ml-diagnostics-image",
+	"ml-diagnostics-telemetry-port",
+}
+
+func validateSPSModeFlags(cmd *cobra.Command) error {
+	if pathways.RunSPSWorkload != "" && (pathways.DeploySPS || pathways.Headless) {
+		return fmt.Errorf("--pathways-run-sps-workload cannot be used with --pathways-deploy-sps or --pathways-headless")
+	}
+	if isSPSTerminalRun() && len(volumeStr) > 0 {
+		return fmt.Errorf("--mount requires --image or --base-image when used with --pathways-run-sps-workload")
+	}
+	if pathways.RunSPSWorkload != "" && cmd != nil {
+		for _, name := range unsupportedRunSPSWorkloadFlags {
+			if f := cmd.Flags().Lookup(name); f != nil && f.Changed {
+				return fmt.Errorf("--pathways-run-sps-workload connects to an existing SPS instance and cannot be used with --%s", name)
+			}
+		}
+	}
+	return validateDeploySPSFlags()
 }
 
 // validateDeploySPSFlags rejects flags that have no effect on an SPS instance, which runs no workload.
@@ -422,7 +490,7 @@ func hasChangedPathwaysFlags(cmd *cobra.Command) bool {
 }
 
 func validateImageFlags(ctx context.Context, projectID, location string) error {
-	if pathways.Headless || pathways.DeploySPS {
+	if pathways.Headless || pathways.DeploySPS || isSPSTerminalRun() {
 		return nil
 	}
 	if err := validateImageSources(); err != nil {
@@ -448,40 +516,54 @@ func validateBuildContext(ctx context.Context, projectID, location string) error
 	if buildContext == "" {
 		return nil
 	}
-	if os.Getenv("GCLUSTER_IMAGE_REPO") == "" {
-		suggestions, hasMore := lookupArtifactRegistryRepos(ctx, projectID, location)
-
-		region := shell.ExtractRegion(location)
-
-		projPrint := projectID
-		if projPrint == "" {
-			projPrint = "<PROJECT_ID>"
+	dest, err := imagebuilder.ResolveDestinationRepo(projectID, location, baseImage, os.Getenv("GCLUSTER_IMAGE_REPO"))
+	if err != nil {
+		if !errors.Is(err, imagebuilder.ErrMissingImageRepo) {
+			return err
 		}
-		regPrint := region
-		if regPrint == "" {
-			regPrint = "<REGION>"
+		if projectID == "" && location == "" {
+			return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context with base image %q. "+
+				"Set GCLUSTER_IMAGE_REPO=<registry-host>/<repository> (or pass a --base-image hosted in a custom OCI registry)", baseImage)
 		}
-
-		if len(suggestions) > 0 {
-			reposStr := "'" + strings.Join(suggestions, "', '") + "'"
-			if hasMore {
-				reposStr += " (and more)"
-			}
-			return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context.\n\n"+
-				"Available Docker repositories in project '%s' and region '%s' are: %s.\n\n"+
-				"To view all repositories, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --filter=\"format=DOCKER\" --format=\"value(name.basename())\"\n\n"+
-				"Please set your environment variable to one of these (e.g., export GCLUSTER_IMAGE_REPO=%s)",
-				projPrint, regPrint, reposStr, projPrint, regPrint, suggestions[0])
-		}
-		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. "+
-			"Please set it in your environment with the repository name only (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo).\n\n"+
-			"To see available repositories manually, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --filter=\"format=DOCKER\" --format=\"value(name.basename())\"",
-			projPrint, regPrint)
+		return missingGARRepoError(ctx, projectID, location)
 	}
-	if os.Getenv("USER") == "" && os.Getenv("USERNAME") == "" {
+	if dest.DerivedFromBase {
+		logging.Info("GCLUSTER_IMAGE_REPO is not set; deriving destination repository %s from --base-image", dest.RepoPrefix)
+	}
+	if dest.IsGAR && os.Getenv("USER") == "" && os.Getenv("USERNAME") == "" {
 		return fmt.Errorf("failed to determine user identity from environment (tried USER and USERNAME). This is required to ensure unique image tagging when using --build-context")
 	}
 	return nil
+}
+
+func missingGARRepoError(ctx context.Context, projectID, location string) error {
+	suggestions, hasMore := lookupArtifactRegistryRepos(ctx, projectID, location)
+	region := shell.ExtractRegion(location)
+
+	projPrint := projectID
+	if projPrint == "" {
+		projPrint = "<PROJECT_ID>"
+	}
+	regPrint := region
+	if regPrint == "" {
+		regPrint = "<REGION>"
+	}
+
+	if len(suggestions) > 0 {
+		reposStr := "'" + strings.Join(suggestions, "', '") + "'"
+		if hasMore {
+			reposStr += " (and more)"
+		}
+		return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context.\n\n"+
+			"Available Docker repositories in project '%s' and region '%s' are: %s.\n\n"+
+			"To view all repositories, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --filter=\"format=DOCKER\" --format=\"value(name.basename())\"\n\n"+
+			"Please set your environment variable to one of these (e.g., export GCLUSTER_IMAGE_REPO=%s)",
+			projPrint, regPrint, reposStr, projPrint, regPrint, suggestions[0])
+	}
+	return fmt.Errorf("GCLUSTER_IMAGE_REPO environment variable is required when using --build-context. "+
+		"For Artifact Registry, set the repository name (e.g., export GCLUSTER_IMAGE_REPO=gcluster-repo); for another OCI registry, set <registry-host>/<repository> (e.g., export GCLUSTER_IMAGE_REPO=harbor.example.com/ml-team).\n\n"+
+		"To see available Artifact Registry repositories manually, you can run:\n\t> gcloud artifacts repositories list --project=%s --location=%s --filter=\"format=DOCKER\" --format=\"value(name.basename())\"",
+		projPrint, regPrint)
 }
 
 func validateGKENAPFlags() error {
@@ -536,4 +618,29 @@ func validateRestartOnExitCodes(codes []int) error {
 		}
 	}
 	return nil
+}
+
+func validateMLDiagnosticsFlags(cmd *cobra.Command) error {
+	imgChanged := cmd.Flags().Changed("ml-diagnostics-image")
+	portChanged := cmd.Flags().Changed("ml-diagnostics-telemetry-port")
+	if !enableMLDiagnostics && (imgChanged || portChanged) {
+		return fmt.Errorf("--ml-diagnostics-image and --ml-diagnostics-telemetry-port require --enable-ml-diagnostics")
+	}
+	if portChanged {
+		return k8s.ValidateTelemetryPort(mlDiagnosticsTelemetryPort)
+	}
+	return nil
+}
+
+// resolveSubmitMLDiagnostics returns the collector image and metrics port for the job; the port is 0 unless
+// --ml-diagnostics-telemetry-port was passed so the orchestrator can tell "default" from "explicit".
+func resolveSubmitMLDiagnostics(cmd *cobra.Command) (string, int) {
+	if !enableMLDiagnostics {
+		return "", 0
+	}
+	port := 0
+	if cmd.Flags().Changed("ml-diagnostics-telemetry-port") {
+		port = mlDiagnosticsTelemetryPort
+	}
+	return strings.TrimSpace(mlDiagnosticsImage), port
 }

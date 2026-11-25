@@ -87,11 +87,6 @@ func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions
 	return nil
 }
 
-func isToolkitGatewayClaimName(claim string) bool {
-	return strings.HasPrefix(claim, gcsFuseGatewayPrefix+"-") ||
-		strings.HasPrefix(claim, filestoreGatewayPrefix+"-")
-}
-
 // reclaimStorageGateways deletes unused toolkit gateways in the namespace. Failures only warn.
 func (g *GKEOrchestrator) reclaimStorageGateways(namespace, cancelledJobSet string, ownClaims []string) {
 	if g.kubeClient == nil {
@@ -207,8 +202,8 @@ func (g *GKEOrchestrator) deleteStorageGateway(namespace string, pvc *unstructur
 			"  The PersistentVolumeClaim was removed, so this volume is now stuck in phase Released with a stale claimRef.\n"+
 			"  The next 'gcluster job submit' using the same storage in namespace '%s' recreates it automatically.\n"+
 			"  To remove it now, run:\n"+
-			"    kubectl delete pv %s",
-			pvName, err, namespace, pvName)
+			"    %s",
+			pvName, err, namespace, kubectlCommandLine(g.kubeContext, "delete", "pv", pvName))
 		return
 	}
 	logging.Info("Reclaimed storage gateway PVC '%s' and PV '%s'. Bucket and share data are unaffected.", claim, pvName)

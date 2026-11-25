@@ -90,14 +90,20 @@ func evaluateAndFlatten(val cty.Value) []cty.Value {
 		var values []cty.Value
 		for it := val.ElementIterator(); it.Next(); {
 			_, v := it.Element()
-			if v.IsKnown() {
+			if v.IsWhollyKnown() {
 				v, _ = v.UnmarkDeep()
+			} else if v.IsKnown() {
+				v, _ = v.Unmark()
 			}
 			values = append(values, v)
 		}
 		return values
 	}
-	val, _ = val.UnmarkDeep()
+	if val.IsWhollyKnown() {
+		val, _ = val.UnmarkDeep()
+	} else if val.IsKnown() {
+		val, _ = val.Unmark()
+	}
 	return []cty.Value{val}
 }
 
@@ -263,29 +269,11 @@ func parseBoolInput(inputs map[string]interface{}, key string, defaultVal bool) 
 }
 
 func isSingleValSet(val cty.Value) bool {
-	if val == cty.NilVal || val.IsNull() {
-		return false
-	}
-	if !val.IsKnown() {
-		_, isExpr := config.IsExpressionValue(val)
-		return isExpr || len(config.IsProductOfModuleUse(val)) > 0
-	}
-	val, _ = val.Unmark()
-	switch val.Type() {
-	case cty.String:
-		return val.AsString() != ""
-	case cty.Number:
-		return val.AsBigFloat().Sign() > 0
-	case cty.Bool:
-		return val.True()
-	default:
-		// For lists, maps, and sets, consider them "not set" if they are empty.
-		return val.LengthInt() > 0
-	}
+	return config.IsValueSet(val)
 }
 
 // isVarSet returns true if the value is known (or a dynamic expression/module use reference), non-null,
-// and non-empty (positive number, non-empty string, true bool, or non-empty collection).
+// and non-empty (non-zero number, non-empty string, true bool, or non-empty collection).
 func isVarSet(values []cty.Value) bool {
 	if len(values) == 0 {
 		return false

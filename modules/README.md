@@ -45,8 +45,6 @@ Modules that are still in development and less stable are labeled with the
   Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v6-controller].
 * **[schedmd-slurm-gcp-v6-nodeset]** ![core-badge] :
   Creates a nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
-* **[schedmd-slurm-gcp-v6-nodeset-tpu]** ![core-badge] :
-  Creates a TPU nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
 * **[schedmd-slurm-gcp-v6-nodeset-dynamic]** ![core-badge] ![experimental-badge]:
   Creates a dynamic nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module and instance template.
 * **[gke-node-pool]** ![core-badge] ![experimental-badge] : Creates a
@@ -72,7 +70,6 @@ Modules that are still in development and less stable are labeled with the
 [gke-job-template]: ../modules/compute/gke-job-template/README.md
 [schedmd-slurm-gcp-v6-partition]: ../community/modules/compute/schedmd-slurm-gcp-v6-partition/README.md
 [schedmd-slurm-gcp-v6-nodeset]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md
-[schedmd-slurm-gcp-v6-nodeset-tpu]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu/README.md
 [schedmd-slurm-gcp-v6-nodeset-dynamic]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 [mig]: ../community/modules/compute/mig/README.md
@@ -178,8 +175,10 @@ Modules that are still in development and less stable are labeled with the
 ### IAM
 
 * **[iap-policy]** ![core-badge] : Configures IAM policy for Identity-Aware Proxy (IAP) on a Google Cloud Backend Service.
+* **[service-account-profiles]** ![community-badge] ![experimental-badge] : Applies a named least-privilege permission profile (Slurm controller, login or compute, Packer image builder, or custom) with resource-scoped IAM bindings to an existing keyless service account.
 
 [iap-policy]: iam/iap-policy/README.md
+[service-account-profiles]: ../community/modules/iam/service-account-profiles/README.md
 
 ### Management
 
@@ -508,7 +507,7 @@ release of the filestore module:
 ```yaml
   - id: network1
     source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=develop
-  ...
+  # ...
   - id: homefs
     source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/file-system/filestore?ref=v1.22.1&depth=1
 ```
@@ -606,7 +605,7 @@ modules:
   source: modules/compute/vm-instance
   use: [network1]
   settings:
-  ...
+    # ...
 ```
 
 In this snippet, the VM instance `workstation` uses the outputs of vpc
@@ -670,6 +669,29 @@ external_ip_vm = <sensitive>
 internal_ip_vm = [
   "10.128.0.19",
 ]
+```
+
+### Reconfigure Ignores (Optional)
+
+The `reconfigure_ignores` field (`map[string][]string`) specifies Terraform
+resource attributes to add to or subtract from `lifecycle.ignore_changes` via an automatically
+generated `override.tf.json` file in the deployment directory. Keys can be a
+resource type (e.g. `google_compute_instance`, applying to all resources of that
+type in the module) or a specific `type.name` address (e.g.
+`google_compute_instance.controller`), and values are lists of attribute names
+to ignore across subsequent `gcluster deploy` re-runs, or prefixed with `-`
+(e.g. `"-node_config[0].labels"`) to selectively un-ignore attributes hardcoded
+in module defaults (the keyword `"all"` is not supported). `reconfigure_ignores`
+is supported on local and embedded `terraform` modules only:
+
+```yaml
+  - id: workstation
+    source: modules/compute/vm-instance
+    use: [network1]
+    reconfigure_ignores:
+      google_compute_instance:
+      - metadata
+      - boot_disk
 ```
 
 ### Required Services (APIs) (optional)

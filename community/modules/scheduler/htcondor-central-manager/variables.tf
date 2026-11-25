@@ -81,10 +81,9 @@ variable "network_storage" {
 }
 
 variable "disk_size_gb" {
-  description = "Boot disk size in GB"
+  description = "Boot disk size in GB. If unset, the size of the image is used, with a minimum of 20 GB."
   type        = number
-  default     = 20
-  nullable    = false
+  default     = null
 }
 
 variable "metadata" {

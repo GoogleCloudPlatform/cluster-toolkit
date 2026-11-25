@@ -26,6 +26,7 @@ import (
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"github.com/google/go-cmp/cmp"
@@ -74,15 +75,18 @@ func setupMockMachineConfig(t *testing.T) {
 	}`
 	config.ClearMachineTypeCache()
 	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", mockJSON)
+	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	t.Setenv("GCLUSTER_LABEL_SCHEME", "")
 	t.Cleanup(config.ClearMachineTypeCache)
 }
 
 type MockExecutor struct {
 	responses   map[string][]shell.CommandResult
 	callCount   map[string]int
-	calls       []string // every command passed to ExecuteCommand, in order
-	streamCalls []string // commands passed to ExecuteCommandStream
-	contexts    []string // --context values stripped from kubectl calls, in order
+	calls       []string        // every command passed to ExecuteCommand, in order
+	streamCalls []string        // commands passed to ExecuteCommandStream
+	contexts    []string        // --context values stripped from kubectl calls, in order
+	timeouts    []time.Duration // timeouts passed to ExecuteCommandWithTimeout, in order
 }
 
 func NewMockExecutor(responses map[string][]shell.CommandResult) *MockExecutor {
@@ -105,6 +109,7 @@ func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
 		resourcePolicyCache:      make(map[string]*GCEWorkloadPolicy),
 		// Never read the developer's real kubeconfig in unit tests.
 		kubeconfigLoader: func() (*clientcmdapi.Config, error) { return clientcmdapi.NewConfig(), nil },
+		preflightClient:  &fakePreflightClient{},
 	}
 }
 
@@ -130,7 +135,8 @@ func (m *MockExecutor) ExecuteCommand(name string, args ...string) shell.Command
 	}
 }
 
-func (m *MockExecutor) ExecuteCommandWithTimeout(_ time.Duration, name string, args ...string) shell.CommandResult {
+func (m *MockExecutor) ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) shell.CommandResult {
+	m.timeouts = append(m.timeouts, timeout)
 	return m.ExecuteCommand(name, args...)
 }
 
@@ -141,9 +147,15 @@ func (m *MockExecutor) ExecuteCommandStream(name string, args ...string) error {
 }
 
 func (m *MockExecutor) stripContext(name string, args []string) []string {
-	if name == "kubectl" && len(args) > 2 && args[0] == "--context" {
+	if name != "kubectl" {
+		return args
+	}
+	if len(args) > 2 && args[0] == "--context" {
 		m.contexts = append(m.contexts, args[1])
 		return args[2:]
+	}
+	if len(args) == 0 || args[0] != "config" {
+		m.contexts = append(m.contexts, "")
 	}
 	return args
 }
@@ -177,6 +189,7 @@ type MockKubeClient struct {
 	ListErrs           map[string]error
 	ListNamespaces     map[string]string
 	ListFieldSelectors map[string]string
+	ListCounts         map[string]int
 	GetErr             error
 	DeleteErrs         map[string]error
 	Deleted            map[string][]string
@@ -233,6 +246,9 @@ func (m *MockKubeClient) ListResources(gvr schema.GroupVersionResource, namespac
 	}
 	if m.ListFieldSelectors != nil {
 		m.ListFieldSelectors[gvr.Resource] = fieldSelector
+	}
+	if m.ListCounts != nil {
+		m.ListCounts[gvr.Resource]++
 	}
 	return m.Objects[gvr.Resource], m.ListErrs[gvr.Resource]
 }
@@ -2782,7 +2798,7 @@ func TestResolveLogsSelector_MainOnlyTargetsMainReplicatedJob(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			orc := newTestGKEOrchestrator(NewMockExecutor(nil))
 
-			selector, mainOnly := orc.resolveLogsSelector("pw-job", &trueVal, 1, tt.firstJob, "")
+			selector, mainOnly := orc.resolveLogsSelector("pw-job", &trueVal, 1, tt.firstJob)
 			if !mainOnly {
 				t.Fatalf("resolveLogsSelector() mainOnly = false, want true")
 			}
@@ -3843,6 +3859,37 @@ func TestJobSetInfoJSONPath(t *testing.T) {
 			},
 			want: jobSetInfo{firstJob: "trainer", expectedPods: 8},
 		},
+		{
+			name: "heterogeneous replicatedJobs count init and app container streams",
+			obj: map[string]any{
+				"spec": map[string]any{
+					"replicatedJobs": []any{
+						map[string]any{
+							"name":     "pathways-head",
+							"replicas": 1,
+							"template": map[string]any{"spec": map[string]any{
+								"parallelism": 1,
+								"template": map[string]any{"spec": map[string]any{
+									"containers": []any{map[string]any{"name": "proxy"}, map[string]any{"name": "rm"}},
+								}},
+							}},
+						},
+						map[string]any{
+							"name":     "worker",
+							"replicas": 2,
+							"template": map[string]any{"spec": map[string]any{
+								"parallelism": 4,
+								"template": map[string]any{"spec": map[string]any{
+									"initContainers": []any{map[string]any{"name": "sidecar"}},
+									"containers":     []any{map[string]any{"name": "worker"}, map[string]any{"name": "metrics"}},
+								}},
+							}},
+						},
+					},
+				},
+			},
+			want: jobSetInfo{firstJob: "pathways-head", expectedPods: 9, expectedStreams: 26},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -3902,7 +3949,7 @@ func TestGetJobLogs_FollowRecountsStreamsAfterProbe(t *testing.T) {
 		"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
 		// First count sees 1 pod; by the time the probe passes all 7 pods (14 streams) exist.
 		podsQuery:   {{Stdout: "head-init head-main\n"}, {Stdout: "head-init head-main\n" + strings.Repeat("main side\n", 6)}},
-		jobSetQuery: {{Stdout: "\tFalse\tpathways-head\n1 1\n1 6\n"}},
+		jobSetQuery: {{Stdout: "\tFalse\tpathways-head\n1 1\thead-main\n1 6\tmain\n"}},
 		probe:       {{ExitCode: 0, Stdout: "x"}},
 	}
 	mockExec := NewMockExecutor(responses)
@@ -3918,6 +3965,63 @@ func TestGetJobLogs_FollowRecountsStreamsAfterProbe(t *testing.T) {
 		t.Fatalf("stream calls = %q, want [%q]", mockExec.streamCalls, want)
 	}
 	mockExec.assertAllKubectlPinned(t, "gke_test-project_us-central1-a_test-cluster")
+}
+
+func TestGetJobLogs_BatchedMultiContainerUsesSpecStreams(t *testing.T) {
+	oldInterval := logsRetryInterval
+	logsRetryInterval = time.Millisecond
+	defer func() { logsRetryInterval = oldInterval }()
+
+	falseVal := false
+	podsQuery := "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job -o jsonpath=" + podContainersJSONPath
+	jobSetQuery := "kubectl get jobsets.jobset.x-k8s.io test-job -n default -o jsonpath=" + jobSetInfoJSONPath
+	twoLivePods := "workload sidecar\nworkload sidecar\n"
+	eightPodSpec := "\tFalse\tmain-job\n1 8\tworkload sidecar\n"
+	waiting := shell.CommandResult{ExitCode: 1, Stderr: `container "workload" in pod "p-0" is waiting to start: ContainerCreating`}
+
+	t.Run("snapshot_retries_with_spec_max_log_requests", func(t *testing.T) {
+		snapCmd := "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=16 --tail=-1"
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+			"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+			podsQuery:                            {{Stdout: twoLivePods}},
+			jobSetQuery:                          {{Stdout: eightPodSpec}},
+			snapCmd:                              {waiting, {ExitCode: 0, Stdout: "all 16 streams\n"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		out, err := orc.GetJobLogs("test-job", orchestrator.LogsOptions{
+			ClusterName: "test-cluster", ClusterLocation: "us-central1-a", ProjectID: "test-project",
+			MainOnly: &falseVal,
+		})
+		if err != nil || out != "all 16 streams\n" {
+			t.Fatalf("GetJobLogs(snapshot) = (%q, %v), want (\"all 16 streams\\n\", nil)", out, err)
+		}
+		if got := mockExec.callCount[snapCmd]; got != 2 {
+			t.Errorf("snapshot logs call count = %d, want 2", got)
+		}
+	})
+
+	t.Run("follow_probes_and_streams_with_spec_max_log_requests", func(t *testing.T) {
+		probeCmd := "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=16 --tail=1"
+		streamCmd := "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers -f --max-log-requests=16 --tail=-1"
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+			"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+			podsQuery:                            {{Stdout: twoLivePods}, {Stdout: twoLivePods}},
+			jobSetQuery:                          {{Stdout: eightPodSpec}},
+			probeCmd:                             {{ExitCode: 0, Stdout: "ready\n"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		if _, err := orc.GetJobLogs("test-job", orchestrator.LogsOptions{
+			ClusterName: "test-cluster", ClusterLocation: "us-central1-a", ProjectID: "test-project",
+			Follow: true, MainOnly: &falseVal,
+		}); err != nil {
+			t.Fatalf("GetJobLogs(follow) error = %v", err)
+		}
+		if len(mockExec.streamCalls) != 1 || mockExec.streamCalls[0] != streamCmd {
+			t.Fatalf("stream calls = %q, want [%q]", mockExec.streamCalls, streamCmd)
+		}
+	})
 }
 
 func TestGetJobLogs_FollowProbesContainersBeforeStreaming(t *testing.T) {
@@ -4188,7 +4292,397 @@ func TestSubmitJob_MTCFastFailBeforeClusterCalls(t *testing.T) {
 	}
 }
 
-func TestSubmitJob_TemplateFastFailBeforeImageBuild(t *testing.T) {
+func TestPopulateClusterMetadata_PathwaysHeadNodePoolPreflight(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	tests := []struct {
+		name         string
+		pools        []gkeJobNodePool
+		headNodePool string
+		wantErr      string
+		forbidErr    string
+	}{
+		{
+			name: "non-existent --pathways-head-np fails fast",
+			pools: []gkeJobNodePool{{
+				Name:             "cpu-np",
+				InitialNodeCount: 1,
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+			}},
+			headNodePool: "missing-pool",
+			wantErr:      "Pathways head node pool 'missing-pool' not found in cluster 'test-cluster' (available node pools: cpu-np)",
+		},
+		{
+			name: "non-existent --pathways-head-np omits available node pools when none qualify",
+			pools: []gkeJobNodePool{{
+				Name:             "tpu-np",
+				InitialNodeCount: 1,
+				Config:           gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+			}},
+			headNodePool: "missing-pool",
+			wantErr:      "Pathways head node pool 'missing-pool' not found in cluster 'test-cluster'.",
+			forbidErr:    "available node pools",
+		},
+		{
+			name: "system pool --pathways-head-np fails fast with system pool error",
+			pools: []gkeJobNodePool{{
+				Name:             "default-pool",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2-standard-8",
+					Taints:      []gkeTaint{{Key: "components.gke.io/gke-managed-components", Value: "true", Effect: "NoSchedule"}},
+				},
+			}},
+			headNodePool: "default-pool",
+			wantErr:      "Pathways head node pool 'default-pool' in cluster 'test-cluster' is a GKE system node pool",
+		},
+		{
+			name: "non-CPU --pathways-head-np fails fast",
+			pools: []gkeJobNodePool{{
+				Name:             "tpu-np",
+				InitialNodeCount: 1,
+				Config:           gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+			}},
+			headNodePool: "tpu-np",
+			wantErr:      "Pathways head node pool 'tpu-np' in cluster 'test-cluster' is not a CPU node pool",
+		},
+		{
+			name: "0-node cpu-np with autoscaling disabled fails fast",
+			pools: []gkeJobNodePool{{
+				Name:             "cpu-np",
+				InitialNodeCount: 0,
+				Autoscaling:      gkeAutoscaling{Enabled: false},
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+			}},
+			wantErr: "Pathways head node pool 'cpu-np' in cluster 'test-cluster' has 0 nodes and autoscaling is disabled",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+			orc.clusterDesc = gkeCluster{NodePools: tt.pools}
+			job := &orchestrator.JobDefinition{
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				IsPathwaysJob:   true,
+				Pathways:        orchestrator.PathwaysJobDefinition{HeadNodePool: tt.headNodePool},
+			}
+			err := orc.populateClusterMetadata(job)
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("unexpected error message: %v", err)
+			}
+			if tt.forbidErr != "" && strings.Contains(err.Error(), tt.forbidErr) {
+				t.Errorf("did not expect %q in error, got: %v", tt.forbidErr, err)
+			}
+		})
+	}
+}
+
+func TestPopulateClusterMetadata_PathwaysHeadNodePoolCapacity(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	t.Run("scale-to-zero cpu-np with autoscaling enabled (min=0, max>0) succeeds and creates pathways-flavor", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.machineCapCache["n2-standard-16:us-central1-a"] = MachineTypeCap{GuestCpus: 16, MemoryMb: 65536}
+		orc.clusterDesc = gkeCluster{
+			NodePools: []gkeJobNodePool{{
+				Name:             "cpu-np",
+				InitialNodeCount: 0,
+				Autoscaling:      gkeAutoscaling{Enabled: true, MinNodeCount: 0, MaxNodeCount: 16},
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-16"},
+			}},
+		}
+		job := &orchestrator.JobDefinition{
+			ClusterName:     "test-cluster",
+			ClusterLocation: "us-central1-a",
+			IsPathwaysJob:   true,
+		}
+		if err := orc.populateClusterMetadata(job); err != nil {
+			t.Fatalf("expected scale-to-zero head node pool to succeed, got error: %v", err)
+		}
+		pwFlavor, ok := orc.capacity.Flavors["pathways-flavor"]
+		if !ok {
+			t.Fatalf("expected pathways-flavor to be populated in cluster capacity, got flavors: %+v", orc.capacity.Flavors)
+		}
+		if pwFlavor.NodeLabels["cloud.google.com/gke-nodepool"] != "cpu-np" {
+			t.Errorf("expected pathways-flavor nodepool label 'cpu-np', got %q", pwFlavor.NodeLabels["cloud.google.com/gke-nodepool"])
+		}
+	})
+
+	t.Run("autoDetectCPUNodePool prefers pool with capacity over 0-node disabled pool", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.clusterDesc = gkeCluster{
+			NodePools: []gkeJobNodePool{
+				{
+					Name:             "cpu-np",
+					InitialNodeCount: 0,
+					Autoscaling:      gkeAutoscaling{Enabled: false},
+					Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+				},
+				{
+					Name:             "pathways-np",
+					InitialNodeCount: 1,
+					Config:           gkeNodePoolConfig{MachineType: "n2-standard-16"},
+				},
+			},
+		}
+		if got := orc.autoDetectCPUNodePool(); got != "pathways-np" {
+			t.Errorf("autoDetectCPUNodePool() = %q, want 'pathways-np'", got)
+		}
+	})
+}
+
+func TestCheckJobSetWarningEvents_IncludesPodSchedulingEvents(t *testing.T) {
+	const jobSetEventsCmd = "kubectl get events -n default --field-selector=involvedObject.name=pw-job,involvedObject.kind=JobSet,type=Warning --request-timeout=10s --no-headers"
+	const jobPodsCmd = "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=pw-job -o name"
+	const podEventsCmd = "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	podEventsOutput := strings.Join([]string{
+		"2m          Normal    Scheduled           pod/pw-job-worker-0-0-abc   Successfully assigned default/pw-job-worker-0-0-abc to node-1",
+		"70s         Normal    Pulled              pod/pw-job-worker-0-0-abc   Pulled container image with no Warning reported",
+		"90s         Warning   FailedScheduling    pod/pw-job-pathways-head-0-0-xyz   0/5 nodes are available: 5 Insufficient cpu.",
+		"85s         Normal    NotTriggerScaleUp   pod/pw-job-pathways-head-0-0-xyz   pod didn't trigger scale-up: 1 max node group size reached",
+		"80s         Warning   FailedScheduling    pod/other-pw-job-0-0-def   0/5 nodes are available",
+		"75s         Warning   FailedScheduling    pod/pw-job-2-worker-0-0-abc   0/5 nodes are available",
+	}, "\n")
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		jobSetEventsCmd: {{ExitCode: 0, Stdout: ""}},
+		jobPodsCmd:      {{ExitCode: 0, Stdout: "pod/pw-job-worker-0-0-abc\npod/pw-job-pathways-head-0-0-xyz\n"}},
+		podEventsCmd:    {{ExitCode: 0, Stdout: podEventsOutput}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	got := orc.checkJobSetWarningEvents("default", "pw-job")
+	if !strings.Contains(got, "FailedScheduling") || !strings.Contains(got, "pw-job-pathways-head-0-0-xyz") {
+		t.Errorf("expected FailedScheduling event for pw-job head pod, got:\n%s", got)
+	}
+	if !strings.Contains(got, "NotTriggerScaleUp") {
+		t.Errorf("expected NotTriggerScaleUp event for pw-job head pod, got:\n%s", got)
+	}
+	if strings.Contains(got, "Successfully assigned") {
+		t.Errorf("did not expect Normal Scheduled event in warning output, got:\n%s", got)
+	}
+	if strings.Contains(got, "Pulled container image") {
+		t.Errorf("did not expect Normal event mentioning 'Warning' in message, got:\n%s", got)
+	}
+	if strings.Contains(got, "other-pw-job") {
+		t.Errorf("did not expect events from unrelated job with matching suffix, got:\n%s", got)
+	}
+	if strings.Contains(got, "pw-job-2") {
+		t.Errorf("did not expect events from unrelated job with matching prefix, got:\n%s", got)
+	}
+}
+
+func TestFetchLogsWithRetry_SurfacesUnscheduledPodsAndEvents(t *testing.T) {
+	oldInterval := logsRetryInterval
+	logsRetryInterval = time.Millisecond
+	defer func() { logsRetryInterval = oldInterval }()
+
+	const selector = "jobset.sigs.k8s.io/jobset-name=pw-job"
+	const logsCmd = "kubectl logs -n default -l " + selector + " --max-log-requests=10 --tail=-1"
+	const unschedCmd = "kubectl get pods -n default -l " + selector + " -o jsonpath=" + unscheduledPodsJSONPath
+	const podEventsCmd = "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	waiting := shell.CommandResult{ExitCode: 1, Stderr: `container "worker" in pod "pw-job-worker-0-0-abc" is waiting to start: PodInitializing`}
+	timedOut := make([]shell.CommandResult, 12)
+	for i := range timedOut {
+		timedOut[i] = waiting
+	}
+	unschedResult := shell.CommandResult{
+		ExitCode: 0,
+		Stdout: "pw-job-worker-0-0-abc\tPending\tTrue\t\t\n" +
+			"pw-job-pathways-head-0-0-xyz\tPending\tFalse\tUnschedulable\t0/4 nodes are available: 4 node(s) didn't match Pod's node affinity/selector.\n",
+	}
+	podEventResult := shell.CommandResult{
+		ExitCode: 0,
+		Stdout:   "60s Normal NotTriggerScaleUp pod/pw-job-pathways-head-0-0-xyz pod didn't trigger scale-up: 2 node(s) didn't match Pod's node affinity/selector\n",
+	}
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		logsCmd:      timedOut,
+		unschedCmd:   {unschedResult, unschedResult},
+		podEventsCmd: {podEventResult, podEventResult, podEventResult},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	_, err := orc.fetchLogsWithRetry("default", "pw-job", selector, false, 0, -1)
+	if err == nil {
+		t.Fatal("expected fetchLogsWithRetry to return timeout error, got nil")
+	}
+	for _, want := range []string{
+		"unscheduled pods:",
+		"pw-job-pathways-head-0-0-xyz (Unschedulable: 0/4 nodes are available",
+		"NotTriggerScaleUp",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("expected error to contain %q, got:\n%v", want, err)
+		}
+	}
+	if n := strings.Count(err.Error(), "NotTriggerScaleUp"); n != 1 {
+		t.Errorf("want NotTriggerScaleUp once in the timeout error, got %d:\n%v", n, err)
+	}
+}
+
+func TestGetJobLogs_EmptyLogsSurfacesUnscheduledPods(t *testing.T) {
+	const selector = "jobset.sigs.k8s.io/jobset-name=stuck-pod-test"
+	podsQuery := "kubectl get pods -n default -l " + selector + " -o jsonpath=" + podContainersJSONPath
+	jobSetQuery := "kubectl get jobsets.jobset.x-k8s.io stuck-pod-test -n default -o jsonpath=" + jobSetInfoJSONPath
+	logsCmd := "kubectl logs -n default -l " + selector + " --all-containers --max-log-requests=10 --tail=-1"
+	unschedCmd := "kubectl get pods -n default -l " + selector + " -o jsonpath=" + unscheduledPodsJSONPath
+	podEventsCmd := "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+		"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+		podsQuery:                            {{ExitCode: 0, Stdout: "main\n"}},
+		jobSetQuery:                          {{ExitCode: 0, Stdout: "\tFalse\tmain-job\n1 1\n"}},
+		logsCmd:                              {{ExitCode: 0, Stdout: ""}},
+		unschedCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "stuck-pod-test-main-job-0-0-f9lv8\tPending\tFalse\tUnschedulable\t0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector.\n",
+			},
+		},
+		podEventsCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "2m51s Warning FailedScheduling pod/stuck-pod-test-main-job-0-0-f9lv8 0/1 nodes are available\n3m9s Normal NotTriggerScaleUp pod/stuck-pod-test-main-job-0-0-f9lv8 Pod didn't trigger scale-up\n",
+			},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	got, err := orc.GetJobLogs("stuck-pod-test", orchestrator.LogsOptions{
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "test-project",
+	})
+	if err != nil {
+		t.Fatalf("GetJobLogs() unexpected error: %v", err)
+	}
+	for _, want := range []string{
+		"Job pods are waiting to be scheduled (no container logs available yet):",
+		"stuck-pod-test-main-job-0-0-f9lv8 (Unschedulable: 0/1 nodes are available",
+		"FailedScheduling",
+		"NotTriggerScaleUp",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("GetJobLogs() = %q, want substring %q", got, want)
+		}
+	}
+}
+
+func TestGetJobLogs_MainOnlySurfacesUnscheduledWorkerPods(t *testing.T) {
+	const jobsetSel = "jobset.sigs.k8s.io/jobset-name=pw-job"
+	const headSel = jobsetSel + ",jobset.sigs.k8s.io/replicatedjob-name=pathways-head,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0"
+	podsQuery := "kubectl get pods -n default -l " + jobsetSel + " -o jsonpath=" + podContainersJSONPath
+	jobSetQuery := "kubectl get jobsets.jobset.x-k8s.io pw-job -n default -o jsonpath=" + jobSetInfoJSONPath
+	logsCmd := "kubectl logs -n default -l " + headSel + " --max-log-requests=10 --tail=-1"
+	unschedCmd := "kubectl get pods -n default -l " + jobsetSel + " -o jsonpath=" + unscheduledPodsJSONPath
+	podEventsCmd := "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+		"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+		// >5 pods automatically narrows log selector to pathways-head rank 0.
+		podsQuery:   {{ExitCode: 0, Stdout: "pathways-head\n" + strings.Repeat("worker\n", 5)}},
+		jobSetQuery: {{ExitCode: 0, Stdout: "\tFalse\tpathways-head\n1 1\n1 5\n"}},
+		logsCmd:     {{ExitCode: 0, Stdout: ""}},
+		unschedCmd: {
+			{
+				ExitCode: 0,
+				Stdout: "pw-job-pathways-head-0-0-abc\tRunning\tTrue\t\t\n" +
+					"pw-job-worker-0-0-xyz\tPending\tFalse\tUnschedulable\t0/2 nodes are available: 2 Insufficient google.com/tpu.\n",
+			},
+		},
+		podEventsCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "30s Warning FailedScheduling pod/pw-job-worker-0-0-xyz 0/2 nodes are available: 2 Insufficient google.com/tpu.\n",
+			},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	got, err := orc.GetJobLogs("pw-job", orchestrator.LogsOptions{
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "test-project",
+	})
+	if err != nil {
+		t.Fatalf("GetJobLogs() unexpected error: %v", err)
+	}
+	for _, want := range []string{
+		"Job pods are waiting to be scheduled (no container logs available yet):",
+		"pw-job-worker-0-0-xyz (Unschedulable: 0/2 nodes are available",
+		"FailedScheduling",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("GetJobLogs() = %q, want substring %q", got, want)
+		}
+	}
+	if strings.Contains(got, "pw-job-pathways-head-0-0-abc") {
+		t.Errorf("did not expect scheduled head pod in unscheduled output, got: %q", got)
+	}
+	mockExec.assertAllKubectlPinned(t, "gke_test-project_us-central1-a_test-cluster")
+}
+
+func TestGetJobLogs_FollowEmptyProbeChecksUnscheduledPods(t *testing.T) {
+	const selector = "jobset.sigs.k8s.io/jobset-name=stuck-pod-test"
+	podsQuery := "kubectl get pods -n default -l " + selector + " -o jsonpath=" + podContainersJSONPath
+	jobSetQuery := "kubectl get jobsets.jobset.x-k8s.io stuck-pod-test -n default -o jsonpath=" + jobSetInfoJSONPath
+	probeCmd := "kubectl logs -n default -l " + selector + " --all-containers --max-log-requests=10 --tail=1"
+	streamCmd := "kubectl logs -n default -l " + selector + " --all-containers -f --max-log-requests=10 --tail=-1"
+	unschedCmd := "kubectl get pods -n default -l " + selector + " -o jsonpath=" + unscheduledPodsJSONPath
+	podEventsCmd := "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+		"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+		podsQuery:                            {{ExitCode: 0, Stdout: "main\n"}, {ExitCode: 0, Stdout: "main\n"}},
+		jobSetQuery:                          {{ExitCode: 0, Stdout: "\tFalse\tmain-job\n1 1\n"}},
+		probeCmd:                             {{ExitCode: 0, Stdout: ""}},
+		unschedCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "stuck-pod-test-main-job-0-0-f9lv8\tPending\tFalse\tUnschedulable\t0/1 nodes are available.\n",
+			},
+		},
+		podEventsCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "30s Warning FailedScheduling pod/stuck-pod-test-main-job-0-0-f9lv8 0/1 nodes are available\n",
+			},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	if _, err := orc.GetJobLogs("stuck-pod-test", orchestrator.LogsOptions{
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "test-project",
+		Follow:          true,
+	}); err != nil {
+		t.Fatalf("GetJobLogs() unexpected error: %v", err)
+	}
+	if mockExec.callCount[unschedCmd] != 1 {
+		t.Errorf("expected unscheduled pods query to run once, got %d", mockExec.callCount[unschedCmd])
+	}
+	if mockExec.callCount[podEventsCmd] != 1 {
+		t.Errorf("expected pod events query to run once for unscheduled pod, got %d", mockExec.callCount[podEventsCmd])
+	}
+	if len(mockExec.streamCalls) != 1 || mockExec.streamCalls[0] != streamCmd {
+		t.Errorf("streamCalls = %q, want [%q]", mockExec.streamCalls, streamCmd)
+	}
+	mockExec.assertAllKubectlPinned(t, "gke_test-project_us-central1-a_test-cluster")
+}
+
+func TestSubmitJob_TelemetryAndTemplateFastFailBeforeImageBuild(t *testing.T) {
 	setupMockMachineConfig(t)
 	badSyntaxDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(badSyntaxDir, "jobset.tmpl"), []byte("{{ .Unclosed"), 0644); err != nil {
@@ -4249,8 +4743,20 @@ func TestSubmitJob_TemplateFastFailBeforeImageBuild(t *testing.T) {
 			job:           newJob("tmpl-valid", validBaseDir, false),
 			wantPastLocal: true,
 		},
+		{
+			name: "custom telemetry port on GKE without collector image",
+			job: func() orchestrator.JobDefinition {
+				job := newJob("port-without-sidecar", "", false)
+				job.ComputeType = "v6e-4"
+				job.MLDiagnosticsEnabled = true
+				job.MLDiagnosticsTelemetryPort = 9095
+				return job
+			}(),
+			wantErr: "--ml-diagnostics-telemetry-port is only supported when injecting",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
 			mockExec := NewMockExecutor(map[string][]shell.CommandResult{})
 			orc := newTestGKEOrchestrator(mockExec)
 			err := orc.SubmitJob(tc.job)
@@ -4270,5 +4776,352 @@ func TestSubmitJob_TemplateFastFailBeforeImageBuild(t *testing.T) {
 				t.Errorf("SubmitJob() executed external commands before local fast-fail: %v", mockExec.calls)
 			}
 		})
+	}
+
+	t.Run("rejects telemetry sidecar on GPU before Crane image build", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud container clusters describe": {
+				{ExitCode: 0, Stdout: `{"locations":["us-central1-a"],"nodePools":[{"name":"gpu-pool","initialNodeCount":1,"config":{"machineType":"g2-standard-48","accelerators":[{"acceleratorCount":4,"acceleratorType":"nvidia-l4"}]}}]}`},
+			},
+			"gcloud container clusters get-credentials": {
+				{ExitCode: 0},
+			},
+			"kubectl get --raw /version": {
+				{ExitCode: 0, Stdout: `{}`},
+				{ExitCode: 0, Stdout: `{}`},
+			},
+			"kubectl get crd": {
+				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+			},
+			"kubectl get service": {
+				{ExitCode: 0, Stdout: "service/jobset-webhook-service\n"},
+			},
+			"kubectl get endpoints": {
+				{ExitCode: 0, Stdout: "10.0.0.1\n"},
+			},
+			"gcloud compute machine-types describe": {
+				{ExitCode: 0, Stdout: `{"guestCpus": 48, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "nvidia-l4"}]}`},
+			},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		err := orc.SubmitJob(orchestrator.JobDefinition{
+			WorkloadName:         "gpu-telem-fast-fail",
+			ProjectID:            "test-project",
+			ClusterName:          "test-cluster",
+			ClusterLocation:      "us-central1-a",
+			GKENamespace:         "default",
+			ComputeType:          "g2-standard-48",
+			BaseImage:            "python:3.11-slim",
+			BuildContext:         filepath.Join(t.TempDir(), "missing-build-ctx"),
+			CommandToRun:         "python3 train.py",
+			DryRunManifest:       filepath.Join(t.TempDir(), "out.yaml"),
+			MLDiagnosticsEnabled: true,
+			MLDiagnosticsImage:   "registry.local/ai-telemetry-collector:v1",
+		})
+		if err == nil || !strings.Contains(err.Error(), "only supported for TPU workloads") {
+			t.Fatalf("got err = %v, want non-TPU telemetry error before Crane build", err)
+		}
+	})
+}
+
+func TestSubmitJob_ClusterMountsResetCacheAndFailFastBeforePinTelemetry(t *testing.T) {
+	setupMockMachineConfig(t)
+	tpuCap := `{"guestCpus": 112, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v6e-slice"}]}`
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud container clusters describe": {
+			{ExitCode: 0, Stdout: `{"locations":["us-central1-a"],"nodePools":[{"name":"tpu-pool","initialNodeCount":2,"config":{"machineType":"ct6e-standard-4t"}}]}`},
+		},
+		"gcloud container clusters get-credentials": {{ExitCode: 0}},
+		"kubectl get --raw /version":                {{ExitCode: 0, Stdout: `{}`}, {ExitCode: 0, Stdout: `{}`}},
+		"kubectl get crd": {
+			{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+			{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+		},
+		"kubectl get service":       {{ExitCode: 0, Stdout: "service/jobset-webhook-service\n"}},
+		"kubectl get endpointslice": {{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}, {ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}},
+		"kubectl get endpoints ":    {{ExitCode: 0, Stdout: "10.0.0.1\n"}},
+		"kubectl get deployment kueue-controller-manager": {
+			{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.16.0"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`},
+		},
+		"kubectl get resourceflavors":           {{ExitCode: 0, Stdout: ""}},
+		"kubectl get localqueue":                {{ExitCode: 0, Stdout: "lq-default"}},
+		"kubectl get nodes":                     {{ExitCode: 0, Stdout: "2x4\n"}},
+		"gcloud compute machine-types list":     {{ExitCode: 0, Stdout: `[{"name":"ct6e-standard-4t"}]`}},
+		"gcloud compute machine-types describe": {{ExitCode: 0, Stdout: tpuCap}, {ExitCode: 0, Stdout: tpuCap}, {ExitCode: 0, Stdout: tpuCap}},
+		"kubectl get pvc": {
+			{ExitCode: 0, Stdout: `{"spec":{"volumeName":"pv-rwo","accessModes":["ReadWriteOnce"]},"status":{"accessModes":["ReadWriteOnce"]}}`},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	var dynListCalls int
+	orc.dynClient = &mockDynamicClient{
+		getFunc: func(_ context.Context, _ string, _ metav1.GetOptions, _ ...string) (*unstructured.Unstructured, error) {
+			return &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Namespace"}}, nil
+		},
+		listFunc: func(_ context.Context, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+			dynListCalls++
+			return &unstructured.UnstructuredList{}, nil
+		},
+	}
+	orc.inspectedPVCs = map[string]pvcInspectResult{"default/stale": {volumeName: "old"}}
+	orc.nfsAuthChecked = true
+
+	// NodesPerSlice starts at 1; resolveHardwareRequirements derives NodesPerSlice=2
+	// for v6e-8/2x4 on ct6e-standard-4t before ValidateClusterMounts rejects RWO.
+	err := orc.SubmitJob(orchestrator.JobDefinition{
+		WorkloadName:    "rwo-fast-fail",
+		ProjectID:       "test-project",
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		GKENamespace:    " default ",
+		ComputeType:     "v6e-8",
+		Topology:        "2x4",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+		BaseImage:       "python:3.11-slim",
+		BuildContext:    filepath.Join(t.TempDir(), "missing-build-ctx"),
+		CommandToRun:    "python3 train.py",
+		RawMounts:       []string{"train-pvc;/data"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "Multi-Attach") {
+		t.Fatalf("SubmitJob() = %v, want Multi-Attach error after resolveHardwareRequirements and before pinTelemetryAndValidate", err)
+	}
+	if orc.namespace != "default" {
+		t.Errorf("SubmitJob() stored untrimmed namespace %q, want %q", orc.namespace, "default")
+	}
+	if dynListCalls != 0 {
+		t.Errorf("pinTelemetryAndValidate called dynamic List %d times before ValidateClusterMounts failed", dynListCalls)
+	}
+	if orc.nfsAuthChecked {
+		t.Errorf("SubmitJob() did not reset nfsAuthChecked")
+	}
+	if _, stale := orc.inspectedPVCs["default/stale"]; stale {
+		t.Errorf("SubmitJob() did not clear stale inspectedPVCs entry")
+	}
+	if got := orc.inspectedPVCs["default/train-pvc"].volumeName; got != "pv-rwo" {
+		t.Errorf("inspectedPVCs[default/train-pvc].volumeName = %q, want pv-rwo", got)
+	}
+}
+
+func TestSubmitJob_TPUTelemetryNodeCachePinning(t *testing.T) {
+	newTPUSubmitOrc := func(t *testing.T, kc *MockKubeClient) *GKEOrchestrator {
+		t.Helper()
+		setupMockMachineConfig(t)
+		t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+		tpuCap := `{"guestCpus": 112, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v6e-slice"}]}`
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud container clusters describe": {
+				{ExitCode: 0, Stdout: `{"locations":["us-central1-a"],"nodePools":[{"name":"tpu-pool","initialNodeCount":1,"config":{"machineType":"tpu-v6e-slice"}}]}`},
+			},
+			"gcloud container clusters get-credentials": {{ExitCode: 0}},
+			"kubectl get --raw /version":                {{ExitCode: 0, Stdout: `{}`}, {ExitCode: 0, Stdout: `{}`}},
+			"kubectl get crd": {
+				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+			},
+			"gcloud compute machine-types list":     {{ExitCode: 0, Stdout: `[{"name":"tpu-v6e-slice"}]`}},
+			"gcloud compute machine-types describe": {{ExitCode: 0, Stdout: tpuCap}, {ExitCode: 0, Stdout: tpuCap}, {ExitCode: 0, Stdout: tpuCap}},
+			"kubectl get resourceflavors":           {{ExitCode: 0, Stdout: ""}},
+			"kubectl get nodes":                     {{ExitCode: 0, Stdout: "2x2\n"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.kubeClient = kc
+		return orc
+	}
+
+	t.Run("rejects missing TPU node collector cache before Crane image build", func(t *testing.T) {
+		orc := newTPUSubmitOrc(t, &MockKubeClient{Namespace: "default"})
+		err := orc.SubmitJob(orchestrator.JobDefinition{
+			WorkloadName:         "tpu-telem-fast-fail",
+			ClusterName:          "test-cluster",
+			ClusterLocation:      "us-central1-a",
+			GKENamespace:         "default",
+			ComputeType:          "v6e-4",
+			Topology:             "2x2",
+			NumSlices:            1,
+			BaseImage:            "python:3.11-slim",
+			BuildContext:         filepath.Join(t.TempDir(), "missing-build-ctx"),
+			CommandToRun:         "python3 train.py",
+			DryRunManifest:       filepath.Join(t.TempDir(), "out.yaml"),
+			MLDiagnosticsEnabled: true,
+		})
+		if err == nil || !strings.Contains(err.Error(), "no running TPU nodes") {
+			t.Fatalf("got err = %v, want missing TPU node cache error before Crane build", err)
+		}
+	})
+
+	t.Run("pins discovered TPU collector image once across SubmitJob", func(t *testing.T) {
+		kc := &MockKubeClient{
+			Namespace:  "default",
+			ListCounts: map[string]int{},
+			Objects: map[string][]unstructured.Unstructured{
+				"nodes": {makeNodeWithImages("tpu-0", "4", []string{"registry.local/ai-telemetry-collector:v1.2.3"})},
+			},
+		}
+		orc := newTPUSubmitOrc(t, kc)
+		outPath := filepath.Join(t.TempDir(), "tpu-jobset.yaml")
+		err := orc.SubmitJob(orchestrator.JobDefinition{
+			WorkloadName:         "tpu-telem-pin",
+			ClusterName:          "test-cluster",
+			ClusterLocation:      "us-central1-a",
+			GKENamespace:         "default",
+			ComputeType:          "v6e-4",
+			Topology:             "2x2",
+			NumSlices:            1,
+			ImageName:            "registry.local/jax:v1",
+			CommandToRun:         "python3 train.py",
+			DryRunManifest:       outPath,
+			MLDiagnosticsEnabled: true,
+		})
+		if err != nil {
+			t.Fatalf("SubmitJob() failed: %v", err)
+		}
+		if kc.ListCounts["nodes"] != 1 {
+			t.Fatalf("nodes listed %d times across SubmitJob, want 1 (pinTelemetryAndValidate must pin MLDiagnosticsImage)", kc.ListCounts["nodes"])
+		}
+		raw, err := os.ReadFile(outPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, templates := parseStrictJobSetTemplates(t, string(raw))
+		assertTelemetrySidecarSpec(t, "JobSet", templates["main-job"].Spec.Template.Spec.InitContainers, 8889, nil)
+	})
+}
+
+type recordingNamespaceKubeClient struct {
+	KubeClient
+	t           *testing.T
+	forbidCalls bool
+	ns          string
+	err         error
+	gotCluster  string
+	gotLocation string
+	gotProject  string
+}
+
+func (r *recordingNamespaceKubeClient) GetCurrentNamespace(cluster, location, project string) (string, error) {
+	if r.forbidCalls {
+		r.t.Fatalf("GetCurrentNamespace must not be invoked")
+	}
+	r.gotCluster = cluster
+	r.gotLocation = location
+	r.gotProject = project
+	return r.ns, r.err
+}
+
+func TestBuildContainerImage_NamespacePrecedenceAndPrebuiltHermeticity(t *testing.T) {
+	t.Run("prebuilt ImageName never touches kubeconfig namespace resolution", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.kubeClient = &recordingNamespaceKubeClient{t: t, forbidCalls: true}
+
+		got, err := orc.BuildContainerImage(orchestrator.JobDefinition{
+			WorkloadName: "prebuilt-job",
+			ImageName:    "10.128.0.68:5000/ml/jax:v5p",
+		})
+		if err != nil || got != "10.128.0.68:5000/ml/jax:v5p" {
+			t.Fatalf("BuildContainerImage(prebuilt) = (%q, %v), want prebuilt URI", got, err)
+		}
+	})
+
+	t.Run("job.GKENamespace takes precedence without mutating g.namespace", func(t *testing.T) {
+		t.Setenv("GCLUSTER_IMAGE_REPO", "")
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.namespace = "unchanged-orch-ns"
+		orc.kubeClient = &recordingNamespaceKubeClient{t: t, forbidCalls: true}
+
+		got, err := orc.BuildContainerImage(orchestrator.JobDefinition{
+			WorkloadName:   "train-v5p",
+			GKENamespace:   "explicit-flag-ns",
+			BaseImage:      "10.128.0.68:5000/ml/jax:v5p",
+			DryRunManifest: "/tmp/dry-run.yaml",
+		})
+		if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/library/gcluster/explicit-flag-ns/train-v5p:") {
+			t.Fatalf("BuildContainerImage(explicit GKENamespace) = (%q, %v)", got, err)
+		}
+		if orc.namespace != "unchanged-orch-ns" {
+			t.Fatalf("BuildContainerImage mutated orc.namespace = %q, want unchanged-orch-ns", orc.namespace)
+		}
+	})
+
+	t.Run("dry-run falls back to default offline while live build fails fast on broken kubeconfig", func(t *testing.T) {
+		t.Setenv("GCLUSTER_IMAGE_REPO", "")
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		spy := &recordingNamespaceKubeClient{t: t, ns: "ctx-ns"}
+		orc.kubeClient = spy
+
+		got, err := orc.BuildContainerImage(orchestrator.JobDefinition{
+			WorkloadName:    "train-v5p",
+			ClusterName:     "clus-a",
+			ClusterLocation: "us-central1-a",
+			ProjectID:       "proj-a",
+			BaseImage:       "10.128.0.68:5000/ml/jax:v5p",
+			DryRunManifest:  "/tmp/dry-run.yaml",
+		})
+		if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/library/gcluster/ctx-ns/train-v5p:") {
+			t.Fatalf("BuildContainerImage(ctx-ns) = (%q, %v)", got, err)
+		}
+		if spy.gotCluster != "clus-a" || spy.gotLocation != "us-central1-a" || spy.gotProject != "proj-a" {
+			t.Fatalf("GetCurrentNamespace args = (%q, %q, %q), want (clus-a, us-central1-a, proj-a)", spy.gotCluster, spy.gotLocation, spy.gotProject)
+		}
+	})
+}
+
+func TestBuildContainerImage_OfflineDryRunFallbackAndLiveError(t *testing.T) {
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
+
+	orcDryOffline := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcDryOffline.kubeClient = &recordingNamespaceKubeClient{t: t, err: fmt.Errorf("no kubeconfig")}
+	got, err := orcDryOffline.BuildContainerImage(orchestrator.JobDefinition{
+		WorkloadName:   "train-v5p",
+		BaseImage:      "10.128.0.68:5000/ml/jax:v5p",
+		DryRunManifest: "/tmp/dry-run.yaml",
+	})
+	if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/library/gcluster/default/train-v5p:") {
+		t.Fatalf("BuildContainerImage(dry-run offline fallback) = (%q, %v), want default namespace URI", got, err)
+	}
+
+	orcLiveBroken := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcLiveBroken.kubeClient = &recordingNamespaceKubeClient{t: t, err: fmt.Errorf("broken kubeconfig")}
+	_, err = orcLiveBroken.BuildContainerImage(orchestrator.JobDefinition{
+		WorkloadName: "train-v5p",
+		BaseImage:    "10.128.0.68:5000/ml/jax:v5p",
+		BuildContext: t.TempDir(),
+	})
+	if err == nil || !strings.Contains(err.Error(), "broken kubeconfig") {
+		t.Fatalf("expected live Crane build to fail fast on broken kubeconfig, got: %v", err)
+	}
+}
+
+type stubDynClient struct {
+	dynamic.Interface
+	id string
+}
+
+func TestSetKubeClientAndSetDynamicClientSync(t *testing.T) {
+	t.Parallel()
+	orc := NewGKEOrchestrator()
+	dynA := &stubDynClient{id: "a"}
+	dynB := &stubDynClient{id: "b"}
+	orc.dynClient = dynA
+	orc.dynClientManaged = true
+	orc.dynClientContext = "ctx-a"
+
+	orc.SetKubeClient(&DefaultKubeClient{dynClient: dynB})
+	if orc.dynClient != dynB || orc.dynClientManaged || orc.dynClientContext != "" {
+		t.Fatalf("SetKubeClient(*DefaultKubeClient) did not sync dynClient/managed state")
+	}
+	orc.SetKubeClient(&MockKubeClient{})
+	orc.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice}
+	orc.SetDynamicClient(dynA)
+	if d, ok := orc.kubeClient.(*DefaultKubeClient); !ok || d == nil || d.dynClient != dynA {
+		t.Fatalf("SetDynamicClient did not replace custom KubeClient with *DefaultKubeClient")
+	}
+	if orc.inventory != nil {
+		t.Fatalf("SetDynamicClient must clear cached inventory")
+	}
+	orc.SetDynamicClient(nil)
+	if orc.kubeClient != nil || orc.dynClient != nil {
+		t.Fatalf("SetDynamicClient(nil) should clear both kubeClient and dynClient")
 	}
 }

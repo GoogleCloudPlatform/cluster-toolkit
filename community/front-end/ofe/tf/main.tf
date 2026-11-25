@@ -165,6 +165,7 @@ resource "google_compute_instance" "server_vm" {
   metadata = {
     startup-script-url      = "${module.control_bucket.bucket.url}/webserver/startup.sh",
     webserver-config-bucket = module.control_bucket.bucket.name,
+    terraform-state-bucket  = var.terraform_state_bucket,
     ghpcfe-c2-topic         = module.pubsub.topic,
     hostname                = var.webserver_hostname
     deploy_mode             = var.deployment_mode

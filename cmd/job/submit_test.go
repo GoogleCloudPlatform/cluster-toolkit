@@ -31,6 +31,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	_ = os.Unsetenv("GCLUSTER_REFRESH_CREDENTIALS")
 	// Mock store globally for tests to skip prerequisite checks by default.
 	// Tests that need to verify prerequisite checks can override it.
 	store = &MockPrereqStore{
@@ -336,80 +337,109 @@ func TestSubmitCmd_PathwaysLongWorkloadName_Fails(t *testing.T) {
 	}
 }
 
-func setupSubmitTestEnv(t *testing.T) {
-	imageName = ""
-	baseImage = ""
-	buildContext = ""
-	commandToRun = ""
-	computeType = ""
-	dryRunManifest = ""
-	clusterName = ""
-	location = ""
-	projectID = ""
-	workloadName = ""
-
-	// Reset MTc & ML Diagnostics global flags to prevent state bleeding across test cases
-	enableMLDiagnostics = false
-	gkeMtcEnabled = false
-	gkeMtcRamdiskDirectory = ""
-	kueueQueueName = ""
-	numNodes = 1
-	numSlices = 1
-	restarts = 1
-	ttlAfterFinished = "1h"
-	gracePeriodStr = "30s"
-	placementPolicy = ""
-	nodeConstraint = nil
-	cpuAffinityStr = ""
-	restartOnExitCodes = nil
-	imagePullSecrets = ""
-	serviceAccountName = ""
-	topology = ""
-	gkeScheduler = ""
-	platform = "linux/amd64"
-	gkeMtcEnabled = false
-	gkeMtcRamdiskDirectory = ""
-	awaitJobCompletion = false
-	priority = "medium"
-	isPathwaysJob = false
-	skipPrereqs = false
-	pathways = orchestrator.PathwaysJobDefinition{}
-	gkeNapProvisioning = ""
-	gkeNapReservation = ""
-	envVars = nil
-	pathwaysProxyEnv = nil
-	pathwaysServerEnv = nil
-	pathwaysWorkerEnv = nil
-	SubmitCmd.Flags().VisitAll(func(f *pflag.Flag) {
-		if f.Name == "pathways-max-slice-restarts" || f.Name == "pathways-elastic-slices" || f.Name == "restarts" {
+func resetCommandFlags(cmd *cobra.Command) {
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			_ = sv.Replace(nil)
+		} else {
 			_ = f.Value.Set(f.DefValue)
 		}
 		f.Changed = false
 	})
+	for _, sub := range cmd.Commands() {
+		resetCommandFlags(sub)
+	}
+}
+
+func resetJobFlags() {
+	pathways = orchestrator.PathwaysJobDefinition{}
+	resetCommandFlags(JobCmd)
+	nodeConstraint = make(map[string]string)
+}
+
+func setupSubmitTestEnv(t *testing.T) {
+	t.Helper()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "empty-kubeconfig"))
+	t.Setenv("DOCKER_CONFIG", t.TempDir())
+	t.Setenv("GCLUSTER_ORCHESTRATOR", "")
+	t.Setenv("GCLUSTER_AIR_GAPPED", "")
+	t.Setenv("GCLUSTER_REFRESH_CREDENTIALS", "")
+	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
+	resetJobFlags()
+
+	oldStore := store
+	t.Cleanup(func() { store = oldStore })
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
 
 	oldFactory := gkeOrchestratorFactory
-	defer t.Cleanup(func() {
+	t.Cleanup(func() {
 		gkeOrchestratorFactory = oldFactory
+		resetJobFlags()
 	})
 	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
 		return &mockOrchestrator{}
 	}
-	enableMLDiagnostics = false
-	gkeMtcEnabled = false
-	gkeMtcRamdiskDirectory = ""
+
+	// The real lookup builds an authenticated Artifact Registry client (ADC, enterprise certificate helper,
+	// network). Submit tests get an offline stub by default; tests about suggestions override it.
+	oldLookup := lookupArtifactRegistryRepos
+	t.Cleanup(func() { lookupArtifactRegistryRepos = oldLookup })
+	lookupArtifactRegistryRepos = func(context.Context, string, string) ([]string, bool) { return nil, false }
 }
 
 type mockOrchestrator struct {
 	orchestrator.JobOrchestrator
-	initializeFunc func(string, string, string) (string, error)
-	SubmittedJob   orchestrator.JobDefinition
+	initializeFunc     func(string, string, string) (string, error)
+	listJobsFunc       func(orchestrator.ListOptions) ([]orchestrator.JobStatus, error)
+	getJobLogsFunc     func(string, orchestrator.LogsOptions) (string, error)
+	cancelJobFunc      func(string, orchestrator.CancelOptions) error
+	inspectClusterFunc func(orchestrator.InspectOptions) error
+	InitClusterName    string
+	InitLocation       string
+	InitProjectID      string
+	SubmittedJob       orchestrator.JobDefinition
 }
 
 func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
+	m.InitClusterName = clusterName
+	m.InitLocation = location
+	m.InitProjectID = projectID
 	if m.initializeFunc != nil {
 		return m.initializeFunc(clusterName, location, projectID)
 	}
 	return location, nil
+}
+
+func (m *mockOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrator.JobStatus, error) {
+	if m.listJobsFunc != nil {
+		return m.listJobsFunc(opts)
+	}
+	return nil, nil
+}
+
+func (m *mockOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions) (string, error) {
+	if m.getJobLogsFunc != nil {
+		return m.getJobLogsFunc(name, opts)
+	}
+	return "", nil
+}
+
+func (m *mockOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions) error {
+	if m.cancelJobFunc != nil {
+		return m.cancelJobFunc(name, opts)
+	}
+	return nil
+}
+
+func (m *mockOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error {
+	if m.inspectClusterFunc != nil {
+		return m.inspectClusterFunc(opts)
+	}
+	return nil
 }
 
 func (m *mockOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
@@ -1279,6 +1309,16 @@ func TestSubmitCmd_SkipPrereqsFalse_RunsChecks(t *testing.T) {
 		return &mockOrchestrator{}
 	}
 
+	// Never spawn the host's gcloud: the stub reports every local CLI as missing, so the checks fail
+	// deterministically and the recorded call proves they ran.
+	origExecute := shell.ExecuteCommandWithTimeout
+	defer func() { shell.ExecuteCommandWithTimeout = origExecute }()
+	var localCLICalls []string
+	shell.ExecuteCommandWithTimeout = func(_ time.Duration, name string, args ...string) shell.CommandResult {
+		localCLICalls = append(localCLICalls, name+" "+strings.Join(args, " "))
+		return shell.CommandResult{ExitCode: 1, Stderr: "not installed in test"}
+	}
+
 	_, err := executeCommand(JobCmd,
 		"submit",
 		"--name", "test-skip-false",
@@ -1291,11 +1331,12 @@ func TestSubmitCmd_SkipPrereqsFalse_RunsChecks(t *testing.T) {
 		// --skip-prereqs is false by default
 	)
 
-	// Since --skip-prereqs is false, the prerequisite checks will run.
-	// Since our MockStore state is empty, the CLI will try to run real gcloud checks
-	// which will fail either due to absence of gcloud or missing authentication in test env.
+	// --skip-prereqs is false and the store state is empty, so the prerequisite checks must run and fail.
 	if err == nil {
 		t.Fatalf("expected an error (prerequisite check failure) since --skip-prereqs is false/omitted, but got nil")
+	}
+	if !slices.Contains(localCLICalls, "gcloud version") {
+		t.Fatalf("prerequisite checks did not run the gcloud SDK check; local CLI calls: %v", localCLICalls)
 	}
 }
 
@@ -1483,6 +1524,11 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsWithoutPathways_Fails(t *testing.T) {
 			extraArgs: []string{"--pathways", "--pathways-gcs-location", "gs://my-bucket", "--pathways-elastic-slices", "-1"},
 			wantErr:   "--pathways-elastic-slices must be non-negative",
 		},
+		{
+			name:      "max-slice-restarts above the int32 range with --pathways",
+			extraArgs: []string{"--pathways", "--pathways-gcs-location", "gs://my-bucket", "--pathways-max-slice-restarts", "2147483648"},
+			wantErr:   "--pathways-max-slice-restarts must be at most 2147483647",
+		},
 	}
 
 	for _, tc := range tests {
@@ -1571,6 +1617,12 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
 			extraArgs:            []string{"--pathways-deploy-sps", "--pathways-max-slice-restarts", "500"},
 			wantElasticSlices:    0,
 			wantMaxSliceRestarts: 500,
+		},
+		{
+			name:                 "accepts max-slice-restarts at the int32 limit",
+			extraArgs:            []string{"--pathways-max-slice-restarts", "2147483647"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 2147483647,
 		},
 	}
 
@@ -1777,4 +1829,402 @@ func TestSubmitCmd_ImagePullSecretFlagPresence(t *testing.T) {
 			t.Errorf("%s: got (%q, specified=%v), want (%q, specified=%v)", tc.name, got.ImagePullSecrets, got.ImagePullSecretsSpecified, tc.wantSecrets, tc.wantSpecified)
 		}
 	}
+}
+
+func TestSubmitCmd_MLDiagnosticsValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		extraArgs []string
+		wantErr   string
+	}{
+		{
+			name:      "image without enable-ml-diagnostics",
+			extraArgs: []string{"--ml-diagnostics-image", "registry.local/col:v1"},
+			wantErr:   "--enable-ml-diagnostics",
+		},
+		{
+			name:      "explicit empty image without enable-ml-diagnostics",
+			extraArgs: []string{"--ml-diagnostics-image="},
+			wantErr:   "--enable-ml-diagnostics",
+		},
+		{
+			name:      "port without enable-ml-diagnostics",
+			extraArgs: []string{"--ml-diagnostics-telemetry-port", "8889"},
+			wantErr:   "--enable-ml-diagnostics",
+		},
+		{
+			name:      "port zero",
+			extraArgs: []string{"--enable-ml-diagnostics", "--ml-diagnostics-telemetry-port", "0"},
+			wantErr:   "must be between 1 and 65535",
+		},
+		{
+			name:      "port above 65535",
+			extraArgs: []string{"--enable-ml-diagnostics", "--ml-diagnostics-telemetry-port", "70000"},
+			wantErr:   "must be between 1 and 65535",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+			args := append([]string{
+				"submit",
+				"--name", "mldiag-val",
+				"--image", "busybox",
+				"--command", "echo hi",
+				"--compute-type", "v6e-4",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+				"--skip-prereqs",
+			}, tc.extraArgs...)
+			_, err := executeCommand(JobCmd, args...)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("got err = %v, want substring %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func runSubmitForTest(t *testing.T, extraArgs ...string) orchestrator.JobDefinition {
+	t.Helper()
+	return runSubmitWithTelemetryEnvForTest(t, "", extraArgs...)
+}
+
+func runSubmitWithTelemetryEnvForTest(t *testing.T, telemetryEnv string, extraArgs ...string) orchestrator.JobDefinition {
+	t.Helper()
+	setupSubmitTestEnv(t)
+	if telemetryEnv != "" {
+		t.Setenv("GCLUSTER_TELEMETRY_IMAGE", telemetryEnv)
+	}
+	mockOrc := &mockOrchestrator{}
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+	args := append([]string{
+		"submit",
+		"--name", "mldiag-job",
+		"--image", "busybox",
+		"--command", "echo hi",
+		"--compute-type", "v6e-4",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--skip-prereqs",
+	}, extraArgs...)
+	if _, err := executeCommand(JobCmd, args...); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return mockOrc.SubmittedJob
+}
+
+func TestSubmitCmd_MLDiagnosticsWiring(t *testing.T) {
+	disabled := runSubmitWithTelemetryEnvForTest(t, "registry.local/env-col:v1")
+	if disabled.MLDiagnosticsEnabled || disabled.MLDiagnosticsImage != "" || disabled.MLDiagnosticsTelemetryPort != 0 || disabled.TerminationGracePeriodSeconds != 30 {
+		t.Errorf("unexpected JobDefinition when disabled: %+v", disabled)
+	}
+
+	// The env var is resolved by the orchestrator, so the CLI leaves MLDiagnosticsImage empty; the port is
+	// forwarded only when explicitly passed and --grace-period is forwarded verbatim (0s stays 0).
+	envFallback := runSubmitWithTelemetryEnvForTest(t, "registry.local/env-col:v1", "--enable-ml-diagnostics", "--ml-diagnostics-telemetry-port", "9095", "--grace-period", "0s")
+	if !envFallback.MLDiagnosticsEnabled || envFallback.MLDiagnosticsImage != "" || envFallback.MLDiagnosticsTelemetryPort != 9095 || envFallback.TerminationGracePeriodSeconds != 0 {
+		t.Errorf("got (%v, %q, %d, grace=%d), want (true, \"\", 9095, grace=0)", envFallback.MLDiagnosticsEnabled, envFallback.MLDiagnosticsImage, envFallback.MLDiagnosticsTelemetryPort, envFallback.TerminationGracePeriodSeconds)
+	}
+
+	explicit := runSubmitForTest(t, "--enable-ml-diagnostics", "--ml-diagnostics-image", "registry.local/flag-col:v2", "--ml-diagnostics-telemetry-port", "9096")
+	if explicit.MLDiagnosticsImage != "registry.local/flag-col:v2" || explicit.MLDiagnosticsTelemetryPort != 9096 {
+		t.Errorf("got (%q, %d), want (registry.local/flag-col:v2, 9096)", explicit.MLDiagnosticsImage, explicit.MLDiagnosticsTelemetryPort)
+	}
+	defaultPort := runSubmitForTest(t, "--enable-ml-diagnostics", "--ml-diagnostics-image", "registry.local/flag-col:v2")
+	if defaultPort.MLDiagnosticsTelemetryPort != 0 {
+		t.Errorf("port must stay 0 (orchestrator default) when --ml-diagnostics-telemetry-port is omitted, got %d", defaultPort.MLDiagnosticsTelemetryPort)
+	}
+}
+
+// TestSubmitCmd_MLDiagnosticsImageSpecified pins the explicit-empty opt-out of GCLUSTER_TELEMETRY_IMAGE
+// (--ml-diagnostics-image="", which the shell passes as --ml-diagnostics-image=) and the Specified wiring.
+func TestSubmitCmd_MLDiagnosticsImageSpecified(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		args          []string
+		wantImage     string
+		wantSpecified bool
+	}{
+		{name: "omitted", wantSpecified: false},
+		{name: "named", args: []string{"--ml-diagnostics-image", "registry.local/flag-col:v2"}, wantImage: "registry.local/flag-col:v2", wantSpecified: true},
+		{name: "explicit empty", args: []string{"--ml-diagnostics-image="}, wantSpecified: true},
+		{name: "explicit blank", args: []string{"--ml-diagnostics-image", "   "}, wantSpecified: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := runSubmitWithTelemetryEnvForTest(t, "registry.local/env-col:v1", append([]string{"--enable-ml-diagnostics"}, tc.args...)...)
+			if got.MLDiagnosticsImage != tc.wantImage || got.MLDiagnosticsImageSpecified != tc.wantSpecified {
+				t.Errorf("got (%q, specified=%v), want (%q, specified=%v)", got.MLDiagnosticsImage, got.MLDiagnosticsImageSpecified, tc.wantImage, tc.wantSpecified)
+			}
+		})
+	}
+}
+
+func TestSubmitCmd_FlagResetHygieneAcrossRuns(t *testing.T) {
+	first := runSubmitForTest(t, "--node-constraint", "pool=a", "--mount", "pvc-1;/mnt/a", "--restart-on-exit-codes", "42", "--gke-namespace", "ns-1", "--grace-period", "45s")
+	if first.NodeConstraint["pool"] != "a" || len(first.RawMounts) != 1 || len(first.RestartOnExitCodes) != 1 || first.GKENamespace != "ns-1" {
+		t.Fatalf("unexpected first run JobDefinition: %+v", first)
+	}
+	if first.TerminationGracePeriodSeconds != 45 {
+		t.Fatalf("expected explicit 45s grace period on first run: %+v", first)
+	}
+	assertCleanSecondSubmitRun(t, runSubmitForTest(t, "--node-constraint", "zone=us-central1-a"))
+}
+
+func assertCleanSecondSubmitRun(t *testing.T, second orchestrator.JobDefinition) {
+	t.Helper()
+	if len(second.NodeConstraint) != 1 || second.NodeConstraint["zone"] != "us-central1-a" {
+		t.Fatalf("NodeConstraint leaked into second run: %+v", second.NodeConstraint)
+	}
+	if len(second.RawMounts) != 0 || len(second.RestartOnExitCodes) != 0 || second.GKENamespace != "" {
+		t.Fatalf("slice/string flags leaked into second run: %+v", second)
+	}
+	if second.TerminationGracePeriodSeconds != 30 {
+		t.Fatalf("--grace-period default did not reset on second run: %+v", second)
+	}
+}
+
+func TestSubmitCmd_RunSPSWorkload(t *testing.T) {
+	t.Run("terminal mode succeeds without compute-type, gcs-location, or image", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+			return mockOrc
+		}
+
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-run-sps-workload", "sps-v5p",
+			"--name", "sps-client-local",
+			"--command", "python3 train.py",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err != nil {
+			t.Fatalf("command failed with error: %v", err)
+		}
+		if got := mockOrc.SubmittedJob.Pathways.RunSPSWorkload; got != "sps-v5p" {
+			t.Errorf("RunSPSWorkload = %q, want %q", got, "sps-v5p")
+		}
+		if got := mockOrc.SubmittedJob.ImageName; got != "" {
+			t.Errorf("ImageName = %q, want empty", got)
+		}
+		if got := mockOrc.SubmittedJob.MaxRestarts; got != 0 {
+			t.Errorf("MaxRestarts = %d, want 0", got)
+		}
+	})
+
+	t.Run("in-cluster mode succeeds with image and without compute-type or gcs-location", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator {
+			return mockOrc
+		}
+
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-run-sps-workload", "sps-v5p-pathways-head-0-0.sps-v5p:29001",
+			"--name", "sps-client-cluster",
+			"--image", "us-docker.pkg.dev/my-project/my-repo/my-image:tag",
+			"--command", "python3 train.py",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err != nil {
+			t.Fatalf("command failed with error: %v", err)
+		}
+		if got := mockOrc.SubmittedJob.Pathways.RunSPSWorkload; got != "sps-v5p-pathways-head-0-0.sps-v5p:29001" {
+			t.Errorf("RunSPSWorkload = %q, want endpoint", got)
+		}
+		if got := mockOrc.SubmittedJob.ImageName; got != "us-docker.pkg.dev/my-project/my-repo/my-image:tag" {
+			t.Errorf("ImageName = %q, want image", got)
+		}
+	})
+}
+
+func TestSubmitCmd_RunSPSWorkload_Validation(t *testing.T) {
+	t.Run("rejects pathways-run-sps-workload without pathways flag", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways-run-sps-workload", "sps-v5p",
+			"--name", "sps-client",
+			"--command", "python3 train.py",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err == nil || !strings.Contains(err.Error(), "pathways flags specified but --pathways flag is missing") {
+			t.Errorf("got err = %v, want missing --pathways error", err)
+		}
+	})
+
+	t.Run("rejects pathways-run-sps-workload with pathways-deploy-sps or pathways-headless", func(t *testing.T) {
+		for _, conflictFlag := range []string{"--pathways-deploy-sps", "--pathways-headless"} {
+			setupSubmitTestEnv(t)
+			_, err := executeCommand(JobCmd,
+				"submit",
+				"--pathways",
+				"--pathways-run-sps-workload", "sps-v5p",
+				conflictFlag,
+				"--name", "sps-client",
+				"--command", "python3 train.py",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+			)
+			if err == nil || !strings.Contains(err.Error(), "--pathways-run-sps-workload cannot be used with --pathways-deploy-sps or --pathways-headless") {
+				t.Errorf("for %s, got err = %v, want mutual exclusion error", conflictFlag, err)
+			}
+		}
+	})
+
+	t.Run("rejects pathways-run-sps-workload without command", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-run-sps-workload", "sps-v5p",
+			"--name", "sps-client",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err == nil || !strings.Contains(err.Error(), `required flag "command" not set`) {
+			t.Errorf("got err = %v, want required flag \"command\" not set error", err)
+		}
+	})
+
+	t.Run("rejects mount in terminal mode without image", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		t.Cleanup(func() { volumeStr = nil })
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-run-sps-workload", "sps-v5p",
+			"--name", "sps-client",
+			"--command", "python3 train.py",
+			"--mount", "gs://my-bucket;/mnt/data",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err == nil || !strings.Contains(err.Error(), "--mount requires --image or --base-image when used with --pathways-run-sps-workload") {
+			t.Errorf("got err = %v, want --mount requires --image error", err)
+		}
+	})
+
+	t.Run("rejects compute-type and server flags with pathways-run-sps-workload", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-run-sps-workload", "sps-v5p",
+			"--compute-type", "ct6e-standard-4t",
+			"--name", "sps-client",
+			"--command", "python3 train.py",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err == nil || !strings.Contains(err.Error(), "--pathways-run-sps-workload connects to an existing SPS instance and cannot be used with --compute-type") {
+			t.Errorf("got err = %v, want unsupported --compute-type error", err)
+		}
+	})
+}
+
+func TestValidateBuildContext_OCIRegistries(t *testing.T) {
+	t.Run("private local base-image succeeds with empty GCLUSTER_IMAGE_REPO and empty USER", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		t.Setenv("DOCKER_CONFIG", t.TempDir())
+		t.Setenv("GCLUSTER_INSECURE_REGISTRY", "")
+		t.Setenv("GCLUSTER_IMAGE_REPO", "")
+		t.Setenv("USER", "")
+		t.Setenv("USERNAME", "")
+
+		ctxDir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(ctxDir, "train.py"), []byte("print(1)\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--skip-prereqs",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+			"--name", "private-oci-build",
+			"--base-image", "10.128.0.68:5000/jax:v5p",
+			"--build-context", ctxDir,
+			"--command", "python3 train.py",
+			"--compute-type", "v5p-8",
+		)
+		if err != nil {
+			t.Fatalf("expected private/local --base-image + --build-context to pass validation without GCLUSTER_IMAGE_REPO or USER, got: %v", err)
+		}
+		if mockOrc.SubmittedJob.WorkloadName != "private-oci-build" || mockOrc.SubmittedJob.BaseImage != "10.128.0.68:5000/jax:v5p" {
+			t.Errorf("unexpected SubmittedJob: %+v", mockOrc.SubmittedJob)
+		}
+	})
+
+	t.Run("explicit non-GAR GCLUSTER_IMAGE_REPO succeeds without USER env", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		t.Setenv("GCLUSTER_INSECURE_REGISTRY", "")
+		t.Setenv("GCLUSTER_IMAGE_REPO", "harbor.example.com/ml-team")
+		t.Setenv("USER", "")
+		t.Setenv("USERNAME", "")
+		buildContext = t.TempDir()
+		baseImage = "python:3.11-slim"
+
+		if err := validateBuildContext(context.Background(), "", ""); err != nil {
+			t.Fatalf("expected explicit non-GAR GCLUSTER_IMAGE_REPO without USER to pass, got: %v", err)
+		}
+	})
+
+	t.Run("public and cloud base-images without project/location or GCLUSTER_IMAGE_REPO give OCI guidance", func(t *testing.T) {
+		for _, pubBase := range []string{
+			"python:3.11-slim",
+			"cgr.dev/chainguard/python:latest",
+			"registry.access.redhat.com/ubi9/python-311:latest",
+			"mycorp.azurecr.io/ml/base:v1",
+			"123456789012.dkr.ecr.us-east-1.amazonaws.com/ml/base:v1",
+		} {
+			setupSubmitTestEnv(t)
+			t.Setenv("GCLUSTER_INSECURE_REGISTRY", "")
+			t.Setenv("GCLUSTER_IMAGE_REPO", "")
+			buildContext = t.TempDir()
+			baseImage = pubBase
+
+			err := validateBuildContext(context.Background(), "", "")
+			if err == nil || !strings.Contains(err.Error(), "<registry-host>/<repository>") {
+				t.Fatalf("baseImage=%q: expected OCI GCLUSTER_IMAGE_REPO=<registry-host>/<repository> guidance, got: %v", pubBase, err)
+			}
+		}
+	})
+
+	t.Run("malformed GCLUSTER_IMAGE_REPO fails immediately in validateBuildContext", func(t *testing.T) {
+		for _, badRepo := range []string{
+			"harbor.local/ml-team:latest",
+			"harbor.local/invalid!!repo",
+			"harbor.local/a//b",
+			"harbor.local/a/../b",
+		} {
+			setupSubmitTestEnv(t)
+			t.Setenv("GCLUSTER_INSECURE_REGISTRY", "")
+			t.Setenv("GCLUSTER_IMAGE_REPO", badRepo)
+			buildContext = t.TempDir()
+			baseImage = "python:3.11-slim"
+
+			if err := validateBuildContext(context.Background(), "", ""); err == nil {
+				t.Fatalf("expected malformed GCLUSTER_IMAGE_REPO=%q to fail in validateBuildContext", badRepo)
+			}
+		}
+	})
 }

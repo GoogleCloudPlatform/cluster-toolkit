@@ -505,6 +505,31 @@ func TestApplyAgentEnvAttribution(t *testing.T) {
 	}
 }
 
+func TestExpandOrDie_AgentEnvDoesNotChangeLabels(t *testing.T) {
+	dir := t.TempDir()
+	bpPath := filepath.Join(dir, "bp.yaml")
+	content := "blueprint_name: test-bp\nvars:\n  project_id: test-project\n  deployment_name: test-deployment\n"
+	if err := os.WriteFile(bpPath, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write blueprint: %v", err)
+	}
+	origLevel := expandFlags.validationLevel
+	expandFlags.validationLevel = "IGNORE"
+	defer func() { expandFlags.validationLevel = origLevel }()
+
+	t.Setenv("GHPC_AI_ASSISTED", "")
+	t.Setenv("CLAUDECODE", "1")
+	t.Setenv("CLOUDSDK_CORE_ACCOUNT", "testuser")
+
+	bp, _ := expandOrDie(createCmd, bpPath)
+	if !bp.AIAssisted {
+		t.Errorf("expected bp.AIAssisted to be true for telemetry after expandOrDie in create command")
+	}
+	labels := bp.Vars.Get("labels").AsValueMap()
+	if _, exists := labels["ghpc_ai_assisted"]; exists {
+		t.Errorf("expected env-only detection not to inject ghpc_ai_assisted into vars.labels, got %v", labels["ghpc_ai_assisted"])
+	}
+}
+
 func setupIsolatedExecuteTest(t *testing.T) (string, func()) {
 	t.Helper()
 	tempDir := t.TempDir()

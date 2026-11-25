@@ -75,7 +75,7 @@ placement [guide][guide-link] and [api][api-link] documentation.
 Use the following settings for compact placement:
 
 ```yaml
-  ...
+  # ...
   settings:
     instance_count: 4
     machine_type: c2-standard-60
@@ -89,7 +89,7 @@ compactness is not obtainable, you can enforce this with the [`max_distance`
 setting](https://cloud.google.com/compute/docs/instances/use-compact-placement-policies):
 
 ```yaml
-  ...
+  # ...
   settings:
     instance_count: 4
     machine_type: c2-standard-60
@@ -101,7 +101,7 @@ setting](https://cloud.google.com/compute/docs/instances/use-compact-placement-p
 Use the following settings for spread placement:
 
 ```yaml
-  ...
+  # ...
   settings:
     instance_count: 4
     machine_type: n2-standard-4
@@ -238,12 +238,13 @@ limitations under the License.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_provisioning_model"></a> [provisioning\_model](#input\_provisioning\_model) | Provisioning model for cloud instance. | `string` | `null` | no |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to | `string` | n/a | yes |
-| <a name="input_reservation_name"></a> [reservation\_name](#input\_reservation\_name) | Name of the reservation to use for VM resources, should be in one of the following formats:<br/>- projects/PROJECT\_ID/reservations/RESERVATION\_NAME<br/>- RESERVATION\_NAME<br/><br/>Must be a "SPECIFIC\_RESERVATION"<br/>Set to empty string if using no reservation or automatically-consumed reservations | `string` | `""` | no |
+| <a name="input_reservation_name"></a> [reservation\_name](#input\_reservation\_name) | Name of the reservation to use for VM resources, should be in one of the following formats:<br/>- projects/PROJECT\_ID/reservations/RESERVATION\_NAME<br/>- RESERVATION\_NAME<br/>- projects/PROJECT\_ID/reservations/RESERVATION\_NAME/reservationBlocks/BLOCK\_NAME<br/>- RESERVATION\_NAME/reservationBlocks/BLOCK\_NAME<br/>- projects/PROJECT\_ID/reservations/RESERVATION\_NAME/reservationBlocks/BLOCK\_NAME/reservationSubBlocks/SUB\_BLOCK\_NAME<br/>- RESERVATION\_NAME/reservationBlocks/BLOCK\_NAME/reservationSubBlocks/SUB\_BLOCK\_NAME<br/><br/>Must be a "SPECIFIC\_RESERVATION"<br/>Set to empty string if using no reservation or automatically-consumed reservations | `string` | `""` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | DEPRECATED - Use `service_account_email` and `service_account_scopes` instead. | <pre>object({<br/>    email  = string,<br/>    scopes = set(string)<br/>  })</pre> | `null` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | Service account e-mail address to use with the VM instance. | `string` | `null` | no |
 | <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes to use with the VM instance. | `set(string)` | <pre>[<br/>  "https://www.googleapis.com/auth/cloud-platform"<br/>]</pre> | no |
 | <a name="input_spot"></a> [spot](#input\_spot) | DEPRECATED - Use `provisioning_model` instead. | `bool` | `null` | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script used on the instance | `string` | `null` | no |
+| <a name="input_startup_script_path"></a> [startup\_script\_path](#input\_startup\_script\_path) | The GCS bucket or bucket path (e.g. 'gs://bucket-name', 'gs://bucket-name/path', or 'bucket-name') to use for startup scripts. If provided, the module will not create a new GCS bucket for startup scripts. | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork to attach the VM. | `string` | `null` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Network tags, provided as a list | `list(string)` | `[]` | no |
 | <a name="input_threads_per_core"></a> [threads\_per\_core](#input\_threads\_per\_core) | Sets the number of threads per physical core. By setting threads\_per\_core<br/>to 2, Simultaneous Multithreading (SMT) is enabled extending the total number<br/>of virtual cores. For example, a machine of type c2-standard-60 will have 60<br/>virtual cores with threads\_per\_core equal to 2. With threads\_per\_core equal<br/>to 1 (SMT turned off), only the 30 physical cores will be available on the VM.<br/><br/>The default value of \"0\" will turn off SMT for supported machine types, and<br/>will fall back to GCE defaults for unsupported machine types (t2d, shared-core<br/>instances, or instances with less than 2 vCPU).<br/><br/>Disabling SMT can be more performant in many HPC workloads, therefore it is<br/>disabled by default where compatible.<br/><br/>null = SMT configuration will use the GCE defaults for the machine type<br/>0 = SMT will be disabled where compatible (default)<br/>1 = SMT will always be disabled (will fail on incompatible machine types)<br/>2 = SMT will always be enabled (will fail on incompatible machine types) | `number` | `0` | no |

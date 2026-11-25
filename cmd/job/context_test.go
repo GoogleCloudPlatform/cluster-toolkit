@@ -156,8 +156,8 @@ func TestLoadContext_CorruptFile(t *testing.T) {
 	}
 
 	loaded, err := loadContext()
-	if err == nil {
-		t.Fatalf("LoadContext() expected error for corrupt file")
+	if err == nil || !strings.Contains(err.Error(), "gcluster job config unset all") {
+		t.Fatalf("LoadContext() = %v, expected error mentioning 'gcluster job config unset all'", err)
 	}
 	expected := Context{}
 	if loaded != expected {

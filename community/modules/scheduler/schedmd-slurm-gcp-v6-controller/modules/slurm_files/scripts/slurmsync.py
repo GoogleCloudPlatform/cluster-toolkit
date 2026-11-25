@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 from itertools import chain
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Dict, Tuple, List, Optional, Protocol, Any
+from typing import Dict, Set, Tuple, List, Optional, Protocol, Any
 from functools import lru_cache
 
 import util
@@ -46,7 +46,6 @@ from util import (
 )
 from util import lookup
 from suspend import suspend_nodes
-import tpu
 import conf
 import watch_delete_vm_op
 import repair
@@ -172,19 +171,9 @@ def start_instance_op(node: str) -> Any:
 
 def start_instances(node_list):
     log.info("{} instances to start ({})".format(len(node_list), ",".join(node_list)))
-    lkp = lookup()
-    # TODO: use code from resume.py to assign proper placement
-    normal, tpu_nodes = separate(lkp.node_is_tpu, node_list)
-    ops = {node: start_instance_op(node) for node in normal}
+    ops = {node: start_instance_op(node) for node in node_list}
 
     done, failed = batch_execute(ops)
-
-    tpu_start_data = []
-    for ns, nodes in util.groupby_unsorted(tpu_nodes, lkp.node_nodeset_name):
-        tpuobj = tpu.TPU.make(ns, lkp)
-        for snodes in chunked(nodes, n=tpuobj.vmcount):
-            tpu_start_data.append({"tpu": tpuobj, "node": snodes})
-    execute_with_futures(tpu.start_tpu, tpu_start_data)
 
 
 def _find_dynamic_node_status() -> NodeAction:
@@ -208,68 +197,154 @@ def get_fr_action(fr: FutureReservation, state:Optional[NodeState]) -> Optional[
         msg = f"Reservation:{fr.name} is after its end-time"
     return NodeActionDown(reason=msg)
 
-def _find_tpu_node_action(nodename, state) -> NodeAction:
-    lkp = lookup()
-    tpuobj = tpu.TPU.make(lkp.node_nodeset_name(nodename), lkp)
-    inst = tpuobj.get_node(nodename)
-    # If we do not find the node but it is from a Tpu that has multiple vms look for the master node
-    if inst is None and tpuobj.vmcount > 1:
-        # Get the tpu slurm nodelist of the nodes in the same tpu group as nodename
-        nodelist = run(
-            f"{lkp.scontrol} show topo {nodename}"
-            + " | awk -F'=' '/Level=0/ { print $NF }'",
-            shell=True,
-        ).stdout
-        l_nodelist = util.to_hostnames(nodelist)
-        group_names = set(l_nodelist)
-        # get the list of all the existing tpus in the nodeset
-        tpus_list = set(tpuobj.list_node_names())
-        # In the intersection there must be only one node that is the master
-        tpus_int = list(group_names.intersection(tpus_list))
-        if len(tpus_int) > 1:
-            log.error(
-                f"More than one cloud tpu node for tpu group {nodelist}, there should be only one that should be {l_nodelist[0]}, but we have found {tpus_int}"
-            )
-            return NodeActionUnknown(slurm_state=state, instance_state=None)
-        if len(tpus_int) == 1:
-            inst = tpuobj.get_node(tpus_int[0])
-        # if len(tpus_int ==0) this case is not relevant as this would be the case always that a TPU group is not running
-    if inst is None:
-        if state.base == "DOWN" and "POWERED_DOWN" in state.flags:
-            return NodeActionIdle()
-        if "POWERING_DOWN" in state.flags:
-            return NodeActionIdle()
-        if "COMPLETING" in state.flags:
-            return NodeActionDown(reason="Unbacked instance")
-        if state.base != "DOWN" and not (
-            set(("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN"))
-            & state.flags
-        ):
-            return NodeActionDown(reason="Unbacked instance")
-        if lkp.is_static_node(nodename):
-            return NodeActionPowerUp()
-    elif (
-        state is not None
-        and "POWERED_DOWN" not in state.flags
-        and "POWERING_DOWN" not in state.flags
-        and inst.state == tpu.TPU.State.STOPPED
-    ):
-        if tpuobj.preemptible:
-            return NodeActionPrempt()
-        if state.base != "DOWN":
-            return NodeActionDown(reason="Instance terminated")
-    elif (
-        state is None or "POWERED_DOWN" in state.flags
-    ) and inst.state == tpu.TPU.State.READY:
-        return NodeActionDelete()
-    elif state is None:
-        # if state is None here, the instance exists but it's not in Slurm
-        return NodeActionUnknown(slurm_state=state, instance_state=inst.status)
 
+_MIG_REPAIRING_REASON = "MIG Auto-Healing instance repair in progress"
+_MIG_REPAIR_ERROR_PREFIX = "MIG Auto-Healing failed"
+_MIG_ERROR_PREFIX = "MIG Error"
+_MIG_REASON_MAX_LEN = 200
+_MIG_REPAIRING_ACTIONS = frozenset(("REPAIRING", "RESTARTING", "RECREATING"))
+_MIG_TRANSIENT_CAPACITY_CODES = frozenset((
+    "ZONE_RESOURCE_POOL_EXHAUSTED",
+    "ZONE_RESOURCE_POOL_EXHAUSTED_WITH_DETAILS",
+    "RESOURCE_POOL_EXHAUSTED",
+    "INSUFFICIENT_RESOURCE_CAPACITY",
+))
+_POWER_DOWN_FLAGS = frozenset(("POWERED_DOWN", "POWERING_DOWN"))
+
+
+def _sanitize_mig_reason_part(text: str) -> str:
+    """Normalize a GCE error field into a single-line Slurm node reason fragment.
+
+    Square brackets are converted to parentheses so error text cannot be mistaken
+    for the trailing ``[user@timestamp]`` attribution suffix stripped by ``get_node_reason``.
+    """
+    cleaned = re.sub(r"[\r\n\t\x00-\x1f\x7f]+", " ", text)
+    cleaned = cleaned.replace("[", "(").replace("]", ")")
+    return " ".join(cleaned.split())
+
+
+def _format_mig_error_reason(action: str, code: str, message: str) -> str:
+    """Format a GCE managed instance ``lastAttempt`` error for Slurm ``sinfo``."""
+    safe_code = _sanitize_mig_reason_part(code) or "UNKNOWN"
+    safe_msg = _sanitize_mig_reason_part(message)
+    prefix = (
+        _MIG_REPAIR_ERROR_PREFIX
+        if action in _MIG_REPAIRING_ACTIONS
+        else _MIG_ERROR_PREFIX
+    )
+    reason = f"{prefix} ({safe_code}): {safe_msg}" if safe_msg else f"{prefix} ({safe_code})"
+    if len(reason) > _MIG_REASON_MAX_LEN:
+        reason = reason[: _MIG_REASON_MAX_LEN - 3].rstrip() + "..."
+    return reason
+
+
+def _is_mig_managed_reason(reason: Optional[str]) -> bool:
+    """Return True when ``reason`` was set by slurmsync MIG auto-healing/error logic."""
+    if not reason:
+        return False
+    return reason.lstrip().startswith(("MIG Auto-Healing", _MIG_ERROR_PREFIX))
+
+
+def _can_update_mig_reason(current_reason: Optional[str]) -> bool:
+    """Return True if a DOWN node's reason may be updated with a newer MIG error.
+
+    ``None`` represents a failed/unknown lookup and fails safe (returns False) so a
+    transient ``scontrol`` error never overwrites a manual operator reason.
+    """
+    if current_reason is None:
+        return False
+    stripped = current_reason.strip()
+    if not stripped:
+        return True
+    if _is_mig_managed_reason(stripped):
+        return True
+    return stripped.lower() in (
+        "unbacked instance",
+        "instance terminated",
+        "not responding",
+        "node unexpectedly rebooted",
+    )
+
+
+def _action_for_mig_error(
+    short_nodename: str,
+    state: NodeState,
+    mig_err: Tuple[str, str, str],
+) -> NodeAction:
+    """Return a NodeAction updating ``short_nodename`` with a formatted MIG error reason."""
+    err_reason = _format_mig_error_reason(*mig_err)
+    if state.base != "DOWN":
+        return NodeActionDown(reason=err_reason)
+    cur_reason = get_node_reason(short_nodename)
+    if _can_update_mig_reason(cur_reason) and cur_reason != err_reason:
+        return NodeActionDown(reason=err_reason)
     return NodeActionUnchanged()
+
+
+def _is_instance_managed_by_mig(
+    lkp: util.Lookup,
+    inst: Optional[util.Instance],
+    short_nodename: str,
+    region: str,
+    mig_name: str,
+) -> bool:
+    """Return True if ``inst`` is managed by ``mig_name`` (fails safe on API error)."""
+    if util.instance_created_by_mig(inst) == mig_name:
+        return True
+    mig_key = (region, mig_name)
+    if _failed_migs is not None and mig_key in _failed_migs:
+        return True
+    try:
+        return short_nodename in lkp.get_mig_instance_names(lkp.project, region, mig_name)
+    except Exception as e:
+        if _failed_migs is not None:
+            _failed_migs.add(mig_key)
+        log.debug(f"Could not verify MIG membership for {short_nodename} in {mig_name}: {e}")
+        return True
+
+
+_REASON_SUFFIX_RE = re.compile(r"\s*\[[^\[\]]+@[^\[\]]+\]\s*$")
+_node_reasons_cache: Optional[Dict[str, str]] = None
+_prefetch_node_reasons_enabled: bool = False
+_node_reasons_prefetched: bool = False
+_failed_migs: Optional[Set[Tuple[str, str]]] = None
+
+
+def _normalize_reason(reason: Optional[str]) -> Optional[str]:
+    if reason is None:
+        return None
+    return _REASON_SUFFIX_RE.sub("", reason).strip()
+
+
+def _load_all_node_reasons() -> Optional[Dict[str, str]]:
+    """Fetch reasons for all Slurm nodes in a single ``scontrol show nodes --json`` call."""
+    try:
+        result = run(f"{lookup().scontrol} show nodes --json")
+        data = json.loads(result.stdout)
+        reasons: Dict[str, str] = {}
+        for node in data.get("nodes", []):
+            name = node.get("name")
+            if name:
+                normalized = _normalize_reason(node.get("reason") or "")
+                assert normalized is not None
+                reasons[name] = normalized
+                reasons.setdefault(name.split(".")[0], normalized)
+        return reasons
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+        log.debug(f"Bulk scontrol show nodes --json failed, will query per-node: {e}")
+    except Exception as e:
+        log.debug(f"Unexpected error prefetching node reasons: {e}")
+    return None
+
 
 def get_node_reason(nodename: str) -> Optional[str]:
     """Get the reason for a node's state using JSON output."""
+    global _node_reasons_cache, _node_reasons_prefetched
+    if _prefetch_node_reasons_enabled and not _node_reasons_prefetched:
+        _node_reasons_cache = _load_all_node_reasons()
+        _node_reasons_prefetched = True
+    if _node_reasons_cache is not None and nodename in _node_reasons_cache:
+        return _node_reasons_cache[nodename]
     try:
         # Use --json to get structured data
         result = run(f"{lookup().scontrol} show node {nodename} --json")
@@ -278,11 +353,7 @@ def get_node_reason(nodename: str) -> Optional[str]:
         # Access the reason field directly from the JSON structure
         nodes = data.get('nodes', [])
         if nodes:
-            reason = nodes[0].get('reason')
-            # Handle the specific formatting logic for brackets if needed
-            if reason and "[" in reason:
-                return reason.split("[")[0].strip()
-            return reason
+            return _normalize_reason(nodes[0].get('reason') or "")
     except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
         log.error(f"Failed to execute scontrol or parse its JSON output for node {nodename}: {e}")
     except Exception as e:
@@ -306,9 +377,6 @@ def get_node_action(nodename: str) -> NodeAction:
     if lkp.node_is_dyn(nodename):
         return _find_dynamic_node_status()
 
-    if lkp.node_is_tpu(nodename):
-        return _find_tpu_node_action(nodename, state)
-
     if capacity_circuit.owns_node(nodename, lkp):
         return NodeActionUnchanged()
 
@@ -316,20 +384,72 @@ def get_node_action(nodename: str) -> NodeAction:
     short_nodename = nodename.split(".")[0]
     inst = lkp.instance(short_nodename)
 
-    # For MIG compute nodes, detect active GCE Auto-Healing repairs
-    if lkp.is_node_mig(nodename):
+    # For MIG compute nodes, detect active GCE Auto-Healing repairs and surface MIG slot errors
+    mig_list_failed = False
+    active_mig_repairing = False
+    active_mig_creating = False
+    active_mig_err = False
+    if lkp.is_node_mig(nodename) and not lkp.is_tpu_node(nodename):
+        mig_key: Optional[Tuple[str, str]] = None
         try:
             mig_name = lkp.node_mig_name(nodename)
             region = lkp.node_region(nodename)
-            if short_nodename in lkp.get_mig_repairing_instances(lkp.project, region, mig_name):
-                if state is not None and state.base != "DOWN":
-                    return NodeActionDown(reason="MIG Auto-Healing instance repair in progress")
-                return NodeActionUnchanged()
-            elif inst and inst.status == "RUNNING" and state is not None and state.base == "DOWN":
-                if "MIG Auto-Healing" in (get_node_reason(short_nodename) or ""):
-                    log.info(f"{short_nodename} recovered by MIG auto-healing; resuming node to idle")
-                    return NodeActionIdle()
+            mig_key = (region, mig_name)
+            if _failed_migs is not None and mig_key in _failed_migs:
+                mig_list_failed = True
+            else:
+                repairing = lkp.get_mig_repairing_instances(lkp.project, region, mig_name)
+                creating = lkp.get_mig_creating_instances(lkp.project, region, mig_name)
+                mig_errors = lkp.get_mig_instance_errors(lkp.project, region, mig_name)
+                mig_err = mig_errors.get(short_nodename)
+                in_power_down = state is not None and bool(state.flags & _POWER_DOWN_FLAGS)
+                active_mig_repairing = short_nodename in repairing
+                active_mig_creating = short_nodename in creating
+                active_mig_err = mig_err is not None
+
+                if active_mig_repairing:
+                    if state is None:
+                        return NodeActionUnchanged()
+                    if not in_power_down:
+                        if mig_err is not None:
+                            return _action_for_mig_error(short_nodename, state, mig_err)
+                        if state.base != "DOWN":
+                            return NodeActionDown(reason=_MIG_REPAIRING_REASON)
+                        return NodeActionUnchanged()
+                elif mig_err is not None:
+                    err_action, err_code, err_msg = mig_err
+                    if (
+                        err_action in ("CREATING", "CREATING_WITHOUT_RETRIES")
+                        and inst is not None
+                        and inst.status in ("RUNNING", "PROVISIONING", "STAGING", "REPAIRING")
+                        and util.instance_created_by_mig(inst) is None
+                    ):
+                        log.warning(
+                            f"MIG {mig_name} slot {short_nodename} ({err_code}) collides with a live "
+                            "standalone VM; leaving Slurm state untouched. Drain and power_down to migrate it."
+                        )
+                        return NodeActionUnchanged()
+                    is_healthy_or_booting = (
+                        inst is not None
+                        and inst.status in ("RUNNING", "PROVISIONING", "STAGING")
+                        and err_action in ("NONE", "VERIFYING", "REFRESHING")
+                    )
+                    if not is_healthy_or_booting and state is not None and not in_power_down:
+                        if "POWERING_UP" in state.flags and err_code.upper() in _MIG_TRANSIENT_CAPACITY_CODES:
+                            log.warning(
+                                f"MIG {mig_name} slot {short_nodename} queued on capacity ({err_code}): {err_msg}"
+                            )
+                            return NodeActionUnchanged()
+                        return _action_for_mig_error(short_nodename, state, mig_err)
+
+                if inst and inst.status == "RUNNING" and state is not None and state.base == "DOWN" and not in_power_down:
+                    if _is_mig_managed_reason(get_node_reason(short_nodename)):
+                        log.info(f"{short_nodename} recovered by MIG auto-healing; resuming node to idle")
+                        return NodeActionIdle()
         except Exception as e:
+            mig_list_failed = True
+            if _failed_migs is not None and mig_key is not None:
+                _failed_migs.add(mig_key)
             log.debug(f"Failed to check managed instance repair status for {nodename}: {e}")
 
     power_flags = frozenset(
@@ -354,16 +474,22 @@ def get_node_action(nodename: str) -> NodeAction:
         if state.base == "DOWN" and "POWERED_DOWN" in state.flags:
             return NodeActionIdle()
         if "POWERING_DOWN" in state.flags:
+            if active_mig_repairing or active_mig_creating or active_mig_err or mig_list_failed:
+                return NodeActionUnchanged()
             return NodeActionIdle()
         if "COMPLETING" in state.flags:
             return NodeActionDown(reason="Unbacked instance")
         if state.base != "DOWN" and not power_flags:
             return NodeActionDown(reason="Unbacked instance")
         if state.base == "DOWN" and not power_flags:
+            if active_mig_creating or mig_list_failed:
+                return NodeActionUnchanged()
             return NodeActionPowerDown()
         if "NOT_RESPONDING" in state.flags:
             return NodeActionPowerDown()
         if "POWERED_DOWN" in state.flags and lkp.is_static_node(nodename):
+            if active_mig_repairing or active_mig_creating or active_mig_err or mig_list_failed:
+                return NodeActionUnchanged()
             return NodeActionPowerUp()
     elif (
         state is not None
@@ -379,12 +505,30 @@ def get_node_action(nodename: str) -> NodeAction:
             )
             return NodeActionPowerDownForce(reason=termination_reason)
         if lkp.is_node_mig(nodename):
-            # MIG auto-healing (default_action_on_failure=REPAIR) recreates the VM
-            # (delete + insert). Do not start it; wait for RUNNING, then resume via
-            # the auto-healing branch above.
-            if state.base != "DOWN":
-                return NodeActionDown(reason="MIG Auto-Healing instance repair in progress")
-            return NodeActionUnchanged()
+            mig_name = lkp.node_mig_name(nodename)
+            region = lkp.node_region(nodename)
+            owner_mig = util.instance_created_by_mig(inst)
+            if owner_mig is not None and owner_mig != mig_name:
+                log.warning(
+                    f"{short_nodename} is managed by a different MIG ({owner_mig}, "
+                    f"expected {mig_name}); skipping legacy TERMINATED/preemption handling."
+                )
+                if state.base != "DOWN":
+                    return NodeActionDown(
+                        reason=f"Instance terminated (managed by different MIG {owner_mig})"
+                    )
+                return NodeActionUnchanged()
+            if _is_instance_managed_by_mig(lkp, inst, short_nodename, region, mig_name):
+                # MIG auto-healing (default_action_on_failure=REPAIR) recreates the VM
+                # (delete + insert). Do not start it; wait for RUNNING, then resume via
+                # the auto-healing branch above.
+                if state.base != "DOWN":
+                    return NodeActionDown(reason=_MIG_REPAIRING_REASON)
+                return NodeActionUnchanged()
+            log.info(
+                f"{short_nodename} is a legacy standalone VM (outside MIG {mig_name}); "
+                "using legacy TERMINATED handling."
+            )
         if inst.scheduling.preemptible:
             return NodeActionPrempt()
         if state.base != "DOWN":
@@ -512,14 +656,25 @@ def sync_placement_groups():
 
 
 def sync_instances():
+    global _node_reasons_cache, _prefetch_node_reasons_enabled, _node_reasons_prefetched, _failed_migs
     compute_instances = {
         name for name, inst in lookup().instances().items() if inst.role == "compute"
     }
     slurm_nodes = set(lookup().slurm_nodes().keys())
     log.debug(f"reconciling {len(compute_instances)} GCP instances and {len(slurm_nodes)} Slurm nodes.")
 
-    for action, nodes in util.groupby_unsorted(list(compute_instances | slurm_nodes), get_node_action):
-        action.apply(list(nodes))
+    _node_reasons_cache = None
+    _prefetch_node_reasons_enabled = True
+    _node_reasons_prefetched = False
+    _failed_migs = set()
+    try:
+        for action, nodes in util.groupby_unsorted(list(compute_instances | slurm_nodes), get_node_action):
+            action.apply(list(nodes))
+    finally:
+        _node_reasons_cache = None
+        _prefetch_node_reasons_enabled = False
+        _node_reasons_prefetched = False
+        _failed_migs = None
 
 
 def reconfigure_slurm() -> bool:

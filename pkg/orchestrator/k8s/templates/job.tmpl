@@ -4,6 +4,9 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{.WorkloadName}}
+{{- if .Namespace }}
+  namespace: {{.Namespace}}
+{{- end }}
   labels:
     gcluster.google.com/workload: {{.WorkloadName}}
 spec:
@@ -17,6 +20,9 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{.WorkloadName}}
+{{- if .Namespace }}
+  namespace: {{.Namespace}}
+{{- end }}
   labels:
 {{(StructuralData (.RenderBlock "workload_labels" 4))}}
 spec:

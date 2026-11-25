@@ -47,7 +47,8 @@ Note: If you create multiple clusters using these same cluster blueprints, ensur
         --project=PROJECT_ID \
         --default-storage-class=STANDARD \
         --location=COMPUTE_REGION \
-        --uniform-bucket-level-access
+        --uniform-bucket-level-access \
+        --public-access-prevention
     gcloud storage buckets update gs://BUCKET_NAME --versioning
     ```
 
@@ -117,7 +118,7 @@ Any job applied to this node pool must meet the following requirements:
 2. Submit the sample test job:
 
     ```sh
-    kubectl apply -f examples/gke-consumption-options/dws-flex-start-compact-placement/dws-flex-start-h4d.yaml
+    kubectl apply -f examples/gke-consumption-options/dws-flex-start-compact-placement/gke-h4d/test-job.yaml
     ```
 
 3. Monitor the scale-up and execution timeline:

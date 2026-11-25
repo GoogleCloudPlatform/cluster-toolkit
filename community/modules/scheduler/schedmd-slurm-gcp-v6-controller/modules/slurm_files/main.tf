@@ -104,8 +104,7 @@ locals {
 
   x_nodeset         = toset(var.nodeset[*].nodeset_name)
   x_nodeset_dyn     = toset(var.nodeset_dyn[*].nodeset_name)
-  x_nodeset_tpu     = toset(var.nodeset_tpu[*].nodeset.nodeset_name)
-  x_nodeset_overlap = setintersection([], local.x_nodeset, local.x_nodeset_dyn, local.x_nodeset_tpu)
+  x_nodeset_overlap = setintersection([], local.x_nodeset, local.x_nodeset_dyn)
 
   etc_dir = abspath("${path.module}/etc")
 
@@ -178,15 +177,6 @@ resource "google_storage_bucket_object" "nodeset_dyn_config" {
   source_md5hash = md5(yamlencode(each.value))
 }
 
-resource "google_storage_bucket_object" "nodeset_tpu_config" {
-  for_each = { for n in var.nodeset_tpu[*].nodeset : n.nodeset_name => n }
-
-  bucket         = data.google_storage_bucket.this.name
-  name           = "${local.bucket_dir}/nodeset_tpu_configs/${each.key}.yaml"
-  content        = yamlencode(each.value)
-  source_md5hash = md5(yamlencode(each.value))
-}
-
 #########
 # DEVEL #
 #########
@@ -211,8 +201,6 @@ locals {
     "conf_v2511.py",
     "conf_v2605.py",
     "file_cache.py",
-    "get_tpu_vmcount.py",
-    "job_submit.lua.tpl",
     "load_bq.py",
     "local_pubsub.py",
     "mig_flex.py",
@@ -227,7 +215,6 @@ locals {
     "sort_nodes.py",
     "suspend_wrapper.sh",
     "suspend.py",
-    "tpu.py",
     "util.py",
     "watch_delete_vm_op.py",
   ]
@@ -242,8 +229,6 @@ locals {
     "conf_v2511.py",
     "conf_v2605.py",
     "file_cache.py",
-    "get_tpu_vmcount.py",
-    "job_submit.lua.tpl",
     "local_pubsub.py",
     "mig_flex.py",
     "setup_network_storage.py",
@@ -253,7 +238,6 @@ locals {
     "error_handler.py",
     "repair.py",
     "suspend.py",
-    "tpu.py",
     "util.py",
     "watch_delete_vm_op.py",
   ]

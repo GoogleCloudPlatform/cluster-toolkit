@@ -145,7 +145,7 @@ with the same commands:
   3. **Stage 3 (`manifests/<server>-bench.yaml.tftpl`):** Waits for the server
      health endpoint and runs the benchmark.
   Run the staging Job and server pods as the `workload-identity-k8s-sa` service
-  account and give the workload service account `storage.objectAdmin` and
+  account and give the workload service account `storage.objectUser` and
   `storage.bucketViewer`. Keep a disk fallback for an empty `model_bucket`.
 * **Pin and explain every parameter.** Pin the serving image tag and spell out
   the serving flags (parallelism, attention backend, memory utilization, max

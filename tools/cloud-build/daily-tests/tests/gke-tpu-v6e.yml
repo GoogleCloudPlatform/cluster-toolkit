@@ -58,5 +58,6 @@ chs_suites:
 post_deploy_tests:
 - test-validation/test-gke-tpu.yml
 - test-validation/test-gcluster-job-pathways.yml
+- test-validation/test-gcluster-job-sps.yml
 - test-validation/test-gke-ml-diagnostics.yml
 - test-validation/test-chs.yml

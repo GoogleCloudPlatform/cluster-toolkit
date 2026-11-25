@@ -86,6 +86,22 @@ setting [var.spool_parent_dir](#input_spool_parent_dir) to its mount point:
 
 [replacement]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
 
+## Automatic Job Retry on Shutdown Exit Codes
+
+The Access Point configures a `Schedd` job transform (`RETRY_WINDOWS_SHUTDOWN`)
+that automatically re-queues jobs failing with Windows DLL initialization exit
+codes that commonly occur when a job is dispatched to an Execute Point while the
+VM is shutting down:
+
+- `-1073741502` / `3221225794` (`0xC0000142`, `STATUS_DLL_INIT_FAILED`)
+- `-1073741205` / `3221226091` (`0xC000026B`, `STATUS_DLL_INIT_FAILED_LOGOFF`)
+
+The transform preserves any user-specified `OnExitRemove` expression and keeps
+the job in the queue (`OnExitRemove = False`) when it exits normally with one of
+these codes, up to 5 attempts (`NumJobCompletions < 5`). Because this transform
+is applied by the Access Point `Schedd` to all submitted jobs without an OS
+filter, it applies to all jobs in the pool, including Linux jobs.
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2026 Google LLC
 
@@ -152,7 +168,7 @@ limitations under the License.
 | <a name="input_central_manager_ips"></a> [central\_manager\_ips](#input\_central\_manager\_ips) | List of IP addresses of HTCondor Central Managers | `list(string)` | n/a | yes |
 | <a name="input_default_mig_id"></a> [default\_mig\_id](#input\_default\_mig\_id) | Default MIG ID for HTCondor jobs; if unset, jobs must specify MIG id | `string` | `""` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Cluster Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
-| <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB | `number` | `32` | no |
+| <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB. If unset, the size of the image is used, with a minimum of 32 GB. | `number` | `null` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Boot disk size in GB | `string` | `"pd-balanced"` | no |
 | <a name="input_distribution_policy_target_shape"></a> [distribution\_policy\_target\_shape](#input\_distribution\_policy\_target\_shape) | Target shape acoss zones for instance group managing high availability of access point | `string` | `"ANY_SINGLE_ZONE"` | no |
 | <a name="input_enable_high_availability"></a> [enable\_high\_availability](#input\_enable\_high\_availability) | Provision HTCondor access point in high availability mode | `bool` | `false` | no |

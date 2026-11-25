@@ -139,7 +139,7 @@ func TestLoadWorkloadTemplate_DirectoryErrors(t *testing.T) {
 func TestLoadWorkloadTemplate_EmbeddedTemplates(t *testing.T) {
 	t.Parallel()
 	blocks := loadBlocks(t, "")
-	if blocks["pod_template"] == nil || blocks["workload_labels"] == nil || blocks["base.tmpl"] != nil {
+	if blocks["pod_template"] == nil || blocks["workload_labels"] == nil || blocks["telemetry_sidecar"] == nil || blocks["base.tmpl"] != nil {
 		t.Fatalf("expected embedded base blocks without the root, got %v", slices.Sorted(maps.Keys(blocks)))
 	}
 	for _, name := range []string{"job.tmpl", "pathways_jobset.tmpl"} {
@@ -180,6 +180,8 @@ type baseBlockTestData struct {
 	ServiceAccountName   string
 	ImagePullSecrets     string
 	MLDiagnosticsEnabled bool
+	// TelemetryCollectorImage is read by workload_labels to decide between the GKE webhook label and the native sidecar.
+	TelemetryCollectorImage string
 }
 
 func executeBaseBlock(t *testing.T, blocks map[string]*yamltemplate.Template, name string, data any) string {
