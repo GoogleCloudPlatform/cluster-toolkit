@@ -236,10 +236,15 @@ def _strip_code_block_comments(text: str) -> str:
     return _scan_code_blocks(text, keep_prose=True)
 
 
-def _strip_action_line_comment(line: str) -> str:
-    """Strip inline shell comments from an action-block header line while preserving Markdown ATX headings."""
-    m_hdr = re.match(r"^([ \t>]*(?:(?:[-*+]|\d+[.)])[ \t]+)?#{1,6}[ \t]+)(.*)$", line)
-    return (m_hdr.group(1) + _strip_inline_comment(m_hdr.group(2))) if m_hdr else _strip_inline_comment(line)
+_INLINE_BACKTICK_RE = re.compile(r"(`+)(?!`)(.+?)(?<!`)\1(?!`)")
+_ATX_SUBHEADING_RE = re.compile(r"^[ \t]*#{2,6}[ \t]+")
+
+
+def _strip_action_line_comment(line: str, *, is_header: bool = False) -> str:
+    """Strip inline shell comments on indented action commands or inside backtick spans, leaving prose '#' intact."""
+    if not is_header and re.match(r"^(?: {4}|\t)", line) and not _BULLET_PREFIX_RE.match(line) and not _ATX_SUBHEADING_RE.match(line):
+        return _strip_inline_comment(line)
+    return _INLINE_BACKTICK_RE.sub(lambda m: m.group(1) + _strip_inline_comment(m.group(2)) + m.group(1), line)
 
 
 def _exec_zone(t: str) -> str:
@@ -247,7 +252,7 @@ def _exec_zone(t: str) -> str:
         stripped
         for s, e in _scan_action_blocks(t)
         for idx, raw in enumerate(_strip_code_block_comments(t[s:e]).splitlines())
-        for stripped in (_strip_action_line_comment(raw) if idx == 0 else _strip_inline_comment(raw),)
+        for stripped in (_strip_action_line_comment(raw, is_header=(idx == 0)),)
         if stripped.strip()
     ]
     return "\n".join([_code_block_lines(t), *action_lines])

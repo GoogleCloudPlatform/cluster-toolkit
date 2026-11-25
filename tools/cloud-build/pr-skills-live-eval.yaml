@@ -13,8 +13,8 @@
 # limitations under the License.
 
 # Shared Cloud Build workflow for PR-skills-smoke-eval (automatic live smoke
-# gate on skill/eval PRs) and PR-test-skills-full-eval (on-demand
-# /gcbrun-gated full evaluation suite across all skills on any PR).
+# gate on skill/eval PRs) and PR-test-skills-full-eval (approval-gated full
+# evaluation suite on matching skill, runner, Cloud Build, and Go CLI PRs).
 
 ---
 

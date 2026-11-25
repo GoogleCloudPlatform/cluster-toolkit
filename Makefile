@@ -268,7 +268,7 @@ lint-skills:
 
 test-skills:
 	$(info **************** running skills unit tests and evals ***************)
-	@python3 -m unittest discover -s tools/tests -p 'test_*.py'
+	@python3 -m unittest tools.tests.test_run_eval tools.tests.test_validate_readme_snippets
 	@python3 skills/xpk-to-clustertoolkit/scripts/parse_xpk_to_gcluster_test.py
 	@python3 tools/run_eval.py --all
 

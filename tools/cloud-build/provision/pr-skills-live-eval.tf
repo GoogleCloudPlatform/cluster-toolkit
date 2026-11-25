@@ -13,7 +13,7 @@
 # limitations under the License.
 
 variable "skills_eval_service_account" {
-  description = "Dedicated least-privilege service account resource name (projects/<project>/serviceAccounts/<email>) for live agent skill evaluation triggers (defaults to projects/<project_id>/serviceAccounts/skills-eval-runner@<project_id>.iam.gserviceaccount.com when null; requires roles/aiplatform.user, roles/compute.viewer, roles/serviceusage.serviceUsageViewer, roles/browser, roles/artifactregistry.reader, roles/logging.logWriter, and bucket-scoped roles/storage.objectCreator plus roles/storage.objectViewer on the regional Cloud Build logs and eval artifacts buckets)."
+  description = "Dedicated least-privilege service account resource name (projects/<project>/serviceAccounts/<email>) for live agent skill evaluation triggers (defaults to projects/<project_id>/serviceAccounts/skills-eval-runner@<project_id>.iam.gserviceaccount.com when null; requires project-level roles/aiplatform.user, roles/compute.viewer, roles/serviceusage.serviceUsageViewer, roles/serviceusage.serviceUsageConsumer, roles/logging.logWriter, repo-scoped roles/artifactregistry.reader on us-central1/hpc-toolkit-repo, and bucket-scoped roles/storage.objectUser plus roles/storage.legacyBucketReader on the Cloud Build logs and eval artifacts buckets; see provision/README.md)."
   type        = string
   default     = null
   validation {
@@ -31,10 +31,10 @@ locals {
     "AGENTS.md",
     "CLAUDE.md",
     "GEMINI.md",
-    "llms.txt",
-    "llms-full.txt",
     "docs/migration/xpk_to_clustertoolkit.md",
+    "pkg/catalog/**",
     "skills/**",
+    "tools/catalog-gen/**",
     "tools/run_eval.py",
     "tools/skills_eval/**",
     "tools/tests/test_run_eval.py",
@@ -84,13 +84,16 @@ resource "google_cloudbuild_trigger" "pr_test_skills_full_eval" {
   service_account = local.skills_eval_service_account
 
   filename = "tools/cloud-build/pr-skills-live-eval.yaml"
+  approval_config {
+    approval_required = true
+  }
 
   github {
     owner = "GoogleCloudPlatform"
     name  = "cluster-toolkit"
     pull_request {
       branch          = ".*"
-      comment_control = "COMMENTS_ENABLED"
+      comment_control = "COMMENTS_ENABLED_FOR_EXTERNAL_CONTRIBUTORS_ONLY"
     }
   }
 

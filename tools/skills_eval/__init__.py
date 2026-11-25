@@ -51,6 +51,7 @@ from .plan_parser import (
 from .reporting import (
     _GLOBAL_EVAL_TRIGGERS,
     _GLOBAL_EVAL_TRIGGER_PREFIXES,
+    _SKILL_SPECIFIC_TRIGGER_PREFIXES,
     _extract_normalized_cases_and_summary,
     check_baseline_regression,
     discover_skills,
@@ -131,6 +132,7 @@ __all__ = [
     "_GCLUSTER_SHIM",
     "_GLOBAL_EVAL_TRIGGERS",
     "_GLOBAL_EVAL_TRIGGER_PREFIXES",
+    "_SKILL_SPECIFIC_TRIGGER_PREFIXES",
     "_GSUTIL_SHIM",
     "_KUBECTL_SHIM",
     "_MAKE_SHIM",

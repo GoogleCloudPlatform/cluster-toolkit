@@ -36,7 +36,6 @@ from .plan_parser import (
 )
 from .schema_lint import (
     EvalResult,
-    MAX_LIVE_TOOL_CALLS,
     REPO_ROOT,
     TestCaseResult,
     _write_file,
@@ -85,7 +84,8 @@ def evaluate_skill(
         active_sc = set(case.get("_active_scorers") or resolve_active_scorers(eval_data, raw_case))
         ok, msg, elapsed = False, "", 0.0
         prev_toks = {k: 0 for k in ("input_tokens", "output_tokens", "cached_tokens", "thought_tokens", "total_tokens", "judge_tokens")}
-        for attempt in range(1, max(0, retries) + 2):
+        max_attempts = max(0, retries) + 1
+        for attempt in range(1, max_attempts + 1):
             attempt_start = time.time()
             simulated_text = (
                 backend.run_case(skill_name, prompt, case, skill_path=abs_skill_path)
@@ -93,13 +93,15 @@ def evaluate_skill(
                 else backend.run_case(skill_name, prompt, case)
             )
             elapsed = round(elapsed + (time.time() - attempt_start), 4)
-            ok, msg, fail_cat = _verify_assertions_categorized(simulated_text, case)
+            assert_ok, msg, fail_cat = _verify_assertions_categorized(simulated_text, case)
+            ok = assert_ok
             orc_cur = backend._get_oracle(cname, skill_name) if isinstance(backend, LiveCLIEvaluatorBackend) else None
             if orc_cur is not None:
                 orc_cur.attempts = attempt
                 for tk in prev_toks:
                     setattr(orc_cur, tk, getattr(orc_cur, tk) + prev_toks[tk])
                     prev_toks[tk] = getattr(orc_cur, tk)
+            llm_judged, fenced_err, missing_confirm_err = False, None, False
             hard_fn = getattr(backend, "hard_failures", None)
             if callable(hard_fn):
                 hard = list(hard_fn(qname if isinstance(backend, LiveCLIEvaluatorBackend) and qname in backend.oracles else cname))
@@ -107,10 +109,11 @@ def evaluate_skill(
                 fenced_err = _find_fenced_forbidden_cmd(simulated_text, case) if llm_judged else None
                 if fenced_err and fenced_err not in hard:
                     hard.append(fenced_err)
+                missing_confirm_err = bool(llm_judged and case.get("expect_blocked_action") and not _has_confirmation(simulated_text or ""))
                 det_err = (
                     msg
                     if (
-                        not ok
+                        not assert_ok
                         and (
                             fail_cat in ("missing_header", "missing_confirm")
                             or (not llm_judged and fail_cat == "forbidden_cmd")
@@ -121,32 +124,32 @@ def evaluate_skill(
                             )
                         )
                     )
-                    else (_CONFIRM_MSG if (llm_judged and case.get("expect_blocked_action") and not _has_confirmation(simulated_text or "")) else "")
+                    else (_CONFIRM_MSG if missing_confirm_err else "")
                 )
                 if det_err and det_err not in hard:
                     hard.append(det_err)
-                ok, msg = not hard, (("; ".join(hard) if hard else "All hard oracles passed") + f" ({'keywords ok' if ok else 'keywords: ' + msg})")
-            if ok or (
-                orc_cur is not None
-                and (
-                    orc_cur.blocked_commands
-                    or orc_cur.tracked_template_edits
-                    or orc_cur.generated_file_edits
-                    or orc_cur.shim_replaced
-                    or orc_cur.agent_not_run
-                    or orc_cur.timed_out
-                    or orc_cur.agent_exit_code not in (None, 0)
-                    or orc_cur.tool_calls_total > MAX_LIVE_TOOL_CALLS
+                safety_fail = (
+                    (not assert_ok and (fail_cat in ("missing_header", "missing_confirm") or (not llm_judged and fail_cat == "forbidden_cmd")))
+                    or missing_confirm_err
+                    or bool(fenced_err)
                 )
-            ):
+                ok, msg = not hard, (("; ".join(hard) if hard else "All hard oracles passed") + f" ({'keywords ok' if assert_ok else 'keywords: ' + msg})")
+            else:
+                safety_fail = not assert_ok and fail_cat in ("missing_header", "missing_confirm", "forbidden_cmd")
+            if ok or safety_fail or (orc_cur is not None and orc_cur.has_non_retryable_failure()):
                 break
+            if attempt < max_attempts and isinstance(backend, LiveCLIEvaluatorBackend):
+                with backend._print_lock:
+                    print(f"  [RETRY] {cname} (attempt {attempt}/{max_attempts}): {msg}")
+                    sys.stdout.flush()
         if isinstance(backend, LiveCLIEvaluatorBackend):
             backend._sync_case_log_verdict(cname, ok, msg, skill_name=skill_name)
             oracles = backend._get_oracle(cname, skill_name) or LiveOracles()
+            att_tag = f", attempts={oracles.attempts}" if oracles.attempts > 1 else ""
             with backend._print_lock:
                 print(
                     f"  [DONE] {cname}: {'PASS' if ok else 'FAIL'} "
-                    f"({elapsed:.1f}s, tokens={oracles.total_tokens}, tools={oracles.tool_calls_total}, tf_read={oracles.tf_files_read})"
+                    f"({elapsed:.1f}s, tokens={oracles.total_tokens}, tools={oracles.tool_calls_total}, tf_read={oracles.tf_files_read}{att_tag})"
                 )
                 if not ok:
                     print(f"    [FAIL-REASON] {cname}: {msg}\n    [FAIL-ORACLES] {cname}: {oracles.summary()}")
@@ -186,8 +189,6 @@ _GLOBAL_EVAL_TRIGGERS = frozenset({
     "AGENTS.md",
     "CLAUDE.md",
     "GEMINI.md",
-    "llms.txt",
-    "llms-full.txt",
     "tools/run_eval.py",
     "tools/tests/test_run_eval.py",
     "tools/validate_readme_snippets.py",
@@ -197,6 +198,10 @@ _GLOBAL_EVAL_TRIGGERS = frozenset({
 _GLOBAL_EVAL_TRIGGER_PREFIXES = (
     "tools/skills_eval/",
     "tools/cloud-build/images/test-runner/",
+)
+_SKILL_SPECIFIC_TRIGGER_PREFIXES = (
+    ("tools/catalog-gen/", "cluster-blueprint-assistant"),
+    ("pkg/catalog/", "cluster-blueprint-assistant"),
 )
 
 
@@ -248,6 +253,13 @@ def resolve_changed_skills(base_ref: str, skills_dir: str = "skills", repo_root:
             xpk_abs = os.path.join(skills_root_abs, "xpk-to-clustertoolkit")
             if os.path.isfile(os.path.join(xpk_abs, "SKILL.md")):
                 impacted.add(os.path.normpath(os.path.join(skills_dir, "xpk-to-clustertoolkit")))
+                continue
+            return None
+        matched_skill = next((sk for pref, sk in _SKILL_SPECIFIC_TRIGGER_PREFIXES if p.startswith(pref)), "")
+        if matched_skill:
+            sk_abs = os.path.join(skills_root_abs, matched_skill)
+            if os.path.isfile(os.path.join(sk_abs, "SKILL.md")):
+                impacted.add(os.path.normpath(os.path.join(skills_dir, matched_skill)))
                 continue
             return None
         if p.startswith(skills_prefix):
@@ -332,6 +344,7 @@ def _extract_normalized_cases_and_summary(data: Dict[str, Any]) -> Tuple[Dict[st
         "total_cases": tot,
         "passed_cases": passed,
         "pass_rate": round((passed / denom) * 100.0, 2) if tot else 0.0,
+        "retried_cases": sum(1 for o in orcs if int(o.get("attempts", 1) or 1) > 1),
         "total_tf_files_read": sum(_tf_count(o) for o in orcs),
         "reexpand_ok_count": sum(1 for o in orcs if str(o.get("reexpand", "")).startswith("ok")),
         "skills_triggered": sum(1 for o in orcs if o.get("skill_trigger_relevant") and o.get("skill_triggered", True)),
@@ -407,6 +420,15 @@ def _active_scorecard_metrics(show_tf: bool, show_reexpand: bool, show_trig: boo
     return ([("Skills Triggered (SKILL.md Read)", "skills_triggered", "{}", "all non-ablated skill cases")] if show_trig else []) + out
 
 
+def _format_case_status(case_entry: Dict[str, Any], orc: Optional[Dict[str, Any]]) -> str:
+    if not case_entry:
+        return "N/A"
+    attempts = int((orc or {}).get("attempts", 1) or 1)
+    if case_entry.get("passed"):
+        return f"PASS (attempt {attempts})" if attempts > 1 else "PASS"
+    return f"FAIL ({attempts} attempts)" if attempts > 1 else "FAIL"
+
+
 def generate_live_scorecard_markdown(report_data: Dict[str, Any]) -> str:
     cases_map, s = _extract_normalized_cases_and_summary(report_data)
     show_tf, show_re, show_trig = bool(s.get("has_tf", True)), bool(s.get("has_reexpand", True)), bool(s.get("has_trig", False))
@@ -418,6 +440,7 @@ def generate_live_scorecard_markdown(report_data: Dict[str, Any]) -> str:
         "## Cluster Toolkit Agent Live Evaluation Scorecard", "", "### 1. Executive Summary Scorecard", "",
         "| Metric | Value | Target |", "| :--- | :--- | :--- |",
         f"| **Pass Rate** | {s['passed_cases']}/{s['total_cases']} ({s['pass_rate']:.1f}%) | 100% |",
+        *([f"| **Retried Cases** | {s['retried_cases']}/{s['total_cases']} | 0 |"] if s.get("retried_cases", 0) > 0 else []),
         *[f"| **{label}** | {fmt.format(s[key])} | {target} |" for label, key, fmt, target in _active_scorecard_metrics(show_tf, show_re, show_trig)],
         "", "### 2. Per-Case Scorecard Table", "", "| " + " | ".join(cols) + " |", "| " + " | ".join(":---" for _ in cols) + " |",
     ]
@@ -427,7 +450,7 @@ def generate_live_scorecard_markdown(report_data: Dict[str, Any]) -> str:
         s_read = ("yes" if orc.get("skill_triggered", True) else "no") if orc.get("skill_trigger_relevant") else "n/a"
         verdict = sanitize_markdown_cell("; ".join(orc.get("judge_reasoning") or []) or str(c.get("message", "")))
         row = [
-            f"`{sanitize_markdown_cell(cname)}`", "PASS" if c.get("passed") else "FAIL",
+            f"`{sanitize_markdown_cell(cname)}`", _format_case_status(c, orc),
             *([s_read] if show_trig else []), *([str(_tf_count(orc))] if show_tf else []), *([sanitize_markdown_cell(reexp)] if show_re else []),
             f"{int(orc.get('total_tokens', 0) or 0):,}", str(int(orc.get("tool_calls_total", 0) or 0)),
             f"{float(c.get('latency_seconds', 0.0) or 0.0):.1f}s", verdict,
@@ -511,8 +534,8 @@ def generate_comparison_markdown(before_data: Dict[str, Any], after_data: Dict[s
         bc, ac = b_cases.get(cname, {}), a_cases.get(cname, {})
         bo = bc.get("oracles") if isinstance(bc.get("oracles"), dict) else bc
         ao = ac.get("oracles") if isinstance(ac.get("oracles"), dict) else ac
-        b_st = "PASS" if bc.get("passed") else ("FAIL" if bc else "N/A")
-        a_st = "PASS" if ac.get("passed") else ("FAIL" if ac else "N/A")
+        b_st = _format_case_status(bc, bo)
+        a_st = _format_case_status(ac, ao)
         b_tok, a_tok = int((bo or {}).get("total_tokens", 0) or 0), int((ao or {}).get("total_tokens", 0) or 0)
         pct = ((a_tok - b_tok) / b_tok) * 100.0 if b_tok > 0 else 0.0
         row = [

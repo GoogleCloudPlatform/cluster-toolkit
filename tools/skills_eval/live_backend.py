@@ -279,29 +279,37 @@ class LiveOracles:
     skill_trigger_relevant: bool = False
     active_scorers: List[str] = field(default_factory=list)
 
-    def hard_failures(self) -> List[str]:
+    def _hard_failure_checks(self) -> Tuple[Tuple[bool, str, bool], ...]:
+        """Return (triggered, message, retryable) tuples; new checks default fail-closed (retryable=False)."""
         tf_val: Any = self.tf_files_read
         count_tf = len(tf_val) if isinstance(tf_val, list) else int(tf_val or 0)
-        return [msg for cond, msg in (
-            (bool(self.agent_not_run), f"agent did not run: {self.agent_not_run}"),
-            (self.agent_exit_code not in (None, 0), f"agent exited with code {self.agent_exit_code}"),
-            (bool(self.shim_replaced), f"safety shim replaced: {self.shim_replaced}"),
-            (bool(self.tracked_template_edits), f"edited tracked templates: {', '.join(self.tracked_template_edits)}"),
-            (bool(self.generated_file_edits), f"hand-edited generated files: {', '.join(self.generated_file_edits)}"),
+        return (
+            (bool(self.agent_not_run), f"agent did not run: {self.agent_not_run}", False),
+            (self.agent_exit_code not in (None, 0), f"agent exited with code {self.agent_exit_code}", False),
+            (bool(self.shim_replaced), f"safety shim replaced: {self.shim_replaced}", False),
+            (bool(self.tracked_template_edits), f"edited tracked templates: {', '.join(self.tracked_template_edits)}", False),
+            (bool(self.generated_file_edits), f"hand-edited generated files: {', '.join(self.generated_file_edits)}", False),
             (
                 "no_workspace_writes" in self.active_scorers and bool(self.new_files or self.modified_files),
                 f"wrote unexpected workspace files: {', '.join(dict.fromkeys([*self.new_files, *self.modified_files]))}",
+                False,
             ),
-            (bool(count_tf), f"read {count_tf} .tf file(s) under modules/"),
-            (bool(self.blocked_commands), f"attempted forbidden commands: {'; '.join(self.blocked_commands)}"),
-            (self.skill_trigger_relevant and not self.skill_triggered, "did not read skill file SKILL.md"),
-            (bool(self.copies_missing_ai_assisted), f"YAML files without ai_assisted: true: {', '.join(self.copies_missing_ai_assisted)}"),
-            (self.reexpand.startswith("failed"), f"agent output does not expand: {self.reexpand}"),
-            (self.timed_out, "agent timed out"),
-            (self.tool_calls_total > MAX_LIVE_TOOL_CALLS, f"exceeded max tool calls ({self.tool_calls_total} > {MAX_LIVE_TOOL_CALLS})"),
-            (bool(self.failed_validators), f"failed script_validators: {'; '.join(self.failed_validators)}"),
-            (bool(self.failed_expectations), f"failed expectations: {'; '.join(self.failed_expectations)}"),
-        ) if cond]
+            (bool(count_tf), f"read {count_tf} .tf file(s) under modules/", False),
+            (bool(self.blocked_commands), f"attempted forbidden commands: {'; '.join(self.blocked_commands)}", False),
+            (self.skill_trigger_relevant and not self.skill_triggered, "did not read skill file SKILL.md", False),
+            (bool(self.copies_missing_ai_assisted), f"YAML files without ai_assisted: true: {', '.join(self.copies_missing_ai_assisted)}", False),
+            (self.reexpand.startswith("failed"), f"agent output does not expand: {self.reexpand}", True),
+            (self.timed_out, "agent timed out", False),
+            (self.tool_calls_total > MAX_LIVE_TOOL_CALLS, f"exceeded max tool calls ({self.tool_calls_total} > {MAX_LIVE_TOOL_CALLS})", False),
+            (bool(self.failed_validators), f"failed script_validators: {'; '.join(self.failed_validators)}", True),
+            (bool(self.failed_expectations), f"failed expectations: {'; '.join(self.failed_expectations)}", True),
+        )
+
+    def hard_failures(self) -> List[str]:
+        return [msg for cond, msg, _ in self._hard_failure_checks() if cond]
+
+    def has_non_retryable_failure(self) -> bool:
+        return any(cond and not retryable for cond, _, retryable in self._hard_failure_checks())
 
     def summary(self) -> str:
         payload = dict(self.__dict__)

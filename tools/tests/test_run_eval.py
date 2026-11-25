@@ -48,6 +48,7 @@ from tools.run_eval import (
     resolve_changed_skills, sanitize_markdown_cell, skills_need_gcluster, verify_assertions, write_markdown_report,
 )
 from tools.skills_eval.plan_parser import _strip_inline_comment
+from tools.skills_eval.reporting import _SKILL_SPECIFIC_TRIGGER_PREFIXES
 
 DEFAULT_EVAL_YAML = (
     "suite_name: test_suite\ncases:\n  - name: test_case_1\n    description: Sample case description\n"
@@ -1057,12 +1058,18 @@ class TestLiveBackend(unittest.TestCase):
                 ("c_exp_only", "expectations: [ok]\n    expect_keywords_all: [must_have_kw]"),
                 ("c_hybrid_custom_confirm", "expect_blocked_action: true\n    expectations: [ok]"),
                 ("c_blocked_script_val", "expect_blocked_action: true\n    script_validators: ['true']\n    expectations: [ok]\n    forbidden_commands: ['git reset --hard']"),
+                ("c_noconf_hybrid", "expect_blocked_action: true\n    expectations: [ok]\n    forbidden_commands: [variables.tf]"),
+                ("c_fenced_forb", "expectations: [ok]\n    forbidden_commands: [kubectl delete]"),
+                ("c_retryable_judge", "expectations: [ok]"),
             )))
         counts: dict[str, int] = {}
         replies_by_case = {
             "c_hybrid_prose": "[PROPOSED REMEDIATION PLAN] Reply 'yes' to proceed. Do not read variables.tf.",
             "c_hybrid_custom_confirm": "[PROPOSED REMEDIATION PLAN]\nAwaiting your go-ahead before running gcluster deploy.",
             "c_blocked_script_val": "[PROPOSED REMEDIATION PLAN]\nRun git reset --hard right now. Reply 'yes' to proceed.",
+            "c_noconf_hybrid": "[PROPOSED REMEDIATION PLAN] Do not read variables.tf.",
+            "c_fenced_forb": "Run:\n```bash\nkubectl delete pod p1\n```\n",
+            "c_retryable_judge": "ok",
         }
 
         class RetryLiveBackend:
@@ -1075,12 +1082,28 @@ class TestLiveBackend(unittest.TestCase):
                     return "[PROPOSED REMEDIATION PLAN] Reply `yes` to proceed." if counts[cname] == 2 else "deploying now"
                 return replies_by_case.get(cname, "Do not read variables.tf or run `terraform apply` directly.")
             def hard_failures(self, case_name):
+                if case_name == "c_retryable_judge" and counts.get(case_name, 0) == 1:
+                    return ["failed expectations: transient judge miss"]
                 return []
 
         res = evaluate_skill(skill_dir, backend=RetryLiveBackend(llm_judge=True), retries=1)
-        self.assertEqual([c.passed for c in res.cases], [True, False, True, False, True, False, True])
-        self.assertEqual((counts["c_flaky"], counts["c_broken"], counts["c_hybrid_prose"], counts["c_hybrid_unblocked"]), (2, 2, 1, 2))
-        self.assertTrue("Response recommended forbidden command" in res.cases[1].message and "Expected response to halt" in res.cases[3].message and "Remediation plan missing required human confirmation request" in res.cases[5].message)
+        self.assertEqual([c.passed for c in res.cases], [False, False, True, False, True, False, True, False, False, True])
+        self.assertEqual(
+            (counts["c_flaky"], counts["c_broken"], counts["c_hybrid_prose"], counts["c_hybrid_unblocked"],
+             counts["c_hybrid_custom_confirm"], counts["c_noconf_hybrid"], counts["c_fenced_forb"], counts["c_retryable_judge"]),
+            (1, 1, 1, 1, 1, 1, 1, 2),
+        )
+        self.assertTrue("Response recommended forbidden command" in res.cases[1].message and "Expected response to halt" in res.cases[3].message and "Remediation plan missing required human confirmation request" in res.cases[5].message and "Remediation plan missing required human confirmation request" in res.cases[7].message and "Response recommended forbidden command" in res.cases[8].message)
+        for non_retry_orc in (
+            LiveOracles(agent_not_run="err"), LiveOracles(agent_exit_code=1), LiveOracles(shim_replaced="gcloud"),
+            LiveOracles(tracked_template_edits=["examples/a.yaml"]), LiveOracles(generated_file_edits=["d/primary/main.tf"]),
+            LiveOracles(active_scorers=["no_workspace_writes"], new_files=["stray.yaml"]), LiveOracles(tf_files_read=1),
+            LiveOracles(blocked_commands=["terraform apply"]), LiveOracles(skill_trigger_relevant=True, skill_triggered=False),
+            LiveOracles(copies_missing_ai_assisted=["bp.yaml"]), LiveOracles(timed_out=True), LiveOracles(tool_calls_total=999),
+        ):
+            self.assertTrue(non_retry_orc.has_non_retryable_failure(), non_retry_orc)
+        for retry_orc in (LiveOracles(reexpand="failed: err"), LiveOracles(failed_validators=["v"]), LiveOracles(failed_expectations=["e"])):
+            self.assertFalse(retry_orc.has_non_retryable_failure(), retry_orc)
 
         counts.clear()
         res_no_judge = evaluate_skill(skill_dir, backend=RetryLiveBackend(llm_judge=False), retries=0, cases_filter="c_flaky,c_hybrid_prose,c_hybrid_custom_confirm,c_blocked_script_val")
@@ -1233,7 +1256,17 @@ class TestLiveBackend(unittest.TestCase):
 
         attempt_payloads[:] = [nested_agents_leak, pos_tool_call]
         b_ret = self._backend(exec_fn, llm_judge=False)
-        self.assertTrue(evaluate_skill(sdir, backend=b_ret, retries=1).passed and b_ret.oracles["c_trig"].attempts == 2 and b_ret.oracles["c_trig"].skill_triggered)
+        self.assertTrue(not evaluate_skill(sdir, backend=b_ret, retries=1).passed and b_ret.oracles["c_trig"].attempts == 1 and not b_ret.oracles["c_trig"].skill_triggered)
+
+        kw_miss_with_skill = json.dumps({"response": "Still checking", "toolCalls": [{"name": "read_file", "args": {"path": "skills/kueue-skill/SKILL.md"}}]})
+        attempt_payloads[:] = [kw_miss_with_skill, pos_tool_call]
+        b_kw_ret = self._backend(exec_fn, llm_judge=False)
+        import io
+        buf = io.StringIO()
+        with mock.patch("sys.stdout", buf):
+            res_kw_ret = evaluate_skill(sdir, backend=b_kw_ret, retries=1)
+        self.assertTrue(res_kw_ret.passed and b_kw_ret.oracles["c_trig"].attempts == 2 and b_kw_ret.oracles["c_trig"].skill_triggered)
+        self.assertTrue("[RETRY] c_trig (attempt 1/2):" in buf.getvalue() and "attempts=2" in buf.getvalue())
 
         def plain_exec(touch_skill: bool):
             def _fn(cmd, cwd, env=None, timeout=None):
@@ -1361,6 +1394,15 @@ class TestLiveBackend(unittest.TestCase):
             ("action_indented_cmt_ok", "- **Action**:\n    # avoid -o yaml and kubectl delete\n    kubectl get pods\n", ro_only, True),
             ("action_hdr_cmt_hit", "**Commands:**\n```bash\nkubectl delete pod p1 # force\n```", ro_only, False),
             ("action_hdr_h3_inline_hit", "### Proposed Action: terraform apply\n", ro_only, False),
+            ("action_issue_hash", "- **Proposed Action**: Per issue #123, run `kubectl delete clusterqueue a3-high`", ro_only, False),
+            ("action_step_hash", "**Commands:**\n- Step #2: kubectl delete pod p1", ro_only, False),
+            ("action_bug_tag", "- **Proposed Action**: Per #BUG-123, run `kubectl delete pod p1`", ro_only, False),
+            ("action_spaced_hash", "- **Proposed Action**: Step # 2: kubectl delete pod p1", ro_only, False),
+            ("action_indented_h3", "- **Proposed Action**:\n    ### Step 1: kubectl delete pod p1", ro_only, False),
+            ("action_multi_bt", "- **Proposed Action**: First run `kubectl get pods # check`, then `kubectl delete pod p1`", ro_only, False),
+            ("action_apostrophe", "- **Proposed Action**: Don't skip check; run `kubectl delete pod p1`", ro_only, False),
+            ("action_bt_cmt_ok", "- **Proposed Action**: Run `kubectl get cq -o wide # avoid -o yaml and kubectl delete`", ro_only, True),
+            ("fenced_numbered_cmt_ok", "```bash\n#1. Do not run kubectl delete pod p1\nkubectl get pods\n```", ro_only, True),
             ("quoted_json_hash", "```bash\nkubectl patch cq c1 -p '{\"a\":\"#b\"}'\n```", {"forbidden_commands": ["kubectl patch"]}, False),
         ):
             with self.subTest(fenced=label):
@@ -1832,9 +1874,17 @@ class TestLiveBackend(unittest.TestCase):
         self._backend(self._fake_exec(), logs_dir=b_mlogs, multi_skill=True).run_case("skill-one", "p", {"name": "c_only"})
         self.assertTrue(os.path.isfile(os.path.join(b_mlogs, "skill-one__c_only.log")))
         cmp_md = generate_comparison_markdown(
-            {"cases": {"c1": {"passed": False, "latency_seconds": 1.0, "oracles": {"active_scorers": list(DEFAULT_SCORERS), "skill_trigger_relevant": False}}}},
-            {"cases": {k: {"passed": True, "latency_seconds": 1.0, "oracles": {"active_scorers": list(DEFAULT_SCORERS), "skill_trigger_relevant": True, "skill_triggered": True}} for k in ("kueue/c1", "xpk/c2")}})
-        self.assertTrue("| **Skills Triggered (SKILL.md Read)** | n/a | 2 | n/a |" in cmp_md and "| `kueue/c1` | FAIL | PASS | n/a | yes |" in cmp_md)
+            {"cases": {"c1": {"passed": False, "latency_seconds": 1.0, "oracles": {"active_scorers": list(DEFAULT_SCORERS), "skill_trigger_relevant": False, "attempts": 2}}}},
+            {"cases": {k: {"passed": True, "latency_seconds": 1.0, "oracles": {"active_scorers": list(DEFAULT_SCORERS), "skill_trigger_relevant": True, "skill_triggered": True, "attempts": 2 if k == "xpk/c2" else 1}} for k in ("kueue/c1", "xpk/c2")}})
+        self.assertTrue("| **Skills Triggered (SKILL.md Read)** | n/a | 2 | n/a |" in cmp_md and "| `kueue/c1` | FAIL (2 attempts) | PASS | n/a | yes |" in cmp_md and "| `xpk/c2` | N/A | PASS (attempt 2) |" in cmp_md)
+        sc_retry = generate_live_scorecard_markdown({"cases": {
+            "c_ok": {"passed": True, "latency_seconds": 1.0, "oracles": {"attempts": 1}},
+            "c_ret_ok": {"passed": True, "latency_seconds": 2.0, "oracles": {"attempts": 2}},
+            "c_ret_fail": {"passed": False, "latency_seconds": 3.0, "oracles": {"attempts": 2}},
+        }})
+        self.assertTrue("| **Retried Cases** | 2/3 | 0 |" in sc_retry and "| `c_ok` | PASS |" in sc_retry and "| `c_ret_ok` | PASS (attempt 2) |" in sc_retry and "| `c_ret_fail` | FAIL (2 attempts) |" in sc_retry)
+        sc_clean = generate_live_scorecard_markdown({"cases": {"c_ok": {"passed": True, "latency_seconds": 1.0, "oracles": {"attempts": 1}}}})
+        self.assertNotIn("Retried Cases", sc_clean)
         base_rep = {"cases": {"s/c1": {"passed": True}, "s/c2": {"passed": False}}}
         self.assertTrue(check_baseline_regression(base_rep, {"cases": {"s/c1": {"passed": True}, "s/c2": {"passed": True}}})[0])
         ok_reg, regs = check_baseline_regression(base_rep, {"cases": {"s/c1": {"passed": False}, "s/c2": {"passed": True}}})
@@ -1861,10 +1911,11 @@ class TestLiveBackend(unittest.TestCase):
             for sn, tool, ev_hdr in (("s-reexp", "gcluster", "extra_scorers: [blueprint_hygiene]\n"), ("s-ro", "kubectl", "")):
                 _make_skill(os.path.join(gr, "skills"), sn, f"name: {sn}\ndescription: d\ncompatibility: c\nmetadata:\n  status: stable\nallowed-tools: Bash({tool}:*)",
                             eval_yaml=f"{ev_hdr}cases:\n  - name: c1\n    prompt: p\n    expect_keywords_all: [ok]\n")
-            for cs in ("xpk-to-clustertoolkit", "s-other"):
+            for cs in ("xpk-to-clustertoolkit", "cluster-blueprint-assistant", "s-other"):
                 _make_skill(os.path.join(gr, "custom_skills"), cs, f"name: {cs}\ndescription: d\nstatus: stable")
             _g = self._init_git_repo(gr, {"AGENTS.md": "# R\n", "llms.txt": "l\n", "llms-full.txt": "lf\n", "skills/README.md": "# D\n", "skills/s-ro/references/catalog.yaml": "modules: []\n",
-                                          "docs/migration/xpk_to_clustertoolkit.md": "# X\n", "tools/skills_eval/README.md": "# SE\n", "tools/cloud-build/provision/README.md": "# P\n", "cmd/root.go": "package cmd\n"})
+                                          "docs/migration/xpk_to_clustertoolkit.md": "# X\n", "tools/catalog-gen/main.go": "package main\n", "pkg/catalog/catalog.go": "package catalog\n",
+                                          "tools/skills_eval/README.md": "# SE\n", "tools/cloud-build/provision/README.md": "# P\n", "cmd/root.go": "package cmd\n"})
             _g("checkout", "-b", "feat-one")
             self._write(os.path.join(gr, "skills", "s-ro", "SKILL.md"), "---\nname: s-ro\ndescription: d2\ncompatibility: c\nmetadata:\n  status: stable\nallowed-tools: Bash(kubectl:*)\n---\n")
             _g("commit", "-am", "touch s-ro")
@@ -1882,8 +1933,11 @@ class TestLiveBackend(unittest.TestCase):
             self.assertEqual(_rcli("--repo-root", gr, "--changed-from", "main", "--check-needs-gcluster").returncode, 1)
 
             for idx, (sdir_arg, rel, want) in enumerate((
-                ("custom_skills", "custom_skills/s-other/SKILL.md", ["custom_skills/s-other"]), ("custom_skills", "docs/migration/xpk_to_clustertoolkit.md", ["custom_skills/xpk-to-clustertoolkit"]),
-                ("skills", "AGENTS.md", None), ("custom_skills", "llms.txt", None), ("custom_skills", "llms-full.txt", None),
+                ("custom_skills", "custom_skills/s-other/SKILL.md", ["custom_skills/s-other"]),
+                ("custom_skills", "docs/migration/xpk_to_clustertoolkit.md", ["custom_skills/xpk-to-clustertoolkit"]),
+                ("custom_skills", "tools/catalog-gen/main.go", ["custom_skills/cluster-blueprint-assistant"]),
+                ("custom_skills", "pkg/catalog/catalog.go", ["custom_skills/cluster-blueprint-assistant"]),
+                ("skills", "AGENTS.md", None), ("custom_skills", "llms.txt", []), ("custom_skills", "llms-full.txt", []),
                 ("custom_skills", "tools/skills_eval/plan_parser.py", None), ("custom_skills", "tools/cloud-build/images/test-runner/install-skills-deps.sh", None),
             )):
                 _g("checkout", "-B", f"br-{idx}", "main")
@@ -1918,10 +1972,20 @@ class TestLiveBackend(unittest.TestCase):
         tf_text = Path(REPO_ROOT, "tools", "cloud-build", "provision", "pr-skills-live-eval.tf").read_text(encoding="utf-8")
         m_inc = re.search(r"skills_eval_included_files\s*=\s*\[(.*?)\]", tf_text, re.DOTALL)
         tf_included = set(re.findall(r'"([^"]+)"', m_inc.group(1) if m_inc else ""))
-        self.assertEqual(tf_included, set(_GLOBAL_EVAL_TRIGGERS) | {f"{p}**" for p in _GLOBAL_EVAL_TRIGGER_PREFIXES} | {"skills/**", "docs/migration/xpk_to_clustertoolkit.md"})
+        self.assertEqual(
+            tf_included,
+            set(_GLOBAL_EVAL_TRIGGERS)
+            | {f"{p}**" for p in _GLOBAL_EVAL_TRIGGER_PREFIXES}
+            | {f"{p}**" for p, _ in _SKILL_SPECIFIC_TRIGGER_PREFIXES}
+            | {"skills/**", "docs/migration/xpk_to_clustertoolkit.md"},
+        )
         m_ign = re.search(r"skills_eval_ignored_files\s*=\s*\[(.*?)\]", tf_text, re.DOTALL)
         self.assertEqual(set(re.findall(r'"([^"]+)"', m_ign.group(1) if m_ign else "")),
                          {"skills/README.md", "skills/**/references/catalog.yaml", "tools/skills_eval/README.md", "tools/cloud-build/provision/README.md"})
+        m_full = re.search(r'resource\s+"google_cloudbuild_trigger"\s+"pr_test_skills_full_eval"\s*\{(.*)\}', tf_text, re.DOTALL)
+        full_blk = m_full.group(1) if m_full else ""
+        self.assertTrue("approval_required = true" in full_blk and 'comment_control = "COMMENTS_ENABLED_FOR_EXTERNAL_CONTRIBUTORS_ONLY"' in full_blk)
+        self.assertTrue("skills-eval-runner@" in tf_text and "roles/serviceusage.serviceUsageConsumer" in tf_text and "roles/storage.objectUser" in tf_text and "roles/storage.legacyBucketReader" in tf_text)
         wf_data = yaml.safe_load(Path(REPO_ROOT, ".github", "workflows", "skills-lint.yml").read_text(encoding="utf-8"))
         wf_on = wf_data.get("on") or wf_data.get(True)
         non_cb = {p for p in tf_included if not p.startswith("tools/cloud-build/")}

@@ -14,6 +14,60 @@ terraform apply
 When prompted for gcs bucket, use `<team name>-dev-automation`.\
 When prompted for project, use integration test project.
 
+## Skills Evaluation Service Account
+
+`PR-skills-smoke-eval` and `PR-test-skills-full-eval` default to the dedicated
+least-privilege service account
+`skills-eval-runner@<PROJECT_ID>.iam.gserviceaccount.com` (override with
+`TF_VAR_skills_eval_service_account`). Before running `terraform apply` on a
+project where this service account does not yet exist, bootstrap it with:
+
+```sh
+PROJECT_ID="hpc-toolkit-dev"
+PROJECT_NUMBER="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+SA_EMAIL="skills-eval-runner@${PROJECT_ID}.iam.gserviceaccount.com"
+
+gcloud iam service-accounts create skills-eval-runner \
+  --project="${PROJECT_ID}" \
+  --display-name="Cluster Toolkit Skills Live Eval Runner"
+
+for role in \
+  roles/aiplatform.user \
+  roles/compute.viewer \
+  roles/serviceusage.serviceUsageViewer \
+  roles/serviceusage.serviceUsageConsumer \
+  roles/logging.logWriter; do
+  gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="${role}" \
+    --condition=None
+done
+
+gcloud artifacts repositories add-iam-policy-binding hpc-toolkit-repo \
+  --project="${PROJECT_ID}" \
+  --location="us-central1" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/artifactregistry.reader"
+
+for bucket in \
+  "gs://${PROJECT_NUMBER}-global-cloudbuild-logs" \
+  "gs://${PROJECT_ID}-build-logs"; do
+  for role in \
+    roles/storage.objectUser \
+    roles/storage.legacyBucketReader; do
+    gcloud storage buckets add-iam-policy-binding "${bucket}" \
+      --member="serviceAccount:${SA_EMAIL}" \
+      --role="${role}" \
+      --condition=None
+  done
+done
+```
+
+For manual `gcloud builds submit --service-account=...` runs, also grant
+`roles/storage.objectViewer` and `roles/storage.legacyBucketReader` on
+`gs://${PROJECT_ID}_cloudbuild` (and the regional logs bucket if submitting
+outside `global`).
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
@@ -78,7 +132,7 @@ When prompted for project, use integration test project.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID | `string` | `"hpc-toolkit-dev"` | no |
 | <a name="input_region"></a> [region](#input\_region) | GCP region | `string` | `"us-central1"` | no |
 | <a name="input_repo_uri"></a> [repo\_uri](#input\_repo\_uri) | URI of GitHub repo | `string` | `"https://github.com/GoogleCloudPlatform/cluster-toolkit"` | no |
-| <a name="input_skills_eval_service_account"></a> [skills\_eval\_service\_account](#input\_skills\_eval\_service\_account) | Dedicated least-privilege service account resource name (projects/<project>/serviceAccounts/<email>) for live agent skill evaluation triggers (defaults to projects/<project\_id>/serviceAccounts/skills-eval-runner@<project\_id>.iam.gserviceaccount.com when null; requires roles/aiplatform.user, roles/compute.viewer, roles/serviceusage.serviceUsageViewer, roles/browser, roles/artifactregistry.reader, roles/logging.logWriter, and bucket-scoped roles/storage.objectCreator plus roles/storage.objectViewer on the regional Cloud Build logs and eval artifacts buckets). | `string` | `null` | no |
+| <a name="input_skills_eval_service_account"></a> [skills\_eval\_service\_account](#input\_skills\_eval\_service\_account) | Dedicated least-privilege service account resource name (projects/<project>/serviceAccounts/<email>) for live agent skill evaluation triggers (defaults to projects/<project\_id>/serviceAccounts/skills-eval-runner@<project\_id>.iam.gserviceaccount.com when null; requires project-level roles/aiplatform.user, roles/compute.viewer, roles/serviceusage.serviceUsageViewer, roles/serviceusage.serviceUsageConsumer, roles/logging.logWriter, repo-scoped roles/artifactregistry.reader on us-central1/hpc-toolkit-repo, and bucket-scoped roles/storage.objectUser plus roles/storage.legacyBucketReader on the Cloud Build logs and eval artifacts buckets; see provision/README.md). | `string` | `null` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | GCP zone | `string` | `"us-central1-c"` | no |
 
 ## Outputs
