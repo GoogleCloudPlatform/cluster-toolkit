@@ -821,3 +821,97 @@ def test_slurmsync_verifying_refreshing_and_live_standalone_creating_collision(m
             assert isinstance(
                 slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionUnchanged
             )
+
+
+@mock.patch("slurmsync.lookup")
+def test_slurmsync_creating_standalone_collision_allows_orphan_cleanup(mock_lookup):
+    """Orphan CREATING* standalone collisions must still reach NodeActionDelete() when
+    state is None or POWERED_DOWN, while POWERING_DOWN/POWER_DOWN remain safe no-ops."""
+    from datetime import timedelta
+
+    lkp, mock_compute = _make_lookup([
+        {
+            "name": "testcl-ns-0",
+            "currentAction": "CREATING",
+            "lastAttempt": {
+                "errors": {"errors": [{"code": "RESOURCE_ALREADY_EXISTS", "message": "exists"}]}
+            },
+        },
+        {
+            "name": "testcl-ns-1",
+            "currentAction": "CREATING_WITHOUT_RETRIES",
+            "lastAttempt": {
+                "errors": {"errors": [{"code": "RESOURCE_ALREADY_EXISTS", "message": "exists"}]}
+            },
+        },
+    ])
+    mock_lookup.return_value = lkp
+    old_ts = util.now() - timedelta(minutes=10)
+    fresh_ts = util.now() - timedelta(seconds=10)
+    old_standalone_0 = _make_instance("testcl-ns-0", status="RUNNING", metadata={})
+    old_standalone_0 = util.Instance(
+        name=old_standalone_0.name, zone=old_standalone_0.zone, status="RUNNING",
+        creation_timestamp=old_ts, role="compute",
+        resource_status=old_standalone_0.resource_status, metadata={},
+        scheduling=old_standalone_0.scheduling,
+    )
+    old_standalone_1 = util.Instance(
+        name="testcl-ns-1", zone=old_standalone_0.zone, status="RUNNING",
+        creation_timestamp=old_ts, role="compute",
+        resource_status=old_standalone_0.resource_status, metadata={},
+        scheduling=old_standalone_0.scheduling,
+    )
+    fresh_standalone_0 = util.Instance(
+        name="testcl-ns-0", zone=old_standalone_0.zone, status="RUNNING",
+        creation_timestamp=fresh_ts, role="compute",
+        resource_status=old_standalone_0.resource_status, metadata={},
+        scheduling=old_standalone_0.scheduling,
+    )
+
+    # Removed from Slurm (state=None) and POWERED_DOWN (idle~/down~) -> orphan cleanup NodeActionDelete
+    for node_state in (
+        None,
+        slurmsync.NodeState(base="IDLE", flags=frozenset(("POWERED_DOWN",))),
+        slurmsync.NodeState(base="DOWN", flags=frozenset(("POWERED_DOWN",))),
+    ):
+        with (
+            mock.patch.object(
+                util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mock_compute
+            ),
+            mock.patch.object(
+                util.Lookup,
+                "instances",
+                return_value={"testcl-ns-0": old_standalone_0, "testcl-ns-1": old_standalone_1},
+            ),
+            mock.patch.object(util.Lookup, "node_state", return_value=node_state),
+        ):
+            assert isinstance(slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionDelete)
+            assert isinstance(slurmsync.get_node_action("testcl-ns-1"), slurmsync.NodeActionDelete)
+
+    # POWERING_DOWN / POWER_DOWN -> safe no-op (suspend already in progress)
+    for node_state in (
+        slurmsync.NodeState(base="IDLE", flags=frozenset(("POWERING_DOWN",))),
+        slurmsync.NodeState(base="IDLE", flags=frozenset(("POWER_DOWN",))),
+    ):
+        with (
+            mock.patch.object(
+                util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mock_compute
+            ),
+            mock.patch.object(
+                util.Lookup, "instances", return_value={"testcl-ns-0": old_standalone_0}
+            ),
+            mock.patch.object(util.Lookup, "node_state", return_value=node_state),
+        ):
+            assert isinstance(slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionUnchanged)
+
+    # Fresh standalone VM (<90s) with state=None still respects orphan age threshold
+    with (
+        mock.patch.object(
+            util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mock_compute
+        ),
+        mock.patch.object(
+            util.Lookup, "instances", return_value={"testcl-ns-0": fresh_standalone_0}
+        ),
+        mock.patch.object(util.Lookup, "node_state", return_value=None),
+    ):
+        assert isinstance(slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionUnchanged)

@@ -415,7 +415,9 @@ def get_node_action(nodename: str) -> NodeAction:
                 elif mig_err is not None:
                     err_action, err_code, err_msg = mig_err
                     if (
-                        err_action in ("CREATING", "CREATING_WITHOUT_RETRIES")
+                        state is not None
+                        and not in_power_down
+                        and err_action in ("CREATING", "CREATING_WITHOUT_RETRIES")
                         and inst is not None
                         and inst.status in ("RUNNING", "PROVISIONING", "STAGING", "REPAIRING")
                         and util.instance_created_by_mig(inst) is None
