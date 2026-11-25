@@ -330,7 +330,7 @@ func TestCheckAndInstallJobSetCRD_ExistingInstallWaitsWithoutModifying(t *testin
 				jobSetEndpointsCmd:  tc.endpoints,
 			})
 
-			if err := orc.checkAndInstallJobSetCRD(); err != nil {
+			if err := resolveJobSetOnlyForTest(orc); err != nil {
 				t.Fatalf("checkAndInstallJobSetCRD() error = %v, want nil", err)
 			}
 			if got := callsWithPrefix(mockExec, jobSetServiceGetCmd); got != tc.wantServiceCalls {
@@ -395,7 +395,7 @@ func TestCheckAndInstallJobSetCRD_ExistingInstallNeverReady(t *testing.T) {
 				jobSetPodsCmd:       {{ExitCode: 0, Stdout: podsJSON}},
 			})
 
-			err := orc.checkAndInstallJobSetCRD()
+			err := resolveJobSetOnlyForTest(orc)
 			if err == nil {
 				t.Fatal("checkAndInstallJobSetCRD() error = nil, want timeout error")
 			}
@@ -443,7 +443,7 @@ func TestCheckAndInstallJobSetCRD_MalformedEndpointsIsHardError(t *testing.T) {
 		jobSetEndpointsCmd:  {{ExitCode: 0, Stdout: "not json"}},
 	})
 
-	err := orc.checkAndInstallJobSetCRD()
+	err := resolveJobSetOnlyForTest(orc)
 	if err == nil || !strings.Contains(err.Error(), "failed to parse EndpointSlices") {
 		t.Fatalf("checkAndInstallJobSetCRD() error = %v, want parse error", err)
 	}
@@ -485,9 +485,9 @@ func TestCheckAndInstallJobSetCRD_PartialInstallNeverModifies(t *testing.T) {
 		want         []string
 	}{
 		{name: "CRD without webhook Service", crd: objectPresent, service: objectAbsent, endpoints: []shell.CommandResult{noPods}, wantCalls: 3, want: crdOnly},
-		{name: "unreadable CRD and missing Service", crd: readForbidden, service: objectAbsent, wantCalls: 2, want: crdOnly},
+		{name: "unreadable CRD and missing Service", crd: readForbidden, service: objectAbsent, wantCalls: 3, want: crdOnly},
 		{name: "webhook Service without CRD", crd: objectAbsent, service: objectPresent, wantCalls: 2, want: serviceOnly},
-		{name: "missing CRD and unreadable Service", crd: objectAbsent, service: readForbidden, wantCalls: 2, want: serviceOnly},
+		{name: "missing CRD and unreadable Service", crd: objectAbsent, service: readForbidden, wantCalls: 3, want: serviceOnly},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -497,7 +497,7 @@ func TestCheckAndInstallJobSetCRD_PartialInstallNeverModifies(t *testing.T) {
 				jobSetEndpointsCmd:  tc.endpoints,
 			})
 
-			err := orc.checkAndInstallJobSetCRD()
+			err := resolveJobSetOnlyForTest(orc)
 			if err == nil {
 				t.Fatal("checkAndInstallJobSetCRD() error = nil, want partial installation error")
 			}
@@ -537,7 +537,7 @@ func TestCheckAndInstallJobSetCRD_ReadErrorsNeverModify(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			orc, mockExec := newJobSetTestOrchestrator(t, tc.responses)
 
-			err := orc.checkAndInstallJobSetCRD()
+			err := resolveJobSetOnlyForTest(orc)
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) || !strings.Contains(err.Error(), "Unable to connect to the server") {
 				t.Fatalf("checkAndInstallJobSetCRD() error = %v, want %q with the kubectl error", err, tc.wantErr)
 			}
@@ -561,7 +561,7 @@ func TestCheckAndInstallJobSetCRD_FreshClusterInstalls(t *testing.T) {
 	orc, mockExec := newJobSetTestOrchestrator(t, freshJobSetResponses())
 	serveJobSetManifest(orc, http.StatusOK, testJobSetManifest)
 
-	if err := orc.checkAndInstallJobSetCRD(); err != nil {
+	if err := resolveJobSetOnlyForTest(orc); err != nil {
 		t.Fatalf("checkAndInstallJobSetCRD() error = %v, want nil", err)
 	}
 	// Every checked resource is cluster-scoped, so a namespaced RoleBinding must not count.
@@ -592,7 +592,7 @@ func TestCheckAndInstallJobSetCRD_FreshClusterWithoutPermissions(t *testing.T) {
 	responses[authCanICreateCmd] = []shell.CommandResult{canIYes, canINo, canIYes, canINo, canIYes, canIYes}
 	orc, mockExec := newJobSetTestOrchestrator(t, responses)
 
-	err := orc.checkAndInstallJobSetCRD()
+	err := resolveJobSetOnlyForTest(orc)
 	if err == nil {
 		t.Fatal("checkAndInstallJobSetCRD() error = nil, want missing permissions error")
 	}
@@ -694,7 +694,7 @@ func TestCheckAndInstallJobSetCRD_FreshInstallFailureHints(t *testing.T) {
 			serveJobSetManifest(orc, http.StatusOK, testJobSetManifest)
 			tc.setup(t, orc, responses)
 
-			err := orc.checkAndInstallJobSetCRD()
+			err := resolveJobSetOnlyForTest(orc)
 			if err == nil {
 				t.Fatal("checkAndInstallJobSetCRD() error = nil, want installation error")
 			}
@@ -1132,7 +1132,7 @@ func TestCheckAndInstallJobSetCRD_AbortsWhenNamespaceHasJobSetObjects(t *testing
 			orc, mockExec := newJobSetTestOrchestrator(t, freshJobSetResponses())
 			orc.kubeClient = tc.kube
 
-			err := orc.checkAndInstallJobSetCRD()
+			err := resolveJobSetOnlyForTest(orc)
 			if err == nil {
 				t.Fatal("checkAndInstallJobSetCRD() error = nil, want an error")
 			}
@@ -3121,6 +3121,43 @@ func assertAutoOfflineAirGapError(t *testing.T, label string, err error) {
 	}
 }
 
+// resolveAddonOnlyForTest exercises the production resolveClusterAddons path for single-addon unit tests
+// by disabling the companion add-on via env hook and keeping stdin non-interactive.
+func resolveAddonOnlyForTest(orc *GKEOrchestrator, disableEnv, clusterName string) error {
+	var origGetenv func(string) string
+	var origProbe func(context.Context) bool
+	if orc.connectivity != nil {
+		origGetenv = orc.connectivity.getenv
+		origProbe = orc.connectivity.probe
+	}
+	if origProbe == nil {
+		origProbe = func(context.Context) bool { return true }
+	}
+	orc.connectivity = &connectivityChecker{
+		getenv: func(k string) string {
+			if k == disableEnv {
+				return "1"
+			}
+			if origGetenv != nil {
+				return origGetenv(k)
+			}
+			return ""
+		},
+		probe: origProbe,
+	}
+	orc.isInteractiveFunc = func() bool { return false }
+	orc.addons = addonPlan{}
+	return orc.resolveClusterAddons(&orchestrator.JobDefinition{ClusterName: clusterName}, false)
+}
+
+func resolveJobSetOnlyForTest(orc *GKEOrchestrator) error {
+	return resolveAddonOnlyForTest(orc, disableKueueEnvVar, "test-cluster")
+}
+
+func resolveKueueOnlyForTest(orc *GKEOrchestrator, clusterName string) error {
+	return resolveAddonOnlyForTest(orc, disableJobSetEnvVar, clusterName)
+}
+
 func TestConnectivityChecker_GenericLazyProbeCachesOfflineState(t *testing.T) {
 	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
 
@@ -3142,7 +3179,7 @@ func TestConnectivityChecker_GenericLazyProbeCachesOfflineState(t *testing.T) {
 		}
 	})
 
-	t.Run("offline_probe_caches_default_airgap_and_uses_accurate_errors", func(t *testing.T) {
+	t.Run("offline_probe_caches_session_offline_without_mutating_global_airgap", func(t *testing.T) {
 		shell.SetDefaultAirGapped(false)
 		probes := 0
 		orc := &GKEOrchestrator{
@@ -3155,13 +3192,16 @@ func TestConnectivityChecker_GenericLazyProbeCachesOfflineState(t *testing.T) {
 		if orc.isConnected() || orc.isConnected() || probes != 1 {
 			t.Fatalf("expected offline probe once and cached; got probes=%d", probes)
 		}
-		if !shell.IsKnownAirGapped() || !orc.isAirGapped() {
-			t.Fatalf("offline probe must cache air-gapped state via shell.SetDefaultAirGapped(true)")
+		if shell.IsKnownAirGapped() || orc.isAirGapped() {
+			t.Fatalf("offline probe must not mutate global shell.defaultAirGap or isAirGapped()")
+		}
+		if !orc.isOfflineForAddons() {
+			t.Fatalf("expected session offline flag after failed GitHub probe")
 		}
 		_, dlErr := orc.downloadManifests("https://example.com/m.yaml")
 		assertAutoOfflineAirGapError(t, "downloadManifests", dlErr)
-		assertAutoOfflineAirGapError(t, "installJobSetOnFreshCluster", orc.installJobSetOnFreshCluster())
-		assertAutoOfflineAirGapError(t, "installKueueOnFreshCluster", orc.installKueueOnFreshCluster("v0.15.2", "c"))
+		assertAutoOfflineAirGapError(t, "installJobSetOnFreshClusterWithPermCheck", orc.installJobSetOnFreshClusterWithPermCheck(true))
+		assertAutoOfflineAirGapError(t, "installKueueOnFreshClusterWithPermCheck", orc.installKueueOnFreshClusterWithPermCheck("v0.15.2", "c", true))
 	})
 }
 
@@ -3245,7 +3285,7 @@ func TestProbeURLConnectivity_StatusCodesAndTimeout(t *testing.T) {
 	}
 }
 
-func TestConnectivityReset_ClearsProbeSetDefaultAirGap(t *testing.T) {
+func TestConnectivityReset_SessionResetReprobesGitHub(t *testing.T) {
 	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
 	shell.SetDefaultAirGapped(false)
 	online := false
@@ -3256,16 +3296,13 @@ func TestConnectivityReset_ClearsProbeSetDefaultAirGap(t *testing.T) {
 			probe:  func(context.Context) bool { probes++; return online },
 		},
 	}
-	if orc.isConnected() || !shell.IsKnownAirGapped() || probes != 1 {
-		t.Fatalf("run 1 expected offline & defaultAirGap=true; probes=%d", probes)
+	if orc.isConnected() || shell.IsKnownAirGapped() || probes != 1 {
+		t.Fatalf("run 1 expected offline with global airgap untouched; probes=%d", probes)
 	}
 	online = true
-	orc.resetConnectivityProbe()
-	if shell.IsKnownAirGapped() {
-		t.Fatalf("resetConnectivityProbe must clear probe-set defaultAirGap")
-	}
+	orc.resetSubmissionSession()
 	if !orc.isConnected() || probes != 2 {
-		t.Fatalf("run 2 after reset expected online re-probe; probes=%d", probes)
+		t.Fatalf("run 2 after resetSubmissionSession expected online re-probe; probes=%d", probes)
 	}
 }
 
@@ -3458,9 +3495,9 @@ func TestValidateTier3Workload_GKECoSchedulingAndOfflineProbeWarn(t *testing.T) 
 		},
 	}
 	jsOn, kueueOn := false, false
-	cont, err := probeOrc.resolveMissingAddons("gke-clus", false, true, true, &jsOn, &kueueOn)
-	if err != nil || !cont || !shell.IsKnownAirGapped() {
-		t.Fatalf("resolveMissingAddons(probe failure) = (cont=%v, err=%v, airGap=%v)", cont, err, shell.IsKnownAirGapped())
+	cont, _, err := probeOrc.resolveMissingAddons("gke-clus", false, true, true, kueueAddonProbe{state: addonStateMissing}, &jsOn, &kueueOn)
+	if err != nil || !cont || shell.IsKnownAirGapped() || !probeOrc.isOfflineForAddons() {
+		t.Fatalf("resolveMissingAddons(probe failure) = (cont=%v, err=%v, globalAirGap=%v, offline=%v)", cont, err, shell.IsKnownAirGapped(), probeOrc.isOfflineForAddons())
 	}
 	_, errLogs := snap()
 	if !strings.Contains(errLogs, "Outbound connectivity check") {
@@ -3521,8 +3558,14 @@ func TestResolveClusterAddons_OfflineOutdatedKueueWarnsAndContinues(t *testing.T
 	}
 }
 
-func TestInstallMissingAddons_ChecksLiveJobSetObjectsBeforeInstallingKueue(t *testing.T) {
-	mockExec := NewMockExecutor(nil)
+func TestInstallMissingAddons_ChecksCanIAndLiveJobSetObjectsBeforeInstallingKueue(t *testing.T) {
+	canIYes := make([]shell.CommandResult, len(kueuePermissionChecks))
+	for i := range canIYes {
+		canIYes[i] = shell.CommandResult{ExitCode: 0, Stdout: "yes"}
+	}
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl auth can-i": canIYes,
+	})
 	orc := newTestGKEOrchestrator(mockExec)
 	orc.kubeClient = &MockKubeClient{
 		Objects: map[string][]unstructured.Unstructured{
@@ -3532,11 +3575,55 @@ func TestInstallMissingAddons_ChecksLiveJobSetObjectsBeforeInstallingKueue(t *te
 		},
 	}
 	jsOn, kueueOn := false, false
-	err := orc.installMissingAddons("gke-clus", true, true, &jsOn, &kueueOn)
+	_, err := orc.installMissingAddons("gke-clus", true, true, kueueAddonProbe{state: addonStateMissing}, &jsOn, &kueueOn)
 	if err == nil || !strings.Contains(err.Error(), "gcluster made no changes") {
 		t.Fatalf("installMissingAddons(leftover JobSet) err = %v, want made no changes error", err)
 	}
 	if len(commandsWithPrefix(mockExec, "kubectl apply")) != 0 {
 		t.Errorf("must not apply Kueue before checkNoLiveJobSetObjects passes; calls=%v", mockExec.calls)
 	}
+	if got := len(commandsWithPrefix(mockExec, "kubectl auth can-i")); got != len(kueuePermissionChecks) {
+		t.Errorf("expected single %d-check can-i pass, got %d", len(kueuePermissionChecks), got)
+	}
+}
+
+func TestResolveClusterAddons_OutdatedKueueDeclinedBeforeJobSetInstallAndCRDPreserved(t *testing.T) {
+	t.Run("declining_outdated_kueue_aborts_before_installing_jobset", func(t *testing.T) {
+		origPrompt := shell.PromptYesNo
+		t.Cleanup(func() { shell.PromptYesNo = origPrompt })
+		shell.PromptYesNo = func(string) bool { return false }
+
+		canIYes := make([]shell.CommandResult, len(kueuePermissionChecks))
+		for i := range canIYes {
+			canIYes[i] = shell.CommandResult{ExitCode: 0, Stdout: "yes"}
+		}
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get crd jobsets.jobset.x-k8s.io":         {{ExitCode: 0, Stdout: ""}},
+			"kubectl get service jobset-webhook-service":      {{ExitCode: 0, Stdout: ""}},
+			"kubectl get crd clusterqueues.kueue.x-k8s.io":    {{ExitCode: 0, Stdout: "crd/clusterqueues"}},
+			"kubectl get deployment kueue-controller-manager": {{ExitCode: 0, Stdout: `{"spec":{"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.10.2"}]}}}}`}},
+			"kubectl auth can-i":                              canIYes,
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.mode = orchestrator.TypeGKE
+		orc.isInteractiveFunc = func() bool { return false }
+		orc.connectivity = &connectivityChecker{
+			getenv: func(string) string { return "" },
+			probe:  func(context.Context) bool { return true },
+		}
+		err := orc.resolveClusterAddons(&orchestrator.JobDefinition{ClusterName: "gke-clus"}, false)
+		if err == nil || !strings.Contains(err.Error(), "user declined to re-install Kueue") {
+			t.Fatalf("resolveClusterAddons() err = %v, want declined Kueue reinstall", err)
+		}
+		if len(commandsWithPrefix(mockExec, "kubectl apply")) != 0 {
+			t.Errorf("must not install JobSet before outdated Kueue reinstall is confirmed; calls=%v", mockExec.calls)
+		}
+	})
+
+	t.Run("resolveForbiddenAddonPresence_preserves_confirmed_200_crd", func(t *testing.T) {
+		crd, comp := resolveForbiddenAddonPresence(false, true, false, true, true)
+		if !crd || comp {
+			t.Errorf("resolveForbiddenAddonPresence(present=false, crd200, dep403) = (%v, %v), want (true, false) for Partial", crd, comp)
+		}
+	})
 }

@@ -105,6 +105,7 @@ It accepts parameters for the container image, command to execute, accelerator t
 and JobSet/Kueue specific configurations like workload name, queue, nodes, and restarts.`,
 	RunE: runSubmitCmd,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		pathways.RunSPSWorkload = strings.TrimSpace(pathways.RunSPSWorkload)
 		if err := validateWorkloadNameLength(workloadName, isPathwaysJob); err != nil {
 			return err
 		}

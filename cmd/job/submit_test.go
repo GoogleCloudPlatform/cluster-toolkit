@@ -2018,6 +2018,23 @@ func TestSubmitCmd_RunSPSWorkload(t *testing.T) {
 		}
 	})
 
+	t.Run("whitespace-only run-sps-workload does not bypass compute-type requirement", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--pathways",
+			"--pathways-run-sps-workload", "   ",
+			"--name", "sps-blank",
+			"--command", "python3 train.py",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+		)
+		if err == nil || !strings.Contains(err.Error(), `required flag(s) "compute-type" not set`) {
+			t.Fatalf("whitespace run-sps-workload err = %v, want compute-type required error", err)
+		}
+	})
+
 	t.Run("in-cluster mode succeeds with image and without compute-type or gcs-location", func(t *testing.T) {
 		setupSubmitTestEnv(t)
 		mockOrc := &mockOrchestrator{}

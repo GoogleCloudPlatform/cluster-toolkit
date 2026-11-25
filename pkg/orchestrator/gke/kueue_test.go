@@ -649,9 +649,9 @@ func TestCheckAndInstallKueue_ReinstallNeeded_LowVersion(t *testing.T) {
 		httpClient: &mockHTTPClient{},
 	}
 
-	err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a")
+	err := resolveKueueOnlyForTest(orc, "test-cluster")
 	if err != nil {
-		t.Fatalf("CheckAndInstallKueue failed: %v", err)
+		t.Fatalf("resolveKueueOnlyForTest failed: %v", err)
 	}
 
 	if !deleteCalled {
@@ -799,7 +799,7 @@ func TestCheckAndInstallKueue_PermissionDenied(t *testing.T) {
 		executor: mock,
 	}
 
-	err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a")
+	err := resolveKueueOnlyForTest(orc, "test-cluster")
 	if err == nil {
 		t.Fatal("expected error due to insufficient permissions, got nil")
 	}
@@ -844,7 +844,7 @@ func TestCheckAndInstallKueue_PermissionGranted(t *testing.T) {
 		httpClient: &mockHTTPClient{},
 	}
 
-	err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a")
+	err := resolveKueueOnlyForTest(orc, "test-cluster")
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -1019,7 +1019,7 @@ func TestIsKueueInstalled_Forbidden(t *testing.T) {
 	}
 	orc := &GKEOrchestrator{executor: mock}
 
-	installed, err := orc.isKueueInstalled()
+	installed, _, err := orc.isKueueCRDInstalled()
 	if err != nil {
 		t.Fatalf("isKueueInstalled should succeed and return true on 403 Forbidden, got err: %v", err)
 	}
@@ -1080,9 +1080,12 @@ func TestCheckAndInstallKueue_VersionNormalization(t *testing.T) {
 	}
 
 	// Pass version without 'v' prefix: "0.17.1"
-	err := orc.CheckAndInstallKueue("0.17.1", "test-cluster", "us-central1-a")
+	if got := normalizeKueueVersion("0.17.1"); got != "v0.17.1" {
+		t.Fatalf("normalizeKueueVersion(\"0.17.1\") = %q, want v0.17.1", got)
+	}
+	err := orc.installKueueOnFreshClusterWithPermCheck("0.17.1", "test-cluster", true)
 	if err != nil {
-		t.Fatalf("CheckAndInstallKueue failed for version without 'v' prefix: %v", err)
+		t.Fatalf("installKueueOnFreshClusterWithPermCheck failed for version without 'v' prefix: %v", err)
 	}
 }
 
@@ -1334,8 +1337,8 @@ func TestCheckAndInstallKueue_HealthySingleDeploymentRead(t *testing.T) {
 	}
 
 	orc := &GKEOrchestrator{executor: mock}
-	if err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a"); err != nil {
-		t.Fatalf("CheckAndInstallKueue failed: %v", err)
+	if err := resolveKueueOnlyForTest(orc, "test-cluster"); err != nil {
+		t.Fatalf("resolveKueueOnlyForTest failed: %v", err)
 	}
 	if getDepCalls != 1 {
 		t.Errorf("kubectl get deployment calls = %d, want 1", getDepCalls)
@@ -1467,8 +1470,8 @@ func TestCheckAndInstallKueue_UnrolledDeploymentRunsRolloutStatus(t *testing.T) 
 	}
 
 	orc := &GKEOrchestrator{executor: mock}
-	if err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a"); err != nil {
-		t.Fatalf("CheckAndInstallKueue failed: %v", err)
+	if err := resolveKueueOnlyForTest(orc, "test-cluster"); err != nil {
+		t.Fatalf("resolveKueueOnlyForTest failed: %v", err)
 	}
 	if getDepCalls != 1 {
 		t.Errorf("kubectl get deployment calls = %d, want 1 (reused for version check)", getDepCalls)
@@ -1772,8 +1775,8 @@ func TestCheckAndInstallKueue_SharedClusterForbidden(t *testing.T) {
 	}
 
 	orc := &GKEOrchestrator{executor: mock}
-	if err := orc.CheckAndInstallKueue("", "test-cluster", "us-central1-a"); err != nil {
-		t.Fatalf("CheckAndInstallKueue should succeed on 403 Forbidden in shared cluster, got: %v", err)
+	if err := resolveKueueOnlyForTest(orc, "test-cluster"); err != nil {
+		t.Fatalf("resolveKueueOnlyForTest should succeed on 403 Forbidden in shared cluster, got: %v", err)
 	}
 	if getDepCalls != 1 {
 		t.Errorf("kubectl get deployment calls = %d, want 1", getDepCalls)
@@ -1965,11 +1968,11 @@ func assertAirGapFastFailBeforeRBAC(t *testing.T) {
 			},
 		},
 	}
-	if err := airGapOrc.installJobSetOnFreshCluster(); err == nil || !strings.Contains(err.Error(), shell.AirGappedEnvVar) {
-		t.Fatalf("installJobSetOnFreshCluster(air-gapped) = %v, want %s error", err, shell.AirGappedEnvVar)
+	if err := airGapOrc.installJobSetOnFreshClusterWithPermCheck(true); err == nil || !strings.Contains(err.Error(), shell.AirGappedEnvVar) {
+		t.Fatalf("installJobSetOnFreshClusterWithPermCheck(air-gapped) = %v, want %s error", err, shell.AirGappedEnvVar)
 	}
-	if err := airGapOrc.CheckAndInstallKueue("v0.15.2", "clus", "us-central1"); err == nil || !strings.Contains(err.Error(), shell.AirGappedEnvVar) {
-		t.Fatalf("CheckAndInstallKueue(air-gapped) = %v, want %s error", err, shell.AirGappedEnvVar)
+	if err := airGapOrc.installKueueOnFreshClusterWithPermCheck("v0.15.2", "clus", true); err == nil || !strings.Contains(err.Error(), shell.AirGappedEnvVar) {
+		t.Fatalf("installKueueOnFreshClusterWithPermCheck(air-gapped) = %v, want %s error", err, shell.AirGappedEnvVar)
 	}
 	if canICalled || promptCalled {
 		t.Fatalf("air-gapped installation ran can-i=%v prompt=%v, want both false", canICalled, promptCalled)
@@ -2059,4 +2062,40 @@ func mockKueueReinstallReadResult(full string) shell.CommandResult {
 		return shell.CommandResult{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}
 	}
 	return shell.CommandResult{ExitCode: 0}
+}
+
+func TestKueueProbes_DoNotMisclassifyExecPluginNotFoundOrSpawnErrors(t *testing.T) {
+	t.Run("missing_exec_plugin_returns_error_not_missing_kueue", func(t *testing.T) {
+		mock := &mockExecutor{
+			executeCommandFunc: func(string, ...string) shell.CommandResult {
+				return shell.CommandResult{
+					ExitCode: 1,
+					Stderr:   `exec: "gke-gcloud-auth-plugin": executable file not found in $PATH`,
+				}
+			},
+		}
+		orc := &GKEOrchestrator{executor: mock}
+		if _, _, err := orc.isKueueCRDInstalled(); err == nil {
+			t.Errorf("isKueueCRDInstalled(missing exec plugin) = nil, want error")
+		}
+		if _, _, _, err := orc.getKueueDeploymentWithStatus(); err == nil {
+			t.Errorf("getKueueDeploymentWithStatus(missing exec plugin) = nil, want error")
+		}
+	})
+
+	t.Run("exit_code_minus_one_preserves_res_err", func(t *testing.T) {
+		spawnErr := errors.New("kubectl binary missing")
+		mock := &mockExecutor{
+			executeCommandFunc: func(string, ...string) shell.CommandResult {
+				return shell.CommandResult{ExitCode: -1, Err: spawnErr}
+			},
+		}
+		orc := &GKEOrchestrator{executor: mock}
+		if _, _, err := orc.isKueueCRDInstalled(); !errors.Is(err, spawnErr) {
+			t.Errorf("isKueueCRDInstalled(ExitCode -1) = %v, want wrapped %v", err, spawnErr)
+		}
+		if _, _, _, err := orc.getKueueDeploymentWithStatus(); !errors.Is(err, spawnErr) {
+			t.Errorf("getKueueDeploymentWithStatus(ExitCode -1) = %v, want wrapped %v", err, spawnErr)
+		}
+	})
 }

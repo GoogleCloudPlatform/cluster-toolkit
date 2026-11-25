@@ -173,8 +173,13 @@ func IsNotFoundOrNoMatchError(err error) bool {
 	if apierrors.IsNotFound(err) || meta.IsNoMatchError(err) {
 		return true
 	}
+	var statusErr apierrors.APIStatus
+	if errors.As(err, &statusErr) {
+		return false
+	}
 	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "could not find the requested resource") ||
+	return strings.Contains(msg, "error from server (notfound)") ||
+		strings.Contains(msg, "could not find the requested resource") ||
 		strings.Contains(msg, "doesn't have a resource type") ||
 		strings.Contains(msg, "no matches for kind")
 }

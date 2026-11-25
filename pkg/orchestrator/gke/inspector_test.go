@@ -966,3 +966,33 @@ func TestInspector_MissingBatchJobWhenHasJobSetFalseKeepsJobSelectors(t *testing
 		t.Errorf("expected job- prefix and batch.kubernetes.io/job-name selector:\n%s", joined)
 	}
 }
+
+func TestInspectCluster_JobSetNotFoundSkipsSPSJobSetProbe(t *testing.T) {
+	outFile := filepath.Join(t.TempDir(), "inspect.log")
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl version --client":                {{ExitCode: 0, Stdout: "v1.32"}},
+		"kubectl config current-context":          {{ExitCode: 0, Stdout: testContext}},
+		"kubectl get --raw=/readyz":               {{ExitCode: 0, Stdout: "ok"}},
+		"kubectl get --raw /apis/jobset.x-k8s.io": {{ExitCode: 1, Stderr: "Error from server (NotFound): not found"}},
+		"kubectl get --raw /apis/kueue.x-k8s.io":  {{ExitCode: 1, Stderr: "Error from server (NotFound): not found"}},
+		"kubectl get nodes -o wide":               {{ExitCode: 0, Stdout: "node-1"}},
+		"kubectl describe nodes":                  {{ExitCode: 0, Stdout: "node-desc"}},
+		"kubectl get jobs":                        {{ExitCode: 0, Stdout: "jobs-list"}},
+		"kubectl get job my-job -n default":       {{ExitCode: 0, Stdout: `{"metadata":{"name":"my-job","labels":{"gcluster.google.com/workload":"my-job"}},"status":{"active":1}}`}},
+		"kubectl describe job my-job -n default":  {{ExitCode: 0, Stdout: "job-desc"}},
+		"kubectl describe service my-job":         {{ExitCode: 0, Stdout: "svc-desc"}},
+		"kubectl get pods":                        {{ExitCode: 0, Stdout: "pods-list"}},
+		"kubectl describe pods":                   {{ExitCode: 0, Stdout: "pods-desc"}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = orchestrator.TypeK8s
+	orc.kubeconfigLoader = staticLoader(kubeconfigWith("https://10.0.0.1:6443", nil, nil, testContext))
+	if err := orc.InspectCluster(orchestrator.InspectOptions{ClusterName: testContext, WorkloadName: "my-job", GKENamespace: "default", OutputPath: outFile}); err != nil {
+		t.Fatalf("InspectCluster(JobSet NotFound) err = %v", err)
+	}
+	for _, call := range mockExec.calls {
+		if strings.Contains(call, "get jobset ") || strings.Contains(call, "get jobsets") || strings.Contains(call, "describe jobsets") {
+			t.Errorf("InspectCluster must not query jobsets when /apis/jobset.x-k8s.io is NotFound: %q", call)
+		}
+	}
+}

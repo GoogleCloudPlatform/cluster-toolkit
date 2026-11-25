@@ -177,6 +177,13 @@ func (g *GKEOrchestrator) runSPSWorkload(job orchestrator.JobDefinition) error {
 	if err := g.validateJobConflicts(job); err != nil {
 		return err
 	}
+	if strings.TrimSpace(job.KueueQueueName) != "" || strings.TrimSpace(inst.KueueQueueName) != "" {
+		g.addons = addonPlan{
+			resolved:      true,
+			jobSetEnabled: true,
+			kueueEnabled:  g.hasKueueInstalled(),
+		}
+	}
 	g.applySPSKueueAndHeadDefaults(&job, &inst)
 	if job.Pathways, err = resolveSPSClientPathways(job.Pathways, inst); err != nil {
 		return err

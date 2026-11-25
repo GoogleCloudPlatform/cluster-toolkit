@@ -83,7 +83,7 @@ func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions
 
 func (g *GKEOrchestrator) resolveCancelActionVerb(namespace, name string) (string, []string) {
 	if !g.jobSetEnabled() {
-		return g.peekBatchJobActionVerb(namespace, name), nil
+		return g.peekBatchJobActionVerb(namespace, name)
 	}
 	js, err := g.kubeClient.GetResource(jobSetGVR, namespace, name)
 	if err == nil && js != nil {
@@ -93,45 +93,37 @@ func (g *GKEOrchestrator) resolveCancelActionVerb(namespace, name string) (strin
 		}
 		return verb, collectClaimNames(js.Object)
 	}
-	if k8s.IsNotFoundOrNoMatchError(err) {
-		return g.peekBatchJobActionVerb(namespace, name), nil
+	if g.isJobSetAPIAbsent(err) {
+		return g.peekBatchJobActionVerb(namespace, name)
 	}
 	return "Cancel", nil
 }
 
 func (g *GKEOrchestrator) handleDeleteJobSetError(namespace, name, actionVerb string, ownClaims []string, err error) error {
 	opErr := fmt.Errorf("%s operation failed for %s in namespace %s: %w", strings.ToLower(actionVerb), name, namespace, err)
-	if !k8s.IsNotFoundOrNoMatchError(err) {
+	if !g.isJobSetAPIAbsent(err) {
 		return opErr
 	}
-	deleted, fallbackVerb, fallbackClaims, fallbackErr := g.cancelFallbackBatchJob(namespace, name)
-	if fallbackErr != nil {
-		return fallbackErr
-	}
-	if deleted {
-		logging.Info("%s operation on Job '%s' completed successfully.", fallbackVerb, name)
-		g.reclaimStorageGateways(namespace, name, fallbackClaims)
-		return nil
-	}
-	logging.Info("Job '%s' was not found in namespace '%s'; it may already have been removed by --gke-ttl-after-finished. Checking for unused storage gateways...", name, namespace)
-	g.reclaimStorageGateways(namespace, name, ownClaims)
-	if !apierrors.IsNotFound(err) {
-		// JobSet API is absent (NoMatch); report a batch/v1 Job NotFound error instead of leaking the JobSet discovery error.
-		return fmt.Errorf("%s operation failed for %s in namespace %s: %w",
-			strings.ToLower(actionVerb), name, namespace, apierrors.NewNotFound(jobGVR.GroupResource(), name))
-	}
-	return opErr
+	return g.cancelFallbackOrReportNotFound(namespace, name, actionVerb, ownClaims, err, opErr)
 }
 
-func (g *GKEOrchestrator) peekBatchJobActionVerb(namespace, name string) string {
+func (g *GKEOrchestrator) peekBatchJobActionVerb(namespace, name string) (string, []string) {
 	jobObj, err := g.kubeClient.GetResource(jobGVR, namespace, name)
-	if err == nil && jobObj != nil && jobObj.GetLabels()[workloadLabel] == name && isFinished(jobObj) {
-		return "Cleanup"
+	if err != nil || jobObj == nil || jobObj.GetLabels()[workloadLabel] != name {
+		return "Cancel", nil
 	}
-	return "Cancel"
+	verb := "Cancel"
+	if isFinished(jobObj) {
+		verb = "Cleanup"
+	}
+	return verb, collectClaimNames(jobObj.Object)
 }
 
 func (g *GKEOrchestrator) cancelJobWithoutJobSet(namespace, name, actionVerb string, ownClaims []string) error {
+	return g.cancelFallbackOrReportNotFound(namespace, name, actionVerb, ownClaims, nil, nil)
+}
+
+func (g *GKEOrchestrator) cancelFallbackOrReportNotFound(namespace, name, actionVerb string, ownClaims []string, origErr, opErr error) error {
 	deleted, fallbackVerb, fallbackClaims, fallbackErr := g.cancelFallbackBatchJob(namespace, name)
 	if fallbackErr != nil {
 		return fallbackErr
@@ -143,6 +135,9 @@ func (g *GKEOrchestrator) cancelJobWithoutJobSet(namespace, name, actionVerb str
 	}
 	logging.Info("Job '%s' was not found in namespace '%s'; it may already have been removed by --gke-ttl-after-finished. Checking for unused storage gateways...", name, namespace)
 	g.reclaimStorageGateways(namespace, name, ownClaims)
+	if origErr != nil && apierrors.IsNotFound(origErr) && opErr != nil {
+		return opErr
+	}
 	return fmt.Errorf("%s operation failed for %s in namespace %s: %w",
 		strings.ToLower(actionVerb), name, namespace, apierrors.NewNotFound(jobGVR.GroupResource(), name))
 }
@@ -206,8 +201,8 @@ func (g *GKEOrchestrator) deleteOwnedFallbackService(namespace, name string) (bo
 	if svcObj == nil {
 		return false, nil
 	}
-	if svcObj.GetLabels()[workloadLabel] != name {
-		logging.Warn("Refusing to delete Service '%s' in namespace '%s': missing label %s=%s.", name, namespace, workloadLabel, name)
+	if svcObj.GetLabels()[workloadLabel] != name || isJobSetOwnedJob(svcObj) {
+		logging.Warn("Refusing to delete Service '%s' in namespace '%s': not a standalone gcluster-managed Service (%s=%s).", name, namespace, workloadLabel, name)
 		return false, nil
 	}
 	if err := g.kubeClient.DeleteResource(serviceGVR, namespace, name, preconditionsFor(svcObj, false)); err != nil && !apierrors.IsNotFound(err) {
@@ -343,11 +338,8 @@ func (g *GKEOrchestrator) deleteStorageGateway(namespace string, pvc *unstructur
 func (g *GKEOrchestrator) namespaceClaimConsumers(namespace, cancelledJobSet string) (map[string]string, error) {
 	consumers := map[string]string{}
 	for _, gvr := range storageConsumerGVRs {
-		if gvr == jobSetGVR && !g.jobSetEnabled() {
-			continue
-		}
 		objs, err := g.kubeClient.ListResources(gvr, namespace, "", "")
-		if k8s.IsNotFoundOrNoMatchError(err) {
+		if (gvr == jobSetGVR && g.isJobSetAPIAbsent(err)) || k8s.IsNotFoundOrNoMatchError(err) {
 			continue
 		}
 		if err != nil {

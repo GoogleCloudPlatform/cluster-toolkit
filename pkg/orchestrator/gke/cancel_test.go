@@ -726,3 +726,85 @@ func TestCancelJob_NoMatchNotFoundMappingDisableJobSetAndServiceDeleteError(t *t
 		}
 	})
 }
+
+func TestCancelJob_DisableJobSetPreservesQueuedJobSetPVCsAnd403Fallback(t *testing.T) {
+	t.Run("disable_jobset_still_scans_jobsets_before_reclaiming_pvcs", func(t *testing.T) {
+		mock := gatewayMock(map[string][]unstructured.Unstructured{
+			"jobs":     {makeTestOwnedBatchJob("t3-job", "1")},
+			"services": {makeTestOwnedService("t3-job", "1")},
+			"jobsets": {{Object: map[string]interface{}{
+				"metadata": map[string]interface{}{"name": "queued-js", "namespace": "default"},
+				"spec": map[string]interface{}{
+					"replicatedJobs": []interface{}{
+						map[string]interface{}{
+							"template": map[string]interface{}{
+								"spec": map[string]interface{}{
+									"template": map[string]interface{}{
+										"spec": map[string]interface{}{
+											"volumes": []interface{}{
+												map[string]interface{}{"persistentVolumeClaim": map[string]interface{}{"claimName": testClaim}},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}}},
+		})
+		orc := cancelTestOrchestrator(mock)
+		orc.connectivity = &connectivityChecker{
+			getenv: func(k string) string {
+				if k == disableJobSetEnvVar {
+					return "1"
+				}
+				return ""
+			},
+		}
+		if err := orc.CancelJob("t3-job", cancelOpts); err != nil {
+			t.Fatalf("CancelJob() err = %v", err)
+		}
+		if len(mock.Deleted["persistentvolumeclaims"]) != 0 {
+			t.Errorf("PVC used by queued JobSet must not be reclaimed under %s=1, deleted=%v", disableJobSetEnvVar, mock.Deleted)
+		}
+	})
+
+	t.Run("forbidden_jobset_confirmed_absent_falls_back_to_batch_job_with_cached_probe", func(t *testing.T) {
+		forbErr := apierrors.NewForbidden(jobSetGVR.GroupResource(), "t3-job", errors.New("forbidden"))
+		mock := &MockKubeClient{
+			Namespace:       "default",
+			DeleteJobSetErr: forbErr,
+			ListErrs:        map[string]error{"jobsets": forbErr},
+			Objects: map[string][]unstructured.Unstructured{
+				"jobs":     {makeTestOwnedBatchJob("t3-job", "1")},
+				"services": {makeTestOwnedService("t3-job", "1")},
+			},
+		}
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud container clusters get-credentials": {{ExitCode: 0}},
+			"kubectl get --raw=/readyz":                 {{ExitCode: 0, Stdout: "ok"}},
+			"kubectl get --raw /apis/jobset.x-k8s.io":   {{ExitCode: 1, Stderr: "Error from server (NotFound): the server could not find the requested resource"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.kubeClient = mock
+		orc.dynClient = nopDynamicClient{}
+		orc.namespace = "default"
+		orc.kubeContext = "gke_p_us-central1_c"
+		if err := orc.CancelJob("t3-job", cancelOpts); err != nil {
+			t.Fatalf("CancelJob(403 JobSet confirmed absent) err = %v", err)
+		}
+		if !reflect.DeepEqual(mock.Deleted["jobs"], []string{"t3-job"}) {
+			t.Errorf("expected fallback batch Job delete, deleted=%v", mock.Deleted)
+		}
+		probes := 0
+		for _, c := range mockExec.calls {
+			if strings.Contains(c, "/apis/jobset.x-k8s.io") {
+				probes++
+			}
+		}
+		if probes != 1 {
+			t.Errorf("expected 1 cached /apis/jobset.x-k8s.io probe, got %d (%v)", probes, mockExec.calls)
+		}
+	})
+}

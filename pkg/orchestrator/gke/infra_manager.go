@@ -104,65 +104,6 @@ var jobSetObjectsWithSelectors = []struct {
 	{"Service", serviceGVR, jobSetMetricsServiceName},
 }
 
-// checkAndInstallJobSetCRD installs JobSet only when neither its CRD nor its webhook Service exists.
-// When both exist it waits for the webhook to become ready. It never modifies an existing or partial
-// installation: re-applying manifests over one can leave the webhook without endpoints, which blocks
-// every JobSet in the cluster.
-func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
-	crdExists, crdForbidden, err := g.checkResourceExists("crd", jobSetCRDName, "")
-	if err != nil {
-		return fmt.Errorf("failed to check for the JobSet CRD: %w", err)
-	}
-	if crdExists && !crdForbidden {
-		return g.verifyOrWaitForJobSetWithCRD()
-	}
-	serviceExists, _, err := g.checkResourceExists("service", jobSetWebhookServiceName, jobSetNamespace)
-	if err != nil {
-		return fmt.Errorf("failed to check for the JobSet webhook Service: %w", err)
-	}
-	switch {
-	case crdExists && serviceExists:
-		if err := g.waitForJobSetWebhookEndpoints(); err != nil {
-			return fmt.Errorf("JobSet is installed but its webhook is not ready, and gcluster did not modify the existing JobSet installation: %w", err)
-		}
-		return nil
-	case !crdExists && !serviceExists:
-		return g.installJobSetOnFreshCluster()
-	default:
-		return g.partialJobSetInstallError(crdExists)
-	}
-}
-
-// verifyOrWaitForJobSetWithCRD handles the common case where the JobSet CRD is confirmed present.
-// It checks the webhook EndpointSlice first so a healthy cluster requires only two kubectl reads
-// (CRD + EndpointSlice) and skips the separate Service existence read.
-func (g *GKEOrchestrator) verifyOrWaitForJobSetWithCRD() error {
-	start := time.Now()
-	ready, epForbidden, epErr := g.checkServiceEndpointsReady(jobSetNamespace, jobSetWebhookServiceName)
-	if epErr != nil && !errors.Is(epErr, errEndpointsUnreadable) {
-		return epErr
-	}
-	if ready && !epForbidden {
-		return nil
-	}
-	serviceExists, _, err := g.checkResourceExists("service", jobSetWebhookServiceName, jobSetNamespace)
-	if err != nil {
-		return fmt.Errorf("failed to check for the JobSet webhook Service: %w", err)
-	}
-	if !serviceExists {
-		return g.partialJobSetInstallError(true)
-	}
-	if ready {
-		return nil
-	}
-	logging.Info("Service %s/%s has no ready endpoint yet; the JobSet controller may be starting or restarting. Waiting up to %s...",
-		jobSetNamespace, jobSetWebhookServiceName, jobSetWebhookWaitTimeout)
-	if err := g.pollJobSetWebhookEndpoints(1, start, epErr == nil, epErr); err != nil {
-		return fmt.Errorf("JobSet is installed but its webhook is not ready, and gcluster did not modify the existing JobSet installation: %w", err)
-	}
-	return nil
-}
-
 // checkResourceExists reports whether a Kubernetes object exists. A Forbidden read counts as existing, so a
 // user who cannot read the object never triggers an installation.
 func (g *GKEOrchestrator) checkResourceExists(kind, name, namespace string) (exists, forbidden bool, err error) {
@@ -182,10 +123,6 @@ func (g *GKEOrchestrator) checkResourceExists(kind, name, namespace string) (exi
 	return false, false, err
 }
 
-func (g *GKEOrchestrator) installJobSetOnFreshCluster() error {
-	return g.installJobSetOnFreshClusterWithPermCheck(true)
-}
-
 func (g *GKEOrchestrator) checkJobSetInstallPermissions() error {
 	if missing := g.missingPermissions(jobSetInstallPermissionChecks); len(missing) > 0 {
 		return fmt.Errorf("JobSet is not installed, and your account cannot install it: missing RBAC permissions [%s]. gcluster made no changes. "+
@@ -195,7 +132,7 @@ func (g *GKEOrchestrator) checkJobSetInstallPermissions() error {
 }
 
 func (g *GKEOrchestrator) installJobSetOnFreshClusterWithPermCheck(checkPerms bool) error {
-	if g.isAirGapped() {
+	if g.isOfflineForAddons() {
 		return fmt.Errorf("JobSet is not installed and cannot be downloaded %s; pre-install JobSet %s on the cluster first", g.airGapReason(), defaultJobSetVersion)
 	}
 	if checkPerms {
@@ -532,7 +469,7 @@ func (g *GKEOrchestrator) getHTTPClient() HTTPClient {
 }
 
 func (g *GKEOrchestrator) downloadManifests(url string) ([]byte, error) {
-	if g.isAirGapped() {
+	if g.isOfflineForAddons() {
 		return nil, fmt.Errorf("cannot download %s %s; pre-install the controller manifests on the cluster first", url, g.airGapReason())
 	}
 	logging.Info("Downloading manifests from %s", url)
@@ -829,58 +766,28 @@ func (g *GKEOrchestrator) airGapReason() string {
 	}
 }
 
-func isExplicitlyFalsyAirGap(getenv func(string) string) bool {
-	switch strings.ToLower(strings.TrimSpace(getenv(shell.AirGappedEnvVar))) {
-	case "0", "false", "no", "off":
-		return true
-	default:
-		return false
-	}
-}
-
-func (g *GKEOrchestrator) resetConnectivityProbe() {
-	if g.probeSetAirGap {
-		shell.SetDefaultAirGapped(false)
-		g.probeSetAirGap = false
-	}
-	if g.connectivity != nil {
-		g.connectivity = &connectivityChecker{
-			getenv: g.connectivity.getenv,
-			probe:  g.connectivity.probe,
-		}
-	}
+func (g *GKEOrchestrator) isOfflineForAddons() bool {
+	return g.isAirGapped() || (g.githubProbed && !g.githubOnline)
 }
 
 func (g *GKEOrchestrator) isConnected() bool {
 	if g.isAirGapped() {
 		return false
 	}
-	if g.connectivity == nil {
-		g.connectivity = &connectivityChecker{}
+	if g.githubProbed {
+		return g.githubOnline
 	}
-	online := g.connectivity.check()
-	if !online && !isExplicitlyFalsyAirGap(g.getenv()) {
-		// Intentionally persists after SubmitJob returns so post-run CLI telemetry
-		// (cmd/root.go -> pkg/telemetry/telemetry.go) skips outbound calls on offline hosts.
-		shell.SetDefaultAirGapped(true)
-		g.probeSetAirGap = true
+	logging.Info("Checking outbound connectivity to %s...", githubConnectivityProbeURL)
+	probe := defaultGitHubConnectivityProbe
+	if g.connectivity != nil && g.connectivity.probe != nil {
+		probe = g.connectivity.probe
 	}
-	return online
+	g.githubOnline = probe(context.Background())
+	g.githubProbed = true
+	return g.githubOnline
 }
 
 var connectivityProbeRetryDelay = 200 * time.Millisecond
-
-func (c *connectivityChecker) check() bool {
-	c.once.Do(func() {
-		logging.Info("Checking outbound connectivity to %s...", githubConnectivityProbeURL)
-		probe := c.probe
-		if probe == nil {
-			probe = defaultGitHubConnectivityProbe
-		}
-		c.online = probe(context.Background())
-	})
-	return c.online
-}
 
 func defaultGitHubConnectivityProbe(ctx context.Context) bool {
 	return probeURLConnectivity(ctx, githubConnectivityProbeURL, connectivityProbeTimeout)
@@ -939,9 +846,31 @@ func (g *GKEOrchestrator) probeAPIGroupOnForbidden(group string) (present, check
 	return ok, true
 }
 
+// isJobSetAPIAbsent reports whether err indicates the JobSet API/object is absent, including
+// namespace-scoped 403 Forbidden responses confirmed absent via non-privileged /apis/jobset.x-k8s.io discovery.
+func (g *GKEOrchestrator) isJobSetAPIAbsent(err error) bool {
+	if k8s.IsNotFoundOrNoMatchError(err) {
+		return true
+	}
+	if !k8s.IsForbiddenError(err) {
+		return false
+	}
+	if g.jobSetAPIProbed && g.jobSetAPIContext == g.kubeContext {
+		return !g.jobSetAPIPresent
+	}
+	present, checked := g.probeAPIGroupOnForbidden("jobset.x-k8s.io")
+	if !checked {
+		return false
+	}
+	g.jobSetAPIProbed = true
+	g.jobSetAPIPresent = present
+	g.jobSetAPIContext = g.kubeContext
+	return !present
+}
+
 func resolveForbiddenAddonPresence(present, crdPresent, crdForbidden, compPresent, compForbidden bool) (bool, bool) {
 	if !present {
-		return false, compPresent && !compForbidden
+		return crdPresent && !crdForbidden, compPresent && !compForbidden
 	}
 	return crdPresent || crdForbidden, compPresent || compForbidden
 }
@@ -1127,15 +1056,16 @@ func (g *GKEOrchestrator) resolveClusterAddons(job *orchestrator.JobDefinition, 
 		return err
 	}
 
+	kueueUpgraded := false
 	continuedWithoutInstall := false
 	if missingJobSet || missingKueue {
-		continuedWithoutInstall, err = g.resolveMissingAddons(job.ClusterName, dryRun, missingJobSet, missingKueue, &jobSetEnabled, &kueueEnabled)
+		continuedWithoutInstall, kueueUpgraded, err = g.resolveMissingAddons(job.ClusterName, dryRun, missingJobSet, missingKueue, kueueProbe, &jobSetEnabled, &kueueEnabled)
 		if err != nil {
 			return err
 		}
 	}
 
-	if !dryRun && kueueProbe.state == addonStateInstalled && g.needsKueueUpgrade(kueueProbe) {
+	if !dryRun && !kueueUpgraded && kueueProbe.state == addonStateInstalled && g.needsKueueUpgrade(kueueProbe) {
 		if err := g.ensureInstalledKueueReady(kueueProbe, job.ClusterName, !continuedWithoutInstall); err != nil {
 			return err
 		}
@@ -1185,14 +1115,14 @@ func (g *GKEOrchestrator) verifyInstalledAddonsReadOnly(jsProbe jobSetAddonProbe
 	return nil
 }
 
-func (g *GKEOrchestrator) resolveMissingAddons(clusterName string, dryRun, missingJobSet, missingKueue bool, jobSetEnabled, kueueEnabled *bool) (bool, error) {
+func (g *GKEOrchestrator) resolveMissingAddons(clusterName string, dryRun, missingJobSet, missingKueue bool, kueueProbe kueueAddonProbe, jobSetEnabled, kueueEnabled *bool) (bool, bool, error) {
 	if dryRun {
 		logging.Info("Dry-run mode: %s not installed; continuing with installed Kubernetes APIs without modifying cluster add-ons.", formatMissingAddonsList(missingJobSet, missingKueue))
-		return true, nil
+		return true, false, nil
 	}
 	if !g.isInteractive() && g.mode == orchestrator.TypeK8s {
 		logging.Info("Non-interactive Kubernetes mode: %s not installed; continuing with installed Kubernetes APIs without mutating cluster add-ons.", formatMissingAddonsList(missingJobSet, missingKueue))
-		return true, nil
+		return true, false, nil
 	}
 	wasAirGapped := g.isAirGapped()
 	if !g.isConnected() {
@@ -1202,50 +1132,76 @@ func (g *GKEOrchestrator) resolveMissingAddons(clusterName string, dryRun, missi
 			logging.Warn("Outbound connectivity check to %s failed; continuing with installed Kubernetes APIs (%s) without installing %s.",
 				githubConnectivityProbeURL, fallbackModeSummary(*jobSetEnabled, *kueueEnabled), formatMissingAddonsList(missingJobSet, missingKueue))
 		}
-		return true, nil
+		return true, false, nil
 	}
 	if !g.isInteractive() {
-		return false, g.installMissingAddons(clusterName, missingJobSet, missingKueue, jobSetEnabled, kueueEnabled)
+		upgraded, err := g.installMissingAddons(clusterName, missingJobSet, missingKueue, kueueProbe, jobSetEnabled, kueueEnabled)
+		return false, upgraded, err
 	}
 	choice := g.promptMissingAddons(missingJobSet, missingKueue, *jobSetEnabled, *kueueEnabled)
 	switch choice {
 	case "install":
-		return false, g.installMissingAddons(clusterName, missingJobSet, missingKueue, jobSetEnabled, kueueEnabled)
+		upgraded, err := g.installMissingAddons(clusterName, missingJobSet, missingKueue, kueueProbe, jobSetEnabled, kueueEnabled)
+		return false, upgraded, err
 	case "continue":
 		logging.Info("Continuing with installed Kubernetes APIs without installing %s.", formatMissingAddonsList(missingJobSet, missingKueue))
-		return true, nil
+		return true, false, nil
 	default:
-		return false, fmt.Errorf("job submission canceled by user")
+		return false, false, fmt.Errorf("job submission canceled by user")
 	}
 }
 
-func (g *GKEOrchestrator) installMissingAddons(clusterName string, missingJobSet, missingKueue bool, jobSetEnabled, kueueEnabled *bool) error {
-	preChecked := false
-	if missingKueue && missingJobSet {
-		if err := g.checkNoLiveJobSetObjects(); err != nil {
+func (g *GKEOrchestrator) preflightAddonMutations(clusterName string, missingJobSet, missingKueue, upgradeKueue bool) error {
+	// kueuePermissionChecks and jobSetInstallPermissionChecks require the same 6 cluster-admin verbs,
+	// so checking once covers both add-ons without running duplicate kubectl auth can-i subprocesses.
+	if missingKueue || upgradeKueue {
+		if g.mode != orchestrator.TypeK8s && g.checkDynamicSlicingViaGKE() {
+			return fmt.Errorf("automatic Kueue installation/modification blocked: cluster %s is set up for Dynamic-Slicing (found 'PROVISION_ONLY' in node pool placementPolicy). Automatic installation or modification of Kueue could conflict with custom topology configurations. Please install Kueue and required CRDs manually", clusterName)
+		}
+		action := "install"
+		if upgradeKueue {
+			action = "re-install"
+		}
+		if err := g.checkKueuePermissions(action, defaultKueueVersion); err != nil {
 			return err
 		}
-		if err := g.checkKueuePermissions("install", defaultKueueVersion); err != nil {
-			return err
-		}
+	} else if missingJobSet {
 		if err := g.checkJobSetInstallPermissions(); err != nil {
 			return err
 		}
-		preChecked = true
+	}
+	if missingJobSet {
+		if err := g.checkNoLiveJobSetObjects(); err != nil {
+			return fmt.Errorf("failed to install JobSet: %w", err)
+		}
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) installMissingAddons(clusterName string, missingJobSet, missingKueue bool, kueueProbe kueueAddonProbe, jobSetEnabled, kueueEnabled *bool) (bool, error) {
+	upgradeKueue := kueueProbe.state == addonStateInstalled && g.needsKueueUpgrade(kueueProbe)
+	if err := g.preflightAddonMutations(clusterName, missingJobSet, missingKueue, upgradeKueue); err != nil {
+		return false, err
+	}
+	if upgradeKueue {
+		reason := fmt.Sprintf("Current Kueue version %s is below target %s.", kueueProbe.currentVersion, defaultKueueVersion)
+		if err := g.handleKueueReinstallation(defaultKueueVersion, reason); err != nil {
+			return false, err
+		}
 	}
 	if missingKueue {
-		if err := g.installKueueOnFreshClusterWithPermCheck(defaultKueueVersion, clusterName, !preChecked); err != nil {
-			return err
+		if err := g.installKueueOnFreshClusterWithPermCheck(defaultKueueVersion, clusterName, false); err != nil {
+			return upgradeKueue, err
 		}
 		*kueueEnabled = true
 	}
 	if missingJobSet {
-		if err := g.installJobSetOnFreshClusterWithPermCheck(!preChecked); err != nil {
-			return err
+		if err := g.installJobSetOnFreshClusterWithPermCheck(false); err != nil {
+			return upgradeKueue, err
 		}
 		*jobSetEnabled = true
 	}
-	return nil
+	return upgradeKueue, nil
 }
 
 func formatMissingAddonsList(missingJobSet, missingKueue bool) string {

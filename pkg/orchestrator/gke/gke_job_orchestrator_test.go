@@ -5538,6 +5538,10 @@ func TestAwaitUnqueuedKueueClusterAndTypeK8sPreflight(t *testing.T) {
 			{ExitCode: 0, Stdout: "Completed\t\tmain\n1 1\tw"},
 		},
 	})
+	origSleep := directAwaitSleep
+	directAwaitSleep = func(time.Duration) {}
+	t.Cleanup(func() { directAwaitSleep = origSleep })
+
 	orc := newTestGKEOrchestrator(mockExec)
 	orc.mode = orchestrator.TypeK8s
 	orc.namespace = "ml"
@@ -5583,6 +5587,34 @@ func TestParseBatchJobStatus_DefaultSuspendFalseAndPartialIndexed(t *testing.T) 
 			want: "Succeeded",
 		},
 		{
+			name: "partial_indexed_with_failed_reports_failed",
+			obj: map[string]interface{}{
+				"spec":   map[string]interface{}{"suspend": false, "completions": int64(2)},
+				"status": map[string]interface{}{"succeeded": int64(1), "failed": int64(1)},
+			},
+			want: "Failed",
+		},
+		{
+			name: "retried_full_completions_with_prior_failure_reports_succeeded",
+			obj: map[string]interface{}{
+				"spec":   map[string]interface{}{"suspend": false, "completions": int64(2)},
+				"status": map[string]interface{}{"succeeded": int64(2), "failed": int64(1)},
+			},
+			want: "Succeeded",
+		},
+		{
+			name: "suspended_condition_does_not_overwrite_terminal_condition",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						map[string]interface{}{"type": "Complete", "status": "True"},
+						map[string]interface{}{"type": "Suspended", "status": "True"},
+					},
+				},
+			},
+			want: "Succeeded",
+		},
+		{
 			name: "suspended_spec_reports_suspended",
 			obj: map[string]interface{}{
 				"spec":   map[string]interface{}{"suspend": true},
@@ -5624,7 +5656,8 @@ func TestAttachBatchJobServiceOwnerRef_PatchesAndWarnsWithValidCancelCmd(t *test
 		},
 	}
 	orc := &GKEOrchestrator{namespace: "ml", dynClient: dyn}
-	orc.attachBatchJobServiceOwnerRef("t3-job")
+	orc.syncKubeClient()
+	orc.attachBatchJobServiceOwnerRefWithTarget("t3-job", "", "", "")
 	patchStr := string(patched)
 	if !strings.Contains(patchStr, `"uid":"job-uid-123"`) || !strings.Contains(patchStr, `"controller":true`) || strings.Contains(patchStr, "blockOwnerDeletion") {
 		t.Fatalf("unexpected Service ownerRef patch: %s", patchStr)
@@ -5634,7 +5667,7 @@ func TestAttachBatchJobServiceOwnerRef_PatchesAndWarnsWithValidCancelCmd(t *test
 	patchErr = errors.New("403 forbidden")
 	snap, restore := logging.CaptureForTesting(t)
 	defer restore()
-	orc.attachBatchJobServiceOwnerRef("t3-job")
+	orc.attachBatchJobServiceOwnerRefWithTarget("t3-job", "", "", "")
 	_, errLogs := snap()
 	if !strings.Contains(errLogs, "gcluster job cancel t3-job") || strings.Contains(errLogs, "cancel --name") {
 		t.Errorf("ownerRef patch warning has invalid cancel syntax:\n%s", errLogs)
@@ -5784,37 +5817,50 @@ func TestTier3PreflightAndOwnerRefGKEHint(t *testing.T) {
 	}
 
 	gkeOrc := &GKEOrchestrator{mode: orchestrator.TypeGKE, namespace: "ml", projectID: "proj-1", kubeContext: "gke_proj-1_us-central1_clus-1"}
-	hint := gkeOrc.formatCancelHint("t3-job", "clus-1", "us-central1", gkeOrc.projectID)
+	hint := gkeOrc.formatCancelHintInNamespace("t3-job", "clus-1", "us-central1", gkeOrc.projectID, gkeOrc.namespace)
 	want := "gcluster job cancel t3-job --cluster clus-1 --location us-central1 --project proj-1 --gke-namespace ml"
 	if hint != want {
-		t.Errorf("formatCancelHint(GKE) = %q, want %q", hint, want)
+		t.Errorf("formatCancelHintInNamespace(GKE) = %q, want %q", hint, want)
 	}
 }
 
 func TestCloudStoragePreflight_NotDisabledByGitHubProbeAirGap(t *testing.T) {
 	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
-	shell.SetDefaultAirGapped(true)
+	shell.SetDefaultAirGapped(false)
 	t.Setenv(shell.AirGappedEnvVar, "")
 
-	called := false
 	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.connectivity = &connectivityChecker{
+		getenv: func(string) string { return "" },
+		probe:  func(context.Context) bool { return false },
+	}
+	if orc.isConnected() {
+		t.Fatalf("expected offline GitHub probe")
+	}
+	if shell.IsKnownAirGapped() {
+		t.Fatalf("failed GitHub probe must not mutate global shell.defaultAirGap")
+	}
 	orc.preflightClient = &fakePreflightClient{
 		locations: map[string]bucketLocation{
 			"flat-bkt": {Location: "US-CENTRAL1", LocationType: "region", HierarchicalNamespace: false},
 		},
 	}
 	sm := &StorageManager{orchestrator: orc}
-	// Inline flat bucket without implicit-dirs emits a WARN only when runCloudStoragePreflight actually runs.
 	snap, restore := logging.CaptureForTesting(t)
 	err := sm.runCloudStoragePreflight("proj-1", "us-central1-a", nil, []string{"flat-bkt"}, false)
 	_, errLogs := snap()
 	restore()
-	called = strings.Contains(errLogs, "flat-bkt")
-	if err != nil || !called {
-		t.Fatalf("runCloudStoragePreflight(defaultAirGap=true, env unset) = (err=%v, called=%v), want preflight to execute", err, called)
+	if err != nil || !strings.Contains(errLogs, "flat-bkt") {
+		t.Fatalf("runCloudStoragePreflight after failed GitHub probe = (err=%v, logs=%q), want preflight to execute", err, errLogs)
 	}
 
-	t.Setenv(shell.AirGappedEnvVar, "true")
+	// Explicit GCLUSTER_AIR_GAPPED=true via orchestrator getenv skips preflight, and nil orchestrator must not panic.
+	orc.connectivity.getenv = func(k string) string {
+		if k == shell.AirGappedEnvVar {
+			return "true"
+		}
+		return ""
+	}
 	snap2, restore2 := logging.CaptureForTesting(t)
 	if err := sm.runCloudStoragePreflight("proj-1", "us-central1-a", nil, []string{"flat-bkt"}, false); err != nil {
 		restore2()
@@ -5825,22 +5871,160 @@ func TestCloudStoragePreflight_NotDisabledByGitHubProbeAirGap(t *testing.T) {
 	if strings.Contains(errLogs2, "flat-bkt") {
 		t.Errorf("explicit GCLUSTER_AIR_GAPPED=true must skip runCloudStoragePreflight, got logs:\n%s", errLogs2)
 	}
+	t.Setenv(shell.AirGappedEnvVar, "true")
+	nilOrcSM := &StorageManager{}
+	if err := nilOrcSM.runCloudStoragePreflight("proj-1", "us-central1-a", nil, []string{"flat-bkt"}, false); err != nil {
+		t.Fatalf("runCloudStoragePreflight(nil orchestrator) err = %v, want nil without panic", err)
+	}
 }
 
-func TestGenerateAndApplyJobManifest_DryRunAndLiveOwnerRef(t *testing.T) {
-	orc := newGPUDerivationTestOrc(t)
-	orc.namespace = "ml"
+func TestGenerateAndApplyJobManifest_DryRunLiveOwnerRefAndPartialRollback(t *testing.T) {
 	opts := ManifestOptions{
 		WorkloadName: "t3-apply", FullImageName: "img:v1", CommandToRun: "echo hi",
 		ComputeType: "g2-standard-48", MachineType: "g2-standard-48", ClusterLocation: "us-central1-a",
 		NumSlices: 1, NodesPerSlice: 1, ParallelContainers: 1, TtlSecondsAfterFinished: 3600, TerminationGracePeriodSeconds: 30,
 	}
 	profile := JobProfile{CapacityCount: 4}
-	outPath := filepath.Join(t.TempDir(), "t3.yaml")
-	if err := orc.generateAndApplyJobManifest(opts, profile, outPath, "clus-1", "proj-1"); err != nil {
-		t.Fatalf("generateAndApplyJobManifest(dry-run) err = %v", err)
+
+	t.Run("dry_run_saves_manifest", func(t *testing.T) {
+		orc := newGPUDerivationTestOrc(t)
+		orc.namespace = "ml"
+		outPath := filepath.Join(t.TempDir(), "t3.yaml")
+		if err := orc.generateAndApplyJobManifest(opts, profile, outPath, "clus-1", "proj-1"); err != nil {
+			t.Fatalf("generateAndApplyJobManifest(dry-run) err = %v", err)
+		}
+		if _, err := os.Stat(outPath); err != nil {
+			t.Fatalf("expected dry-run manifest at %s: %v", outPath, err)
+		}
+	})
+
+	t.Run("live_apply_patches_service_owner_ref", func(t *testing.T) {
+		var patched bool
+		dyn := &versionTrackingDynamicClient{
+			getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": "job-uid-live", "labels": map[string]interface{}{workloadLabel: name}},
+				}}, nil
+			},
+			patchByGVR: func(gvr schema.GroupVersionResource, _, _ string, pt types.PatchType, data []byte) (*unstructured.Unstructured, error) {
+				if gvr == serviceGVR && pt == types.MergePatchType && strings.Contains(string(data), "job-uid-live") {
+					patched = true
+				}
+				return &unstructured.Unstructured{}, nil
+			},
+		}
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud compute machine-types describe g2-standard-48 --zone=us-central1-a --format=json": {
+				{ExitCode: 0, Stdout: `{"guestCpus": 48, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "nvidia-l4"}]}`},
+			},
+			"kubectl apply -n ml -f": {{ExitCode: 0, Stdout: "service/t3-apply created\njob.batch/t3-apply created"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.namespace = "ml"
+		orc.SetDynamicClient(dyn)
+		if err := orc.generateAndApplyJobManifest(opts, profile, "", "clus-1", "proj-1"); err != nil {
+			t.Fatalf("generateAndApplyJobManifest(live) err = %v", err)
+		}
+		if !patched {
+			t.Errorf("expected live Tier-3 apply to patch Service ownerReference")
+		}
+	})
+
+	t.Run("partial_apply_failure_rolls_back_unowned_service", func(t *testing.T) {
+		mockClient := &MockKubeClient{
+			Namespace: "ml",
+			Objects: map[string][]unstructured.Unstructured{
+				"services": {{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "t3-apply", "namespace": "ml", "labels": map[string]interface{}{workloadLabel: "t3-apply"}},
+				}}},
+			},
+		}
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud compute machine-types describe g2-standard-48 --zone=us-central1-a --format=json": {
+				{ExitCode: 0, Stdout: `{"guestCpus": 48, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "nvidia-l4"}]}`},
+			},
+			"kubectl apply -n ml -f": {{ExitCode: 1, Stderr: "Error from server (Forbidden): jobs.batch is forbidden"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.namespace = "ml"
+		orc.kubeClient = mockClient
+		err := orc.generateAndApplyJobManifest(opts, profile, "", "clus-1", "proj-1")
+		if err == nil || !strings.Contains(err.Error(), "jobs.batch is forbidden") {
+			t.Fatalf("expected original apply error, got %v", err)
+		}
+		if len(mockClient.Deleted["services"]) != 1 || mockClient.Deleted["services"][0] != "t3-apply" {
+			t.Errorf("expected partial apply to roll back owned Service t3-apply, deleted=%v", mockClient.Deleted)
+		}
+	})
+}
+
+func TestUnqueuedSlicingAndTopologyNodePoolFallback(t *testing.T) {
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get nodes": {{ExitCode: 1, Stderr: "Error from server (Forbidden): nodes is forbidden"}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.addons = addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false}
+	orc.clusterDesc = gkeCluster{
+		NodePools: []gkeJobNodePool{{
+			Config:          gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+			PlacementPolicy: &gkePlacementPolicy{TpuTopology: "2x4"},
+		}},
 	}
-	if _, err := os.Stat(outPath); err != nil {
-		t.Fatalf("expected dry-run manifest at %s: %v", outPath, err)
+	if orc.hasSliceAdmissionCheck() || orc.hasSlicingTopologies() {
+		t.Fatalf("unqueued submits must disable Kueue slicing checks")
 	}
+	if orc.slicingTopologiesChecked {
+		t.Errorf("unqueued short-circuit must not poison slicingTopologiesChecked cache")
+	}
+	if len(mockExec.calls) != 0 {
+		t.Errorf("unqueued slicing checks must run zero kubectl calls, got %v", mockExec.calls)
+	}
+	out, err := orc.queryDiscoveredTopologies("tpu-v6e-slice", "ct6e-standard-4t")
+	if err != nil || out != "2x4" {
+		t.Fatalf("queryDiscoveredTopologies(get nodes 403 with nodePoolTopologies) = (%q, %v), want (\"2x4\", nil)", out, err)
+	}
+}
+
+func TestOrphanedTier3ServiceConflictAndBatchJobWorkloadLookup(t *testing.T) {
+	t.Run("jobset_submit_flags_owned_orphaned_tier3_service", func(t *testing.T) {
+		dyn := &versionTrackingDynamicClient{
+			getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+				if gvr == serviceGVR && name == "orphan-svc" {
+					return &unstructured.Unstructured{Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name, "namespace": ns, "labels": map[string]interface{}{workloadLabel: name}},
+					}}, nil
+				}
+				return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+			},
+		}
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.mode = orchestrator.TypeK8s
+		orc.namespace = "ml"
+		orc.SetDynamicClient(dyn)
+		status, err := orc.getJobStatus("orphan-svc")
+		if err != nil || status != "OrphanedService" {
+			t.Fatalf("getJobStatus(orphaned Tier-3 Service) = (%q, %v), want (OrphanedService, nil)", status, err)
+		}
+	})
+
+	t.Run("findTargetWorkloadForKind_batch_job_skips_jobset_get_and_uses_job_wording", func(t *testing.T) {
+		sawJobSetGet := false
+		dyn := &versionTrackingDynamicClient{
+			getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+				if gvr == jobSetGVR {
+					sawJobSetGet = true
+				}
+				return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+			},
+		}
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.SetDynamicClient(dyn)
+		_, err := orc.findTargetWorkloadForKind("ml", "t3-job", 0, true)
+		if sawJobSetGet {
+			t.Errorf("findTargetWorkloadForKind(isBatchJob=true) must not query jobSetGVR")
+		}
+		if err == nil || !strings.Contains(err.Error(), "failed to find Kueue workload for job t3-job") {
+			t.Errorf("findTargetWorkloadForKind(isBatchJob=true) err = %v, want 'for job t3-job'", err)
+		}
+	})
 }

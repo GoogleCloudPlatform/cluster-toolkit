@@ -30,25 +30,6 @@ func IsKnownAirGapped() bool {
 	return IsAirGappedEnv(os.Getenv)
 }
 
-// IsExplicitlyAirGapped reports whether GCLUSTER_AIR_GAPPED is explicitly set to a truthy value in the environment,
-// ignoring any process-default offline flag cached by lazy GitHub connectivity probes.
-func IsExplicitlyAirGapped() bool {
-	return IsExplicitlyAirGappedEnv(os.Getenv)
-}
-
-// IsExplicitlyAirGappedEnv reports whether GCLUSTER_AIR_GAPPED is explicitly truthy via getenv (or os.Getenv if nil).
-func IsExplicitlyAirGappedEnv(getenv func(string) string) bool {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	switch strings.ToLower(strings.TrimSpace(getenv(AirGappedEnvVar))) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
-}
-
 // IsAirGappedEnv reports whether air-gapped mode is active. An explicit boolean value in GCLUSTER_AIR_GAPPED
 // from getenv (or os.Getenv if nil) overrides the process default; unset, blank, or unrecognized values fall back to the default.
 func IsAirGappedEnv(getenv func(string) string) bool {

@@ -537,12 +537,3 @@ func (s *MySuite) TestIsInteractive_PipedStdoutReturnsFalse(c *C) {
 	c.Assert(isInteractiveWith(0, 1, func(int) bool { return false }), Equals, false)
 	c.Assert(isInteractiveWith(0, 1, func(int) bool { return true }), Equals, true)
 }
-
-func (s *MySuite) TestIsExplicitlyAirGapped_IgnoresProcessDefault(c *C) {
-	defer SetDefaultAirGapped(false)
-	SetDefaultAirGapped(true)
-	c.Assert(IsAirGappedEnv(func(string) string { return "" }), Equals, true)
-	c.Assert(IsExplicitlyAirGappedEnv(func(string) string { return "" }), Equals, false)
-	c.Assert(IsExplicitlyAirGappedEnv(func(string) string { return "true" }), Equals, true)
-	c.Assert(IsExplicitlyAirGappedEnv(func(string) string { return "false" }), Equals, false)
-}

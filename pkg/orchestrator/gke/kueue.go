@@ -367,65 +367,27 @@ func isKueueDeploymentRolledOut(dep *kueueDeployment) bool {
 		dep.Status.AvailableReplicas >= dep.Status.UpdatedReplicas
 }
 
-// CheckAndInstallKueue verifies if Kueue is installed on the GKE cluster, installing or updating it if required.
-func (g *GKEOrchestrator) CheckAndInstallKueue(version string, clusterName string, clusterLocation string) error {
-	kueueCRDInstalled, errCRD := g.isKueueInstalled()
-	if errCRD != nil {
-		return fmt.Errorf("failed to verify Kueue CRD status: %w", errCRD)
+func (g *GKEOrchestrator) prepareKueueManifest(targetVersion string) (string, error) {
+	kueueManifestsURL := fmt.Sprintf("https://github.com/kubernetes-sigs/kueue/releases/download/%s/manifests.yaml", targetVersion)
+	manifestBytes, err := g.downloadManifests(kueueManifestsURL)
+	if err != nil {
+		return "", err
 	}
-	dep, kueueDeploymentInstalled, errDep := g.getKueueDeployment()
-	if errDep != nil {
-		return fmt.Errorf("failed to verify Kueue deployment status: %w", errDep)
+	cleanedManifests, err := g.cleanAndProcessManifests(manifestBytes, g.injectKueueControllerTolerations)
+	if err != nil {
+		return "", err
 	}
-	var currentVersion string
-	if dep != nil {
-		logging.Info("Kueue deployment found.")
-		var errVer error
-		if currentVersion, errVer = g.getKueueVersion(dep); errVer != nil {
-			logging.Info("Warning: Unable to determine installed Kueue version: %v", errVer)
-		}
-	}
-
-	if version == "" {
-		version = defaultKueueVersion
-	} else if !strings.HasPrefix(version, "v") {
-		version = "v" + version
-	}
-
-	needReinstall, reinstallReason := g.evaluateKueueReinstall(kueueCRDInstalled, kueueDeploymentInstalled, currentVersion, version)
-	if needReinstall {
-		if g.checkDynamicSlicingViaGKE() {
-			return fmt.Errorf("automatic Kueue installation/modification blocked: cluster %s is set up for Dynamic-Slicing (found 'PROVISION_ONLY' in node pool placementPolicy). Automatic installation or modification of Kueue could conflict with custom topology configurations. Please install Kueue and required CRDs manually", clusterName)
-		}
-		if g.isAirGapped() {
-			return fmt.Errorf("cannot re-install Kueue (%s) %s; install Kueue %s on the cluster first", reinstallReason, g.airGapReason(), version)
-		}
-
-		if err := g.checkKueueInstallPermissions(version); err != nil {
-			return err
-		}
-
-		if err := g.handleKueueReinstallation(version, reinstallReason); err != nil {
-			return err
-		}
-	} else {
-		if err := g.waitForKueueWebhookFast(dep); err != nil {
-			return fmt.Errorf("kueue is installed but currently unhealthy. Please check deployment health with 'kubectl get deployment kueue-controller-manager -n kueue-system': %w", err)
-		}
-	}
-
-	logging.Info("Kueue is already installed.")
-	return nil
+	return writeGeneratedManifest(cleanedManifests, kueueManifestFile(g.kubeContext))
 }
 
-func (g *GKEOrchestrator) evaluateKueueReinstall(crdInstalled, depInstalled bool, currentVer, targetVer string) (bool, string) {
-	if currentVer != "" && g.isVersionBelow(currentVer, targetVer) {
-		return true, fmt.Sprintf("Current Kueue version %s is below target %s.", currentVer, targetVer)
+func (g *GKEOrchestrator) applyAndWaitKueueManifest(manifestPath, targetVersion, verb string) error {
+	logging.Info("Installing Kueue version %s...", targetVersion)
+	if err := g.applyManifestFile(manifestPath, ""); err != nil {
+		return fmt.Errorf("%w\nTo finish %s Kueue %s from the saved manifest, run:\n  %s",
+			err, verb, targetVersion, kubectlCommandLine(g.kubeContext, "apply", "-f", manifestPath))
 	}
-	if !crdInstalled || !depInstalled {
-		return true, "Kueue installation is incomplete (CRD or Deployment missing)."
-	}
-	return false, ""
+	logging.Info("Kueue components applied successfully.")
+	return g.waitForKueueWebhook()
 }
 
 func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason string) error {
@@ -434,16 +396,7 @@ func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason
 		return fmt.Errorf("user declined to re-install Kueue")
 	}
 
-	kueueManifestsURL := fmt.Sprintf("https://github.com/kubernetes-sigs/kueue/releases/download/%s/manifests.yaml", targetVersion)
-	manifestBytes, err := g.downloadManifests(kueueManifestsURL)
-	if err != nil {
-		return err
-	}
-	cleanedManifests, err := g.cleanAndProcessManifests(manifestBytes, g.injectKueueControllerTolerations)
-	if err != nil {
-		return err
-	}
-	manifestPath, err := writeGeneratedManifest(cleanedManifests, kueueManifestFile(g.kubeContext))
+	manifestPath, err := g.prepareKueueManifest(targetVersion)
 	if err != nil {
 		return err
 	}
@@ -453,13 +406,7 @@ func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason
 		return fmt.Errorf("failed to delete Kueue resources: %w", err)
 	}
 
-	logging.Info("Installing Kueue version %s...", targetVersion)
-	if err := g.applyManifestFile(manifestPath, ""); err != nil {
-		return fmt.Errorf("%w\nTo finish reinstalling Kueue %s from the saved manifest, run:\n  %s",
-			err, targetVersion, kubectlCommandLine(g.kubeContext, "apply", "-f", manifestPath))
-	}
-	logging.Info("Kueue components applied successfully.")
-	if err := g.waitForKueueWebhook(); err != nil {
+	if err := g.applyAndWaitKueueManifest(manifestPath, targetVersion, "reinstalling"); err != nil {
 		return err
 	}
 	return g.installKueueResources(defaultClusterQueue, defaultLocalQueue)
@@ -487,18 +434,12 @@ func normalizeKueueVersion(version string) string {
 	return version
 }
 
-// installKueueOnFreshCluster installs Kueue on a cluster where neither CRD nor controller Deployment exists.
-// It never deletes existing Kueue resources and never installs GKE default queues on TypeK8s clusters.
-func (g *GKEOrchestrator) installKueueOnFreshCluster(targetVersion, clusterName string) error {
-	return g.installKueueOnFreshClusterWithPermCheck(targetVersion, clusterName, true)
-}
-
 func (g *GKEOrchestrator) installKueueOnFreshClusterWithPermCheck(targetVersion, clusterName string, checkPerms bool) error {
 	targetVersion = normalizeKueueVersion(targetVersion)
 	if g.mode != orchestrator.TypeK8s && g.checkDynamicSlicingViaGKE() {
 		return fmt.Errorf("automatic Kueue installation/modification blocked: cluster %s is set up for Dynamic-Slicing (found 'PROVISION_ONLY' in node pool placementPolicy). Automatic installation or modification of Kueue could conflict with custom topology configurations. Please install Kueue and required CRDs manually", clusterName)
 	}
-	if g.isAirGapped() {
+	if g.isOfflineForAddons() {
 		return fmt.Errorf("Kueue is not installed and cannot be downloaded %s; pre-install Kueue %s on the cluster first", g.airGapReason(), targetVersion)
 	}
 	if checkPerms {
@@ -506,26 +447,11 @@ func (g *GKEOrchestrator) installKueueOnFreshClusterWithPermCheck(targetVersion,
 			return err
 		}
 	}
-	kueueManifestsURL := fmt.Sprintf("https://github.com/kubernetes-sigs/kueue/releases/download/%s/manifests.yaml", targetVersion)
-	manifestBytes, err := g.downloadManifests(kueueManifestsURL)
+	manifestPath, err := g.prepareKueueManifest(targetVersion)
 	if err != nil {
 		return err
 	}
-	cleanedManifests, err := g.cleanAndProcessManifests(manifestBytes, g.injectKueueControllerTolerations)
-	if err != nil {
-		return err
-	}
-	manifestPath, err := writeGeneratedManifest(cleanedManifests, kueueManifestFile(g.kubeContext))
-	if err != nil {
-		return err
-	}
-	logging.Info("Installing Kueue version %s...", targetVersion)
-	if err := g.applyManifestFile(manifestPath, ""); err != nil {
-		return fmt.Errorf("%w\nTo finish installing Kueue %s from the saved manifest, run:\n  %s",
-			err, targetVersion, kubectlCommandLine(g.kubeContext, "apply", "-f", manifestPath))
-	}
-	logging.Info("Kueue components applied successfully.")
-	if err := g.waitForKueueWebhook(); err != nil {
+	if err := g.applyAndWaitKueueManifest(manifestPath, targetVersion, "installing"); err != nil {
 		return err
 	}
 	if g.mode != orchestrator.TypeK8s {
@@ -538,15 +464,13 @@ func (g *GKEOrchestrator) installKueueOnFreshClusterWithPermCheck(targetVersion,
 // partialKueueInstallError reports an incomplete Kueue installation without modifying cluster state.
 func (g *GKEOrchestrator) partialKueueInstallError(crdInstalled bool) error {
 	kubectl := func(args ...string) string { return kubectlCommandLine(g.kubeContext, args...) }
+	present, missing := "Deployment kueue-system/kueue-controller-manager", "CRD clusterqueues.kueue.x-k8s.io"
 	if crdInstalled {
-		return fmt.Errorf("Kueue is only partly installed: CRD clusterqueues.kueue.x-k8s.io exists (or could not be read), but Deployment kueue-system/kueue-controller-manager was not found. gcluster made no changes.\n"+
-			"Verify your Kueue installation ('%s' / '%s'), ask your cluster administrator to restore or remove the partial install, or set %s=1 to submit without Kueue",
-			kubectl("get", "deployments", "-n", "kueue-system"),
-			kubectl("get", "crd", "clusterqueues.kueue.x-k8s.io"),
-			disableKueueEnvVar)
+		present, missing = missing, present
 	}
-	return fmt.Errorf("Kueue is only partly installed: Deployment kueue-system/kueue-controller-manager exists (or could not be read), but CRD clusterqueues.kueue.x-k8s.io was not found. gcluster made no changes.\n"+
+	return fmt.Errorf("Kueue is only partly installed: %s exists (or could not be read), but %s was not found. gcluster made no changes.\n"+
 		"Verify your Kueue installation ('%s' / '%s'), ask your cluster administrator to restore or remove the partial install, or set %s=1 to submit without Kueue",
+		present, missing,
 		kubectl("get", "deployments", "-n", "kueue-system"),
 		kubectl("get", "crd", "clusterqueues.kueue.x-k8s.io"),
 		disableKueueEnvVar)
@@ -567,27 +491,35 @@ func listKueueWorkloads(client dynamic.Interface, ns, uid string) (*unstructured
 	return client.Resource(fallbackGVR).Namespace(ns).List(context.TODO(), listOpts)
 }
 
-func (g *GKEOrchestrator) isKueueInstalled() (bool, error) {
-	installed, _, err := g.isKueueCRDInstalled()
-	return installed, err
+func kubectlCommandError(prefix string, res shell.CommandResult) error {
+	detail := strings.TrimSpace(res.Stderr + "\n" + res.Stdout)
+	if detail == "" && res.Err != nil {
+		return fmt.Errorf("%s: %w", prefix, res.Err)
+	}
+	if res.Err != nil {
+		return fmt.Errorf("%s: %s (%w)", prefix, detail, res.Err)
+	}
+	return fmt.Errorf("%s: %s", prefix, detail)
 }
 
 func (g *GKEOrchestrator) isKueueCRDInstalled() (bool, bool, error) {
-	res := g.kubectl("get", "crd", "clusterqueues.kueue.x-k8s.io")
+	res := g.kubectl("get", "crd", "clusterqueues.kueue.x-k8s.io", kubectlReadTimeout)
 	if res.ExitCode == 0 {
 		logging.Info("Kueue CRD found.")
 		return true, false, nil
 	}
-	errStr := strings.ToLower(res.Stderr + " " + res.Stdout)
-	if strings.Contains(errStr, "notfound") || strings.Contains(errStr, "not found") {
-		logging.Info("Kueue CRD not found.")
-		return false, false, nil
+	cmdErr := kubectlCommandError("failed to check for Kueue CRD", res)
+	if res.ExitCode != -1 {
+		if k8s.IsNotFoundOrNoMatchError(cmdErr) {
+			logging.Info("Kueue CRD not found.")
+			return false, false, nil
+		}
+		if k8s.IsForbiddenError(cmdErr) {
+			logging.Warn("Insufficient RBAC permissions to read Kueue CRD (403 Forbidden). Assuming Kueue is installed in shared cluster.")
+			return true, true, nil
+		}
 	}
-	if strings.Contains(errStr, "forbidden") {
-		logging.Warn("Insufficient RBAC permissions to read Kueue CRD (403 Forbidden). Assuming Kueue is installed in shared cluster.")
-		return true, true, nil
-	}
-	return false, false, fmt.Errorf("failed to check for Kueue CRD: %s\n%s", res.Stderr, res.Stdout)
+	return false, false, cmdErr
 }
 
 // getKueueDeployment retrieves the Kueue controller manager deployment from the cluster.
@@ -597,7 +529,7 @@ func (g *GKEOrchestrator) getKueueDeployment() (*kueueDeployment, bool, error) {
 }
 
 func (g *GKEOrchestrator) getKueueDeploymentWithStatus() (*kueueDeployment, bool, bool, error) {
-	res := g.kubectl("get", "deployment", "kueue-controller-manager", "-n", "kueue-system", "-o", "json")
+	res := g.kubectl("get", "deployment", "kueue-controller-manager", "-n", "kueue-system", "-o", "json", kubectlReadTimeout)
 	if res.ExitCode == 0 {
 		var dep kueueDeployment
 		if err := json.Unmarshal([]byte(res.Stdout), &dep); err != nil {
@@ -605,16 +537,18 @@ func (g *GKEOrchestrator) getKueueDeploymentWithStatus() (*kueueDeployment, bool
 		}
 		return &dep, true, false, nil
 	}
-	errStr := strings.ToLower(res.Stderr + " " + res.Stdout)
-	if strings.Contains(errStr, "notfound") || strings.Contains(errStr, "not found") {
-		logging.Info("Kueue deployment not found.")
-		return nil, false, false, nil
+	cmdErr := kubectlCommandError("failed to check for Kueue deployment", res)
+	if res.ExitCode != -1 {
+		if k8s.IsNotFoundOrNoMatchError(cmdErr) {
+			logging.Info("Kueue deployment not found.")
+			return nil, false, false, nil
+		}
+		if k8s.IsForbiddenError(cmdErr) {
+			logging.Warn("Insufficient RBAC permissions to read Kueue deployment in kueue-system (403 Forbidden). Assuming Kueue deployment is installed in shared cluster.")
+			return nil, true, true, nil
+		}
 	}
-	if strings.Contains(errStr, "forbidden") {
-		logging.Warn("Insufficient RBAC permissions to read Kueue deployment in kueue-system (403 Forbidden). Assuming Kueue deployment is installed in shared cluster.")
-		return nil, true, true, nil
-	}
-	return nil, false, false, fmt.Errorf("failed to check for Kueue deployment: %s\n%s", res.Stderr, res.Stdout)
+	return nil, false, false, cmdErr
 }
 
 // getKueueVersion extracts the deployed version of the Kueue controller from its Deployment object.

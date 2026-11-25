@@ -1393,3 +1393,31 @@ func TestDiscoverInventory_SingleHost1tAnd8tSliceRejection(t *testing.T) {
 		t.Fatalf("1t pool = (%+v, %v), want empty DefaultSliceName (rejecting 2x4)", inv1t, err)
 	}
 }
+
+func TestIsNotFoundOrNoMatchError(t *testing.T) {
+	t.Parallel()
+	gr := schema.GroupResource{Group: "jobset.x-k8s.io", Resource: "jobsets"}
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil", err: nil, want: false},
+		{name: "typed_not_found", err: apierrors.NewNotFound(gr, "j1"), want: true},
+		{name: "typed_no_match", err: &meta.NoResourceMatchError{PartialResource: TPUSliceGVR}, want: true},
+		{name: "typed_forbidden_with_misleading_msg", err: apierrors.NewForbidden(gr, "j1", errors.New("could not find the requested resource")), want: false},
+		{name: "kubectl_not_found_stderr", err: errors.New(`Error from server (NotFound): jobsets.jobset.x-k8s.io "j1" not found`), want: true},
+		{name: "kubectl_no_resource_type", err: errors.New(`error: the server doesn't have a resource type "jobsets"`), want: true},
+		{name: "kubectl_no_matches_for_kind", err: errors.New(`no matches for kind "JobSet" in version "jobset.x-k8s.io/v1alpha2"`), want: true},
+		{name: "kubectl_could_not_find_resource", err: errors.New(`the server could not find the requested resource`), want: true},
+		{name: "forbidden_on_resource_named_notfound", err: errors.New(`Error from server (Forbidden): jobs.batch "job-notfound" is forbidden`), want: false},
+		{name: "missing_exec_plugin_not_found", err: errors.New(`exec: "gke-gcloud-auth-plugin": executable file not found in $PATH`), want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsNotFoundOrNoMatchError(tc.err); got != tc.want {
+				t.Errorf("IsNotFoundOrNoMatchError(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}

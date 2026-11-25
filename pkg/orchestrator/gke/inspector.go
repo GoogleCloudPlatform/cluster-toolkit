@@ -16,6 +16,7 @@ package gke
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
@@ -98,7 +99,8 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 
 	// Initial header in log
 	_, _ = fmt.Fprintf(outputTarget, "==================\nGCLUSTER INSPECT OUTPUT:\n==================\n\n")
-	if g.jobSetEnabled() {
+	hasJobSet := g.hasJobSetInstalled()
+	if hasJobSet {
 		g.logSPSSummaryIfInstance(outputTarget, opts.WorkloadName, targetNamespace)
 	}
 
@@ -121,7 +123,6 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	if hasKueue {
 		g.logKueueResources(writer)
 	}
-	hasJobSet := g.hasJobSetInstalled()
 	if hasJobSet {
 		writer.runAndLog("JobSet: Deployment Details", "kubectl", "describe", "Deployment", "jobset-controller-manager", "-n", "jobset-system")
 		writer.runAndLog("JobSet: JobSet Controller Manager Logs (tail 100)", "kubectl", "logs", "deployment/jobset-controller-manager", "-n", "jobset-system", "-c", "manager", "--tail=100")
@@ -259,7 +260,7 @@ func (g *GKEOrchestrator) describeWorkloadResource(writer *inspectWriter, worklo
 	checkBatchJob := !hasJobSet
 	if hasJobSet {
 		exitCode, stderr := writer.runAndLogResult(fmt.Sprintf("JobSet: Config for %s", workloadName), "kubectl", "describe", "jobsets", workloadName, "-n", workloadNamespace)
-		checkBatchJob = exitCode != 0 && isNotFoundOrNoMatchStderr(stderr)
+		checkBatchJob = exitCode != 0 && k8s.IsNotFoundOrNoMatchError(errors.New(stderr))
 	}
 	if !checkBatchJob {
 		return isBatchJob

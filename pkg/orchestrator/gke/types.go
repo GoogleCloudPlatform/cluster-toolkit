@@ -200,8 +200,13 @@ type submissionSession struct {
 	// inventory caches pure-Kubernetes node, slice, and label-scheme discovery results for the current run.
 	inventory *k8s.Inventory
 	// addons caches the resolved 3-state JobSet/Kueue matrix once per submission.
-	addons         addonPlan
-	probeSetAirGap bool
+	addons       addonPlan
+	githubProbed bool
+	githubOnline bool
+	// jobSetAPI* caches the lightweight /apis/jobset.x-k8s.io probe per kubeContext on 403 fallback paths.
+	jobSetAPIProbed  bool
+	jobSetAPIPresent bool
+	jobSetAPIContext string
 }
 
 func newSubmissionSession() submissionSession {
@@ -1124,14 +1129,11 @@ type addonPlan struct {
 	kueueEnabled  bool
 }
 
-// connectivityChecker lazily checks outbound GitHub reachability once per run.
-// When an offline probe runs without an explicit GCLUSTER_AIR_GAPPED=false override,
-// GKEOrchestrator caches the offline state via shell.SetDefaultAirGapped(true) for the run.
+// connectivityChecker holds injectable environment and GitHub reachability probe hooks.
+// Per-submission probe results are cached in submissionSession (githubProbed/githubOnline).
 type connectivityChecker struct {
 	getenv func(string) string
 	probe  func(ctx context.Context) bool
-	once   sync.Once
-	online bool
 }
 
 // batchJobInfoJSON captures the fields needed by GetJobLogs when falling back to a standalone batch/v1 Job.

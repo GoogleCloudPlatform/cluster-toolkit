@@ -2376,7 +2376,11 @@ func (sm *StorageManager) validateStorageClassExists(storageClass string, dryRun
 }
 
 func (sm *StorageManager) runCloudStoragePreflight(projectID, clusterLocation string, profileMounts []profileMount, inlineBuckets []string, dryRun bool) error {
-	if shell.IsExplicitlyAirGapped() {
+	var getenv func(string) string
+	if sm.orchestrator != nil {
+		getenv = sm.orchestrator.getenv()
+	}
+	if shell.IsAirGappedEnv(getenv) {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), storageAPITimeout)
