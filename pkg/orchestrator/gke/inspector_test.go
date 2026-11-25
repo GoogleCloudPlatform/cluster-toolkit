@@ -996,3 +996,30 @@ func TestInspectCluster_JobSetNotFoundSkipsSPSJobSetProbe(t *testing.T) {
 		}
 	}
 }
+
+func TestDescribeWorkloadResource_ForbiddenJobSetFallsBackToTier3Job(t *testing.T) {
+	jobJSON := `{"metadata":{"name":"t3-rb","labels":{"gcluster.google.com/workload":"t3-rb"}},"spec":{"parallelism":1},"status":{"active":1}}`
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl describe jobsets t3-rb -n ml": {{ExitCode: 1, Stderr: `Error from server (Forbidden): jobsets.jobset.x-k8s.io "t3-rb" is forbidden`}},
+		"kubectl get job t3-rb -n ml -o json":  {{ExitCode: 0, Stdout: jobJSON}},
+		"kubectl describe job t3-rb -n ml":     {{ExitCode: 0, Stdout: "Name: t3-rb"}},
+		"kubectl describe service t3-rb -n ml": {{ExitCode: 0, Stdout: "ClusterIP: None"}},
+		"kubectl describe workloads job-t3-rb": {{ExitCode: 0, Stdout: "Workload: job-t3-rb"}},
+		"kubectl get pods -l gcluster.google.com/workload=t3-rb,batch.kubernetes.io/job-name=t3-rb -n ml -o wide": {{ExitCode: 0, Stdout: "t3-rb-0 Running"}},
+		"kubectl describe pods -l gcluster.google.com/workload=t3-rb,batch.kubernetes.io/job-name=t3-rb -n ml":    {{ExitCode: 0, Stdout: "Events: <none>"}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	var buf strings.Builder
+	w := &inspectWriter{writer: &buf, orc: orc}
+	orc.inspectWorkload(w, "t3-rb", "ml", true, true)
+	out := buf.String()
+	joined := strings.Join(mockExec.calls, "\n")
+	if !strings.Contains(out, "is forbidden") {
+		t.Errorf("expected 403 JobSet error logged verbatim, got:\n%s", out)
+	}
+	for _, want := range []string{"describe job t3-rb -n ml", "describe service t3-rb -n ml", "describe workloads job-t3-rb", "batch.kubernetes.io/job-name=t3-rb"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected fallback inspect call %q, calls:\n%s", want, joined)
+		}
+	}
+}

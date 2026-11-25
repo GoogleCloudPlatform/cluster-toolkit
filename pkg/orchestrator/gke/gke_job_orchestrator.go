@@ -34,6 +34,7 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -931,6 +932,9 @@ func (g *GKEOrchestrator) validateJobConflicts(job orchestrator.JobDefinition) e
 	if status != "" {
 		ns := k8s.FirstNonEmpty(g.namespace, job.GKENamespace)
 		hint := g.formatCancelHintInNamespace(job.WorkloadName, job.ClusterName, job.ClusterLocation, job.ProjectID, ns)
+		if status == orphanedTier3ServiceStatus {
+			return fmt.Errorf("a leftover headless Service named '%s' from a previous job already exists in namespace '%s'. You can remove it using '%s' or resubmit this workload with a different name using '--name'", job.WorkloadName, ns, hint)
+		}
 		return fmt.Errorf("job with name '%s' already exists in state '%s'. You can cancel the existing job using '%s' or resubmit this workload with a different name using '--name'", job.WorkloadName, status, hint)
 	}
 	return nil
@@ -1549,11 +1553,12 @@ func (g *GKEOrchestrator) queryDiscoveredTopologies(accelLabel string, machineTy
 	if output == "" {
 		res := g.kubectl("get", "nodes", "-o", "jsonpath={range .items[*]}{.metadata.labels.cloud\\.google\\.com/gke-tpu-topology}{\"\\n\"}{end}", "-l", selector)
 		if res.ExitCode != 0 {
-			if len(nodePoolTopologies) > 0 {
-				logging.Warn("Failed to query Nodes for topology (%s); falling back to node pool metadata topologies.", strings.TrimSpace(res.Stderr))
+			rawErr := errors.New(strings.TrimSpace(res.Stderr + "\n" + res.Stdout))
+			if res.ExitCode != -1 && k8s.IsForbiddenError(rawErr) {
+				logging.Warn("Insufficient RBAC permissions to query Nodes for topology (403 Forbidden); falling back to node pool metadata topologies.")
 				return strings.Join(nodePoolTopologies, "\n"), nil
 			}
-			return "", fmt.Errorf("failed to query Nodes for topology: %s", res.Stderr)
+			return "", kubectlCommandError("failed to query Nodes for topology", res)
 		}
 		output = strings.TrimSpace(res.Stdout)
 	}
@@ -1698,7 +1703,12 @@ func (g *GKEOrchestrator) rollbackPartialBatchJobService(name, clusterName, loca
 		return
 	}
 	_, err := kc.GetResource(jobGVR, ns, name)
+	if err == nil {
+		return
+	}
 	if !apierrors.IsNotFound(err) {
+		logging.Warn("Could not verify whether batch/v1 Job %q exists in namespace %q after apply failure (%v); a headless Service may remain. Run '%s' if cleanup is needed.",
+			name, ns, err, g.formatCancelHintInNamespace(name, clusterName, location, projectID, ns))
 		return
 	}
 	if _, delErr := g.deleteOwnedFallbackService(ns, name); delErr != nil {
@@ -1722,28 +1732,52 @@ func (g *GKEOrchestrator) attachBatchJobServiceOwnerRefWithTarget(name, clusterN
 	defer cancel()
 
 	jobUID, ok := g.lookupOwnedBatchJobUID(ctx, ns, name)
-	if !ok || !g.isOwnedServicePresent(ctx, ns, name) {
+	if !ok {
 		return
 	}
-	patchBytes, err := json.Marshal(map[string]interface{}{
-		"metadata": map[string]interface{}{
-			"ownerReferences": []map[string]interface{}{
-				{
-					"apiVersion": "batch/v1",
-					"kind":       "Job",
-					"name":       name,
-					"uid":        jobUID,
-					"controller": true,
-				},
-			},
-		},
-	})
-	if err != nil {
+	svcObj, ok := g.lookupOwnedServiceForOwnerRef(ctx, ns, name)
+	if !ok {
 		return
 	}
-	if _, err := g.dynClient.Resource(serviceGVR).Namespace(ns).Patch(ctx, name, k8stypes.MergePatchType, patchBytes, metav1.PatchOptions{}); err != nil {
+	patchBytes, ok := buildOwnerRefJSONPatch(svcObj.GetOwnerReferences(), name, jobUID)
+	if !ok {
+		return
+	}
+	if _, err := g.dynClient.Resource(serviceGVR).Namespace(ns).Patch(ctx, name, k8stypes.JSONPatchType, patchBytes, metav1.PatchOptions{}); err != nil {
 		logging.Warn("Could not attach Job ownerReference to headless Service %q in namespace %q (%v); run '%s' to clean up the Service after the Job expires.", name, ns, err, g.formatCancelHintInNamespace(name, clusterName, location, projectID, ns))
 	}
+}
+
+func buildOwnerRefJSONPatch(existing []metav1.OwnerReference, name, jobUID string) ([]byte, bool) {
+	for _, ref := range existing {
+		if string(ref.UID) == jobUID {
+			return nil, false
+		}
+		if ref.Controller != nil && *ref.Controller {
+			return nil, false
+		}
+	}
+	ownerRef := map[string]interface{}{
+		"apiVersion": "batch/v1",
+		"kind":       "Job",
+		"name":       name,
+		"uid":        jobUID,
+		"controller": true,
+	}
+	patchOp := map[string]interface{}{
+		"op":    "add",
+		"path":  "/metadata/ownerReferences",
+		"value": []interface{}{ownerRef},
+	}
+	if len(existing) > 0 {
+		patchOp["path"] = "/metadata/ownerReferences/-"
+		patchOp["value"] = ownerRef
+	}
+	patchBytes, err := json.Marshal([]interface{}{patchOp})
+	if err != nil {
+		return nil, false
+	}
+	return patchBytes, true
 }
 
 func (g *GKEOrchestrator) formatCancelHintInNamespace(name, clusterName, location, projectID, ns string) string {
@@ -1778,15 +1812,18 @@ func (g *GKEOrchestrator) lookupOwnedBatchJobUID(ctx context.Context, ns, name s
 	return string(jobObj.GetUID()), true
 }
 
-func (g *GKEOrchestrator) isOwnedServicePresent(ctx context.Context, ns, name string) bool {
+func (g *GKEOrchestrator) lookupOwnedServiceForOwnerRef(ctx context.Context, ns, name string) (*unstructured.Unstructured, bool) {
 	svcObj, err := g.dynClient.Resource(serviceGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		if !k8s.IsNotFoundOrNoMatchError(err) {
 			logging.Warn("Could not inspect headless Service %q before attaching ownerReferences: %v", name, err)
 		}
-		return false
+		return nil, false
 	}
-	return svcObj != nil && svcObj.GetLabels()[workloadLabel] == name && !isJobSetOwnedJob(svcObj)
+	if svcObj == nil || svcObj.GetLabels()[workloadLabel] != name || isJobSetOwnedJob(svcObj) {
+		return nil, false
+	}
+	return svcObj, true
 }
 
 // TODO: Make this a dynamic lookup using cloud.google.com/gke-tpu-accelerator & cloud.google.com/gke-accelerator
@@ -1918,7 +1955,9 @@ func (g *GKEOrchestrator) getPodAggregatedStatus(client dynamic.Interface, ns st
 	listOpts := metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("gcluster.google.com/workload=%s", workloadName),
 	}
-	podList, err := client.Resource(gvrPod).Namespace(ns).List(context.TODO(), listOpts)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultKubeClientTimeout)
+	defer cancel()
+	podList, err := client.Resource(gvrPod).Namespace(ns).List(ctx, listOpts)
 	if err != nil {
 		return "", err
 	}
@@ -1955,99 +1994,128 @@ func (g *GKEOrchestrator) getPodAggregatedStatus(client dynamic.Interface, ns st
 	return "Running", nil
 }
 
+const orphanedTier3ServiceStatus = "orphaned-service"
+
 func (g *GKEOrchestrator) getJobStatus(name string) (string, error) {
 	client, err := g.getDynamicClient()
 	if err != nil {
 		return "", err
 	}
-	if !g.jobSetEnabled() {
-		return g.getBatchJobStatusWithCrossTierCheck(client, name)
+	if g.jobSetEnabled() {
+		status, noMatch, err := g.lookupJobSetConflict(client, name, true)
+		if err != nil || status != "" {
+			return status, err
+		}
+		if status, err := g.lookupBatchJobConflict(client, name, noMatch); err != nil || status != "" {
+			return status, err
+		}
+		return g.lookupServiceConflict(client, name, !noMatch)
 	}
-	status, err := g.getJobSetStatusForConflict(client, name)
-	if err != nil || status != "" {
+	if status, err := g.lookupBatchJobConflict(client, name, true); err != nil || status != "" {
 		return status, err
 	}
-	status, err = g.getOwnedBatchJobStatusIfPresent(client, name)
-	if err != nil || status != "" {
+	if status, _, err := g.lookupJobSetConflict(client, name, false); err != nil || status != "" {
 		return status, err
 	}
-	return g.getOwnedOrphanedServiceStatus(client, name), nil
+	return g.lookupServiceConflict(client, name, false)
 }
 
-// getOwnedOrphanedServiceStatus detects a leftover gcluster-managed Tier-3 headless Service
-// (not owned by a JobSet) in g.namespace so a subsequent JobSet submit fails with a cancel hint
-// instead of colliding inside jobset-controller Service creation.
-func (g *GKEOrchestrator) getOwnedOrphanedServiceStatus(client dynamic.Interface, name string) string {
-	if g.namespace == "" || name == "" {
-		return ""
+func (g *GKEOrchestrator) lookupJobSetConflict(client dynamic.Interface, name string, strict bool) (string, bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultKubeClientTimeout)
+	defer cancel()
+	if g.namespace != "" && (!strict || g.mode == orchestrator.TypeK8s) {
+		return g.lookupNamespacedJobSetConflict(ctx, client, g.namespace, name, strict)
 	}
-	svc, err := client.Resource(serviceGVR).Namespace(g.namespace).Get(context.TODO(), name, metav1.GetOptions{})
-	if err != nil || svc == nil {
-		return ""
-	}
-	if svc.GetLabels()[workloadLabel] == name && !isJobSetOwnedJob(svc) {
-		return "OrphanedService"
-	}
-	return ""
-}
-
-func (g *GKEOrchestrator) getJobSetStatusForConflict(client dynamic.Interface, name string) (string, error) {
-	if g.mode == orchestrator.TypeK8s && g.namespace != "" {
-		return g.getNamespacedJobSetStatus(client, g.namespace, name)
-	}
-
-	optsSelector := metav1.ListOptions{
+	list, err := client.Resource(jobSetGVR).Namespace("").List(ctx, metav1.ListOptions{
 		FieldSelector: fmt.Sprintf("metadata.name=%s", name),
-	}
-	list, err := client.Resource(jobSetGVR).Namespace("").List(context.TODO(), optsSelector)
+	})
 	if err != nil {
 		if k8s.IsNotFoundOrNoMatchError(err) {
-			return g.getBatchJobStatus(client, name)
+			return "", true, nil
 		}
-		if k8s.IsForbiddenError(err) && g.namespace != "" {
-			return g.getNamespacedJobSetStatus(client, g.namespace, name)
+		if k8s.IsForbiddenError(err) {
+			if strict && g.namespace != "" {
+				return g.lookupNamespacedJobSetConflict(ctx, client, g.namespace, name, true)
+			}
+			if !strict {
+				return "", false, nil
+			}
 		}
-		return "", fmt.Errorf("failed to search for jobset %s across namespaces: %w", name, err)
+		return "", false, fmt.Errorf("failed to search for jobset %s across namespaces: %w", name, err)
 	}
-
-	if len(list.Items) == 0 {
-		return "", nil
-	}
-
 	if len(list.Items) > 1 {
-		return "", fmt.Errorf("found multiple jobsets named %s in different namespaces; this is not currently supported", name)
+		return "", false, fmt.Errorf("found multiple jobsets named %s in different namespaces; this is not currently supported", name)
 	}
-
-	return g.resolveWorkloadObjectStatus(client, name, list.Items[0], false)
+	if len(list.Items) == 0 {
+		return "", false, nil
+	}
+	st, err := g.resolveWorkloadObjectStatus(client, name, list.Items[0], false)
+	return st, false, err
 }
 
-func (g *GKEOrchestrator) getOwnedBatchJobStatusIfPresent(client dynamic.Interface, name string) (string, error) {
-	if g.namespace != "" {
-		return g.getNamespacedOwnedBatchJobStatus(client, g.namespace, name)
+func isCRDMissingError(err error) bool {
+	if meta.IsNoMatchError(err) {
+		return true
 	}
-	return g.listOwnedBatchJobStatus(client, name)
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "could not find the requested resource") ||
+		strings.Contains(msg, "doesn't have a resource type") ||
+		strings.Contains(msg, "no matches for kind")
 }
 
-func (g *GKEOrchestrator) getNamespacedOwnedBatchJobStatus(client dynamic.Interface, ns, name string) (string, error) {
-	obj, err := client.Resource(jobGVR).Namespace(ns).Get(context.TODO(), name, metav1.GetOptions{})
+func (g *GKEOrchestrator) lookupNamespacedJobSetConflict(ctx context.Context, client dynamic.Interface, ns, name string, strict bool) (string, bool, error) {
+	obj, err := client.Resource(jobSetGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		if k8s.IsNotFoundOrNoMatchError(err) || k8s.IsForbiddenError(err) {
+		if k8s.IsNotFoundOrNoMatchError(err) {
+			return "", isCRDMissingError(err), nil
+		}
+		if !strict && k8s.IsForbiddenError(err) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("failed to check existing jobset %s in namespace %s: %w", name, ns, err)
+	}
+	if obj == nil {
+		return "", false, nil
+	}
+	st, err := g.resolveWorkloadObjectStatus(client, name, *obj, false)
+	return st, false, err
+}
+
+func (g *GKEOrchestrator) lookupBatchJobConflict(client dynamic.Interface, name string, strict bool) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultKubeClientTimeout)
+	defer cancel()
+	if g.namespace != "" {
+		return g.lookupNamespacedBatchJobConflict(ctx, client, g.namespace, name, strict)
+	}
+	return g.lookupClusterBatchJobConflict(ctx, client, name, strict)
+}
+
+func (g *GKEOrchestrator) lookupNamespacedBatchJobConflict(ctx context.Context, client dynamic.Interface, ns, name string, strict bool) (string, error) {
+	obj, err := client.Resource(jobGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if k8s.IsNotFoundOrNoMatchError(err) || (!strict && k8s.IsForbiddenError(err)) {
 			return "", nil
 		}
 		return "", fmt.Errorf("failed to check existing batch/v1 job %s in namespace %s: %w", name, ns, err)
 	}
-	if obj != nil && obj.GetLabels()[workloadLabel] == name && !isJobSetOwnedJob(obj) {
-		return g.resolveWorkloadObjectStatus(client, name, *obj, true)
+	if obj == nil {
+		return "", nil
 	}
-	return "", nil
+	if isJobSetOwnedJob(obj) || obj.GetLabels()[workloadLabel] != name {
+		if strict {
+			return "", fmt.Errorf("a batch/v1 Job named %q already exists in namespace %q (not managed by gcluster); resubmit with a different --name", name, ns)
+		}
+		return "", nil
+	}
+	return g.resolveWorkloadObjectStatus(client, name, *obj, true)
 }
 
-func (g *GKEOrchestrator) listOwnedBatchJobStatus(client dynamic.Interface, name string) (string, error) {
-	list, err := client.Resource(jobGVR).Namespace("").List(context.TODO(), metav1.ListOptions{
+func (g *GKEOrchestrator) lookupClusterBatchJobConflict(ctx context.Context, client dynamic.Interface, name string, strict bool) (string, error) {
+	list, err := client.Resource(jobGVR).Namespace("").List(ctx, metav1.ListOptions{
 		FieldSelector: fmt.Sprintf("metadata.name=%s", name),
 	})
 	if err != nil {
-		if k8s.IsNotFoundOrNoMatchError(err) || k8s.IsForbiddenError(err) {
+		if !strict && (k8s.IsNotFoundOrNoMatchError(err) || k8s.IsForbiddenError(err)) {
 			return "", nil
 		}
 		return "", fmt.Errorf("failed to search for batch/v1 job %s across namespaces: %w", name, err)
@@ -2060,124 +2128,32 @@ func (g *GKEOrchestrator) listOwnedBatchJobStatus(client dynamic.Interface, name
 	return "", nil
 }
 
-func (g *GKEOrchestrator) getBatchJobStatusWithCrossTierCheck(client dynamic.Interface, name string) (string, error) {
-	status, err := g.getBatchJobStatusOnly(client, name)
-	if err != nil || status != "" {
-		return status, err
+func (g *GKEOrchestrator) lookupServiceConflict(client dynamic.Interface, name string, checkOwnedOrphan bool) (string, error) {
+	if g.namespace == "" || name == "" {
+		return "", nil
 	}
-	if jsStatus, jsErr := g.getJobSetStatusBestEffort(client, name); jsErr != nil || jsStatus != "" {
-		return jsStatus, jsErr
-	}
-	if g.namespace != "" {
-		if svcErr := g.checkUnownedServiceConflict(client, g.namespace, name); svcErr != nil {
-			return "", svcErr
+	ctx, cancel := context.WithTimeout(context.Background(), defaultKubeClientTimeout)
+	defer cancel()
+	svc, err := client.Resource(serviceGVR).Namespace(g.namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if k8s.IsNotFoundOrNoMatchError(err) || k8s.IsForbiddenError(err) {
+			return "", nil
 		}
+		return "", fmt.Errorf("failed to check existing service %s in namespace %s: %w", name, g.namespace, err)
 	}
-	return "", nil
-}
-
-func (g *GKEOrchestrator) getJobSetStatusBestEffort(client dynamic.Interface, name string) (string, error) {
-	if g.namespace != "" {
-		obj, err := client.Resource(jobSetGVR).Namespace(g.namespace).Get(context.TODO(), name, metav1.GetOptions{})
-		if err != nil {
-			if k8s.IsNotFoundOrNoMatchError(err) || k8s.IsForbiddenError(err) {
-				return "", nil
-			}
-			return "", fmt.Errorf("failed to check existing jobset %s in namespace %s: %w", name, g.namespace, err)
-		}
-		if obj != nil {
-			return g.resolveWorkloadObjectStatus(client, name, *obj, false)
+	if svc == nil {
+		return "", nil
+	}
+	if svc.GetLabels()[workloadLabel] == name && !isJobSetOwnedJob(svc) {
+		if checkOwnedOrphan {
+			return orphanedTier3ServiceStatus, nil
 		}
 		return "", nil
 	}
-	list, err := client.Resource(jobSetGVR).Namespace("").List(context.TODO(), metav1.ListOptions{
-		FieldSelector: fmt.Sprintf("metadata.name=%s", name),
-	})
-	if err != nil {
-		if k8s.IsNotFoundOrNoMatchError(err) || k8s.IsForbiddenError(err) {
-			return "", nil
-		}
-		return "", fmt.Errorf("failed to search for jobset %s across namespaces: %w", name, err)
-	}
-	if len(list.Items) == 1 {
-		return g.resolveWorkloadObjectStatus(client, name, list.Items[0], false)
-	}
-	if len(list.Items) > 1 {
-		return "", fmt.Errorf("found multiple jobsets named %s in different namespaces; this is not currently supported", name)
+	if !checkOwnedOrphan {
+		return "", fmt.Errorf("a Kubernetes Service named %q already exists in namespace %q (not managed by gcluster); resubmit with a different --name", name, g.namespace)
 	}
 	return "", nil
-}
-
-func (g *GKEOrchestrator) getNamespacedJobSetStatus(client dynamic.Interface, ns, name string) (string, error) {
-	obj, err := client.Resource(jobSetGVR).Namespace(ns).Get(context.TODO(), name, metav1.GetOptions{})
-	if err != nil {
-		if k8s.IsNotFoundOrNoMatchError(err) {
-			return "", nil
-		}
-		return "", fmt.Errorf("failed to check existing jobset %s in namespace %s: %w", name, ns, err)
-	}
-	return g.resolveWorkloadObjectStatus(client, name, *obj, false)
-}
-
-func (g *GKEOrchestrator) getBatchJobStatus(client dynamic.Interface, name string) (string, error) {
-	status, err := g.getBatchJobStatusOnly(client, name)
-	if err != nil || status != "" {
-		return status, err
-	}
-	if g.namespace != "" {
-		if svcErr := g.checkUnownedServiceConflict(client, g.namespace, name); svcErr != nil {
-			return "", svcErr
-		}
-	}
-	return "", nil
-}
-
-func (g *GKEOrchestrator) getBatchJobStatusOnly(client dynamic.Interface, name string) (string, error) {
-	ns := g.namespace
-	if ns != "" {
-		return g.getNamespacedBatchJobStatus(client, ns, name)
-	}
-	optsSelector := metav1.ListOptions{
-		FieldSelector: fmt.Sprintf("metadata.name=%s", name),
-	}
-	list, err := client.Resource(jobGVR).Namespace("").List(context.TODO(), optsSelector)
-	if err != nil {
-		return "", fmt.Errorf("failed to search for batch/v1 job %s across namespaces: %w", name, err)
-	}
-	for i := range list.Items {
-		if list.Items[i].GetLabels()[workloadLabel] == name {
-			return g.resolveWorkloadObjectStatus(client, name, list.Items[i], true)
-		}
-	}
-	return "", nil
-}
-
-func (g *GKEOrchestrator) getNamespacedBatchJobStatus(client dynamic.Interface, ns, name string) (string, error) {
-	obj, err := client.Resource(jobGVR).Namespace(ns).Get(context.TODO(), name, metav1.GetOptions{})
-	if err == nil && obj != nil {
-		if obj.GetLabels()[workloadLabel] != name {
-			return "", fmt.Errorf("a batch/v1 Job named %q already exists in namespace %q (not managed by gcluster); resubmit with a different --name", name, ns)
-		}
-		return g.resolveWorkloadObjectStatus(client, name, *obj, true)
-	}
-	if err != nil && !k8s.IsNotFoundOrNoMatchError(err) {
-		return "", fmt.Errorf("failed to check existing batch/v1 job %s in namespace %s: %w", name, ns, err)
-	}
-	return "", nil
-}
-
-func (g *GKEOrchestrator) checkUnownedServiceConflict(client dynamic.Interface, ns, name string) error {
-	svc, err := client.Resource(serviceGVR).Namespace(ns).Get(context.TODO(), name, metav1.GetOptions{})
-	if err != nil {
-		if k8s.IsNotFoundOrNoMatchError(err) || k8s.IsForbiddenError(err) {
-			return nil
-		}
-		return fmt.Errorf("failed to check existing service %s in namespace %s: %w", name, ns, err)
-	}
-	if svc != nil && svc.GetLabels()[workloadLabel] != name {
-		return fmt.Errorf("a Kubernetes Service named %q already exists in namespace %q (not managed by gcluster); resubmit with a different --name", name, ns)
-	}
-	return nil
 }
 
 func (g *GKEOrchestrator) resolveWorkloadObjectStatus(client dynamic.Interface, name string, obj unstructured.Unstructured, isBatchJob bool) (string, error) {
@@ -2906,7 +2882,9 @@ func (d *DefaultKubeClient) DeleteJobSet(namespace string, name string) error {
 	if d.dynClient == nil {
 		return fmt.Errorf("kubernetes dynamic client is not initialized")
 	}
-	return d.dynClient.Resource(jobSetGVR).Namespace(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), defaultKubeClientTimeout)
+	defer cancel()
+	return d.dynClient.Resource(jobSetGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
 func (d *DefaultKubeClient) resource(gvr schema.GroupVersionResource, namespace string) (dynamic.ResourceInterface, error) {
@@ -2919,7 +2897,7 @@ func (d *DefaultKubeClient) resource(gvr schema.GroupVersionResource, namespace 
 	return d.dynClient.Resource(gvr).Namespace(namespace), nil
 }
 
-const defaultKubeClientListTimeout = 30 * time.Second
+const defaultKubeClientTimeout = 30 * time.Second
 
 // ListResources returns the raw objects of gvr in namespace matching labelSelector and fieldSelector.
 func (d *DefaultKubeClient) ListResources(gvr schema.GroupVersionResource, namespace, labelSelector, fieldSelector string) ([]unstructured.Unstructured, error) {
@@ -2927,7 +2905,7 @@ func (d *DefaultKubeClient) ListResources(gvr schema.GroupVersionResource, names
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), defaultKubeClientListTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultKubeClientTimeout)
 	defer cancel()
 	list, err := r.List(ctx, metav1.ListOptions{
 		LabelSelector: labelSelector,
@@ -2945,7 +2923,9 @@ func (d *DefaultKubeClient) GetResource(gvr schema.GroupVersionResource, namespa
 	if err != nil {
 		return nil, err
 	}
-	return r.Get(context.TODO(), name, metav1.GetOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), defaultKubeClientTimeout)
+	defer cancel()
+	return r.Get(ctx, name, metav1.GetOptions{})
 }
 
 // DeleteResource deletes the object of gvr named name, only if it still matches pre.
@@ -2959,7 +2939,9 @@ func (d *DefaultKubeClient) DeleteResource(gvr schema.GroupVersionResource, name
 		bg := metav1.DeletePropagationBackground
 		opts.PropagationPolicy = &bg
 	}
-	return r.Delete(context.TODO(), name, opts)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultKubeClientTimeout)
+	defer cancel()
+	return r.Delete(ctx, name, opts)
 }
 
 // ListWorkloads lists matching Kueue workloads in the specified namespace.
@@ -3012,7 +2994,9 @@ func (d *DefaultKubeClient) resolveWorkloadOwnerUID(namespace, workloadName stri
 	if d.isJobSetDisabled() {
 		return d.resolveBatchJobOwnerUID(namespace, workloadName, nil)
 	}
-	jobset, err := d.dynClient.Resource(jobSetGVR).Namespace(namespace).Get(context.TODO(), workloadName, metav1.GetOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), defaultKubeClientTimeout)
+	defer cancel()
+	jobset, err := d.dynClient.Resource(jobSetGVR).Namespace(namespace).Get(ctx, workloadName, metav1.GetOptions{})
 	if err == nil {
 		uid := string(jobset.GetUID())
 		if uid == "" {
@@ -3027,7 +3011,9 @@ func (d *DefaultKubeClient) resolveWorkloadOwnerUID(namespace, workloadName stri
 }
 
 func (d *DefaultKubeClient) resolveBatchJobOwnerUID(namespace, workloadName string, jobSetErr error) (string, error) {
-	jobObj, jobErr := d.dynClient.Resource(jobGVR).Namespace(namespace).Get(context.TODO(), workloadName, metav1.GetOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), defaultKubeClientTimeout)
+	defer cancel()
+	jobObj, jobErr := d.dynClient.Resource(jobGVR).Namespace(namespace).Get(ctx, workloadName, metav1.GetOptions{})
 	if jobErr != nil {
 		if jobSetErr != nil && k8s.IsNotFoundOrNoMatchError(jobErr) {
 			return "", fmt.Errorf("failed to get jobset %s in namespace %s: %w", workloadName, namespace, jobSetErr)
@@ -3053,7 +3039,9 @@ func (d *DefaultKubeClient) ListJobSets(namespace string, labelSelector string) 
 		return nil, fmt.Errorf("kubernetes dynamic client is not initialized")
 	}
 	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
-	list, err := d.dynClient.Resource(gvr).Namespace(namespace).List(context.Background(), metav1.ListOptions{
+	ctx, cancel := context.WithTimeout(context.Background(), defaultKubeClientTimeout)
+	defer cancel()
+	list, err := d.dynClient.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: labelSelector,
 	})
 

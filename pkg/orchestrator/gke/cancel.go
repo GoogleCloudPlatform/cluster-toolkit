@@ -69,7 +69,7 @@ func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions
 	}
 
 	if !g.jobSetEnabled() {
-		return g.cancelJobWithoutJobSet(foundNamespace, name, actionVerb, ownClaims)
+		return g.cancelFallbackOrReportNotFound(foundNamespace, name, actionVerb, ownClaims, nil, nil, false)
 	}
 
 	// Sweep the whole namespace to also catch gateways of TTL-deleted jobs.
@@ -119,10 +119,6 @@ func (g *GKEOrchestrator) peekBatchJobActionVerb(namespace, name string) (string
 	return verb, collectClaimNames(jobObj.Object)
 }
 
-func (g *GKEOrchestrator) cancelJobWithoutJobSet(namespace, name, actionVerb string, ownClaims []string) error {
-	return g.cancelFallbackOrReportNotFound(namespace, name, actionVerb, ownClaims, nil, nil, false)
-}
-
 func (g *GKEOrchestrator) cancelFallbackOrReportNotFound(namespace, name, actionVerb string, ownClaims []string, origErr, opErr error, jobSetAttempted bool) error {
 	deleted, fallbackVerb, fallbackClaims, fallbackErr := g.cancelFallbackBatchJob(namespace, name)
 	if fallbackErr != nil {
@@ -154,17 +150,10 @@ func (g *GKEOrchestrator) cancelFallbackOrReportNotFound(namespace, name, action
 func (g *GKEOrchestrator) cancelFallbackBatchJob(namespace, name string) (bool, string, []string, error) {
 	jobObj, err := g.kubeClient.GetResource(jobGVR, namespace, name)
 	if err != nil {
-		if k8s.IsNotFoundOrNoMatchError(err) {
-			svcDeleted, svcErr := g.deleteOwnedFallbackService(namespace, name)
-			if svcErr != nil {
-				return false, "", nil, svcErr
-			}
-			if svcDeleted {
-				return true, "Cleanup", nil, nil
-			}
-			return false, "", nil, nil
+		if !k8s.IsNotFoundOrNoMatchError(err) {
+			return false, "", nil, fmt.Errorf("failed to inspect batch/v1 Job %q in namespace %q before fallback cancel: %w", name, namespace, err)
 		}
-		return false, "", nil, fmt.Errorf("failed to inspect batch/v1 Job %q in namespace %q before fallback cancel: %w", name, namespace, err)
+		jobObj = nil
 	}
 	if jobObj == nil {
 		svcDeleted, svcErr := g.deleteOwnedFallbackService(namespace, name)

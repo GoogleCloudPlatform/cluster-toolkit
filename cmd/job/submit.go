@@ -106,6 +106,9 @@ and JobSet/Kueue specific configurations like workload name, queue, nodes, and r
 	RunE: runSubmitCmd,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		pathways.RunSPSWorkload = strings.TrimSpace(pathways.RunSPSWorkload)
+		if cmd.Flags().Changed("pathways-run-sps-workload") && pathways.RunSPSWorkload == "" {
+			return fmt.Errorf("--pathways-run-sps-workload cannot be empty")
+		}
 		if err := validateWorkloadNameLength(workloadName, isPathwaysJob); err != nil {
 			return err
 		}

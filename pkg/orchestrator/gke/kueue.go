@@ -417,10 +417,6 @@ func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion, reason string
 	return g.installKueueResources(defaultClusterQueue, defaultLocalQueue)
 }
 
-func (g *GKEOrchestrator) checkKueueInstallPermissions(version string) error {
-	return g.checkKueuePermissions("re-install", version)
-}
-
 func (g *GKEOrchestrator) checkKueuePermissions(action, version string) error {
 	logging.Info("Verifying cluster permissions for Kueue installation...")
 	if missing := g.missingPermissions(addonInstallPermissionChecks); len(missing) > 0 {
@@ -439,18 +435,13 @@ func normalizeKueueVersion(version string) string {
 	return version
 }
 
-func (g *GKEOrchestrator) installKueueOnFreshClusterWithPermCheck(targetVersion, clusterName string, checkPerms bool) error {
+func (g *GKEOrchestrator) installKueueOnFreshCluster(targetVersion, clusterName string) error {
 	targetVersion = normalizeKueueVersion(targetVersion)
-	if g.mode != orchestrator.TypeK8s && g.checkDynamicSlicingViaGKE() {
-		return fmt.Errorf("automatic Kueue installation/modification blocked: cluster %s is set up for Dynamic-Slicing (found 'PROVISION_ONLY' in node pool placementPolicy). Automatic installation or modification of Kueue could conflict with custom topology configurations. Please install Kueue and required CRDs manually", clusterName)
+	if err := g.checkDynamicSlicingBlocksKueue(clusterName); err != nil {
+		return err
 	}
 	if g.isOfflineForAddons() {
 		return fmt.Errorf("Kueue is not installed and cannot be downloaded %s; pre-install Kueue %s on the cluster first", g.airGapReason(), targetVersion)
-	}
-	if checkPerms {
-		if err := g.checkKueuePermissions("install", targetVersion); err != nil {
-			return err
-		}
 	}
 	manifestPath, err := g.prepareKueueManifest(targetVersion)
 	if err != nil {
@@ -487,13 +478,15 @@ func listKueueWorkloads(client dynamic.Interface, ns, uid string) (*unstructured
 	listOpts := metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("kueue.x-k8s.io/job-uid=%s", uid),
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultKubeClientTimeout)
+	defer cancel()
 	primaryGVR := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: kueueAPIVersion, Resource: "workloads"}
-	wlList, err := client.Resource(primaryGVR).Namespace(ns).List(context.TODO(), listOpts)
+	wlList, err := client.Resource(primaryGVR).Namespace(ns).List(ctx, listOpts)
 	if err == nil || !k8s.IsNotFoundOrNoMatchError(err) {
 		return wlList, err
 	}
 	fallbackGVR := schema.GroupVersionResource{Group: "kueue.x-k8s.io", Version: kueueFallbackAPIVersion, Resource: "workloads"}
-	return client.Resource(fallbackGVR).Namespace(ns).List(context.TODO(), listOpts)
+	return client.Resource(fallbackGVR).Namespace(ns).List(ctx, listOpts)
 }
 
 func kubectlCommandError(prefix string, res shell.CommandResult) error {
@@ -650,32 +643,16 @@ func (g *GKEOrchestrator) waitForKueueWebhookFast(dep *kueueDeployment) error {
 	if !isKueueDeploymentRolledOut(dep) {
 		res := g.kubectl("rollout", "status", "deployment/kueue-controller-manager", "-n", "kueue-system", kueueControllerRolloutTimeout)
 		if res.ExitCode != 0 {
-			if strings.Contains(strings.ToLower(res.Stderr+" "+res.Stdout), "forbidden") {
+			rawErr := errors.New(strings.TrimSpace(res.Stderr + "\n" + res.Stdout))
+			if res.ExitCode != -1 && k8s.IsForbiddenError(rawErr) {
 				logging.Warn("Insufficient RBAC permissions to check Kueue deployment rollout status in kueue-system (403 Forbidden). Skipping rollout status check.")
-				return g.waitForKueueEndpoints(true)
+				return g.waitForKueueEndpoints()
 			}
 			podDetails := g.getKueuePodDetails()
 			return fmt.Errorf("kueue controller manager failed to become ready: %s\n%s%s", res.Stderr, res.Stdout, podDetails)
 		}
-		if dep == nil {
-			var err error
-			dep, _, err = g.getKueueDeployment()
-			if err != nil {
-				logging.Warn("Failed to read Kueue deployment after rollout: %v", err)
-			}
-		}
 	}
-
-	version, err := g.getKueueVersion(dep)
-	if err != nil {
-		logging.Warn("Failed to get Kueue version, defaulting to Endpoints check: %v", err)
-		version = defaultKueueVersion
-	}
-
-	major, minor, _ := parseVersion(version)
-	useEndpointSlice := major > 0 || (major == 0 && minor > 13)
-
-	return g.waitForKueueEndpoints(useEndpointSlice)
+	return g.waitForKueueEndpoints()
 }
 
 func (g *GKEOrchestrator) waitForKueueWebhook() error {
@@ -685,9 +662,9 @@ func (g *GKEOrchestrator) waitForKueueWebhook() error {
 	return g.probeKueueWebhookReadiness()
 }
 
-func (g *GKEOrchestrator) waitForKueueEndpoints(useEndpointSlice bool) error {
+func (g *GKEOrchestrator) waitForKueueEndpoints() error {
 	for i := 0; i < 40; i++ {
-		ready, err := g.checkKueueEndpoints(useEndpointSlice)
+		ready, err := g.checkKueueEndpoints()
 		if err != nil {
 			return err
 		}
@@ -769,41 +746,12 @@ func (g *GKEOrchestrator) getKueuePodDetails() string {
 	return podDetails
 }
 
-func (g *GKEOrchestrator) checkKueueEndpoints(useEndpointSlice bool) (bool, error) {
-	if useEndpointSlice {
-		ready, _, err := g.checkServiceEndpointsReady("kueue-system", "kueue-webhook-service")
-		if errors.Is(err, errEndpointsUnreadable) {
-			return false, nil
-		}
-		return ready, err
-	}
-
-	cmdEndpoints := g.kubectl("get", "endpoints", "kueue-webhook-service", "-n", "kueue-system", "-o", "json")
-	if cmdEndpoints.ExitCode != 0 {
-		errStr := strings.ToLower(cmdEndpoints.Stderr)
-		if strings.Contains(errStr, "forbidden") {
-			logging.Warn("Insufficient RBAC permissions to read kueue-webhook-service endpoints in kueue-system (403 Forbidden). Skipping endpoint readiness check.")
-			return true, nil
-		}
+func (g *GKEOrchestrator) checkKueueEndpoints() (bool, error) {
+	ready, _, err := g.checkServiceEndpointsReady("kueue-system", "kueue-webhook-service")
+	if errors.Is(err, errEndpointsUnreadable) {
 		return false, nil
 	}
-
-	var eps struct {
-		Subsets []struct {
-			Addresses []struct {
-				Ip string `json:"ip"`
-			} `json:"addresses"`
-		} `json:"subsets"`
-	}
-	if err := json.Unmarshal([]byte(cmdEndpoints.Stdout), &eps); err != nil {
-		return false, fmt.Errorf("failed to unmarshal endpoints json: %w", err)
-	}
-	for _, subset := range eps.Subsets {
-		if len(subset.Addresses) > 0 {
-			return true, nil
-		}
-	}
-	return false, nil
+	return ready, err
 }
 
 // -----------------------------------------------------------------------------

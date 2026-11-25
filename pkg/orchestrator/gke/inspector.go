@@ -260,7 +260,8 @@ func (g *GKEOrchestrator) describeWorkloadResource(writer *inspectWriter, worklo
 	checkBatchJob := !hasJobSet
 	if hasJobSet {
 		exitCode, stderr := writer.runAndLogResult(fmt.Sprintf("JobSet: Config for %s", workloadName), "kubectl", "describe", "jobsets", workloadName, "-n", workloadNamespace)
-		checkBatchJob = exitCode != 0 && k8s.IsNotFoundOrNoMatchError(errors.New(stderr))
+		descErr := errors.New(stderr)
+		checkBatchJob = exitCode != 0 && exitCode != -1 && (k8s.IsNotFoundOrNoMatchError(descErr) || k8s.IsForbiddenError(descErr))
 	}
 	if !checkBatchJob {
 		return isBatchJob

@@ -3200,8 +3200,8 @@ func TestConnectivityChecker_GenericLazyProbeCachesOfflineState(t *testing.T) {
 		}
 		_, dlErr := orc.downloadManifests("https://example.com/m.yaml")
 		assertAutoOfflineAirGapError(t, "downloadManifests", dlErr)
-		assertAutoOfflineAirGapError(t, "installJobSetOnFreshClusterWithPermCheck", orc.installJobSetOnFreshClusterWithPermCheck(true))
-		assertAutoOfflineAirGapError(t, "installKueueOnFreshClusterWithPermCheck", orc.installKueueOnFreshClusterWithPermCheck("v0.15.2", "c", true))
+		assertAutoOfflineAirGapError(t, "installJobSetOnFreshCluster", orc.installJobSetOnFreshCluster())
+		assertAutoOfflineAirGapError(t, "installKueueOnFreshCluster", orc.installKueueOnFreshCluster("v0.15.2", "c"))
 	})
 }
 
@@ -3242,7 +3242,7 @@ func TestResolveClusterAddons_OlderKueuePreservedInTypeK8s(t *testing.T) {
 		"kubectl get endpointslice -l kubernetes.io/service-name=jobset-webhook-service": {{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.2"],"conditions":{"ready":true}}]}]}`}},
 		"kubectl get crd clusterqueues.kueue.x-k8s.io":                                   {{ExitCode: 0, Stdout: "crd/clusterqueues"}},
 		"kubectl get deployment kueue-controller-manager":                                {{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.10.2"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`}},
-		"kubectl get endpoints kueue-webhook-service":                                    {{ExitCode: 0, Stdout: `{"subsets":[{"addresses":[{"ip":"10.0.0.3"}]}]}`}},
+		"kubectl get endpointslice -l kubernetes.io/service-name=kueue-webhook-service":  {{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.3"],"conditions":{"ready":true}}]}]}`}},
 	})
 	orc := newTestGKEOrchestrator(mockExec)
 	orc.mode = orchestrator.TypeK8s
@@ -3278,7 +3278,7 @@ func TestProbeURLConnectivity_StatusCodesAndTimeout(t *testing.T) {
 				w.WriteHeader(tc.status)
 			}))
 			defer srv.Close()
-			if got := probeURLConnectivity(context.Background(), srv.URL, 50*time.Millisecond); got != tc.want {
+			if got := probeURLConnectivity(context.Background(), srv.URL, 50*time.Millisecond, time.Millisecond); got != tc.want {
 				t.Errorf("probeURLConnectivity(status=%d) = %v, want %v", tc.status, got, tc.want)
 			}
 		})
@@ -3398,16 +3398,20 @@ func TestResolveClusterAddons_ContinueSkipsDestructiveKueueUpgradeAndProbeRetrie
 	ignoreNotFoundMissing := shell.CommandResult{ExitCode: 0, Stdout: ""}
 	oldKueueDep := `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.10.2"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`
 	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
-		"kubectl get crd jobsets.jobset.x-k8s.io":                     {ignoreNotFoundMissing},
-		"kubectl get service jobset-webhook-service -n jobset-system": {ignoreNotFoundMissing},
-		"kubectl get crd clusterqueues.kueue.x-k8s.io":                {{ExitCode: 0, Stdout: "crd/clusterqueues"}},
-		"kubectl get deployment kueue-controller-manager":             {{ExitCode: 0, Stdout: oldKueueDep}},
-		"kubectl get endpoints kueue-webhook-service":                 {{ExitCode: 0, Stdout: `{"subsets":[{"addresses":[{"ip":"10.0.0.3"}]}]}`}},
+		"kubectl get crd jobsets.jobset.x-k8s.io":                                       {ignoreNotFoundMissing},
+		"kubectl get service jobset-webhook-service -n jobset-system":                   {ignoreNotFoundMissing},
+		"kubectl get crd clusterqueues.kueue.x-k8s.io":                                  {{ExitCode: 0, Stdout: "crd/clusterqueues"}},
+		"kubectl get deployment kueue-controller-manager":                               {{ExitCode: 0, Stdout: oldKueueDep}},
+		"kubectl get endpointslice -l kubernetes.io/service-name=kueue-webhook-service": {{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.3"],"conditions":{"ready":true}}]}]}`}},
 	})
 	orc := newTestGKEOrchestrator(mockExec)
 	orc.mode = orchestrator.TypeGKE
 	orc.isInteractiveFunc = func() bool { return true }
-	orc.promptLineFunc = func(string) (string, bool) { return "2", true }
+	var capturedPrompt string
+	orc.promptLineFunc = func(p string) (string, bool) {
+		capturedPrompt = p
+		return "2", true
+	}
 	orc.connectivity = &connectivityChecker{
 		getenv: func(string) string { return "" },
 		probe:  func(context.Context) bool { return true },
@@ -3421,14 +3425,14 @@ func TestResolveClusterAddons_ContinueSkipsDestructiveKueueUpgradeAndProbeRetrie
 	if err := orc.resolveClusterAddons(&orchestrator.JobDefinition{ClusterName: "gke-clus"}, false); err != nil {
 		t.Fatalf("resolveClusterAddons([2] Continue with old Kueue) err = %v", err)
 	}
+	if !strings.Contains(capturedPrompt, "upgrade Kueue (v0.10.2 ->") || !strings.Contains(capturedPrompt, "keeping Kueue v0.10.2") {
+		t.Errorf("prompt must disclose Kueue upgrade in [1]/[2], got:\n%s", capturedPrompt)
+	}
 	if orc.jobSetEnabled() || !orc.kueueEnabled() {
 		t.Errorf("addons = (jobSet=%v kueue=%v), want (false, true)", orc.jobSetEnabled(), orc.kueueEnabled())
 	}
 
-	// probeURLConnectivity retries once on transient HTTP 5xx failure.
-	origDelay := connectivityProbeRetryDelay
-	connectivityProbeRetryDelay = time.Millisecond
-	t.Cleanup(func() { connectivityProbeRetryDelay = origDelay })
+	// probeURLConnectivity retries once on transient HTTP 5xx failure within one shared deadline.
 	attempts := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		attempts++
@@ -3439,8 +3443,20 @@ func TestResolveClusterAddons_ContinueSkipsDestructiveKueueUpgradeAndProbeRetrie
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(srv.Close)
-	if !probeURLConnectivity(context.Background(), srv.URL, time.Second) || attempts != 2 {
+	if !probeURLConnectivity(context.Background(), srv.URL, time.Second, time.Millisecond) || attempts != 2 {
 		t.Fatalf("probeURLConnectivity transient 503 retry failed: attempts=%d", attempts)
+	}
+
+	// probeURLConnectivity rejects cross-host captive-portal redirects and does not retry 4xx.
+	portalAttempts := 0
+	portal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		portalAttempts++
+		w.Header().Set("Location", "https://proxy.corp.invalid/blocked")
+		w.WriteHeader(http.StatusFound)
+	}))
+	t.Cleanup(portal.Close)
+	if probeURLConnectivity(context.Background(), portal.URL, time.Second, time.Millisecond) || portalAttempts != 1 {
+		t.Fatalf("captive portal redirect must return offline without retry (attempts=%d)", portalAttempts)
 	}
 }
 
@@ -3494,10 +3510,9 @@ func TestValidateTier3Workload_GKECoSchedulingAndOfflineProbeWarn(t *testing.T) 
 			probe:  func(context.Context) bool { return false },
 		},
 	}
-	jsOn, kueueOn := false, false
-	cont, _, err := probeOrc.resolveMissingAddons("gke-clus", false, true, true, kueueAddonProbe{state: addonStateMissing}, &jsOn, &kueueOn)
-	if err != nil || !cont || shell.IsKnownAirGapped() || !probeOrc.isOfflineForAddons() {
-		t.Fatalf("resolveMissingAddons(probe failure) = (cont=%v, err=%v, globalAirGap=%v, offline=%v)", cont, err, shell.IsKnownAirGapped(), probeOrc.isOfflineForAddons())
+	actions, err := probeOrc.decideMissingAddonActions(true, true, false, "", false, false)
+	if err != nil || actions.any() || shell.IsKnownAirGapped() || !probeOrc.isOfflineForAddons() {
+		t.Fatalf("decideMissingAddonActions(probe failure) = (actions=%+v, err=%v, globalAirGap=%v, offline=%v)", actions, err, shell.IsKnownAirGapped(), probeOrc.isOfflineForAddons())
 	}
 	_, errLogs := snap()
 	if !strings.Contains(errLogs, "Outbound connectivity check") {
@@ -3538,7 +3553,7 @@ func TestResolveClusterAddons_OfflineOutdatedKueueWarnsAndContinues(t *testing.T
 		"kubectl get endpointslice -l kubernetes.io/service-name=jobset-webhook-service": {{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.2"],"conditions":{"ready":true}}]}]}`}},
 		"kubectl get crd clusterqueues.kueue.x-k8s.io":                                   {{ExitCode: 0, Stdout: "crd/clusterqueues"}},
 		"kubectl get deployment kueue-controller-manager":                                {{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.10.2"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`}},
-		"kubectl get endpoints kueue-webhook-service":                                    {{ExitCode: 0, Stdout: `{"subsets":[{"addresses":[{"ip":"10.0.0.3"}]}]}`}},
+		"kubectl get endpointslice -l kubernetes.io/service-name=kueue-webhook-service":  {{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.3"],"conditions":{"ready":true}}]}]}`}},
 	})
 	orc := newTestGKEOrchestrator(mockExec)
 	orc.mode = orchestrator.TypeGKE
@@ -3574,10 +3589,10 @@ func TestInstallMissingAddons_ChecksCanIAndLiveJobSetObjectsBeforeInstallingKueu
 			}}},
 		},
 	}
-	jsOn, kueueOn := false, false
-	_, err := orc.installMissingAddons("gke-clus", true, true, kueueAddonProbe{state: addonStateMissing}, &jsOn, &kueueOn)
+	plan := addonPlan{}
+	err := orc.executeAddonActions("gke-clus", kueueAddonProbe{state: addonStateMissing}, addonActions{installJobSet: true, installKueue: true}, false, &plan)
 	if err == nil || !strings.Contains(err.Error(), "gcluster made no changes") {
-		t.Fatalf("installMissingAddons(leftover JobSet) err = %v, want made no changes error", err)
+		t.Fatalf("executeAddonActions(leftover JobSet) err = %v, want made no changes error", err)
 	}
 	if len(commandsWithPrefix(mockExec, "kubectl apply")) != 0 {
 		t.Errorf("must not apply Kueue before checkNoLiveJobSetObjects passes; calls=%v", mockExec.calls)
@@ -3700,13 +3715,26 @@ func TestJobSetProbeAndInstallRBACEdgeCases(t *testing.T) {
 		}
 	})
 
-	t.Run("installJobSetOnFreshClusterWithPermCheck_checks_rbac_when_enabled", func(t *testing.T) {
+	t.Run("preflightAddonMutations_checks_rbac_for_jobset_only", func(t *testing.T) {
 		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 			"kubectl auth can-i": {{ExitCode: 0, Stdout: "no"}},
 		})
 		orc := newTestGKEOrchestrator(mockExec)
-		if err := orc.installJobSetOnFreshClusterWithPermCheck(true); err == nil || !strings.Contains(err.Error(), "missing RBAC permissions") {
-			t.Errorf("installJobSetOnFreshClusterWithPermCheck(true) err = %v, want missing RBAC permissions", err)
+		if err := orc.preflightAddonMutations("clus", addonActions{installJobSet: true}); err == nil || !strings.Contains(err.Error(), "missing RBAC permissions") {
+			t.Errorf("preflightAddonMutations(installJobSet) err = %v, want missing RBAC permissions", err)
+		}
+	})
+
+	t.Run("checkServiceEndpointsReady_exit_minus_one_fails_fast", func(t *testing.T) {
+		spawnErr := errors.New("kubectl binary missing")
+		orc := &GKEOrchestrator{executor: &mockExecutor{
+			executeCommandFunc: func(string, ...string) shell.CommandResult {
+				return shell.CommandResult{ExitCode: -1, Stderr: "Error from server (Forbidden): misleading", Err: spawnErr}
+			},
+		}}
+		ready, forbidden, err := orc.checkServiceEndpointsReady("kueue-system", "kueue-webhook-service")
+		if ready || forbidden || !errors.Is(err, spawnErr) || errors.Is(err, errEndpointsUnreadable) {
+			t.Errorf("checkServiceEndpointsReady(ExitCode -1) = (%v, %v, %v), want fail-fast wrapped spawnErr", ready, forbidden, err)
 		}
 	})
 }

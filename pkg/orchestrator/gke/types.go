@@ -1129,6 +1129,12 @@ type addonPlan struct {
 	kueueEnabled  bool
 }
 
+type addonActions struct {
+	installJobSet bool
+	installKueue  bool
+	upgradeKueue  bool
+}
+
 // connectivityChecker holds injectable environment and GitHub reachability probe hooks.
 // Per-submission probe results are cached in submissionSession (githubProbed/githubOnline).
 type connectivityChecker struct {

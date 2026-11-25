@@ -2018,20 +2018,23 @@ func TestSubmitCmd_RunSPSWorkload(t *testing.T) {
 		}
 	})
 
-	t.Run("whitespace-only run-sps-workload does not bypass compute-type requirement", func(t *testing.T) {
-		setupSubmitTestEnv(t)
-		_, err := executeCommand(JobCmd,
-			"submit",
-			"--pathways",
-			"--pathways-run-sps-workload", "   ",
-			"--name", "sps-blank",
-			"--command", "python3 train.py",
-			"--cluster", "test-cluster",
-			"--location", "us-central1-a",
-			"--project", "test-project",
-		)
-		if err == nil || !strings.Contains(err.Error(), `required flag(s) "compute-type" not set`) {
-			t.Fatalf("whitespace run-sps-workload err = %v, want compute-type required error", err)
+	t.Run("whitespace-only run-sps-workload fails fast even with compute-type", func(t *testing.T) {
+		for _, extra := range [][]string{nil, {"--compute-type", "v6e-8"}} {
+			setupSubmitTestEnv(t)
+			args := append([]string{
+				"submit",
+				"--pathways",
+				"--pathways-run-sps-workload", "   ",
+				"--name", "sps-blank",
+				"--command", "python3 train.py",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+			}, extra...)
+			_, err := executeCommand(JobCmd, args...)
+			if err == nil || !strings.Contains(err.Error(), "--pathways-run-sps-workload cannot be empty") {
+				t.Fatalf("whitespace run-sps-workload (extra=%v) err = %v, want empty flag error", extra, err)
+			}
 		}
 	})
 

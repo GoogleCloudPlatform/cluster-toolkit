@@ -557,10 +557,10 @@ func TestWaitForKueueWebhook_Success_OlderVersion(t *testing.T) {
 					Stdout:   `{"spec":{"template":{"spec":{"containers":[{"image":"registry.k8s.io/kueue/kueue:v0.11.1"}]}}}}`,
 				}
 			}
-			if name == "kubectl" && args[0] == "get" && args[1] == "endpoints" {
+			if name == "kubectl" && args[0] == "get" && args[1] == "endpointslice" {
 				return shell.CommandResult{
 					ExitCode: 0,
-					Stdout:   `{"subsets":[{"addresses":[{"ip":"10.4.1.3"}]}]}`,
+					Stdout:   `{"items":[{"endpoints":[{"addresses":["10.4.1.3"],"conditions":{"ready":true}}]}]}`,
 				}
 			}
 			if name == "kubectl" && args[0] == "rollout" {
@@ -622,8 +622,7 @@ func TestCheckAndInstallKueue_ReinstallNeeded_LowVersion(t *testing.T) {
 		{pattern: "auth can-i", res: shell.CommandResult{ExitCode: 0, Stdout: "yes"}},
 		{pattern: "kubectl get crd", res: shell.CommandResult{ExitCode: 0, Stdout: "clusterqueues.kueue.x-k8s.io found"}},
 		{pattern: "kubectl get deployment", res: shell.CommandResult{ExitCode: 0, Stdout: `{"spec":{"template":{"spec":{"containers":[{"image":"registry.k8s.io/kueue/kueue:v0.12.0"}]}}}}`}},
-		{pattern: "kubectl get endpoints", res: shell.CommandResult{ExitCode: 0, Stdout: `{"subsets": [{"addresses": [{"ip": "10.0.0.1"}]}]}`}},
-		{pattern: "kubectl get endpointslice", res: shell.CommandResult{ExitCode: 0, Stdout: `{"subsets": [{"addresses": [{"ip": "10.0.0.1"}]}]}`}},
+		{pattern: "kubectl get endpointslice", res: shell.CommandResult{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}},
 		{pattern: "apply", res: shell.CommandResult{ExitCode: 0}},
 		{pattern: "priorityclass", res: shell.CommandResult{ExitCode: 0}},
 		{pattern: "rollout", res: shell.CommandResult{ExitCode: 0}},
@@ -848,8 +847,8 @@ func TestCheckAndInstallKueue_PermissionGranted(t *testing.T) {
 			if strings.Contains(fullCmd, "kubectl get deployment") {
 				return shell.CommandResult{ExitCode: 0, Stdout: `{"spec":{"template":{"spec":{"containers":[{"image":"registry.k8s.io/kueue/kueue:v0.12.0"}]}}}}`}
 			}
-			if strings.Contains(fullCmd, "kubectl get endpoints") || strings.Contains(fullCmd, "kubectl get endpointslice") {
-				return shell.CommandResult{ExitCode: 0, Stdout: `{"subsets": [{"addresses": [{"ip": "10.0.0.1"}]}]}`}
+			if strings.Contains(fullCmd, "kubectl get endpointslice") {
+				return shell.CommandResult{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}
 			}
 			return shell.CommandResult{ExitCode: 0}
 		},
@@ -1084,8 +1083,8 @@ func TestCheckAndInstallKueue_VersionNormalization(t *testing.T) {
 			if strings.Contains(fullCmd, "kubectl get crd") {
 				return shell.CommandResult{ExitCode: 0, Stdout: "found"}
 			}
-			if strings.Contains(fullCmd, "kubectl get endpoints") || strings.Contains(fullCmd, "kubectl get endpointslice") {
-				return shell.CommandResult{ExitCode: 0, Stdout: `{"subsets": [{"addresses": [{"ip": "10.0.0.1"}]}]}`}
+			if strings.Contains(fullCmd, "kubectl get endpointslice") {
+				return shell.CommandResult{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}
 			}
 			return shell.CommandResult{ExitCode: 0}
 		},
@@ -1103,9 +1102,9 @@ func TestCheckAndInstallKueue_VersionNormalization(t *testing.T) {
 	if got := normalizeKueueVersion("0.17.1"); got != "v0.17.1" {
 		t.Fatalf("normalizeKueueVersion(\"0.17.1\") = %q, want v0.17.1", got)
 	}
-	err := orc.installKueueOnFreshClusterWithPermCheck("0.17.1", "test-cluster", true)
+	err := orc.installKueueOnFreshCluster("0.17.1", "test-cluster")
 	if err != nil {
-		t.Fatalf("installKueueOnFreshClusterWithPermCheck failed for version without 'v' prefix: %v", err)
+		t.Fatalf("installKueueOnFreshCluster failed for version without 'v' prefix: %v", err)
 	}
 }
 
@@ -1210,12 +1209,12 @@ func TestCheckKueueInstallPermissions_MissingPermission(t *testing.T) {
 	}
 	orc := &GKEOrchestrator{executor: mock}
 
-	err := orc.checkKueueInstallPermissions("v0.15.2")
+	err := orc.checkKueuePermissions("re-install", "v0.15.2")
 	if err == nil {
-		t.Fatalf("checkKueueInstallPermissions should fail on missing permission, got nil")
+		t.Fatalf("checkKueuePermissions should fail on missing permission, got nil")
 	}
 	if !strings.Contains(err.Error(), "missing required RBAC permissions: ['create namespaces', 'create clusterroles.rbac.authorization.k8s.io']") {
-		t.Errorf("checkKueueInstallPermissions error = %v; want aggregated missing permissions list", err)
+		t.Errorf("checkKueuePermissions error = %v; want aggregated missing permissions list", err)
 	}
 }
 
@@ -1241,12 +1240,12 @@ func TestCheckKueueEndpoints_EndpointSlice(t *testing.T) {
 				return tc.result
 			}}}
 
-			ready, err := orc.checkKueueEndpoints(true)
+			ready, err := orc.checkKueueEndpoints()
 			if (err != nil) != tc.wantErr {
-				t.Fatalf("checkKueueEndpoints(true) error = %v, wantErr %v", err, tc.wantErr)
+				t.Fatalf("checkKueueEndpoints() error = %v, wantErr %v", err, tc.wantErr)
 			}
 			if ready != tc.wantReady {
-				t.Errorf("checkKueueEndpoints(true) = %v, want %v", ready, tc.wantReady)
+				t.Errorf("checkKueueEndpoints() = %v, want %v", ready, tc.wantReady)
 			}
 		})
 	}
@@ -1744,8 +1743,8 @@ func TestWaitForKueueWebhook_RolloutBeforeDeploymentGet(t *testing.T) {
 	if err := orc.waitForKueueWebhook(); err != nil {
 		t.Fatalf("waitForKueueWebhook failed: %v", err)
 	}
-	if len(callOrder) < 3 || callOrder[0] != "rollout" || callOrder[1] != "get-deployment" || callOrder[2] != "get-endpointslice" {
-		t.Errorf("waitForKueueWebhook call order = %v, want [rollout get-deployment get-endpointslice ...]", callOrder)
+	if len(callOrder) < 2 || callOrder[0] != "rollout" || callOrder[1] != "get-endpointslice" {
+		t.Errorf("waitForKueueWebhook call order = %v, want [rollout get-endpointslice ...]", callOrder)
 	}
 }
 
@@ -1988,11 +1987,11 @@ func assertAirGapFastFailBeforeRBAC(t *testing.T) {
 			},
 		},
 	}
-	if err := airGapOrc.installJobSetOnFreshClusterWithPermCheck(true); err == nil || !strings.Contains(err.Error(), shell.AirGappedEnvVar) {
-		t.Fatalf("installJobSetOnFreshClusterWithPermCheck(air-gapped) = %v, want %s error", err, shell.AirGappedEnvVar)
+	if err := airGapOrc.installJobSetOnFreshCluster(); err == nil || !strings.Contains(err.Error(), shell.AirGappedEnvVar) {
+		t.Fatalf("installJobSetOnFreshCluster(air-gapped) = %v, want %s error", err, shell.AirGappedEnvVar)
 	}
-	if err := airGapOrc.installKueueOnFreshClusterWithPermCheck("v0.15.2", "clus", true); err == nil || !strings.Contains(err.Error(), shell.AirGappedEnvVar) {
-		t.Fatalf("installKueueOnFreshClusterWithPermCheck(air-gapped) = %v, want %s error", err, shell.AirGappedEnvVar)
+	if err := airGapOrc.installKueueOnFreshCluster("v0.15.2", "clus"); err == nil || !strings.Contains(err.Error(), shell.AirGappedEnvVar) {
+		t.Fatalf("installKueueOnFreshCluster(air-gapped) = %v, want %s error", err, shell.AirGappedEnvVar)
 	}
 	if canICalled || promptCalled {
 		t.Fatalf("air-gapped installation ran can-i=%v prompt=%v, want both false", canICalled, promptCalled)

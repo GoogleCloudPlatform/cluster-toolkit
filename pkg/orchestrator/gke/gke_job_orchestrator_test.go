@@ -5649,7 +5649,7 @@ func TestAttachBatchJobServiceOwnerRef_PatchesAndWarnsWithValidCancelCmd(t *test
 			if patchErr != nil {
 				return nil, patchErr
 			}
-			if gvr == serviceGVR && pt == types.MergePatchType {
+			if gvr == serviceGVR && pt == types.JSONPatchType {
 				patched = data
 			}
 			return &unstructured.Unstructured{}, nil
@@ -5910,7 +5910,7 @@ func TestGenerateAndApplyJobManifest_DryRunLiveOwnerRefAndPartialRollback(t *tes
 				}}, nil
 			},
 			patchByGVR: func(gvr schema.GroupVersionResource, _, _ string, pt types.PatchType, data []byte) (*unstructured.Unstructured, error) {
-				if gvr == serviceGVR && pt == types.MergePatchType && strings.Contains(string(data), "job-uid-live") {
+				if gvr == serviceGVR && pt == types.JSONPatchType && strings.Contains(string(data), "job-uid-live") && strings.Contains(string(data), `"/metadata/ownerReferences"`) {
 					patched = true
 				}
 				return &unstructured.Unstructured{}, nil
@@ -5986,16 +5986,45 @@ func TestUnqueuedSlicingAndTopologyNodePoolFallback(t *testing.T) {
 	if err != nil || out != "2x4" {
 		t.Fatalf("queryDiscoveredTopologies(get nodes 403 with nodePoolTopologies) = (%q, %v), want (\"2x4\", nil)", out, err)
 	}
+
+	// Single-host TPU / NAP cluster (empty nodePoolTopologies) with 403 on get nodes returns "", nil so selectTopology can fast-track.
+	orcEmpty := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get nodes": {{ExitCode: 1, Stderr: "Error from server (Forbidden): nodes is forbidden"}},
+	}))
+	orcEmpty.addons = addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false}
+	if got, err := orcEmpty.queryDiscoveredTopologies("tpu-v6e-slice", "ct6e-standard-4t"); err != nil || got != "" {
+		t.Fatalf("queryDiscoveredTopologies(empty nodePoolTopologies + 403) = (%q, %v), want (\"\", nil)", got, err)
+	}
+
+	// Non-403 error (e.g. 503) must NOT be masked even when nodePoolTopologies is non-empty.
+	orc503 := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get nodes": {{ExitCode: 1, Stderr: "Error from server (ServiceUnavailable): apiserver busy"}},
+	}))
+	orc503.addons = addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false}
+	orc503.clusterDesc = orc.clusterDesc
+	if _, err := orc503.queryDiscoveredTopologies("tpu-v6e-slice", "ct6e-standard-4t"); err == nil || !strings.Contains(err.Error(), "ServiceUnavailable") {
+		t.Fatalf("queryDiscoveredTopologies(503) err = %v, want ServiceUnavailable error", err)
+	}
 }
 
 func TestOrphanedTier3ServiceConflictAndBatchJobWorkloadLookup(t *testing.T) {
-	t.Run("jobset_submit_flags_owned_orphaned_tier3_service", func(t *testing.T) {
+	t.Run("jobset_submit_flags_owned_orphaned_tier3_service_and_surfaces_unexpected_err", func(t *testing.T) {
+		var jobGets, svcGets int
 		dyn := &versionTrackingDynamicClient{
 			getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
-				if gvr == serviceGVR && name == "orphan-svc" {
-					return &unstructured.Unstructured{Object: map[string]interface{}{
-						"metadata": map[string]interface{}{"name": name, "namespace": ns, "labels": map[string]interface{}{workloadLabel: name}},
-					}}, nil
+				if gvr == jobGVR {
+					jobGets++
+				}
+				if gvr == serviceGVR {
+					svcGets++
+					if name == "orphan-svc" {
+						return &unstructured.Unstructured{Object: map[string]interface{}{
+							"metadata": map[string]interface{}{"name": name, "namespace": ns, "labels": map[string]interface{}{workloadLabel: name}},
+						}}, nil
+					}
+					if name == "err-svc" {
+						return nil, errors.New("apiserver timeout")
+					}
 				}
 				return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
 			},
@@ -6004,12 +6033,20 @@ func TestOrphanedTier3ServiceConflictAndBatchJobWorkloadLookup(t *testing.T) {
 		orc.mode = orchestrator.TypeK8s
 		orc.namespace = "ml"
 		orc.SetDynamicClient(dyn)
-		status, err := orc.getJobStatus("orphan-svc")
-		if err != nil || status != "OrphanedService" {
-			t.Fatalf("getJobStatus(orphaned Tier-3 Service) = (%q, %v), want (OrphanedService, nil)", status, err)
+		err := orc.validateJobConflicts(orchestrator.JobDefinition{WorkloadName: "orphan-svc", ClusterName: "c"})
+		if err == nil || !strings.Contains(err.Error(), "leftover headless Service") || strings.Contains(err.Error(), "OrphanedService") {
+			t.Fatalf("validateJobConflicts(orphaned Tier-3 Service) err = %v, want clear leftover Service error", err)
+		}
+		if jobGets != 1 || svcGets != 1 {
+			t.Errorf("expected at most 1 query per GVR, got jobGets=%d svcGets=%d", jobGets, svcGets)
+		}
+		if _, err := orc.getJobStatus("err-svc"); err == nil || !strings.Contains(err.Error(), "apiserver timeout") {
+			t.Fatalf("getJobStatus(unexpected Service error) err = %v, want apiserver timeout", err)
 		}
 	})
+}
 
+func TestFindTargetWorkloadForBatchJobAndCustomTemplate(t *testing.T) {
 	t.Run("findTargetWorkloadForKind_batch_job_skips_jobset_get_and_uses_job_wording", func(t *testing.T) {
 		sawJobSetGet := false
 		dyn := &versionTrackingDynamicClient{
@@ -6049,4 +6086,113 @@ func TestOrphanedTier3ServiceConflictAndBatchJobWorkloadLookup(t *testing.T) {
 			t.Errorf("resolveWorkloadTemplateName(RunSPSWorkload) = %q, want %q", got, k8s.PathwaysJobSetTemplate)
 		}
 	})
+}
+
+func TestBuildOwnerRefJSONPatchAndRollbackGuards(t *testing.T) {
+	t.Run("json_patch_preserves_existing_non_controller_owner_and_skips_conflicts", func(t *testing.T) {
+		isCtrl := true
+		patch, ok := buildOwnerRefJSONPatch([]metav1.OwnerReference{{UID: "webhook-uid", Kind: "ConfigMap"}}, "t3-job", "job-uid")
+		if !ok || !strings.Contains(string(patch), `"/metadata/ownerReferences/-"`) {
+			t.Fatalf("expected JSONPatch append to /metadata/ownerReferences/-, got (%s, %v)", string(patch), ok)
+		}
+		if _, ok := buildOwnerRefJSONPatch([]metav1.OwnerReference{{UID: "job-uid"}}, "t3-job", "job-uid"); ok {
+			t.Errorf("expected no-op when jobUID is already present")
+		}
+		if _, ok := buildOwnerRefJSONPatch([]metav1.OwnerReference{{UID: "other-ctrl", Controller: &isCtrl}}, "t3-job", "job-uid"); ok {
+			t.Errorf("expected skip when another controller ownerRef already exists")
+		}
+	})
+
+	t.Run("rollback_skips_silently_when_job_exists_and_warns_on_403", func(t *testing.T) {
+		mockLive := &MockKubeClient{
+			Namespace: "ml",
+			Objects: map[string][]unstructured.Unstructured{
+				"jobs":     {makeTestOwnedBatchJob("live-job", "1")},
+				"services": {makeTestOwnedService("live-job", "1")},
+			},
+		}
+		orcLive := &GKEOrchestrator{namespace: "ml", kubeClient: mockLive}
+		snapLive, restoreLive := logging.CaptureForTesting(t)
+		orcLive.rollbackPartialBatchJobService("live-job", "c", "l", "p")
+		_, warnLive := snapLive()
+		restoreLive()
+		if len(mockLive.Deleted["services"]) != 0 || warnLive != "" {
+			t.Errorf("live job rollback must not delete or warn: deleted=%v warn=%q", mockLive.Deleted, warnLive)
+		}
+
+		mockForb := &MockKubeClient{
+			Namespace: "ml",
+			GetErr:    apierrors.NewForbidden(jobGVR.GroupResource(), "forb-job", errors.New("denied")),
+			Objects:   map[string][]unstructured.Unstructured{"services": {makeTestOwnedService("forb-job", "1")}},
+		}
+		orcForb := &GKEOrchestrator{namespace: "ml", kubeClient: mockForb}
+		snapForb, restoreForb := logging.CaptureForTesting(t)
+		orcForb.rollbackPartialBatchJobService("forb-job", "c", "l", "p")
+		_, warnForb := snapForb()
+		restoreForb()
+		if len(mockForb.Deleted["services"]) != 0 || !strings.Contains(warnForb, "gcluster job cancel forb-job") {
+			t.Errorf("403 rollback must preserve service and warn with cancel hint: deleted=%v warn=%q", mockForb.Deleted, warnForb)
+		}
+	})
+}
+
+func TestStrictTier3ConflictAgainstJobSetOwnedObjects(t *testing.T) {
+	dyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			if gvr == jobGVR && name == "train-main-0" {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": name, "namespace": ns,
+						"labels": map[string]interface{}{"jobset.sigs.k8s.io/jobset-name": "train"},
+					},
+				}}, nil
+			}
+			if gvr == serviceGVR && name == "train-svc" {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": name, "namespace": ns,
+						"labels": map[string]interface{}{"jobset.sigs.k8s.io/jobset-name": "train"},
+					},
+				}}, nil
+			}
+			return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+		},
+	}
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.namespace = "ml"
+	orc.addons = addonPlan{resolved: true, jobSetEnabled: false}
+	orc.SetDynamicClient(dyn)
+	if _, err := orc.getJobStatus("train-main-0"); err == nil || !strings.Contains(err.Error(), "not managed by gcluster") {
+		t.Errorf("strict Tier-3 must reject colliding JobSet-owned child Job, got %v", err)
+	}
+	if _, err := orc.getJobStatus("train-svc"); err == nil || !strings.Contains(err.Error(), "Kubernetes Service named") {
+		t.Errorf("strict Tier-3 must reject colliding JobSet-owned Service, got %v", err)
+	}
+}
+
+func TestNamespacedMissingCRD404TriggersStrictBatchJobCheck(t *testing.T) {
+	dyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			if gvr == jobSetGVR {
+				return nil, &apierrors.StatusError{ErrStatus: metav1.Status{
+					Status:  metav1.StatusFailure,
+					Reason:  metav1.StatusReasonNotFound,
+					Message: "the server could not find the requested resource (get jobsets.jobset.x-k8s.io taken)",
+				}}
+			}
+			if gvr == jobGVR && name == "taken" {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns},
+				}}, nil
+			}
+			return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+		},
+	}
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.mode = orchestrator.TypeK8s
+	orc.namespace = "ml"
+	orc.SetDynamicClient(dyn)
+	if _, err := orc.getJobStatus("taken"); err == nil || !strings.Contains(err.Error(), "not managed by gcluster") {
+		t.Errorf("namespaced missing-CRD 404 must run strict batch Job conflict check, got %v", err)
+	}
 }

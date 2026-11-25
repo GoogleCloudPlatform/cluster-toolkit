@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"net/url"
 	"os"
 	"slices"
 	"strconv"
@@ -177,9 +178,15 @@ func IsNotFoundOrNoMatchError(err error) bool {
 	if errors.As(err, &statusErr) {
 		return false
 	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return false
+	}
 	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "error from server (notfound)") ||
-		strings.Contains(msg, "could not find the requested resource") ||
+	if strings.Contains(msg, "error from server (") {
+		return strings.Contains(msg, "error from server (notfound)")
+	}
+	return strings.Contains(msg, "could not find the requested resource") ||
 		strings.Contains(msg, "doesn't have a resource type") ||
 		strings.Contains(msg, "no matches for kind")
 }
