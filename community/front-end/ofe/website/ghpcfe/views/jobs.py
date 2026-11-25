@@ -148,7 +148,7 @@ class JobCreateView2(LoginRequiredMixin, generic.CreateView):
         try:
             node_price_float = cloud_info.get_instance_pricing(
                 "GCP",
-                cluster.cloud_credential.detail,
+                cluster.cloud_credential,
                 cluster.cloud_region,
                 cluster.cloud_zone,
                 instance_type,
@@ -279,7 +279,7 @@ class JobRerunView(LoginRequiredMixin, generic.CreateView):
         try:
             node_price_float = cloud_info.get_instance_pricing(
                 "GCP",
-                cluster.cloud_credential.detail,
+                cluster.cloud_credential,
                 cluster.cloud_region,
                 cluster.cloud_zone,
                 instance_type,

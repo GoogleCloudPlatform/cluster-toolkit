@@ -1,0 +1,6 @@
+
+Error: Error deleting instance template: googleapi: Error 403: Required 'compute.instanceTemplates.delete' permission for 'projects/example-project/global/instanceTemplates/alpha0a1b2c3d-compute-batch-20261104120000000000000001', forbidden
+
+  with module.slurm_controller.module.slurm_nodeset_template["batch"].module.instance_template.google_compute_instance_template.tpl,
+  on ../_modules/embedded/community/modules/internal/slurm-gcp/internal_instance_template/main.tf line 83, in resource "google_compute_instance_template" "tpl":
+  83: resource "google_compute_instance_template" "tpl" {

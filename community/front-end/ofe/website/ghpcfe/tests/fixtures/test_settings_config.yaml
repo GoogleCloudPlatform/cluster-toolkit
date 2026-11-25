@@ -1,0 +1,25 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Backend configuration for the test suite, with the same keys that the
+# webserver startup script writes to configuration.yaml. All values are fake.
+# baseDir is not set here: the test settings point it at a per-run scratch directory.
+config:
+  server:
+    host_type: "GCP"
+    gcp_project: "ofe-test-project"
+    gcs_bucket: "ofe-test-bucket"
+    terraform_state_bucket: "ofe-test-state-bucket"
+    c2_topic: "ofe-test-c2"
+    deployment_name: "ofe-test"

@@ -88,11 +88,24 @@ Here are some notes from a developer's perspective:
   variables in `tf/terraform.tfvars`, and invoke Terraform.
   - The deploy script will check the GCP project being used has the correct
     APIs enabled.  The list of required APIs is embedded in `deploy.sh`
-    script - **this will need to be maintained**.
-  - The deploy script will also, optionally, use an additional script,
-    `script/service_account.sh`, to create a GCP service account.  This sets
-    the correct roles/permissions on the account based on a list kept in the
-    script - **this will need to be maintained**.
+    script (`PRJ_API`) - **this will need to be maintained**.  Missing APIs
+    are enabled after asking, or, with `--config`, without asking.
+  - The deploy script always uses an additional script,
+    `script/service_account.sh create`, to create the keyless provisioning
+    service account `<deployment_name>-prov-sa` (or to reuse an existing one
+    and give it the same roles).  This sets the correct roles/permissions on
+    the account based on a list kept in the script (`SA_ROLES`) - **this will
+    need to be maintained**.  `create` makes no key: Terraform grants the web
+    server's account *Service Account Token Creator* on the provisioning
+    account, the account's e-mail address is passed to the server in the
+    instance metadata key `ofe-provisioning-service-account`, and the server
+    registers it as the *OFE provisioning account* credential and acts as it
+    by impersonation.
+  - A key file is written only on request: the interactive deploy script
+    asks whether to write one (default *No*), and
+    `script/service_account.sh credential` writes one for an existing account.
+    This is the opt-in path for an *Uploaded service account key* credential,
+    which image builds still need.
 - Terraform creates a hosting VPC and a subnetwork for the deployment, together
   with the necessary firewall rules.
 - Terraform creates a supporting GCS bucket. This bucket is not only used
@@ -111,6 +124,30 @@ Here are some notes from a developer's perspective:
   `server.terraform_state_bucket` in `configuration.yaml`.
 - Terraform sets up a Pub/Sub topic for communication between the service
   machine and clusters.
+- Terraform creates the service machine's own service account,
+  `<deployment_name>-fe-sa`, and two Secret Manager secrets on which only
+  that account is granted access (principals with project-wide Secret
+  Manager roles, such as the provisioning account and the shared account of
+  clusters created before an upgrade, can still read them): `<deployment_name>-server-config`, which
+  holds the configuration the startup script reads on first boot (including
+  the admin user's password), and `<deployment_name>-db-key`, for the key
+  that encrypts stored credentials.  The configuration is no longer uploaded
+  to the GCS bucket. Once the first boot has installed and started the
+  server, the startup script disables that secret version, so the admin
+  password cannot be read again. The first boot writes
+  `/var/lib/ofe-server/first-boot-started` before it fetches the TKFE code
+  and `first-boot-complete` only once the fetch and the Django set-up have
+  succeeded and the server and the Django application are running
+  (`first-boot-fetched` records a completed fetch in between). A first boot
+  whose fetch fails or is interrupted leaves the version enabled and the next
+  boot removes any partial copy and tries again; one that fails later stops
+  and disables the web server and leaves a partly installed server, which
+  that boot and every later boot report without disabling the version, and
+  which must be recreated. An
+  installed server (complete marker, or no markers for one installed by an
+  earlier version) disables any version still enabled each time it starts.
+  A server VM created again must have the version enabled first; see
+  [Web server account](admin_guide.md#web-server-account).
 - Terraform provisions a compute engine virtual machine to be the service
   machine. A startup script is then executed on the service machine to set up
   the software environment for Cluster Toolkit and Django, and start the web and
@@ -361,6 +398,53 @@ introduced in Django v3.1.
 Finally, `templates` directory contains the web view templates. Django ships
 with its own template engine to process these template files and insert dynamic
 contents to them.
+
+#### Running the tests
+
+The Django tests live in `website/ghpcfe/tests/` and run offline with their own
+settings module, `ghpcfe.tests.settings`. It builds on the production settings
+but uses an in-memory SQLite database (the `ghpcfe` tables are created directly
+from the models), never starts the C2 Pub/Sub subscriptions, skips the GCE
+metadata server lookups, stubs the Spack modules, and reads a fake backend
+configuration from `ghpcfe/tests/fixtures/test_settings_config.yaml` instead of
+the deployment's `configuration.yaml`.
+
+From `community/front-end/ofe`, install the same requirements as the webserver
+into a Python virtual environment:
+
+```shell
+pip install --require-hashes -r infrastructure_files/gcs_bucket/webserver/django_requirements.txt
+pip install --require-hashes -r requirements.txt
+```
+
+Then run the tests from the `website/` directory, because the settings read
+(or create) `.secret_key` in the current directory:
+
+```shell
+cd website
+python manage.py test ghpcfe.tests --settings=ghpcfe.tests.settings
+```
+
+To run a single module, name it instead, for example
+`python manage.py test ghpcfe.tests.test_credentials --settings=ghpcfe.tests.settings`.
+
+`ghpcfe.tests.test_profiles_module_condition` evaluates the
+`service-account-profiles` module with `terraform console`, offline. It needs
+`terraform` on `PATH` and a local copy of the `hashicorp/google` and
+`hashicorp/time` providers; without either it is skipped, and the skip reason
+says where it looked. To run it, make the copy once, from the repository root
+(this downloads the providers; Git ignores the result):
+
+```shell
+terraform -chdir=community/modules/iam/service-account-profiles init -backend=false
+```
+
+The test also finds the providers in Terraform's plugin cache
+(`TF_PLUGIN_CACHE_DIR`), or in any directory named by `OFE_TEST_TF_PLUGIN_DIR`
+that holds `registry.terraform.io/hashicorp/google` and
+`registry.terraform.io/hashicorp/time`. A directory named by
+`OFE_TEST_TF_PLUGIN_DIR` that lacks either provider fails the test instead
+of skipping it.
 
 ## Workbenches Architecture
 

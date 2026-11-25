@@ -18,3 +18,8 @@ output "server_ip" {
   description = "Webserver IP Address"
   value       = google_compute_instance.server_vm.network_interface[0].access_config[0].nat_ip
 }
+
+output "server_service_account_email" {
+  description = "E-mail address of the web server's service account, available once its grants have propagated."
+  value       = module.fe_profile.service_account_email
+}

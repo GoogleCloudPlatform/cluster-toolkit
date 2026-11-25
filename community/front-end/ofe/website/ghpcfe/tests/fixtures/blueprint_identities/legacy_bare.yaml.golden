@@ -1,0 +1,119 @@
+
+
+blueprint_name: bare-00ff00ff
+
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: ofe-test-state-bucket
+    prefix: @STATE_PREFIX@
+
+vars:
+  project_id: example-project
+  deployment_name: bare-00ff00ff
+  region: us-central1
+  zone: us-central1-a
+  enable_cleanup_compute: True
+  enable_bigquery_load: False
+  
+  labels:
+    created_by: @SITE_NAME@
+
+deployment_groups:
+- group: primary
+  modules:
+  - source: modules/network/pre-existing-vpc
+    kind: terraform
+    settings:
+      network_name: net-a
+      subnetwork_name: subnet-a
+    id: hpc_network
+
+
+
+
+
+
+
+  - source: modules/project/service-account
+    kind: terraform
+    id: hpc_service_account
+    settings:
+      project_id: example-project
+      name: sa
+      project_roles:
+      - compute.instanceAdmin.v1
+      - iam.serviceAccountUser
+      - monitoring.metricWriter
+      - logging.logWriter
+      - storage.objectAdmin
+      - pubsub.admin
+      - compute.securityAdmin
+      - iam.serviceAccountAdmin
+      - resourcemanager.projectIamAdmin
+      - compute.networkAdmin
+      - artifactregistry.admin
+      - secretmanager.secretAccessor
+
+
+
+
+
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    kind: terraform
+    id: slurm_controller
+    settings:
+      enable_slurm_auth: true
+      instance_image:
+        family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+        project: advanced-compute-images
+      cloud_parameters:
+        resume_rate: 0
+        resume_timeout: 500
+        suspend_rate: 0
+        suspend_timeout: 300
+        no_comma_params: false
+      machine_type: n2-standard-2
+      disk_type: pd-standard
+      disk_size_gb: 120
+      
+      service_account_email: $(hpc_service_account.service_account_email)
+      service_account_scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+        - https://www.googleapis.com/auth/monitoring.write
+        - https://www.googleapis.com/auth/logging.write
+        - https://www.googleapis.com/auth/devstorage.read_write
+        - https://www.googleapis.com/auth/pubsub
+      compute_startup_scripts_timeout: 1200
+      controller_startup_scripts_timeout: 1200
+      controller_startup_script: |
+        #!/bin/bash
+        echo "******************************************** CALLING CONTROLLER STARTUP"
+        gcloud storage cat gs://ofe-test-bucket/clusters/103/bootstrap_controller.sh | bash
+      login_startup_script: |
+        #!/bin/bash
+        echo "******************************************** CALLING LOGIN STARTUP"
+        gcloud storage cat gs://ofe-test-bucket/clusters/103/bootstrap_login.sh | bash
+    use:
+    - slurm_login
+    - hpc_network
+
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    kind: terraform
+    id: slurm_login
+    settings:
+      instance_image:
+        family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+        project: advanced-compute-images
+      num_instances: 0
+      subnetwork_self_link: "projects/example-project/regions/us-central1/subnetworks/subnet-a"
+      machine_type: n2-standard-2
+      disk_type: pd-standard
+      disk_size_gb: 120
+      
+      service_account_email: $(hpc_service_account.service_account_email)
+      service_account_scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+        - https://www.googleapis.com/auth/monitoring.write
+        - https://www.googleapis.com/auth/logging.write
+        - https://www.googleapis.com/auth/devstorage.read_write

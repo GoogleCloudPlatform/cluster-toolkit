@@ -151,6 +151,17 @@
       </div>
       {% block padded_content %}
       <div class="col-sm-10 mt-3" style="flex:1;">
+        {% if credential_setup_errors %}
+          <div class="alert alert-danger" role="alert" id="credential-setup-errors">
+            <p class="mb-1">Preparing stored credentials failed when the server last started{% if credential_setup_errors.time %} ({{ credential_setup_errors.time }}){% endif %}:</p>
+            <ul class="mb-1">
+              {% for error in credential_setup_errors.errors %}
+              <li>{{ error }}</li>
+              {% endfor %}
+            </ul>
+            <p class="mb-0">Fix the cause (see the Admin Guide, Stored credentials at start), then restart the server or run <code>python manage.py ofe_bootstrap_credentials</code>.</p>
+          </div>
+        {% endif %}
         {% if messages %}
           {% for message in messages %}
             <div class="alert {% if message.tags %}alert-{% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}danger{% else %}{{ message.tags }}{% endif %}{% endif %}" role="alert">{{ message }}</div>

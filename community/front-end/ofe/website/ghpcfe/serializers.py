@@ -28,11 +28,16 @@ from .models import (
 
 
 class CredentialSerializer(serializers.ModelSerializer):
-    """Custom ModelSerializer for Credential model"""
+    """Custom ModelSerializer for Credential model.
+
+    The owner is the user who created the credential; the API cannot set
+    or change it.
+    """
 
     class Meta:
         model = Credential
         fields = ("id", "name", "owner", "detail")
+        read_only_fields = ("owner",)
         extra_kwargs = {"detail": {"write_only": True}}
 
 

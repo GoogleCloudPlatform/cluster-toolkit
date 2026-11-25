@@ -1,0 +1,17 @@
+
+Error: Error when reading or editing Custom Project Role "projects/example-project/roles/alpha_0a1b2c3d.ctl.a1b2c3": googleapi: Error 403: Permission 'iam.roles.get' denied on resource (or it may not exist).
+Details:
+[
+  {
+    "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+    "domain": "iam.googleapis.com",
+    "metadata": {
+      "permission": "iam.roles.get"
+    },
+    "reason": "IAM_PERMISSION_DENIED"
+  }
+]
+
+  with module.ctl_profile.google_project_iam_custom_role.this[0],
+  on ../_modules/embedded/community/modules/iam/service-account-profiles/main.tf line 426, in resource "google_project_iam_custom_role" "this":
+ 426: resource "google_project_iam_custom_role" "this" {

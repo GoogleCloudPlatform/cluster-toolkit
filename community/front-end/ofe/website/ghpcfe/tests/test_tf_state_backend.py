@@ -24,13 +24,18 @@ pre-commit configuration runs a bare `pytest` from the repository root on any
 changed Python file, with no rootdir configuration and no DJANGO_SETTINGS_MODULE,
 so a module that imported Django (or any ghpcfe module that does) at import time
 would error during collection in CI. `utils` itself imports only the standard
-library and PyYAML, so it is loaded here directly by path. filesystem.py is
-loaded the same way, with its Django-dependent imports (models, site settings)
-stubbed.
+library and PyYAML, so it is loaded here directly by path; it imports the
+credentials module, which needs Django, only when a run acts as a credential,
+and these tests replace that module with FakeCredentials. filesystem.py is
+loaded the same way, with its Django-dependent imports (models, site settings,
+credentials) stubbed.
 """
 
+import ast
+import contextlib
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -57,6 +62,84 @@ def _load_utils():
 
 
 utils = _load_utils()
+
+# The server's ambient credential variables, none of which may reach a run
+# given no credential. Pinned here, and checked against
+# credentials.AMBIENT_CREDENTIAL_VARIABLES, read from its source because the
+# module needs Django (GetTerraformStateTests).
+AMBIENT_CREDENTIAL_VARIABLES = (
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GOOGLE_CREDENTIALS",
+    "GOOGLE_BACKEND_CREDENTIALS",
+    "GOOGLE_BACKEND_IMPERSONATE_SERVICE_ACCOUNT",
+    "GOOGLE_CLOUD_KEYFILE_JSON",
+    "GCLOUD_KEYFILE_JSON",
+    "GOOGLE_OAUTH_ACCESS_TOKEN",
+    "GOOGLE_IMPERSONATE_SERVICE_ACCOUNT",
+    "CLOUDSDK_CONFIG",
+    "CLOUDSDK_AUTH_ACCESS_TOKEN_FILE",
+    "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+    "CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT",
+    "CLOUDSDK_CORE_ACCOUNT",
+    "CLOUDSDK_CORE_PROJECT",
+)
+
+
+def code_ambient_credential_variables():
+    """credentials.AMBIENT_CREDENTIAL_VARIABLES, read from credentials.py
+    without importing it"""
+    tree = ast.parse(
+        (CLUSTER_MANAGER / "credentials.py").read_text(encoding="utf-8")
+    )
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name)
+            and target.id == "AMBIENT_CREDENTIAL_VARIABLES"
+            for target in node.targets
+        ):
+            return ast.literal_eval(node.value)
+    raise AssertionError("credentials.py has no AMBIENT_CREDENTIAL_VARIABLES")
+
+
+PROVISIONING_EMAIL = "prov@proj.iam.gserviceaccount.com"
+# The environment a run that acts as the credential gets
+CREDENTIAL_ENV = {"GOOGLE_IMPERSONATE_SERVICE_ACCOUNT": PROVISIONING_EMAIL}
+
+
+def fake_credentials():
+    """A stand-in for cluster_manager/credentials.py, which needs Django: runs
+    act as an impersonated provisioning account, and a failed run is raised
+    unchanged (no permission refusal in its logs)."""
+    module = types.SimpleNamespace()
+
+    @contextlib.contextmanager
+    def tool_environment(credential, key_file=False, base_env=None):
+        env = dict(os.environ if base_env is None else base_env)
+        env.update(CREDENTIAL_ENV)
+        yield env
+
+    module.tool_environment = mock.MagicMock(side_effect=tool_environment)
+    module.python_credentials = mock.MagicMock(name="python_credentials")
+    module.shell_identity = mock.MagicMock(
+        return_value=f"GOOGLE_IMPERSONATE_SERVICE_ACCOUNT={PROVISIONING_EMAIL}"
+    )
+    module.explain_failed_run = mock.MagicMock(side_effect=lambda cpe, *_: cpe)
+    module.permission_error_from_output = mock.MagicMock(return_value=None)
+    module.PermissionDeniedRunError = subprocess.CalledProcessError
+    # The variables a run given no credential drops from its environment
+    module.AMBIENT_CREDENTIAL_VARIABLES = AMBIENT_CREDENTIAL_VARIABLES
+    return module
+
+
+def acting_as_credential(test):
+    """Patch utils so that runs which act as a credential use
+    fake_credentials(); returns the fake module and a credential."""
+    module = fake_credentials()
+    patcher = mock.patch.object(utils, "_credentials", return_value=module)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+    credential = mock.Mock(name="credential", kind="impersonate", project_id="proj")
+    return module, credential
 
 
 class TerraformStatePrefixTests(unittest.TestCase):
@@ -185,26 +268,68 @@ class GetTerraformStateTests(unittest.TestCase):
 
     STATE = {"version": 4, "outputs": {"vpc_id": {"value": "my-net"}}}
 
+    def setUp(self):
+        # credentials.py needs Django; its stand-in names the ambient
+        # credential variables
+        patcher = mock.patch.object(
+            utils, "_credentials", return_value=fake_credentials()
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_parses_pulled_state(self):
         completed = subprocess.CompletedProcess(
             args=[], returncode=0, stdout=json.dumps(self.STATE).encode()
         )
         with mock.patch.object(subprocess, "run", return_value=completed) as run:
-            state = utils.get_terraform_state("/some/dir", {"A": "b"})
+            state = utils.get_terraform_state("/some/dir", extra_env={"A": "b"})
         self.assertEqual(state["outputs"]["vpc_id"]["value"], "my-net")
         cmdline = run.call_args.args[0]
         self.assertEqual(cmdline, ["terraform", "state", "pull"])
+        self.assertEqual(run.call_args.kwargs["env"]["A"], "b")
 
-    def test_credentials_are_passed_through(self):
+    def test_the_ambient_variables_are_pinned(self):
+        code = code_ambient_credential_variables()
+        self.assertEqual(len(AMBIENT_CREDENTIAL_VARIABLES), 14)
+        self.assertEqual(len(code), len(set(code)))
+        self.assertEqual(set(code), set(AMBIENT_CREDENTIAL_VARIABLES))
+
+    def test_pull_without_a_credential_gets_no_ambient_credential(self):
+        # As run_terraform without a credential: the server's own identity
+        # never reaches the pull
         completed = subprocess.CompletedProcess(
             args=[], returncode=0, stdout=json.dumps(self.STATE).encode()
         )
-        creds = {"GOOGLE_APPLICATION_CREDENTIALS": "/tmp/creds.json"}
+        ambient = {
+            name: f"ambient-{name.lower()}"
+            for name in AMBIENT_CREDENTIAL_VARIABLES
+        }
+        with mock.patch.dict(os.environ, {**ambient, "KEEP_ME": "1"}), \
+                mock.patch.object(
+                    subprocess, "run", return_value=completed
+                ) as run:
+            utils.get_terraform_state("/some/dir", extra_env={"A": "b"})
+        env = run.call_args.kwargs["env"]
+        for name in ambient:
+            with self.subTest(variable=name):
+                # Not assertNotIn: its failure message would print the
+                # whole environment, secrets included, into the test log
+                self.assertFalse(name in env, f"{name} reached the pull")
+        self.assertEqual(env["KEEP_ME"], "1")
+        self.assertEqual(env["A"], "b")
+
+    def test_the_pull_acts_as_the_credential(self):
+        # The state bucket is read as the resource's provisioning credential
+        module, credential = acting_as_credential(self)
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=json.dumps(self.STATE).encode()
+        )
         with mock.patch.object(subprocess, "run", return_value=completed) as run:
-            utils.get_terraform_state("/some/dir", creds)
+            utils.get_terraform_state("/some/dir", credential=credential)
+        module.tool_environment.assert_called_once_with(credential)
         env = run.call_args.kwargs["env"]
         self.assertEqual(
-            env["GOOGLE_APPLICATION_CREDENTIALS"], "/tmp/creds.json"
+            env["GOOGLE_IMPERSONATE_SERVICE_ACCOUNT"], PROVISIONING_EMAIL
         )
 
     def test_unparseable_state_raises(self):
@@ -227,7 +352,9 @@ class RunTerraformInputTests(unittest.TestCase):
 
     def _cmdline(self, command):
         with tempfile.TemporaryDirectory() as tmp:
-            with mock.patch.object(subprocess, "run") as run:
+            with mock.patch.object(subprocess, "run") as run, \
+                    mock.patch.object(utils, "_credentials",
+                                      return_value=fake_credentials()):
                 utils.run_terraform(tmp, command)
         return run.call_args.args[0]
 
@@ -334,11 +461,11 @@ class RawTemplateBackendTests(unittest.TestCase):
 class TerraformInitCredentialsTests(unittest.TestCase):
     """`terraform init` must authenticate as the provisioning credential.
 
-    A GCS backend is contacted during init, so without
-    GOOGLE_APPLICATION_CREDENTIALS Terraform falls back to application default
-    credentials -- on the server, the front end's own service account, a
-    different identity from the one that provisions the resource and possibly
-    in a different project.
+    A GCS backend is contacted during init, so without the resource's
+    credential (run_terraform's credential, passed with the rest of `cloud`)
+    Terraform falls back to application default credentials -- on the
+    server, the front end's own service account, a different identity from
+    the one that provisions the resource and possibly in a different project.
     """
 
     PROVISIONING_MODULES = (
@@ -361,28 +488,32 @@ class TerraformInitCredentialsTests(unittest.TestCase):
             self.assertTrue(calls, f"no terraform init call found in {name}")
             for match in calls:
                 with self.subTest(module=name):
-                    self.assertIn(
-                        "extra_env",
+                    self.assertRegex(
                         match.group("args"),
-                        f"{name}: terraform init must pass extra_env, or it "
-                        "will contact the state bucket as the wrong identity",
+                        r"\*\*cloud\b|\bcredential=",
+                        f"{name}: terraform init must act as the resource's "
+                        "credential, or it will contact the state bucket as "
+                        "the wrong identity",
                     )
 
 
 def _load_filesystem():
     """Import cluster_manager/filesystem.py without Django.
 
-    The module's only Django-dependent imports are the ghpcfe models and the
-    site settings, neither of which write_filestore_yaml touches. They are
-    stubbed in sys.modules for the duration of the import, and the module is
-    placed in a throwaway package so its relative imports resolve to the
-    stubs and to the already-loaded `utils`.
+    The module's only Django-dependent imports are the ghpcfe models, the
+    site settings and the credentials module, none of which
+    write_filestore_yaml touches. They are stubbed in sys.modules for the
+    duration of the import, and the module is placed in a throwaway package so
+    its relative imports resolve to the stubs and to the already-loaded
+    `utils`.
     """
     pkg = types.ModuleType("ofe_stub")
     pkg.__path__ = []
     manager = types.ModuleType("ofe_stub.cluster_manager")
     manager.__path__ = []
     manager.utils = utils
+    credentials = types.ModuleType("ofe_stub.cluster_manager.credentials")
+    manager.credentials = credentials
     models = types.ModuleType("ofe_stub.models")
     for name in ("GCPFilestoreFilesystem", "Filesystem", "FilesystemImpl"):
         setattr(models, name, mock.MagicMock())
@@ -394,6 +525,7 @@ def _load_filesystem():
         "ofe_stub": pkg,
         "ofe_stub.cluster_manager": manager,
         "ofe_stub.cluster_manager.utils": utils,
+        "ofe_stub.cluster_manager.credentials": credentials,
         "ofe_stub.models": models,
         "website": website,
         "website.settings": settings,
@@ -425,7 +557,7 @@ class FilesystemBlueprintYamlTests(unittest.TestCase):
         fs = mock.MagicMock()
         fs.id = 12
         fs.name = "testfs"
-        fs.cloud_credential.detail = json.dumps({"project_id": "proj"})
+        fs.cloud_credential.project_id = "proj"
         fs.cloud_region = "europe-west4"
         fs.cloud_zone = "europe-west4-a"
         fs.vpc.cloud_id = "testnet"
@@ -466,7 +598,9 @@ class RunTerraformLockTimeoutTests(unittest.TestCase):
 
     def _cmdline(self, command):
         with tempfile.TemporaryDirectory() as tmp:
-            with mock.patch.object(subprocess, "run") as run:
+            with mock.patch.object(subprocess, "run") as run, \
+                    mock.patch.object(utils, "_credentials",
+                                      return_value=fake_credentials()):
                 utils.run_terraform(tmp, command)
         return run.call_args.args[0]
 
@@ -500,9 +634,10 @@ class StaleStateLockTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.dir = Path(tmp.name)
-        self.creds = str(self.dir / "cloud_credentials")
         self._write_backend("gcs")
-        self.env = {"GOOGLE_APPLICATION_CREDENTIALS": self.creds}
+        # Each run acts as the resource's credential, which the lock check
+        # also reads the lock object as
+        self.credentials, self.credential = acting_as_credential(self)
         for target, value in (
             ("socket.gethostname", f"{self.HOST}.c.example.internal"),
             ("_terraform_running_in", False),
@@ -544,10 +679,16 @@ class StaleStateLockTests(unittest.TestCase):
         client.bucket.return_value.get_blob.return_value = blob
         return client
 
-    def _run(self, client, command="plan"):
-        with mock.patch.object(utils, "_gcs_client", return_value=client):
+    def _run(self, client, command="plan", expect_check=True):
+        """Run command; the lock check must read the bucket as the
+        credential, or (expect_check=False) not read it at all"""
+        with mock.patch.object(utils, "_gcs_client", return_value=client) as gcs_client:
             with mock.patch.object(subprocess, "run") as run:
-                utils.run_terraform(self.dir, command, extra_env=self.env)
+                utils.run_terraform(self.dir, command, credential=self.credential)
+        if expect_check:
+            gcs_client.assert_called_with(self.credential)
+        else:
+            gcs_client.assert_not_called()
         return run
 
     def test_no_lock_object_runs_terraform(self):
@@ -583,7 +724,8 @@ class StaleStateLockTests(unittest.TestCase):
             "Age:",
             "2026-10-15T22:16:03",
             "no Terraform process on this server holds it",
-            f"cd {self.dir} && GOOGLE_APPLICATION_CREDENTIALS={self.creds}"
+            # The command acts as the credential the operation ran as
+            f"cd {self.dir} && GOOGLE_IMPERSONATE_SERVICE_ACCOUNT={PROVISIONING_EMAIL}"
             f" terraform force-unlock -force {self.GENERATION}",
         ):
             with self.subTest(expected=expected):
@@ -605,7 +747,7 @@ class StaleStateLockTests(unittest.TestCase):
         ):
             with mock.patch.object(subprocess, "run") as run:
                 with self.assertLogs(utils.logger, "WARNING") as logs:
-                    utils.run_terraform(self.dir, "plan", extra_env=self.env)
+                    utils.run_terraform(self.dir, "plan", credential=self.credential)
         run.assert_called_once()
         self.assertIn("storage down", "\n".join(logs.output))
 
@@ -613,7 +755,7 @@ class StaleStateLockTests(unittest.TestCase):
         self._write_backend("local")
         with mock.patch.object(utils, "_gcs_client") as gcs_client:
             with mock.patch.object(subprocess, "run") as run:
-                utils.run_terraform(self.dir, "plan", extra_env=self.env)
+                utils.run_terraform(self.dir, "plan", credential=self.credential)
         gcs_client.assert_not_called()
         run.assert_called_once()
 
@@ -621,14 +763,15 @@ class StaleStateLockTests(unittest.TestCase):
         (self.dir / ".terraform" / "terraform.tfstate").unlink()
         with mock.patch.object(utils, "_gcs_client") as gcs_client:
             with mock.patch.object(subprocess, "run") as run:
-                utils.run_terraform(self.dir, "plan", extra_env=self.env)
+                utils.run_terraform(self.dir, "plan", credential=self.credential)
         gcs_client.assert_not_called()
         run.assert_called_once()
 
     def test_non_locking_command_skips_check(self):
-        with mock.patch.object(utils, "_gcs_client") as gcs_client:
-            self._run(gcs_client, "init")
-        gcs_client.assert_not_called()
+        client = self._client(None)
+        run = self._run(client, "init", expect_check=False)
+        client.bucket.assert_not_called()
+        run.assert_called_once()
 
     def test_lock_timeout_is_reported_from_stderr(self):
         stderr = (
@@ -658,7 +801,7 @@ class StaleStateLockTests(unittest.TestCase):
                         utils.TerraformStateLockError
                     ) as ctx:
                         utils.run_terraform(
-                            self.dir, "plan", extra_env=self.env
+                            self.dir, "plan", credential=self.credential
                         )
         message = str(ctx.exception)
         self.assertIn("waited 45m", message)
@@ -680,7 +823,7 @@ class StaleStateLockTests(unittest.TestCase):
         ):
             with mock.patch.object(subprocess, "run", side_effect=fail):
                 with self.assertRaises(subprocess.CalledProcessError) as ctx:
-                    utils.run_terraform(self.dir, "plan", extra_env=self.env)
+                    utils.run_terraform(self.dir, "plan", credential=self.credential)
         self.assertIs(ctx.exception, original)
 
     def test_error_is_a_called_process_error(self):

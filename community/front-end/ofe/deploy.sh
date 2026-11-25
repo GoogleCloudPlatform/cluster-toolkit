@@ -22,13 +22,11 @@
 #   Deployment requires a GCP project and authenticated user to run the FrontEnd
 #   on GCP resources.
 #
-#   The FrontEnd also requires a service account with permissions and
-#   credential, which needs to be created and registered with the FrontEnd once
-#   it is running.
-#
-#   By default this script will create the account and supply the credential
-#   file, but this can be skipped if the admin user already has an account they
-#   prefer to use.
+#   The FrontEnd also requires a provisioning service account, with the
+#   permissions to create clusters and other resources. This script creates it
+#   (<deployment_name>-prov-sa) with no key: only the FrontEnd web server's
+#   account may act as it, and the server uses it without a key. A key file is
+#   written only if the interactive user asks for one.
 #
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
@@ -50,6 +48,8 @@ PRJ_API['file.googleapis.com']='Cloud Filestore API'
 PRJ_API['cloudresourcemanager.googleapis.com']='Cloud Resource Manager API'
 PRJ_API['pubsub.googleapis.com']='Cloud Pub/Sub API'
 PRJ_API['iam.googleapis.com']='Identity and Access Management (IAM) API'
+# The web server acts as the keyless provisioning account through this API.
+PRJ_API['iamcredentials.googleapis.com']='IAM Service Account Credentials API'
 PRJ_API['oslogin.googleapis.com']='Cloud OS Login API'
 PRJ_API['cloudbilling.googleapis.com']='Cloud Billing API'
 PRJ_API['aiplatform.googleapis.com']='Vertex AI API'
@@ -95,6 +95,7 @@ HELP1
   If these are not enabled, you will be asked to confirm they can be
   enabled by this script.  Not confirming will cause the script to exit, so you
   can rectify the project manually, or start again with a different project.
+  With --config, the script enables any that are missing without asking.
   If you do not have permission to modify APIs on the project, these will need
   to be added by an administrator (with Owner or Editor privileges).
   Please see the Administrator's Guide for details on the APIs.
@@ -294,8 +295,9 @@ checklock() {
 
 #
 # Check the deployment name can be used in every resource name derived from it.
-#   - The tightest limit is the service account ID "<name>-tkfe-sa", which GCP
-#     caps at 30 characters, leaving 22 for the name.
+#   - The tightest limit is the service account ID "<name>-prov-sa"
+#     (PROV_SA_SUFFIX), which GCP caps at 30 characters, leaving 22 for the
+#     name.
 #   - Service account IDs, VM names and label values do not allow '.'.
 #   - Prints the reason to stderr and returns 1 if the name is invalid.
 #
@@ -307,7 +309,8 @@ validate_deployment_name() {
 
 	if [[ ${#name} -lt 3 || ${#name} -gt ${DEPLOYMENT_NAME_MAX_LENGTH} || ! ${name} =~ ${validname} ]]; then
 		error "    Error: Deployment name '${name}' is invalid. It must:"
-		error "              - Be 3 to ${DEPLOYMENT_NAME_MAX_LENGTH} characters long"
+		error "              - Be 3 to ${DEPLOYMENT_NAME_MAX_LENGTH} characters long, so that the service"
+		error "                account names made from it are valid"
 		error "              - Only contain characters a-z (lowercase), 0-9 and '-'"
 		error "              - Start with a letter and end with a letter or digit"
 		return 1
@@ -375,146 +378,718 @@ check_account() {
 # Check that all required APIs are enabled for the project
 # - If some are missing, ask if they would like them enabled and do so.
 # - Abort if declined, as cannot deploy without them.
+# - With --yes (the --config path, which cannot ask), enable them without
+#   asking. Both paths call this, so they give the same result.
+# - A failure to list or enable the APIs stops the script.
+#
+# Usage:
+#    check_apis PROJECT [--yes]
 #
 check_apis() {
 
 	local project=$1
+	local assume_yes=${2:-}
 
-	# Get all currently enabled APIs for this project
+	# Get all currently enabled APIs for this project, one name per line
 	#
 	local enabled_apis
-	enabled_apis=$(gcloud services list)
+	if ! enabled_apis=$(gcloud services list --enabled \
+		--project="${project}" --format='value(config.name)' 2>&1); then
+		error ""
+		error "  Error: Unable to list the APIs enabled in project ${project}:"
+		error "${enabled_apis}"
+		error ""
+		error "Exiting."
+		exit 1
+	fi
 
 	# Check all required APIs are present, prompt and enable for any missing
 	#
-	local id
+	local id output
 	for id in "${!PRJ_API[@]}"; do
 		local desc=${PRJ_API[$id]}
 
 		verbose "checking API: ${desc}"
-		set +e
-		echo "${enabled_apis}" | grep -q "${id}"
-		local ok=$?
-		set -e
+		if grep -qxF "${id}" <<<"${enabled_apis}"; then
+			continue
+		fi
 
-		if [[ ${ok} -ne 0 ]]; then
-			echo ""
-			echo "Warning: Required API is not enabled: ${desc}"
+		echo ""
+		echo "Warning: Required API is not enabled: ${desc} (${id})"
+		if [[ ${assume_yes} != '--yes' ]]; then
 			read -r -p "         Enable this API? [y/N] " reply
 			case "${reply}" in
-			[Yy]*)
-				echo ""
-				echo "  Enabling: ${desc}"
-				echo "  This may take a few seconds..."
-				# Enabling may fail if user doesn't have privileges to
-				# modify the project.
-				# Could use --async option on this command, to prevent wait,
-				# but would need to check later if did this.
-				set +e
-				if ! gcloud services enable "${id}" \
-					--project="${project}" &>/dev/null; then
-					error ""
-					error "  Error: Unable to modify project APIs"
-					error "         Please contact to administrator"
-					error ""
-					error "Exiting."
-					exit 1
-				fi
-				set -e
-				;;
+			[Yy]*) ;;
 			*)
 				echo "Exiting."
 				exit 0
 				;;
 			esac
+		fi
 
+		echo ""
+		echo "  Enabling: ${desc}"
+		echo "  This may take a few seconds..."
+		# Enabling may fail if user doesn't have privileges to
+		# modify the project.
+		if ! output=$(gcloud services enable "${id}" \
+			--project="${project}" 2>&1); then
+			error ""
+			error "  Error: Unable to enable ${desc} (${id}) in project ${project}:"
+			error "${output}"
+			error "         Please ask a project administrator to enable it."
+			error ""
+			error "Exiting."
+			exit 1
 		fi
 	done
 }
 
+# The provisioning service account is <deployment_name>-prov-sa. Service
+# account names are at most 30 characters, so the deployment name can be at
+# most 30 - 8 = 22.
+PROV_SA_SUFFIX='-prov-sa'
+PROV_SA_MAX_DEPLOYMENT_NAME=$((30 - ${#PROV_SA_SUFFIX}))
+
 #
-# Create a service account with required roles to run TKFE operations
+# Create the provisioning service account, with the roles the FrontEnd needs
+# to create clusters and other resources, and no key. One that already exists
+# under this name (a redeploy) is reused and given the same roles.
+# - Only the web server's account may act as it: tf/main.tf grants that, for
+#   the e-mail written to terraform.tfvars, and each use is in the project's
+#   audit logs.
+# - Both the interactive and the --config paths call this, so they give the
+#   same result.
+# - An existing account with user-managed keys, whose holders would get the
+#   roles, is reused with a warning. With --ask (the interactive path), the
+#   user is asked first, and a no exits here with nothing granted. The
+#   --config path cannot ask, and a key written earlier by this script at its
+#   user's request is no reason to stop a redeploy, so it goes on.
+# - Sets provisioning_email, which deploy() writes to terraform.tfvars.
 #
-create_service_account() {
+# Usage:
+#    create_provisioning_account PROJECT DEPLOYMENT [--ask]
+#
+create_provisioning_account() {
 
 	local project=$1
-	local server_name=$2
+	local deployment=$2
+	local account="${deployment}${PROV_SA_SUFFIX}"
+	local options=()
+	local rc=0
+
+	if [[ ${3:-} == "--ask" ]]; then
+		options=(--ask)
+	fi
+
+	echo ""
+	echo "    Creating the provisioning service account ${account}, with no key."
+	echo "    This may take a few seconds..."
+	bash "${SCRIPT_DIR}/script/service_account.sh" create \
+		"${project}" "${account}" "${options[@]}" || rc=$?
+	if [[ ${rc} -eq 3 && ${#options[@]} -gt 0 ]]; then
+		echo ""
+		echo "    Not deploying. The existing account ${account} was not given its"
+		echo "    roles by this run. Running ./deploy.sh again checks its keys again."
+		echo "Exiting."
+		exit 0
+	fi
+	if [[ ${rc} -ne 0 ]]; then
+		error ""
+		error "Error:  Could not create the provisioning service account ${account}."
+		if [[ ${#deployment} -gt ${PROV_SA_MAX_DEPLOYMENT_NAME} ]]; then
+			error "        The deployment name must be at most ${PROV_SA_MAX_DEPLOYMENT_NAME} characters."
+		fi
+		error ""
+		echo "Exiting."
+		exit 1
+	fi
+	provisioning_email="${account}@${project}.iam.gserviceaccount.com"
+}
+
+#
+# Write a key for the provisioning service account, only when the interactive
+# user asks for one. The server does not need it.
+#
+write_provisioning_key() {
+
+	local project=$1
+	local deployment=$2
 	local credfile=$3
-	local service_account="${server_name}-tkfe-sa"
+	local account="${deployment}${PROV_SA_SUFFIX}"
 
-	# Check for existing service account with this name
-	# - if there is an account, it can be used and a new credential generated
-	#   if required.
-	#
-	verbose "checking for any previous existing account"
+	verbose "creating credential file: ${credfile}"
+	if ! bash "${SCRIPT_DIR}/script/service_account.sh" credential \
+		"${project}" "${account}" "${credfile}"; then
+		error ""
+		error "Error:  Could not write a key for ${account} (the error is above)."
+		error "        The account ${account} exists, with its project roles."
+		error "        Running this script again reuses it. To delete it and its"
+		error "        project roles instead:"
+		error "          script/service_account.sh delete ${project} ${account}"
+		error ""
+		echo "Exiting."
+		exit 1
+	fi
+	echo ""
+	echo "    Warning: A key for ${account} was written in plain text to:"
+	echo "      ${credfile}"
+	echo "    Anyone who holds this file can act as the account, which can"
+	echo "    administer IAM in project ${project}. Keeping it safe is up to you:"
+	echo "    delete the file once you no longer need it, and delete the key with"
+	echo "    'gcloud iam service-accounts keys delete' when it is no longer used."
+}
 
-	local create=0
-	local getcred=0
+# Terraform addresses of the web server's service account: current, and as
+# written by servers deployed before the move to the Cluster Toolkit modules
+# (tf/main.tf moves it from the old address on the next apply).
+FE_SA_ADDRESS='module.fe_sa.module.service_account.google_service_account.service_accounts["fe-sa"]'
+FE_SA_OLD_ADDRESS='module.service_account.google_service_account.service_accounts["fe-sa"]'
 
-	if bash "${SCRIPT_DIR}/script/service_account.sh" check \
-		"${project}" "${service_account}"; then
+# Terraform addresses of the control bucket: current, and as written by
+# servers deployed before the bucket module call was renamed (tf/main.tf moves
+# it from the old address on the next apply).
+CONTROL_BUCKET_ADDRESS='module.control_storage.google_storage_bucket.buckets["storage"]'
+CONTROL_BUCKET_OLD_ADDRESS='module.control_bucket.google_storage_bucket.buckets["storage"]'
 
-		echo ""
-		echo "    Warning: Service account already exists (it is likely the deployment name"
-		echo "             is being reused or a previous deployment was aborted after the"
-		echo "             service account had already been created)."
-		echo ""
-		echo "             If the credential still exists this can be reused (assuming it"
-		echo "             has the correct roles)."
-		echo "             Or the account and credential can be deleted and recreated."
-		echo ""
-		case $(ask "    Delete and recreate? [y/N] ") in
-		[Yy]*)
-			if ! bash "${SCRIPT_DIR}/script/service_account.sh" delete \
-				"${project}" "${service_account}"; then
-				echo "Exiting."
-				exit 1
-			fi
-			create=1
-			getcred=1
-			;;
-		*)
-			verbose "assuming reuse of account"
-			echo ""
-			echo "    Using existing service account: ${service_account}"
-			case $(ask "    Do you want to regenerate a credential? [y/N] ") in
-			[Yy]*)
-				getcred=1
-				;;
-			*)
-				echo "    Please register existing credential with FrontEnd once it is running."
-				;;
-			esac
-			;;
-		esac
+# The waits that let IAM catch up with the account and with its grants.
+FE_SA_WAITS=(
+	'module.fe_sa.time_sleep.wait_for_service_account'
+	'module.fe_profile.time_sleep.wait_for_iam'
+)
+
+# Project roles that servers deployed before the move to the profile modules
+# gave their account and that resource-scoped grants now replace. tf/main.tf
+# forgets the old grants without deleting them (a removed block), so access
+# never lapses; remove_project_role_grants removes these after the upgrade
+# apply. logging.logWriter and monitoring.metricWriter are kept, and
+# module.fe_sa now manages them. teardown.sh has the full old list.
+FE_SA_SUPERSEDED_ROLES=(
+	storage.objectAdmin
+	cloudtrace.agent
+	pubsub.admin
+	artifactregistry.admin
+	secretmanager.admin
+)
+
+# tf_init
+#
+# Run terraform init in the current directory and report a failure clearly.
+#  - -upgrade lets a lock file written for older provider versions move to the
+#    versions tf/versions.tf now requires.
+#  - A provider mirror configured through TF_CLI_CONFIG_FILE is used as it is.
+#  - teardown.sh uses this function too (it sources this file).
+#
+tf_init() {
+	local log="tfinit.log"
+
+	if terraform init -input=false -upgrade >"${log}" 2>&1; then
+		return 0
+	fi
+	error ""
+	error "Error:  terraform init failed. Full output: $(pwd)/${log}"
+	error "        The usual cause is a provider or module that cannot be downloaded."
+	error "        Check access to registry.terraform.io, or, if you use a provider"
+	error "        mirror, that it holds hashicorp/google and hashicorp/google-beta"
+	error "        >= 7.33.0, hashicorp/time, hashicorp/random and hashicorp/null."
+	error ""
+	tail -n 20 "${log}" >&2
+	return 1
+}
+
+# The Python that tf_state_attribute runs on the state: argv[1] is the
+# attribute, the rest are resource addresses, and stdin is the state. Prints
+# the attribute's value for the first address the state holds, as a string,
+# and exits 0; exits 3 when the state holds none of the addresses; exits 1,
+# with the reason on stderr, otherwise.
+#  - Only managed resources, at addresses of the form
+#    [module.NAME[KEY].]...TYPE.NAME[KEY], and their current (not deposed)
+#    object.
+#  - A state upgraded from Terraform 0.11 holds attributes_flat instead of
+#    attributes; a top-level string attribute is read from either.
+TF_STATE_ATTRIBUTE_PY=$(
+	cat <<'PYTHON'
+import json
+import re
+import sys
+
+ADDRESS = re.compile(
+    r"((?:module\.[A-Za-z0-9_-]+(?:\[[^\]]+\])?\.)*)"
+    r"([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)(?:\[(.+)\])?"
+)
+
+
+def parse(address):
+    match = ADDRESS.fullmatch(address)
+    if not match:
+        sys.exit("Not a resource address: " + address)
+    module, rtype, name, key = match.groups()
+    return module.rstrip("."), rtype, name, None if key is None else json.loads(key)
+
+
+def instance(resources, address):
+    module, rtype, name, key = parse(address)
+    for resource in resources:
+        if (
+            isinstance(resource, dict)
+            and resource.get("mode") == "managed"
+            and resource.get("module", "") == module
+            and resource.get("type") == rtype
+            and resource.get("name") == name
+        ):
+            for item in resource.get("instances") or []:
+                if (
+                    isinstance(item, dict)
+                    and "deposed" not in item
+                    and item.get("index_key") == key
+                ):
+                    return item
+    return None
+
+
+attribute, addresses = sys.argv[1], sys.argv[2:]
+try:
+    state = json.load(sys.stdin)
+except ValueError as err:
+    sys.exit("The state is not valid JSON: " + str(err))
+resources = state.get("resources") if isinstance(state, dict) else None
+if not isinstance(resources, list):
+    sys.exit("The state has no list of resources.")
+for address in addresses:
+    item = instance(resources, address)
+    if item is None:
+        continue
+    attributes = item.get("attributes")
+    if attributes is None:
+        attributes = item.get("attributes_flat")
+    value = attributes.get(attribute) if isinstance(attributes, dict) else None
+    if not isinstance(value, str) or not value:
+        sys.exit("The state holds " + address + " with no " + attribute + ".")
+    print(value)
+    sys.exit(0)
+sys.exit(3)
+PYTHON
+)
+
+# tf_state_attribute ATTRIBUTE ADDRESS...
+#
+# Run in tf/. Print ATTRIBUTE of the first ADDRESS, in order, that the
+# Terraform state holds, and return 0. Return 3, printing nothing, when the
+# state holds none of them or there is no state yet (a new deployment).
+# Otherwise return 1, with the reason on stderr.
+#  - It reads the state as stored (terraform state pull), which needs no
+#    provider and works for a local or a remote backend. terraform state show
+#    instead decodes a resource with the schema of the provider installed
+#    now, and fails for one that an older major version of the Google
+#    provider wrote, until an apply upgrades it ("schema version 0 for
+#    google_storage_bucket.buckets in state does not match version 4 from
+#    the provider", from Google provider 4.x to 7.x). deploy() runs
+#    terraform init -upgrade first, so on the upgrade of an old deployment
+#    state show cannot read its bucket or account.
+#  - Only terraform's error output from state pull goes to a file (made with
+#    mktemp and deleted straight after); the state passes through a pipe.
+#  - It parses the state with python3 or, if there is none, with the Python
+#    that gcloud runs on (the gcloud CLI needs one, and its archive install
+#    bundles it). It needs neither when there is no state.
+#
+tf_state_attribute() {
+	local attribute=${1}
+	shift
+	local errors state rc python
+
+	errors=$(mktemp) || return 1
+	state=$(terraform state pull 2>"${errors}")
+	rc=$?
+	if [[ ${rc} -ne 0 ]]; then
+		echo "'terraform state pull' failed (exit status ${rc}):" >&2
+		cat "${errors}" >&2
+		rm -f "${errors}"
+		return 1
+	fi
+	rm -f "${errors}"
+	if [[ ! ${state} =~ [^[:space:]] ]]; then
+		return 3
+	fi
+
+	python=$(command -v python3) ||
+		python=$(gcloud info --format='value(basic.python_location)' 2>/dev/null)
+	if [[ -z ${python} || ! -x ${python} ]]; then
+		echo "Reading the Terraform state needs python3, or the Python that gcloud" >&2
+		echo "runs on, and neither was found." >&2
+		return 1
+	fi
+	# -I: ignore PYTHON* variables and the current directory's modules.
+	printf '%s' "${state}" |
+		"${python}" -I -c "${TF_STATE_ATTRIBUTE_PY}" "${attribute}" "$@"
+}
+
+# fe_sa_replace_flags EMAIL PROJECT
+#
+# Print the -replace flags, one per line, that the next apply needs.
+#  - The waits after the account is created and after its grants are made run
+#    only when they are created. If the account in state was deleted outside
+#    Terraform, or deleted and created again under the same name (a new unique
+#    id), apply recreates the account or its grants without pausing, and the
+#    grants or the server can then use the account before IAM knows it.
+#  - So, when the unique id in state differs from the live one, or the live
+#    account is missing, the waits in state are replaced and pause again.
+#  - Prints nothing for a first deploy (no account in state; the waits are
+#    created anyway) or when the ids match.
+#
+fe_sa_replace_flags() {
+	local email=${1}
+	local project=${2}
+	local state_list state_id live_id address in_state wait
+
+	state_list=$(terraform state list 2>/dev/null)
+	in_state=""
+	for address in "${FE_SA_ADDRESS}" "${FE_SA_OLD_ADDRESS}"; do
+		if grep -qxF "${address}" <<<"${state_list}"; then
+			in_state=${address}
+			break
+		fi
+	done
+	if [[ -z ${in_state} ]]; then
+		return 0
+	fi
+
+	# An id that cannot be read counts as changed: the only cost of replacing
+	# the waits is the pause.
+	if ! state_id=$(tf_state_attribute unique_id "${in_state}" 2>&1); then
+		error "Could not read the unique id of ${email} from the Terraform state:"
+		error "${state_id:-The state pulled does not hold ${in_state}.}"
+		error "The IAM propagation waits will run again before the account is used."
 	else
-		create=1
-		getcred=1
+		live_id=$(gcloud iam service-accounts describe "${email}" \
+			--project="${project}" --format='value(uniqueId)' 2>/dev/null)
+		if [[ ${state_id} == "${live_id}" ]]; then
+			return 0
+		fi
+		error "Service account ${email} is missing or was recreated outside Terraform;"
+		error "the IAM propagation waits will run again before it is used."
+	fi
+	for wait in "${FE_SA_WAITS[@]}"; do
+		if grep -qxF "${wait}" <<<"${state_list}"; then
+			printf -- '-replace=%s\n' "${wait}"
+		fi
+	done
+}
+
+# control_bucket_location
+#
+# Print the location of the control bucket recorded in Terraform state, or
+# nothing when the state holds no bucket (a new deployment).
+#  - A bucket cannot move: Terraform replaces a bucket whose location changes,
+#    and the replacement deletes every file in it (force_destroy), including
+#    the files existing clusters read at boot. Servers deployed with --config
+#    by earlier versions had no region set, so their bucket is in the US
+#    multi-region rather than in the deployment's region. deploy() passes the
+#    location printed here to Terraform as control_bucket_location, so the
+#    apply keeps the bucket where it is.
+#  - Reads the location with tf_state_attribute, so it works on the state of
+#    a server that an older major version of the Google provider deployed.
+#  - Returns non-zero, with a message that includes the underlying error, when
+#    the state cannot be read or holds the bucket without a location that
+#    looks like one, so that deploy() stops before the apply rather than risk
+#    replacing the bucket.
+#
+control_bucket_location() {
+	local location rc
+
+	location=$(tf_state_attribute location \
+		"${CONTROL_BUCKET_ADDRESS}" "${CONTROL_BUCKET_OLD_ADDRESS}" 2>&1)
+	rc=$?
+	if [[ ${rc} -eq 3 ]]; then
+		# No state, or no bucket in it: a new deployment.
+		return 0
+	fi
+	if [[ ${rc} -eq 0 && ${location} =~ ^[A-Za-z0-9-]+$ ]]; then
+		printf '%s\n' "${location}"
+		return 0
+	fi
+	if [[ ${rc} -eq 0 ]]; then
+		location="The state holds an unexpected location for the bucket: '${location}'."
+	fi
+	error ""
+	error "Error:  Could not read the control bucket's location from the"
+	error "        Terraform state in $(pwd):"
+	error "${location}"
+	error "        Stopping before the apply: applying without the location could"
+	error "        replace the bucket and delete its files."
+	return 1
+}
+
+# fe_sa_inconsistent_result LOG
+#
+# Succeed when the apply log LOG holds the Google provider's "Provider
+# produced inconsistent result after apply" error for the web server's
+# service account itself, at its current or its old address. The same error
+# on any other resource does not count, even when the log names the account
+# elsewhere.
+#  - Terraform draws a box and colour codes around each error and wraps its
+#    text, so those are removed and the lines joined before matching. It
+#    wraps only at spaces, so an address is never split.
+#
+fe_sa_inconsistent_result() {
+	local log=${1}
+	local text address
+
+	text=$(sed -e $'s/\033\\[[0-9;]*m//g' -e 's/│/ /g' "${log}" | tr -s '[:space:]' ' ')
+	for address in "${FE_SA_ADDRESS}" "${FE_SA_OLD_ADDRESS}"; do
+		if grep -qF "Provider produced inconsistent result after apply When applying changes to ${address}," <<<"${text}"; then
+			return 0
+		fi
+	done
+	return 1
+}
+
+# -- IAM policy edits that Google refuses for a while, and their retry.
+#    script/service_account.sh holds an identical copy, from IAM_RETRY_DELAYS
+#    to the end of iam_policy_edit; a test checks that the two match.
+#
+#    A project policy edit (add- or remove-iam-policy-binding) is a
+#    read-modify-write of the whole policy. Google refuses it, changing
+#    nothing, with these errors, which clear on their own:
+#    - "There were concurrent policy changes" (409, ABORTED): another edit
+#      landed between the read and the write. gcloud does not retry it.
+#    - "Deleted member '<email>?uid=<id>' is not deleted": the policy holds
+#      grants of an account deleted moments ago. Until that deletion has
+#      reached all of IAM, any edit of the policy, for any member, can be
+#      refused; seen live for several minutes after an account was deleted.
+#    - "Quota exceeded for quota metric '...' and limit '... per minute'"
+#      (429, RESOURCE_EXHAUSTED): the project's per-minute Resource Manager
+#      quota, shared by everything that uses the project's API, is used up.
+#      It refills each minute; seen live during a teardown while other
+#      deployments used the same project. Limits over longer windows, such
+#      as per day, are not retried.
+#    Remove the retry for an error once gcloud retries that error itself.
+#
+#    Seconds to wait before each retry: 8 attempts over about 2 minutes.
+IAM_RETRY_DELAYS=(2 4 8 16 30 30 30)
+IAM_CONFLICT_ERROR='There were concurrent policy changes'
+IAM_DELETED_MEMBER_ERROR="Deleted member '[^']*' is not deleted"
+IAM_QUOTA_ERROR="Quota exceeded for quota metric '[^']*' and limit '[^']*per minute[^']*'"
+
+# iam_read COMMAND...
+#
+# Run COMMAND, a gcloud read of IAM data (a project policy, the list of
+# service accounts), and print its output. Retry it after each of the
+# IAM_RETRY_DELAYS while it fails with IAM_QUOTA_ERROR, the only error above
+# that a read can get; the live 429 was on getIamPolicy. Any other error is
+# final at once. On failure, print gcloud's last error to stderr and return
+# its exit code.
+#
+iam_read() {
+	local errors output rc delay reason
+
+	errors=$(mktemp) || return 1
+	for delay in "${IAM_RETRY_DELAYS[@]}" last; do
+		if output=$("$@" 2>"${errors}"); then
+			rm -f "${errors}"
+			if [[ -n ${output} ]]; then
+				printf '%s\n' "${output}"
+			fi
+			return 0
+		else
+			rc=$?
+		fi
+		reason=$(grep -m1 -oE -- "${IAM_QUOTA_ERROR}" "${errors}") || reason=""
+		if [[ -z ${reason} || ${delay} == last ]]; then
+			cat "${errors}" >&2
+			rm -f "${errors}"
+			return "${rc}"
+		fi
+		echo "    Google refused the read (${reason}); retrying in ${delay}s ..." >&2
+		sleep "${delay}"
+	done
+}
+
+# iam_policy_edit EXTRA_ERROR COMMAND...
+#
+# Run COMMAND, a gcloud IAM policy edit, quietly. Retry it after each of the
+# IAM_RETRY_DELAYS while it fails with one of the errors above, or with
+# EXTRA_ERROR (an extended regular expression; empty for none). Any other
+# error is final at once. On failure, print gcloud's last error to stderr and
+# return its exit code.
+#
+iam_policy_edit() {
+	local extra=$1
+	shift
+	local retryable="${IAM_CONFLICT_ERROR}|${IAM_DELETED_MEMBER_ERROR}|${IAM_QUOTA_ERROR}"
+	local output rc delay reason
+
+	if [[ -n ${extra} ]]; then
+		retryable+="|${extra}"
+	fi
+	for delay in "${IAM_RETRY_DELAYS[@]}" last; do
+		if output=$("$@" 2>&1); then
+			return 0
+		else
+			rc=$?
+		fi
+		reason=$(grep -m1 -oE -- "${retryable}" <<<"${output}") || reason=""
+		if [[ -z ${reason} || ${delay} == last ]]; then
+			printf '%s\n' "${output}" >&2
+			return "${rc}"
+		fi
+		echo "    IAM refused the change (${reason}); retrying in ${delay}s ..." >&2
+		sleep "${delay}"
+	done
+}
+
+# remove_project_role_grants PROJECT "MEMBER..." ROLE...
+#
+# Remove the given project roles (without "roles/") from each member in the
+# space-separated MEMBER list, for grants Terraform no longer manages. A role
+# a member does not hold is skipped, so this does nothing when there is
+# nothing to remove. A deleted account's grants are listed under
+# "deleted:serviceAccount:<email>?uid=<unique id>", so pass that form too when
+# the account may already be gone. Each removal is retried on the transient
+# IAM errors (iam_policy_edit); after one fails, the rest are not tried, so
+# the wait stays bounded. Returns non-zero, after printing the commands to run
+# by hand, when the policy could not be read or a removal failed.
+#
+remove_project_role_grants() {
+	local project=${1}
+	local members
+	read -r -a members <<<"${2}"
+	shift 2
+	local roles=("$@")
+	local policy held role member entry
+	local failed=()
+
+	if ! policy=$(iam_read gcloud projects get-iam-policy "${project}" \
+		--flatten='bindings[].members' \
+		--format='value(bindings.role,bindings.members)'); then
+		for role in "${roles[@]}"; do
+			for member in "${members[@]}"; do
+				failed+=("roles/${role} ${member}")
+			done
+		done
+		policy=""
+	fi
+	# One "<role> <member>" line per grant in the policy.
+	held=$(awk 'NF >= 2 { print $1 " " $2 }' <<<"${policy}")
+
+	for role in "${roles[@]}"; do
+		for member in "${members[@]}"; do
+			if ! grep -qxF "roles/${role} ${member}" <<<"${held}"; then
+				continue
+			fi
+			if [[ ${#failed[@]} -eq 0 ]]; then
+				echo "Removing project role roles/${role} from ${member}"
+				if iam_policy_edit "" gcloud projects remove-iam-policy-binding \
+					"${project}" --member="${member}" --role="roles/${role}" \
+					--condition=None; then
+					continue
+				fi
+			fi
+			failed+=("roles/${role} ${member}")
+		done
+	done
+
+	if [[ ${#failed[@]} -eq 0 ]]; then
+		return 0
+	fi
+	error ""
+	error "Warning:  Could not check or remove these project roles. Remove them by hand:"
+	for entry in "${failed[@]}"; do
+		error "    gcloud projects remove-iam-policy-binding ${project} --member=${entry#* } --role=${entry%% *} --condition=None"
+	done
+	error ""
+	return 1
+}
+
+#
+# Pack the git checkout that holds this script for a tarball deployment, which
+# uploads the archive to the control bucket.
+# - Only the files git would commit go in: tracked files, with any uncommitted
+#   changes, and untracked files that are not ignored. Ignored files (such as
+#   website/.secret_key, key files, virtual environments and build output)
+#   and the .git directory stay out. Tracked files deleted from the working
+#   tree are skipped, and so are nested repositories, with a warning.
+# - The archive's top directory must be named 'cluster-toolkit', as the
+#   server's install depends on it, so the files are copied under that name
+#   into a new staging directory (mktemp -d), which is removed afterwards.
+# - Returns non-zero, with a message, if this is not a git checkout or
+#   packing fails.
+#
+# Usage:
+#    pack_deployment_tarball OUTPUT
+#
+pack_deployment_tarball() (
+	set -o pipefail
+
+	local output=$1
+	local basedir path count=0
+	# Not local: the EXIT trap that removes it runs after the function returns.
+	# The function runs in a subshell, so it does not reach the caller.
+	stage=''
+
+	if ! basedir=$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>&1); then
+		error ""
+		error "  Error: A tarball deployment packs the git checkout that holds"
+		error "         this script, but ${SCRIPT_DIR} is not in one:"
+		error "${basedir}"
+		error "         Deploy from a git checkout, or use the git deployment mode."
+		error ""
+		return 1
 	fi
 
-	if [[ ${create} -ne 0 ]]; then
-		verbose "creating service account: ${account}"
-		echo "    This may take a few seconds..."
-		if ! bash "${SCRIPT_DIR}/script/service_account.sh" create \
-			"${project}" "${service_account}"; then
-			echo "Exiting."
-			exit 1
+	if ! stage=$(mktemp -d); then
+		error "  Error: Unable to create a staging directory to pack the deployment."
+		return 1
+	fi
+	trap 'rm -rf "${stage}"' EXIT
+
+	if ! git -C "${basedir}" ls-files -z --cached --others --exclude-standard \
+		>"${stage}/listed"; then
+		error "  Error: Unable to list the files of the git checkout ${basedir}."
+		return 1
+	fi
+	while IFS= read -r -d '' path; do
+		if [[ -L ${basedir}/${path} || -f ${basedir}/${path} ]]; then
+			printf '%s\0' "${path}"
+			count=$((count + 1))
+		elif [[ -d ${basedir}/${path} ]]; then
+			# A submodule, or an untracked directory that holds its own
+			# repository: its files are not this checkout's to pack.
+			error "Warning: Not packing ${path}: it is a separate git repository."
 		fi
+	done <"${stage}/listed" >"${stage}/files"
+
+	echo "Packing ${count} files from ${basedir} into ${output}"
+	# Copy the listed entries only (no recursion), keeping their modes.
+	if ! mkdir "${stage}/cluster-toolkit" ||
+		! tar -C "${basedir}" --null --no-recursion -T "${stage}/files" -cf - |
+		tar -C "${stage}/cluster-toolkit" -xpf -; then
+		error "  Error: Unable to copy the files of ${basedir} to pack them."
+		return 1
 	fi
 
-	if [[ ${getcred} -ne 0 ]]; then
-		verbose "creating credential file: ${credfile}"
-		if ! bash "${SCRIPT_DIR}/script/service_account.sh" credential \
-			"${project}" "${service_account}" "${credfile}"; then
-			echo "Exiting."
-			exit 1
-		fi
-		echo "    Credential written to:"
-		echo "      ${credfile}"
-		echo ""
-		echo "    You will need to register the contents of this file as a credential to the"
-		echo "    FrontEnd once it is running."
+	if ! tar -zcf "${output}" \
+		--exclude=.terraform \
+		--exclude=.terraform.lock.hcl \
+		--exclude=tf \
+		--directory="${stage}" \
+		./cluster-toolkit; then
+		error "  Error: Unable to write the deployment archive ${output}."
+		return 1
 	fi
+)
+
+# stopped_before_apply
+#
+# Say what this run has already changed when deploy() stops before its
+# apply. Terraform has changed no resource yet, but both setup() and
+# deploy_from_config() create the provisioning account, or give an existing
+# one its roles again, before deploy() runs.
+#
+stopped_before_apply() {
+	error "        Terraform has not changed any resource. This run has already"
+	error "        created the provisioning service account ${provisioning_email}"
+	error "        and granted its roles (or granted them again, if it existed);"
+	error "        running deploy.sh again reuses it."
 }
 
 #
@@ -636,7 +1211,15 @@ for r in json.load(open(sys.argv[1])).get("resources", []):
 #
 deploy_state_bucket() {
 
-	local sa="${deployment_name}-tkfe-sa@${project_id}.iam.gserviceaccount.com"
+	# The accounts deploy.sh makes writers: the provisioning account, which
+	# the server acts as to run Terraform, and the <name>-tkfe-sa account
+	# that earlier versions created, while it exists, because resources
+	# created with its registered key keep running Terraform as it.
+	local -a default_accounts=(
+		"${deployment_name}${PROV_SA_SUFFIX}"
+		"${deployment_name}-tkfe-sa"
+	)
+	local account
 	local -a tfvar_args=(
 		-var="project_id=${project_id}"
 		-var="region=${region}"
@@ -705,12 +1288,19 @@ deploy_state_bucket() {
 		# bucket named before the deterministic naming, would make Terraform
 		# try to replace a prevent_destroy bucket. Stop with a remedy instead.
 		# An adoption whose apply failed leaves the bucket in state but no
-		# outputs, so the name is then read from the state.
+		# outputs, so the name is then read from the local state file itself,
+		# as stored: decoding it with the provider installed now (terraform
+		# state show) fails for state an older provider major version wrote.
 		local local_bucket
 		local_bucket=$(terraform -chdir="${state_bucket_dir}" output -raw bucket_name 2>/dev/null) ||
-			local_bucket=$(terraform -chdir="${state_bucket_dir}" state show -no-color \
-				google_storage_bucket.tfstate 2>/dev/null |
-				sed -n 's/^[[:space:]]*name[[:space:]]*=[[:space:]]*"\(.*\)"$/\1/p' | head -n 1)
+			local_bucket=$(python3 -c '
+import json, sys
+for r in json.load(open(sys.argv[1])).get("resources", []):
+    if r.get("mode") == "managed" and r.get("type") == "google_storage_bucket" and r.get("name") == "tfstate":
+        for i in r.get("instances", []):
+            if "deposed" not in i:
+                print(i["attributes"]["name"])
+' "${state_file}" 2>/dev/null | head -n 1)
 		if [[ ${local_bucket} != "${bucket}" ]]; then
 			echo "Error: ${state_bucket_dir}/terraform.tfstate on this machine belongs to"
 			echo "       gs://${local_bucket:-<unknown bucket>}, but this deployment's state bucket"
@@ -746,7 +1336,7 @@ deploy_state_bucket() {
 			# admin.auto.tfvars recording who was granted access before. Seed
 			# it from the current holders (used only if that file is absent).
 			# Buckets created before writers moved to objectUser hold objectAdmin.
-			local policy live_members member
+			local policy live_members member default_member
 			policy=$(gcloud storage buckets get-iam-policy "gs://${bucket}" \
 				--format=json) || return 1
 			live_members=$(python3 -c '
@@ -760,7 +1350,15 @@ for b in json.load(sys.stdin).get("bindings", []):
                 print(m)
 ' <<<"${policy}") || return 1
 			while IFS= read -r member; do
-				[[ -z ${member} || ${member} == "serviceAccount:${sa}" ]] && continue
+				[[ -z ${member} ]] && continue
+				# deploy.sh's own writers are regenerated below, not seeded
+				default_member=0
+				for account in "${default_accounts[@]}"; do
+					if [[ ${member} == "serviceAccount:${account}@${project_id}.iam.gserviceaccount.com" ]]; then
+						default_member=1
+					fi
+				done
+				[[ ${default_member} -eq 1 ]] && continue
 				seed_members+=("${member}")
 			done <<<"${live_members}"
 		fi
@@ -779,19 +1377,48 @@ for b in json.load(sys.stdin).get("bindings", []):
 		} >"${admin_file}" || return 1
 	fi
 
-	# The default provisioning service account is optional (an administrator
-	# may register a different or pre-existing credential instead; see
-	# AdvancedAdmin.md), and GCS rejects an IAM binding that names a
-	# nonexistent service account, so grant it only if it exists.
-	local default_writers="[]"
-	if bash "${SCRIPT_DIR}/script/service_account.sh" check \
-		"${project_id}" "${deployment_name}-tkfe-sa" &>/dev/null; then
-		default_writers="[\"serviceAccount:${sa}\"]"
-	else
-		echo "    Note: ${sa} does not exist yet, so the state bucket grants it no"
-		echo "          writer access. Once it exists, rerun deploy.sh, or add it to"
-		echo "          state_bucket_writers in ${admin_file} and run:"
-		echo "            terraform -chdir=${state_bucket_dir} apply"
+	# GCS rejects an IAM binding that names a nonexistent service account, so
+	# each of these is granted only if it exists. The provisioning account
+	# exists by now (setup() and deploy_from_config() create it first); an
+	# old -tkfe-sa account normally does not. Only exit status 1 from
+	# service_account.sh check means the account is absent. Any other failure
+	# (2 when the accounts could not be listed, 99, a missing script or bash,
+	# a signal) is not taken to be absent: default_writers is authoritative,
+	# so applying without an account that exists would take away its access
+	# to the state it writes.
+	local default_writers="[]" sa check_rc check_error
+	local -a writers=()
+	for account in "${default_accounts[@]}"; do
+		sa="${account}@${project_id}.iam.gserviceaccount.com"
+		check_rc=0
+		check_error=$(bash "${SCRIPT_DIR}/script/service_account.sh" check \
+			"${project_id}" "${account}" 2>&1 >/dev/null) || check_rc=$?
+		if [[ ${check_rc} -eq 0 ]]; then
+			writers+=("\"serviceAccount:${sa}\"")
+		elif [[ ${check_rc} -ne 1 ]]; then
+			if [[ -n ${check_error} ]]; then
+				printf '%s\n' "${check_error}"
+			fi
+			echo "Error: could not check whether the service account ${sa}"
+			echo "       exists (service_account.sh check exited with status ${check_rc}),"
+			echo "       so the state bucket's writers could not be chosen."
+			echo "       Nothing was changed in the state bucket: gs://${bucket} was"
+			echo "       not created or updated. Check that you can list the project's"
+			echo "       service accounts, then run deploy.sh again:"
+			echo "         gcloud iam service-accounts list --project=${project_id}"
+			return 1
+		elif [[ ${account} == "${deployment_name}${PROV_SA_SUFFIX}" ]]; then
+			echo "    Note: ${sa} does not exist, so the state bucket grants it no"
+			echo "          writer access. Once it exists, rerun deploy.sh, or add it to"
+			echo "          state_bucket_writers in ${admin_file} and run:"
+			echo "            terraform -chdir=${state_bucket_dir} apply"
+		fi
+	done
+	if [[ ${#writers[@]} -gt 0 ]]; then
+		default_writers="[$(
+			IFS=,
+			echo "${writers[*]}"
+		)]"
 	fi
 
 	cat >"${state_bucket_dir}/terraform.tfvars" <<TFVARS || return 1
@@ -860,14 +1487,21 @@ TFVARS
 #
 deploy() {
 
-	# -- Confirm before anything is created: the state bucket below is
-	#    protected from deletion, so declining after it exists would leave it
-	#    behind.
+	# -- Confirm before the state bucket is created: it is protected from
+	#    deletion, so declining after it exists would leave it behind.
 	#
 	if [ -z "$config_file" ]; then
 		case $(ask "    Proceed to deploy? [y/N] ") in
 		[Yy]*) ;;
 		*)
+			# setup() has already created the provisioning account.
+			echo ""
+			echo "    Not deploying. The provisioning service account"
+			echo "    ${provisioning_email} exists, with its project roles."
+			echo "    Running ./deploy.sh again reuses it. To delete it and its project"
+			echo "    roles:"
+			echo "      script/service_account.sh delete ${project_id} ${deployment_name}${PROV_SA_SUFFIX}"
+			echo "    (./teardown.sh also offers to delete it, or lists it.)"
 			echo "Exiting."
 			exit 0
 			;;
@@ -875,38 +1509,30 @@ deploy() {
 	fi
 
 	# -- The state bucket must exist before the server is created, because the
-	#    server's configuration carries its name.
+	#    server's configuration carries its name. It is created after the
+	#    provisioning account, which is one of its writers.
 	#
 	if ! deploy_state_bucket; then
+		error ""
+		error "Error:  The FrontEnd was not deployed: the Terraform state bucket could"
+		error "        not be created or updated (the error is above). This run has"
+		error "        already created the provisioning service account"
+		error "        ${provisioning_email} and granted its roles (or granted them"
+		error "        again, if it existed); running deploy.sh again reuses it."
+		error ""
 		exit 1
 	fi
 
 	# -- Collect deployment files
 	#
-	#    For a tarball deployment, it is important that the 'root' directory is
-	#    named 'cluster-toolkit' as most of the install depends on it.
-	#
-	#    Simplest way to ensure this is to build from a temporary copy that
-	#    definitely is named correctly.
+	#    A tarball deployment ships the files of this git checkout, with its
+	#    uncommitted changes, but none that git ignores.
 	#
 	if [ "${deployment_mode}" == "tarball" ]; then
-
-		basedir=$(git rev-parse --show-toplevel)
-		tdir=/tmp/cluster-toolkit
-
-		cp -R "${basedir}" ${tdir}/
-		(
-			cd ${tdir}
-
-			tar -zcf "${SCRIPT_DIR}"/tf/deployment.tar.gz \
-				--exclude=.terraform \
-				--exclude=.terraform.lock.hcl \
-				--exclude=tf \
-				--directory=/tmp \
-				./cluster-toolkit 2>/dev/null
-		)
-
-		rm -rf ${tdir}
+		if ! pack_deployment_tarball "${SCRIPT_DIR}/tf/deployment.tar.gz"; then
+			error "Exiting."
+			exit 1
+		fi
 	fi
 
 	# -- All Terraform operations to be done in tf subdir
@@ -930,6 +1556,7 @@ django_su_email    = "${django_superuser_email}"
 deployment_mode = "${deployment_mode}"
 subnet = "${subnet_name}"
 
+provisioning_service_account = "${provisioning_email}"
 terraform_state_bucket = "${state_bucket_name}"
 
 extra_labels = {
@@ -966,48 +1593,81 @@ TFVARS
 		#          Also toggle exit on error.
 		#
 		set +e
-		terraform init
+		if ! tf_init; then
+			error ""
+			stopped_before_apply
+			error ""
+			exit 2
+		fi
+
+		# -- Keep an existing control bucket where it is (see
+		#    control_bucket_location). Nothing is added for a new deployment,
+		#    whose bucket is created in its region.
+		if ! bucket_location=$(control_bucket_location); then
+			stopped_before_apply
+			error "        terraform.tfvars there was rewritten for this run without the"
+			error "        bucket's location: do not run terraform apply there by hand."
+			error ""
+			exit 2
+		fi
+		if [[ -n ${bucket_location} ]]; then
+			echo "Keeping the existing control bucket in its location, ${bucket_location}."
+			echo "control_bucket_location = \"${bucket_location}\"" >>terraform.tfvars
+		fi
 
 		# -- Adopt a pre-existing server service account so a redeploy with the
 		#    same deployment name does not fail trying to recreate it. terraform
 		#    destroy normally removes it, but an aborted/partial teardown can
 		#    leave it behind; importing lets apply reconcile the existing
 		#    identity instead of hitting an "already exists" error.
+		#    Only when the account is at neither address: a server deployed
+		#    before the move to the profile modules has it at the old address,
+		#    and the moved block in tf/main.tf takes it from there.
 		fe_sa_email="${deployment_name}-fe-sa@${project_id}.iam.gserviceaccount.com"
-		fe_sa_address='module.service_account.google_service_account.service_accounts["fe-sa"]'
 		if gcloud iam service-accounts describe "${fe_sa_email}" \
 			--project="${project_id}" >/dev/null 2>&1; then
-			if ! terraform state list 2>/dev/null | grep -qF "${fe_sa_address}"; then
+			tf_state=$(terraform state list 2>/dev/null)
+			if ! grep -qxF "${FE_SA_ADDRESS}" <<<"${tf_state}" &&
+				! grep -qxF "${FE_SA_OLD_ADDRESS}" <<<"${tf_state}"; then
 				echo "Found existing service account ${fe_sa_email}; importing into Terraform state."
-				terraform import -input=false "${fe_sa_address}" \
+				terraform import -input=false "${FE_SA_ADDRESS}" \
 					"projects/${project_id}/serviceAccounts/${fe_sa_email}" || true
 			fi
 		fi
 
+		# -- Make the IAM waits run again if the account changed outside
+		#    Terraform (see fe_sa_replace_flags).
+		mapfile -t replace_flags < <(fe_sa_replace_flags "${fe_sa_email}" "${project_id}")
+
 		# -- Merge stderr into the piped/logged stream: terraform writes its
 		#    "Error: ..." diagnostics to stderr, not stdout, so the retry
 		#    detection below would never see them if only stdout were teed.
-		terraform apply -auto-approve 2>&1 | tee tfapply.log
+		terraform apply -auto-approve "${replace_flags[@]}" 2>&1 | tee tfapply.log
 		tf_rc=${PIPESTATUS[0]}
 
 		# -- The Google provider can return "Provider produced inconsistent
 		#    result after apply" on the service account when its create races
 		#    IAM's eventual consistency (e.g. reusing a recently-freed name).
 		#    The account is created regardless, so a single re-apply reconciles
-		#    state. Retry only for that specific service-account error.
-		if [[ ${tf_rc} -ne 0 ]] &&
-			grep -q "Provider produced inconsistent result after apply" tfapply.log &&
-			grep -q "service_account" tfapply.log; then
+		#    state. Retry only when that error names the account itself (see
+		#    fe_sa_inconsistent_result), not for the same error on any other
+		#    resource.
+		if [[ ${tf_rc} -ne 0 ]] && fe_sa_inconsistent_result tfapply.log; then
 			echo "Reconciling service account state and retrying terraform apply..."
 			# The failed apply actually created the account but, because of the
 			# inconsistent-result error, dropped it from state. A bare re-apply
 			# would then hit "409 already exists", so adopt the existing account
 			# back into state before retrying.
-			if ! terraform state list 2>/dev/null | grep -qF "${fe_sa_address}"; then
-				terraform import -input=false "${fe_sa_address}" \
+			# As for the pre-import: only when the account is at neither
+			# address, or the import would fight the moved block.
+			tf_state=$(terraform state list 2>/dev/null)
+			if ! grep -qxF "${FE_SA_ADDRESS}" <<<"${tf_state}" &&
+				! grep -qxF "${FE_SA_OLD_ADDRESS}" <<<"${tf_state}"; then
+				terraform import -input=false "${FE_SA_ADDRESS}" \
 					"projects/${project_id}/serviceAccounts/${fe_sa_email}" || true
 			fi
-			terraform apply -auto-approve 2>&1 | tee tfapply.log
+			mapfile -t replace_flags < <(fe_sa_replace_flags "${fe_sa_email}" "${project_id}")
+			terraform apply -auto-approve "${replace_flags[@]}" 2>&1 | tee tfapply.log
 			tf_rc=${PIPESTATUS[0]}
 		fi
 
@@ -1018,6 +1678,13 @@ TFVARS
 			error ""
 			exit 2
 		fi
+
+		# -- The new grants exist, so the project roles they replace can go.
+		#    The server works with or without them, so a failure (reported
+		#    with the commands to run by hand) does not fail the deployment;
+		#    teardown.sh removes any that are left before deleting the account.
+		remove_project_role_grants "${project_id}" "serviceAccount:${fe_sa_email}" \
+			"${FE_SA_SUPERSEDED_ROLES[@]}" || true
 		set -e
 
 		echo ""
@@ -1074,7 +1741,7 @@ LINE
 	#
 	if ! command -v terraform &>/dev/null; then
 		error "Error:"
-		error "    Please ensure terraform (version 0.13 or higher) is in your \$PATH"
+		error "    Please ensure terraform (version 1.12.2 or later) is in your \$PATH"
 		exit 1
 	fi
 	if ! command -v gcloud &>/dev/null || ! gcloud storage --help &>/dev/null; then
@@ -1221,40 +1888,42 @@ ADMIN
 	django_superuser_email=$(ask "    Admin user email address")
 
 	#
-	# -- Create service account and credential if required
+	# -- Create the provisioning service account; a key only if asked for
 	#
 	cat <<SERVICEACC
 
-* Service account & credential
+* Provisioning service account
 
-    A service account with a credential to use this project can be created
-    by this script.  This credential allows clusters and other resources to be
-    deployed by the FrontEnd within this project.
+    The FrontEnd creates clusters and other resources in this project as the
+    service account ${deployment_name}${PROV_SA_SUFFIX}, which this script creates now.
+    It has no key: only the FrontEnd web server's account may act as it, and
+    every use is recorded in the project's audit logs.
 
-    If requested, a service account will be created and the new credential is
-    written to a file, which needs to be registered to the FrontEnd once
-    running.
+    It can administer IAM in this project, because clusters need accounts,
+    roles and grants of their own; whoever controls the FrontEnd server
+    therefore controls it. Running the FrontEnd in a project of its own is
+    recommended.
 
-    Alternatively, service accounts and credentials can be created manually
-    via the GCP Console or gcloud CLI.  Multiple credentials can then be
-    registered to the FrontEnd for different projects, allowing the
-    FrontEnd to deploy resources against these, and/or manage access at a
-    finer level.  Existing service accounts with the necessary
-    roles/permissions can also be used.  Please see Administrator's Guide for
-    more details.
-
-    The single service account and credential is sufficient for most use cases.
+    Credentials for other projects can be registered with the FrontEnd once it
+    is running.  Please see the Administrator's Guide for more details.
 
 SERVICEACC
-	case $(ask "    Create a service account and credential? [y/N]: ") in
+	create_provisioning_account "${project_id}" "${deployment_name}" --ask
+
+	cat <<SERVICEKEY
+
+    The FrontEnd does not need a key for this account. If you need one for
+    another purpose, this script can write it to a file in plain text, which
+    you are then responsible for keeping safe. This is not recommended.
+
+SERVICEKEY
+	case $(ask "    Write a key file for this account? [y/N]: ") in
 	[Yy]*)
-		create_service_account "${project_id}" \
+		write_provisioning_key "${project_id}" \
 			"${deployment_name}" \
 			"${CREDENTIAL_FILE}"
-
 		;;
 	*) ;;
-
 	esac
 
 	echo ""
@@ -1378,11 +2047,27 @@ deploy_from_config() {
 	echo "    Admin email:      ${django_superuser_email}"
 	echo ""
 
+	# The same API check the interactive path makes, enabling any missing API
+	# without asking (this path cannot ask). An existing deployment is upgraded
+	# through this path, so this also enables APIs a newer version needs.
+	check_apis "${project_id}" --yes
+
+	# The same keyless provisioning account the interactive path creates. This
+	# path cannot ask: an existing account with user-managed keys is given its
+	# roles, with a warning naming each key.
+	create_provisioning_account "${project_id}" "${deployment_name}"
+
 	deploy
 }
 
 ################################################################################
 #
+
+# -- When sourced (teardown.sh does, for the shared functions above), stop
+#    here: everything below runs a deployment.
+if [[ ${BASH_SOURCE[0]} != "${0}" ]]; then
+	return 0
+fi
 
 # -- Exit on any errors by default (will toggle on/off throughout this script)
 set -e

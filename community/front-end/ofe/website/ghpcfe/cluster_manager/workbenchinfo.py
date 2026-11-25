@@ -17,13 +17,30 @@
 
 import logging
 import json
+import re
 import shutil
 import subprocess
 from retry import retry
 
+from . import credentials
 from . import utils
 
 logger = logging.getLogger(__name__)
+
+
+def slurm_controller_hostname(cluster):
+    """Hostname of a cluster's Slurm controller.
+
+    The schedmd-slurm-gcp-v6-controller module names the controller
+    "<slurm_cluster_name>-controller". A cluster that sets no
+    slurm_cluster_name gets the module's default: the deployment name
+    (cloud_id) lower-cased, with leading non-letters and every character
+    other than a-z and 0-9 removed, cut to 10 characters.
+    """
+    name = getattr(cluster, "slurm_cluster_name", "") or re.sub(
+        r"^[^a-z]*|[^a-z0-9]", "", cluster.cloud_id.lower()
+    )[:10]
+    return f"{name}-controller"
 
 
 class WorkbenchInfo:
@@ -41,26 +58,58 @@ class WorkbenchInfo:
 
         self.cloud_dir = "google"
 
-    def create_workbench_dir(self, credentials):
+    def create_workbench_dir(self):
         self.workbench_dir.mkdir(parents=True)
 
-        self.set_credentials(credentials)
         self.copy_terraform()
         self.copy_startup_script()
         self.prepare_terraform_vars()
 
-    def _get_credentials_file(self):
-        return self.workbench_dir / "cloud_credentials"
+    def _operation(self, verb):
+        return f"{verb} workbench {self.workbench.name}"
 
-    def set_credentials(self, creds=None):
-        credfile = self._get_credentials_file()
-        if not creds:
-            # pull from DB
-            creds = self.workbench.cloud_credential.detail
-        with credfile.open("w") as fp:
-            fp.write(creds)
+    def _cloud(self, verb):
+        """The credential and operation of a Terraform run"""
+        return {
+            "credential": self.workbench.cloud_credential,
+            "operation": self._operation(verb),
+        }
+
+    def _preflight(self, verb):
+        """Stop before Terraform runs when the workbench's credential lacks a
+        permission that `verb` (create or destroy) needs"""
+        credentials.preflight(
+            self.workbench.cloud_credential,
+            self._operation(verb),
+            credentials.permissions_for(f"workbench_{verb}"),
+        )
+
+    def _checked(self, verb, action):
+        """Run the preflight for `verb`; on a gap, log why and return False.
+
+        A create that is refused marks the workbench failed. A destroy that
+        is refused changes nothing, as for clusters: the workbench still
+        exists and keeps the status it has.
+        """
+        try:
+            self._preflight(verb)
+        except credentials.CredentialError as err:
+            if verb != "destroy":
+                self.workbench.status = "e"
+                self.workbench.save()
+            logger.error(
+                "Cannot %s workbench %d-%s: %s",
+                action,
+                self.workbench.id,
+                self.workbench.name,
+                err,
+            )
+            return False
+        return True
 
     def start(self):
+        if not self._checked("create", "deploy"):
+            return
         try:
             self.workbench.cloud_state = "nm"
             self.workbench.status = "c"
@@ -87,6 +136,8 @@ class WorkbenchInfo:
 
 
     def terminate(self):
+        if not self._checked("destroy", "destroy"):
+            return
         try:
             self._terraform_destroy()
         except Exception as err: # pylint: disable=broad-except
@@ -136,7 +187,9 @@ OSLOGIN_USER=$(curl -s http://metadata.google.internal/computeMetadata/v1/oslogi
 
         slurm_config_segment = ""
         try:
-            cid = self.workbench.attached_cluster.cloud_id
+            controller = slurm_controller_hostname(
+                self.workbench.attached_cluster
+            )
             # Safe upgrade fallback default locked to False!
             if getattr(self.workbench.attached_cluster, 'enable_slurm_auth', False):
                 slurm_config_segment=f"""\
@@ -172,7 +225,7 @@ fi
 # Temporary mount and persistent resilient key copy mapping
 mkdir -p /mnt/clusterkey
 mkdir -p /etc/slurm
-mount slurm-{cid}-controller:/slurm/key_distribution /mnt/clusterkey
+mount {controller}:/slurm/key_distribution /mnt/clusterkey
 cp /mnt/clusterkey/slurm.key /etc/slurm/slurm.key
 chmod 400 /etc/slurm/slurm.key
 chown slurm:slurm /etc/slurm/slurm.key
@@ -181,7 +234,7 @@ rm -rf /mnt/clusterkey
 
 # Mount configurations exported by Gcluster v6 controller using clean idempotent symlinks
 mkdir -p /mnt/slurm_configs
-grep -qs '/mnt/slurm_configs ' /proc/mounts || mount slurm-{cid}-controller:/usr/local/etc/slurm /mnt/slurm_configs
+grep -qs '/mnt/slurm_configs ' /proc/mounts || mount {controller}:/usr/local/etc/slurm /mnt/slurm_configs
 ln -sf /mnt/slurm_configs/slurm.conf /etc/slurm/slurm.conf
 """
             else:
@@ -203,7 +256,7 @@ fi
 
 mkdir -p /mnt/clustermunge
 mkdir -p /etc/munge
-mount slurm-{cid}-controller:/etc/munge /mnt/clustermunge
+mount {controller}:/etc/munge /mnt/clustermunge
 cp /mnt/clustermunge/munge.key /etc/munge/munge.key
 chmod 400 /etc/munge/munge.key
 chown munge:munge /etc/munge/munge.key
@@ -231,7 +284,7 @@ fi
 
 # Mount configurations exported by Gcluster v6 controller using clean idempotent symlinks
 mkdir -p /mnt/slurm_configs
-grep -qs '/mnt/slurm_configs ' /proc/mounts || mount slurm-{cid}-controller:/usr/local/etc/slurm /mnt/slurm_configs
+grep -qs '/mnt/slurm_configs ' /proc/mounts || mount {controller}:/usr/local/etc/slurm /mnt/slurm_configs
 mkdir -p /etc/slurm
 ln -sf /mnt/slurm_configs/slurm.conf /etc/slurm/slurm.conf
 """
@@ -327,9 +380,7 @@ EOF
         subnet = self.workbench.subnet.cloud_id
 
         # Cloud-specific Terraform changes
-        project = json.loads(self.workbench.cloud_credential.detail)[
-            "project_id"
-        ]
+        project = self.workbench.cloud_credential.project_id
         csp_info = f"""
 region = "{region}"
 zone = "{zone}"
@@ -363,21 +414,18 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
 
     def _terraform_init(self):
         terraform_dir = self.workbench_dir / "terraform"
-        extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": self._get_credentials_file()
-        }
+        cloud = self._cloud("create")
 
         try:
             self.workbench.cloud_state = "cm"
             self.workbench.save()
+            # init reads the state bucket, so it acts as the credential too
+            utils.run_terraform(terraform_dir / self.cloud_dir, "init", **cloud)
             utils.run_terraform(
-                terraform_dir / self.cloud_dir, "init", extra_env=extra_env
+                terraform_dir / self.cloud_dir, "validate", **cloud
             )
             utils.run_terraform(
-                terraform_dir / self.cloud_dir, "validate", extra_env=extra_env
-            )
-            utils.run_terraform(
-                terraform_dir / self.cloud_dir, "plan", extra_env=extra_env
+                terraform_dir / self.cloud_dir, "plan", **cloud
             )
         except subprocess.CalledProcessError as cpe:
             if cpe.stdout:
@@ -390,12 +438,9 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
 
     def _terraform_create(self):
         terraform_dir = self.workbench_dir / "terraform"
-        extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": self._get_credentials_file()
-        }
         try:
             utils.run_terraform(
-                terraform_dir / self.cloud_dir, "apply", extra_env=extra_env
+                terraform_dir / self.cloud_dir, "apply", **self._cloud("create")
             )
         except subprocess.CalledProcessError as err:
             # We can error during provisioning, in which case Terraform
@@ -417,7 +462,7 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
         # state back must not reach the destroy above.
         try:
             outputs = utils.get_terraform_state(
-                terraform_dir / self.cloud_dir, extra_env
+                terraform_dir / self.cloud_dir, **self._cloud("create")
             )["outputs"]
         except (subprocess.CalledProcessError, RuntimeError) as err:
             logger.error(
@@ -453,15 +498,12 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
 
     def _terraform_destroy(self):
         terraform_dir = self.workbench_dir / "terraform"
-        extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": self._get_credentials_file()
-        }
         self.workbench.status = "t"
         self.workbench.cloud_state = "dm"
         self.workbench.save()
         try:
             utils.run_terraform(
-                terraform_dir / self.cloud_dir, "destroy", extra_env=extra_env
+                terraform_dir / self.cloud_dir, "destroy", **self._cloud("destroy")
             )
         except subprocess.CalledProcessError as err:
             logger.error("Terraform destroy failed", exc_info=err)
@@ -484,16 +526,13 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
     def _get_proxy_uri(self):
         # set terraform dir
         terraform_dir = self.workbench_dir / "terraform"
-        extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": self._get_credentials_file()
-        }
 
         try:
             utils.run_terraform(
                 terraform_dir / self.cloud_dir,
                 "apply",
                 ["-refresh-only"],
-                extra_env=extra_env,
+                **self._cloud("create"),
             )
         except subprocess.CalledProcessError as err:
             logger.error("Terraform refresh failed", exc_info=err)
@@ -505,7 +544,7 @@ wb_startup_script_bucket = "{self.config["server"]["gcs_bucket"]}"
 
         try:
             outputs = utils.get_terraform_state(
-                terraform_dir / self.cloud_dir, extra_env
+                terraform_dir / self.cloud_dir, **self._cloud("create")
             )["outputs"]
         except (subprocess.CalledProcessError, RuntimeError) as err:
             # Not retried: the backend client already retries transient

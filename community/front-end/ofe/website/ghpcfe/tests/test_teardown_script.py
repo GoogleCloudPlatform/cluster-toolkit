@@ -90,6 +90,46 @@ class StateBucketDirTests(unittest.TestCase):
         self.assertEqual(self._run({}), "")
 
 
+class AccountExistsTests(unittest.TestCase):
+    """service_account.sh check's 99, a missing or invalid argument such as
+    an empty project, is not an absent account: teardown.sh treats it as an
+    account it could not check, and records it as possibly left.
+    """
+
+    FUNCTIONS = "\n".join(
+        _extract_bash_function(TEARDOWN_SH, name) for name in ("left_account", "account_exists")
+    )
+
+    def _run(self, check_rc: int) -> subprocess.CompletedProcess:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "script").mkdir()
+            (root / "script" / "service_account.sh").write_text(
+                f'#!/bin/bash\necho "Error: Must specify PROJECT_ID" >&2\nexit {check_rc}\n'
+            )
+            script = (
+                f'SCRIPT_DIR="{root}"\nleft_accounts=()\n{self.FUNCTIONS}\n'
+                'rc=0; account_exists "" dep1-prov-sa || rc=$?\n'
+                'echo "rc=${rc} left=${#left_accounts[@]}"'
+            )
+            return subprocess.run(
+                ["bash", "-c", script],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+            )
+
+    def test_argument_error_is_an_account_that_could_not_be_checked(self):
+        result = self._run(99)
+        self.assertIn("rc=2 left=1", result.stdout)
+        self.assertIn("Could not check whether dep1-prov-sa still exists", result.stdout)
+
+    def test_absent_account_is_still_absent(self):
+        result = self._run(1)
+        self.assertIn("rc=1 left=0", result.stdout)
+
+
 class TeardownSandbox(unittest.TestCase):
     """Runs the real teardown.sh, or functions from it, in a temporary
     directory with stub gcloud, terraform and script/service_account.sh.
@@ -115,7 +155,12 @@ class TeardownSandbox(unittest.TestCase):
         fe_deployed: bool = True,
         lock: bool = True,
         show_fails: bool = False,
-        tf_tfvars: str | None = 'project_id = "proj"\ndeployment_name = "dep1"\n',
+        # As deploy.sh writes it: teardown.sh reads the zone to check for the
+        # server VM, and supplies a region only when it is empty.
+        tf_tfvars: str | None = (
+            'project_id = "proj"\ndeployment_name = "dep1"\n'
+            'region = "europe-west4"\nzone = "europe-west4-a"\n'
+        ),
         stdin: str = "",
         script: str | None = None,
         noncurrent: list[str] | None = None,
@@ -159,9 +204,16 @@ class TeardownSandbox(unittest.TestCase):
             # Kept out of the f-string below: Python 3.11 rejects a backslash
             # inside an f-string expression.
             show_action = "echo '  ghpcfe_id = \"dep1\"'" if fe_deployed else ":"
+            # teardown.sh reads tf/'s state with `state list` (and, when that
+            # fails, `state pull`): the server while the FrontEnd is deployed,
+            # nothing once it is gone.
+            state_list_action = "echo google_compute_instance.server_vm" if fe_deployed else ":"
+            state_pull_action = ":"
             if show_fails:
                 # As with tf/ not initialised: no provider schemas.
                 show_action = 'echo "Error: Failed to load plugin schemas" >&2; exit 1'
+                state_list_action = 'echo "Error: Failed to load state" >&2; exit 1'
+                state_pull_action = state_list_action
             listing = (
                 'echo "ERROR: denied" >&2; exit 1'
                 if list_fails
@@ -174,6 +226,10 @@ class TeardownSandbox(unittest.TestCase):
                 '  "storage --help "*) exit 0 ;;\n'
                 f'  "storage objects list") {listing} ;;\n'
                 f'  "storage cat "*) cat "{root}/objects/${{3#gs://{self.BUCKET}/}}" ;;\n'
+                # The server VM is gone: only asked when tf/ holds no state
+                '  "compute instances describe")\n'
+                "    echo \"ERROR: The resource 'projects/proj/zones/europe-west4-a/instances/$4'"
+                ' was not found" >&2; exit 1 ;;\n'
                 "esac\n",
             )
             stub(
@@ -200,6 +256,10 @@ class TeardownSandbox(unittest.TestCase):
                 + "' && exit 0\n"
                 'case "$1" in\n'
                 f"  show) {show_action} ;;\n"
+                '  state) case "$2" in\n'
+                f"    list) {state_list_action} ;;\n"
+                f"    pull) {state_pull_action} ;;\n"
+                "  esac ;;\n"
                 f'  apply) cp "$dir/main.tf" "{root}/applied_main.tf"'
                 + (
                     # As on Ctrl-C: the run recorded something, then the
@@ -228,6 +288,8 @@ class TeardownSandbox(unittest.TestCase):
             }
             if script is None:
                 (root / "teardown.sh").write_text(TEARDOWN_SH.read_text())
+                # teardown.sh sources deploy.sh for the functions they share
+                (root / "deploy.sh").write_text((OFE_DIR / "deploy.sh").read_text())
                 command = ["bash", str(root / "teardown.sh"), *args.split()]
             else:
                 command = ["bash", "-c", script]

@@ -14,7 +14,6 @@
 
 """Cloud interrogation routines"""
 
-import json
 import logging
 import time
 from collections import defaultdict
@@ -26,7 +25,10 @@ import googleapiclient.discovery
 from google.cloud import storage as gcs
 import google.cloud.secretmanager as secretmanager
 from google.cloud.billing_v1.services import cloud_catalog
-from google.oauth2 import service_account
+
+# Every function here that takes "credentials" takes a Credential, and acts
+# as it through credentials.py
+from . import credentials as credential_store
 
 logger = logging.getLogger(__name__)
 
@@ -72,11 +74,33 @@ def _get_arch_for_node_type_gcp(instance):
         return None
 
 
+class _CacheKey:
+    """A Credential as an lru_cache argument: equal to another when the two
+    credentials have the same content, so editing a credential starts a new
+    cache entry"""
+
+    def __init__(self, credential):
+        self.credential = credential
+        self.tag = credential_store.cache_tag(credential)
+
+    def __hash__(self):
+        return hash(self.tag)
+
+    def __eq__(self, other):
+        return isinstance(other, _CacheKey) and self.tag == other.tag
+
+
+def _credential_of(credentials):
+    """The Credential behind a Credential or a _CacheKey"""
+    return getattr(credentials, "credential", credentials)
+
+
 def _get_gcp_client(credentials, service="compute", api_version="v1"):
-    cred_info = json.loads(credentials)
-    creds = service_account.Credentials.from_service_account_info(cred_info)
+    """(project id, discovery client) acting as credentials, a Credential"""
+    credential = _credential_of(credentials)
+    creds = credential_store.python_credentials(credential)
     return (
-        cred_info["project_id"],
+        credential.project_id,
         googleapiclient.discovery.build(
             service, api_version, credentials=creds, cache_discovery=False
         ),
@@ -128,7 +152,9 @@ def _get_vm_reservations(credentials, zone, ttl_hash=None):
 
 def get_vm_reservations(cloud_provider, credentials, unused_region, zone):
     if cloud_provider == "GCP":
-        return _get_vm_reservations(credentials, zone, ttl_hash=_get_ttl_hash())
+        return _get_vm_reservations(
+            _CacheKey(credentials), zone, ttl_hash=_get_ttl_hash()
+        )
     else:
         raise Exception(f'Unsupported Cloud Provider "{cloud_provider}"')
 
@@ -154,7 +180,7 @@ def _get_gcp_disk_types(
 def get_disk_types(cloud_provider, credentials, unused_region, zone):
     if cloud_provider == "GCP":
         return _get_gcp_disk_types(
-            credentials, zone, ttl_hash=_get_ttl_hash()
+            _CacheKey(credentials), zone, ttl_hash=_get_ttl_hash()
         )
     else:
         raise Exception(f'Unsupport Cloud Provider "{cloud_provider}"')
@@ -333,7 +359,7 @@ def _get_ttl_hash(seconds=3600 * 24):
 def get_machine_types(cloud_provider, credentials, unused_region, zone):
     if cloud_provider == "GCP":
         return _get_gcp_machine_types(
-            credentials, zone, ttl_hash=_get_ttl_hash()
+            _CacheKey(credentials), zone, ttl_hash=_get_ttl_hash()
         )
     else:
         raise Exception(f'Unsupport Cloud Provider "{cloud_provider}"')
@@ -393,7 +419,9 @@ def _get_gcp_region_zone_info(
 
 def get_region_zone_info(cloud_provider, credentials):
     if cloud_provider == "GCP":
-        return _get_gcp_region_zone_info(credentials, ttl_hash=_get_ttl_hash())
+        return _get_gcp_region_zone_info(
+            _CacheKey(credentials), ttl_hash=_get_ttl_hash()
+        )
     else:
         raise Exception("Unsupported Cloud Provider")
 
@@ -521,9 +549,7 @@ def _get_gcp_instance_pricing(
     global _gcp_services_list
     global _gcp_compute_sku_list
 
-    creds = service_account.Credentials.from_service_account_info(
-        json.loads(credentials)
-    )
+    creds = credential_store.python_credentials(_credential_of(credentials))
     catalog = cloud_catalog.CloudCatalogClient(credentials=creds)
     # Step one:  Find the Compute Engine service
     if not _gcp_services_list:
@@ -712,7 +738,9 @@ def _get_gcp_instance_pricing(
         return gpu_price_per_hr
 
 
-    machine = _get_gcp_machine_types(credentials, zone)[instance_type]
+    machine = _get_gcp_machine_types(
+        _CacheKey(_credential_of(credentials)), zone
+    )[instance_type]
     instance_price = (
         get_cpu_price(machine["vCPU"], instance_type, skus)
         + get_mem_price(machine["memory"] / 1024, instance_type, skus)
@@ -750,6 +778,14 @@ def get_instance_pricing(
 def gcs_apply_bucket_acl(
     bucket, account, permission="roles/storage.objectViewer"
 ):
+    """Grant account the role permission on the whole bucket.
+
+    The policy is read and written as version 3: once the bucket holds a
+    conditional binding (the prefix-limited write grant of a cluster that
+    uses service-account profiles), Google refuses to return its policy at
+    a lower version. Only a binding without a condition is extended, or a
+    new one added; conditional bindings are written back unchanged.
+    """
 
     logger.info(
         "Attempting to grant %s to gs://%s/ for user %s",
@@ -760,14 +796,16 @@ def gcs_apply_bucket_acl(
     client = gcs.Client()
     try:
         gcs_bucket = client.get_bucket(bucket)
-        policy = gcs_bucket.get_iam_policy()
+        policy = gcs_bucket.get_iam_policy(requested_policy_version=3)
+        policy.version = 3
         for binding in policy.bindings:
-            if binding["role"] == permission:
+            if binding["role"] == permission and not binding.get("condition"):
                 binding["members"].add(account)
                 break
         else:
+            # A set holding the account (set(account) would hold its letters)
             policy.bindings.append(
-                {"role": permission, "members": set(account)}
+                {"role": permission, "members": {account}}
             )
 
         gcs_bucket.set_iam_policy(policy)
@@ -866,21 +904,19 @@ def get_gcp_filestores(credentials):
     return result["instances"]
 
 
-def get_secret_value(credentials_json, project_id, secret_name):
+def get_secret_value(credentials, project_id, secret_name):
     """
     Retrieve the latest secret value from Google Secret Manager.
 
     Args:
-        credentials_json (str): JSON string of the service account credentials.
+        credentials (Credential): The OFE credential to read the secret as.
         project_id (str): The GCP project where the secret is located.
         secret_name (str): The name of the secret (without 'projects/...').
 
     Returns:
         str: The secret value (decoded to UTF-8).
     """
-    # Parse the JSON credentials
-    creds_info = json.loads(credentials_json)
-    creds = service_account.Credentials.from_service_account_info(creds_info)
+    creds = credential_store.python_credentials(credentials)
 
     # Build the Secret Manager client
     client = secretmanager.SecretManagerServiceClient(credentials=creds)

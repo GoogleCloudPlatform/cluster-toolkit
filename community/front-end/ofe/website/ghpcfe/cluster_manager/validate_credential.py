@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,14 +15,12 @@
 """Cloud credential validation routines"""
 
 import logging
-import json
-import warnings
 
 from google.api_core import exceptions as google_exceptions
 from google.auth import exceptions as auth_exceptions
 from google.cloud import storage
-from google.oauth2 import service_account
 
+from . import credentials
 from . import utils
 
 logger = logging.getLogger(__name__)
@@ -43,46 +40,32 @@ def validate_credential(cloud_provider, credential_detail):
 
     validated = False
     if cloud_provider == "GCP":
-        validated = _validate_credential_gcp(credential_detail)
+        validated = credentials.validate_key_json(credential_detail)
 
     return validated
 
 
-def _validate_credential_gcp(credential_detail):
+def validate_impersonation(cloud_provider, email, project_id):
+    """Check that the server can impersonate email and use project_id.
 
-    # catch errors for incorrect format
-    try:
-        info = json.loads(credential_detail)
-    except Exception as err:  # pylint: disable=broad-except
-        logger.info("Failed to parse credential Json: %s", err)
-        return False
-
-    # I've seen different error conditions, including a warning to indicate
-    # corrupted private key. Need to catch that but not other harmless warnings.
-    warnings.simplefilter("ignore", ResourceWarning)
-    warnings.simplefilter("error", UserWarning)
-    try:
-        service_account.Credentials.from_service_account_info(
-            info
-        )
-    except Exception as err: #pylint: disable=broad-except
-        logger.info("Credential validation failed: %s", err)
-        return False
-
-    return True
+    Returns None when it can, or the reason it cannot.
+    """
+    if cloud_provider != "GCP":
+        return f"Unsupported cloud provider {cloud_provider}"
+    return credentials.validate_impersonation(email, project_id)
 
 
-def check_state_bucket_access(credential_detail):
+def check_state_bucket_access(credential):
     """Return a warning if a GCP credential cannot use the state bucket.
 
-    Asks the bucket (testIamPermissions) which of STATE_BUCKET_PERMISSIONS
-    the credential's service account holds: this writes nothing, needs no
-    permission and includes project-level roles. The front end never grants
-    access itself; the warning tells an administrator how. Returns None if
-    every permission is held.
+    credential is a Credential, with a key or impersonated. Asks the bucket
+    (testIamPermissions), acting as the credential, which of
+    STATE_BUCKET_PERMISSIONS its service account holds: this writes
+    nothing, needs no permission and includes project-level roles. The
+    front end never grants access itself; the warning tells an
+    administrator how. Returns None if every permission is held.
     """
-    info = json.loads(credential_detail)
-    email = info.get("client_email")
+    email = credentials.identity_email(credential)
     server = utils.load_config()["server"]
     bucket = server.get("terraform_state_bucket")
     if not bucket:
@@ -92,8 +75,10 @@ def check_state_bucket_access(credential_detail):
             "terraform_state_bucket. Provisioning will fail until it does."
         )
 
-    creds = service_account.Credentials.from_service_account_info(info)
-    client = storage.Client(project=info.get("project_id"), credentials=creds)
+    client = storage.Client(
+        project=credential.project_id or None,
+        credentials=credentials.python_credentials(credential),
+    )
     # One try with a short timeout: this runs inside the registration request.
     try:
         granted = client.bucket(bucket).test_iam_permissions(

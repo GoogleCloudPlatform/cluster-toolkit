@@ -167,6 +167,9 @@ document.addEventListener("DOMContentLoaded", function() {
               if (response.import) {
               window.alert("Imported image has been deleted from OFE, but not from GCP. Please delete the imported image manually if needed.")
               }
+            } else if (response.error) {
+              // The image was kept; say why
+              window.alert(response.error);
             }
           }
         };

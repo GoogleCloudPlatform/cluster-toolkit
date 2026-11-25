@@ -91,9 +91,13 @@ class StateBucketSandbox(unittest.TestCase):
 
     # deploy_state_bucket() calls prepare_state_bucket_dir(), which uses
     # STATE_BUCKET_ROOT, and validate_bucket_name(), which uses error() and
-    # BUCKET_NAME_MAX_LENGTH, so all of them are taken from deploy.sh.
+    # BUCKET_NAME_MAX_LENGTH, and names the provisioning account with
+    # PROV_SA_SUFFIX, so all of them are taken from deploy.sh.
     FUNCTION_BODY = "\n".join(
         [
+            re.search(
+                r"^PROV_SA_SUFFIX=\S+$", DEPLOY_SH.read_text(), re.MULTILINE
+            ).group(0),
             _extract_bash_function(DEPLOY_SH, "error"),
             re.search(
                 r"^BUCKET_NAME_MAX_LENGTH=\d+$", DEPLOY_SH.read_text(), re.MULTILINE
@@ -110,13 +114,17 @@ class StateBucketSandbox(unittest.TestCase):
 
     BUCKET = "testdeploy-tfstate-abcd1234"
     PROJECT_NUMBER = "111111111111"
-    DEFAULT_SA = "serviceAccount:testdeploy-tkfe-sa@test-project.iam.gserviceaccount.com"
+    # The provisioning account deploy.sh creates, and the account an earlier
+    # version created, which stays a writer while it exists.
+    DEFAULT_SA = "serviceAccount:testdeploy-prov-sa@test-project.iam.gserviceaccount.com"
+    OLD_SA = "serviceAccount:testdeploy-tkfe-sa@test-project.iam.gserviceaccount.com"
     FOREIGN = "serviceAccount:other@other-project.iam.gserviceaccount.com"
 
     def _sandbox_run(
         self,
         *,
         sa_exists: bool,
+        old_sa_exists: bool = False,
         preexisting_tfvars: str | None = None,
         preexisting_admin: bytes | None = None,
         bucket: str = "absent",
@@ -126,7 +134,7 @@ class StateBucketSandbox(unittest.TestCase):
         apply_fails: bool = False,
         state_unreadable: bool = False,
         computed_name: str | None = None,
-        state_show_name: str | None = None,
+        state_name: str | None = None,
         owner: str | None = None,
         legacy: dict[str, str] | None = None,
         other_deployments: dict[str, dict[str, str]] | None = None,
@@ -144,7 +152,10 @@ class StateBucketSandbox(unittest.TestCase):
         with a 409 message, as when the name is already taken.
         `in_local_state` and `state_unreadable` both create a local
         terraform.tfstate; with `state_unreadable`, `terraform state list`
-        fails on it. `computed_name` overrides the name `terraform console`
+        fails on it; with `state_name`, it records the bucket under that
+        name. `sa_exists` and `old_sa_exists` say whether the provisioning
+        account and an earlier version's -tkfe-sa account exist.
+        `computed_name` overrides the name `terraform console`
         derives. `owner` is what `gcloud storage buckets describe --raw`
         reports as the bucket's project number after a failed create: None
         -> describe fails (bucket not visible), "this" -> this project's
@@ -178,14 +189,35 @@ class StateBucketSandbox(unittest.TestCase):
             if preexisting_admin is not None:
                 (sb / "admin.auto.tfvars").write_bytes(preexisting_admin)
             if in_local_state or state_unreadable:
-                (sb / "terraform.tfstate").write_text("{}")
+                state = {}
+                if state_name:
+                    state = {
+                        "version": 4,
+                        "resources": [
+                            {
+                                "mode": "managed",
+                                "type": "google_storage_bucket",
+                                "name": "tfstate",
+                                "instances": [{"attributes": {"name": state_name}}],
+                            }
+                        ],
+                    }
+                (sb / "terraform.tfstate").write_text(json.dumps(state))
             (root / "policy.json").write_text(policy)
 
             def stub(path: Path, body: str) -> None:
                 path.write_text("#!/bin/bash\n" + body)
                 path.chmod(path.stat().st_mode | stat.S_IEXEC)
 
-            stub(root / "script" / "service_account.sh", f"exit {0 if sa_exists else 1}\n")
+            # service_account.sh check PROJECT ACCOUNT
+            stub(
+                root / "script" / "service_account.sh",
+                'case "$3" in\n'
+                f"  {deployment_name}-prov-sa) exit {0 if sa_exists else 1} ;;\n"
+                f"  {deployment_name}-tkfe-sa) exit {0 if old_sa_exists else 1} ;;\n"
+                "esac\n"
+                "exit 1\n",
+            )
 
             if local_output is None:
                 output_action = f"echo {self.BUCKET}"
@@ -213,12 +245,6 @@ class StateBucketSandbox(unittest.TestCase):
                 'case "$*" in\n'
                 f'  *" console"*) cat >/dev/null; echo \'"{name}"\' ;;\n'
                 f'  *"state list"*) {state_list_action} ;;\n'
-                + (
-                    f'  *"state show"*) echo \'  name = "{state_show_name}"\' ;;\n'
-                    if state_show_name
-                    else ""
-                )
-                +
                 f'  *"output -raw bucket_name"*) {output_action} ;;\n'
                 f'  *" apply"*) {apply_action} ;;\n'
                 "esac\n"
@@ -336,6 +362,21 @@ class DeployStateBucketWritersTests(StateBucketSandbox):
     def test_default_writers_empty_when_default_sa_absent(self):
         res = self._ok(sa_exists=False)
         self.assertEqual(self._list(res["tfvars"], "default_writers"), [])
+
+    def test_an_earlier_versions_account_stays_a_writer_while_it_exists(self):
+        # Resources created with its registered key still run Terraform as it
+        res = self._ok(sa_exists=True, old_sa_exists=True)
+        self.assertEqual(
+            self._list(res["tfvars"], "default_writers"), [self.DEFAULT_SA, self.OLD_SA]
+        )
+
+    def test_neither_default_account_is_seeded_into_the_admin_file(self):
+        policy = (
+            '{"bindings": [{"role": "roles/storage.objectUser", "members": ['
+            f'"{self.FOREIGN}", "{self.DEFAULT_SA}", "{self.OLD_SA}"]}}]}}'
+        )
+        res = self._ok(sa_exists=True, old_sa_exists=True, bucket="exists", policy=policy)
+        self.assertEqual(self._list(res["admin"].decode(), "state_bucket_writers"), [self.FOREIGN])
 
     def test_first_deploy_creates_empty_admin_file(self):
         res = self._ok(sa_exists=True)
@@ -464,13 +505,15 @@ class DeployStateBucketAdoptionTests(StateBucketSandbox):
     def test_local_state_without_output_uses_the_name_in_state(self):
         # An adoption whose apply failed: the bucket is in state, no outputs.
         res = self._sandbox_run(
-            sa_exists=True, in_local_state=True, local_output="", state_show_name=self.BUCKET
+            sa_exists=True, in_local_state=True, local_output="", state_name=self.BUCKET
         )
         # The stub writes no outputs on apply, so only the guard is checked:
         # no wrong-bucket stop, and the apply runs.
         self.assertNotIn("belongs to", res["out"])
         self.assertNotIn("<unknown bucket>", res["out"])
         self.assertTrue(self._applied(res))
+        # Read from the state file as stored, never decoded by the provider
+        self.assertFalse(any("state show" in c for c in res["tf_calls"]), res["tf_calls"])
 
     def test_bucket_is_looked_up_by_exact_name_within_the_project(self):
         res = self._ok(sa_exists=True, bucket="absent")

@@ -1,0 +1,339 @@
+
+
+blueprint_name: researchgroupa-9f8e7d6c
+
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: ofe-test-state-bucket
+    prefix: @STATE_PREFIX@
+
+vars:
+  project_id: example-project
+  deployment_name: researchgroupa-9f8e7d6c
+  region: us-central1
+  zone: us-central1-a
+  enable_cleanup_compute: True
+  enable_bigquery_load: True
+  
+  labels:
+    created_by: @SITE_NAME@
+
+deployment_groups:
+- group: primary
+  modules:
+  - source: modules/network/pre-existing-vpc
+    kind: terraform
+    settings:
+      network_name: net-a
+      subnetwork_name: subnet-a
+    id: hpc_network
+
+
+  - id: services-api
+    source: community/modules/project/service-enablement
+    settings:
+      gcp_service_list:
+        - secretmanager.googleapis.com
+        - cloudbuild.googleapis.com
+        - artifactregistry.googleapis.com
+
+
+
+
+  - source: community/modules/container/artifact-registry
+    kind: terraform
+    id: registry_301
+    settings:
+      repo_mode: REMOTE_REPOSITORY
+      format: DOCKER
+      
+      use_upstream_credentials: False
+      repo_public_repository: DOCKER_HUB
+      
+
+
+
+
+  - source: modules/file-system/pre-existing-network-storage
+    kind: terraform
+    id: mount_num_401
+    outputs:
+    - network_storage
+    settings:
+      server_ip: '$controller'
+      remote_mount: /home
+      local_mount: /home
+      mount_options: defaults,nofail,nosuid
+      fs_type: nfs
+
+
+
+
+  - source: modules/file-system/pre-existing-network-storage
+    kind: terraform
+    id: mount_num_402
+    outputs:
+    - network_storage
+    settings:
+      server_ip: 10.10.0.5
+      remote_mount: /tools
+      local_mount: /opt/cluster
+      mount_options: defaults,hard
+      fs_type: nfs
+
+
+  - source: modules/project/service-account
+    kind: terraform
+    id: hpc_service_account
+    settings:
+      project_id: example-project
+      name: sa
+      project_roles:
+      - compute.instanceAdmin.v1
+      - iam.serviceAccountUser
+      - monitoring.metricWriter
+      - logging.logWriter
+      - storage.objectAdmin
+      - pubsub.admin
+      - compute.securityAdmin
+      - iam.serviceAccountAdmin
+      - resourcemanager.projectIamAdmin
+      - compute.networkAdmin
+      - artifactregistry.admin
+      - secretmanager.secretAccessor
+
+
+
+  - source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    kind: terraform
+    id: partition_211
+    use:
+    - partition_211-nodeset
+    settings:
+      partition_name: gpu
+      exclusive: True
+      resume_timeout: 500
+
+  - source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    id: partition_211-nodeset
+    use:
+    - mount_num_401
+    - mount_num_402
+    settings:
+      bandwidth_tier: platform_default
+      subnetwork_self_link: "projects/example-project/regions/us-central1/subnetworks/subnet-a"
+      
+      enable_placement: False
+      machine_type: n1-standard-8
+      
+      
+      node_count_dynamic_max: 2
+      node_count_static: 0
+      disk_size_gb: 50
+      disk_type: pd-standard
+      instance_image:
+      
+        family: imported-family
+        project: example-project
+      
+      
+      
+      guest_accelerator:
+        - type: nvidia-tesla-t4
+          count: 1
+      
+      startup_script: |
+        #!/bin/bash
+        echo "******************************************** CALLING COMPUTE STARTUP"
+        gcloud storage cat gs://ofe-test-bucket/clusters/102/bootstrap_compute.sh | bash
+
+
+
+
+  - source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    kind: terraform
+    id: partition_212
+    use:
+    - partition_212-nodeset
+    settings:
+      partition_name: hpc
+      exclusive: True
+      resume_timeout: 500
+
+  - source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    id: partition_212-nodeset
+    use:
+    - mount_num_401
+    - mount_num_402
+    settings:
+      bandwidth_tier: tier_1_enabled
+      subnetwork_self_link: "projects/example-project/regions/us-central1/subnetworks/subnet-a"
+      
+      advanced_machine_features:
+        threads_per_core: 1
+      
+      enable_placement: True
+      machine_type: c2-standard-60
+      
+      
+      node_count_dynamic_max: 2
+      node_count_static: 0
+      disk_size_gb: 100
+      disk_type: pd-ssd
+      instance_image:
+      
+        family: image-built-family
+        project: example-project
+      
+      
+      additional_disks:
+        
+        - device_name: disk0
+          disk_name: null
+          disk_size_gb: 100
+          disk_type: pd-ssd
+          disk_labels: {}
+          auto_delete: False
+          boot: false
+        
+        - device_name: disk1
+          disk_name: null
+          disk_size_gb: 100
+          disk_type: pd-ssd
+          disk_labels: {}
+          auto_delete: False
+          boot: false
+        
+      
+      
+      startup_script: |
+        #!/bin/bash
+        echo "******************************************** CALLING COMPUTE STARTUP"
+        gcloud storage cat gs://ofe-test-bucket/clusters/102/bootstrap_compute.sh | bash
+
+
+
+
+  - source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    kind: terraform
+    id: partition_213
+    use:
+    - partition_213-nodeset
+    settings:
+      partition_name: small
+      exclusive: False
+      resume_timeout: 500
+
+  - source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    id: partition_213-nodeset
+    use:
+    - mount_num_401
+    - mount_num_402
+    settings:
+      bandwidth_tier: platform_default
+      subnetwork_self_link: "projects/example-project/regions/us-central1/subnetworks/subnet-a"
+      
+      advanced_machine_features:
+        threads_per_core: 1
+      
+      enable_placement: False
+      machine_type: e2-standard-8
+      
+      on_host_maintenance: MIGRATE
+      
+      
+      reservation_name: "projects/example-project/reservations/res-a"
+      
+      node_count_dynamic_max: 0
+      node_count_static: 1
+      disk_size_gb: 50
+      disk_type: pd-standard
+      instance_image:
+      
+        family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+        project: advanced-compute-images
+      
+      
+      
+      startup_script: |
+        #!/bin/bash
+        echo "******************************************** CALLING COMPUTE STARTUP"
+        gcloud storage cat gs://ofe-test-bucket/clusters/102/bootstrap_compute.sh | bash
+
+
+
+
+  - source: community/modules/database/slurm-cloudsql-federation
+    kind: terraform
+    id: slurm-sql
+    use: [hpc_network]
+    settings:
+      sql_instance_name: sql-researchgroupa-9f8e7d6c
+      tier: "db-g1-small"
+
+
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    kind: terraform
+    id: slurm_controller
+    settings:
+      enable_slurm_auth: false
+      instance_image:
+        family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+        project: advanced-compute-images
+      cloud_parameters:
+        resume_rate: 0
+        resume_timeout: 500
+        suspend_rate: 0
+        suspend_timeout: 300
+        no_comma_params: false
+      machine_type: n2-standard-2
+      disk_type: pd-standard
+      disk_size_gb: 120
+      
+      service_account_email: $(hpc_service_account.service_account_email)
+      service_account_scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+        - https://www.googleapis.com/auth/monitoring.write
+        - https://www.googleapis.com/auth/logging.write
+        - https://www.googleapis.com/auth/devstorage.read_write
+        - https://www.googleapis.com/auth/pubsub
+      compute_startup_scripts_timeout: 1200
+      controller_startup_scripts_timeout: 1200
+      controller_startup_script: |
+        #!/bin/bash
+        echo "******************************************** CALLING CONTROLLER STARTUP"
+        gcloud storage cat gs://ofe-test-bucket/clusters/102/bootstrap_controller.sh | bash
+      login_startup_script: |
+        #!/bin/bash
+        echo "******************************************** CALLING LOGIN STARTUP"
+        gcloud storage cat gs://ofe-test-bucket/clusters/102/bootstrap_login.sh | bash
+    use:
+    - slurm_login
+    - hpc_network
+    - partition_211
+    - partition_212
+    - partition_213
+    - mount_num_401
+    - mount_num_402
+    - slurm-sql
+
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    kind: terraform
+    id: slurm_login
+    settings:
+      instance_image:
+        family: aci-cpu-rocky-linux-9-slurm-2605-amd64
+        project: advanced-compute-images
+      num_instances: 2
+      subnetwork_self_link: "projects/example-project/regions/us-central1/subnetworks/subnet-a"
+      machine_type: n2-standard-2
+      disk_type: pd-standard
+      disk_size_gb: 120
+      
+      service_account_email: $(hpc_service_account.service_account_email)
+      service_account_scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+        - https://www.googleapis.com/auth/monitoring.write
+        - https://www.googleapis.com/auth/logging.write
+        - https://www.googleapis.com/auth/devstorage.read_write

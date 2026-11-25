@@ -33,6 +33,8 @@ from django.dispatch import receiver
 from rest_framework.authtoken.models import Token
 from django import template
 
+from .cluster_manager import credentials as credential_store
+from .cluster_manager import utils as cluster_utils
 from .cluster_manager.utils import new_state_namespace
 
 register = template.Library()
@@ -49,6 +51,296 @@ CLOUD_RESOURCE_MGMT_STATUS = (
     ("xm", "Destroyed"),  # Deleted, managed
     ("um", "Unknown"),  # Unknown, following error
 )
+
+
+class IdentityModel(models.TextChoices):
+    """Which service accounts a cluster's nodes or an image build run as"""
+
+    # One shared account with broad project roles, as OFE created before it
+    # used service-account profiles. Rows from before the upgrade keep it, so
+    # re-rendering their blueprints changes nothing.
+    LEGACY = "legacy", "Shared account (before service-account profiles)"
+    # Separate accounts from modules/project/service-account, each granted
+    # only what it needs by community/modules/iam/service-account-profiles.
+    PROFILES = "profiles", "Separate least-privilege accounts"
+
+
+def identity_model_field():
+    """The identity_model field of Cluster and Image.
+
+    Rows created from now on get PROFILES. The database default is LEGACY: the
+    migration the server generates when it starts fills the rows that existed
+    before the upgrade with it.
+    """
+    return models.CharField(
+        max_length=8,
+        choices=IdentityModel.choices,
+        default=IdentityModel.PROFILES,
+        db_default=IdentityModel.LEGACY,
+        editable=False,
+        help_text="Which service accounts this resource runs as",
+    )
+
+
+def started_flag_field(help_text):
+    """A flag that Cluster and Image set, and never clear, just before their
+    first `terraform apply`, so a destroy or delete knows the resource may
+    have cloud resources even when its status or cloud state says otherwise
+    (a partial apply, or a failed build).
+
+    Rows created from now on start False. The database default is True: the
+    migration the server generates when it starts fills the rows that existed
+    before the upgrade with it, so they count as deployed.
+    """
+    return models.BooleanField(
+        default=False,
+        db_default=True,
+        editable=False,
+        help_text=help_text,
+    )
+
+
+def _rows_of(instance, using=None):
+    """The queryset of instance's model on the database it is saved to"""
+    manager = type(instance)._base_manager
+    return manager.db_manager(using) if using else manager
+
+
+def set_started_flag(instance, field):
+    """Set the started flag field of a saved Cluster or Image: an UPDATE of
+    that column alone, so none of the other fields instance holds, which may
+    be stale, are written; then on instance too"""
+    _rows_of(instance).filter(pk=instance.pk).update(**{field: True})
+    setattr(instance, field, True)
+
+
+def _leave_started_flag_out(instance, field, kwargs):
+    """Narrow save()'s kwargs so the save does not write the started flag
+    field, when instance is an existing row that holds False. Returns True
+    if it did.
+
+    The update_fields become the fields the save would otherwise write
+    (every loaded, non-primary-key concrete field when none were given, as
+    Django's own save of a deferred instance does), without the flag. A new
+    row, a forced insert, a save to another database than the row came
+    from, or a save whose update_fields already leave the flag out is
+    unchanged.
+    """
+    # _state and _meta are Django's documented model APIs
+    # pylint: disable=protected-access
+    if getattr(instance, field) or instance.pk is None:
+        return False
+    if instance._state.adding or kwargs.get("force_insert"):
+        return False
+    using = kwargs.get("using")
+    if using and using != instance._state.db:
+        return False
+    flag = instance._meta.get_field(field)
+    flag_names = {flag.name, flag.attname}
+    update_fields = kwargs.get("update_fields")
+    if update_fields is not None:
+        # save() takes any iterable, and an iterator can be read only once:
+        # save() is given the list read here
+        update_fields = kwargs["update_fields"] = list(update_fields)
+    if update_fields is None:
+        deferred = instance.get_deferred_fields()
+        update_fields = [
+            other.attname
+            for other in instance._meta.concrete_fields
+            if not other.primary_key
+            and not other.generated
+            and other.attname not in deferred
+            and other.name not in flag_names
+        ]
+    elif flag_names.isdisjoint(update_fields):
+        return False
+    else:
+        update_fields = [
+            name for name in update_fields if name not in flag_names
+        ]
+    kwargs["update_fields"] = update_fields
+    return True
+
+
+def keep_started_flag(instance, field, save, kwargs):
+    """Save instance with save (its model's parent save()) and save()'s
+    kwargs, never writing False over a started flag the database holds as
+    True.
+
+    An instance loaded before the flag was set (by another process, or
+    another copy of the row) still holds False, and a full save of it
+    would clear the flag. So when an existing row's instance holds False,
+    the UPDATE leaves the flag's column out (_leave_started_flag_out): a
+    flag set at any time before that UPDATE is kept, with no read before
+    the write for a concurrent set to fall between. The column is then
+    read back into instance. A new row, or a save whose update_fields
+    leave the field out, reads nothing. The flag can still be cleared by
+    an UPDATE of the column alone.
+    """
+    flag_left_out = _leave_started_flag_out(instance, field, kwargs)
+    save(**kwargs)
+    if flag_left_out:
+        instance.refresh_from_db(using=kwargs.get("using"), fields=[field])
+
+
+# A user-managed service account. Default Compute Engine and App Engine
+# accounts (...@developer.gserviceaccount.com, ...@appspot.gserviceaccount.com)
+# do not match the domain, and Google-managed service agents
+# (service-<project number>@..., or any account in a gcp-sa-* domain) are
+# refused by the two lookaheads.
+SERVICE_ACCOUNT_EMAIL_VALIDATOR = RegexValidator(
+    regex=(
+        r"^(?!service-[0-9]+@)[a-z][-a-z0-9]{4,28}[a-z0-9]"
+        r"@(?!gcp-sa-)[a-z][-a-z0-9.]*[a-z0-9]\.iam\.gserviceaccount\.com$"
+    ),
+    message=(
+        "Enter the e-mail address of a service account you created, of the "
+        "form name@project-id.iam.gserviceaccount.com. Default Compute Engine "
+        "and App Engine accounts and Google-managed service agents are not "
+        "accepted."
+    ),
+)
+
+# Accounts that OFE itself creates, matched on the part before the "@".
+# - An image build's account: img-<image id>-bld (cluster_manager/image.py).
+# - A cluster's node accounts: <cloud_id>-ctl, -lgn, -cmp and -c00 to -c99
+#   (cluster_manager/clusterinfo.py), where cloud_id is the cluster name, a
+#   hyphen and 8 hexadecimal characters (views/clusters.py).
+# - The shared account of a cluster created before service-account profiles:
+#   <cloud_id>-sa (the hpc_service_account block of the cluster blueprint),
+#   which holds Project IAM Admin.
+# - A workbench's account: sa-p-notebook-<hex>
+#   (infrastructure_files/workbench_tf/google/main.tf), which holds
+#   project-wide Compute Instance Admin.
+# - An OFE server's provisioning and web server accounts, this server's or
+#   another deployment's in the same project: <deployment_name>-prov-sa
+#   (deploy.sh) and <deployment_name>-fe-sa (tf/main.tf), and the
+#   provisioning account of earlier versions, <deployment_name>-tkfe-sa,
+#   which holds Project IAM Admin until removed.
+_IMAGE_BUILDER_ACCOUNT = re.compile(r"img-[0-9]+-bld")
+_CLUSTER_NODE_ACCOUNT = re.compile(
+    r"[a-z][-a-z0-9]*-[0-9a-f]{8}-(?:ctl|lgn|cmp|c[0-9]{2})"
+)
+_LEGACY_CLUSTER_ACCOUNT = re.compile(r"[a-z][-a-z0-9]*-[0-9a-f]{8}-sa")
+_WORKBENCH_ACCOUNT = re.compile(r"sa-p-notebook-[0-9a-f]+")
+_SERVER_ACCOUNT = re.compile(r"([a-z][-a-z0-9]*)-(prov-sa|fe-sa|tkfe-sa)")
+_SERVER_ACCOUNT_KINDS = {
+    "prov-sa": (
+        "provisioning account, which can change the project's IAM policy"
+    ),
+    "fe-sa": "web server account",
+    "tkfe-sa": (
+        "provisioning account from an earlier version, which can change the "
+        "project's IAM policy"
+    ),
+}
+
+
+def refuse_ofe_managed_service_account(email):
+    """Refuse an account OFE creates as a cluster's existing account.
+
+    A cluster's nodes run as its existing accounts, and any user or job on a
+    node can use the node's account. Given this server's provisioning
+    account (or that of an earlier version, or of another OFE deployment), or
+    the shared account of a cluster created before service-account profiles,
+    they could change the project's IAM policy; given a workbench's account,
+    they could take over any VM in the project; given an image build's or another
+    cluster's account, they would get grants that OFE made for that image or
+    cluster, and lose them when it is deleted.
+    """
+    local_part = (email or "").split("@", 1)[0].lower()
+    server = cluster_utils.load_config()["server"]
+    deployment_name = server.get("deployment_name", "")
+    if not deployment_name:
+        # Without it this server's own accounts cannot be recognised
+        raise ValidationError(
+            "%(email)s cannot be checked: the server's configuration has no "
+            "deployment name, so OFE cannot tell its own accounts apart. "
+            "Leave the three fields empty to let OFE create the cluster's "
+            "accounts.",
+            code="ofe_managed_account",
+            params={"email": email},
+        )
+    server_account = _SERVER_ACCOUNT.fullmatch(local_part)
+    if server_account:
+        owner = (
+            "this OFE server's"
+            if server_account.group(1) == deployment_name
+            else "an OFE server's"
+        )
+        raise ValidationError(
+            "%(email)s is %(description)s. A cluster's nodes must never "
+            "run as it: enter an account you created for this cluster.",
+            code="ofe_managed_account",
+            params={
+                "email": email,
+                "description": (
+                    f"{owner} {_SERVER_ACCOUNT_KINDS[server_account.group(2)]}"
+                ),
+            },
+        )
+    if _WORKBENCH_ACCOUNT.fullmatch(local_part):
+        raise ValidationError(
+            "%(email)s is the account OFE creates for a workbench, which can "
+            "administer the project's VMs. Enter an account you created for "
+            "this cluster.",
+            code="ofe_managed_account",
+            params={"email": email},
+        )
+    if _IMAGE_BUILDER_ACCOUNT.fullmatch(local_part):
+        raise ValidationError(
+            "%(email)s is the account OFE creates to build an image. Enter "
+            "an account you created for this cluster.",
+            code="ofe_managed_account",
+            params={"email": email},
+        )
+    if _LEGACY_CLUSTER_ACCOUNT.fullmatch(local_part):
+        raise ValidationError(
+            "%(email)s is named like the shared account OFE created for a "
+            "cluster before this version (<cluster name>-<8 hexadecimal "
+            "characters>-sa), which can change the project's IAM policy. "
+            "Enter an account you created for this cluster under another "
+            "name, or leave the three fields empty to let OFE create the "
+            "cluster's accounts.",
+            code="ofe_managed_account",
+            params={"email": email},
+        )
+    if _CLUSTER_NODE_ACCOUNT.fullmatch(local_part):
+        raise ValidationError(
+            "%(email)s is named like the accounts OFE creates for a "
+            "cluster's nodes (<cluster name>-<8 hexadecimal characters>-ctl, "
+            "-lgn, -cmp or -c00 to -c99). Enter an account you created for "
+            "this cluster under another name, or leave the three fields "
+            "empty to let OFE create the cluster's accounts.",
+            code="ofe_managed_account",
+            params={"email": email},
+        )
+
+
+# Partitions with their own service account hold a slot, 0 to 99, which
+# names the account c00 to c99.
+MAX_SERVICE_ACCOUNT_SLOTS = 100
+
+
+def slurm_cluster_name_for(name, cloud_id):
+    """The Slurm cluster name of a profiles cluster.
+
+    Slurm names every node "<slurm_cluster_name>-...", and the controller's
+    name-scoped permission to change instance metadata covers exactly that
+    prefix. Left to itself the controller takes the first 10 letters and
+    digits of the deployment name, so two clusters whose names share them
+    would share a prefix. This appends the 8 hex characters that end cloud_id
+    to the first 11 letters and digits of the cluster name: at most 19
+    characters, starting with a letter, as the controller requires.
+    """
+    prefix = re.sub(r"[^a-z0-9]", "", re.sub(r"^[^a-z]+", "", name.lower()))[:11]
+    suffix = cloud_id.rsplit("-", 1)[-1]
+    if not prefix or not re.fullmatch(r"[0-9a-f]{8}", suffix):
+        raise ValueError(
+            f"Cannot derive a Slurm cluster name from name {name!r} and "
+            f"cloud_id {cloud_id!r}"
+        )
+    return prefix + suffix
 
 
 # Name style matches the other options that Django provides
@@ -252,7 +544,13 @@ class AuthorisedUser(models.Model):
 
 
 class Credential(models.Model):
-    """Model representing a credential on a cloud platform"""
+    """Model representing a credential on a cloud platform.
+
+    Only cluster_manager/credentials.py reads detail: for a "key" credential
+    it holds the service account key JSON, encrypted when saved; for an
+    "impersonate" credential, the email of the service account the server
+    impersonates.
+    """
 
     name = models.CharField(
         max_length=30,
@@ -263,12 +561,31 @@ class Credential(models.Model):
         help_text="Who owns this credential?",
         on_delete=models.RESTRICT,
     )
+    kind = models.CharField(
+        max_length=12,
+        choices=credential_store.KIND_CHOICES,
+        default=credential_store.KIND_KEY,
+        help_text=(
+            "An uploaded service account key, or a service account the "
+            "server impersonates without a key"
+        ),
+    )
+    project_id = models.CharField(
+        max_length=128,
+        blank=True,
+        default="",
+        help_text="The project this credential provisions in",
+    )
     detail = models.TextField(
         max_length=4000,
         help_text=(
             "Obtain the credential json and copy/paste it into this text field."
         ),
     )
+
+    def save(self, *args, **kwargs):
+        credential_store.seal(self)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
@@ -308,8 +625,7 @@ class CloudResource(models.Model):
     @property
     def project_id(self):
         if self.cloud_credential:
-            cred_info = json.loads(self.cloud_credential.detail)
-            return cred_info.get("project_id", None)
+            return self.cloud_credential.project_id or None
         return None
 
     @property
@@ -658,6 +974,30 @@ class Image(CloudResource):
         default="n",
         help_text="Status of this image",
     )
+    identity_model = identity_model_field()
+    builder_started = started_flag_field(
+        "Whether a Terraform apply of this image's builder environment has "
+        "started; set before the first one and never cleared"
+    )
+    role_id_suffix = models.CharField(
+        max_length=8,
+        blank=True,
+        default="",
+        editable=False,
+        help_text=(
+            "Suffix of the custom IAM role ids of a profiles image build. A "
+            "new one is made for each build after a finished or failed one, "
+            "because Google holds a deleted role id for up to 44 days."
+        ),
+    )
+
+    def set_builder_started(self):
+        """Set builder_started, writing no other field (set_started_flag)"""
+        set_started_flag(self, "builder_started")
+
+    def save(self, **kwargs):
+        # A stale copy never clears builder_started (keep_started_flag)
+        keep_started_flag(self, "builder_started", super().save, kwargs)
 
     def __str__(self):
         return self.name
@@ -832,6 +1172,105 @@ class Cluster(CloudResource):
             "Enable Slurm native authentication instead of MUNGE."
         ),
     )
+    identity_model = identity_model_field()
+    terraform_started = started_flag_field(
+        "Whether a Terraform apply of this cluster has started; set before "
+        "the first one and never cleared"
+    )
+    slurm_cluster_name = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        editable=False,
+        help_text=(
+            "Slurm cluster name of a profiles cluster, which starts every "
+            "node name. Set with cloud_id."
+        ),
+    )
+    role_id_suffix = models.CharField(
+        max_length=8,
+        blank=True,
+        default="",
+        editable=False,
+        help_text=(
+            "Suffix of the custom IAM role ids of a profiles cluster. A new "
+            "one is made for each start after a destroy, because Google holds "
+            "a deleted role id for up to 44 days."
+        ),
+    )
+    # Bring your own accounts: set all three or none. OFE then creates no
+    # account and grants nothing for this cluster.
+    controller_service_account_email = models.EmailField(
+        max_length=254,
+        blank=True,
+        default="",
+        validators=[
+            SERVICE_ACCOUNT_EMAIL_VALIDATOR,
+            refuse_ofe_managed_service_account,
+        ],
+        verbose_name="Controller service account",
+        help_text=(
+            "Needs the permissions of the slurm-controller profile of "
+            "service-account-profiles, Service Account User on the compute "
+            "account, Storage Object Viewer on the OFE bucket (limited by the "
+            "IAM condition in the Admin Guide) and Storage "
+            "Object User on its clusters/<cluster ID>/ objects, Pub/Sub "
+            "Subscriber on this cluster's command subscription and Pub/Sub "
+            "Publisher on the OFE command topic."
+        ),
+    )
+    login_service_account_email = models.EmailField(
+        max_length=254,
+        blank=True,
+        default="",
+        validators=[
+            SERVICE_ACCOUNT_EMAIL_VALIDATOR,
+            refuse_ofe_managed_service_account,
+        ],
+        verbose_name="Login service account",
+        help_text=(
+            "Needs Logs Writer and Monitoring Metric Writer on the project "
+            "and Storage Object Viewer on the OFE bucket, limited by the IAM "
+            "condition in the Admin Guide."
+        ),
+    )
+    compute_service_account_email = models.EmailField(
+        max_length=254,
+        blank=True,
+        default="",
+        validators=[
+            SERVICE_ACCOUNT_EMAIL_VALIDATOR,
+            refuse_ofe_managed_service_account,
+        ],
+        verbose_name="Compute service account",
+        help_text=(
+            "Used by every partition. Needs Logs Writer and Monitoring Metric "
+            "Writer on the project and Storage Object Viewer on the OFE bucket, "
+            "limited by the IAM condition in the Admin Guide."
+        ),
+    )
+
+    @property
+    def uses_service_account_profiles(self):
+        return self.identity_model == IdentityModel.PROFILES
+
+    @property
+    def own_service_accounts(self):
+        """The bring-your-own accounts by role, or {} if none are set"""
+        accounts = {
+            "controller": self.controller_service_account_email,
+            "login": self.login_service_account_email,
+            "compute": self.compute_service_account_email,
+        }
+        return accounts if any(accounts.values()) else {}
+
+    def set_terraform_started(self):
+        """Set terraform_started, writing no other field (set_started_flag)"""
+        set_started_flag(self, "terraform_started")
+
+    def save(self, **kwargs):
+        # A stale copy never clears terraform_started (keep_started_flag)
+        keep_started_flag(self, "terraform_started", super().save, kwargs)
 
     def get_access_key(self):
         return Token.objects.get(user=self.owner)
@@ -1017,12 +1456,94 @@ class ClusterPartition(models.Model):
         max_length=30,
         help_text="Name of the reservation to use for VM resources"
     )
+    separate_service_account = models.BooleanField(
+        default=False,
+        help_text=(
+            "Run this partition's nodes as their own service account instead "
+            "of the cluster's shared compute account. Clusters created before "
+            "service-account profiles, and clusters with their own accounts, "
+            "ignore it. It cannot be changed once the cluster is created."
+        ),
+    )
+    # Which c<NN> account a partition with its own account runs as. Set once,
+    # when the partition is first saved or rendered with its own account, and
+    # never renumbered, so other partitions coming and going never move a
+    # running partition to another account.
+    service_account_slot = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        editable=False,
+        help_text="Slot of this partition's own service account (c00-c99)",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["cluster", "service_account_slot"],
+                name="unique_partition_service_account_slot",
+            ),
+        ]
+
     def __str__(self):
         return self.name
 
+    def _free_service_account_slot(self):
+        """The smallest slot no other partition of the cluster holds, or None"""
+        taken = set(
+            ClusterPartition.objects.filter(cluster_id=self.cluster_id)
+            .exclude(pk=self.pk)
+            .exclude(service_account_slot=None)
+            .values_list("service_account_slot", flat=True)
+        )
+        return next(
+            (slot for slot in range(MAX_SERVICE_ACCOUNT_SLOTS) if slot not in taken),
+            None,
+        )
+
+    def assign_service_account_slot(self):
+        """Give a partition with its own account a slot, once"""
+        if not self.separate_service_account or self.service_account_slot is not None:
+            return
+        slot = self._free_service_account_slot()
+        if slot is None:
+            raise ValueError(
+                f"At most {MAX_SERVICE_ACCOUNT_SLOTS} partitions of a cluster "
+                "can have their own service account"
+            )
+        self.service_account_slot = slot
+
+    def save(self, *args, **kwargs):
+        self.assign_service_account_slot()
+        super().save(*args, **kwargs)
+
     def clean(self):
         if self.enable_placement and self.enable_node_reuse:
-            raise ValidationError("You cannot enable both Placement Groups and Node Reuse simultaneously.") 
+            raise ValidationError("You cannot enable both Placement Groups and Node Reuse simultaneously.")
+        if self.cluster_id is None:
+            return
+        if (
+            self.pk is not None
+            and self.cluster.status != "n"
+            and ClusterPartition.objects.filter(pk=self.pk)
+            .exclude(separate_service_account=self.separate_service_account)
+            .exists()
+        ):
+            # Changing it would move running nodes to another account and
+            # destroy the one they run as
+            raise ValidationError(
+                "Whether a partition has its own service account cannot be "
+                "changed once the cluster is created. Add a new partition "
+                "instead."
+            )
+        if (
+            self.separate_service_account
+            and self.service_account_slot is None
+            and self._free_service_account_slot() is None
+        ):
+            raise ValidationError(
+                f"At most {MAX_SERVICE_ACCOUNT_SLOTS} partitions of a cluster "
+                "can have their own service account."
+            )
 
 
 class ContainerRegistry(models.Model):
