@@ -223,11 +223,11 @@ echo "   (or filter by module tag: tools/cloud-build/babysit/run --pr ${PR_NUM_H
 echo
 echo "2. Mark the ${BRANCH_NAME} -> main PR ready for review (triggers draft release notes) and merge it to main (publishes ${NEW_TAG})."
 echo
-echo "3. Run the OSS Exit Gate publish script after ${NEW_TAG} is tagged on main:"
-echo "   git fetch origin --tags && bash tools/publish_release.sh \"${NEW_TAG}\" \"${NEW_TAG}\""
-echo
-echo "4. Immediately open the main -> develop back-merge PR:"
+echo "3. Immediately open the main -> develop back-merge PR:"
 echo "   gh pr create -R ${REPO} --base develop --head main --label release-chore --title \"Back-merge hotfix ${NEW_TAG} from main into develop\" --body \"Back-merge emergency hotfix ${NEW_TAG} from main into develop.\""
+echo
+echo "4. After receiving the OSS Exit Gate email, run the publish script (automatically fetches tags and picks the latest tag):"
+echo "   bash tools/publish_release.sh"
 if [ "${OPEN_RC_COUNT}" -gt 0 ]; then
 	echo
 	echo "5. Also merge/cherry-pick ${NEW_TAG} into the open release-candidate-* branch listed above."

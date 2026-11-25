@@ -401,8 +401,12 @@ sys.exit(1)
         self.assertIn("WARNING: An in-flight release candidate PR is currently open", res.stdout)
         self.assertIn("release-candidate-v1.110.0", res.stdout)
         self.assertIn("HOTFIX-test-<test_name>", res.stdout)
-        self.assertIn("tools/publish_release.sh", res.stdout)
+        self.assertIn("bash tools/publish_release.sh", res.stdout)
         self.assertIn("--base develop --head main", res.stdout)
+        self.assertLess(
+            res.stdout.index("--base develop --head main"),
+            res.stdout.index("bash tools/publish_release.sh"),
+        )
         self.assertNotIn("hpc-toolkit", res.stdout)
         self.assertNotIn("--all -c", res.stdout)
 
