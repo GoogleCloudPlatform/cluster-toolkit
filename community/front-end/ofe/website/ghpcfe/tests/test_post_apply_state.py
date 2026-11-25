@@ -102,6 +102,22 @@ def _load_vpc():
     return _load("vpc", stubs)
 
 
+def _load_image():
+    stubs = _common_stubs()
+    google = _package("google")
+    stubs.update({
+        "django": _package("django"),
+        "django.conf": _module("django.conf", settings=mock.MagicMock()),
+        "google": google,
+        "google.api_core": _package("google.api_core"),
+        "google.api_core.exceptions": _module(
+            "google.api_core.exceptions", NotFound=Exception
+        ),
+        "google.cloud": _module("google.cloud", compute_v1=mock.MagicMock()),
+    })
+    return _load("image", stubs)
+
+
 def _load_clusterinfo():
     stubs = _common_stubs(
         Cluster=mock.MagicMock(),
@@ -138,6 +154,7 @@ def _load_clusterinfo():
 
 vpc_module = _load_vpc()
 clusterinfo = _load_clusterinfo()
+image_module = _load_image()
 
 STATE_PULL_FAILED = subprocess.CalledProcessError(
     1, ["terraform", "state", "pull"]
@@ -221,12 +238,20 @@ class StartVpcTests(unittest.TestCase):
             "ns/vpcs/vpc_7",
         )
         modules = bp["deployment_groups"][0]["modules"]
-        # Private service access lives in the Cloud SQL cluster blueprint.
+        # One private service access per network, shared by its Cloud SQL
+        # clusters; the firewall rule uses its range, which gcluster needs.
         self.assertEqual(
             [m["source"] for m in modules],
-            ["modules/network/vpc", "modules/network/firewall-rules"],
+            ["modules/network/vpc", "modules/network/private-service-access",
+             "modules/network/firewall-rules"],
         )
         self.assertEqual(modules[1]["use"], ["network"])
+        self.assertNotIn("settings", modules[1])  # default psconnect-<network>
+        self.assertEqual(modules[2]["use"], ["network"])
+        self.assertIn(
+            "$(private_service_access.cidr_range)",
+            modules[2]["settings"]["ingress_rules"][0]["source_ranges"],
+        )
         subnets = modules[0]["settings"]["subnetworks"]
         self.assertEqual(
             subnets,
@@ -247,6 +272,7 @@ class StartVpcTests(unittest.TestCase):
     def test_destroy_uses_gcluster(self):
         vpc, _ = _fake_vpc(cloud_state="m")
         vpc.cloud_id = "net-abc123"
+        (self.dir / "net-abc123").mkdir()
         with mock.patch.object(utils, "run_gcluster") as run_gcluster, \
                 mock.patch.object(utils, "run_terraform") as tf:
             vpc_module.destroy_vpc(vpc)
@@ -254,6 +280,58 @@ class StartVpcTests(unittest.TestCase):
                          ("destroy", "net-abc123"))
         tf.assert_not_called()
         self.assertEqual(vpc.cloud_state, "xm")
+
+    def test_log_file_is_the_gcluster_log_the_page_shows(self):
+        self.assertEqual(vpc_module.get_log_file(_fake_vpc()[0]),
+                         self.dir / "gcluster.log")
+
+    def test_psa_blocked_destroy_is_recognised_from_the_log(self):
+        vpc, _ = _fake_vpc()
+        log = self.dir / "gcluster.log"
+        blocked = ("\n$ gcluster destroy net --auto-approve\nError: Unable to "
+                   "remove Service Networking Connection ... reason: "
+                   "FLOW_SN_DC_RESOURCE_PREVENTING_DELETE_CONNECTION\n")
+        cases = {
+            "no log": None,
+            "blocked destroy": "\n$ gcluster deploy net\nok\n" + blocked,
+            "other destroy error": "\n$ gcluster destroy net\nError: quota\n",
+            # A later command supersedes the blocked destroy.
+            "deployed since": blocked + "\n$ gcluster deploy net\nok\n",
+        }
+        expected = {"no log": False, "blocked destroy": True,
+                    "other destroy error": False, "deployed since": False}
+        for name, text in cases.items():
+            with self.subTest(case=name):
+                if text is None:
+                    log.unlink(missing_ok=True)
+                else:
+                    log.write_text(text)
+                self.assertEqual(vpc_module.destroy_blocked_by_psa(vpc),
+                                 expected[name])
+
+    def test_destroy_failure_marks_vpc_unknown_so_destroy_is_offered(self):
+        # e.g. the network still used by a leftover PSA address.
+        vpc, _ = _fake_vpc(cloud_state="dm")
+        vpc.cloud_id = "net-abc123"
+        (self.dir / "net-abc123").mkdir()
+        failed = subprocess.CalledProcessError(1, ["gcluster", "destroy"])
+        with mock.patch.object(utils, "run_gcluster", side_effect=failed):
+            with self.assertRaises(subprocess.CalledProcessError):
+                vpc_module.destroy_vpc(vpc)
+        self.assertEqual(vpc.cloud_state, "um")
+        vpc.save.assert_called()
+
+    def test_destroy_of_never_applied_vpc_just_marks_it_destroyed(self):
+        # Created, then destroyed without "Apply Cloud Changes": no cloud_id
+        # and no deployment folder, so there is nothing for gcluster to do.
+        for cloud_id in (None, "net-abc123"):
+            with self.subTest(cloud_id=cloud_id):
+                vpc, _ = _fake_vpc(cloud_state="nm")
+                vpc.cloud_id = cloud_id
+                with mock.patch.object(utils, "run_gcluster") as run_gcluster:
+                    vpc_module.destroy_vpc(vpc)
+                run_gcluster.assert_not_called()
+                self.assertEqual(vpc.cloud_state, "xm")
 
 
 def _cluster_info(cloud_state):
@@ -327,6 +405,73 @@ class ClusterPostApplyTests(unittest.TestCase):
                 info.reconfigure_cluster()
         self.assertEqual(info.cluster.cloud_state, "m")
         self.assertEqual(info.cluster.status, "e")
+
+    def test_successful_start_pings_controller_after_last_save(self):
+        # A redeploy of a cluster whose controller is already up gets no new
+        # "ready" message; the PING's answer stands in for it.
+        info = _cluster_info("m")
+        info.cluster.id = 18
+        info._deploy_cluster = mock.MagicMock()
+        calls = mock.MagicMock()
+        info.cluster.save = calls.save
+        with mock.patch.object(clusterinfo, "c2") as c2:
+            c2.ping_cluster = calls.ping_cluster
+            info.start_cluster(None)
+        names = [c[0] for c in calls.mock_calls]
+        self.assertEqual(names[-1], "ping_cluster")
+        calls.ping_cluster.assert_called_once_with(18)
+
+    def test_failed_start_does_not_ping(self):
+        info = _cluster_info("nm")
+        info._run_ghpc.side_effect = RuntimeError("gcluster failed")
+        with mock.patch.object(clusterinfo, "c2") as c2:
+            with self.assertRaises(RuntimeError):
+                info.start_cluster(None)
+        c2.ping_cluster.assert_not_called()
+
+    def test_destroy_failure_marks_cluster_error_so_destroy_is_offered(self):
+        # e.g. Service Networking refusing to drop a connection still in use:
+        # the cluster must not stay in "Terminating", which offers no Destroy.
+        info = _cluster_info("m")
+        failed = subprocess.CalledProcessError(1, ["gcluster", "destroy"])
+        with mock.patch.object(utils, "run_gcluster", side_effect=failed):
+            with self.assertRaises(subprocess.CalledProcessError):
+                info.stop_cluster()
+        self.assertEqual(info.cluster.status, "e")
+        self.assertEqual(info.cluster.cloud_state, "um")
+        info.cluster.save.assert_called()
+
+
+class ImageCloudStateTests(unittest.TestCase):
+    """Images report cloud_state/cloud_id like the other resources."""
+
+    def _backend(self):
+        image = mock.MagicMock()
+        image.name = "img"
+        image.cloud_state = "nm"
+        image.cloud_id = None
+        backend = image_module.ImageBackend.__new__(image_module.ImageBackend)
+        backend.image = image
+        return backend, image
+
+    def test_status_sets_cloud_state(self):
+        for status, cloud_state in (("c", "cm"), ("r", "m"), ("e", "um")):
+            with self.subTest(status=status):
+                backend, image = self._backend()
+                backend.update_image_status(status)
+                self.assertEqual(image.status, status)
+                self.assertEqual(image.cloud_state, cloud_state)
+                image.save.assert_called()
+
+    def test_ready_image_records_its_gcp_name(self):
+        backend, image = self._backend()
+        backend.update_image_status("r")
+        self.assertEqual(image.cloud_id, "image-img")
+
+    def test_failed_image_has_no_cloud_id(self):
+        backend, image = self._backend()
+        backend.update_image_status("e")
+        self.assertIsNone(image.cloud_id)
 
 
 if __name__ == "__main__":

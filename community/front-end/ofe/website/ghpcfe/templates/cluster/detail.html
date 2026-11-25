@@ -21,7 +21,7 @@
 <meta http-equiv="refresh" content="15" />
 {% endif %}
 {% if object.status == "c" or object.status == "t" %}
-{# aka, if Terraform running, let's show the TF log #}
+{# while gcluster deploys or destroys, show its log #}
 <script>
   window.onload = function (event) {
     var xhr_ = new XMLHttpRequest();
@@ -268,10 +268,10 @@
 <br /><br />
 
 {% if object.status == "c" or object.status == "t" %}
-{# aka, if Terraform running, let's show the TF log #}
+{# while gcluster deploys or destroys, show its log #}
 <hr>
 <div>
-  <h5>Terraform progress...</h5>
+  <h5>gcluster progress...</h5>
   <textarea class="log-file form-control" id="id_log_1" rows=10 disabled readonly></textarea>
 </div>
 {% endif %}

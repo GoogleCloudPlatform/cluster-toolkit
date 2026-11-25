@@ -1184,7 +1184,9 @@ class ContainerRegistry(models.Model):
         self.save(update_fields=["status"])
     
     def __str__(self):
-        return self.repository_id
+        # repository_id is empty until read from the deployment's state, and
+        # Django (admin delete, for one) needs a string.
+        return self.repository_id or f"Container registry {self.pk}"
 
     class Meta:
         verbose_name = "Container Registry"

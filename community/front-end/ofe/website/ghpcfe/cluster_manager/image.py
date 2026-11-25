@@ -61,14 +61,23 @@ class ImageBackend:
         Raises:
             subprocess.CalledProcessError: If a gcluster command fails.
         """
+        self.update_image_status("c")
         self._create_image_dir()
         self._create_blueprint()
         self._run_ghpc()
         self._create_image()
         self._destroy_builder_env()
 
+    # Image.status -> CloudResource.cloud_state, so images report their
+    # cloud state like every other resource.
+    _CLOUD_STATE = {"c": "cm", "r": "m", "e": "um"}
+
     def update_image_status(self, new_status):
         self.image.status = new_status
+        if new_status in self._CLOUD_STATE:
+            self.image.cloud_state = self._CLOUD_STATE[new_status]
+        if new_status == "r":
+            self.image.cloud_id = f"image-{self.image.name}"
         self.image.save()
 
     def _create_image_dir(self):

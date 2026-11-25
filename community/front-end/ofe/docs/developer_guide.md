@@ -174,8 +174,9 @@ The directory contains the following:
   - `gcluster.log` - output of every `gcluster` command run for the cluster,
     shown as the cluster's deployment log.
 - `vpcs/vpc_\<id>` - similar to above but holding run-time data for a virtual
-  network: `vpc.yaml`, a blueprint of `modules/network/vpc`. Private service
-  access is created by the blueprint of a cluster that uses Cloud SQL.
+  network: `vpc.yaml`, a blueprint of `modules/network/vpc`,
+  `modules/network/private-service-access` (shared by every Cloud SQL
+  cluster on the network) and `modules/network/firewall-rules`.
 - `fs/fs_\<id>` - similar to above but holding run-time data for a filesystem.
   Currently only GCP Filestore is supported.
 

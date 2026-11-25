@@ -14,6 +14,7 @@
 """Cluster Manager Backend for GHPCFE"""
 import json
 import logging
+import re
 import uuid
 
 from google.api_core.exceptions import AlreadyExists
@@ -76,7 +77,40 @@ def c2_pong(message, source_id):
         )
     else:
         logger.info("Received PONG from cluster %s", source_id)
+    _mark_initialising_cluster_ready(source_id)
     return True
+
+
+def _mark_initialising_cluster_ready(source_id):
+    """A PONG proves the controller's C2 daemon is running, which it only
+    does once setup has finished: the same thing its one-off "Cluster C2
+    Daemon started" status message reports. Count it as that message for a
+    cluster still initialising, e.g. one redeployed while its controller was
+    already up (see ping_cluster)."""
+    from ..models import Cluster
+
+    match = re.fullmatch(r"cluster_(\d+)", source_id or "")
+    if not match:
+        return
+    # Conditional update: never overrides any status but "initialising".
+    if Cluster.objects.filter(pk=int(match.group(1)), status="i").update(
+        status="r"
+    ):
+        logger.info("Cluster %s answered PING; marked ready", match.group(1))
+
+
+def ping_cluster(cluster_id):
+    """Ask a cluster's C2 daemon to answer (see c2_pong). Best effort: if
+    the daemon is not up yet, its startup status message still reports the
+    cluster ready."""
+    try:
+        _C2STATE.send_message(
+            command="PING",
+            message={"id": f"ready-check-{cluster_id}"},
+            target=get_cluster_sub_id(cluster_id),
+        )
+    except Exception as err:  # pylint: disable=broad-except
+        logger.warning("Could not PING cluster %s", cluster_id, exc_info=err)
 
 
 # Difference between UPDATE and ACK:  ACK removes the callback, UPDATE leaves it

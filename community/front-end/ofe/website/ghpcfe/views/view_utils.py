@@ -96,7 +96,8 @@ class TerraformLogFile(LocalFile):
         return tf_log
 
     def get_filename(self):
-        return "terraform.log"
+        name = self.get_file().name
+        return name if name == "gcluster.log" else "terraform.log"
 
 
 class GCSFile:

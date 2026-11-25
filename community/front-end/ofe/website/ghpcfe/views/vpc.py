@@ -38,7 +38,10 @@ from ..cluster_manager.vpc import (
     create_vpc,
     start_vpc,
     destroy_vpc,
+    destroy_blocked_by_psa,
+    get_log_file,
 )
+from .view_utils import LocalFile, StreamingFileView
 from ..views.asyncview import BackendAsyncView
 from ..serializers import VirtualNetworkSerializer, VirtualSubnetSerializer
 from ..permissions import SuperUserRequiredMixin
@@ -104,6 +107,14 @@ class VPCListView(SuperUserRequiredMixin, generic.ListView):
 
 
 # detail view
+class VPCLogView(SuperUserRequiredMixin, StreamingFileView):
+    """The network's gcluster.log, shown on its detail page."""
+
+    def get_file_info(self):
+        vpc = get_object_or_404(VirtualNetwork, pk=self.kwargs["pk"])
+        return LocalFile(get_log_file(vpc))
+
+
 class VPCDetailView(SuperUserRequiredMixin, generic.DetailView):
     """Custom DetailView for Virtual Network model"""
 
@@ -136,6 +147,10 @@ class VPCDetailView(SuperUserRequiredMixin, generic.DetailView):
         context["used_in_clusters"] = used_in_clusters
         context["used_in_filesystems"] = used_in_filesystems
         context["used_in_workbenches"] = used_in_workbenches
+        if vpc.cloud_state == "um" and destroy_blocked_by_psa(vpc):
+            context["psa_blocked_project"] = json.loads(
+                vpc.cloud_credential.detail
+            )["project_id"]
         return context
 
 

@@ -110,6 +110,14 @@ class ClusterInfo:
             self.cluster.grafana_dashboard_url = dash.get("url", "")
             self.cluster.save()
 
+            # The cluster is now "initialising" until its controller reports
+            # ready, which it does once, when its C2 daemon starts. If the
+            # controller was already up (a retry, or a redeploy after an
+            # interrupted task) that has happened already, so ask the daemon
+            # to answer instead. Sent after the last save above, so a fast
+            # answer is not overwritten.
+            c2.ping_cluster(self.cluster.id)
+
         # Not a lot we can do if gcluster fails, it's on the admin user to
         # investigate and fix the errors shown in the log.
         # cloud_state is left alone: it becomes "m" as soon as the apply
@@ -778,6 +786,11 @@ class ClusterInfo:
             logger.error("gcluster destroy failed", exc_info=err)
             if err.stdout:
                 logger.info("gcluster output:\n%s\n", err.stdout.decode("utf-8"))
+            # Some resources may remain. "Error" offers Destroy again rather
+            # than leaving the cluster stuck in "Terminating".
+            self.cluster.status = "e"
+            self.cluster.cloud_state = "um"
+            self.cluster.save()
             raise
 
     def _sweep_orphaned_compute_nodes(self):
