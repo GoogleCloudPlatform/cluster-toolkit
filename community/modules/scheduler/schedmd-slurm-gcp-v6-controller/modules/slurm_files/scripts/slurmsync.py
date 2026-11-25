@@ -482,6 +482,15 @@ def get_node_action(nodename: str) -> NodeAction:
         if state.base == "DOWN" and not power_flags:
             if active_mig_creating or mig_list_failed:
                 return NodeActionUnchanged()
+            if (
+                lkp.is_node_mig(nodename)
+                and not lkp.is_tpu_node(nodename)
+                and bool(getattr(lkp.node_nodeset(nodename), "reservation_name", None))
+                and (get_node_reason(short_nodename) or "").lstrip().startswith(
+                    util.MIG_UNSUPPORTED_RESERVATION_PREFIX
+                )
+            ):
+                return NodeActionUnchanged()
             return NodeActionPowerDown()
         if "NOT_RESPONDING" in state.flags:
             return NodeActionPowerDown()

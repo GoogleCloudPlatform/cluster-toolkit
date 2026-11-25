@@ -249,6 +249,7 @@ locals {
 
   # AUTO routes pure-static, MIG-eligible NodeSets to MIG while keeping dynamic, hybrid, TPU,
   # reserved, non-topology compact-placement, and BULK_INSERT-only overrides safely on BULK_INSERT.
+  # Keep in sync with schedmd-slurm-gcp-v6-controller/partition.tf (nodeset_auto_mig_eligible).
   auto_mig_eligible = (
     !var.dws_flex.enabled &&
     !local.is_tpu &&

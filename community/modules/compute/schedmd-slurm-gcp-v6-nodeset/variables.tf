@@ -731,12 +731,12 @@ variable "provisioning_engine" {
     Compute node provisioning engine: 'AUTO' (default), 'MIG', or 'BULK_INSERT'.
     - 'AUTO': Routes DWS Flex (unless use_bulk_insert = true) and eligible pure-static NodeSets
       (node_count_static > 0, node_count_dynamic_max = 0, non-TPU, no reservation_name/future_reservation,
-      no maintenance_interval/instance_properties, and either enable_placement = false or an A4X
-      slice-aligned accelerator_topology with zone_target_shape = 'ANY_SINGLE_ZONE') to 'MIG'.
-      Dynamic, hybrid (static + dynamic), TPU, reserved, and non-topology compact-placement NodeSets
-      stay on 'BULK_INSERT'.
+      no maintenance_interval/instance_properties, and either enable_placement = false (default: true)
+      or an A4X / A4X Max slice-aligned accelerator_topology with zone_target_shape = 'ANY_SINGLE_ZONE')
+      to 'MIG'. Dynamic, hybrid (static + dynamic), TPU, reserved, and non-topology compact-placement
+      NodeSets stay on 'BULK_INSERT'.
     - 'MIG': Forces Managed Instance Group provisioning. Requires node_count_dynamic_max = 0;
-      enable_placement is only supported with an A4X accelerator_topology; future_reservation,
+      enable_placement is only supported with an A4X / A4X Max accelerator_topology; future_reservation,
       maintenance_interval, and instance_properties are not supported; and reservation_name currently
       supports standard reservations only (DENSE/CALENDAR reservations requiring RESERVATION_BOUND
       should use 'BULK_INSERT' or 'AUTO'). DWS Flex NodeSets should leave provisioning_engine as 'AUTO'.

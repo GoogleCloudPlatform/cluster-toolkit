@@ -385,7 +385,7 @@ def _mig_unsupported_reservation_reason(nodeset: Any, lkp: util.Lookup) -> Optio
         return None
     detail = "; ".join(unsupported_traits)
     return (
-        f"MIG does not support reservation {reservation.name} ({detail}); "
+        f"{util.MIG_UNSUPPORTED_RESERVATION_PREFIX} {reservation.name} ({detail}); "
         "use provisioning_engine = BULK_INSERT or AUTO"
     )
 
