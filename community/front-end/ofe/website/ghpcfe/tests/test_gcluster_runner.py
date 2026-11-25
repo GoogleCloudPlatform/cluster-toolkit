@@ -90,6 +90,15 @@ class RunGclusterTests(unittest.TestCase):
         self.assertEqual(text.count("$ gcluster deploy dep --auto-approve"), 2)
         self.assertLess(text.index("first"), text.index("second"))
 
+    def test_logged_command_is_shell_quoted(self):
+        def fake_run(cmdline, cwd, env, stdout, stderr, check):
+            return subprocess.CompletedProcess(cmdline, 0)
+
+        with mock.patch.object(utils.subprocess, "run", side_effect=fake_run):
+            utils.run_gcluster(self.dir, "create", "my blueprint.yaml", "-w")
+        self.assertIn("$ gcluster create 'my blueprint.yaml' -w",
+                      (self.dir / "gcluster.log").read_text())
+
     def test_failure_raises_called_process_error_with_log_tail(self):
         with self.assertRaises(subprocess.CalledProcessError) as ctx:
             self._run(3, "Error: quota exceeded\n")

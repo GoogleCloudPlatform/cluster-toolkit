@@ -656,7 +656,7 @@ def run_gcluster(base_dir, *args, credentials_file=None):
     cmdline = [GCLUSTER_PATH, "--no-color", *args]
     log_fn = base_dir / GCLUSTER_LOG
     with log_fn.open("a", encoding="utf-8") as log:
-        log.write(f"\n$ gcluster {' '.join(args)}\n")
+        log.write(f"\n$ gcluster {shlex.join(args)}\n")
         log.flush()
         returncode = subprocess.run(
             cmdline,
