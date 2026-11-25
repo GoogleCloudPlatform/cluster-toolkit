@@ -16,7 +16,7 @@ vars:
   region: us-central1
   zone: us-central1-a
 
-  slurm_gcp_version: 6.13.2
+  slurm_gcp_version: 6.13.3
 
   # to supply
   family:
@@ -45,6 +45,9 @@ vars:
     content: |
       #!/bin/bash
       set -e -o pipefail
+      # The base image ships its own Ansible in /usr/bin. Run the playbook with
+      # the Ansible that the startup-script module installs instead.
+      export PATH=/usr/local/ghpc-venv/bin:$PATH
       ansible-pull \
           -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.slurm_gcp_version) \
           -i localhost, --limit localhost --connection=local \

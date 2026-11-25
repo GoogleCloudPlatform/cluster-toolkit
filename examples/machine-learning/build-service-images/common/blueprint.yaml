@@ -77,6 +77,8 @@ deployment_groups:
                 path: /etc/apt/preferences.d/block-hdf5
                 state: absent
 
+      # "install_managed_lustre" is false because the base image already ships
+      # the Managed Lustre client (lustre-client-modules-dkms).
       - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
@@ -148,16 +150,6 @@ deployment_groups:
         destination: /etc/enroot/enroot.conf
         content: |
           ENROOT_CONFIG_PATH     ${HOME}/.enroot
-      - type: shell
-        destination: fix_enroot_env.sh
-        content: |
-          #!/bin/bash
-          # 1. Disable Ubuntu 24.04 restriction on unprivileged user namespaces
-          # Required for enroot/pyxis to work
-          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
-            sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-            echo "kernel.apparmor_restrict_unprivileged_userns = 0" > /etc/sysctl.d/90-enroot-namespaces.conf
-          fi
 
 
 - group: image

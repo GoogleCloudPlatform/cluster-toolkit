@@ -86,6 +86,8 @@ deployment_groups:
           apt-mark hold google-compute-engine-oslogin
           apt-mark hold google-guest-agent
           apt-mark hold google-osconfig-agent
+      # "install_managed_lustre" is false because the base image already ships
+      # the Managed Lustre client (lustre-client-modules-dkms).
       - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
@@ -117,16 +119,6 @@ deployment_groups:
           ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
           ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
           ENROOT_TEMP_PATH       /mnt/localssd/${UID}/enroot
-      - type: shell
-        destination: fix_enroot_env.sh
-        content: |
-          #!/bin/bash
-          # 1. Disable Ubuntu 24.04 restriction on unprivileged user namespaces
-          # Required for enroot/pyxis to work
-          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
-            sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-            echo "kernel.apparmor_restrict_unprivileged_userns = 0" > /etc/sysctl.d/90-enroot-namespaces.conf
-          fi
       - type: ansible-local
         destination: configure_gpu_monitoring.yml
         content: |
@@ -233,7 +225,7 @@ deployment_groups:
 
                 - name: Download dmabuf-import-helper package
                   ansible.builtin.command:
-                    cmd: apt-get download dmabuf-import-helper
+                    cmd: apt-get download dmabuf-import-helper={{ dmabuf_version }}
                     chdir: "{{ tempdir.path }}"
                   register: download_res
                   changed_when: download_res.rc == 0
@@ -256,11 +248,13 @@ deployment_groups:
                   register: move_res
                   changed_when: move_res.rc == 0
 
-                - name: Patch import-helper.c for kernel 6.17 compatibility
+                # Kernel 6.13 and later require the namespace as a string literal
+                - name: Patch import-helper.c for kernel 6.13 and later
                   ansible.builtin.replace:
                     path: /usr/src/dmabuf-import-helper-{{ dmabuf_version }}/import-helper.c
                     regexp: 'MODULE_IMPORT_NS\(DMA_BUF\)'
                     replace: 'MODULE_IMPORT_NS("DMA_BUF")'
+                  when: ansible_kernel is version('6.13', '>=')
 
                 - name: Add dmabuf-import-helper to DKMS
                   ansible.builtin.command:

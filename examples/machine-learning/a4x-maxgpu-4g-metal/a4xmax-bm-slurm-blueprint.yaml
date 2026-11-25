@@ -24,13 +24,13 @@ vars:
   a4x_max_cluster_size: # supply cluster size
 
   # Image settings
-  source_image_family: aci-gpu-u2404-cuda-132-nvidia-595-arm64
-  source_image_project: advanced-compute-images
+  build_from_image_family: aci-gpu-u2404-cuda-132-nvidia-595-arm64
+  build_from_image_project: advanced-compute-images
   image_build_machine_type: c4a-highcpu-16
   image_build_disk_type: hyperdisk-balanced
   image_disk_size_gb: 100
   built_image_family: slurm-ubuntu2404-a4x-max-metal # Custom Slurm image with MFT
-  build_slurm_from_git_ref: 6.13.2
+  build_slurm_from_git_ref: 6.13.3
 
   # Cluster env settings
   net0_range: 10.1.1.0/24
@@ -196,7 +196,7 @@ deployment_groups:
             "install_cuda": false,
             "allow_kernel_upgrades": false,
             "monitoring_agent": "cloud-ops",
-            "install_managed_lustre": false
+            "install_managed_lustre": true
           }
       - type: shell
         destination: setup_asapd_lite_service.sh
@@ -262,6 +262,9 @@ deployment_groups:
         content: |
           #!/bin/bash
           set -e -o pipefail
+          # The base image ships its own Ansible in /usr/bin. Run the playbook with
+          # the Ansible that the startup-script module installs instead.
+          export PATH=/usr/local/ghpc-venv/bin:$PATH
           ansible-pull \
               -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_slurm_from_git_ref) \
               -i localhost, --limit localhost --connection=local \
@@ -369,8 +372,8 @@ deployment_groups:
       disk_size: $(vars.image_disk_size_gb)
       disk_type: $(vars.image_build_disk_type)
       machine_type: $(vars.image_build_machine_type)
-      source_image_family: $(vars.source_image_family)
-      source_image_project_id: [$(vars.source_image_project)]
+      source_image_family: $(vars.build_from_image_family)
+      source_image_project_id: [$(vars.build_from_image_project)]
       image_family: $(vars.built_image_family)
       omit_external_ip: false
       metadata:

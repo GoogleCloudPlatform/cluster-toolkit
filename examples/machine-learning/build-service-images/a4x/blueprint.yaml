@@ -126,8 +126,11 @@ deployment_groups:
         content: |
           #!/bin/bash
           set -e -o pipefail
+          # The base image ships its own Ansible in /usr/bin. Run the playbook with
+          # the Ansible that the startup-script module installs instead.
+          export PATH=/usr/local/ghpc-venv/bin:$PATH
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.13.2 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.13.3 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
