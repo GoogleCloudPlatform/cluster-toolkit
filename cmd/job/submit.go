@@ -207,7 +207,7 @@ func init() {
 	SubmitCmd.Flags().StringArrayVar(&pathwaysProxyEnv, "pathways-proxy-env", []string{}, "Pathways proxy container env var in KEY=VALUE format (repeatable). Replaces matching gcluster defaults.")
 	SubmitCmd.Flags().StringArrayVar(&pathwaysServerEnv, "pathways-server-env", []string{}, "Pathways server container env var in KEY=VALUE format (repeatable). Replaces matching gcluster defaults.")
 	SubmitCmd.Flags().StringArrayVar(&pathwaysWorkerEnv, "pathways-worker-env", []string{}, "Pathways worker container env var in KEY=VALUE format (repeatable). Replaces matching gcluster defaults.")
-	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Optional colocated Python sidecar image sharing /tmp/sidecar with workers. Auto-matches public cloud-pathways server/proxy tags; pass matching image flags for custom sidecars.")
+	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Optional colocated Python sidecar image sharing /tmp/sidecar with workers. Auto-matches public cloud-pathways server/proxy tags; pass matching image flags for custom or digest-only sidecars.")
 	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
 
 	SubmitCmd.Flags().BoolVar(&gkeMtcEnabled, "gke-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")

@@ -204,6 +204,15 @@ func testSPSInstance() spsInstance {
 	}
 }
 
+func mustResolveSPSPathways(t *testing.T, p orchestrator.PathwaysJobDefinition, inst spsInstance) orchestrator.PathwaysJobDefinition {
+	t.Helper()
+	got, err := resolveSPSClientPathways(p, inst)
+	if err != nil {
+		t.Fatalf("resolveSPSClientPathways failed: %v", err)
+	}
+	return got
+}
+
 func TestGenerateSPSClientManifest(t *testing.T) {
 	orc := NewGKEOrchestrator()
 	inst := testSPSInstance()
@@ -214,9 +223,9 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 			NumSlices:               2,
 			TtlSecondsAfterFinished: 3600,
 			CommandToRun:            "python3 train.py",
-			Pathways: orchestrator.PathwaysJobDefinition{
+			Pathways: mustResolveSPSPathways(t, orchestrator.PathwaysJobDefinition{
 				RunSPSWorkload: "sps-j6080103",
-			},
+			}, inst),
 		}
 		manifest, err := orc.generateSPSClientManifest(job, inst, "us-docker.pkg.dev/my-proj/img:latest")
 		if err != nil {
@@ -253,9 +262,9 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 			NumSlices:               1,
 			TtlSecondsAfterFinished: 3600,
 			CommandToRun:            "python3 train.py",
-			Pathways: orchestrator.PathwaysJobDefinition{
+			Pathways: mustResolveSPSPathways(t, orchestrator.PathwaysJobDefinition{
 				RunSPSWorkload: "sps-j6080103",
-			},
+			}, instWithQueue),
 		}
 		manifest, err := orc.generateSPSClientManifest(job, instWithQueue, "")
 		if err != nil {
@@ -282,9 +291,9 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 			ImagePullSecrets:        "my-reg-secret",
 			RestartOnExitCodes:      []int{42, 43},
 			MLDiagnosticsEnabled:    true,
-			Pathways: orchestrator.PathwaysJobDefinition{
+			Pathways: mustResolveSPSPathways(t, orchestrator.PathwaysJobDefinition{
 				RunSPSWorkload: "sps-j6080103",
-			},
+			}, inst),
 		}
 		manifest, err := orc.generateSPSClientManifest(job, inst, "us-docker.pkg.dev/my-proj/img:latest")
 		if err != nil {
@@ -317,7 +326,7 @@ func renderSPSClientEnvManifest(t *testing.T, templatesPath, image string, mutat
 		NumSlices:                 2,
 		CommandToRun:              "python3 train.py",
 		ImagePullSecretsSpecified: true,
-		Pathways:                  orchestrator.PathwaysJobDefinition{RunSPSWorkload: inst.Name},
+		Pathways:                  mustResolveSPSPathways(t, orchestrator.PathwaysJobDefinition{RunSPSWorkload: inst.Name}, inst),
 	}
 	mutate(&job)
 	manifest, err := orc.generateSPSClientManifest(job, inst, image)
@@ -538,9 +547,11 @@ func TestSubmitSPSClusterWorkload_ValidatesClusterMounts(t *testing.T) {
 			pvcJSONCmd: {{ExitCode: 0, Stdout: `{"spec":{"volumeName":"pv-sps-rwo","accessModes":["ReadWriteOnce"]}}`}},
 		})
 		orc := newTestGKEOrchestrator(mockExec)
-		err := orc.submitSPSClusterWorkload(baseJob, inst)
-		if err == nil || !strings.Contains(err.Error(), "pass --pathways-head-np") {
-			t.Fatalf("expected RWO PVC to pass ValidateClusterMounts and reach the SPS client settings check, got: %v", err)
+		job := baseJob
+		job.ImageName = ""
+		err := orc.submitSPSClusterWorkload(job, inst)
+		if err == nil || !strings.Contains(err.Error(), "either --image or --base-image must be provided") {
+			t.Fatalf("expected RWO PVC to pass ValidateClusterMounts and reach BuildContainerImage, got: %v", err)
 		}
 		if got := orc.inspectedPVCs["default/train-pvc"].volumeName; got != "pv-sps-rwo" {
 			t.Errorf("expected inspectedPVCs[default/train-pvc].volumeName = pv-sps-rwo, got %q", got)
@@ -578,42 +589,81 @@ func TestSubmitSPSClusterWorkload_ValidatesClusterMounts(t *testing.T) {
 	})
 }
 
-// TestSubmitSPSClusterWorkload_ResolvesProxyBeforeBuild pins that a proxy image gcluster cannot derive fails the
-// submission before the container image build.
-func TestSubmitSPSClusterWorkload_ResolvesProxyBeforeBuild(t *testing.T) {
+// TestRunSPSWorkload_ResolvesPathwaysBeforeMountsAndBuild pins that runSPSWorkload resolves client Pathways
+// settings once right after reading the SPS instance, so a digest-pinned server fails fast in both local and
+// in-cluster mode before cluster mount checks or container image builds.
+func TestRunSPSWorkload_ResolvesPathwaysBeforeMountsAndBuild(t *testing.T) {
 	t.Setenv("GCLUSTER_IMAGE_REPO", "")
-	mockExec := NewMockExecutor(map[string][]shell.CommandResult{})
-	orc := newTestGKEOrchestrator(mockExec)
-	job := orchestrator.JobDefinition{
-		WorkloadName:  "sps-build-check",
-		BaseImage:     "python:3.12",
-		BuildContext:  t.TempDir(),
-		NumSlices:     1,
-		NodesPerSlice: 1,
-		IsPathwaysJob: true,
-		Pathways:      orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-inst"},
+	digestJobSetJSON := strings.Replace(testSPSJobSetJSON, ":20261004", "@sha256:abcdef", 1)
+	newOrchestrator := func() (*GKEOrchestrator, *MockExecutor) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud container clusters get-credentials":                                {{ExitCode: 0}},
+			"kubectl get jobset sps-j6080103 -n default -o json --request-timeout=10s": {{ExitCode: 0, Stdout: digestJobSetJSON}},
+			"kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=sps-j6080103,jobset.sigs.k8s.io/replicatedjob-name=pathways-head -o jsonpath={.items[*].status.phase} --request-timeout=10s": {
+				{ExitCode: 0, Stdout: "Running"},
+			},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.dynClient = &mockDynamicClient{}
+		return orc, mockExec
 	}
-	inst := spsInstance{
-		Name:         "sps-inst",
-		HeadNodePool: "cpu-np",
-		ServerImage:  "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server@sha256:abcdef",
-		GCSLocation:  "gs://my-bucket/sps",
+	baseJob := func() orchestrator.JobDefinition {
+		return orchestrator.JobDefinition{
+			WorkloadName:    "sps-build-check",
+			ClusterName:     "test-cluster",
+			ClusterLocation: "us-central1-a",
+			ProjectID:       "test-project",
+			NumSlices:       1,
+			NodesPerSlice:   1,
+			IsPathwaysJob:   true,
+			Pathways:        orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-j6080103"},
+		}
 	}
-	inst.ProxyImage = proxyImageFor(inst.ServerImage)
-	err := orc.submitSPSClusterWorkload(job, inst)
-	if err == nil || !strings.Contains(err.Error(), "different digests") {
-		t.Fatalf("submitSPSClusterWorkload() = %v, want the digest error", err)
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*orchestrator.JobDefinition)
+	}{
+		{
+			name: "local terminal mode fails fast on digest-pinned server",
+		},
+		{
+			name: "in-cluster mode fails fast before cluster mount checks and image build",
+			mutate: func(j *orchestrator.JobDefinition) {
+				j.BaseImage = "python:3.12"
+				j.BuildContext = t.TempDir()
+				j.RawMounts = []string{"train-pvc;/data"}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			orc, mockExec := newOrchestrator()
+			job := baseJob()
+			if tc.mutate != nil {
+				tc.mutate(&job)
+			}
+			err := orc.runSPSWorkload(job)
+			if err == nil || !strings.Contains(err.Error(), "different digests") {
+				t.Fatalf("runSPSWorkload() = %v, want the digest error", err)
+			}
+			for _, call := range mockExec.calls {
+				if strings.Contains(call, "get pvc") {
+					t.Errorf("unexpected PVC check before digest error: %q", call)
+				}
+			}
+		})
 	}
-	// Verify no kubectl calls ran before the fast-fail (Crane builds run in-process, verified by the positive control below).
-	if len(mockExec.calls) != 0 {
-		t.Errorf("expected no kubectl commands before the digest error, got %v", mockExec.calls)
-	}
-	// Positive control: once --pathways-proxy-server-image is provided, execution advances into BuildContainerImage.
-	jobWithProxy := job
-	jobWithProxy.Pathways.ProxyServerImage = "proxy:pinned"
-	if err := orc.submitSPSClusterWorkload(jobWithProxy, inst); err == nil || !strings.Contains(err.Error(), "crane-based image build failed") {
-		t.Fatalf("with explicit proxy image, expected BuildContainerImage error, got: %v", err)
-	}
+
+	t.Run("positive control advances to BuildContainerImage when proxy image is given", func(t *testing.T) {
+		orc, _ := newOrchestrator()
+		job := baseJob()
+		job.BaseImage = "python:3.12"
+		job.BuildContext = t.TempDir()
+		job.Pathways.ProxyServerImage = "proxy:pinned"
+		if err := orc.runSPSWorkload(job); err == nil || !strings.Contains(err.Error(), "crane-based image build failed") {
+			t.Fatalf("with explicit proxy image, expected BuildContainerImage error, got: %v", err)
+		}
+	})
 }
 
 func TestReadySPSProxyPod(t *testing.T) {

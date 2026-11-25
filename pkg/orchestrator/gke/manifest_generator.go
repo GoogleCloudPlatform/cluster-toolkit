@@ -660,7 +660,11 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 	job.IsPathwaysJob = true
 	var imageNotice string
 	var imageNoticeIsWarning bool
-	job.Pathways, imageNotice, imageNoticeIsWarning = resolvePathwaysImages(job.Pathways)
+	var err error
+	job.Pathways, imageNotice, imageNoticeIsWarning, err = resolvePathwaysImages(job.Pathways)
+	if err != nil {
+		return "", err
+	}
 	switch {
 	case imageNotice == "":
 	case imageNoticeIsWarning:

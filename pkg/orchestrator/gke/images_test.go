@@ -59,6 +59,8 @@ func TestResolvePathwaysImages(t *testing.T) {
 		wantMsg  []string // substrings of the message; none means no message
 		notInMsg []string
 		wantWarn bool
+		wantErr  []string
+		notInErr []string
 	}{
 		{
 			name: "no sidecar keeps gcluster's defaults",
@@ -101,11 +103,24 @@ func TestResolvePathwaysImages(t *testing.T) {
 			wantWarn: true,
 		},
 		{
-			name:     "public sidecar pinned by digest only",
-			in:       orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + "@sha256:abcdef"},
-			want:     publicImages("latest"),
-			wantMsg:  []string{testPublicRepo + "/server:latest", "to pin"},
-			wantWarn: true,
+			name:    "public sidecar pinned by digest only returns an error",
+			in:      orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + "@sha256:abcdef"},
+			wantErr: []string{"pinned by digest without a release tag", "--pathways-server-image and --pathways-proxy-server-image"},
+		},
+		{
+			name:    "public sidecar pinned by digest with only the server image set returns an error",
+			in:      orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + "@sha256:abcdef", ServerImage: testDefaultServer},
+			wantErr: []string{"pinned by digest without a release tag", "--pathways-server-image and --pathways-proxy-server-image"},
+		},
+		{
+			name:    "public sidecar pinned by digest with an unrecognized tag returns an error",
+			in:      orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + ":update-available-abcdef@sha256:abcdef"},
+			wantErr: []string{"pinned by digest without a release tag", "--pathways-server-image and --pathways-proxy-server-image"},
+		},
+		{
+			name: "public sidecar pinned by digest with both server and proxy images set succeeds",
+			in:   orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + "@sha256:abcdef", ServerImage: "server:v1", ProxyServerImage: "proxy:v1"},
+			want: pathwaysImages{"server:v1", "proxy:v1", "server:v1"},
 		},
 		{
 			name:     "public sidecar with a tag that is not a release tag",
@@ -138,8 +153,8 @@ func TestResolvePathwaysImages(t *testing.T) {
 			wantWarn: true,
 		},
 		{
-			name:     "public sidecar pinned by digest with only the server image set does not duplicate flag advice",
-			in:       orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + "@sha256:abcdef", ServerImage: testDefaultServer},
+			name:     "public sidecar with an unrecognized tag and only the server image set does not duplicate flag advice",
+			in:       orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + ":update-available-abcdef", ServerImage: testDefaultServer},
 			want:     pathwaysImages{testDefaultServer, testPublicRepo + "/proxy_server:latest", testDefaultServer},
 			wantMsg:  []string{testPublicRepo + "/proxy_server:latest", "make sure the images work together.", "names no release tag", "to pin the images."},
 			notInMsg: []string{"yourself"},
@@ -165,12 +180,15 @@ func TestResolvePathwaysImages(t *testing.T) {
 			notInMsg: []string{"proxy"},
 		},
 		{
-			name:     "deploy-SPS with the public sidecar pinned by digest only omits proxy flag",
+			name:     "deploy-SPS with the public sidecar pinned by digest only errors and omits proxy flag",
 			in:       orchestrator.PathwaysJobDefinition{DeploySPS: true, ColocatedPythonSidecarImage: testPublicSidecar + "@sha256:abcdef"},
-			want:     pathwaysImages{testPublicRepo + "/server:latest", testDefaultProxy, testPublicRepo + "/server:latest"},
-			wantMsg:  []string{testPublicRepo + "/server:latest", "--pathways-server-image"},
-			notInMsg: []string{"proxy"},
-			wantWarn: true,
+			wantErr:  []string{"pinned by digest without a release tag", "--pathways-server-image"},
+			notInErr: []string{"proxy"},
+		},
+		{
+			name: "deploy-SPS with the public sidecar pinned by digest and explicit server image succeeds",
+			in:   orchestrator.PathwaysJobDefinition{DeploySPS: true, ColocatedPythonSidecarImage: testPublicSidecar + "@sha256:abcdef", ServerImage: "server:v1"},
+			want: pathwaysImages{"server:v1", testDefaultProxy, "server:v1"},
 		},
 		{
 			name: "deploy-SPS with the public sidecar and an explicit server image",
@@ -227,7 +245,14 @@ func TestResolvePathwaysImages(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, msg, warn := resolvePathwaysImages(tc.in)
+			got, msg, warn, err := resolvePathwaysImages(tc.in)
+			if len(tc.wantErr) > 0 {
+				assertResolvePathwaysImagesErr(t, err, tc.wantErr, tc.notInErr)
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if diff := cmp.Diff(tc.want, pathwaysImages{got.ServerImage, got.ProxyServerImage, got.WorkerImage}); diff != "" {
 				t.Errorf("images mismatch (-want +got):\n%s", diff)
 			}
@@ -254,6 +279,51 @@ func TestResolvePathwaysImages(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func assertResolvePathwaysImagesErr(t *testing.T, err error, want, unwanted []string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("expected error containing %v, got nil", want)
+	}
+	for _, s := range want {
+		if !strings.Contains(err.Error(), s) {
+			t.Errorf("error %q does not contain %q", err.Error(), s)
+		}
+	}
+	for _, s := range unwanted {
+		if strings.Contains(err.Error(), s) {
+			t.Errorf("error %q unexpectedly contains %q", err.Error(), s)
+		}
+	}
+}
+
+// TestSubmitJob_DigestOnlyPublicSidecarFailsPreflight pins that a digest-only public sidecar without matching
+// server/proxy image flags fails fast locally before any cluster or image-build commands run.
+func TestSubmitJob_DigestOnlyPublicSidecarFailsPreflight(t *testing.T) {
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{})
+	orc := newTestGKEOrchestrator(mockExec)
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pw-digest",
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "test-project",
+		ComputeType:     "v6e-16",
+		BaseImage:       "python:3.12",
+		BuildContext:    t.TempDir(),
+		IsPathwaysJob:   true,
+		Pathways: orchestrator.PathwaysJobDefinition{
+			GCSLocation:                 "gs://bucket/pw",
+			ColocatedPythonSidecarImage: testPublicSidecar + "@sha256:abcdef",
+		},
+	}
+	err := orc.SubmitJob(job)
+	if err == nil || !strings.Contains(err.Error(), "pinned by digest without a release tag") {
+		t.Fatalf("SubmitJob() = %v, want digest-only sidecar error", err)
+	}
+	if len(mockExec.calls) != 0 {
+		t.Errorf("expected 0 shell calls before local preflight failure, got %v", mockExec.calls)
 	}
 }
 

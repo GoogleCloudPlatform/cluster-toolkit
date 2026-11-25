@@ -46,13 +46,18 @@ var publicPathwaysReleaseTag = regexp.MustCompile(`^(latest|jax-[0-9]+(?:\.[0-9]
 
 // resolvePathwaysImages fills in the Pathways server, proxy and worker images the user did not set. With the public
 // colocated Python sidecar every missing server or proxy image comes from publicPathwaysImageRepo at the sidecar's
-// release; explicitly set images are never changed. It returns the message to log about the images it chose, if any,
-// and whether that message is a warning.
-func resolvePathwaysImages(p orchestrator.PathwaysJobDefinition) (orchestrator.PathwaysJobDefinition, string, bool) {
+// release; explicitly set images are never changed. A digest-pinned public sidecar without a release tag returns an
+// error unless the required server/proxy images are explicitly provided. It returns the message to log about the
+// images it chose, if any, whether that message is a warning, and any resolution error.
+func resolvePathwaysImages(p orchestrator.PathwaysJobDefinition) (orchestrator.PathwaysJobDefinition, string, bool, error) {
 	var msg string
 	var warn bool
+	var err error
 	if tag, exact, pinnedByDigest, ok := publicSidecarRelease(p.ColocatedPythonSidecarImage); ok {
-		msg, warn = fillFromPublicSidecarRelease(&p, tag, exact, pinnedByDigest)
+		msg, warn, err = fillFromPublicSidecarRelease(&p, tag, exact, pinnedByDigest)
+		if err != nil {
+			return p, "", false, err
+		}
 	} else if p.ColocatedPythonSidecarImage != "" {
 		msg = customSidecarNotice(p)
 		warn = msg != ""
@@ -66,7 +71,7 @@ func resolvePathwaysImages(p orchestrator.PathwaysJobDefinition) (orchestrator.P
 	if p.WorkerImage == "" {
 		p.WorkerImage = p.ServerImage
 	}
-	return p, msg, warn
+	return p, msg, warn, nil
 }
 
 // publicSidecarRelease reports whether image is the public sidecar and returns its release tag. exact is false when
@@ -118,8 +123,16 @@ func pathwaysImageNouns(deploySPS bool) (images, flags string) {
 }
 
 // fillFromPublicSidecarRelease sets every missing server or proxy image to the public image of the given release and
-// returns the message describing what it chose.
-func fillFromPublicSidecarRelease(p *orchestrator.PathwaysJobDefinition, tag string, exact, pinnedByDigest bool) (string, bool) {
+// returns the message describing what it chose, or an error when a digest-pinned sidecar has no release tag to pair.
+func fillFromPublicSidecarRelease(p *orchestrator.PathwaysJobDefinition, tag string, exact, pinnedByDigest bool) (string, bool, error) {
+	if !exact && pinnedByDigest {
+		if p.ServerImage == "" || (!p.DeploySPS && p.ProxyServerImage == "") {
+			images, flags := pathwaysImageNouns(p.DeploySPS)
+			return "", false, fmt.Errorf("public colocated Python sidecar %q is pinned by digest without a release tag, so gcluster cannot determine the matching release for the unset Pathways %s; pass %s (or use a release tag like jax-<version> or <yyyymmdd>-jax_<version>)",
+				p.ColocatedPythonSidecarImage, images, flags)
+		}
+		return "", false, nil
+	}
 	var chosen, kept []string
 	if p.ServerImage == "" {
 		p.ServerImage = publicPathwaysServerImage + ":" + tag
@@ -139,9 +152,10 @@ func fillFromPublicSidecarRelease(p *orchestrator.PathwaysJobDefinition, tag str
 		kept = append(kept, "--pathways-worker-image")
 	}
 	if len(chosen) == 0 {
-		return "", false
+		return "", false, nil
 	}
-	return formatPublicSidecarNotice(p.ColocatedPythonSidecarImage, p.DeploySPS, chosen, kept, tag, exact, pinnedByDigest)
+	msg, warn := formatPublicSidecarNotice(p.ColocatedPythonSidecarImage, p.DeploySPS, chosen, kept, tag, exact, pinnedByDigest)
+	return msg, warn, nil
 }
 
 func formatPublicSidecarNotice(sidecar string, deploySPS bool, chosen, kept []string, tag string, exact, pinnedByDigest bool) (string, bool) {

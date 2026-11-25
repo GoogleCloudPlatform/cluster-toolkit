@@ -179,6 +179,9 @@ func (g *GKEOrchestrator) runSPSWorkload(job orchestrator.JobDefinition) error {
 	if inst.HeadNodePool == "" {
 		inst.HeadNodePool = g.autoDetectCPUNodePool()
 	}
+	if job.Pathways, err = resolveSPSClientPathways(job.Pathways, inst); err != nil {
+		return err
+	}
 	logging.Info("Using SPS instance %s (%s): %d x %s", inst.Name, inst.Endpoint, inst.InstanceCount, inst.InstanceType)
 
 	if job.ImageName == "" && job.BaseImage == "" {
@@ -193,12 +196,6 @@ func (g *GKEOrchestrator) submitSPSClusterWorkload(job orchestrator.JobDefinitio
 		return err
 	}
 	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
-		return err
-	}
-	// Resolve the client's Pathways settings before the image build, so a proxy image or node pool that gcluster
-	// cannot determine fails before anything is built and pushed.
-	var err error
-	if job.Pathways, err = resolveSPSClientPathways(job.Pathways, inst); err != nil {
 		return err
 	}
 	fullImageName, err := g.BuildContainerImage(job)
@@ -240,9 +237,8 @@ func resolveSPSClientPathways(p orchestrator.PathwaysJobDefinition, inst spsInst
 	return p, nil
 }
 
-func (g *GKEOrchestrator) buildSPSClientManifestOptions(job orchestrator.JobDefinition, p orchestrator.PathwaysJobDefinition, fullImageName string) (ManifestOptions, error) {
+func (g *GKEOrchestrator) buildSPSClientManifestOptions(job orchestrator.JobDefinition, fullImageName string) (ManifestOptions, error) {
 	job.IsPathwaysJob = true
-	job.Pathways = p
 	pullSecrets, err := g.resolveImagePullSecrets(job, fullImageName, "")
 	if err != nil {
 		return ManifestOptions{}, err
@@ -274,7 +270,7 @@ func (g *GKEOrchestrator) buildSPSClientManifestOptions(job orchestrator.JobDefi
 		PodFailurePolicy:              indentYaml(pfpStr, 12),
 		MLDiagnosticsEnabled:          job.MLDiagnosticsEnabled,
 		IsPathwaysJob:                 true,
-		Pathways:                      p,
+		Pathways:                      job.Pathways,
 	}
 	if fullImageName != "" && len(job.RawMounts) > 0 {
 		sm := &StorageManager{orchestrator: g}
@@ -290,12 +286,9 @@ func (g *GKEOrchestrator) buildSPSClientManifestOptions(job orchestrator.JobDefi
 
 // generateSPSClientManifest renders the client JobSet from pathways_jobset.tmpl: a proxy pointed at the
 // instance, plus the workload container when fullImageName is set. No resource manager, no TPU workers.
+// Expects job.Pathways to have been resolved by resolveSPSClientPathways.
 func (g *GKEOrchestrator) generateSPSClientManifest(job orchestrator.JobDefinition, inst spsInstance, fullImageName string) (string, error) {
-	p, err := resolveSPSClientPathways(job.Pathways, inst)
-	if err != nil {
-		return "", err
-	}
-	opts, err := g.buildSPSClientManifestOptions(job, p, fullImageName)
+	opts, err := g.buildSPSClientManifestOptions(job, fullImageName)
 	if err != nil {
 		return "", err
 	}

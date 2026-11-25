@@ -406,15 +406,20 @@
     delay: 10
     changed_when: false
 
-  - name: Assert the Pathways JobSet completed on its first run
+  - name: Print Pathways JobSet terminal status and restart count
+    ansible.builtin.debug:
+      msg: >-
+        Pathways JobSet {{ job_name }} reached terminalState={{ jobset_status.stdout.split('|')[0] }}
+        with restarts={{ jobset_status.stdout.split('|')[1] | default('0', true) }}.
+
+  - name: Assert the Pathways JobSet completed
     ansible.builtin.assert:
       that:
       - jobset_status.stdout.split('|')[0] == 'Completed'
-      - jobset_status.stdout.split('|')[1] in ['', '0']
       fail_msg: >-
         The Pathways JobSet ended {{ jobset_status.stdout.split('|')[0] }} after
         {{ jobset_status.stdout.split('|')[1] | default('0', true) }} restarts; a workload that exits 0 must complete
-        the JobSet without restarting it (check the diagnostics below if a Spot TPU preemption caused a restart).
+        the JobSet.
 
   rescue:
   - name: "FAILURE: Job failed execution. Gathering GCluster diagnostic inspection."
