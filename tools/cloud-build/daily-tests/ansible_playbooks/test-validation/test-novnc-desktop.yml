@@ -141,7 +141,7 @@
   become: true
   ansible.builtin.shell: |
     set -o pipefail
-    ss -ltn | grep -E ':59[0-9][0-9]' || true
+    ss -ltn | grep -E ':59[0-9][0-9]\b' || true
   args:
     executable: /bin/bash
   changed_when: false

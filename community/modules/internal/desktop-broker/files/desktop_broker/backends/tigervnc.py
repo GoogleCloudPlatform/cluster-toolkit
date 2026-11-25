@@ -41,8 +41,8 @@ class TigerVNCBackend(VNCBackend):
         if gpu.first_render_node() is None:
             return (
                 "this backend offloads GL only through '-rendernode', which "
-                "needs a DRM render node, and none is present - GCE's NVIDIA "
-                "images build nvidia_drm without KMS so /dev/dri is never "
-                'created. Set vnc_backend="turbovnc" for GPU desktops.'
+                "needs a DRM render node, and none is present - an NVIDIA "
+                "driver built without KMS creates no /dev/dri. Set "
+                'vnc_backend="turbovnc" for GPU desktops.'
             )
         return None

@@ -193,8 +193,8 @@ resource "google_compute_instance" "server_vm" {
 
   boot_disk {
     initialize_params {
-      image = "projects/rocky-linux-cloud/global/images/rocky-linux-8-v20220126"
-      size  = 30
+      image = "projects/advanced-compute-images/global/images/family/aci-cpu-rocky-linux-9-amd64"
+      size  = 50
       type  = "pd-ssd"
     }
   }
