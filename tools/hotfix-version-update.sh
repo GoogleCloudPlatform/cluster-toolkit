@@ -53,7 +53,7 @@ if ! gh auth status >/dev/null 2>&1; then
 fi
 
 GITDIR=$(mktemp -d)
-trap 'rm -rf "${GITDIR}"' EXIT
+trap 'cd / && rm -rf "${GITDIR}"' EXIT
 
 BRANCH_NAME=""
 
@@ -113,12 +113,12 @@ fi
 # Warn if a regular release candidate PR is currently open so the hotfix is also merged into it.
 OPEN_RC_PRS=$(gh pr list -R "${REPO}" --state open --json number,title,headRefName,baseRefName,url \
 	--jq '[.[] | select(.headRefName | startswith("release-candidate-"))]')
-OPEN_RC_COUNT=$(echo "${OPEN_RC_PRS}" | jq 'length')
+OPEN_RC_COUNT=$(printf '%s\n' "${OPEN_RC_PRS}" | jq 'length')
 
 if [ "${OPEN_RC_COUNT}" -gt 0 ]; then
 	echo
 	echo "WARNING: An in-flight release candidate PR is currently open:"
-	echo "${OPEN_RC_PRS}" | jq -r '.[] | "  - #\(.number): \(.title) (\(.headRefName) -> \(.baseRefName)) \(.url)"'
+	printf '%s\n' "${OPEN_RC_PRS}" | jq -r '.[] | "  - #\(.number): \(.title) (\(.headRefName) -> \(.baseRefName)) \(.url)"'
 	echo "Coordinate with the release owner and ensure '${NEW_TAG}' is also merged into the active release-candidate branch."
 	echo
 fi
@@ -162,7 +162,9 @@ EXISTING_VERSION_PR=$(gh pr list -R "${REPO}" --state open --base "${BRANCH_NAME
 
 git switch -c "${V_BRANCH}" "${BRANCH_NAME}"
 echo "Updating Toolkit version references from ${OLD_TAG} to ${NEW_TAG}..."
-git ls-files -z '*.go' '*versions.tf' | xargs -0 git sed "v${OLD_MAJOR}\.${OLD_MINOR}\.${OLD_PATCH}" "${NEW_TAG}" --
+if [ -n "$(git ls-files '*.go' '*versions.tf')" ]; then
+	git ls-files -z '*.go' '*versions.tf' | xargs -0 -r git sed "v${OLD_MAJOR}\.${OLD_MINOR}\.${OLD_PATCH}" "${NEW_TAG}" --
+fi
 
 VERSION_PR_URL=""
 if git diff --quiet; then

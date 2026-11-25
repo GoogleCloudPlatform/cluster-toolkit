@@ -512,6 +512,29 @@ sys.exit(1)
         self.assertEqual(res.returncode, 0, msg=res.stderr)
         self.assertEqual(len(self._created_prs()), 2)
 
+    def test_handles_backslashes_in_rc_pr_title_and_empty_matching_files(self) -> None:
+        # Remove all .go and versions.tf files on main, leaving only README.md with v1.109.0
+        _git(self.work_repo, "switch", "main")
+        _git(self.work_repo, "rm", "pkg/version.go", "modules/example/versions.tf")
+        _git(self.work_repo, "commit", "-m", "remove matching go and tf files")
+        _git(self.work_repo, "push", "origin", "main")
+
+        self.open_prs = [
+            {
+                "number": 999,
+                "title": r"Release candidate v1.110.0 (\n and \t test)",
+                "headRefName": "release-candidate-v1.110.0",
+                "baseRefName": "main",
+                "url": "https://github.com/GoogleCloudPlatform/cluster-toolkit/pull/999",
+            }
+        ]
+
+        res = self._run_script()
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+        self.assertIn(r"Release candidate v1.110.0 (\n and \t test)", res.stdout)
+        self.assertIn("skipping version-bump PR", res.stdout)
+        self.assertEqual(len(self._created_prs()), 0)
+
 
 class ReleaseWorkflowContractTest(unittest.TestCase):
     def _run_release_step(self, workflow_path: str, branch: str) -> subprocess.CompletedProcess:
