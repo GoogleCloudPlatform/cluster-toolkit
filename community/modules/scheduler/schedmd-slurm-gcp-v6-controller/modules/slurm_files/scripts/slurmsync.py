@@ -70,6 +70,14 @@ class NodeActionPowerUp():
         run(f"{lookup().scontrol} update nodename={hostlist} state=power_up")
 
 @dataclass(frozen=True)
+class NodeActionStaticPowerUp():
+    def apply(self, nodes: List[str]) -> None:
+        hostlist = util.to_hostlist(nodes)
+        log.info(f"{len(nodes)} static nodes to clear and resume ({hostlist})")
+        run(f"{lookup().scontrol} update nodename={hostlist} state=resume")
+        run(f"{lookup().scontrol} update nodename={hostlist} state=power_up", check=False)
+
+@dataclass(frozen=True)
 class NodeActionIdle():
     def apply(self, nodes:List[str]) -> None:
         hostlist = util.to_hostlist(nodes)
@@ -249,7 +257,12 @@ def get_node_action(nodename: str) -> NodeAction:
                     return NodeActionDown(reason="MIG Auto-Healing instance repair in progress")
                 return NodeActionUnchanged()
             elif inst and inst.status == "RUNNING" and state is not None and state.base == "DOWN":
-                if "MIG Auto-Healing" in (get_node_reason(short_nodename) or ""):
+                node_reason = (
+                    state.reason
+                    if state.reason is not None
+                    else get_node_reason(short_nodename)
+                )
+                if "MIG Auto-Healing" in (node_reason or ""):
                     log.info(f"{short_nodename} recovered by MIG auto-healing; resuming node to idle")
                     return NodeActionIdle()
         except Exception as e:
@@ -260,8 +273,8 @@ def get_node_action(nodename: str) -> NodeAction:
     ) & (state.flags if state is not None else set())
 
     if state is not None and "DRAIN" in state.flags:
-        reason = get_node_reason(nodename)
-        if reason in repair.REPAIR_REASONS:
+        reason = state.reason if state.reason is not None else get_node_reason(nodename)
+        if reason and reason in repair.REPAIR_REASONS:
             if repair.is_node_being_repaired(nodename):
                 return NodeActionUnchanged()
             if inst:
@@ -275,14 +288,27 @@ def get_node_action(nodename: str) -> NodeAction:
         if "POWERING_UP" in state.flags:
             return NodeActionUnchanged()
         if state.base == "DOWN" and "POWERED_DOWN" in state.flags:
+            if lkp.is_static_node(nodename):
+                return NodeActionStaticPowerUp()
             return NodeActionIdle()
         if "POWERING_DOWN" in state.flags:
+            if lkp.is_static_node(nodename):
+                return NodeActionStaticPowerUp()
             return NodeActionIdle()
         if "COMPLETING" in state.flags:
             return NodeActionDown(reason="Unbacked instance")
-        if state.base != "DOWN" and not power_flags:
+        # On PowerDownOnIdle=YES partitions, ALLOCATED/MIXED nodes carry a deferred POWER_DOWN
+        # (!) flag while jobs are running; that deferred flag must not mask a vanished VM.
+        active_power_flags = (
+            power_flags - {"POWER_DOWN"}
+            if state.base in ("ALLOCATED", "MIXED")
+            else power_flags
+        )
+        if state.base != "DOWN" and not active_power_flags:
             return NodeActionDown(reason="Unbacked instance")
-        if state.base == "DOWN" and not power_flags:
+        if state.base == "DOWN" and not (power_flags - {"POWER_DOWN"}):
+            if "POWER_DOWN" in power_flags:
+                return NodeActionPowerDownForce()
             return NodeActionPowerDown()
         if "NOT_RESPONDING" in state.flags:
             return NodeActionPowerDown()
@@ -399,6 +425,10 @@ def sync_placement_groups():
     )
 
     lkp = lookup()
+    policies = _get_resource_policies(lkp)
+    if not policies:
+        return
+
     keep_jobs = {
         str(job.id)
         for job in lkp.get_jobs()
@@ -414,7 +444,7 @@ def sync_placement_groups():
         rf"{lkp.cfg.slurm_cluster_name}-slurmgcp-(?P<ns>.+?)-wp-\d+(?:-\d+)*$"
     )
 
-    for pg in _get_resource_policies(lkp):
+    for pg in policies:
         name = pg["name"]
 
         # Keep reusable TPU workload policies unless their nodeset was removed
@@ -687,6 +717,31 @@ def main():
         log.info("Local controller is in STANDBY mode. Skipping slurmsync pass.")
         return
     if lkp.is_controller:
+        # Single deferred reconfigure for both config and topology changes.
+        # Must run AFTER update_topology (so slurmctld loads new cloud.conf + topology together)
+        # and BEFORE sync_instances (so systemctl restart slurmctld never kills resume.py
+        # child processes freshly spawned by static-node power_up in sync_instances;
+        # scontrol_reconfigure waits via wait_slurmctld_up before returning).
+        if config_changed or topology_changed:
+            reasons = []
+            if config_changed:
+                reasons.append("config updated")
+            if topology_changed:
+                reasons.append("topology changed")
+            try:
+                log.info(f"Reconfiguring Slurm ({', '.join(reasons)}).")
+                # Restart slurmctld only for a config change. A topology-only
+                # change is picked up by `scontrol reconfigure` alone, and
+                # update_topology runs on every node power-up, so restarting
+                # there would flap nodes registering during the restart window.
+                util.scontrol_reconfigure(lkp, restart=config_changed)
+                # Only dump summary after successful reconfigure so it reflects Slurm's view
+                if topology_changed and topology_summary is not None:
+                    topology_summary.dump(lkp)
+                util.run(f"wall '{_UPDATE_MSG}'", timeout=30, check=False)
+            except Exception:
+                log.exception("failed to reconfigure slurmctld")
+
         try:
             process_messages(lkp)
         except:
@@ -711,28 +766,6 @@ def main():
             sync_placement_groups()
         except Exception:
             log.exception("failed to sync placement groups")
-
-        # Single deferred reconfigure for both config and topology changes.
-        # Placed here so it runs even if topology generation failed above.
-        if config_changed or topology_changed:
-            reasons = []
-            if config_changed:
-                reasons.append("config updated")
-            if topology_changed:
-                reasons.append("topology changed")
-            try:
-                log.info(f"Reconfiguring Slurm ({', '.join(reasons)}).")
-                # Restart slurmctld only for a config change. A topology-only
-                # change is picked up by `scontrol reconfigure` alone, and
-                # update_topology runs on every node power-up, so restarting
-                # there would flap nodes registering during the restart window.
-                util.scontrol_reconfigure(lkp, restart=config_changed)
-                # Only dump summary after successful reconfigure so it reflects Slurm's view
-                if topology_changed and topology_summary is not None:
-                    topology_summary.dump(lkp)
-                util.run(f"wall '{_UPDATE_MSG}'", timeout=30, check=False)
-            except Exception:
-                log.exception("failed to reconfigure slurmctld")
 
         try:
             sync_maintenance_reservation(lkp)
