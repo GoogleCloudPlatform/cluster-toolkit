@@ -181,6 +181,7 @@ another deployment and serve several clusters.
    any VM in the project, or register a key without connecting:
 
    ```bash
+   [ -f ~/.ssh/google_compute_engine.pub ] || ssh-keygen -t rsa -f ~/.ssh/google_compute_engine
    gcloud compute os-login ssh-keys add --project PROJECT_ID \
      --key-file ~/.ssh/google_compute_engine.pub
    ```

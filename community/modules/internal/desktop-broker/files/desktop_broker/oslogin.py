@@ -176,8 +176,10 @@ class Directory:
             return username
         raise ProfileNotFound(
             403,
-            "No OS Login account was found for your Google account. Ask an "
-            "administrator for OS Login access to this cluster.",
+            "No OS Login account was found for your Google account. If you "
+            "have never used OS Login in this project, SSH to one of its VMs "
+            "once (or add a key with 'gcloud compute os-login ssh-keys add') "
+            "and reload. Otherwise, ask an administrator for access.",
         )
 
     def resolve(self, username):
