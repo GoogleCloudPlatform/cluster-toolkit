@@ -11,8 +11,8 @@ Toolkit, see the extended [Network Storage documentation](../../../../docs/netwo
 
 If you are using Hyperdisk storage, check the possible disk size, IOPS, and throughput values for each disk type in the [Hyperdisk limits documentation](https://cloud.google.com/compute/docs/disks/hyperdisks#limits-disk).
 
-> **_NOTE:_** By default, this module uses the `hpc-rocky-linux-9` OS disk
-> image family from `cloud-hpc-image-public`.
+> **_NOTE:_** By default, this module uses the `aci-cpu-rocky-linux-9-amd64` OS
+> disk image family from `advanced-compute-images`.
 
 [disk]: https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk
 

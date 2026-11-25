@@ -23,5 +23,6 @@ network: "{{ deployment_name }}-net"
 packer_group_name: build-slurm
 packer_module_id: slurm-custom-image
 cli_deployment_vars:
+  zone: "{{ zone }}"
   network_name: "{{ network }}"
   subnetwork_name: "{{ network }}-sub"

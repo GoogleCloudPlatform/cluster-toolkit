@@ -1,8 +1,8 @@
 ## Description
 
-This module creates a Toolkit runner that will install HTCondor on RedHat 7,
-8, or 9 and its derivative operating systems (including Rocky Linux 9 on
-Advanced Compute Images and Rocky Linux 8 / CentOS 7). Please report any
+This module creates a Toolkit runner that will install HTCondor on RedHat 8 or
+9 and its derivative operating systems (including Rocky Linux 9 on Advanced
+Compute Images and Rocky Linux 8). Please report any
 [issues] on these distributions or open a [discussion] to request support on
 Debian or Ubuntu distributions.
 

@@ -5150,6 +5150,8 @@ blueprints:
   required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
     build_from_git_ref: 6.13.2
+    build_from_image_family: aci-cpu-rocky-linux-9-amd64
+    build_from_image_project: advanced-compute-images
     built_image_family: my-custom-slurm
     built_instance_image:
       family: $(vars.built_image_family)
@@ -5161,8 +5163,6 @@ blueprints:
     image_build_machine_type: n2d-standard-16
     project_id: null
     region: us-central1
-    source_image_family: aci-cpu-rocky-linux-9-amd64
-    source_image_project: advanced-compute-images
     zone: us-central1-a
   modules:
   - id: network
@@ -6084,7 +6084,7 @@ blueprints:
 - path: community/examples/htc-htcondor.yaml
   blueprint_name: htc-htcondor
   scheduler: htcondor
-  description: "This blueprint provisions an auto-scaling HTCondor pool based upon the HPC VM Image."
+  description: "This blueprint provisions an auto-scaling HTCondor pool based upon the Rocky Linux 9 image from Advanced Compute Images."
   workloads: [hpc]
   required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, secretmanager.googleapis.com, storage.googleapis.com]
   vars:
