@@ -63,6 +63,10 @@ if [[ ${DIST} == "Ubuntu" ]]; then
 	# Install modules
 	apt update
 	if ! apt install -y "lustre-client-modules-$(uname -r)" lustre-client-utils; then
+		if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
+			echo "Error: Pre-compiled lustre-client-modules-$(uname -r) not found, and lustre-client-modules-dkms is unavailable for $(dpkg --print-architecture)." >&2
+			exit 1
+		fi
 		echo "Pre-compiled package lustre-client-modules-$(uname -r) not found. Attempting install via lustre-client-modules-dkms..."
 		if ! apt install -y dkms "linux-headers-$(uname -r)" lustre-client-modules-dkms lustre-client-utils; then
 			echo "Error finding Lustre module packages, Lustre package may not exist for this kernel version" >&2
@@ -73,20 +77,25 @@ elif [[ ${DIST} == "Rocky" ]]; then
 	ROCKY_MAJOR="${VERSION_ID%%.*}"
 	# Set up yum repo
 	touch /etc/yum.repos.d/artifact-registry.repo
-	tee -a /etc/yum.repos.d/artifact-registry.repo <<-EOF
-		[lustre-client-rocky-${ROCKY_MAJOR}]
-		name=lustre-client-rocky-${ROCKY_MAJOR}
-		baseurl=https://us-yum.pkg.dev/projects/lustre-client-binaries/lustre-client-rocky-${ROCKY_MAJOR}
-		enabled=1
-		repo_gpgcheck=0
-		gpgcheck=0
-	EOF
+	if ! grep -Fq "[lustre-client-rocky-${ROCKY_MAJOR}]" /etc/yum.repos.d/artifact-registry.repo 2>/dev/null; then
+		tee -a /etc/yum.repos.d/artifact-registry.repo <<-EOF
+			[lustre-client-rocky-${ROCKY_MAJOR}]
+			name=lustre-client-rocky-${ROCKY_MAJOR}
+			baseurl=https://us-yum.pkg.dev/projects/lustre-client-binaries/lustre-client-rocky-${ROCKY_MAJOR}
+			enabled=1
+			repo_gpgcheck=0
+			gpgcheck=0
+		EOF
+	fi
 	# Install modules
 	yum makecache
 	yum --enablerepo="lustre-client-rocky-${ROCKY_MAJOR}" install -y kmod-lustre-client lustre-client
 fi
 
-if [[ $DIST != "NA" ]]; then
-	# Load the new lustre client module
-	modprobe lustre
+if [[ $DIST == "NA" ]]; then
+	echo "Error: Unsupported OS '${NAME:-unknown} ${VERSION_ID:-}' for Managed Lustre client install. Supported OSes: Ubuntu 22.04, Ubuntu 24.04, Rocky Linux 8, Rocky Linux 9." >&2
+	exit 1
 fi
+
+# Load the new lustre client module
+modprobe lustre

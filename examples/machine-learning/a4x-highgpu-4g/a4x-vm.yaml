@@ -165,22 +165,12 @@ deployment_groups:
           wget https://download.open-mpi.org/release/open-mpi/v5.0/openmpi-5.0.8.tar.bz2
           tar -xvf openmpi-5.0.8.tar.bz2
           cd openmpi-5.0.8
-          ./configure --with-cuda=/usr/local/cuda-13.2/targets/sbsa-linux
-          make -j
+          ./configure --with-cuda=/usr/local/cuda/targets/sbsa-linux
+          make -j"\$(nproc)"
           make install
+          ldconfig
           cd ../
           rm -rf openmpi-5.0.8.tar.bz2 openmpi-5.0.8
-
-      - type: ansible-local
-        destination: update_ldconfig.yml
-        content: |
-          ---
-          - name: Update ldconfig
-            hosts: localhost
-            become: true
-            tasks:
-            - name: Configure ldconfig
-              ansible.builtin.command: /usr/sbin/ldconfig
 
 # This deployment group builds a custom image using Packer + Ansible + Bash
 - group: image
