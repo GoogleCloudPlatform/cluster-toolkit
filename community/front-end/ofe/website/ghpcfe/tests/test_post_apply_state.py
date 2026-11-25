@@ -263,6 +263,29 @@ class StartVpcTests(unittest.TestCase):
             }],
         )
 
+    def test_longest_vpc_name_keeps_every_resource_name_within_63(self):
+        vpc, subnet = _fake_vpc()
+        vpc.name = "a" * 63  # the longest name the model accepts
+        subnet.id = 99999
+        self._start(vpc)
+        network = vpc.cloud_id
+        self.assertLessEqual(len(network), 42)
+        derived = [
+            network,
+            subnet.cloud_id,
+            f"psconnect-{network}",
+            f"{network}-router",
+            # The vpc module's own rules, the longest suffixes.
+            f"{network}-fw-allow-iap-ingress",
+            f"{network}-fw-allow-ssh-ingress",
+        ]
+        bp = yaml.safe_load((self.dir / "vpc.yaml").read_text())
+        rules = bp["deployment_groups"][0]["modules"][2]["settings"]
+        derived += [r["name"] for r in rules["ingress_rules"]]
+        for name in derived:
+            with self.subTest(name=name):
+                self.assertLessEqual(len(name), 63)
+
     def test_existing_network_name_is_kept(self):
         vpc, _ = _fake_vpc(cloud_state="m")
         vpc.cloud_id = "net-abc123"

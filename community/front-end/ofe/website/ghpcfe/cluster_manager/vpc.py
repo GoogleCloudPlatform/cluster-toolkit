@@ -51,6 +51,11 @@ _BLUEPRINT = "vpc.yaml"
 # Same rules as the earlier Terraform template: SSH from anywhere, and all
 # traffic between private (RFC 1918) addresses, whatever the subnet ranges.
 _INTERNAL_RANGES = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+# GCP resource names are at most 63 characters, and the network's resources
+# are named after it: the longest suffix is the vpc module's
+# "-fw-allow-iap-ingress"/"-fw-allow-ssh-ingress" (21). So the network name
+# (prefix + "-" + 6 hex) must stay within 63 - 21 = 42: a 35-character prefix.
+_NAME_PREFIX_LEN = 35
 
 
 def create_vpc(vpc: VirtualNetwork) -> None:
@@ -70,7 +75,9 @@ def start_vpc(vpc: VirtualNetwork) -> None:
     if not vpc.cloud_id:
         # Stable across re-applies; random so a network never collides with
         # one from another OFE in the same project.
-        vpc.cloud_id = f"{vpc.name[:40]}-{secrets.token_hex(3)}"
+        vpc.cloud_id = (
+            f"{vpc.name[:_NAME_PREFIX_LEN]}-{secrets.token_hex(3)}"
+        )
         vpc.save()
     subnets = [s for s in vpc.subnets.all() if s.is_managed]
     for subnet in subnets:

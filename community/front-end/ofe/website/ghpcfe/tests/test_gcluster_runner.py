@@ -77,6 +77,12 @@ class RunGclusterTests(unittest.TestCase):
         self.assertTrue(env["PATH"].startswith("/usr/bin:"))
         self.assertEqual(log, self.dir / "gcluster.log")
 
+    def test_gcluster_is_the_binary_at_the_toolkit_root(self):
+        # OFE lives at <root>/community/front-end/ofe; make builds
+        # <root>/gcluster (ghpc is only a symlink to it).
+        self.assertEqual(Path(utils.GCLUSTER_PATH),
+                         OFE_DIR.parents[2] / "gcluster")
+
     def test_appends_every_command_to_one_log(self):
         self._run(0, "first\n")
         self._run(0, "second\n")

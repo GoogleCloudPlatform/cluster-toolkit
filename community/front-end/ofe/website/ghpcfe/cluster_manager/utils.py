@@ -628,7 +628,10 @@ def run_terraform(target_dir, command, arguments=None, extra_env=None):
 # Every OFE blueprint (clusters, filesystems, images, networks) is created,
 # deployed and destroyed through gcluster; OFE no longer drives Terraform or
 # Packer for them. Only workbenches still use run_terraform() directly.
-GCLUSTER_PATH = "/opt/gcluster/cluster-toolkit/ghpc"
+# The gcluster binary `make` builds at the root of the Toolkit checkout OFE
+# runs from (g_baseDir is <root>/community/front-end/ofe). `ghpc` is only a
+# backward-compatible symlink to it.
+GCLUSTER_PATH = str(g_baseDir.parents[2] / "gcluster")
 GCLUSTER_LOG = "gcluster.log"
 
 
