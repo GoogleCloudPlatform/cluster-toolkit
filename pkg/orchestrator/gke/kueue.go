@@ -498,8 +498,11 @@ func listKueueWorkloads(client dynamic.Interface, ns, uid string) (*unstructured
 
 func kubectlCommandError(prefix string, res shell.CommandResult) error {
 	detail := strings.TrimSpace(res.Stderr + "\n" + res.Stdout)
-	if detail == "" && res.Err != nil {
-		return fmt.Errorf("%s: %w", prefix, res.Err)
+	if detail == "" {
+		if res.Err != nil {
+			return fmt.Errorf("%s: %w", prefix, res.Err)
+		}
+		return fmt.Errorf("%s: exit status %d", prefix, res.ExitCode)
 	}
 	if res.Err != nil {
 		return fmt.Errorf("%s: %s (%w)", prefix, detail, res.Err)
@@ -513,18 +516,18 @@ func (g *GKEOrchestrator) isKueueCRDInstalled() (bool, bool, error) {
 		logging.Info("Kueue CRD found.")
 		return true, false, nil
 	}
-	cmdErr := kubectlCommandError("failed to check for Kueue CRD", res)
+	rawErr := errors.New(strings.TrimSpace(res.Stderr + "\n" + res.Stdout))
 	if res.ExitCode != -1 {
-		if k8s.IsNotFoundOrNoMatchError(cmdErr) {
+		if k8s.IsNotFoundOrNoMatchError(rawErr) {
 			logging.Info("Kueue CRD not found.")
 			return false, false, nil
 		}
-		if k8s.IsForbiddenError(cmdErr) {
+		if k8s.IsForbiddenError(rawErr) {
 			logging.Warn("Insufficient RBAC permissions to read Kueue CRD (403 Forbidden). Assuming Kueue is installed in shared cluster.")
 			return true, true, nil
 		}
 	}
-	return false, false, cmdErr
+	return false, false, kubectlCommandError("failed to check for Kueue CRD", res)
 }
 
 // getKueueDeployment retrieves the Kueue controller manager deployment from the cluster.
@@ -542,18 +545,18 @@ func (g *GKEOrchestrator) getKueueDeploymentWithStatus() (*kueueDeployment, bool
 		}
 		return &dep, true, false, nil
 	}
-	cmdErr := kubectlCommandError("failed to check for Kueue deployment", res)
+	rawErr := errors.New(strings.TrimSpace(res.Stderr + "\n" + res.Stdout))
 	if res.ExitCode != -1 {
-		if k8s.IsNotFoundOrNoMatchError(cmdErr) {
+		if k8s.IsNotFoundOrNoMatchError(rawErr) {
 			logging.Info("Kueue deployment not found.")
 			return nil, false, false, nil
 		}
-		if k8s.IsForbiddenError(cmdErr) {
+		if k8s.IsForbiddenError(rawErr) {
 			logging.Warn("Insufficient RBAC permissions to read Kueue deployment in kueue-system (403 Forbidden). Assuming Kueue deployment is installed in shared cluster.")
 			return nil, true, true, nil
 		}
 	}
-	return nil, false, false, cmdErr
+	return nil, false, false, kubectlCommandError("failed to check for Kueue deployment", res)
 }
 
 // getKueueVersion extracts the deployed version of the Kueue controller from its Deployment object.

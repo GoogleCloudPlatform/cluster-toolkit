@@ -851,43 +851,80 @@ func TestResolveSPSClientPathways_DigestPinnedServer(t *testing.T) {
 }
 
 func TestRunSPSWorkload_StripsQueueWhenKueueNotInstalled(t *testing.T) {
-	dryOut := filepath.Join(t.TempDir(), "sps-client.yaml")
-	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
-		"gcloud container clusters get-credentials": {{ExitCode: 0}},
-		"kubectl get jobset sps-j6080103 -n default -o json --request-timeout=10s": {
-			{ExitCode: 0, Stdout: testSPSJobSetJSON},
+	cases := []struct {
+		name             string
+		jobQueue         string
+		kueueAPIRes      shell.CommandResult
+		wantQueueSubstr  string
+		wantOmitQueue    bool
+		wantKueueEnabled bool
+	}{
+		{
+			name:             "explicit_queue_stripped_when_kueue_absent",
+			jobQueue:         "my-queue",
+			kueueAPIRes:      shell.CommandResult{ExitCode: 1, Stderr: "Error from server (NotFound): not found"},
+			wantOmitQueue:    true,
+			wantKueueEnabled: false,
 		},
-		"kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=sps-j6080103,jobset.sigs.k8s.io/replicatedjob-name=pathways-head -o jsonpath={.items[*].status.phase} --request-timeout=10s": {
-			{ExitCode: 0, Stdout: "Running"},
+		{
+			name:             "inherited_instance_queue_stripped_when_kueue_absent",
+			jobQueue:         "",
+			kueueAPIRes:      shell.CommandResult{ExitCode: 1, Stderr: "Error from server (NotFound): not found"},
+			wantOmitQueue:    true,
+			wantKueueEnabled: false,
 		},
-		"kubectl get --raw /apis/kueue.x-k8s.io": {{ExitCode: 1, Stderr: "Error from server (NotFound): not found"}},
-	})
-	orc := newTestGKEOrchestrator(mockExec)
-	orc.kubeconfigLoader = staticLoader(kubeconfigWith("https://10.0.0.1:6443", nil, gkeExec(), "gke_test-project_us-central1-a_test-cluster"))
-	job := orchestrator.JobDefinition{
-		WorkloadName:    "sps-client-unqueued",
-		ClusterName:     "test-cluster",
-		ClusterLocation: "us-central1-a",
-		ProjectID:       "test-project",
-		ImageName:       "gcr.io/proj/img:v1",
-		CommandToRun:    "python3 train.py",
-		KueueQueueName:  "my-queue",
-		NumSlices:       1,
-		IsPathwaysJob:   true,
-		DryRunManifest:  dryOut,
-		Pathways:        orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-j6080103"},
+		{
+			name:             "whitespace_queue_inherits_instance_queue_when_kueue_installed",
+			jobQueue:         "   ",
+			kueueAPIRes:      shell.CommandResult{ExitCode: 0, Stdout: "{}"},
+			wantQueueSubstr:  "kueue.x-k8s.io/queue-name: cluster-queue",
+			wantKueueEnabled: true,
+		},
 	}
-	if err := orc.runSPSWorkload(job); err != nil {
-		t.Fatalf("runSPSWorkload(Kueue absent) err = %v", err)
-	}
-	raw, err := os.ReadFile(dryOut)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "kueue.x-k8s.io/queue-name") {
-		t.Errorf("SPS client manifest must omit queue-name when Kueue is absent:\n%s", string(raw))
-	}
-	if orc.kueueEnabled() {
-		t.Errorf("expected orc.addons to record kueueEnabled=false after probe")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dryOut := filepath.Join(t.TempDir(), "sps-client.yaml")
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+				"gcloud container clusters get-credentials": {{ExitCode: 0}},
+				"kubectl get jobset sps-j6080103 -n default -o json --request-timeout=10s": {
+					{ExitCode: 0, Stdout: testSPSJobSetJSON},
+				},
+				"kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=sps-j6080103,jobset.sigs.k8s.io/replicatedjob-name=pathways-head -o jsonpath={.items[*].status.phase} --request-timeout=10s": {
+					{ExitCode: 0, Stdout: "Running"},
+				},
+				"kubectl get --raw /apis/kueue.x-k8s.io": {tc.kueueAPIRes},
+			})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.kubeconfigLoader = staticLoader(kubeconfigWith("https://10.0.0.1:6443", nil, gkeExec(), "gke_test-project_us-central1-a_test-cluster"))
+			job := orchestrator.JobDefinition{
+				WorkloadName:    "sps-client-unqueued",
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "test-project",
+				ImageName:       "gcr.io/proj/img:v1",
+				CommandToRun:    "python3 train.py",
+				KueueQueueName:  tc.jobQueue,
+				NumSlices:       1,
+				IsPathwaysJob:   true,
+				DryRunManifest:  dryOut,
+				Pathways:        orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-j6080103"},
+			}
+			if err := orc.runSPSWorkload(job); err != nil {
+				t.Fatalf("runSPSWorkload() err = %v", err)
+			}
+			raw, err := os.ReadFile(dryOut)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantOmitQueue && strings.Contains(string(raw), "kueue.x-k8s.io/queue-name") {
+				t.Errorf("SPS client manifest must omit queue-name:\n%s", string(raw))
+			}
+			if tc.wantQueueSubstr != "" && !strings.Contains(string(raw), tc.wantQueueSubstr) {
+				t.Errorf("SPS client manifest missing %q:\n%s", tc.wantQueueSubstr, string(raw))
+			}
+			if orc.kueueEnabled() != tc.wantKueueEnabled {
+				t.Errorf("orc.kueueEnabled() = %v, want %v", orc.kueueEnabled(), tc.wantKueueEnabled)
+			}
+		})
 	}
 }

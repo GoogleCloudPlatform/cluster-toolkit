@@ -2128,11 +2128,11 @@ func TestKueueProbes_DoNotMisclassifyExecPluginNotFoundOrSpawnErrors(t *testing.
 		}
 	})
 
-	t.Run("exit_code_minus_one_preserves_res_err", func(t *testing.T) {
+	t.Run("exit_code_minus_one_preserves_res_err_even_with_misleading_stderr", func(t *testing.T) {
 		spawnErr := errors.New("kubectl binary missing")
 		mock := &mockExecutor{
 			executeCommandFunc: func(string, ...string) shell.CommandResult {
-				return shell.CommandResult{ExitCode: -1, Err: spawnErr}
+				return shell.CommandResult{ExitCode: -1, Stderr: "Error from server (NotFound): misleading", Err: spawnErr}
 			},
 		}
 		orc := &GKEOrchestrator{executor: mock}
@@ -2141,6 +2141,13 @@ func TestKueueProbes_DoNotMisclassifyExecPluginNotFoundOrSpawnErrors(t *testing.
 		}
 		if _, _, _, err := orc.getKueueDeploymentWithStatus(); !errors.Is(err, spawnErr) {
 			t.Errorf("getKueueDeploymentWithStatus(ExitCode -1) = %v, want wrapped %v", err, spawnErr)
+		}
+	})
+
+	t.Run("kubectlCommandError_empty_output_and_nil_err", func(t *testing.T) {
+		err := kubectlCommandError("probe failed", shell.CommandResult{ExitCode: 2})
+		if err == nil || !strings.Contains(err.Error(), "exit status 2") {
+			t.Errorf("kubectlCommandError() = %v, want exit status 2", err)
 		}
 	})
 }

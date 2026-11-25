@@ -177,13 +177,6 @@ func (g *GKEOrchestrator) runSPSWorkload(job orchestrator.JobDefinition) error {
 	if err := g.validateJobConflicts(job); err != nil {
 		return err
 	}
-	if strings.TrimSpace(job.KueueQueueName) != "" || strings.TrimSpace(inst.KueueQueueName) != "" {
-		g.addons = addonPlan{
-			resolved:      true,
-			jobSetEnabled: true,
-			kueueEnabled:  g.hasKueueInstalled(),
-		}
-	}
 	g.applySPSKueueAndHeadDefaults(&job, &inst)
 	if job.Pathways, err = resolveSPSClientPathways(job.Pathways, inst); err != nil {
 		return err
@@ -197,6 +190,15 @@ func (g *GKEOrchestrator) runSPSWorkload(job orchestrator.JobDefinition) error {
 }
 
 func (g *GKEOrchestrator) applySPSKueueAndHeadDefaults(job *orchestrator.JobDefinition, inst *spsInstance) {
+	job.KueueQueueName = strings.TrimSpace(job.KueueQueueName)
+	inst.KueueQueueName = strings.TrimSpace(inst.KueueQueueName)
+	if !g.addons.resolved && (job.KueueQueueName != "" || inst.KueueQueueName != "") {
+		g.addons = addonPlan{
+			resolved:      true,
+			jobSetEnabled: true,
+			kueueEnabled:  g.hasKueueInstalled(),
+		}
+	}
 	if !g.kueueEnabled() {
 		if job.KueueQueueName != "" {
 			logging.Warn("--queue %q was specified, but Kueue is not installed or is disabled; omitting kueue.x-k8s.io/queue-name.", job.KueueQueueName)

@@ -115,12 +115,12 @@ func (g *GKEOrchestrator) checkResourceExists(kind, name, namespace string) (exi
 	if res.ExitCode == 0 {
 		return strings.TrimSpace(res.Stdout) != "", false, nil
 	}
-	err = fmt.Errorf("kubectl get %s %s failed: %s", kind, name, strings.TrimSpace(res.Stderr+"\n"+res.Stdout))
-	if k8s.IsForbiddenError(err) {
+	rawErr := errors.New(strings.TrimSpace(res.Stderr + "\n" + res.Stdout))
+	if res.ExitCode != -1 && k8s.IsForbiddenError(rawErr) {
 		logging.Warn("Insufficient RBAC permissions to read %s %s (403 Forbidden). Assuming it exists.", kind, name)
 		return true, true, nil
 	}
-	return false, false, err
+	return false, false, kubectlCommandError(fmt.Sprintf("kubectl get %s %s failed", kind, name), res)
 }
 
 func (g *GKEOrchestrator) checkJobSetInstallPermissions() error {

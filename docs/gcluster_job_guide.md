@@ -56,7 +56,7 @@ Before live submission (not bypassed by `--skip-prereqs`), `gcluster` classifies
 * **Connected and interactive (TTY):** Displays a single 3-way prompt (`[1]` Install from GitHub, `[2]` Continue with installed APIs, `[3]` Cancel).
 * **Connected and non-interactive (GKE):** Auto-installs missing add-ons after RBAC (`kubectl auth can-i`) and pre-flight checks.
 * **Air-gapped (`GCLUSTER_AIR_GAPPED=true`) or GitHub unreachable:** Never installs add-ons and adapts to installed APIs—omitting `kueue.x-k8s.io/queue-name` without Kueue, and rendering a standalone `batch/v1` Indexed `Job` plus headless `Service` without JobSet.
-* **Standalone `batch/v1` `Job` limits (without JobSet):** Supports single-slice, non-Pathways workloads only (`--num-slices=1`, no `--pathways` / `--pathways-run-sps-workload`). Multi-host TPU jobs require pinning a single node pool with `--node-constraint cloud.google.com/gke-nodepool=<node-pool>`, and `backoffLimit: 0` is used so `--restarts > 1` has no effect.
+* **Standalone `batch/v1` `Job` limits (without JobSet):** Supports single-slice, non-Pathways workloads only (`--num-slices=1`, no `--pathways` / `--pathways-run-sps-workload`). Multi-host TPU jobs require pinning a single node pool with `--node-constraint cloud.google.com/gke-nodepool=<node-pool>`, and `backoffLimit: 0` is used so `--restarts` does not trigger pod restarts (passing `--restarts > 1` logs a warning).
 * **`--dry-run-out`:** Renders standard `JobSet` manifests without probing cluster add-ons unless `GCLUSTER_DISABLE_JOBSET`, `GCLUSTER_DISABLE_KUEUE`, or `GCLUSTER_AIR_GAPPED=true` is set, in which case `gcluster` inspects installed add-ons read-only and adapts the rendered manifest without modifying the cluster.
 
 ### Confirmation Prompts
@@ -310,7 +310,7 @@ Adding `profile=` (`training`, `checkpointing`, or `serving`) to a `gs://` mount
 
 ### 4.5 Example: Submit Job with Custom Environment Variables
 
-For standard (non-Pathways) JobSet workloads, `gcluster job submit` automatically injects `WORKERS_0_HOSTNAME` and `MASTER_ADDR` into the workload container environment, both set to `<workload-name>-main-job-0-0.<workload-name>` (the DNS hostname of the rank-0 pod on the JobSet headless service) for distributed frameworks such as PyTorch `torchrun`.
+For standard (non-Pathways) workloads, `gcluster job submit` automatically injects `WORKERS_0_HOSTNAME` and `MASTER_ADDR` into the workload container environment, set to `<workload-name>-main-job-0-0.<workload-name>` for `JobSet` workloads or `<workload-name>-0.<workload-name>` for standalone `batch/v1` `Job` workloads (the DNS hostname of the rank-0 pod on the headless service) for distributed frameworks such as PyTorch `torchrun`.
 
 You can pass additional custom environment variables—or override `WORKERS_0_HOSTNAME` / `MASTER_ADDR`—using the `--env` flag:
 
@@ -390,7 +390,7 @@ Verify that the Kubernetes JobSet ran successfully on your GKE cluster.
   * **Workloads**: Overview of all workloads in the cluster, and specific JobSet/Workload descriptors if a name is targeted.
   * **Console Links**: Direct links to GKE clusters, GKE workloads, IAM permissions, and Quota administration consoles.
 
-    If the cluster does not serve the `kueue.x-k8s.io` API group, the report skips the Kueue, Slice Controller, and Kueue workload sections and lists JobSets (`kubectl get jobsets`) instead.
+    If the cluster does not serve `kueue.x-k8s.io` (or `GCLUSTER_DISABLE_KUEUE=1` is set), the report skips the Kueue, Slice Controller, and Kueue workload sections and lists `JobSet`s (when `jobset.x-k8s.io` is available and `GCLUSTER_DISABLE_JOBSET` is not set) and standalone `batch/v1` `Job`s (`kubectl get jobs -l gcluster.google.com/workload,!jobset.sigs.k8s.io/jobset-name`). When `jobset.x-k8s.io` is absent or `GCLUSTER_DISABLE_JOBSET=1` is set, JobSet controller and SPS sections are also skipped.
 
     When `--name` is a Shared Pathways Service (SPS) instance, the report starts with a short summary of the instance. To collect only that summary into `gcluster-inspect-<cluster>-<timestamp>-sps.log` (or a custom `--output` file), pass `--filter=pathways-sps` (add `--show` / `-s` to also print it to the terminal):
 

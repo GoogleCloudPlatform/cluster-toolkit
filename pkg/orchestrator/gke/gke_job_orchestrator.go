@@ -146,6 +146,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return orchestrator.UnsupportedK8sSubmitError()
 	}
 	job.GKENamespace = strings.TrimSpace(job.GKENamespace)
+	job.Pathways.RunSPSWorkload = strings.TrimSpace(job.Pathways.RunSPSWorkload)
 	g.namespace = job.GKENamespace
 	logging.Info("Starting gcluster job submit workflow...")
 	g.gkeCustomTemplatesPath = job.GkeCustomTemplatesPath
@@ -154,7 +155,6 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err := g.validateSubmitLocalPreflight(sm, job); err != nil {
 		return err
 	}
-	job.Pathways.RunSPSWorkload = strings.TrimSpace(job.Pathways.RunSPSWorkload)
 	if job.Pathways.RunSPSWorkload != "" {
 		return g.runSPSWorkload(job)
 	}
@@ -208,17 +208,16 @@ func (g *GKEOrchestrator) validatePostHardwareChecks(sm *StorageManager, job *or
 	return g.pinTelemetryAndValidate(job)
 }
 
-// workloadTemplateName selects the workload template for a job. It is the single source for both the local
-// preflight (ValidateCustomWorkloadTemplates) and submitWorkloadTemplate, so the two cannot drift.
+// workloadTemplateName selects the JobSet workload template assumed before cluster add-on resolution.
 func workloadTemplateName(job orchestrator.JobDefinition) string {
-	if job.IsPathwaysJob {
+	if job.IsPathwaysJob || job.Pathways.RunSPSWorkload != "" {
 		return k8s.PathwaysJobSetTemplate
 	}
 	return k8s.JobSetTemplate
 }
 
 func (g *GKEOrchestrator) resolveWorkloadTemplateName(job orchestrator.JobDefinition) string {
-	if job.IsPathwaysJob {
+	if job.IsPathwaysJob || job.Pathways.RunSPSWorkload != "" {
 		return k8s.PathwaysJobSetTemplate
 	}
 	if !g.jobSetEnabled() {
@@ -676,7 +675,7 @@ func (g *GKEOrchestrator) getJobSetInfo(ns, jobsetName string) (jobSetInfo, erro
 		if res.ExitCode != -1 && g.isJobSetAPIAbsent(errors.New(errText)) {
 			return g.getBatchJobInfo(ns, jobsetName)
 		}
-		return jobSetInfo{}, fmt.Errorf("failed to read status of job '%s': %s", jobsetName, errText)
+		return jobSetInfo{}, kubectlCommandError(fmt.Sprintf("failed to read status of job '%s'", jobsetName), res)
 	}
 	info := parseJobSetInfo(res.Stdout)
 	info.queried = true
@@ -690,7 +689,7 @@ func (g *GKEOrchestrator) getBatchJobInfo(ns, name string) (jobSetInfo, error) {
 		if res.ExitCode != -1 && k8s.IsNotFoundOrNoMatchError(errors.New(errText)) {
 			return jobSetInfo{}, fmt.Errorf("job '%s' not found in namespace '%s' (run 'gcluster job list' or check --gke-namespace)", name, ns)
 		}
-		return jobSetInfo{}, fmt.Errorf("failed to read status of job '%s': %s", name, errText)
+		return jobSetInfo{}, kubectlCommandError(fmt.Sprintf("failed to read status of job '%s'", name), res)
 	}
 	if strings.TrimSpace(res.Stdout) == "" {
 		return jobSetInfo{}, fmt.Errorf("job '%s' not found in namespace '%s' (run 'gcluster job list' or check --gke-namespace)", name, ns)
@@ -1787,7 +1786,7 @@ func (g *GKEOrchestrator) isOwnedServicePresent(ctx context.Context, ns, name st
 		}
 		return false
 	}
-	return svcObj != nil && svcObj.GetLabels()[workloadLabel] == name
+	return svcObj != nil && svcObj.GetLabels()[workloadLabel] == name && !isJobSetOwnedJob(svcObj)
 }
 
 // TODO: Make this a dynamic lookup using cloud.google.com/gke-tpu-accelerator & cloud.google.com/gke-accelerator
@@ -2760,11 +2759,13 @@ func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, 
 		"workload", targetWorkloadName, "-n", ns, "--timeout="+timeout)
 
 	if waitRes.ExitCode != 0 {
-		warnEvents := g.checkWorkloadWarningEvents(ns, workloadName, !g.jobSetEnabled())
+		isBatchJob := !g.jobSetEnabled()
+		warnEvents := g.checkWorkloadWarningEvents(ns, workloadName, isBatchJob)
 		var warnSuffix string
 		if warnEvents != "" {
-			logging.Error("JobSet '%s' reported warning events:\n%s", workloadName, warnEvents)
-			warnSuffix = fmt.Sprintf("\nJobSet warning events:\n%s", warnEvents)
+			kind := workloadKindLabel(isBatchJob)
+			logging.Error("%s '%s' reported warning events:\n%s", kind, workloadName, warnEvents)
+			warnSuffix = fmt.Sprintf("\n%s warning events:\n%s", kind, warnEvents)
 		}
 		if strings.Contains(waitRes.Stderr, "timed out waiting") || strings.Contains(waitRes.Stdout, "timed out waiting") {
 			if jobConsoleLink != "" {

@@ -3627,3 +3627,86 @@ func TestResolveClusterAddons_OutdatedKueueDeclinedBeforeJobSetInstallAndCRDPres
 		}
 	})
 }
+
+func TestAddonAndTier3EdgeCases(t *testing.T) {
+	t.Run("configureClusterEnvironment_unqueued_clears_queue_and_warns", func(t *testing.T) {
+		orc := &GKEOrchestrator{
+			namespace:         "default",
+			submissionSession: submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false}},
+		}
+		job := orchestrator.JobDefinition{KueueQueueName: "team-q"}
+		if err := orc.configureClusterEnvironment(&job); err != nil {
+			t.Fatalf("configureClusterEnvironment(!kueueEnabled) err = %v", err)
+		}
+		if job.KueueQueueName != "" {
+			t.Errorf("expected KueueQueueName cleared when Kueue is disabled, got %q", job.KueueQueueName)
+		}
+	})
+
+	t.Run("validateTier3FlagsWithWarn_pathways_and_restarts_warning", func(t *testing.T) {
+		orc := &GKEOrchestrator{
+			submissionSession: submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: false}},
+		}
+		if err := orc.validateTier3FlagsWithWarn(&orchestrator.JobDefinition{IsPathwaysJob: true}, true); err == nil || !strings.Contains(err.Error(), "Pathways") {
+			t.Errorf("validateTier3FlagsWithWarn(Pathways) = %v, want Pathways error", err)
+		}
+		snapLogs, restoreLogs := logging.CaptureForTesting(t)
+		defer restoreLogs()
+		if err := orc.validateTier3FlagsWithWarn(&orchestrator.JobDefinition{MaxRestarts: 3}, true); err != nil {
+			t.Fatalf("validateTier3FlagsWithWarn(MaxRestarts=3) err = %v", err)
+		}
+		_, warnOut := snapLogs()
+		if !strings.Contains(warnOut, "--restarts=3") {
+			t.Errorf("expected --restarts warning, got %q", warnOut)
+		}
+	})
+
+	t.Run("isJobSetAPIAbsent_caches_per_context_and_reprobes_on_switch", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get --raw /apis/jobset.x-k8s.io": {
+				{ExitCode: 1, Stderr: "Error from server (NotFound): not found"},
+				{ExitCode: 0, Stdout: "{}"},
+			},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.kubeContext = "ctx-a"
+		forb := apierrors.NewForbidden(jobSetGVR.GroupResource(), "j1", errors.New("denied"))
+		if !orc.isJobSetAPIAbsent(forb) || !orc.isJobSetAPIAbsent(forb) {
+			t.Fatalf("expected cached absent=true on ctx-a")
+		}
+		if got := len(mockExec.calls); got != 1 {
+			t.Errorf("expected 1 probe on ctx-a, got %d", got)
+		}
+		orc.kubeContext = "ctx-b"
+		if orc.isJobSetAPIAbsent(forb) {
+			t.Errorf("expected absent=false after context switch to ctx-b")
+		}
+		if got := len(mockExec.calls); got != 2 {
+			t.Errorf("expected reprobe on ctx-b (2 total), got %d", got)
+		}
+	})
+}
+
+func TestJobSetProbeAndInstallRBACEdgeCases(t *testing.T) {
+	t.Run("checkResourceExists_exit_minus_one_preserves_res_err", func(t *testing.T) {
+		spawnErr := errors.New("kubectl missing")
+		orc := &GKEOrchestrator{executor: &mockExecutor{
+			executeCommandFunc: func(string, ...string) shell.CommandResult {
+				return shell.CommandResult{ExitCode: -1, Stderr: "Error from server (Forbidden): misleading", Err: spawnErr}
+			},
+		}}
+		if _, _, err := orc.checkResourceExists("crd", "jobsets.jobset.x-k8s.io", ""); !errors.Is(err, spawnErr) {
+			t.Errorf("checkResourceExists(ExitCode -1) err = %v, want wrapped %v", err, spawnErr)
+		}
+	})
+
+	t.Run("installJobSetOnFreshClusterWithPermCheck_checks_rbac_when_enabled", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl auth can-i": {{ExitCode: 0, Stdout: "no"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		if err := orc.installJobSetOnFreshClusterWithPermCheck(true); err == nil || !strings.Contains(err.Error(), "missing RBAC permissions") {
+			t.Errorf("installJobSetOnFreshClusterWithPermCheck(true) err = %v, want missing RBAC permissions", err)
+		}
+	})
+}

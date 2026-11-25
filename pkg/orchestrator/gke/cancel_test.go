@@ -513,8 +513,8 @@ func TestCreatedByJobSet(t *testing.T) {
 		{"empty jobset name never matches", pod, podGVR, "", false},
 	}
 	for _, tc := range tests {
-		if got := createdByJobSet(&tc.obj, tc.gvr, tc.js); got != tc.want {
-			t.Errorf("%s: createdByJobSet() = %v, want %v", tc.name, got, tc.want)
+		if got := createdByWorkload(&tc.obj, tc.gvr, tc.js, false); got != tc.want {
+			t.Errorf("%s: createdByWorkload() = %v, want %v", tc.name, got, tc.want)
 		}
 	}
 }
@@ -772,15 +772,12 @@ func TestCancelJob_DisableJobSetPreservesQueuedJobSetPVCsAnd403Fallback(t *testi
 
 	t.Run("forbidden_jobset_confirmed_absent_falls_back_to_batch_job_with_cached_probe", func(t *testing.T) {
 		forbErr := apierrors.NewForbidden(jobSetGVR.GroupResource(), "t3-job", errors.New("forbidden"))
-		mock := &MockKubeClient{
-			Namespace:       "default",
-			DeleteJobSetErr: forbErr,
-			ListErrs:        map[string]error{"jobsets": forbErr},
-			Objects: map[string][]unstructured.Unstructured{
-				"jobs":     {makeTestOwnedBatchJob("t3-job", "1")},
-				"services": {makeTestOwnedService("t3-job", "1")},
-			},
-		}
+		mock := gatewayMock(map[string][]unstructured.Unstructured{
+			"jobs":     {makeTestOwnedBatchJob("t3-job", "1")},
+			"services": {makeTestOwnedService("t3-job", "1")},
+		})
+		mock.DeleteJobSetErr = forbErr
+		mock.ListErrs = map[string]error{"jobsets": forbErr}
 		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
 			"gcloud container clusters get-credentials": {{ExitCode: 0}},
 			"kubectl get --raw=/readyz":                 {{ExitCode: 0, Stdout: "ok"}},
@@ -797,6 +794,9 @@ func TestCancelJob_DisableJobSetPreservesQueuedJobSetPVCsAnd403Fallback(t *testi
 		if !reflect.DeepEqual(mock.Deleted["jobs"], []string{"t3-job"}) {
 			t.Errorf("expected fallback batch Job delete, deleted=%v", mock.Deleted)
 		}
+		if !reflect.DeepEqual(mock.Deleted["persistentvolumeclaims"], []string{testClaim}) {
+			t.Errorf("expected unused gateway PVC %q to be reclaimed via cached 403 skip, deleted=%v", testClaim, mock.Deleted)
+		}
 		probes := 0
 		for _, c := range mockExec.calls {
 			if strings.Contains(c, "/apis/jobset.x-k8s.io") {
@@ -804,7 +804,70 @@ func TestCancelJob_DisableJobSetPreservesQueuedJobSetPVCsAnd403Fallback(t *testi
 			}
 		}
 		if probes != 1 {
-			t.Errorf("expected 1 cached /apis/jobset.x-k8s.io probe, got %d (%v)", probes, mockExec.calls)
+			t.Errorf("expected 1 cached /apis/jobset.x-k8s.io probe across cancel + PVC scan, got %d (%v)", probes, mockExec.calls)
+		}
+	})
+}
+
+func TestCancelJob_DisableJobSetProtectsLiveJobSetPVC(t *testing.T) {
+	t.Run("cancelling_live_jobset_name_preserves_its_pvc_and_grace_period", func(t *testing.T) {
+		pvc := gatewayPVC(testClaim, testPV, 10*time.Second)
+		pvc.SetAnnotations(map[string]string{
+			lastClaimedByAnnotation: "train-1",
+			lastClaimedAtAnnotation: time.Now().Format(time.RFC3339Nano),
+		})
+		mock := &MockKubeClient{
+			Namespace: "default",
+			Objects: map[string][]unstructured.Unstructured{
+				"persistentvolumeclaims": {pvc},
+				"persistentvolumes":      {*managedStorageObject("PersistentVolume", testPV)},
+				"jobsets":                {*jobSetWithClaims("train-1", false, testClaim)},
+			},
+		}
+		orc := cancelTestOrchestrator(mock)
+		orc.connectivity = &connectivityChecker{
+			getenv: func(k string) string {
+				if k == disableJobSetEnvVar {
+					return "1"
+				}
+				return ""
+			},
+		}
+		if err := orc.CancelJob("train-1", cancelOpts); err == nil || !apierrors.IsNotFound(err) {
+			t.Fatalf("CancelJob(live JobSet under DISABLE_JOBSET) err = %v, want NotFound", err)
+		}
+		if len(mock.Deleted["persistentvolumeclaims"]) != 0 || len(mock.Deleted["persistentvolumes"]) != 0 {
+			t.Fatalf("live JobSet PVC/PV must never be reclaimed under %s=1, deleted=%v", disableJobSetEnvVar, mock.Deleted)
+		}
+	})
+
+	t.Run("batch_job_cancel_does_not_exempt_same_named_jobset_or_jobset_pod", func(t *testing.T) {
+		js := *jobSetWithClaims("shared-name", false, testClaim)
+		jsPod := unstructured.Unstructured{Object: map[string]interface{}{
+			"metadata": map[string]interface{}{
+				"name":      "shared-name-main-job-0-0",
+				"namespace": "default",
+				"labels": map[string]interface{}{
+					"jobset.sigs.k8s.io/jobset-name": "shared-name",
+					"batch.kubernetes.io/job-name":   "shared-name",
+				},
+			},
+		}}
+		standalonePod := unstructured.Unstructured{Object: map[string]interface{}{
+			"metadata": map[string]interface{}{
+				"name":      "shared-name-0",
+				"namespace": "default",
+				"labels":    map[string]interface{}{"batch.kubernetes.io/job-name": "shared-name"},
+			},
+		}}
+		if createdByWorkload(&js, jobSetGVR, "shared-name", true) {
+			t.Errorf("batchJobOnly must not exempt JobSet object")
+		}
+		if createdByWorkload(&jsPod, podGVR, "shared-name", true) {
+			t.Errorf("batchJobOnly must not exempt JobSet-owned pod")
+		}
+		if !createdByWorkload(&standalonePod, podGVR, "shared-name", true) {
+			t.Errorf("batchJobOnly should exempt standalone batch/v1 Job pod")
 		}
 	})
 }

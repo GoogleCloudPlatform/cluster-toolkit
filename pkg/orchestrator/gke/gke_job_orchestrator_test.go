@@ -5879,6 +5879,9 @@ func TestCloudStoragePreflight_NotDisabledByGitHubProbeAirGap(t *testing.T) {
 }
 
 func TestGenerateAndApplyJobManifest_DryRunLiveOwnerRefAndPartialRollback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	opts := ManifestOptions{
 		WorkloadName: "t3-apply", FullImageName: "img:v1", CommandToRun: "echo hi",
 		ComputeType: "g2-standard-48", MachineType: "g2-standard-48", ClusterLocation: "us-central1-a",
@@ -6025,6 +6028,25 @@ func TestOrphanedTier3ServiceConflictAndBatchJobWorkloadLookup(t *testing.T) {
 		}
 		if err == nil || !strings.Contains(err.Error(), "failed to find Kueue workload for job t3-job") {
 			t.Errorf("findTargetWorkloadForKind(isBatchJob=true) err = %v, want 'for job t3-job'", err)
+		}
+	})
+
+	t.Run("validateResolvedCustomTemplate_checks_job_tmpl_on_auto_fallback", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "job.tmpl"), []byte("{{ invalid"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		orc := &GKEOrchestrator{
+			gkeCustomTemplatesPath: dir,
+			submissionSession:      submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: false}},
+		}
+		if err := orc.validateResolvedCustomTemplate(orchestrator.JobDefinition{}); err == nil {
+			t.Fatalf("expected invalid custom job.tmpl to fail validateResolvedCustomTemplate")
+		}
+		if got := orc.resolveWorkloadTemplateName(orchestrator.JobDefinition{
+			Pathways: orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-1"},
+		}); got != k8s.PathwaysJobSetTemplate {
+			t.Errorf("resolveWorkloadTemplateName(RunSPSWorkload) = %q, want %q", got, k8s.PathwaysJobSetTemplate)
 		}
 	})
 }

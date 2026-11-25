@@ -104,7 +104,7 @@ func (g *GKEOrchestrator) handleDeleteJobSetError(namespace, name, actionVerb st
 	if !g.isJobSetAPIAbsent(err) {
 		return opErr
 	}
-	return g.cancelFallbackOrReportNotFound(namespace, name, actionVerb, ownClaims, err, opErr)
+	return g.cancelFallbackOrReportNotFound(namespace, name, actionVerb, ownClaims, err, opErr, true)
 }
 
 func (g *GKEOrchestrator) peekBatchJobActionVerb(namespace, name string) (string, []string) {
@@ -120,21 +120,27 @@ func (g *GKEOrchestrator) peekBatchJobActionVerb(namespace, name string) (string
 }
 
 func (g *GKEOrchestrator) cancelJobWithoutJobSet(namespace, name, actionVerb string, ownClaims []string) error {
-	return g.cancelFallbackOrReportNotFound(namespace, name, actionVerb, ownClaims, nil, nil)
+	return g.cancelFallbackOrReportNotFound(namespace, name, actionVerb, ownClaims, nil, nil, false)
 }
 
-func (g *GKEOrchestrator) cancelFallbackOrReportNotFound(namespace, name, actionVerb string, ownClaims []string, origErr, opErr error) error {
+func (g *GKEOrchestrator) cancelFallbackOrReportNotFound(namespace, name, actionVerb string, ownClaims []string, origErr, opErr error, jobSetAttempted bool) error {
 	deleted, fallbackVerb, fallbackClaims, fallbackErr := g.cancelFallbackBatchJob(namespace, name)
 	if fallbackErr != nil {
 		return fallbackErr
 	}
 	if deleted {
 		logging.Info("%s operation on Job '%s' completed successfully.", fallbackVerb, name)
-		g.reclaimStorageGateways(namespace, name, fallbackClaims)
+		g.reclaimStorageGatewaysForWorkload(namespace, name, fallbackClaims, true)
 		return nil
 	}
 	logging.Info("Job '%s' was not found in namespace '%s'; it may already have been removed by --gke-ttl-after-finished. Checking for unused storage gateways...", name, namespace)
-	g.reclaimStorageGateways(namespace, name, ownClaims)
+	if jobSetAttempted {
+		g.reclaimStorageGatewaysForWorkload(namespace, name, ownClaims, false)
+	} else {
+		// DeleteJobSet was not attempted (e.g. GCLUSTER_DISABLE_JOBSET=1), so a live JobSet
+		// with the same name may still exist; do not exempt it from grace-period or consumer checks.
+		g.reclaimStorageGatewaysForWorkload(namespace, "", nil, true)
+	}
 	if origErr != nil && apierrors.IsNotFound(origErr) && opErr != nil {
 		return opErr
 	}
@@ -214,6 +220,10 @@ func (g *GKEOrchestrator) deleteOwnedFallbackService(namespace, name string) (bo
 
 // reclaimStorageGateways deletes unused toolkit gateways in the namespace. Failures only warn.
 func (g *GKEOrchestrator) reclaimStorageGateways(namespace, cancelledJobSet string, ownClaims []string) {
+	g.reclaimStorageGatewaysForWorkload(namespace, cancelledJobSet, ownClaims, false)
+}
+
+func (g *GKEOrchestrator) reclaimStorageGatewaysForWorkload(namespace, cancelledWorkload string, ownClaims []string, batchJobOnly bool) {
 	if g.kubeClient == nil {
 		return
 	}
@@ -223,7 +233,7 @@ func (g *GKEOrchestrator) reclaimStorageGateways(namespace, cancelledJobSet stri
 		return
 	}
 	pvcs = slices.DeleteFunc(pvcs, func(pvc unstructured.Unstructured) bool {
-		return !isToolkitGatewayClaimName(pvc.GetName()) || withinGracePeriod(&pvc, cancelledJobSet, ownClaims)
+		return !isToolkitGatewayClaimName(pvc.GetName()) || withinGracePeriod(&pvc, cancelledWorkload, ownClaims)
 	})
 	if len(pvcs) == 0 {
 		return
@@ -231,7 +241,7 @@ func (g *GKEOrchestrator) reclaimStorageGateways(namespace, cancelledJobSet stri
 
 	// No re-check needed: the PVC delete is conditional on the resourceVersion listed above, and every submit
 	// bumps it by re-stamping last-claimed-at, so a gateway claimed after this scan fails the delete.
-	consumers, err := g.namespaceClaimConsumers(namespace, cancelledJobSet)
+	consumers, err := g.namespaceClaimConsumers(namespace, cancelledWorkload, batchJobOnly)
 	if err != nil {
 		logging.Warn("Skipping storage cleanup in namespace '%s': failed to determine active storage consumers: %v", namespace, err)
 		return
@@ -250,7 +260,7 @@ func (g *GKEOrchestrator) reclaimStorageGateways(namespace, cancelledJobSet stri
 func withinGracePeriod(pvc *unstructured.Unstructured, cancelledJobSet string, ownClaims []string) bool {
 	annotations := pvc.GetAnnotations()
 	claimedBy, stamped := annotations[lastClaimedByAnnotation]
-	if stamped && claimedBy == cancelledJobSet {
+	if stamped && cancelledJobSet != "" && claimedBy == cancelledJobSet {
 		return false
 	}
 	if !stamped && slices.Contains(ownClaims, pvc.GetName()) {
@@ -335,7 +345,7 @@ func (g *GKEOrchestrator) deleteStorageGateway(namespace string, pvc *unstructur
 }
 
 // namespaceClaimConsumers maps each claim used by a live workload to "<resource>/<name>".
-func (g *GKEOrchestrator) namespaceClaimConsumers(namespace, cancelledJobSet string) (map[string]string, error) {
+func (g *GKEOrchestrator) namespaceClaimConsumers(namespace, cancelledWorkload string, batchJobOnly bool) (map[string]string, error) {
 	consumers := map[string]string{}
 	for _, gvr := range storageConsumerGVRs {
 		objs, err := g.kubeClient.ListResources(gvr, namespace, "", "")
@@ -347,7 +357,7 @@ func (g *GKEOrchestrator) namespaceClaimConsumers(namespace, cancelledJobSet str
 		}
 		for i := range objs {
 			obj := &objs[i]
-			if isFinished(obj) || createdByJobSet(obj, gvr, cancelledJobSet) {
+			if isFinished(obj) || createdByWorkload(obj, gvr, cancelledWorkload, batchJobOnly) {
 				continue
 			}
 			for _, claim := range collectClaimNames(obj.Object) {
@@ -384,16 +394,30 @@ func walkForClaimNames(node interface{}, found map[string]bool) {
 	}
 }
 
-func createdByJobSet(obj *unstructured.Unstructured, gvr schema.GroupVersionResource, jobSetName string) bool {
-	if jobSetName == "" {
+func createdByWorkload(obj *unstructured.Unstructured, gvr schema.GroupVersionResource, workloadName string, batchJobOnly bool) bool {
+	if workloadName == "" {
 		return false
 	}
+	if batchJobOnly {
+		if gvr == jobSetGVR || isJobSetOwnedJob(obj) {
+			return false
+		}
+		labels := obj.GetLabels()
+		switch gvr {
+		case jobGVR:
+			return obj.GetName() == workloadName && labels[workloadLabel] == workloadName
+		case podGVR:
+			return labels["batch.kubernetes.io/job-name"] == workloadName || labels["job-name"] == workloadName
+		default:
+			return false
+		}
+	}
 	if gvr == jobSetGVR {
-		return obj.GetName() == jobSetName
+		return obj.GetName() == workloadName
 	}
 	labels := obj.GetLabels()
-	return labels["jobset.sigs.k8s.io/jobset-name"] == jobSetName ||
-		labels["gcluster.google.com/workload"] == jobSetName
+	return labels["jobset.sigs.k8s.io/jobset-name"] == workloadName ||
+		labels["gcluster.google.com/workload"] == workloadName
 }
 
 func isFinished(obj *unstructured.Unstructured) bool {
