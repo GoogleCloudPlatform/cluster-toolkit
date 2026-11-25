@@ -213,13 +213,18 @@ func (g *GKEOrchestrator) pinTelemetryAndValidate(job *orchestrator.JobDefinitio
 }
 
 // validateSubmitLocalPreflight runs the checks that need no cluster access or image build: mount syntax,
-// ML Diagnostics flags, and custom template parsing.
+// ML Diagnostics flags, Pathways image resolution, and custom template parsing.
 func (g *GKEOrchestrator) validateSubmitLocalPreflight(sm *StorageManager, job orchestrator.JobDefinition) error {
 	if err := sm.validateJobMounts(job.RawMounts, job.IsPathwaysJob, job.Pathways.ColocatedPythonSidecarImage != ""); err != nil {
 		return err
 	}
 	if err := g.validateTelemetryFlags(job); err != nil {
 		return err
+	}
+	if job.IsPathwaysJob && job.Pathways.RunSPSWorkload == "" {
+		if _, _, _, err := resolvePathwaysImages(job.Pathways); err != nil {
+			return err
+		}
 	}
 	return k8s.ValidateCustomWorkloadTemplates(g.gkeCustomTemplatesPath, workloadTemplateName(job))
 }

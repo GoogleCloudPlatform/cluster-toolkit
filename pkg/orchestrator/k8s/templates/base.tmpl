@@ -114,17 +114,27 @@ spec:
     {{- end }}
     {{- if $.Verbose }}
     {{- if $.IsTPU }}
+    {{- if not ($.Env.Has "TPU_STDERR_LOG_LEVEL") }}
     - name: TPU_STDERR_LOG_LEVEL
       value: "0"
+    {{- end }}
+    {{- if not ($.Env.Has "TPU_MIN_LOG_LEVEL") }}
     - name: TPU_MIN_LOG_LEVEL
       value: "0"
+    {{- end }}
+    {{- if not ($.Env.Has "TF_CPP_MIN_LOG_LEVEL") }}
     - name: TF_CPP_MIN_LOG_LEVEL
       value: "0"
+    {{- end }}
+    {{- if not ($.Env.Has "TPU_VMODULE") }}
     - name: TPU_VMODULE
       value: "real_program_continuator=1"
+    {{- end }}
     {{- else if $.IsGPU }}
+    {{- if not ($.Env.Has "NCCL_DEBUG") }}
     - name: NCCL_DEBUG
       value: "INFO"
+    {{- end }}
     {{- end }}
     {{- end }}
     {{- end }}

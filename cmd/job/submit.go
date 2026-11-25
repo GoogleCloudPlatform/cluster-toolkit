@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/imagebuilder"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -164,7 +165,7 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&platform, "platform", "f", "linux/amd64", "Target platform for the image build (e.g., 'linux/amd64', 'linux/arm64'). Used with --base-image.")
 
 	SubmitCmd.Flags().StringArrayVar(&volumeStr, "mount", nil, "Volumes to mount (format: <src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>], where <src> is gs://<bucket>[/<path>], filestore://<instance-or-ip>/<share>, nfs://<server>/<export>, <pvc-name>[/<sub-path>], or /host/path; mode can be 'ro' or 'rw', default 'ro'). profile= selects a GKE GCSFuse storage profile (training, checkpointing or serving) for gs:// sources and provisions a shared PV/PVC gateway instead of an inline CSI volume.")
-	SubmitCmd.Flags().StringArrayVar(&envVars, "env", []string{}, "Custom environment variables to pass to the workload container in KEY=VALUE format. Can be specified multiple times.")
+	SubmitCmd.Flags().StringArrayVar(&envVars, "env", []string{}, "Workload container env var in KEY=VALUE format (repeatable). Replaces matching gcluster defaults.")
 
 	SubmitCmd.Flags().StringVarP(&workloadName, "name", "n", "", "Name of the workload to create. Required.")
 	SubmitCmd.Flags().StringVarP(&kueueQueueName, "queue", "q", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
@@ -172,7 +173,7 @@ func init() {
 	SubmitCmd.Flags().IntVar(&numSlices, "num-slices", 1, "The number of independent groups/slices to use.")
 	SubmitCmd.Flags().IntVar(&restarts, "restarts", 1, "Maximum number of restarts for the JobSet before failing.")
 	SubmitCmd.Flags().StringVar(&ttlAfterFinished, "gke-ttl-after-finished", "1h", "Time to retain the JobSet after it finishes (e.g. 5m, 1h).")
-	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Time to wait before forcefully terminating a pod (e.g. 30s, 2m). Gives the workload time to save checkpoints or clean up distributed state during cancellation or preemption events (like Spot VM evictions).")
+	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Pod termination grace period (e.g. 30s, 2m). On Pathways jobs, applies only to worker pods (pathways-head keeps 30s; ignored by --pathways-run-sps-workload).")
 	SubmitCmd.Flags().BoolVar(&gkeDisableParallelContainers, "gke-disable-parallel-containers", false, "Disable parallel containers for TPU7x on GKE.")
 
 	SubmitCmd.Flags().StringVar(&placementPolicy, "placement-policy", "", "Name of an existing GCE compact placement or workload policy attached to the target node pool. Under NAP on machines that support compact placement it is also used as the GKE placement group identifier.")
@@ -186,27 +187,27 @@ func init() {
 	SubmitCmd.Flags().BoolVar(&awaitJobCompletion, "await-job-completion", false, "If true, gcluster will wait for the submitted job to complete.")
 	SubmitCmd.Flags().StringVar(&timeout, "timeout", "-1s", "Time to wait for job in seconds or string format (e.g. 1h, 10m). Default is max timeout (-1s).")
 	SubmitCmd.Flags().StringVar(&priority, "priority", "", "A priority class name (e.g., low, medium, high, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used.")
-	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose logging for the workload (TPUs and GPUs).")
+	SubmitCmd.Flags().BoolVar(&verbose, "verbose", false, "Enable verbose TPU/GPU logging. Matching --env or --pathways-worker-env values take precedence.")
 	SubmitCmd.Flags().StringVar(&gkeNapProvisioning, "gke-nap-provisioning", "", "Compute provisioning model for GKE NAP. Allowed values: on-demand, spot, reservation.")
 	SubmitCmd.Flags().StringVar(&gkeNapReservation, "gke-nap-reservation", "", "Name of the Google Cloud Reservation for GKE NAP (required if --gke-nap-provisioning=reservation).")
 
 	SubmitCmd.Flags().BoolVar(&isPathwaysJob, "pathways", false, "If present, gcluster will generate a manifest for a Pathways job.")
-	SubmitCmd.Flags().StringVar(&pathways.ProxyServerImage, "pathways-proxy-server-image", "", "The image for the Pathways proxy server.")
-	SubmitCmd.Flags().StringVar(&pathways.ServerImage, "pathways-server-image", "", "The image for the Pathways server.")
-	SubmitCmd.Flags().StringVar(&pathways.WorkerImage, "pathways-worker-image", "", "The image for the Pathways worker.")
+	SubmitCmd.Flags().StringVar(&pathways.ProxyServerImage, "pathways-proxy-server-image", "", "Image for pathways-proxy (defaults to pathways/proxy_server:latest, the public colocated sidecar release, or derived from the SPS instance; required for digest-pinned SPS servers).")
+	SubmitCmd.Flags().StringVar(&pathways.ServerImage, "pathways-server-image", "", "Image for pathways-rm and default for pathways-worker (defaults to pathways/server:latest, or the public colocated sidecar release).")
+	SubmitCmd.Flags().StringVar(&pathways.WorkerImage, "pathways-worker-image", "", "Image for pathways-worker (defaults to --pathways-server-image).")
 	SubmitCmd.Flags().BoolVar(&pathways.Headless, "pathways-headless", false, "If present, the user's workload container will not be deployed within the `pathways-head` job.")
 	SubmitCmd.Flags().BoolVar(&pathways.DeploySPS, "pathways-deploy-sps", false, "Deploy a Shared Pathways Service (SPS) instance with a resource-manager-only head pod and persistent TPU workers.")
-	SubmitCmd.Flags().StringVar(&pathways.RunSPSWorkload, "pathways-run-sps-workload", "", "Run --command on an existing SPS instance, given its JobSet name or endpoint. Without an image the command runs on this machine against the instance (like pathwaysutils run_workload); with --image or --base-image it runs in the cluster.")
+	SubmitCmd.Flags().StringVar(&pathways.RunSPSWorkload, "pathways-run-sps-workload", "", "Run --command against an existing SPS JobSet name or endpoint. Without an image, runs locally via port-forward (sets JAX_PLATFORMS=proxy unless overridden via --env); with --image or --base-image, runs in-cluster.")
 	SubmitCmd.Flags().StringVar(&pathways.GCSLocation, "pathways-gcs-location", "", "Please provide the GCS location to store Pathways artifacts. This flag is required when using --pathways.")
 	SubmitCmd.Flags().IntVar(&pathways.ElasticSlices, "pathways-elastic-slices", 0, "Configures the number of elastic slices, potentially allowing for more flexible resource allocation.")
-	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 0, "Maximum times the workers in a slice can be restarted (defaults to 0, 4000 when --pathways-elastic-slices>0 or --pathways-headless is set, or 1000000 when --pathways-deploy-sps is set). Maps to backoffLimitPerIndex=N and backoffLimit=N*nodesPerSlice on the worker Job.")
+	SubmitCmd.Flags().IntVar(&pathways.MaxSliceRestarts, "pathways-max-slice-restarts", 0, "Max failed-pod replacements (N) per worker index (default 0; 4000 if elastic/headless; 1000000 if deploy-SPS). Sets backoffLimitPerIndex=N and backoffLimit=max(N,4)*nodesPerSlice (min 4 per node, max 2147483647).")
 	SubmitCmd.Flags().StringVar(&pathways.ProxyArgs, "pathways-proxy-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-proxy` executable.")
 	SubmitCmd.Flags().StringVar(&pathways.ServerArgs, "pathways-server-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-rm` (resource manager) executable.")
 	SubmitCmd.Flags().StringVar(&pathways.WorkerArgs, "pathways-worker-args", "", "Arbitrary additional command-line arguments to pass directly to the `pathways-worker` executable.")
-	SubmitCmd.Flags().StringArrayVar(&pathwaysProxyEnv, "pathways-proxy-env", []string{}, "Custom environment variables for the Pathways proxy container in KEY=VALUE format. Can be specified multiple times.")
-	SubmitCmd.Flags().StringArrayVar(&pathwaysServerEnv, "pathways-server-env", []string{}, "Custom environment variables for the Pathways server container in KEY=VALUE format. Can be specified multiple times.")
-	SubmitCmd.Flags().StringArrayVar(&pathwaysWorkerEnv, "pathways-worker-env", []string{}, "Custom environment variables for the Pathways worker container in KEY=VALUE format. Can be specified multiple times.")
-	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Image for an optional colocated Python sidecar that runs in each Pathways worker pod and shares memory with the worker at /tmp/sidecar.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysProxyEnv, "pathways-proxy-env", []string{}, "Pathways proxy container env var in KEY=VALUE format (repeatable). Replaces matching gcluster defaults.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysServerEnv, "pathways-server-env", []string{}, "Pathways server container env var in KEY=VALUE format (repeatable). Replaces matching gcluster defaults.")
+	SubmitCmd.Flags().StringArrayVar(&pathwaysWorkerEnv, "pathways-worker-env", []string{}, "Pathways worker container env var in KEY=VALUE format (repeatable). Replaces matching gcluster defaults.")
+	SubmitCmd.Flags().StringVar(&pathways.ColocatedPythonSidecarImage, "pathways-colocated-python-sidecar-image", "", "Optional colocated Python sidecar image sharing /tmp/sidecar with workers. Auto-matches public cloud-pathways server/proxy tags; pass matching image flags for custom or digest-only sidecars.")
 	SubmitCmd.Flags().StringVar(&pathways.HeadNodePool, "pathways-head-np", "", "The node pool to use for the Pathways head job. If empty, it will be auto-detected (looking for 'cpu-np' or 'pathways-np').")
 
 	SubmitCmd.Flags().BoolVar(&gkeMtcEnabled, "gke-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")
@@ -413,6 +414,9 @@ func validatePathwaysFlags(cmd *cobra.Command) error {
 		}
 		if pathways.MaxSliceRestarts < 0 {
 			return fmt.Errorf("--pathways-max-slice-restarts must be non-negative")
+		}
+		if pathways.MaxSliceRestarts > math.MaxInt32 {
+			return fmt.Errorf("--pathways-max-slice-restarts must be at most %d", math.MaxInt32)
 		}
 		return nil
 	}

@@ -1524,6 +1524,11 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsWithoutPathways_Fails(t *testing.T) {
 			extraArgs: []string{"--pathways", "--pathways-gcs-location", "gs://my-bucket", "--pathways-elastic-slices", "-1"},
 			wantErr:   "--pathways-elastic-slices must be non-negative",
 		},
+		{
+			name:      "max-slice-restarts above the int32 range with --pathways",
+			extraArgs: []string{"--pathways", "--pathways-gcs-location", "gs://my-bucket", "--pathways-max-slice-restarts", "2147483648"},
+			wantErr:   "--pathways-max-slice-restarts must be at most 2147483647",
+		},
 	}
 
 	for _, tc := range tests {
@@ -1612,6 +1617,12 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
 			extraArgs:            []string{"--pathways-deploy-sps", "--pathways-max-slice-restarts", "500"},
 			wantElasticSlices:    0,
 			wantMaxSliceRestarts: 500,
+		},
+		{
+			name:                 "accepts max-slice-restarts at the int32 limit",
+			extraArgs:            []string{"--pathways-max-slice-restarts", "2147483647"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 2147483647,
 		},
 	}
 

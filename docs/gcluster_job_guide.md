@@ -558,6 +558,11 @@ When a workload pod is evicted, cancelled, or preempted (e.g. on Spot VMs or Kue
 * Post-command cleanup commands in the user script (such as checkpoint flushes or artifact uploads to Cloud Storage) continue to run before the pod grace period expires.
 * If a workload is interrupted by `SIGTERM`, `gcluster` ensures it exits with code `143` even if cleanup commands exit `0`, preventing evicted pods from falsely reporting success.
 
+#### Pathways Jobs
+
+* The workload runs in the `pathways-head` pod, which keeps the Kubernetes default grace period of 30s whatever `--grace-period` is set to: cleanup after `SIGTERM`, including a final checkpoint, must finish within 30s. `--grace-period` sets how long the worker pods may take to stop. It has no effect on `--pathways-run-sps-workload` runs, which have no worker pods.
+* With `--pathways-colocated-python-sidecar-image`, each worker pod takes the full `--grace-period` to stop, because the sidecar exits only when it is killed. A long grace period therefore delays JobSet restarts, and keeps the TPU nodes in use for that long after the JobSet finishes.
+
 ### 6.5 Topology & Scheduler
 
 **Example 1: Topology Awareness**
@@ -1139,8 +1144,9 @@ Pathways integration provides the following orchestration capabilities:
 * **Multi-role JobSet orchestration:** When you specify the `--pathways` flag, Cluster Toolkit generates and coordinates a multi-role JobSet comprising the Resource Manager (`pathways-rm`), Proxy server (`pathways-proxy`), and JAX worker pods.
 * **Kueue resource management:** Cluster Toolkit automatically maps multi-slice resource limits and unifies Kueue ClusterQueue resource groups so that coordinator and worker pods schedule without resource deadlocks.
 * **Headless execution mode:** With the `--pathways-headless` flag, Cluster Toolkit provisions the Pathways server infrastructure without requiring a client workload container, letting external clients (such as local notebooks) connect to the cluster.
-* **Shared Pathways Service (SPS) mode:** With the `--pathways-deploy-sps` flag, Cluster Toolkit deploys a long-running Shared Pathways Service instance: `pathways-head` runs only `pathways-rm` (no proxy or workload container, because each SPS client brings its own proxy), the TPU worker pods keep running with optional colocated Python sidecar support, and `--restarts` and `--pathways-max-slice-restarts` default to `30` and `1000000`. The command prints the in-cluster service endpoint (`<name>-pathways-head-0-0.<name>:29001`). With `--pathways-run-sps-workload <instance-or-endpoint>`, Cluster Toolkit runs a workload against an existing SPS instance (auto-discovering its `instance_type`, `gcs_scratch_location`, proxy image, Kueue queue, and colocated Python sidecar): locally in your terminal via a port-forwarded `pathways-proxy` pod when no container image is passed, or inside the cluster when `--image` (or `--base-image` + `--build-context`) is passed.
-* **Completion and restart semantics:** In non-headless mode, the JobSet's `successPolicy` tracks `pathways-head`: when `workload-container` exits `0`, the entire JobSet is marked `Completed` and the worker pods are torn down; when it exits non-zero (including `143` on `SIGTERM`), the JobSet `failurePolicy` restarts the job up to `--restarts` times. Ensure your training command exits non-zero on fatal errors (for example, if a framework catches checkpoint or data-loader exceptions and exits `0` early, the JobSet will complete as `Succeeded` instead of restarting).
+* **Shared Pathways Service (SPS) mode:** With the `--pathways-deploy-sps` flag, Cluster Toolkit deploys a long-running Shared Pathways Service instance: `pathways-head` runs only `pathways-rm` (no proxy or workload container, because each SPS client brings its own proxy), the TPU worker pods keep running with optional colocated Python sidecar support, and `--restarts` and `--pathways-max-slice-restarts` default to `30` and `1000000`. The command prints the in-cluster service endpoint (`<name>-pathways-head-0-0.<name>:29001`). With `--pathways-run-sps-workload <instance-or-endpoint>`, Cluster Toolkit runs a workload against an existing SPS instance (auto-discovering its `instance_type`, `gcs_scratch_location`, proxy image (derived from the instance's server image; pass `--pathways-proxy-server-image` when that image is pinned by digest), Kueue queue, and colocated Python sidecar): locally in your terminal via a port-forwarded `pathways-proxy` pod when no container image is passed, or inside the cluster when `--image` (or `--base-image` + `--build-context`) is passed.
+* **Completion and restart semantics:** In non-headless mode, the JobSet's `successPolicy` tracks `pathways-head`: when `workload-container` exits `0`, the entire JobSet is marked `Completed` and the worker pods are torn down; when it exits non-zero (including `143` on `SIGTERM`), the JobSet `failurePolicy` restarts the job up to `--restarts` times. Ensure your training command exits non-zero on fatal errors (for example, if a framework catches checkpoint or data-loader exceptions and exits `0` early, the JobSet will complete as `Succeeded` instead of restarting). Each Pathways worker restarts in place when the client disconnects, so the end of a successful run does not fail the worker Job. With `--pathways-max-slice-restarts 0` (the default without elastic slices), a worker pod that fails or is preempted fails the worker Job, so the JobSet `failurePolicy` recreates every slice (up to `--restarts`; with `--restarts 0` the JobSet fails).
+* **Environment variables:** gcluster sets defaults in each Pathways container, for example `JAX_PLATFORMS=proxy` and `JAX_BACKEND_TARGET` in `workload-container`, and `ABSL_FLAGS=--pathways_pipe_unreachable_timeout=60s` in `pathways-rm`, `pathways-proxy`, `workload-container` and `pathways-worker`. A variable you pass with `--env` (workload container), `--pathways-proxy-env`, `--pathways-server-env` or `--pathways-worker-env` replaces the default of the same name in that container, so include `--pathways_pipe_unreachable_timeout=60s` in your own `ABSL_FLAGS` value to keep that timeout.
 
 #### Example CLI commands
 
@@ -1198,6 +1204,68 @@ To run a containerized workload inside the cluster against an existing SPS insta
   --pathways-run-sps-workload my-pathways-sps \
   --num-slices 1 \
   --command "python train_pathways.py"
+```
+
+#### Colocated Python sidecar images
+
+The colocated Python sidecar (`--pathways-colocated-python-sidecar-image`), the Pathways server (`pathways-rm` and `pathways-worker`) and the proxy (`pathways-proxy`) should come from the same Pathways release. `gcluster` cannot verify before submission that a set of images works together.
+
+The public images are published for each release in three repositories:
+
+| Image | Repository |
+| --- | --- |
+| Colocated Python sidecar | `us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/colocated_python_sidecar` |
+| Server | `us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/server` |
+| Proxy | `us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/proxy_server` |
+
+Every release tag exists in all three repositories:
+
+* `jax-<version>` (for example `jax-0.11.2`): the newest build for that JAX version. It moves when a new build is published.
+* `<yyyymmdd>-jax_<version>` (for example `20261124-jax_0.11.2`): the build of one day. Use it to pin a release.
+* `latest`: the newest build for the newest JAX version.
+
+To choose a version, take the sidecar tag for the JAX version of your workload. The workload must run the same Python, JAX, jaxlib and cloudpickle versions as the sidecar, which lists them in `/opt/venv/server_constraints.txt`:
+
+```shell
+docker run --rm --platform linux/amd64 --entrypoint cat \
+  us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/colocated_python_sidecar:jax-0.11.2 \
+  /opt/venv/server_constraints.txt
+```
+
+How `gcluster` picks the server and proxy images:
+
+* **Public sidecar** (`us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/colocated_python_sidecar`, with or without a tag or digest): every server or proxy image that you don't pass is set to the `cloud-pathways` image with the sidecar's tag, and `gcluster` logs the images it chose. If the sidecar reference is pinned by digest without a release tag (for example `@sha256:...`), `gcluster` returns an error unless you pass `--pathways-server-image` and `--pathways-proxy-server-image` (or `--pathways-server-image` with `--pathways-deploy-sps`). If it uses an unrecognized tag without a digest, `gcluster` uses `latest` and warns. If it includes both a release tag and a digest (for example `:jax-0.11.2@sha256:...`), `gcluster` uses that tag for the server and proxy images and warns that container runtimes pull the sidecar by digest instead. Images that you pass are always used as given, and `gcluster` does not derive `--pathways-proxy-server-image` from `--pathways-server-image` (or vice versa): if you pass `--pathways-server-image`, `--pathways-proxy-server-image`, or `--pathways-worker-image` while leaving other server/proxy images unset, the unset ones still use the `cloud-pathways` image of the sidecar's release, and `gcluster` warns.
+* **Any other sidecar**, including one that you built from the public sidecar image: `gcluster` can't tell which release it belongs to. Every server or proxy image that you don't pass stays at the `gcluster` default (`us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest` and `us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest`), and `gcluster` warns. These defaults don't work with the public sidecar or with images built from it, so pass `--pathways-server-image` and `--pathways-proxy-server-image` from `cloud-pathways` with the tag of your sidecar's base image.
+* **No sidecar:** the `gcluster` defaults apply.
+
+With `--pathways-deploy-sps`, the `pathways-head` pod runs no proxy, so only the server image counts in these rules.
+
+For example, to run a workload with the public sidecar for JAX 0.11.2, pinned to the build of one day, pass only the sidecar image; `gcluster` runs `pathways-rm`, `pathways-worker` and `pathways-proxy` from `cloud-pathways/server:20261124-jax_0.11.2` and `cloud-pathways/proxy_server:20261124-jax_0.11.2`:
+
+```shell
+./gcluster job submit \
+  --name my-sidecar-job \
+  --image <CONTAINER_IMAGE> \
+  --command "python train_pathways.py" \
+  --compute-type v6e-16 \
+  --pathways \
+  --pathways-gcs-location gs://BUCKET_NAME/pathways-artifacts \
+  --pathways-colocated-python-sidecar-image us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/colocated_python_sidecar:20261124-jax_0.11.2
+```
+
+For a sidecar that you built from that public image and pushed to your own registry, also pass the server and proxy images of the same release:
+
+```shell
+./gcluster job submit \
+  --name custom-sidecar-job \
+  --image <CONTAINER_IMAGE> \
+  --command "python train_pathways.py" \
+  --compute-type v6e-16 \
+  --pathways \
+  --pathways-gcs-location gs://BUCKET_NAME/pathways-artifacts \
+  --pathways-colocated-python-sidecar-image <SIDECAR_IMAGE> \
+  --pathways-server-image us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/server:20261124-jax_0.11.2 \
+  --pathways-proxy-server-image us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/proxy_server:20261124-jax_0.11.2
 ```
 
 ---
@@ -1260,7 +1328,7 @@ First, use the `gke-template-extract` command to extract the embedded default te
 
 *(Use `--overwrite` if the directory already contains files you want to replace).*
 
-Extracted templates match the gcluster version that extracted them. After upgrading gcluster, extract them again and re-apply your changes, because newer versions can move logic into the templates. For example, `pathways_jobset.tmpl` now defines the Pathways Multi-Tier Checkpointing and colocated-sidecar volumes and the `--pathways-deploy-sps` server layout itself, so an older copy of that file omits them.
+Extracted templates match the `gcluster` version that generated them. After upgrading `gcluster`, re-extract the defaults and re-apply your changes so you pick up template-level feature updates and bug fixes; `gcluster` warns or returns an error when it detects stale patterns.
 
 #### 2. Modify the templates
 
@@ -1268,7 +1336,7 @@ Open the extracted `.tmpl` files in your preferred editor. Workload manifests ar
 
 * `jobset.tmpl`: Standard (non-Pathways) `JobSet` wrapper used by `gcluster job submit`. Delegates shared labels, network settings, and `pod_template` to `base.tmpl`.
 * `pathways_jobset.tmpl`: Pathways (`--pathways`) `JobSet` manifest. Defines `pathways-head` and `worker` pod specs inline while reusing `workload_labels`, `jobset_network`, `pod_auth_and_priority`, `pod_placement`, and `telemetry_sidecar` from `base.tmpl`.
-* `base.tmpl`: Shared named `{{- define "<block>" -}}` blocks rendered at a target YAML column width via `{{(StructuralData (.RenderBlock "<block>" <indent>))}}`. To add custom sidecars, pod annotations, or volumes to standard workloads, edit `pod_template` in `base.tmpl`.
+* `base.tmpl`: Shared named `{{- define "<block>" -}}` blocks rendered at a target YAML column width via `{{(StructuralData (.RenderBlock "<block>" <indent>))}}`. To add custom sidecars, pod annotations, or volumes to standard workloads, edit `pod_template` in `base.tmpl`. If you add a default environment variable to a container, wrap it in `{{- if not ($.Env.Has "NAME") }}` ... `{{- end }}` (use the container's own list, such as `$.PathwaysWorkerEnv`, in `pathways_jobset.tmpl`) so a value the user passes for the same name replaces it instead of duplicating it.
 * `job.tmpl`: Standalone `batch/v1` Indexed `Job` and headless `Service` template (reserved for upcoming single-slice `Job` support; `gcluster job submit` does not render `job.tmpl` yet).
 * `filestore.tmpl` & `gcs_fuse_pv_pvc.tmpl`: Storage templates used when provisioning Filestore, generic NFS (`nfs://`), and Cloud Storage FUSE storage-profile `PersistentVolume` / `PersistentVolumeClaim` resources.
 * `local_queue.tmpl` & `priority_classes.tmpl`: Kueue templates used when bootstrapping default `LocalQueue` and `PriorityClass` resources.
@@ -1365,10 +1433,10 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. Supports pipe separator (`\|`) for multiple values. |
 | `--restarts` | `int` | Maximum number of restarts allowed for the JobSet before marked as failed (Default: `1`, or `30` when `--pathways-deploy-sps` is set). |
 | `--mount` | `stringArray` | Mount storage volumes, buckets, filestore/NFS shares, or PVCs using the `<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]` format. Examples of `<src>`: `gs://my-bucket[/<sub-path>]`, `filestore://my-instance/share`, `nfs://10.0.0.1/export`, `my-pvc` or `my-pvc/sub-dir` (for Lustre/NFS PVCs), or `/host/path`. `profile=` (`training`, `checkpointing`, `serving`) is GCS-only and provisions a shared GCS FUSE storage-profile PV/PVC gateway instead of an inline CSI volume. |
-| `--env` | `stringArray` | Custom environment variables to pass exclusively to the user's workload container in KEY=VALUE format (e.g. `--env KEY=VALUE`). Applies to both standard and Pathways workloads and can be specified multiple times. For standard JobSet workloads, `WORKERS_0_HOSTNAME` and `MASTER_ADDR` are preset to `<name>-main-job-0-0.<name>` unless overridden via `--env`. |
+| `--env` | `stringArray` | Custom environment variables to pass exclusively to the user's workload container in KEY=VALUE format (e.g. `--env KEY=VALUE`). Applies to both standard and Pathways workloads and can be specified multiple times. For standard JobSet workloads, `WORKERS_0_HOSTNAME` and `MASTER_ADDR` are preset to `<name>-main-job-0-0.<name>` unless overridden via `--env`. A variable that gcluster also sets in the workload container (for example `JAX_PLATFORMS` on Pathways, or a `--verbose` logging variable) is replaced by your value. |
 | `--await-job-completion` | `bool` | If true, the CLI waits for the job to complete before exiting. |
 | `--timeout` | `string` | Time to wait for job completion (e.g., `1h`, `10m`). Used with `--await-job-completion`. |
-| `--verbose` | `bool` | Enable verbose logging for the workload. |
+| `--verbose` | `bool` | Enable verbose logging for the workload. Sets `TPU_STDERR_LOG_LEVEL=0`, `TPU_MIN_LOG_LEVEL=0`, `TF_CPP_MIN_LOG_LEVEL=0` and `TPU_VMODULE=real_program_continuator=1` on standard TPU workloads, `NCCL_DEBUG=INFO` on GPU workloads, and `TPU_MIN_LOG_LEVEL=0` and `TF_CPP_MIN_LOG_LEVEL=0` on the Pathways `pathways-worker` container. Values set for the same variables with `--env` (standard jobs) or `--pathways-worker-env` (Pathways jobs) take precedence. |
 
 *(Note: `--cluster`, `--location`, and `--project` are also supported as common flags, see 9.1)*
 
@@ -1380,21 +1448,21 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--topology` | `string` | TPU slice topology (e.g., `2x2x1`, `2x4`, `2x4x4`). Applies to TPU workloads only (rejected for GPU/CPU jobs). **Required for TPU 7x.** For other TPU types, when omitted, `gcluster` resolves it from a slice shorthand (e.g., `v6e-16` -> `4x4`) or auto-discovers it from matching TPU node pools on the cluster. |
 | `--pathways` | `flag` | If present, generates a manifest tailored for a Pathways distributed job paradigm. |
 | `--pathways-gcs-location` | `string` | GCS bucket location to store Pathways artifacts. *(Required when `--pathways` is set, except with `--pathways-run-sps-workload` which inherits it from the SPS instance)* |
-| `--pathways-proxy-server-image` | `string` | Container image for the Pathways proxy server. |
-| `--pathways-server-image` | `string` | Container image for the Pathways resource manager / server. |
-| `--pathways-worker-image` | `string` | Container image for the Pathways workers. |
+| `--pathways-proxy-server-image` | `string` | Container image for `pathways-proxy` (Default: `us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest`, or, with the public colocated Python sidecar, the `cloud-pathways/proxy_server` image of the sidecar's release; see [Colocated Python sidecar images](#colocated-python-sidecar-images)). With `--pathways-run-sps-workload` it defaults to the `proxy_server` image that matches the SPS instance's server image, and is required when that image is pinned by digest. |
+| `--pathways-server-image` | `string` | Container image for `pathways-rm` and, unless `--pathways-worker-image` is set, `pathways-worker` (Default: `us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest`, or, with the public colocated Python sidecar, the `cloud-pathways/server` image of the sidecar's release; see [Colocated Python sidecar images](#colocated-python-sidecar-images)). |
+| `--pathways-worker-image` | `string` | Container image for `pathways-worker` (Default: the server image). |
 | `--pathways-headless` | `flag` | If present, the user workload container will not be deployed in the `pathways-head` job. |
 | `--pathways-deploy-sps` | `flag` | If present, deploys a Shared Pathways Service (SPS) instance (`pathways-rm` on `pathways-head` without a proxy or workload container, plus the TPU worker pods). Mutually exclusive with `--pathways-headless`. |
-| `--pathways-run-sps-workload` | `string` | Name or endpoint (`<name>-pathways-head-0-0.<name>:29001`) of an existing SPS instance to run `--command` against. Runs locally in the terminal via a port-forwarded `pathways-proxy` pod when no image is specified, or inside the cluster when `--image` (or `--base-image` + `--build-context`) is passed. |
+| `--pathways-run-sps-workload` | `string` | Name or endpoint (`<name>-pathways-head-0-0.<name>:29001`) of an existing SPS instance to run `--command` against. Runs locally in the terminal via a port-forwarded `pathways-proxy` pod when no image is specified, or inside the cluster when `--image` (or `--base-image` + `--build-context`) is passed. In terminal mode the local process gets `JAX_PLATFORMS=proxy` unless `--env` sets it, and always gets a `JAX_BACKEND_TARGET` pointing at the port-forward, even if `--env` sets one. |
 | `--pathways-elastic-slices` | `int` | Configures the number of elastic slices for resilient training scaling. |
-| `--pathways-max-slice-restarts` | `int` | Maximum number of times the workers within a single slice can be restarted (Default: `0`, `4000` when `--pathways-elastic-slices > 0` or `--pathways-headless` is set, or `1000000` when `--pathways-deploy-sps` is set). Maps to `backoffLimitPerIndex: N` and `backoffLimit: N * nodesPerSlice` on the Pathways worker Job. |
+| `--pathways-max-slice-restarts` | `int` | Maximum number of times (`N`) each worker pod in a slice can be replaced after it fails or its node is lost (Default: `0`, `4000` when `--pathways-elastic-slices > 0` or `--pathways-headless` is set, or `1000000` when `--pathways-deploy-sps` is set). Sets `backoffLimitPerIndex: N` and `backoffLimit: max(N, 4) * nodesPerSlice` (at least `4` per node, capped at `2147483647`) on the Pathways worker Job, whose pods use `restartPolicy: OnFailure`: Pathways restarts each worker after its client disconnects, and worker containers restart in place until their restarts, summed across the slice (sidecars included), reach `backoffLimit`. With `N = 0` a worker pod that fails or is preempted fails the worker Job (`MaxFailedIndexesExceeded`). |
 | `--pathways-proxy-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-proxy`. |
 | `--pathways-server-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-rm`. |
 | `--pathways-worker-args` | `string` | Arbitrary additional command-line arguments passed to `pathways-worker`. |
-| `--pathways-proxy-env` | `stringArray` | Custom environment variables injected specifically into the Pathways proxy container (KEY=VALUE). |
-| `--pathways-server-env` | `stringArray` | Custom environment variables injected specifically into the Pathways server container (KEY=VALUE). |
-| `--pathways-worker-env` | `stringArray` | Custom environment variables injected specifically into the Pathways worker containers (KEY=VALUE). |
-| `--pathways-colocated-python-sidecar-image` | `string` | Image for an optional Python-based sidecar container running alongside workers. Also passes `--sidecar_name=external` to `pathways-proxy` so Pathways routes colocated Python work to the sidecar, unless `--pathways-proxy-args` already sets `--sidecar_name`. |
+| `--pathways-proxy-env` | `stringArray` | Custom environment variables injected specifically into the Pathways proxy container (KEY=VALUE). A variable that gcluster also sets in the container is replaced by your value. |
+| `--pathways-server-env` | `stringArray` | Custom environment variables injected specifically into the Pathways server container (KEY=VALUE). A variable that gcluster also sets in the container is replaced by your value. |
+| `--pathways-worker-env` | `stringArray` | Custom environment variables injected specifically into the Pathways worker containers (KEY=VALUE). A variable that gcluster also sets in the container is replaced by your value. |
+| `--pathways-colocated-python-sidecar-image` | `string` | Image for an optional Python-based sidecar container running alongside workers. Also passes `--sidecar_name=external` to `pathways-proxy` so Pathways routes colocated Python work to the sidecar, unless `--pathways-proxy-args` already sets `--sidecar_name`. The sidecar, server and proxy images should come from the same Pathways release; see [Colocated Python sidecar images](#colocated-python-sidecar-images) for how `gcluster` picks the server and proxy images and how to choose a version. |
 | `--pathways-head-np` | `string` | The node pool name to target for the Pathways head job. |
 
 #### 9.3.3 GPU Related Flags
@@ -1410,7 +1478,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | :--- | :--- | :--- |
 | `-q, --queue` | `string` | Name of the Kueue `LocalQueue` to submit the job to (Auto-discovered by default). |
 | `--priority` | `string` | Priority class name assigned to the job queue (supports default classes like `low`, `medium`, `high`, or any custom PriorityClass defined in the cluster). If empty, the cluster's default priority class will be used. |
-| `--grace-period` | `string` | Buffer period given to pods to save checkpoints before forced termination (Default: `30s`). |
+| `--grace-period` | `string` | Buffer period given to pods to save checkpoints before forced termination (Default: `30s`). On Pathways jobs it applies to the worker pods; `pathways-head`, where the workload runs, keeps the Kubernetes default of `30s` (see [section 6.4](#64-graceful-termination--signal-handling)). |
 | `--gke-mtc-enabled` | `flag` | If present, enables Multi-Tier Checkpointing (MTC) for the workload. |
 | `--gke-mtc-ramdisk-dir` | `string` | The ramdisk directory path for local checkpoints in MTC (required when `--gke-mtc-enabled` is set). |
 | `--enable-ml-diagnostics` | `bool` | Enables ML Diagnostics for the workload. Uses the GKE managed webhook (`managed-mldiagnostics-gke: "true"`, requiring `gke-cluster` setting `enable_ml_diagnostics: true`) by default, or injects the native `ai-telemetry-collector` sidecar on Kubernetes 1.29+ TPU pods when `--ml-diagnostics-image` or `GCLUSTER_TELEMETRY_IMAGE` is set (adding pod label `tpu-workload-name: <name>`, port `tpu-metrics`, and `TPU_RUNTIME_METRICS_PORTS="8431,8432,8433,8434,8435,8436,8437,8438"` unless overridden via `--env` / `--pathways-worker-env`; for `--pathways` jobs, injected only on TPU `worker` pods). |
