@@ -22,10 +22,10 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:netapp-volume/v1.109.0"
+    module_name = "blueprints/terraform/hpc-toolkit:netapp-volume/v1.109.1"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:netapp-volume/v1.109.0"
+    module_name = "blueprints/terraform/hpc-toolkit:netapp-volume/v1.109.1"
   }
 
   required_version = ">= 1.12.2"
