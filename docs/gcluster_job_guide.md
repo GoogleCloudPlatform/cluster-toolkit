@@ -70,7 +70,7 @@ Some `gcluster job` commands ask for confirmation before cluster changes, for ex
 * A heredoc or file can answer several prompts, one line each, but which prompts appear, and in what order, depends on the cluster's state and the `gcluster` version (`--skip-prereqs` skips only local prerequisite checks, not these cluster prompts). For example, when Kueue is outdated, a Kueue re-installation prompt appears before the queue prompt, so an answer meant for the queue prompt can approve the re-installation.
 
 > [!WARNING]
-> Any `y` or empty line on standard input can approve the Kueue re-installation prompt, which deletes all Kueue resources and all queued or suspended workloads in the cluster. Piping `yes` approves every yes/no prompt (and because stdin is not a TTY, non-interactive connected GKE runs also auto-install missing add-ons). For unattended runs:
+> When Kueue is already installed on the cluster and requires an upgrade or re-installation, any `y` or empty line on standard input approves the Kueue re-installation prompt, which deletes all Kueue resources and all queued or suspended workloads in the cluster (when Kueue is not installed, fresh installation does not delete any workloads and does not show this warning). Piping `yes` approves every yes/no prompt (and because stdin is not a TTY, non-interactive connected GKE runs also auto-install missing add-ons). For unattended runs:
 >
 > * Redirect stdin from `/dev/null` so destructive yes/no prompts are declined.
 > * Pass `--queue` with an existing `LocalQueue` so the queue creation prompt does not appear.

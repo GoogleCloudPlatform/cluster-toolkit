@@ -69,15 +69,6 @@ const (
 	kueueControllerRolloutTimeout = "--timeout=600s"
 )
 
-var kueuePermissionChecks = []permissionCheck{
-	{"create", "namespaces"},
-	{"create", "customresourcedefinitions.apiextensions.k8s.io"},
-	{"create", "clusterroles.rbac.authorization.k8s.io"},
-	{"create", "clusterrolebindings.rbac.authorization.k8s.io"},
-	{"create", "mutatingwebhookconfigurations.admissionregistration.k8s.io"},
-	{"create", "validatingwebhookconfigurations.admissionregistration.k8s.io"},
-}
-
 var kueueCRDs = []string{
 	"admissionchecks.kueue.x-k8s.io",
 	"clusterqueues.kueue.x-k8s.io",
@@ -390,10 +381,20 @@ func (g *GKEOrchestrator) applyAndWaitKueueManifest(manifestPath, targetVersion,
 	return g.waitForKueueWebhook()
 }
 
-func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason string) error {
-	promptMsg := fmt.Sprintf("%s\nKueue requires re-installation using %s.\nWARNING: This deletes all queued and suspended workloads in this cluster before proceeding.\nReplying 'no' will cause an immediate exit and you will have to do the re-installation manually. Proceed?", reason, targetVersion)
+func formatKueueReinstallPrompt(targetVersion, reason string, kueueInstalled bool) string {
+	if kueueInstalled {
+		return fmt.Sprintf("%s\nKueue requires re-installation using %s.\nWARNING: This deletes all queued and suspended workloads in this cluster before proceeding.\nReplying 'no' will cause an immediate exit and you will have to do the re-installation manually. Proceed?", reason, targetVersion)
+	}
+	return fmt.Sprintf("%s\nKueue requires installation using %s.\nReplying 'no' will cause an immediate exit and you will have to do the installation manually. Proceed?", reason, targetVersion)
+}
+
+func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion, reason string, kueueInstalled bool) error {
+	promptMsg := formatKueueReinstallPrompt(targetVersion, reason, kueueInstalled)
 	if !shell.PromptYesNo(promptMsg) {
-		return fmt.Errorf("user declined to re-install Kueue")
+		if kueueInstalled {
+			return fmt.Errorf("user declined to re-install Kueue")
+		}
+		return fmt.Errorf("user declined to install Kueue")
 	}
 
 	manifestPath, err := g.prepareKueueManifest(targetVersion)
@@ -401,12 +402,16 @@ func (g *GKEOrchestrator) handleKueueReinstallation(targetVersion string, reason
 		return err
 	}
 
-	logging.Info("Proceeding with clean re-installation of Kueue...")
-	if err := g.DeleteAllKueueResources(); err != nil {
-		return fmt.Errorf("failed to delete Kueue resources: %w", err)
+	verb := "installing"
+	if kueueInstalled {
+		verb = "reinstalling"
+		logging.Info("Proceeding with clean re-installation of Kueue...")
+		if err := g.DeleteAllKueueResources(); err != nil {
+			return fmt.Errorf("failed to delete Kueue resources: %w", err)
+		}
 	}
 
-	if err := g.applyAndWaitKueueManifest(manifestPath, targetVersion, "reinstalling"); err != nil {
+	if err := g.applyAndWaitKueueManifest(manifestPath, targetVersion, verb); err != nil {
 		return err
 	}
 	return g.installKueueResources(defaultClusterQueue, defaultLocalQueue)
@@ -418,7 +423,7 @@ func (g *GKEOrchestrator) checkKueueInstallPermissions(version string) error {
 
 func (g *GKEOrchestrator) checkKueuePermissions(action, version string) error {
 	logging.Info("Verifying cluster permissions for Kueue installation...")
-	if missing := g.missingPermissions(kueuePermissionChecks); len(missing) > 0 {
+	if missing := g.missingPermissions(addonInstallPermissionChecks); len(missing) > 0 {
 		return fmt.Errorf("unable to %s Kueue to version %s: missing required RBAC permissions: [%s]. Please contact your cluster administrator", action, version, strings.Join(missing, ", "))
 	}
 	return nil

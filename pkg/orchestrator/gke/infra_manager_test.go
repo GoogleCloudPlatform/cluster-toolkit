@@ -550,7 +550,7 @@ func freshJobSetResponses() map[string][]shell.CommandResult {
 	return map[string][]shell.CommandResult{
 		jobSetCRDGetCmd:     {objectAbsent},
 		jobSetServiceGetCmd: {objectAbsent},
-		authCanICreateCmd:   repeatResult(canIYes, len(jobSetInstallPermissionChecks)),
+		authCanICreateCmd:   repeatResult(canIYes, len(addonInstallPermissionChecks)),
 		jobSetApplyCmd:      {commandOK},
 		jobSetRolloutCmd:    {commandOK},
 		jobSetEndpointsCmd:  {readyEndpoints},
@@ -3457,9 +3457,9 @@ func TestKueueTolerationsAndWebhookPerms(t *testing.T) {
 			t.Errorf("Kueue controller manifest missing toleration %q:\n%s", want, out)
 		}
 	}
-	if !slices.Contains(kueuePermissionChecks, permissionCheck{"create", "mutatingwebhookconfigurations.admissionregistration.k8s.io"}) ||
-		!slices.Contains(kueuePermissionChecks, permissionCheck{"create", "validatingwebhookconfigurations.admissionregistration.k8s.io"}) {
-		t.Errorf("kueuePermissionChecks missing webhook create checks: %+v", kueuePermissionChecks)
+	if !slices.Contains(addonInstallPermissionChecks, permissionCheck{"create", "mutatingwebhookconfigurations.admissionregistration.k8s.io"}) ||
+		!slices.Contains(addonInstallPermissionChecks, permissionCheck{"create", "validatingwebhookconfigurations.admissionregistration.k8s.io"}) {
+		t.Errorf("addonInstallPermissionChecks missing webhook create checks: %+v", addonInstallPermissionChecks)
 	}
 }
 
@@ -3559,7 +3559,7 @@ func TestResolveClusterAddons_OfflineOutdatedKueueWarnsAndContinues(t *testing.T
 }
 
 func TestInstallMissingAddons_ChecksCanIAndLiveJobSetObjectsBeforeInstallingKueue(t *testing.T) {
-	canIYes := make([]shell.CommandResult, len(kueuePermissionChecks))
+	canIYes := make([]shell.CommandResult, len(addonInstallPermissionChecks))
 	for i := range canIYes {
 		canIYes[i] = shell.CommandResult{ExitCode: 0, Stdout: "yes"}
 	}
@@ -3582,8 +3582,8 @@ func TestInstallMissingAddons_ChecksCanIAndLiveJobSetObjectsBeforeInstallingKueu
 	if len(commandsWithPrefix(mockExec, "kubectl apply")) != 0 {
 		t.Errorf("must not apply Kueue before checkNoLiveJobSetObjects passes; calls=%v", mockExec.calls)
 	}
-	if got := len(commandsWithPrefix(mockExec, "kubectl auth can-i")); got != len(kueuePermissionChecks) {
-		t.Errorf("expected single %d-check can-i pass, got %d", len(kueuePermissionChecks), got)
+	if got := len(commandsWithPrefix(mockExec, "kubectl auth can-i")); got != len(addonInstallPermissionChecks) {
+		t.Errorf("expected single %d-check can-i pass, got %d", len(addonInstallPermissionChecks), got)
 	}
 }
 
@@ -3593,7 +3593,7 @@ func TestResolveClusterAddons_OutdatedKueueDeclinedBeforeJobSetInstallAndCRDPres
 		t.Cleanup(func() { shell.PromptYesNo = origPrompt })
 		shell.PromptYesNo = func(string) bool { return false }
 
-		canIYes := make([]shell.CommandResult, len(kueuePermissionChecks))
+		canIYes := make([]shell.CommandResult, len(addonInstallPermissionChecks))
 		for i := range canIYes {
 			canIYes[i] = shell.CommandResult{ExitCode: 0, Stdout: "yes"}
 		}

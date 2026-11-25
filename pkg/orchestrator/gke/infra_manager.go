@@ -81,8 +81,8 @@ var (
 // errEndpointsUnreadable marks a failed endpoint read that callers may retry.
 var errEndpointsUnreadable = errors.New("endpoints could not be read")
 
-// jobSetInstallPermissionChecks are the cluster-scoped permissions needed to install JobSet.
-var jobSetInstallPermissionChecks = []permissionCheck{
+// addonInstallPermissionChecks are the cluster-scoped RBAC permissions required to install JobSet or Kueue.
+var addonInstallPermissionChecks = []permissionCheck{
 	{"create", "namespaces"},
 	{"create", "customresourcedefinitions.apiextensions.k8s.io"},
 	{"create", "clusterroles.rbac.authorization.k8s.io"},
@@ -124,7 +124,7 @@ func (g *GKEOrchestrator) checkResourceExists(kind, name, namespace string) (exi
 }
 
 func (g *GKEOrchestrator) checkJobSetInstallPermissions() error {
-	if missing := g.missingPermissions(jobSetInstallPermissionChecks); len(missing) > 0 {
+	if missing := g.missingPermissions(addonInstallPermissionChecks); len(missing) > 0 {
 		return fmt.Errorf("JobSet is not installed, and your account cannot install it: missing RBAC permissions [%s]. gcluster made no changes. "+
 			"Ask your cluster administrator to install JobSet (for example with jobset.install: true in the kubectl-apply module) or to run this command once", strings.Join(missing, ", "))
 	}
@@ -989,6 +989,10 @@ func (g *GKEOrchestrator) buildKueueAddonProbe(crdInstalled, depInstalled bool, 
 	}
 }
 
+func (p kueueAddonProbe) isPresent() bool {
+	return p.state == addonStateInstalled || p.state == addonStatePartial || p.crdExists || p.dep != nil
+}
+
 func (g *GKEOrchestrator) needsKueueUpgrade(probe kueueAddonProbe) bool {
 	return g.mode != orchestrator.TypeK8s && probe.currentVersion != "" && g.isVersionBelow(probe.currentVersion, defaultKueueVersion)
 }
@@ -1025,7 +1029,7 @@ func (g *GKEOrchestrator) ensureInstalledKueueReady(probe kueueAddonProbe, clust
 			if err := g.checkKueueInstallPermissions(defaultKueueVersion); err != nil {
 				return err
 			}
-			return g.handleKueueReinstallation(defaultKueueVersion, reason)
+			return g.handleKueueReinstallation(defaultKueueVersion, reason, probe.isPresent())
 		}
 	}
 	if err := g.waitForKueueWebhookFast(probe.dep); err != nil {
@@ -1152,8 +1156,8 @@ func (g *GKEOrchestrator) resolveMissingAddons(clusterName string, dryRun, missi
 }
 
 func (g *GKEOrchestrator) preflightAddonMutations(clusterName string, missingJobSet, missingKueue, upgradeKueue bool) error {
-	// kueuePermissionChecks and jobSetInstallPermissionChecks require the same 6 cluster-admin verbs,
-	// so checking once covers both add-ons without running duplicate kubectl auth can-i subprocesses.
+	// JobSet and Kueue share addonInstallPermissionChecks, so checking once covers both add-ons
+	// without running duplicate kubectl auth can-i subprocesses.
 	if missingKueue || upgradeKueue {
 		if g.mode != orchestrator.TypeK8s && g.checkDynamicSlicingViaGKE() {
 			return fmt.Errorf("automatic Kueue installation/modification blocked: cluster %s is set up for Dynamic-Slicing (found 'PROVISION_ONLY' in node pool placementPolicy). Automatic installation or modification of Kueue could conflict with custom topology configurations. Please install Kueue and required CRDs manually", clusterName)
@@ -1185,7 +1189,7 @@ func (g *GKEOrchestrator) installMissingAddons(clusterName string, missingJobSet
 	}
 	if upgradeKueue {
 		reason := fmt.Sprintf("Current Kueue version %s is below target %s.", kueueProbe.currentVersion, defaultKueueVersion)
-		if err := g.handleKueueReinstallation(defaultKueueVersion, reason); err != nil {
+		if err := g.handleKueueReinstallation(defaultKueueVersion, reason, kueueProbe.isPresent()); err != nil {
 			return false, err
 		}
 	}

@@ -722,18 +722,38 @@ func TestEnsurePriorityClassesInstalled_Present(t *testing.T) {
 func TestHandleKueueReinstallation_UserDeclines(t *testing.T) {
 	origPrompt := shell.PromptYesNo
 	t.Cleanup(func() { shell.PromptYesNo = origPrompt })
-	shell.PromptYesNo = func(prompt string) bool { return false }
 
-	orc := &GKEOrchestrator{}
+	t.Run("installed_warns_about_deleting_workloads", func(t *testing.T) {
+		var capturedPrompt string
+		shell.PromptYesNo = func(prompt string) bool {
+			capturedPrompt = prompt
+			return false
+		}
+		orc := &GKEOrchestrator{}
+		err := orc.handleKueueReinstallation("v0.15.2", "Current Kueue version v0.14.0 is below target v0.15.2.", true)
+		if err == nil || !strings.Contains(err.Error(), "user declined to re-install Kueue") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(capturedPrompt, "WARNING: This deletes all queued and suspended workloads") {
+			t.Errorf("expected deletion warning when Kueue is installed, got prompt:\n%s", capturedPrompt)
+		}
+	})
 
-	err := orc.handleKueueReinstallation("v0.15.2", "Test reason")
-	if err == nil {
-		t.Fatal("expected error when user declines, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "user declined to re-install Kueue") {
-		t.Errorf("unexpected error: %v", err)
-	}
+	t.Run("not_installed_omits_deletion_warning", func(t *testing.T) {
+		var capturedPrompt string
+		shell.PromptYesNo = func(prompt string) bool {
+			capturedPrompt = prompt
+			return false
+		}
+		orc := &GKEOrchestrator{}
+		err := orc.handleKueueReinstallation("v0.15.2", "Kueue is not installed.", false)
+		if err == nil || !strings.Contains(err.Error(), "user declined to install Kueue") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if strings.Contains(capturedPrompt, "deletes all queued") || strings.Contains(capturedPrompt, "WARNING:") {
+			t.Errorf("fresh install prompt must not warn about deleting queued workloads, got prompt:\n%s", capturedPrompt)
+		}
+	})
 }
 
 func TestRenderClusterQueue_NAP(t *testing.T) {
@@ -1848,7 +1868,7 @@ func assertReinstallAbortsBeforeDelete(t *testing.T) {
 			},
 		},
 	}
-	if err := orc.handleKueueReinstallation("v0.15.2", "incomplete"); err == nil || !strings.Contains(err.Error(), "github unreachable") {
+	if err := orc.handleKueueReinstallation("v0.15.2", "incomplete", true); err == nil || !strings.Contains(err.Error(), "github unreachable") {
 		t.Fatalf("handleKueueReinstallation(download error) = %v, want github unreachable", err)
 	}
 	if deleteCalled {
@@ -1895,7 +1915,7 @@ func assertInvalidManifestBodiesAbortBeforeDelete(t *testing.T, orc *GKEOrchestr
 				}, nil
 			},
 		}
-		err := orc.handleKueueReinstallation("v0.15.2", "incomplete")
+		err := orc.handleKueueReinstallation("v0.15.2", "incomplete", true)
 		if err == nil || !strings.Contains(err.Error(), tc.wantSubstr) {
 			t.Fatalf("handleKueueReinstallation(%s) = %v, want substring %q", tc.name, err, tc.wantSubstr)
 		}
@@ -1922,7 +1942,7 @@ func assertUnwritableHomeAbortsBeforeDelete(t *testing.T, orc *GKEOrchestrator, 
 			}, nil
 		},
 	}
-	err := orc.handleKueueReinstallation("v0.15.2", "incomplete")
+	err := orc.handleKueueReinstallation("v0.15.2", "incomplete", true)
 	if err == nil || !strings.Contains(err.Error(), "failed to create directory for generated manifests") {
 		t.Fatalf("handleKueueReinstallation(unwritable HOME) = %v, want directory creation error", err)
 	}
@@ -2025,7 +2045,7 @@ func assertHappyPathKueueReinstallOrder(t *testing.T) {
 	}
 	snapLogs, restoreLogs := logging.CaptureForTesting(t)
 	defer restoreLogs()
-	if err := orc.handleKueueReinstallation("v0.15.2", "incomplete"); err != nil {
+	if err := orc.handleKueueReinstallation("v0.15.2", "incomplete", true); err != nil {
 		t.Fatalf("handleKueueReinstallation(happy path) error = %v", err)
 	}
 	wantOrder := []string{"download", "delete", "apply"}
@@ -2038,10 +2058,35 @@ func assertHappyPathKueueReinstallOrder(t *testing.T) {
 	}
 
 	applyMustFail = true
-	applyErr := orc.handleKueueReinstallation("v0.15.2", "incomplete")
+	applyErr := orc.handleKueueReinstallation("v0.15.2", "incomplete", true)
 	wantRecovery := "kubectl --context gke-ctx apply -f"
 	if applyErr == nil || !strings.Contains(applyErr.Error(), wantRecovery) {
 		t.Fatalf("handleKueueReinstallation(apply failure) = %v, want recovery hint %q", applyErr, wantRecovery)
+	}
+
+	applyMustFail = false
+	assertFreshKueueInstallSkipsDelete(t, orc, &events)
+}
+
+func assertFreshKueueInstallSkipsDelete(t *testing.T, orc *GKEOrchestrator, events *[]string) {
+	t.Helper()
+	*events = nil
+	var freshPrompt string
+	shell.PromptYesNo = func(p string) bool {
+		freshPrompt = p
+		return true
+	}
+	if err := orc.handleKueueReinstallation("v0.15.2", "Kueue is not installed.", false); err != nil {
+		t.Fatalf("handleKueueReinstallation(kueueInstalled=false) error = %v", err)
+	}
+	if strings.Contains(freshPrompt, "deletes all queued") {
+		t.Errorf("kueueInstalled=false prompt unexpectedly warned about deleting workloads:\n%s", freshPrompt)
+	}
+	if slices.Contains(*events, "delete") {
+		t.Errorf("kueueInstalled=false must not delete Kueue CRDs, events=%v", *events)
+	}
+	if !slices.Equal(*events, []string{"download", "apply"}) {
+		t.Errorf("kueueInstalled=false events = %v, want [download apply]", *events)
 	}
 }
 
