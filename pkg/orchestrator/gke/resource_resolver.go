@@ -344,6 +344,9 @@ func validateTPU7xTopology(topology string, machineType string) error {
 }
 
 func (g *GKEOrchestrator) hasSliceAdmissionCheck() bool {
+	if !g.kueueEnabled() {
+		return false
+	}
 	acResult := g.kubectl("get", "admissioncheck", "-o", "json")
 	if acResult.ExitCode != 0 {
 		logging.Warn("Failed to query AdmissionChecks. Assuming dynamic-slicing not active.")
@@ -374,6 +377,9 @@ func (g *GKEOrchestrator) hasSliceAdmissionCheck() bool {
 }
 
 func (g *GKEOrchestrator) hasSlicingTopologies() bool {
+	if !g.kueueEnabled() {
+		return false
+	}
 	if g.slicingTopologiesChecked {
 		return g.slicingTopologiesDetected
 	}

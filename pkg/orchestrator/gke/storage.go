@@ -2376,7 +2376,11 @@ func (sm *StorageManager) validateStorageClassExists(storageClass string, dryRun
 }
 
 func (sm *StorageManager) runCloudStoragePreflight(projectID, clusterLocation string, profileMounts []profileMount, inlineBuckets []string, dryRun bool) error {
-	if shell.IsKnownAirGapped() {
+	var getenv func(string) string
+	if sm.orchestrator != nil {
+		getenv = sm.orchestrator.getenv()
+	}
+	if shell.IsAirGappedEnv(getenv) {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), storageAPITimeout)
@@ -2862,10 +2866,24 @@ func (g *GKEOrchestrator) gatewayRemoved(ns, claim string) (bool, string, error)
 }
 
 func (g *GKEOrchestrator) rollBackJob(ns, jobSetName string, cause error) error {
+	if !g.jobSetEnabled() {
+		return g.rollBackBatchJob(ns, jobSetName, cause)
+	}
 	if err := g.kubeClient.DeleteJobSet(ns, jobSetName); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("%w; rolling back job %q also failed, delete it with `%s`: %v", cause, jobSetName, kubectlCommandLine(g.kubeContext, "delete", "jobset", jobSetName, "-n", ns), err)
 	}
 	return fmt.Errorf("job %q was not started: %w", jobSetName, cause)
+}
+
+func (g *GKEOrchestrator) rollBackBatchJob(ns, name string, cause error) error {
+	if _, _, _, err := g.cancelFallbackBatchJob(ns, name); err != nil {
+		return fmt.Errorf("%w; rolling back batch/v1 job %q also failed, delete it with `%s` and `%s`: %v",
+			cause, name,
+			kubectlCommandLine(g.kubeContext, "delete", "job", name, "-n", ns),
+			kubectlCommandLine(g.kubeContext, "delete", "service", name, "-n", ns),
+			err)
+	}
+	return fmt.Errorf("job %q was not started: %w", name, cause)
 }
 
 // manifestGatewayClaims returns the toolkit gateway PVCs declared in manifest.

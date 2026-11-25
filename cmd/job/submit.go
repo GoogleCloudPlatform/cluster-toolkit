@@ -96,15 +96,21 @@ var (
 
 var SubmitCmd = &cobra.Command{
 	Use:   "submit",
-	Short: "Submits a workload on a GKE cluster using JobSet.",
-	Long: `The 'submit' command deploys a workload (Kubernetes JobSet)
-on a GKE cluster, integrated with Kueue. Image can be pre-built (--image)
-or built on-the-fly using Crane (--base-image with --build-context).
+	Short: "Submits a workload on a GKE cluster using JobSet (or standalone batch/v1 Job).",
+	Long: `The 'submit' command deploys a workload on a GKE cluster using Kubernetes
+JobSet integrated with Kueue, or falls back to a standalone batch/v1 Indexed Job
+when JobSet is absent or disabled (single-slice, non-Pathways workloads). Image
+can be pre-built (--image) or built on-the-fly using Crane (--base-image with
+--build-context).
 
 It accepts parameters for the container image, command to execute, accelerator type,
-and JobSet/Kueue specific configurations like workload name, queue, nodes, and restarts.`,
+and workload/queueing configurations like workload name, queue, nodes, and restarts.`,
 	RunE: runSubmitCmd,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		pathways.RunSPSWorkload = strings.TrimSpace(pathways.RunSPSWorkload)
+		if cmd.Flags().Changed("pathways-run-sps-workload") && pathways.RunSPSWorkload == "" {
+			return fmt.Errorf("--pathways-run-sps-workload cannot be empty")
+		}
 		if err := validateWorkloadNameLength(workloadName, isPathwaysJob); err != nil {
 			return err
 		}

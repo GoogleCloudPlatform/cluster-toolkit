@@ -5462,6 +5462,29 @@ func TestSubmitWorkloadTemplate_DispatchesByJobKind(t *testing.T) {
 	}
 }
 
+func TestGenerateAndSubmitManifests_Tier3JobTemplateDispatch(t *testing.T) {
+	tier3Orc := newCustomTemplateTestOrc(t, "")
+	tier3Orc.submissionSession = submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: false}}
+	_, profile := newCustomTemplateBaseOpts()
+	job := newCPUPathwaysJob("dispatch-tier3")
+	job.IsPathwaysJob = false
+	job.DryRunManifest = filepath.Join(t.TempDir(), "tier3-manifest.yaml")
+	if err := tier3Orc.generateAndSubmitManifests(job, "img:v1", profile, false, false); err != nil {
+		t.Fatalf("generateAndSubmitManifests(Tier-3) failed: %v", err)
+	}
+	content, err := os.ReadFile(job.DryRunManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := string(content)
+	if !strings.Contains(rendered, "kind: Service") || !strings.Contains(rendered, "apiVersion: batch/v1") || !strings.Contains(rendered, "kind: Job\n") {
+		t.Errorf("expected standalone Service + batch/v1 Job manifest, got:\n%s", rendered)
+	}
+	if strings.Contains(rendered, "kind: JobSet") {
+		t.Errorf("Tier-3 dispatch must not render JobSet, got:\n%s", rendered)
+	}
+}
+
 // TestGeneratePathwaysManifest_PodFailurePolicyScopingByMode pins podFailurePolicyContainers on the Pathways head:
 // scoped to workload-container when the head runs the workload, pod-wide (no containerName) for headless and SPS
 // heads that have no workload container, and valid in every mode.
@@ -6411,5 +6434,74 @@ func TestWarnPathwaysHostNetworkManifest(t *testing.T) {
 				t.Errorf("warnPathwaysHostNetworkManifest() = %v, want %v", got, tc.wantWarn)
 			}
 		})
+	}
+}
+
+func TestGenerateJobManifest_TypedServiceAndIndexedJobYAML(t *testing.T) {
+	g := newGPUDerivationTestOrc(t)
+	g.namespace = "ml-ns"
+
+	opts := ManifestOptions{
+		WorkloadName:                  "tier3-job",
+		FullImageName:                 "registry.local/train:v1",
+		CommandToRun:                  "python train.py",
+		ComputeType:                   "g2-standard-48",
+		MachineType:                   "g2-standard-48",
+		ClusterLocation:               "us-central1-a",
+		NumSlices:                     1,
+		NodesPerSlice:                 2,
+		ParallelContainers:            1,
+		TtlSecondsAfterFinished:       3600,
+		TerminationGracePeriodSeconds: 30,
+	}
+	profile := JobProfile{IsCPUMachine: false, CapacityCount: 4}
+
+	manifest, err := g.GenerateJobManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateJobManifest() err = %v", err)
+	}
+	if err := ValidateJobSetManifest(manifest); err != nil {
+		t.Fatalf("ValidateJobSetManifest(Service+Job) err = %v", err)
+	}
+	if err := ValidateJobSetManifest("apiVersion: v1\nkind: Service\nspec:\n  ports: \"not-a-list\"\n"); err == nil {
+		t.Fatalf("ValidateJobSetManifest(malformed Service) = nil, want parse error")
+	}
+	docs, err := splitYAMLDocuments(manifest)
+	if err != nil || len(docs) != 2 {
+		t.Fatalf("splitYAMLDocuments() len=%d err=%v, want 2 (Service + Job)", len(docs), err)
+	}
+	assertHeadlessServiceYAML(t, docs[0], "tier3-job")
+	assertIndexedJobYAML(t, docs[1], "tier3-job")
+}
+
+func assertHeadlessServiceYAML(t *testing.T, doc, name string) {
+	t.Helper()
+	var svc corev1.Service
+	if err := k8syaml.Unmarshal([]byte(doc), &svc); err != nil {
+		t.Fatalf("unmarshal Service failed: %v", err)
+	}
+	if svc.Kind != "Service" || svc.Name != name || svc.Spec.ClusterIP != corev1.ClusterIPNone {
+		t.Errorf("unexpected headless Service header: %+v", svc)
+	}
+	if svc.Labels[workloadLabel] != name || svc.Spec.Selector["batch.kubernetes.io/job-name"] != name {
+		t.Errorf("unexpected headless Service labels/selector: labels=%v selector=%v", svc.Labels, svc.Spec.Selector)
+	}
+}
+
+func assertIndexedJobYAML(t *testing.T, doc, name string) {
+	t.Helper()
+	var job batchv1.Job
+	if err := k8syaml.Unmarshal([]byte(doc), &job); err != nil {
+		t.Fatalf("unmarshal Job failed: %v", err)
+	}
+	if job.Kind != "Job" || job.Name != name || job.Spec.Template.Spec.Subdomain != name {
+		t.Errorf("unexpected batch/v1 Job header: %+v", job)
+	}
+	if job.Spec.CompletionMode == nil || *job.Spec.CompletionMode != batchv1.IndexedCompletion {
+		t.Errorf("expected Indexed completionMode, got %v", job.Spec.CompletionMode)
+	}
+	limits := job.Spec.Template.Spec.Containers[0].Resources.Limits
+	if qty, ok := limits[corev1.ResourceName("nvidia.com/gpu")]; !ok || qty.String() != "4" {
+		t.Errorf("GPU limits = %v, want nvidia.com/gpu=4", limits)
 	}
 }
