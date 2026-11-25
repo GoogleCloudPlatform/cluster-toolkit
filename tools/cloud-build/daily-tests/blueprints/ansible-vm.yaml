@@ -70,30 +70,6 @@ deployment_groups:
         family: ubuntu-2404-lts-arm64
         project: ubuntu-os-cloud
 
-  - id: workstation-debian-12
-    source: modules/compute/vm-instance
-    use:
-    - network1
-    - startup-script
-    settings:
-      name_prefix: deb12
-      add_deployment_name_before_prefix: true
-      instance_image:
-        family: debian-12
-        project: debian-cloud
-
-  - id: workstation-debian-13
-    source: modules/compute/vm-instance
-    use:
-    - network1
-    - startup-script
-    settings:
-      name_prefix: deb13
-      add_deployment_name_before_prefix: true
-      instance_image:
-        family: debian-13
-        project: debian-cloud
-
   - id: workstation-rocky-9
     source: modules/compute/vm-instance
     use:
@@ -124,8 +100,6 @@ deployment_groups:
       instance_names:
       - $(workstation-ubuntu-2404.name[0])
       - $(workstation-ubuntu-2404-arm.name[0])
-      - $(workstation-debian-12.name[0])
-      - $(workstation-debian-13.name[0])
       - $(workstation-rocky-9.name[0])
       - $(workstation-rhel-9.name[0])
       timeout: 7200

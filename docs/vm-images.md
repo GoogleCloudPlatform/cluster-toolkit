@@ -16,7 +16,7 @@
 For information on customizing VM images with extra software and configuration
 settings, see [Building Images](image-building.md).
 
-Please see the [blueprint catalog](https://cloud.google.com/cluster-toolkit/docs/setup/blueprint-catalog) for examples.
+Please see the [blueprint catalog](https://cloud.google.com/cluster-toolkit/docs/setup/cluster-blueprint-catalog) for examples.
 
 ## Specifying Blueprint Images
 
@@ -38,7 +38,7 @@ either the specific module definition or the global variables. The
 instance_image:
  family: aci-cpu-rocky-linux-9-slurm-2605-amd64
  project: advanced-compute-images                  # If family is defined, omit name
- name: aci-cpu-rocky-linux-9-slurm-2605-amd64-v20261008-1  # If name is defined, omit family
+ # name: aci-cpu-rocky-linux-9-slurm-2605-amd64-v20261008-1  # If name is defined, omit family
 ```
 
 The `project` setting defines the space where the image will be found. Either
@@ -112,6 +112,10 @@ project and the new image name in the `instance_image` field discussed in
 ### Rocky Linux 9
 
 Rocky Linux 9 is the primary supported VM image for HPC workloads on Google Cloud.
+The `vm-instance`, `batch-job-template` and `custom-image` modules default to
+the `aci-cpu-rocky-linux-9-amd64` image family in the `advanced-compute-images`
+project. The [Overview of Advanced Compute Images][aci-images] lists the machine
+series that each image family supports.
 
 ### Ubuntu 24.04 LTS
 
@@ -163,13 +167,13 @@ description of our support for Windows images.
   <th>Shared filestore</th>
   <th></th>
   <td><a href="../examples/hpc-slurm.yaml">✓</a></td>
-  <td><a href="../examples/ml-slurm-g4.yaml">✓</a></td>
+  <td><a href="../examples/ml-slurm-g4-vgpu.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Startup script</th>
   <th></th>
   <td><a href="../community/examples/hpc-slurm-ramble-gromacs.yaml">✓</a></td>
-  <td><a href="../examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml">✓</a></td>
+  <td><a href="../examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml">✓</a></td>
 </tr>
 
 <tr>
@@ -227,10 +231,8 @@ images in the `advanced-compute-images` project, which are documented in the
 which images are available, their naming convention, and what software is
 pre-installed on them.
 
-Slurm images are compatible by the minor version releases of the Terraform and
-Packer modules. The default Slurm image family and vendored Slurm module
-implementation used by your copy of the Toolkit in the local filesystem can be
-inspected in
+The default Slurm image family and vendored Slurm module implementation used by
+your copy of the Toolkit in the local filesystem can be inspected in
 `community/modules/scheduler/schedmd-slurm-gcp-v6-controller/variables_controller_instance.tf`
 and `community/modules/internal/slurm-gcp/`.
 
@@ -243,15 +245,16 @@ Commonly used Slurm image families in `advanced-compute-images` include:
 <a name="slurm-on-gcp-custom-images"></a>
 ### Custom Slurm Images
 
-> [!NOTE]
-> Set the `instance_image_custom` to `true` in the blueprint to let terraform
-> know you are aware that you are using a custom image.
-
-See: [Image Builder](../examples/README.md#image-builderyaml-)
+You can build a custom Slurm image with `modules/packer/custom-image` either by
+layering software onto a pre-built Slurm image (see
+[Image Builder](../examples/README.md#image-builderyaml-)) or by installing
+Slurm onto a base OS image via `ansible-pull` (see
+[`hpc-build-slurm-image.yaml`](../community/examples/hpc-build-slurm-image.yaml)).
 
 > [!WARNING]
-> When building custom images, the Terraform and Packer modules must share the
-> same version.
+> When installing Slurm from `GoogleCloudPlatform/slurm-gcp` in a custom image
+> build, use a `slurm-gcp` git ref compatible with the vendored module in
+> `community/modules/internal/slurm-gcp/`.
 
 These instructions apply to the following modules:
 

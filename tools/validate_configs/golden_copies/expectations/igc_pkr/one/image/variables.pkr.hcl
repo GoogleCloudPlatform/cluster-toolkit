@@ -29,9 +29,9 @@ variable "machine_type" {
 }
 
 variable "disk_size" {
-  description = "Size of disk image in GB"
+  description = "Size of disk image in GB. If unset, the disk is sized to match the source image."
   type        = number
-  default     = 50
+  default     = null
 }
 
 variable "disk_type" {
