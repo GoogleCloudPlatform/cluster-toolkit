@@ -24,6 +24,7 @@
 
 | Name | Type |
 | ---- | ---- |
+| [google_compute_firewall.controller_nfs_allow_gke](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall) | resource |
 | [google_storage_bucket_object.gke_nodeset_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/storage_bucket) | data source |
 
@@ -32,6 +33,7 @@
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | projects/{{project}}/locations/{{location}}/clusters/{{cluster}} | `string` | n/a | yes |
+| <a name="input_create_nfs_firewall_rule"></a> [create\_nfs\_firewall\_rule](#input\_create\_nfs\_firewall\_rule) | If true, create a VPC firewall rule that allows NFS traffic (TCP/UDP ports<br/>111, 2049 and 20048) from this nodeset's GKE subnetwork to the Slurm<br/>controller, so GKE nodes can mount the Slurm key directory. The controller<br/>module denies controller NFS traffic from untagged sources by default. Set<br/>to false if you manage firewall rules yourself. If the GKE subnetwork is not<br/>one of the controller's subnetworks, also add its range to the controller's<br/>extra\_nfs\_client\_cidrs. | `bool` | `true` | no |
 | <a name="input_filestore_id"></a> [filestore\_id](#input\_filestore\_id) | An array of identifier for a filestore with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`. | `list(string)` | n/a | yes |
 | <a name="input_image"></a> [image](#input\_image) | The image for slurm daemon | `string` | n/a | yes |
 | <a name="input_instance_templates"></a> [instance\_templates](#input\_instance\_templates) | The URLs of Instance Templates | `list(string)` | n/a | yes |

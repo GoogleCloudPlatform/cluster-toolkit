@@ -127,3 +127,18 @@ variable "slurm_control_host_port" {
     error_message = "The slurm_control_host_port must be a valid port number between 1 and 65535."
   }
 }
+
+variable "create_nfs_firewall_rule" {
+  description = <<-EOD
+    If true, create a VPC firewall rule that allows NFS traffic (TCP/UDP ports
+    111, 2049 and 20048) from this nodeset's GKE subnetwork to the Slurm
+    controller, so GKE nodes can mount the Slurm key directory. The controller
+    module denies controller NFS traffic from untagged sources by default. Set
+    to false if you manage firewall rules yourself. If the GKE subnetwork is not
+    one of the controller's subnetworks, also add its range to the controller's
+    extra_nfs_client_cidrs.
+    EOD
+  type        = bool
+  default     = true
+  nullable    = false
+}
