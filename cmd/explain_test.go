@@ -598,9 +598,9 @@ func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(outMpiGromacs, "Blueprint: community/examples/hpc-slurm-gromacs.yaml"), Equals, true)
 
-	outTpuMaxText, err := runExplainForTest("slurm", "tpu", "maxtext")
+	outTpuSlurm, err := runExplainForTest("slurm", "tpu")
 	c.Assert(err, IsNil)
-	c.Check(strings.Contains(outTpuMaxText, "Blueprint: community/examples/hpc-slurm6-tpu-maxtext.yaml"), Equals, true)
+	c.Check(strings.Contains(outTpuSlurm, "Blueprint: examples/machine-learning/tpu-v5e-v5p-v6e/tpu-slurm-blueprint.yaml"), Equals, true)
 
 	// 4c. Specific workload tokens in module IDs/sources or non-segment path substrings (vllm, gemma, spack)
 	outGkeVLLM, err := runExplainForTest("gke", "vllm")
@@ -660,12 +660,16 @@ func (s *MySuite) TestExplainWorkloadAcceleratorsAndOtherExactMatches(c *C) {
 	c.Assert(json.Unmarshal([]byte(outHPCJSON), &hpcRes), IsNil)
 	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/alphaevolve/alpha-evolve-experiment.yaml"), Equals, false)
 	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/kms-key-per-service.yaml"), Equals, false)
-	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/hpc-slurm6-tpu.yaml"), Equals, false)
-	c.Check(slices.Contains(hpcRes.OtherExactMatches, "community/examples/hpc-slurm6-tpu-maxtext.yaml"), Equals, false)
 }
 
 func runExplainJSONForTest(args ...string) (string, error) {
 	explainFlags.format = "json"
+	defer func() { explainFlags.format = "text" }()
+	return runExplainForTest(args...)
+}
+
+func runExplainYAMLForTest(args ...string) (string, error) {
+	explainFlags.format = "yaml"
 	defer func() { explainFlags.format = "text" }()
 	return runExplainForTest(args...)
 }
@@ -704,6 +708,124 @@ func (s *MySuite) TestExplainModuleDeprecatedAndValidations(c *C) {
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(kaJSONOut, "install=optional(bool)"), Equals, true)
 	c.Check(strings.Contains(kaJSONOut, "config_template_vars"), Equals, true)
+}
+
+func (s *MySuite) TestExplainModuleInputConstraints(c *C) {
+	_, cleanup := setupExplainTestFS(c)
+	defer cleanup()
+
+	results := map[string]ExplainModuleResult{}
+	input := func(mod, name string) ExplainModuleInput {
+		res, ok := results[mod]
+		if !ok {
+			out, err := runExplainJSONForTest(mod)
+			c.Assert(err, IsNil)
+			c.Assert(json.Unmarshal([]byte(out), &res), IsNil)
+			results[mod] = res
+		}
+		for _, in := range append(slices.Clone(res.RequiredInputs), res.OptionalInputs...) {
+			if in.Name == name {
+				return in
+			}
+		}
+		c.Fatalf("input %q not found in %s", name, mod)
+		return ExplainModuleInput{}
+	}
+
+	// Terraform validation and metadata.yaml allowed_enum agree.
+	tput := input("modules/file-system/managed-lustre", "per_unit_storage_throughput").Constraints
+	c.Assert(tput, NotNil)
+	c.Check(tput.AllowedValues, DeepEquals, []interface{}{125.0, 250.0, 500.0, 1000.0})
+	c.Check(tput.AllowNull, Equals, true)
+	c.Check(tput.Sources, DeepEquals, []string{"metadata", "terraform"})
+
+	ohm := input("modules/compute/vm-instance", "on_host_maintenance").Constraints
+	c.Assert(ohm, NotNil)
+	c.Check(ohm.AllowedValues, DeepEquals, []interface{}{"MIGRATE", "TERMINATE"})
+	c.Check(ohm.AllowNull, Equals, true)
+
+	size := input("modules/file-system/filestore", "size_gb").Constraints
+	c.Assert(size, NotNil)
+	c.Assert(size.Min, NotNil)
+	c.Check(*size.Min, Equals, 1024.0)
+	c.Check(size.MinExclusive, Equals, false)
+
+	uri := input("modules/file-system/managed-lustre", "import_gcs_bucket_uri").Constraints
+	c.Assert(uri, NotNil)
+	c.Check(uri.Pattern, Equals, "^(gs://.*)?$")
+	c.Check(uri.Sources, DeepEquals, []string{"metadata"})
+
+	coll := input("community/modules/ai/discovery-engine", "collection").Constraints
+	c.Assert(coll, NotNil)
+	c.Check(coll.Pattern, Equals, "^[a-zA-Z0-9_-]{1,63}$")
+
+	resume := input("community/modules/compute/schedmd-slurm-gcp-v6-partition", "resume_timeout").Constraints
+	c.Assert(resume, NotNil)
+	c.Assert(resume.Min, NotNil)
+	c.Assert(resume.Max, NotNil)
+	c.Check(*resume.Min, Equals, 0.0)
+	c.Check(resume.MinExclusive, Equals, true)
+	c.Check(*resume.Max, Equals, 65536.0)
+	c.Check(resume.MaxExclusive, Equals, true)
+	c.Check(resume.AllowNull, Equals, true)
+
+	// The Terraform rule uses lower(trimspace(...)) and is skipped; the
+	// case-insensitive metadata.yaml enum still applies.
+	vnc := input("community/modules/remote-desktop/novnc-desktop", "vnc_backend").Constraints
+	c.Assert(vnc, NotNil)
+	c.Check(vnc.AllowedValues, DeepEquals, []interface{}{"tigervnc", "turbovnc"})
+	c.Check(vnc.CaseInsensitive, Equals, true)
+	c.Check(vnc.Sources, DeepEquals, []string{"metadata"})
+
+	// Cross-field rules, regexes over joined variables and object inputs keep
+	// only their messages.
+	ports := input("modules/network/multivpc", "min_ports_per_vm")
+	c.Check(ports.Constraints, IsNil)
+	c.Check(len(ports.Validations) > 0, Equals, true)
+	saName := input("modules/project/service-account", "name")
+	c.Check(saName.Constraints, IsNil)
+	c.Check(len(saName.Validations) > 0, Equals, true)
+	c.Check(input("modules/compute/gke-node-pool", "placement_policy").Constraints, IsNil)
+
+	// Terraform allow_null is preserved alongside metadata regex/range rules,
+	// including unparsed TF null-guards, and metadata display casing is kept.
+	npName := input("modules/compute/gke-node-pool", "name").Constraints
+	c.Assert(npName, NotNil)
+	c.Check(npName.AllowNull, Equals, true)
+	c.Check(npName.Sources, DeepEquals, []string{"metadata", "terraform"})
+
+	threads := input("modules/compute/gke-node-pool", "threads_per_core").Constraints
+	c.Assert(threads, NotNil)
+	c.Check(*threads.Min, Equals, 0.0)
+	c.Check(*threads.Max, Equals, 2.0)
+	c.Check(threads.AllowNull, Equals, true)
+
+	retry := input("modules/scheduler/batch-job-template", "max_retry_count").Constraints
+	c.Assert(retry, NotNil)
+	c.Check(*retry.Min, Equals, 0.0)
+	c.Check(*retry.Max, Equals, 10.0)
+	c.Check(retry.AllowNull, Equals, true)
+
+	binding := input("modules/file-system/gke-storage", "sc_volume_binding_mode").Constraints
+	c.Assert(binding, NotNil)
+	c.Check(binding.AllowedValues, DeepEquals, []interface{}{"Immediate", "WaitForFirstConsumer"})
+	c.Check(binding.CaseInsensitive, Equals, true)
+
+	// Compound triggers maps in metadata.yaml attach messages to trigger vars.
+	dwsFlex := input("community/modules/compute/schedmd-slurm-gcp-v6-nodeset", "dws_flex")
+	c.Check(len(dwsFlex.Validations) > 0, Equals, true)
+
+	// YAML output serializes constraints with matching snake_case tags and zero bounds.
+	yamlOut, err := runExplainYAMLForTest("modules/scheduler/batch-job-template")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(yamlOut, "min: 0"), Equals, true)
+	c.Check(strings.Contains(yamlOut, "max: 10"), Equals, true)
+	c.Check(strings.Contains(yamlOut, "allow_null: true"), Equals, true)
+
+	// Text output does not print the new field.
+	textOut, err := runExplainForTest("modules/file-system/managed-lustre")
+	c.Assert(err, IsNil)
+	c.Check(strings.Contains(textOut, "allowed_values"), Equals, false)
 }
 
 func (s *MySuite) TestExplainBlueprintGlobalVsBlueprintVars(c *C) {

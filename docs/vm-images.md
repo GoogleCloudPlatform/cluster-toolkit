@@ -170,14 +170,14 @@ description of our support for Windows images.
 <tr>
   <th>Shared filestore</th>
   <th></th>
-  <td>✓</td>
+  <td></td>
   <td><a href="../examples/hpc-slurm.yaml">✓</a></td>
-  <td><a href="../community/examples/hpc-slurm-ubuntu2204.yaml">✓</a></td>
+  <td><a href="../examples/ml-slurm-g4.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Startup script</th>
   <th></th>
-  <td>✓</td>
+  <td></td>
   <td><a href="../community/examples/hpc-slurm-ramble-gromacs.yaml">✓</a></td>
   <td>✓</td>
 </tr>
@@ -260,8 +260,7 @@ The latest GitHub release supports
 > Set the `instance_image_custom` to `true` in the blueprint to let terraform
 > know you are aware that you are using a custom image.
 
-See: [ML Slurm](../examples/README.md#ml-slurmyaml-)
-and [Image Builder](../examples/README.md#image-builderyaml-)
+See: [Image Builder](../examples/README.md#image-builderyaml-)
 
 > [!WARNING]
 > When building custom images, the Terraform and Packer modules must share the

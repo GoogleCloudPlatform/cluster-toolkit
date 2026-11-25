@@ -106,14 +106,14 @@ vars:
 terraform_providers:
   google:
     source: hashicorp/google
-    version: ">= 8.0.0, <= 8.8.0"
+    version: ">= 8.0.0, <= 8.12.0"
     configuration:
       project: $(vars.project_id)
       region: $(vars.region)
       zone: $(vars.zone)
   google-beta:
     source: hashicorp/google-beta
-    version: ">= 8.0.0, <= 8.8.0"
+    version: ">= 8.0.0, <= 8.12.0"
     configuration:
       project: $(vars.project_id)
       region: $(vars.region)

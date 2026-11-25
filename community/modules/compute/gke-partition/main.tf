@@ -32,7 +32,6 @@ locals {
     partition_conf = local.partition_conf
 
     partition_nodeset     = [var.nodeset_name]
-    partition_nodeset_tpu = []
     partition_nodeset_dyn = []
     # Options
     enable_job_exclusive = true

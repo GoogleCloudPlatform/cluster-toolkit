@@ -15,6 +15,7 @@
 package gke
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -60,6 +61,10 @@ func RegisterProviders() {
 }
 
 func (g *GKEOrchestrator) configureK8sKubectl(clusterName string) error {
+	g.resetStorageCaches()
+	g.inventory = nil
+	g.addons = addonPlan{}
+	g.resetManagedDynamicClient()
 	trimmed := strings.TrimSpace(clusterName)
 	if strings.TrimSpace(g.kubeContext) != "" && (trimmed == "" || trimmed == g.k8sCluster || trimmed == g.kubeContext) {
 		return nil
@@ -68,7 +73,6 @@ func (g *GKEOrchestrator) configureK8sKubectl(clusterName string) error {
 	if err != nil {
 		g.kubeContext = ""
 		g.k8sCluster = ""
-		g.resetManagedDynamicClient()
 		return fmt.Errorf("failed to load kubeconfig: %w", err)
 	}
 	if name, _, resolvedCluster, ok := k8s.ResolveContext(cfg, trimmed); ok {
@@ -82,7 +86,6 @@ func (g *GKEOrchestrator) configureK8sKubectl(clusterName string) error {
 	}
 	g.kubeContext = ""
 	g.k8sCluster = ""
-	g.resetManagedDynamicClient()
 	if trimmed != "" {
 		return fmt.Errorf("kubeconfig context or cluster %q was not found; check 'kubectl config get-contexts'", trimmed)
 	}
@@ -90,6 +93,38 @@ func (g *GKEOrchestrator) configureK8sKubectl(clusterName string) error {
 		return fmt.Errorf("kubeconfig current-context %q was not found; run 'kubectl config get-contexts' or pass --cluster <context>", dangling)
 	}
 	return fmt.Errorf("no current-context configured in kubeconfig; run 'kubectl config use-context <context>' or pass --cluster <context>")
+}
+
+// DiscoverK8sInventory queries Kubernetes nodes, TPU Slices/PartitionTrees, and non-privileged API
+// group discovery without invoking gcloud, caching the snapshot on g.inventory.
+// Platform label schemes are never inferred from --node-constraint or --compute-type.
+func (g *GKEOrchestrator) DiscoverK8sInventory() (*k8s.Inventory, error) {
+	g.inventory = nil
+	schemeOverride, err := k8s.ResolveLabelSchemeOverride(g.getenv())
+	if err != nil {
+		return nil, err
+	}
+	kc, err := g.requireKubeClient()
+	if err != nil {
+		if errors.Is(err, errKubeClientUninitialized) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("failed to initialize Kubernetes API client for node inventory discovery: %w", err)
+	}
+	var apiChecker k8s.APIGroupChecker
+	if strings.TrimSpace(g.kubeContext) != "" {
+		apiChecker = g
+	}
+	inv, err := k8s.DiscoverInventory(kc, apiChecker, k8s.DiscoverOptions{
+		LabelSchemeOverride: schemeOverride,
+		HardwareResolver:    gceTPUHardwareResolver{},
+	})
+	if err != nil {
+		return nil, err
+	}
+	g.inventory = inv
+	inv.LogSummary()
+	return inv, nil
 }
 
 func (g *GKEOrchestrator) verifyK8sClusterReachable() error {
@@ -123,8 +158,8 @@ func scaleExpectedStreams(livePods, liveStreams, expectedPods, expectedStreams i
 	return max(expectedPods, streams)
 }
 
-func (g *GKEOrchestrator) allPodsLogsCommand(namespace, name string, maxReqs int, follow bool) string {
-	selector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name)
+func (g *GKEOrchestrator) allPodsLogsCommand(namespace, name string, maxReqs int, follow, isBatchJob bool) string {
+	selector := workloadPodSelector(name, isBatchJob)
 	args := []string{"logs", "-n", namespace, "-l", selector, "--all-containers", "--prefix"}
 	if follow {
 		args = append(args, "-f")
@@ -133,13 +168,13 @@ func (g *GKEOrchestrator) allPodsLogsCommand(namespace, name string, maxReqs int
 	return kubectlCommandLine(g.kubeContext, args...)
 }
 
-func (g *GKEOrchestrator) logMainOnlyDefault(name, namespace string, opts orchestrator.LogsOptions, podCount, maxReqs int) {
+func (g *GKEOrchestrator) logMainOnlyDefault(name, namespace string, opts orchestrator.LogsOptions, podCount, maxReqs int, isBatchJob bool) {
 	if podCount <= maxLogRequests {
 		logging.Info("Job has %d pods (> 5). Defaulting to --main-only logs. To fetch logs from all pods, run with --main-only=false.", podCount)
 		return
 	}
 	if g.mode == orchestrator.TypeK8s {
-		cmdLine := g.allPodsLogsCommand(namespace, name, maxReqs, opts.Follow)
+		cmdLine := g.allPodsLogsCommand(namespace, name, maxReqs, opts.Follow, isBatchJob)
 		logging.Info("Job has %d pods (> %d). Defaulting to --main-only logs. To view logs from all pods, run '%s'.", podCount, maxLogRequests, cmdLine)
 		return
 	}
@@ -147,9 +182,9 @@ func (g *GKEOrchestrator) logMainOnlyDefault(name, namespace string, opts orches
 	logging.Info("Job has %d pods (> %d). Defaulting to --main-only logs. To view logs from all pods, use the Google Cloud Console:\n%s", podCount, maxLogRequests, consoleURL)
 }
 
-func (g *GKEOrchestrator) maxLogRequestsError(name, namespace string, opts orchestrator.LogsOptions, podCount, maxReqs int) error {
+func (g *GKEOrchestrator) maxLogRequestsError(name, namespace string, opts orchestrator.LogsOptions, podCount, maxReqs int, isBatchJob bool) error {
 	if g.mode == orchestrator.TypeK8s {
-		cmdLine := g.allPodsLogsCommand(namespace, name, maxReqs, opts.Follow)
+		cmdLine := g.allPodsLogsCommand(namespace, name, maxReqs, opts.Follow, isBatchJob)
 		verb := "fetch"
 		if opts.Follow {
 			verb = "stream"

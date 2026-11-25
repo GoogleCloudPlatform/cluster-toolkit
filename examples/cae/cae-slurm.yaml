@@ -263,9 +263,9 @@ deployment_groups:
     source: community/modules/remote-desktop/chrome-remote-desktop
     use: [network, homefs, appsfs]
     settings:
-      instance_image:
-        project: debian-cloud
-        family: debian-12
+      # The default image installs the GRID 595 driver, which does not support
+      # Pascal vWS GPUs (nvidia-tesla-p4-vws, nvidia-tesla-p100-vws). For those,
+      # set instance_image to {family: debian-12, project: debian-cloud}.
       install_nvidia_driver: true
       add_deployment_name_before_prefix: true
       name_prefix: chrome-remote-desktop

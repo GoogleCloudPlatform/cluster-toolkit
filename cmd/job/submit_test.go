@@ -368,6 +368,8 @@ func setupSubmitTestEnv(t *testing.T) {
 	t.Setenv("GCLUSTER_AIR_GAPPED", "")
 	t.Setenv("GCLUSTER_REFRESH_CREDENTIALS", "")
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	t.Setenv("GCLUSTER_DISABLE_JOBSET", "")
+	t.Setenv("GCLUSTER_DISABLE_KUEUE", "")
 	t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
 	resetJobFlags()
 
@@ -1524,6 +1526,11 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsWithoutPathways_Fails(t *testing.T) {
 			extraArgs: []string{"--pathways", "--pathways-gcs-location", "gs://my-bucket", "--pathways-elastic-slices", "-1"},
 			wantErr:   "--pathways-elastic-slices must be non-negative",
 		},
+		{
+			name:      "max-slice-restarts above the int32 range with --pathways",
+			extraArgs: []string{"--pathways", "--pathways-gcs-location", "gs://my-bucket", "--pathways-max-slice-restarts", "2147483648"},
+			wantErr:   "--pathways-max-slice-restarts must be at most 2147483647",
+		},
 	}
 
 	for _, tc := range tests {
@@ -1612,6 +1619,12 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
 			extraArgs:            []string{"--pathways-deploy-sps", "--pathways-max-slice-restarts", "500"},
 			wantElasticSlices:    0,
 			wantMaxSliceRestarts: 500,
+		},
+		{
+			name:                 "accepts max-slice-restarts at the int32 limit",
+			extraArgs:            []string{"--pathways-max-slice-restarts", "2147483647"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 2147483647,
 		},
 	}
 
@@ -2002,6 +2015,26 @@ func TestSubmitCmd_RunSPSWorkload(t *testing.T) {
 		}
 		if got := mockOrc.SubmittedJob.MaxRestarts; got != 0 {
 			t.Errorf("MaxRestarts = %d, want 0", got)
+		}
+	})
+
+	t.Run("whitespace-only run-sps-workload fails fast even with compute-type", func(t *testing.T) {
+		for _, extra := range [][]string{nil, {"--compute-type", "v6e-8"}} {
+			setupSubmitTestEnv(t)
+			args := append([]string{
+				"submit",
+				"--pathways",
+				"--pathways-run-sps-workload", "   ",
+				"--name", "sps-blank",
+				"--command", "python3 train.py",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+			}, extra...)
+			_, err := executeCommand(JobCmd, args...)
+			if err == nil || !strings.Contains(err.Error(), "--pathways-run-sps-workload cannot be empty") {
+				t.Fatalf("whitespace run-sps-workload (extra=%v) err = %v, want empty flag error", extra, err)
+			}
 		}
 	})
 

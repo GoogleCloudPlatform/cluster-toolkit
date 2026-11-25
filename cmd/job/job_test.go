@@ -23,7 +23,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -145,10 +147,14 @@ func assertTypeK8sDispatchedTargets(t *testing.T, mockOrc *mockOrchestrator, got
 func TestJobCmd_RealRegistryWiringOnList(t *testing.T) {
 	setupSubmitTestEnv(t)
 	var apiHits atomic.Int32
-	var gotPath, gotAuth atomic.Value
+	var pathsMu sync.Mutex
+	var gotPaths []string
+	var gotAuth atomic.Value
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		apiHits.Add(1)
-		gotPath.Store(r.URL.Path)
+		pathsMu.Lock()
+		gotPaths = append(gotPaths, r.URL.Path)
+		pathsMu.Unlock()
 		gotAuth.Store(r.Header.Get("Authorization"))
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"apiVersion":"jobset.x-k8s.io/v1alpha2","kind":"JobSetList","items":[]}`))
@@ -172,11 +178,18 @@ func TestJobCmd_RealRegistryWiringOnList(t *testing.T) {
 	if _, err := executeCommand(JobCmd, "list", "--cluster", "onprem-k8s"); err != nil {
 		t.Fatalf("executeCommand(list --cluster onprem-k8s) via real provider registry error = %v, want nil", err)
 	}
-	if got := apiHits.Load(); got != 1 {
-		t.Errorf("JobSet API list hits = %d, want 1", got)
+	if got := apiHits.Load(); got != 2 {
+		t.Errorf("API list hits = %d, want 2 (JobSets + standalone batch/v1 Jobs)", got)
 	}
-	if p, _ := gotPath.Load().(string); p != "/apis/jobset.x-k8s.io/v1alpha2/namespaces/ml-team/jobsets" {
-		t.Errorf("request path = %q, want /apis/jobset.x-k8s.io/v1alpha2/namespaces/ml-team/jobsets", p)
+	wantPaths := []string{
+		"/apis/jobset.x-k8s.io/v1alpha2/namespaces/ml-team/jobsets",
+		"/apis/batch/v1/namespaces/ml-team/jobs",
+	}
+	pathsMu.Lock()
+	gotPathsCopy := slices.Clone(gotPaths)
+	pathsMu.Unlock()
+	if !slices.Equal(gotPathsCopy, wantPaths) {
+		t.Errorf("request paths = %v, want %v", gotPathsCopy, wantPaths)
 	}
 	if a, _ := gotAuth.Load().(string); a != "Bearer sa-jwt" {
 		t.Errorf("Authorization header = %q, want \"Bearer sa-jwt\"", a)

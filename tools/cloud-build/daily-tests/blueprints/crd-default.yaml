@@ -30,7 +30,7 @@ deployment_groups:
     use: [network]
     settings:
       install_nvidia_driver: true  # Must be set to true to accept Nvidia ToS for driver install
-      # instance_image defaults to some debian
+      # instance_image defaults to ubuntu-2404-lts-amd64
 
   # This module makes terraform wait until the remote-desktop setup is complete
   - id: wait
