@@ -243,6 +243,13 @@ func TestResolvePathwaysImages(t *testing.T) {
 			wantMsg:  []string{"should ideally come from the same Pathways release"},
 			wantWarn: true,
 		},
+		{
+			name:     "public sidecar with empty trailing tag warns and falls back to latest",
+			in:       orchestrator.PathwaysJobDefinition{ColocatedPythonSidecarImage: testPublicSidecar + ":"},
+			want:     publicImages("latest"),
+			wantMsg:  []string{testPublicRepo + "/server:latest", "names no release tag"},
+			wantWarn: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, msg, warn, err := resolvePathwaysImages(tc.in)
@@ -518,6 +525,10 @@ func TestProxyImageFor(t *testing.T) {
 		},
 		{
 			serverImage: "custom-registry.io/my-rm:v1",
+			want:        "",
+		},
+		{
+			serverImage: "///server",
 			want:        "",
 		},
 	}

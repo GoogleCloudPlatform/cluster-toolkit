@@ -47,7 +47,7 @@ func TestParseImageRef(t *testing.T) {
 			ref:  "pytorch/pytorch:2.4@sha256:1111",
 			want: ImageRef{
 				RawName: "pytorch/pytorch", Host: "docker.io", Repo: "pytorch/pytorch",
-				Tag: "2.4", HasTag: true, Digest: "sha256:1111", HasDigest: true,
+				Tag: "2.4", HasTag: true, HasDigest: true,
 			},
 		},
 		{
@@ -100,15 +100,50 @@ func TestParseImageRef(t *testing.T) {
 			ref:  "localhost:5000/team/app:v2@sha256:abcdef",
 			want: ImageRef{
 				RawName: "localhost:5000/team/app", Host: "localhost:5000", Repo: "team/app",
-				Tag: "v2", HasTag: true, Digest: "sha256:abcdef", HasDigest: true,
+				Tag: "v2", HasTag: true, HasDigest: true,
 			},
+		},
+		{
+			name: "uppercase localhost with port, DNS host, and IPv6 host normalize Host to lowercase",
+			ref:  "LOCALHOST:5000/team/app:v1",
+			want: ImageRef{RawName: "LOCALHOST:5000/team/app", Host: "localhost:5000", Repo: "team/app", Tag: "v1", HasTag: true},
+		},
+		{
+			name: "mixed-case registry host with port normalizes Host while preserving RawName",
+			ref:  "Harbor.Local:8443/team-a/app:v1",
+			want: ImageRef{RawName: "Harbor.Local:8443/team-a/app", Host: "harbor.local:8443", Repo: "team-a/app", Tag: "v1", HasTag: true},
+		},
+		{
+			name: "uppercase GAR host normalizes Host to lowercase",
+			ref:  "US-DOCKER.PKG.DEV/p/r/img:v1",
+			want: ImageRef{RawName: "US-DOCKER.PKG.DEV/p/r/img", Host: "us-docker.pkg.dev", Repo: "p/r/img", Tag: "v1", HasTag: true},
+		},
+		{
+			name: "uppercase IPv6 host normalizes Host to lowercase",
+			ref:  "[FD00::1]:5000/obs/collector:v1",
+			want: ImageRef{RawName: "[FD00::1]:5000/obs/collector", Host: "[fd00::1]:5000", Repo: "obs/collector", Tag: "v1", HasTag: true},
+		},
+		{
+			name: "non-docker.io single-segment repo does not add library prefix",
+			ref:  "localhost:5000/app:v1",
+			want: ImageRef{RawName: "localhost:5000/app", Host: "localhost:5000", Repo: "app", Tag: "v1", HasTag: true},
+		},
+		{
+			name: "bare docker hub image containing dot without slash",
+			ref:  "my.app:v1",
+			want: ImageRef{RawName: "my.app", Host: "docker.io", Repo: "library/my.app", Tag: "v1", HasTag: true},
+		},
+		{
+			name: "bare image named localhost without slash defaults to docker.io",
+			ref:  "localhost:v1",
+			want: ImageRef{RawName: "localhost", Host: "docker.io", Repo: "library/localhost", Tag: "v1", HasTag: true},
 		},
 		{
 			name: "GAR image with digest only",
 			ref:  "us-docker.pkg.dev/proj/repo/server@sha256:1234",
 			want: ImageRef{
 				RawName: "us-docker.pkg.dev/proj/repo/server", Host: "us-docker.pkg.dev", Repo: "proj/repo/server",
-				Digest: "sha256:1234", HasDigest: true,
+				HasDigest: true,
 			},
 		},
 		{
@@ -120,7 +155,7 @@ func TestParseImageRef(t *testing.T) {
 			},
 		},
 		{
-			name: "trailing at-sign sets HasDigest with empty Digest",
+			name: "trailing at-sign sets HasDigest",
 			ref:  "us-docker.pkg.dev/proj/repo/server@",
 			want: ImageRef{
 				RawName: "us-docker.pkg.dev/proj/repo/server", Host: "us-docker.pkg.dev", Repo: "proj/repo/server",
@@ -135,12 +170,17 @@ func TestParseImageRef(t *testing.T) {
 		{
 			name: "digest only with empty name leaves Host and Repo empty",
 			ref:  "@sha256:abcdef",
-			want: ImageRef{Digest: "sha256:abcdef", HasDigest: true},
+			want: ImageRef{HasDigest: true},
 		},
 		{
 			name: "registry host with empty repo leaves Host and Repo empty",
 			ref:  "us-docker.pkg.dev/",
 			want: ImageRef{RawName: "us-docker.pkg.dev/"},
+		},
+		{
+			name: "double slash after registry host leaves Host and Repo empty",
+			ref:  "us-docker.pkg.dev//proj/img",
+			want: ImageRef{RawName: "us-docker.pkg.dev//proj/img"},
 		},
 		{
 			name: "leading slash leaves Host and Repo empty",

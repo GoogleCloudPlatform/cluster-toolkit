@@ -571,7 +571,7 @@ func validatePodSpecEnv(contextPrefix string, podSpec *corev1.PodSpec) error {
 				continue
 			}
 			if seenEnv[e.Name] {
-				return fmt.Errorf("%s container %q defines duplicate environment variable %q. If you use --gke-custom-templates-path, re-extract the default templates with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations", contextPrefix, c.Name, e.Name)
+				return fmt.Errorf("%s container %q defines duplicate environment variable %q. If you use --gke-custom-templates-path, remove or guard the duplicate in your template (or re-extract fresh defaults with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations)", contextPrefix, c.Name, e.Name)
 			}
 			seenEnv[e.Name] = true
 		}

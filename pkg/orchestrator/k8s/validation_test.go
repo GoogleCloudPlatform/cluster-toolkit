@@ -31,17 +31,25 @@ func TestValidateNonNegativeInt32(t *testing.T) {
 		{name: "zero allowed", flag: "--restarts", in: 0},
 		{name: "positive allowed", flag: "--restarts", in: 5},
 		{name: "int32 max allowed", flag: "--restarts", in: math.MaxInt32},
-		{name: "negative rejected", flag: "--restarts", in: -1, wantErr: "--restarts must be non-negative"},
-		{name: "custom flag name formatted", flag: "--pathways-max-slice-restarts", in: -1, wantErr: "--pathways-max-slice-restarts must be non-negative"},
+		{name: "negative rejected", flag: "--restarts", in: -1, wantErr: "--restarts must be non-negative (got -1)"},
+		{name: "custom flag name formatted", flag: "--pathways-max-slice-restarts", in: -1, wantErr: "--pathways-max-slice-restarts must be non-negative (got -1)"},
 	}
 	if math.MaxInt > math.MaxInt32 {
 		aboveInt32 := int64(math.MaxInt32) + 1
-		cases = append(cases, struct {
-			name    string
-			flag    string
-			in      int
-			wantErr string
-		}{name: "above int32 max rejected", flag: "--restarts", in: int(aboveInt32), wantErr: "--restarts must be at most 2147483647"})
+		cases = append(cases,
+			struct {
+				name    string
+				flag    string
+				in      int
+				wantErr string
+			}{name: "above int32 max rejected", flag: "--restarts", in: int(aboveInt32), wantErr: "--restarts must be at most 2147483647 (got 2147483648)"},
+			struct {
+				name    string
+				flag    string
+				in      int
+				wantErr string
+			}{name: "custom flag name above int32 max", flag: "--pathways-max-slice-restarts", in: int(aboveInt32), wantErr: "--pathways-max-slice-restarts must be at most 2147483647 (got 2147483648)"},
+		)
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

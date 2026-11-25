@@ -4044,7 +4044,7 @@ spec:
               - name: JAX_PLATFORMS
                 value: cpu
 `,
-			wantErr: `container "workload-container" defines duplicate environment variable "JAX_PLATFORMS"`,
+			wantErr: `invalid JobSet manifest: replicatedJob "pathways-head" container "workload-container" defines duplicate environment variable "JAX_PLATFORMS"`,
 		},
 		{
 			name: "duplicate env in JobSet initContainer rejected",
@@ -4074,7 +4074,7 @@ spec:
             - name: workload-container
               image: busybox
 `,
-			wantErr: `container "pathways-proxy" defines duplicate environment variable "FOO"`,
+			wantErr: `invalid JobSet manifest: replicatedJob "pathways-head" container "pathways-proxy" defines duplicate environment variable "FOO"`,
 		},
 		{
 			name: "duplicate env in batch Job container rejected",
@@ -4094,7 +4094,7 @@ spec:
         - name: MASTER_ADDR
           value: b
 `,
-			wantErr: `container "workload-container" defines duplicate environment variable "MASTER_ADDR"`,
+			wantErr: `invalid Job manifest: container "workload-container" defines duplicate environment variable "MASTER_ADDR"`,
 		},
 		{
 			name: "duplicate env across valueFrom and value rejected",
@@ -4123,7 +4123,7 @@ spec:
               - name: PATHWAYS_HEAD
                 value: custom-head
 `,
-			wantErr: `container "workload-container" defines duplicate environment variable "PATHWAYS_HEAD"`,
+			wantErr: `invalid JobSet manifest: replicatedJob "pathways-head" container "workload-container" defines duplicate environment variable "PATHWAYS_HEAD"`,
 		},
 		{
 			name: "empty env names are skipped without duplicate error",
@@ -4205,8 +4205,8 @@ func TestGeneratePathwaysManifest_LegacyTemplateDuplicateEnv(t *testing.T) {
 	_, err := generatePathwaysTestManifest(t, writeLegacyPathwaysTemplate(t), false, "", "", nil, func(j *orchestrator.JobDefinition) {
 		j.Env = map[string]string{"PATHWAYS_HEAD": "custom-head"}
 	})
-	if err == nil || !strings.Contains(err.Error(), `defines duplicate environment variable "PATHWAYS_HEAD"`) {
-		t.Fatalf("legacy template colliding --env err = %v, want duplicate PATHWAYS_HEAD error", err)
+	if err == nil || !strings.Contains(err.Error(), `invalid JobSet manifest: replicatedJob "pathways-head" container "workload-container" defines duplicate environment variable "PATHWAYS_HEAD"`) || !strings.Contains(err.Error(), "gke-template-extract") {
+		t.Fatalf("legacy template colliding --env err = %v, want duplicate PATHWAYS_HEAD error with gke-template-extract hint", err)
 	}
 }
 

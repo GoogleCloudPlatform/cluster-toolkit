@@ -120,7 +120,6 @@ type ImageRef struct {
 	Repo      string // Normalized repository path (bare Docker Hub names become "library/<name>").
 	Tag       string // Explicit tag without leading ":", or empty if absent.
 	HasTag    bool   // True when a ":" tag separator appeared in the final path segment.
-	Digest    string // Digest without leading "@", or empty if absent.
 	HasDigest bool   // True when an "@" digest separator was present.
 }
 

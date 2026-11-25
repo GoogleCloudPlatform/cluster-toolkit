@@ -96,20 +96,21 @@ func publicSidecarRelease(image string) (tag string, exact, pinnedByDigest, ok b
 func proxyImageFor(serverImage string) string {
 	// Pathways server and proxy images never share a digest, so only a tag can carry over.
 	parsed := k8s.ParseImageRef(serverImage)
-	if parsed.HasDigest {
+	if parsed.HasDigest || parsed.Repo == "" {
 		return ""
 	}
 	prefix, ok := strings.CutSuffix(parsed.RawName, "/server")
 	if !ok || prefix == "" {
 		return ""
 	}
-	if !parsed.HasTag {
-		return prefix + "/proxy_server:latest"
+	tag := "latest"
+	if parsed.HasTag {
+		if parsed.Tag == "" {
+			return ""
+		}
+		tag = parsed.Tag
 	}
-	if parsed.Tag == "" {
-		return ""
-	}
-	return prefix + "/proxy_server:" + parsed.Tag
+	return prefix + "/proxy_server:" + tag
 }
 
 // pathwaysImageNouns names the images the rendered JobSet runs besides the sidecar, and the flags that set them.

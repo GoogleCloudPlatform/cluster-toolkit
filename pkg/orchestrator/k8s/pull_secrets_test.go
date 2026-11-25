@@ -257,13 +257,16 @@ func TestDiscoverImagePullSecrets_MatchingSemantics(t *testing.T) {
 		{"docker.io/library/nginx", []string{"hub-default"}},
 		{"quay.io/org/img:v1", []string{"quay-userpass"}},
 		{"us-docker.pkg.dev/p/r/img:v1", []string{"pkg-wildcard"}},
+		{"US-DOCKER.PKG.DEV/p/r/img:v1", []string{"pkg-wildcard"}},
 		{"us-docker.pkg.dev:5000/p/r/img:v1", []string{"pkg-wildcard-port"}},
 		{"sub.us-docker.pkg.dev/p/r/img:v1", nil},
 		{"harbor.local/team-a/trainer:v1", []string{"scoped-v2"}},
+		{"Harbor.Local/team-a/trainer:v1", []string{"scoped-v2"}},
 		// Path prefix scoping matches on path segment boundaries; team-alpha does not match team-a.
 		{"harbor.local/team-alpha/x:v1", nil},
 		{"harbor.local/other/x:v1", nil},
 		{"[fd00::1]:5000/obs/collector:v1", []string{"ipv6-sec"}},
+		{"[FD00::1]:5000/obs/collector:v1", []string{"ipv6-sec"}},
 		{"dup.local/app:v1", []string{"a-dup", "z-dup"}},
 		// The kubelet rejects the whole secret when "auth" is not base64("user:pass"), failing every pull in the pod.
 		{"tok.local/app:v1", nil},
@@ -274,6 +277,23 @@ func TestDiscoverImagePullSecrets_MatchingSemantics(t *testing.T) {
 		if got := matchingSecretNames(secrets, tc.image); !slices.Equal(got, tc.want) {
 			t.Errorf("matchingSecretNames(%q) = %v, want %v", tc.image, got, tc.want)
 		}
+	}
+
+	wildAndUpper := []unstructured.Unstructured{
+		makeTestDockerSecret("wild", "*"),
+		makeTestDockerSecret("upper-hub", "https://INDEX.DOCKER.IO/v1/"),
+		makeTestDockerSecret("upper-reg", "HARBOR.LOCAL:8443"),
+	}
+	for _, bad := range []string{"", ":latest", "us-docker.pkg.dev/", "/nginx", "myorg/"} {
+		if got := matchingSecretNames(wildAndUpper, bad); len(got) != 0 {
+			t.Errorf("matchingSecretNames(wildAndUpper, %q) = %v, want nil", bad, got)
+		}
+	}
+	if got := matchingSecretNames(wildAndUpper, "nginx:1.27"); !slices.Equal(got, []string{"upper-hub"}) {
+		t.Errorf("uppercase INDEX.DOCKER.IO auth key match = %v, want [upper-hub]", got)
+	}
+	if got := matchingSecretNames(wildAndUpper, "harbor.local:8443/app:v1"); !slices.Equal(got, []string{"upper-reg"}) {
+		t.Errorf("uppercase HARBOR.LOCAL:8443 auth key match = %v, want [upper-reg]", got)
 	}
 
 	lister := &stubResourceLister{items: secrets}

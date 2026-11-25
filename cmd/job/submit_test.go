@@ -1739,6 +1739,9 @@ func TestSubmitCmd_RestartsBounds(t *testing.T) {
 				if err != nil {
 					t.Fatalf("--restarts %s failed unexpectedly: %v", tc.val, err)
 				}
+				if got := mockOrc.SubmittedJob.WorkloadName; got != "ok-restarts" {
+					t.Errorf("SubmittedJob.WorkloadName = %q, want %q", got, "ok-restarts")
+				}
 				if got := mockOrc.SubmittedJob.MaxRestarts; got != tc.want {
 					t.Errorf("SubmittedJob.MaxRestarts = %d, want %d", got, tc.want)
 				}

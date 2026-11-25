@@ -232,10 +232,11 @@ func authKeyHostAndPath(key string) (string, string, bool) {
 		p = p[3:]
 	}
 	p = strings.Trim(p, "/")
-	if u.Host == "index.docker.io" && p == "" {
+	host := strings.ToLower(u.Host)
+	if host == "index.docker.io" && p == "" {
 		return "docker.io", "", true
 	}
-	return u.Host, p, true
+	return host, p, true
 }
 
 // authHostMatches mirrors the kubelet's URL matching: equal ports, the same number of dot-separated labels,

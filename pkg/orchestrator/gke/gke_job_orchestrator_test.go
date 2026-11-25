@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -5114,59 +5113,6 @@ func TestBuildContainerImage_OfflineDryRunFallbackAndLiveError(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "broken kubeconfig") {
 		t.Fatalf("expected live Crane build to fail fast on broken kubeconfig, got: %v", err)
-	}
-}
-
-func TestSubmitJob_MaxRestartsLocalPreflight(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name    string
-		job     orchestrator.JobDefinition
-		wantErr string
-	}{
-		{
-			name: "negative MaxRestarts rejected locally",
-			job: orchestrator.JobDefinition{
-				WorkloadName: "bad-restarts", ComputeType: "n2d-standard-64", MaxRestarts: -1,
-			},
-			wantErr: "--restarts must be non-negative",
-		},
-		{
-			name: "SPS workload negative MaxRestarts rejected before kubectl",
-			job: orchestrator.JobDefinition{
-				WorkloadName: "bad-sps-restarts", MaxRestarts: -1,
-				Pathways: orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-inst"},
-			},
-			wantErr: "--restarts must be non-negative",
-		},
-	}
-	if math.MaxInt > math.MaxInt32 {
-		aboveInt32 := int64(math.MaxInt32) + 1
-		cases = append(cases, struct {
-			name    string
-			job     orchestrator.JobDefinition
-			wantErr string
-		}{
-			name: "MaxRestarts above int32 max rejected locally",
-			job: orchestrator.JobDefinition{
-				WorkloadName: "bad-restarts", ComputeType: "n2d-standard-64", MaxRestarts: int(aboveInt32),
-			},
-			wantErr: "--restarts must be at most 2147483647",
-		})
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			mockExec := NewMockExecutor(map[string][]shell.CommandResult{})
-			orc := newTestGKEOrchestrator(mockExec)
-			err := orc.SubmitJob(tc.job)
-			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("SubmitJob() err = %v, want substring %q", err, tc.wantErr)
-			}
-			if len(mockExec.calls) != 0 {
-				t.Errorf("expected 0 shell calls on local preflight failure, got %v", mockExec.calls)
-			}
-		})
 	}
 }
 

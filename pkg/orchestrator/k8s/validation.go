@@ -23,10 +23,10 @@ import (
 // field falls within 0..math.MaxInt32.
 func ValidateNonNegativeInt32(flagName string, value int) error {
 	if value < 0 {
-		return fmt.Errorf("%s must be non-negative", flagName)
+		return fmt.Errorf("%s must be non-negative (got %d)", flagName, value)
 	}
 	if int64(value) > math.MaxInt32 {
-		return fmt.Errorf("%s must be at most %d", flagName, math.MaxInt32)
+		return fmt.Errorf("%s must be at most %d (got %d)", flagName, math.MaxInt32, value)
 	}
 	return nil
 }
