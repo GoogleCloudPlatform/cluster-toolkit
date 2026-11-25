@@ -210,6 +210,15 @@ locals {
     destination = "early_run_hotfixes.sh"
   }]
 
+  ml_diagnostics_daemon_runner = !var.enable_ml_diagnostics_daemon ? [] : [
+    {
+      type        = "shell"
+      source      = "${path.module}/files/install_ml_diagnostics_agent.sh"
+      destination = "install_ml_diagnostics_agent_automatic.sh"
+      args        = var.ml_diagnostics_daemon_version != "" ? "--version=${var.ml_diagnostics_daemon_version}" : ""
+    },
+  ]
+
   runners = concat(
     local.warnings,
     local.hotfix_runner,
@@ -223,7 +232,12 @@ locals {
     local.configure_ssh_runners,
     local.docker_runner,
     local.gpu_network_wait_online_runner,
-    var.runners
+    var.runners,
+    # Append after var.runners so earlier GPU/NCCL runners finish installing
+    # apt-transport-artifact-registry first, avoiding APT Signed-By clashes and
+    # preventing Google Cloud ML Diagnostics repo issues from affecting earlier
+    # runners.
+    local.ml_diagnostics_daemon_runner,
   )
 
   bucket_regex               = "^gs://([^/]*)/*(.*)"
