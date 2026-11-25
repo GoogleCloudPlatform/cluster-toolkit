@@ -109,9 +109,7 @@ func TestRolePrefixedVarsInOfficialExamples(t *testing.T) {
 	}
 	// Bare module inputs that must never appear unprefixed in examples/*.yaml
 	// single-file templates (they would be injected into every module).
-	bare := map[string]bool{"machine_type": true, "enable_spot_vm": true, "node_count_dynamic_max": true, "node_count_static": true, "cluster_size": true}
-	// Blueprints whose bare disk_size_gb broadcast is documented as intentional.
-	allowBareDisk := map[string]bool{"examples/ml-slurm.yaml": true}
+	bare := map[string]bool{"machine_type": true, "enable_spot_vm": true, "node_count_dynamic_max": true, "node_count_static": true, "cluster_size": true, "disk_size_gb": true}
 	for _, bp := range blueprints {
 		if !strings.HasPrefix(bp.Path, "examples/") {
 			continue
@@ -123,9 +121,6 @@ func TestRolePrefixedVarsInOfficialExamples(t *testing.T) {
 			}
 			if singleFile && bare[k] {
 				t.Errorf("%s: bare var %q would be injected into every module; prefix it by role", bp.Path, k)
-			}
-			if singleFile && k == "disk_size_gb" && !allowBareDisk[bp.Path] {
-				t.Errorf("%s: bare disk_size_gb broadcasts to login/controller; prefix it by role", bp.Path)
 			}
 		}
 	}
