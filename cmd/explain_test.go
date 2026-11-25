@@ -92,7 +92,7 @@ func (s *MySuite) TestExplainBlueprintAndDeploymentPairing(c *C) {
 	c.Check(strings.Contains(out, "a3u_cluster_size"), Equals, true)
 	c.Check(strings.Contains(out, "Stage 1 [cluster-env]:"), Equals, true)
 	c.Check(strings.Contains(out, "Stage 2 [cluster]:"), Equals, true)
-	c.Check(strings.Contains(out, "./gcluster deploy -d examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"), Equals, true)
+	c.Check(strings.Contains(out, execPath()+" deploy -d examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml"), Equals, true)
 
 	// Passing the companion *-deployment.yaml directly should resolve to its sibling blueprint
 	outDepl, err := runExplainForTest("examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-deployment.yaml")

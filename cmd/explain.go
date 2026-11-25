@@ -48,11 +48,11 @@ var explainCmd = &cobra.Command{
 	Use:   "explain [module-or-blueprint-or-specs...]",
 	Short: "Discover and inspect blueprints, embedded modules, and cluster specs.",
 	Long: `Inspect Cluster Toolkit blueprints and modules, or find the best blueprint for given specs:
-  1. ./gcluster explain
+  1. gcluster explain
      Lists all available blueprint paths and top-level embedded modules.
-  2. ./gcluster explain <blueprint.yaml | modules/...>
+  2. gcluster explain <blueprint.yaml | modules/...>
      Shows required GCP APIs, customizable variables, deployment stages, and ready-to-copy 'use:' snippets.
-  3. ./gcluster explain <specs...> (e.g., './gcluster explain slurm a3u lustre' or './gcluster explain gke a3-megagpu lustre')
+  3. gcluster explain <specs...> (e.g., 'gcluster explain slurm a3u lustre' or 'gcluster explain gke a3-megagpu lustre')
      Finds the exact or closest matching blueprint and generates snippets for any missing module specs.`,
 	Args:         cobra.ArbitraryArgs,
 	RunE:         runExplainCmd,
@@ -282,7 +282,7 @@ func tryExplainSingleTarget(out io.Writer, format, repoRoot, target string) (boo
 
 	if looksLikePathTarget(target) {
 		setTelemetryMetadata(telemetry.EXPLAIN_TARGET, classifyMissingPathTarget(target))
-		return true, fmt.Errorf("blueprint or module path %q not found; run './gcluster explain' to list all available blueprints and modules", target)
+		return true, fmt.Errorf("blueprint or module path %q not found; run '%s explain' to list all available blueprints and modules", target, execPath())
 	}
 	return false, nil
 }
@@ -569,9 +569,10 @@ func buildExplainIndex(repoRoot string) (ExplainIndexResult, error) {
 	}
 
 	res := ExplainIndexResult{
-		Blueprints:   bpSummaries,
-		Modules:      groupedMods,
-		Hint:         "Run './gcluster explain <path>' to inspect a blueprint/module, or './gcluster explain <specs...>' (e.g. 'slurm a3u lustre') to find the closest blueprint.",
+		Blueprints: bpSummaries,
+		Modules:    groupedMods,
+		Hint: fmt.Sprintf("Run '%[1]s explain <path>' to inspect a blueprint/module, or '%[1]s explain <specs...>' "+
+			"(e.g. 'slurm a3u lustre') to find the closest blueprint.", execPath()),
 		GclusterPath: realExecutable(),
 	}
 	if len(bpSummaries) > 0 {
@@ -845,9 +846,9 @@ func buildExplainBlueprint(repoRoot, bpPath, explicitDeplPath string) (ExplainBl
 	}
 
 	varsList := mergeAndFormatBlueprintVars(bp.Vars, ds.Vars)
-	deployCmd := fmt.Sprintf("./gcluster deploy %s", displayBPPath)
+	deployCmd := fmt.Sprintf("%s deploy %s", execPath(), displayBPPath)
 	if displayDeplPath != "" {
-		deployCmd = fmt.Sprintf("./gcluster deploy -d %s %s", displayDeplPath, displayBPPath)
+		deployCmd = fmt.Sprintf("%s deploy -d %s %s", execPath(), displayDeplPath, displayBPPath)
 	}
 
 	return ExplainBlueprintResult{
@@ -2109,7 +2110,7 @@ func scanBlueprintsForSpecMatch(repoRoot string) ([]catalog.BlueprintEntry, erro
 		return nil, fmt.Errorf("failed to scan blueprints: %w", err)
 	}
 	if len(blueprints) == 0 {
-		return nil, fmt.Errorf("no blueprints found under %s/examples; run './gcluster explain <module>' to inspect embedded modules", repoRoot)
+		return nil, fmt.Errorf("no blueprints found under %s/examples; run '%s explain <module>' to inspect embedded modules", repoRoot, execPath())
 	}
 	return blueprints, nil
 }
@@ -2286,8 +2287,8 @@ func formatUnmatchedSpecsError(specs []normalizedSpec) error {
 		rawList = append(rawList, s.Raw)
 	}
 	return fmt.Errorf(
-		"no blueprint matched specs [%s]; try keywords like 'slurm a3u lustre', 'gke a4', 'tpu 7x', or run './gcluster explain' to list all blueprints and modules",
-		strings.Join(rawList, ", "))
+		"no blueprint matched specs [%s]; try keywords like 'slurm a3u lustre', 'gke a4', 'tpu 7x', or run '%s explain' to list all blueprints and modules",
+		strings.Join(rawList, ", "), execPath())
 }
 
 func assembleSpecMatchResult(repoRoot string, specs []normalizedSpec, best *scoredBlueprintCandidate, otherExactPaths []string, allBlueprints []catalog.BlueprintEntry) (ExplainSpecMatchResult, error) {
