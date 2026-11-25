@@ -1260,7 +1260,7 @@ func TestResolveTelemetryProjectID(t *testing.T) {
 	}
 }
 
-func TestJobCmd_ReportsTelemetryProjectID(t *testing.T) {
+func TestJobCmd_ReportsTelemetryProjectID_GKE(t *testing.T) {
 	origHook := OnTelemetryProjectResolved
 	t.Cleanup(func() { OnTelemetryProjectResolved = origHook })
 
@@ -1315,6 +1315,16 @@ func TestJobCmd_ReportsTelemetryProjectID(t *testing.T) {
 			t.Errorf("reported telemetry project = %q, want %q", reported, "kc-gke-proj")
 		}
 	})
+}
+
+func TestJobCmd_ReportsTelemetryProjectID_Suppression(t *testing.T) {
+	origHook := OnTelemetryProjectResolved
+	t.Cleanup(func() { OnTelemetryProjectResolved = origHook })
+
+	var reported string
+	OnTelemetryProjectResolved = func(p string) {
+		reported = p
+	}
 
 	t.Run("clears stale saved project on TypeK8s command", func(t *testing.T) {
 		setupSubmitTestEnv(t)

@@ -84,12 +84,13 @@ func (c *Collector) SetProjectID(projectID string) {
 	c.projectIDSet = true
 }
 
-// GetProjectID returns the explicit project ID override set on the collector.
-func (c *Collector) GetProjectID() string {
+// GetProjectID returns the explicit project ID override set on the collector
+// and whether SetProjectID was called (distinguishing unset from explicit "").
+func (c *Collector) GetProjectID() (string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.projectID
+	return c.projectID, c.projectIDSet
 }
 
 // resolveProjectID returns the effective GCP project ID for telemetry.
@@ -214,14 +215,27 @@ func resolveProjectIdentifiers(projectID string) (string, string) {
 	}()
 	wg.Wait()
 
-	// Only cache outcomes where both lookups either succeeded or returned an
-	// authenticated PermissionDenied. Missing ADC, Unauthenticated, NotFound,
-	// or network errors must not poison the 24h cache.
-	if isCacheableProjectLookupErr(projErr) && isCacheableProjectLookupErr(billErr) {
+	// Cache successful and authenticated PermissionDenied outcomes for 24h.
+	// For transient network/timeout failures, write a short negative cache entry
+	// (15m) so blocked networks do not pay the 3s lookup timeout on every CLI exit.
+	// Missing ADC, Unauthenticated, and NotFound errors are never cached so
+	// recovery takes effect immediately.
+	now := time.Now().UTC()
+	switch {
+	case isCacheableProjectLookupErr(projErr) && isCacheableProjectLookupErr(billErr):
 		_ = config.SetCachedProjectMetadata(projectID, config.ProjectMetadata{
 			ProjectNumber:    projectNumber,
 			BillingAccountID: billingAccountID,
-			UpdatedAt:        time.Now().UTC(),
+			UpdatedAt:        now,
+			ExpiresAt:        now.Add(projectCacheTTL),
+		})
+	case (isCacheableProjectLookupErr(projErr) || isTransientRPCError(projErr)) &&
+		(isCacheableProjectLookupErr(billErr) || isTransientRPCError(billErr)):
+		_ = config.SetCachedProjectMetadata(projectID, config.ProjectMetadata{
+			ProjectNumber:    projectNumber,
+			BillingAccountID: billingAccountID,
+			UpdatedAt:        now,
+			ExpiresAt:        now.Add(projectNegativeCacheTTL),
 		})
 	}
 
@@ -321,22 +335,6 @@ func getIsSlurm(modulesList []string) string {
 
 func getIsVmInstance(modulesList []string) string {
 	return ifModulesMatchPatterns(modulesList, isVmInstanceModulePatterns)
-}
-
-func getProjectNumber(projectID string) string {
-	if projectID == "" {
-		return ""
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), projectLookupTimeout)
-	defer cancel()
-
-	projectName, err := fetchProjectName(ctx, projectID)
-	if err != nil || projectName == "" {
-		return ""
-	}
-
-	return strings.TrimPrefix(projectName, "projects/")
 }
 
 func getMachineType(bp config.Blueprint) string {
@@ -512,21 +510,6 @@ func getTerraformVersion() string {
 		return ""
 	}
 	return version
-}
-
-func getBillingAccountId(projectID string) string {
-	if projectID == "" {
-		return ""
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), projectLookupTimeout)
-	defer cancel()
-
-	billingAccount, err := getProjectBillingAccount(ctx, projectID)
-	if err != nil || billingAccount == "" {
-		return ""
-	}
-	return strings.TrimPrefix(billingAccount, "billingAccounts/")
 }
 
 // getIsGoogler determines if the credentials belong to a Google internal user or an internal CI service account.

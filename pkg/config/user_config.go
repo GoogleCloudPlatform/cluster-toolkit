@@ -26,7 +26,10 @@ import (
 	"time"
 )
 
-const configFileName = "telemetry_config.json"
+const (
+	configFileName       = "telemetry_config.json"
+	projectCacheFileName = "telemetry_project_cache.json"
+)
 
 // ProjectMetadata caches resolved GCP project identifiers for telemetry so
 // repeated CLI invocations avoid redundant Resource Manager and Billing RPCs.
@@ -34,20 +37,21 @@ type ProjectMetadata struct {
 	ProjectNumber    string    `json:"project_number,omitempty"`
 	BillingAccountID string    `json:"billing_account_id,omitempty"`
 	UpdatedAt        time.Time `json:"updated_at"`
+	ExpiresAt        time.Time `json:"expires_at,omitempty"`
 }
 
 // UserConfig holds the in-memory state of the user information and telemetry preferences.
 type UserConfig struct {
-	UserID           string                     `json:"user_id"`
-	TelemetryEnabled bool                       `json:"telemetry_enabled"`
-	IsGoogler        *bool                      `json:"is_googler,omitempty"`
-	ProjectCache     map[string]ProjectMetadata `json:"project_cache,omitempty"`
+	UserID           string `json:"user_id"`
+	TelemetryEnabled bool   `json:"telemetry_enabled"`
+	IsGoogler        *bool  `json:"is_googler,omitempty"`
 }
 
 // globalUserConfig is the package-level variable holding the state during execution
 var (
 	globalUserConfig UserConfig
 	mu               sync.RWMutex
+	projectCacheMu   sync.Mutex
 )
 
 // InitUserConfig initializes the user's config, prioritizing a local JSON file over defaults.
@@ -133,20 +137,44 @@ func SetIsGoogler(isGoogler bool) error {
 	return nil
 }
 
+func projectCacheFilePath() string {
+	return filepath.Join(getLocalDirPath(true), projectCacheFileName)
+}
+
+func readProjectCacheLocked(cacheFile string) map[string]ProjectMetadata {
+	data, err := os.ReadFile(cacheFile)
+	if err != nil {
+		return make(map[string]ProjectMetadata)
+	}
+	var cache map[string]ProjectMetadata
+	if err := json.Unmarshal(data, &cache); err != nil || cache == nil {
+		return make(map[string]ProjectMetadata)
+	}
+	return cache
+}
+
 // GetCachedProjectMetadata returns cached project metadata for projectID if it
-// exists and is newer than ttl.
+// exists and has not expired. If the stored entry specifies ExpiresAt, that
+// deadline takes precedence; otherwise ttl is evaluated against UpdatedAt.
 func GetCachedProjectMetadata(projectID string, ttl time.Duration) (ProjectMetadata, bool) {
 	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
 		return ProjectMetadata{}, false
 	}
 
-	mu.RLock()
-	defer mu.RUnlock()
+	projectCacheMu.Lock()
+	cache := readProjectCacheLocked(projectCacheFilePath())
+	projectCacheMu.Unlock()
 
-	entry, ok := globalUserConfig.ProjectCache[projectID]
+	entry, ok := cache[projectID]
 	if !ok || entry.UpdatedAt.IsZero() {
 		return ProjectMetadata{}, false
+	}
+	if !entry.ExpiresAt.IsZero() {
+		if !time.Now().Before(entry.ExpiresAt) {
+			return ProjectMetadata{}, false
+		}
+		return entry, true
 	}
 	if ttl > 0 && time.Since(entry.UpdatedAt) >= ttl {
 		return ProjectMetadata{}, false
@@ -154,8 +182,9 @@ func GetCachedProjectMetadata(projectID string, ttl time.Duration) (ProjectMetad
 	return entry, true
 }
 
-// SetCachedProjectMetadata stores resolved project metadata for projectID and
-// persists it to disk.
+// SetCachedProjectMetadata stores resolved project metadata for projectID in a
+// dedicated cache file under the cache directory using atomic write-and-rename
+// with 0600 permissions, leaving telemetry_config.json untouched.
 func SetCachedProjectMetadata(projectID string, meta ProjectMetadata) error {
 	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
@@ -165,16 +194,50 @@ func SetCachedProjectMetadata(projectID string, meta ProjectMetadata) error {
 		meta.UpdatedAt = time.Now().UTC()
 	}
 
-	mu.Lock()
-	if globalUserConfig.ProjectCache == nil {
-		globalUserConfig.ProjectCache = make(map[string]ProjectMetadata)
-	}
-	globalUserConfig.ProjectCache[projectID] = meta
-	mu.Unlock()
+	cacheFile := projectCacheFilePath()
+	dir := filepath.Dir(cacheFile)
 
-	if err := SaveToFile(); err != nil {
-		return fmt.Errorf("failed to save state to file: %v", err)
+	projectCacheMu.Lock()
+	defer projectCacheMu.Unlock()
+
+	cache := readProjectCacheLocked(cacheFile)
+	cache[projectID] = meta
+
+	data, err := json.MarshalIndent(cache, "", " ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal project cache: %v", err)
 	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("failed to create cache directory: %v", err)
+	}
+
+	tmpFile, err := os.CreateTemp(dir, ".telemetry_project_cache-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp project cache file: %v", err)
+	}
+	tmpPath := tmpFile.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if err := tmpFile.Chmod(0600); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("failed to set permissions on temp project cache file: %v", err)
+	}
+	if _, err := tmpFile.Write(data); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("failed to write temp project cache file: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp project cache file: %v", err)
+	}
+	if err := os.Rename(tmpPath, cacheFile); err != nil {
+		return fmt.Errorf("failed to replace project cache file: %v", err)
+	}
+	cleanup = false
 	return nil
 }
 

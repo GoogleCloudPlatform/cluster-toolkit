@@ -700,13 +700,22 @@ func TestSetTelemetryProjectID_Wiring(t *testing.T) {
 	cmd := &cobra.Command{Use: "submit"}
 	telemetryCollector = telemetry.NewCollector(cmd, nil, telemetry.SOURCE)
 
+	if got, set := telemetryCollector.GetProjectID(); got != "" || set {
+		t.Errorf("before hooks, telemetryCollector.GetProjectID() = (%q, %v), want ('', false)", got, set)
+	}
+
 	job.OnTelemetryProjectResolved("wired-job-proj")
-	if got := telemetryCollector.GetProjectID(); got != "wired-job-proj" {
-		t.Errorf("after job hook, telemetryCollector.GetProjectID() = %q, want %q", got, "wired-job-proj")
+	if got, set := telemetryCollector.GetProjectID(); got != "wired-job-proj" || !set {
+		t.Errorf("after job hook, telemetryCollector.GetProjectID() = (%q, %v), want (%q, true)", got, set, "wired-job-proj")
+	}
+
+	job.OnTelemetryProjectResolved("")
+	if got, set := telemetryCollector.GetProjectID(); got != "" || !set {
+		t.Errorf("after suppression hook, telemetryCollector.GetProjectID() = (%q, %v), want ('', true)", got, set)
 	}
 
 	cluster.OnTelemetryProjectResolved("wired-cluster-proj")
-	if got := telemetryCollector.GetProjectID(); got != "wired-cluster-proj" {
-		t.Errorf("after cluster hook, telemetryCollector.GetProjectID() = %q, want %q", got, "wired-cluster-proj")
+	if got, set := telemetryCollector.GetProjectID(); got != "wired-cluster-proj" || !set {
+		t.Errorf("after cluster hook, telemetryCollector.GetProjectID() = (%q, %v), want (%q, true)", got, set, "wired-cluster-proj")
 	}
 }

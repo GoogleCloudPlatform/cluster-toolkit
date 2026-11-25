@@ -61,6 +61,7 @@ Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic kubeconfig detection, or
 			return err
 		}
 		var det orchestrator.Detection
+		// Cover early-return and flag-validation paths; L89 reports earlier so FatalHook paths observe the resolved project.
 		defer func() {
 			reportTelemetryProjectID(resolveTelemetryProjectID(projectID, projectFlagChanged, det))
 		}()

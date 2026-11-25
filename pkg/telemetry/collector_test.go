@@ -1488,145 +1488,6 @@ func TestGetIsVmInstance(t *testing.T) {
 	}
 }
 
-// TestGetProjectNumber verifies that the project number is correctly fetched or gracefully fails depending on the API response.
-func TestGetProjectNumber(t *testing.T) {
-	tests := []struct {
-		name      string
-		projectID string
-		clientErr error
-		mockErr   error
-		want      string
-	}{
-		{
-			name:      "success_1",
-			projectID: "test-project-1",
-			want:      "1234567890",
-		},
-		{
-			name:      "success_2",
-			projectID: "test-project-2",
-			want:      "9876543210",
-		},
-		{
-			name:      "no_project_id",
-			projectID: "",
-			want:      "",
-		},
-		{
-			name:      "client_creation_error",
-			projectID: "any-project",
-			clientErr: errors.New("failed to create client"),
-			want:      "",
-		},
-		{
-			name:      "api_error",
-			projectID: "error-project",
-			mockErr:   errors.New("project not found"),
-			want:      "",
-		},
-		{
-			name:      "api_returns_empty_name",
-			projectID: "empty-name-project",
-			want:      "",
-		},
-		{
-			name:      "api_returns_nil_project",
-			projectID: "nil-project",
-			want:      "",
-		},
-	}
-
-	// To safely mock package-level variables without permanently altering the global state.
-	origFetchProjectName := fetchProjectName
-	defer func() { fetchProjectName = origFetchProjectName }()
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Mock the function directly for this test case
-			fetchProjectName = func(ctx context.Context, projectID string) (string, error) {
-				if tt.clientErr != nil {
-					return "", tt.clientErr
-				}
-				if tt.mockErr != nil {
-					return "", tt.mockErr
-				}
-				// simulate mock responses based on test setup
-				if projectID == "test-project-1" {
-					return "projects/1234567890", nil
-				}
-				if projectID == "test-project-2" {
-					return "projects/9876543210", nil
-				}
-				if projectID == "empty-name-project" || projectID == "nil-project" {
-					return "", nil
-				}
-				return "", errors.New("not found")
-			}
-
-			got := getProjectNumber(tt.projectID)
-			if got != tt.want {
-				t.Errorf("getProjectNumber() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-// TestGetBillingAccountId verifies the extraction and formatting of the billing account ID.
-func TestGetBillingAccountId(t *testing.T) {
-	// Save the original function and restore it after the test finishes
-	originalGetProjectBillingAccount := getProjectBillingAccount
-	defer func() { getProjectBillingAccount = originalGetProjectBillingAccount }()
-
-	tests := []struct {
-		name               string
-		projectID          string
-		mockBillingAccount string
-		mockErr            error
-		expected           string
-	}{
-		{
-			name:               "Missing project_id",
-			projectID:          "",
-			mockBillingAccount: "",
-			expected:           "",
-		},
-		{
-			name:               "Project ID present but no billing account returned",
-			projectID:          "test-project-123",
-			mockBillingAccount: "",
-			expected:           "",
-		},
-		{
-			name:               "Project ID present and billing account trimmed",
-			projectID:          "test-project-123",
-			mockBillingAccount: "billingAccounts/012345-6789AB-CDEF01",
-			expected:           "012345-6789AB-CDEF01",
-		},
-		{
-			name:               "Project ID present but API fails",
-			projectID:          "test-project-123",
-			mockBillingAccount: "",
-			mockErr:            errors.New("api error"),
-			expected:           "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Mock the GCP call for this specific test case, now returning (string, error)
-			getProjectBillingAccount = func(ctx context.Context, projectID string) (string, error) {
-				return tt.mockBillingAccount, tt.mockErr
-			}
-
-			actual := getBillingAccountId(tt.projectID)
-
-			if actual != tt.expected {
-				t.Errorf("getBillingAccountId() = %q, want %q", actual, tt.expected)
-			}
-		})
-	}
-}
-
 func TestGetModules(t *testing.T) {
 	// Save and restore the original transport to not pollute other tests
 	originalTransport := http.DefaultTransport
@@ -3555,9 +3416,11 @@ func TestCollector_ProjectIDResolutionAndConcordAttribution(t *testing.T) {
 			}
 			if tt.setExplicit {
 				c.SetProjectID(tt.explicitProject)
-				if got := c.GetProjectID(); got != strings.TrimSpace(tt.explicitProject) {
-					t.Errorf("GetProjectID() = %q, want %q", got, strings.TrimSpace(tt.explicitProject))
+				if got, ok := c.GetProjectID(); got != strings.TrimSpace(tt.explicitProject) || !ok {
+					t.Errorf("GetProjectID() = (%q, %v), want (%q, true)", got, ok, strings.TrimSpace(tt.explicitProject))
 				}
+			} else if got, ok := c.GetProjectID(); got != "" || ok {
+				t.Errorf("GetProjectID() before SetProjectID = (%q, %v), want ('', false)", got, ok)
 			}
 
 			c.CollectMetrics(0, nil)
@@ -3630,6 +3493,17 @@ func TestBuildConcordEvent_LatencyExcludesRPCTimeAndCachesProjectLookup(t *testi
 	}
 }
 
+func TestSleepWithContext(t *testing.T) {
+	if !sleepWithContext(context.Background(), time.Millisecond) {
+		t.Error("expected sleepWithContext to return true when timer completes")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if sleepWithContext(ctx, time.Second) {
+		t.Error("expected sleepWithContext to return false on canceled context")
+	}
+}
+
 func TestIsTransientRPCError(t *testing.T) {
 	tests := []struct {
 		name string
@@ -3659,7 +3533,7 @@ func TestIsTransientRPCError(t *testing.T) {
 	}
 }
 
-func TestResolveProjectIdentifiers_DoesNotPoisonCacheOnAuthOrTransientErrors(t *testing.T) {
+func TestResolveProjectIdentifiers_DoesNotCacheAuthOrNotFoundErrors(t *testing.T) {
 	origFetchProject := fetchProjectName
 	origGetBilling := getProjectBillingAccount
 	t.Cleanup(func() {
@@ -3674,7 +3548,6 @@ func TestResolveProjectIdentifiers_DoesNotPoisonCacheOnAuthOrTransientErrors(t *
 		{"missing ADC", errors.New("google: could not find default credentials")},
 		{"Unauthenticated", status.Error(codes.Unauthenticated, "token expired")},
 		{"NotFound", status.Error(codes.NotFound, "project not created yet")},
-		{"Unavailable", status.Error(codes.Unavailable, "transient outage")},
 	}
 
 	for _, tc := range nonCacheableErrors {
@@ -3710,12 +3583,110 @@ func TestResolveProjectIdentifiers_DoesNotPoisonCacheOnAuthOrTransientErrors(t *
 				t.Fatalf("second call = (%q, %q), want (98765, ABCDEF)", num2, bill2)
 			}
 
-			// Third call should now hit the populated cache without calling fetchProjectName again.
+			// Third call should now hit the 24h positive cache without calling fetchProjectName again.
 			callsAfterPopulate := projAttempts.Load()
 			num3, bill3 := resolveProjectIdentifiers("retry-proj")
 			if num3 != "98765" || bill3 != "ABCDEF" || projAttempts.Load() != callsAfterPopulate {
 				t.Fatalf("third call = (%q, %q, calls=%d), want cached (98765, ABCDEF, calls=%d)", num3, bill3, projAttempts.Load(), callsAfterPopulate)
 			}
+		})
+	}
+}
+
+func stubProjectLookupRPCs(projErr, billErr error) (*atomic.Int32, *atomic.Int32) {
+	var projCalls, billCalls atomic.Int32
+	fetchProjectName = func(_ context.Context, _ string) (string, error) {
+		projCalls.Add(1)
+		if projErr != nil {
+			return "", projErr
+		}
+		return "projects/55555", nil
+	}
+	getProjectBillingAccount = func(_ context.Context, _ string) (string, error) {
+		billCalls.Add(1)
+		if billErr != nil {
+			return "", billErr
+		}
+		return "billingAccounts/BILL-1", nil
+	}
+	return &projCalls, &billCalls
+}
+
+func assertShortNegativeCacheCase(t *testing.T, projErr, billErr error, wantProjNum string) {
+	t.Helper()
+	isolateTelemetryTestEnv(t)
+	projCalls, billCalls := stubProjectLookupRPCs(projErr, billErr)
+
+	if num1, bill1 := resolveProjectIdentifiers("transient-proj"); num1 != wantProjNum || bill1 != "" {
+		t.Fatalf("first call = (%q, %q), want (%q, '')", num1, bill1, wantProjNum)
+	}
+
+	// Verify entry was cached with the short negative TTL (~15m), not 24h.
+	meta, ok := config.GetCachedProjectMetadata("transient-proj", projectCacheTTL)
+	if !ok {
+		t.Fatal("expected short negative cache entry after transient error")
+	}
+	ttlRemaining := time.Until(meta.ExpiresAt)
+	if ttlRemaining <= 0 || ttlRemaining > projectNegativeCacheTTL+time.Minute {
+		t.Errorf("negative cache TTL remaining = %v, want within (0, %v]", ttlRemaining, projectNegativeCacheTTL)
+	}
+
+	// Immediate second call must hit the negative cache without firing new RPCs.
+	if num2, bill2 := resolveProjectIdentifiers("transient-proj"); num2 != wantProjNum || bill2 != "" {
+		t.Fatalf("second call = (%q, %q), want (%q, '')", num2, bill2, wantProjNum)
+	}
+	if projCalls.Load() != 1 || billCalls.Load() != 1 {
+		t.Errorf("expected negative cache hit; RPC counts = (%d, %d), want (1, 1)", projCalls.Load(), billCalls.Load())
+	}
+
+	// Once the negative cache expires, recovery succeeds and populates the 24h cache.
+	meta.ExpiresAt = time.Now().UTC().Add(-time.Second)
+	if err := config.SetCachedProjectMetadata("transient-proj", meta); err != nil {
+		t.Fatalf("failed to expire negative cache entry: %v", err)
+	}
+	stubProjectLookupRPCs(nil, nil)
+	if num3, bill3 := resolveProjectIdentifiers("transient-proj"); num3 != "55555" || bill3 != "BILL-1" {
+		t.Fatalf("after negative-cache expiry got (%q, %q), want (55555, BILL-1)", num3, bill3)
+	}
+}
+
+func TestResolveProjectIdentifiers_ShortNegativeCacheOnTransientErrors(t *testing.T) {
+	origFetchProject := fetchProjectName
+	origGetBilling := getProjectBillingAccount
+	t.Cleanup(func() {
+		fetchProjectName = origFetchProject
+		getProjectBillingAccount = origGetBilling
+	})
+
+	tests := []struct {
+		name        string
+		projErr     error
+		billErr     error
+		wantProjNum string
+	}{
+		{
+			name:        "both Unavailable",
+			projErr:     status.Error(codes.Unavailable, "blocked network"),
+			billErr:     status.Error(codes.Unavailable, "blocked network"),
+			wantProjNum: "",
+		},
+		{
+			name:        "both DeadlineExceeded",
+			projErr:     context.DeadlineExceeded,
+			billErr:     context.DeadlineExceeded,
+			wantProjNum: "",
+		},
+		{
+			name:        "project succeeds while billing Unavailable",
+			projErr:     nil,
+			billErr:     status.Error(codes.Unavailable, "billing timeout"),
+			wantProjNum: "55555",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assertShortNegativeCacheCase(t, tc.projErr, tc.billErr, tc.wantProjNum)
 		})
 	}
 }

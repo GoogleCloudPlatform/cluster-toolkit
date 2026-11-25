@@ -29,6 +29,7 @@ const (
 	configDirName           = "cluster-toolkit"
 	projectLookupTimeout    = 3 * time.Second
 	projectCacheTTL         = 24 * time.Hour
+	projectNegativeCacheTTL = 15 * time.Minute
 	uploadTimeout           = 10 * time.Second
 	shortTimeout            = 2 * time.Second
 	CLUSTER_TOOLKIT         = "CLUSTER_TOOLKIT"
