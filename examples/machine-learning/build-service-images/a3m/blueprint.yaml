@@ -98,8 +98,8 @@ deployment_groups:
             "install_lustre": false,
             "install_managed_lustre": false,
             "install_gcsfuse": true,
-            "monitoring_agent": "cloud-ops",
-            "use_open_drivers": true
+            "allow_kernel_upgrades": false,
+            "monitoring_agent": "cloud-ops"
           }
       - type: shell
         destination: install_git.sh
@@ -128,7 +128,6 @@ deployment_groups:
             become: true
             vars:
               enable_ops_agent: true
-              enable_nvidia_dcgm: true
             tasks:
             - name: Install NVIDIA DCGM
               ansible.builtin.apt:

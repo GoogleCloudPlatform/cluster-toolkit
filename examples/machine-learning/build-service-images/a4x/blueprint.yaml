@@ -113,27 +113,13 @@ deployment_groups:
             "reboot": false,
             "install_ompi": true,
             "install_lustre": false,
-            "install_managed_lustre": false,
+            "install_managed_lustre": true,
             "install_gcsfuse": true,
             "install_cuda": false,
             "allow_kernel_upgrades": false,
             "monitoring_agent": "cloud-ops"
           }
-      - type: shell
-        destination: install_slurm.sh
-        # Note: changes to slurm-gcp `/scripts` folder in the built image will not reflect in the deployed cluster.
-        # Instead the scripts referenced in `schedmd-slurm-gcp-v6-controller/slurm_files` will be used.
-        content: |
-          #!/bin/bash
-          set -e -o pipefail
-          # The base image ships its own Ansible in /usr/bin. Run the playbook with
-          # the Ansible that the startup-script module installs instead.
-          export PATH=/usr/local/ghpc-venv/bin:$PATH
-          ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.13.3 \
-              -i localhost, --limit localhost --connection=local \
-              -e @/var/tmp/slurm_vars.json \
-              ansible/playbook.yml
+      - $(vars.runner_install_slurm)
 
       - type: ansible-local
         destination: install_a4x_drivers.yml

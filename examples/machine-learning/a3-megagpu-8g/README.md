@@ -88,6 +88,6 @@ To tear down the cluster when finished:
 - **Managed Lustre (`a3mega-slurm-blueprint.yaml`):** Provisions a **36 TiB Google Cloud Managed Lustre (`lustre_size_gib: 36000`, `per_unit_storage_throughput: 500`)** instance mounted at `/home` across all Slurm nodes.
 - **GCSFuse with Local SSD Cache (`a3mega-slurm-blueprint.yaml`):** Configured with [GCSFuse profile-based configurations](https://cloud.google.com/storage/docs/cloud-storage-fuse/profile-based-configurations) and Local SSD caching on A3 Mega nodes:
   - `/gcs`: General-purpose mount of the created GCS bucket (`data-bucket`).
-  - `/gcs-checkpoints`: Uses `profile=aiml-checkpointing` with `cache_dir=/mnt/localssd` for high-throughput checkpoint reads/writes.
+  - `/gcs-checkpoints`: Uses `profile=aiml-checkpointing` with `cache_dir=/mnt/localssd/gcsfuse-cache/checkpoints` for high-throughput checkpoint reads/writes.
   - `/gcs-training-data`: Uses `profile=aiml-training` optimized for reading training datasets.
-  - `/gcs-model-serving`: Uses `profile=aiml-serving` with `cache_dir=/mnt/localssd` optimized for model serving.
+  - `/gcs-model-serving`: Uses `profile=aiml-serving` with `cache_dir=/mnt/localssd/gcsfuse-cache/serving` optimized for model serving.

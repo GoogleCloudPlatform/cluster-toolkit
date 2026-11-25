@@ -67,6 +67,8 @@ vars:
   login_machine_type: c2-standard-4
   # Machine type for the controller node.
   controller_machine_type: c2-standard-8
+  # Enable hierarchical namespace on the created GCS data bucket.
+  enable_hierarchical_namespace: true
 
 deployment_groups:
 - group: primary
@@ -180,8 +182,8 @@ deployment_groups:
             "install_lustre": false,
             "install_managed_lustre": false,
             "install_gcsfuse": true,
-            "monitoring_agent": "cloud-ops",
-            "use_open_drivers": true
+            "allow_kernel_upgrades": false,
+            "monitoring_agent": "cloud-ops"
           }
       - type: shell
         destination: install_slurm.sh
@@ -238,7 +240,6 @@ deployment_groups:
             become: true
             vars:
               enable_ops_agent: $(vars.enable_ops_agent)
-              enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
             tasks:
             - name: Install NVIDIA DCGM
               ansible.builtin.apt:
@@ -281,7 +282,7 @@ deployment_groups:
               ansible.builtin.service:
                 name: nvidia-dcgm.service
                 state: stopped
-                enabled: "{{ enable_nvidia_dcgm }}"
+                enabled: false
             - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
               ansible.builtin.service:
                 name: nvidia-persistenced.service
@@ -486,7 +487,7 @@ deployment_groups:
   - id: data-bucket
     source: modules/file-system/cloud-storage-bucket
     settings:
-      enable_hierarchical_namespace: true
+      enable_hierarchical_namespace: $(vars.enable_hierarchical_namespace)
       local_mount: /gcs
       mount_options: "implicit_dirs,\
                       metadata_cache_negative_ttl_secs=0,\
@@ -510,8 +511,11 @@ deployment_groups:
       remote_mount: $(data-bucket.gcs_bucket_name)
       local_mount: /gcs-checkpoints
       fs_type: gcsfuse
-      mount_options: "profile=aiml-checkpointing,\
-                      cache_dir=$(vars.localssd_mountpoint),\
+      mount_options: "_netdev,\
+                      x-systemd.requires=mount-localssd-raid.service,\
+                      x-systemd.before=slurmd.service,\
+                      profile=aiml-checkpointing,\
+                      cache_dir=$(vars.localssd_mountpoint)/gcsfuse-cache/checkpoints,\
                       dir_mode=777,\
                       file_mode=777,\
                       allow_other"
@@ -519,7 +523,8 @@ deployment_groups:
   # (Optional) Create a mount-point optimized for reading training data.
   # If your training dataset fits on localssd, then you may want to enable file
   # cache as well, which is done by adding
-  # cache_dir=/mnt/localssd,\
+  # x-systemd.requires=mount-localssd-raid.service,\
+  # cache_dir=/mnt/localssd/gcsfuse-cache/training,\
   # file_cache_max_size_mb=<DATASET_SIZE>,\
   # file_cache_cache_file_for_range_read=true,\
   # to the mount_options.
@@ -533,7 +538,9 @@ deployment_groups:
       remote_mount: $(data-bucket.gcs_bucket_name)
       local_mount: /gcs-training-data
       fs_type: gcsfuse
-      mount_options: "profile=aiml-training,\
+      mount_options: "_netdev,\
+                      x-systemd.before=slurmd.service,\
+                      profile=aiml-training,\
                       dir_mode=777,\
                       file_mode=777,\
                       allow_other"
@@ -549,8 +556,11 @@ deployment_groups:
       remote_mount: $(data-bucket.gcs_bucket_name)
       local_mount: /gcs-model-serving
       fs_type: gcsfuse
-      mount_options: "profile=aiml-serving,\
-                      cache_dir=$(vars.localssd_mountpoint),\
+      mount_options: "_netdev,\
+                      x-systemd.requires=mount-localssd-raid.service,\
+                      x-systemd.before=slurmd.service,\
+                      profile=aiml-serving,\
+                      cache_dir=$(vars.localssd_mountpoint)/gcsfuse-cache/serving,\
                       dir_mode=777,\
                       file_mode=777,\
                       allow_other"
