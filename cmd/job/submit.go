@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/imagebuilder"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -117,7 +118,7 @@ and workload scheduling configurations like workload name, queue, nodes, and res
 		if err := validateWorkloadNameLength(workloadName, isPathwaysJob); err != nil {
 			return err
 		}
-		if err := k8s.ValidateNonNegativeInt32("--restarts", restarts); err != nil {
+		if err := validateNonNegativeInt32("--restarts", restarts); err != nil {
 			return err
 		}
 		computeType = strings.TrimSpace(computeType)
@@ -438,13 +439,25 @@ func validatePathwaysFlags(cmd *cobra.Command) error {
 		if pathways.ElasticSlices < 0 {
 			return fmt.Errorf("--pathways-elastic-slices must be non-negative")
 		}
-		if err := k8s.ValidateNonNegativeInt32("--pathways-max-slice-restarts", pathways.MaxSliceRestarts); err != nil {
+		if err := validateNonNegativeInt32("--pathways-max-slice-restarts", pathways.MaxSliceRestarts); err != nil {
 			return err
 		}
 		return nil
 	}
 	if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{}) || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 || hasChangedPathwaysFlags(cmd) {
 		return fmt.Errorf("pathways flags specified but --pathways flag is missing")
+	}
+	return nil
+}
+
+// validateNonNegativeInt32 checks that a flag backed by a Kubernetes int32
+// field falls within 0..math.MaxInt32.
+func validateNonNegativeInt32(flagName string, value int) error {
+	if value < 0 {
+		return fmt.Errorf("%s must be non-negative (got %d)", flagName, value)
+	}
+	if int64(value) > math.MaxInt32 {
+		return fmt.Errorf("%s must be at most %d (got %d)", flagName, math.MaxInt32, value)
 	}
 	return nil
 }

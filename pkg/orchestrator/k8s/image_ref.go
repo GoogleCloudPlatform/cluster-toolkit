@@ -17,16 +17,17 @@ package k8s
 import "strings"
 
 // ParseImageRef splits an OCI image reference into its normalized registry host,
-// repository path, raw name, tag, and digest presence.
+// repository path, raw name, tag, and digest presence. Unlike go-containerregistry's
+// name.ParseReference, it preserves tags on tag+digest refs and accepts synthetic digests.
 func ParseImageRef(ref string) ImageRef {
 	name, _, hasDigest := strings.Cut(ref, "@")
 	lastSlash := strings.LastIndex(name, "/")
 	rawName := name
 	var tag string
 	var hasTag bool
-	if colon := strings.Index(name[lastSlash+1:], ":"); colon >= 0 {
-		rawName = name[:lastSlash+1+colon]
-		tag = name[lastSlash+1+colon+1:]
+	if seg, parsedTag, ok := strings.Cut(name[lastSlash+1:], ":"); ok {
+		rawName = name[:lastSlash+1+len(seg)]
+		tag = parsedTag
 		hasTag = true
 	}
 
@@ -38,6 +39,7 @@ func ParseImageRef(ref string) ImageRef {
 	}
 
 	host, repo, hasSlash := strings.Cut(rawName, "/")
+	// Bare names and org/repo shorthands have no '.', ':', or 'localhost' in the first segment.
 	if !hasSlash || (!strings.ContainsAny(host, ".:") && !strings.EqualFold(host, "localhost")) {
 		host, repo = "docker.io", rawName
 	} else {
