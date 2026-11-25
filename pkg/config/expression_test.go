@@ -128,6 +128,20 @@ echo "Hello $(vars.project_id)"
 		{`$("${vars.green}_${vars.sleeve}")`, `"${var.green}_${var.sleeve}"`, false},
 		{"$(fun(vars.green))", "fun(var.green)", false},
 
+		// Same reference used more than once, or as a prefix of another one
+		{"$(vars.green + vars.green)", "var.green+var.green", false},
+		{"$(amber.blue + amber.blue)", "module.amber.blue+module.amber.blue", false},
+		{"$(amber.blue + amber.blue.sky)", "module.amber.blue+module.amber.blue.sky", false},
+		{"$(amber.blue.sky + amber.blue)", "module.amber.blue.sky+module.amber.blue", false},
+		{`$(amber.blue != "" ? amber.blue : "red")`, `module.amber.blue!=""?module.amber.blue:"red"`, false},
+		{"$(amber.blue[0] + amber.blue[1])", "module.amber.blue[0]+module.amber.blue[1]", false},
+		{"$(amber.amber + amber.amber)", "module.amber.amber+module.amber.amber", false},
+		{"$({amber = amber.blue})", "{amber=module.amber.blue}", false},
+		{"$(amber(amber.blue))", "amber(module.amber.blue)", false},
+		{`$("${amber.blue}_${amber.blue}")`, `"${module.amber.blue}_${module.amber.blue}"`, false},
+		{"$(amber.blue[amber.idx])", "module.amber.blue[module.amber.idx]", false},
+		{"$(pink.lime.0.salmon)", "module.pink.lime.0.salmon", false},
+
 		// Untranslatable expressions
 		{"$(vars)", "", true},
 		{"$(sleeve)", "", true},
@@ -136,9 +150,6 @@ echo "Hello $(vars.project_id)"
 		{"$(vars[3]])", "", true},      // can't index vars
 		{`$(vars["green"])`, "", true}, // can't index module
 
-		// TODO: uncomment
-		// see comment to `BlueprintExpressionLiteralToExpression`
-		// {"$(pink.lime.0.salmon)", "module.pink.lime[0].salmon", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {

@@ -20,12 +20,14 @@ import (
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 func defaultMockResponses(clusterName, location, project string) map[string][]shell.CommandResult {
@@ -41,6 +43,7 @@ func defaultMockResponses(clusterName, location, project string) map[string][]sh
 		"kubectl get configmap":                                           {{ExitCode: 0, Stdout: "configmap-data"}},
 		"kubectl get nodes -o wide":                                       {{ExitCode: 0, Stdout: "nodes-list"}},
 		"kubectl get nodes -o json":                                       {{ExitCode: 0, Stdout: `{"items": [{"metadata":{"name":"node-1","labels":{"cloud.google.com/gke-nodepool":"pool-1"}},"status":{"conditions":[{"type":"Ready","status":"True"}]}}]}`}},
+		"kubectl get --raw /apis/kueue.x-k8s.io":                          {{ExitCode: 0, Stdout: "{}"}},
 		"kubectl describe ClusterQueue":                                   {{ExitCode: 0, Stdout: "clusterqueue-details"}},
 		"kubectl describe LocalQueue":                                     {{ExitCode: 0, Stdout: "localqueue-details"}},
 		"kubectl describe ResourceFlavor":                                 {{ExitCode: 0, Stdout: "resourceflavor-details"}},
@@ -578,4 +581,279 @@ func TestInspectCluster_ReportStartsWithSPSSummary(t *testing.T) {
 	if summaryAt < 0 || gcloudAt < 0 || summaryAt > gcloudAt {
 		t.Errorf("report should start with the SPS summary (summary at %d, gcloud section at %d):\n%s", summaryAt, gcloudAt, content)
 	}
+}
+
+func TestInspectCluster_KueueLessK8s(t *testing.T) {
+	k8sNodesJSON := `{"items": [
+		{"metadata":{"name":"tpu-0","labels":{"node.kubernetes.io/instance-type":"ct5p-hightpu-4t"}},"status":{"conditions":[{"type":"Ready","status":"True"}]}},
+		{"metadata":{"name":"tpu-1","labels":{"node.kubernetes.io/instance-type":"ct5p-hightpu-4t"}},"status":{"conditions":[{"type":"Ready","status":"True"}]}},
+		{"metadata":{"name":"ctrl-0","labels":{"node.kubernetes.io/instance-type":"n2-standard-8"}},"status":{"conditions":[{"type":"Ready","status":"True"}]}}
+	]}`
+	responses := map[string][]shell.CommandResult{
+		"kubectl get --raw /version":                            {{ExitCode: 0, Stdout: "{}"}},
+		"kubectl get --raw /apis/kueue.x-k8s.io":                {{ExitCode: 1, Stderr: `Error from server (NotFound): the server could not find the requested resource`}},
+		"kubectl get nodes -o wide":                             {{ExitCode: 0, Stdout: "tpu-0 Ready\ntpu-1 Ready\nctrl-0 Ready"}},
+		"kubectl get nodes -o json":                             {{ExitCode: 0, Stdout: k8sNodesJSON}},
+		"kubectl describe Deployment jobset-controller-manager": {{ExitCode: 0, Stdout: "jobset-dep"}},
+		"kubectl logs deployment/jobset-controller-manager":     {{ExitCode: 0, Stdout: "jobset-logs"}},
+		"kubectl get jobsets":                                   {{ExitCode: 0, Stdout: "my-k8s-job"}},
+		"kubectl get jobset my-k8s-job":                         {{ExitCode: 1, Stderr: "not an sps instance"}},
+		"kubectl describe jobsets my-k8s-job":                   {{ExitCode: 0, Stdout: "k8s-jobset-desc"}},
+		"kubectl get pods -l":                                   {{ExitCode: 0, Stdout: "my-k8s-job-0"}},
+		"kubectl describe pods":                                 {{ExitCode: 0, Stdout: "k8s-pod-events"}},
+	}
+
+	mockExec := NewMockExecutor(responses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.kubeconfigLoader = func() (*clientcmdapi.Config, error) {
+		return &clientcmdapi.Config{
+			CurrentContext: "k8s-ctx",
+			Contexts: map[string]*clientcmdapi.Context{
+				"k8s-ctx": {Cluster: "k8s-cluster", Namespace: "ml-team"},
+			},
+		}, nil
+	}
+	orc.kubeClient = &MockKubeClient{Namespace: "ml-team"}
+
+	logFilePath := filepath.Join(t.TempDir(), "k8s-inspect.log")
+	err := orc.InspectCluster(orchestrator.InspectOptions{
+		ClusterName:  "k8s-cluster",
+		WorkloadName: "my-k8s-job",
+		OutputPath:   logFilePath,
+	})
+	if err != nil {
+		t.Fatalf("InspectCluster(K8s) failed: %v", err)
+	}
+
+	assertK8sInspectCallsClean(t, mockExec)
+	mockExec.assertAllKubectlPinned(t, "k8s-ctx")
+
+	contentBytes, err := os.ReadFile(logFilePath)
+	if err != nil {
+		t.Fatalf("failed to read inspect log: %v", err)
+	}
+	assertK8sInspectOutput(t, string(contentBytes))
+
+	// TypeK8s mode must stay non-GKE even when an explicit ProjectID is supplied.
+	mockExecWithProj := NewMockExecutor(responses)
+	orc.SetExecutor(mockExecWithProj)
+	orc.mode = orchestrator.TypeK8s
+	projLogPath := filepath.Join(t.TempDir(), "k8s-with-project.log")
+	if err := orc.InspectCluster(orchestrator.InspectOptions{
+		ClusterName:  "k8s-cluster",
+		ProjectID:    "explicit-project",
+		WorkloadName: "my-k8s-job",
+		OutputPath:   projLogPath,
+	}); err != nil {
+		t.Fatalf("InspectCluster(TypeK8s with ProjectID) failed: %v", err)
+	}
+	assertK8sInspectCallsClean(t, mockExecWithProj)
+	projBytes, err := os.ReadFile(projLogPath)
+	if err != nil {
+		t.Fatalf("failed to read inspect log: %v", err)
+	}
+	assertK8sInspectOutput(t, string(projBytes))
+}
+
+func assertK8sInspectCallsClean(t *testing.T, mockExec *MockExecutor) {
+	t.Helper()
+	forbidden := []string{
+		"gcloud ",
+		"configmap",
+		"ClusterQueue",
+		"LocalQueue",
+		"ResourceFlavor",
+		"kueue-controller-manager",
+		"topologies.kueue.x-k8s.io",
+		"get workloads",
+		"describe workloads",
+	}
+	for _, call := range mockExec.calls {
+		for _, bad := range forbidden {
+			if strings.Contains(call, bad) {
+				t.Errorf("Kueue-less K8s inspect ran unexpected command %q (matched %q)", call, bad)
+			}
+		}
+	}
+}
+
+func assertK8sInspectOutput(t *testing.T, content string) {
+	t.Helper()
+	for _, want := range []string{
+		"ct5p-hightpu-4t: 2 total",
+		"ct5p-hightpu-4t: 2 healthy",
+		"n2-standard-8: 1 total",
+		"JobSet: All JobSets",
+		"JobSet: Config for my-k8s-job",
+		"Pods: Status for my-k8s-job",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("K8s inspect log missing %q", want)
+		}
+	}
+	for _, unwanted := range []string{
+		"unknown:",
+		"GKE: Cluster Details",
+		"Cloud Console Links",
+		"Kueue: ClusterQueue Details",
+		"Error (1):",
+	} {
+		if strings.Contains(content, unwanted) {
+			t.Errorf("K8s inspect log unexpectedly contained %q", unwanted)
+		}
+	}
+}
+
+func TestCountNodes_GroupingPrecedence(t *testing.T) {
+	list := &kubernetesNodeList{
+		Items: []kubernetesNode{
+			{Metadata: kubernetesNodeMetadata{Labels: map[string]string{
+				"cloud.google.com/gke-nodepool":    "gke-pool",
+				"node.kubernetes.io/instance-type": "ignored-it",
+				"beta.kubernetes.io/instance-type": "ignored-beta",
+			}}, Status: kubernetesNodeStatus{Conditions: []kubernetesNodeCondition{{Type: "Ready", Status: "True"}}}},
+			{Metadata: kubernetesNodeMetadata{Labels: map[string]string{
+				"node.kubernetes.io/instance-type": "n2-standard-8",
+				"beta.kubernetes.io/instance-type": "ignored-beta",
+			}}, Status: kubernetesNodeStatus{Conditions: []kubernetesNodeCondition{{Type: "Ready", Status: "False"}}}},
+			{Metadata: kubernetesNodeMetadata{Labels: map[string]string{
+				"beta.kubernetes.io/instance-type": "legacy-node",
+			}}},
+			{Metadata: kubernetesNodeMetadata{Labels: map[string]string{}}},
+		},
+	}
+
+	total, healthy := countNodes(list)
+	for _, tc := range []struct {
+		key         string
+		wantTotal   int
+		wantHealthy int
+	}{
+		{"gke-pool", 1, 1},
+		{"n2-standard-8", 1, 0},
+		{"legacy-node", 1, 0},
+		{"unknown", 1, 0},
+	} {
+		if total[tc.key] != tc.wantTotal || healthy[tc.key] != tc.wantHealthy {
+			t.Errorf("group %q = (%d total, %d healthy), want (%d, %d)",
+				tc.key, total[tc.key], healthy[tc.key], tc.wantTotal, tc.wantHealthy)
+		}
+	}
+}
+
+func chdirUnwritableTempDir(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows cannot remove the current working directory")
+	}
+	// Enter a temp dir, then remove it: creating "./<file>" now fails with ENOENT even as root.
+	// chmod 0555 does not work here because root bypasses it, and `make tests` runs as root in Cloud Build.
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.Remove(dir); err != nil {
+		t.Fatalf("remove cwd: %v", err)
+	}
+	return dir
+}
+
+func TestOpenInspectOutput_UnwritableCWDFallback(t *testing.T) {
+	unwritableDir := chdirUnwritableTempDir(t)
+
+	t.Run("falls back to ~/.gcluster/logs when CWD is not writable", func(t *testing.T) {
+		homeDir := t.TempDir()
+		t.Setenv("HOME", homeDir)
+
+		file, _, path, err := openInspectOutput(orchestrator.InspectOptions{ClusterName: "k8s-c"}, ".log")
+		if err != nil {
+			t.Fatalf("expected fallback to ~/.gcluster/logs, got err: %v", err)
+		}
+		info, statErr := file.Stat()
+		_ = file.Close()
+		if statErr != nil {
+			t.Fatalf("stat fallback file: %v", statErr)
+		}
+		if got := info.Mode().Perm(); got != 0600 {
+			t.Errorf("~/.gcluster/logs fallback file mode = %v, want 0600", got)
+		}
+		wantPrefix := filepath.Join(homeDir, ".gcluster", "logs")
+		if !strings.HasPrefix(path, wantPrefix) {
+			t.Errorf("fallback path = %q, want prefix %q", path, wantPrefix)
+		}
+	})
+
+	t.Run("falls back to os.TempDir with 0600 mode and sanitizes slashes in cluster name", func(t *testing.T) {
+		// Point HOME at a regular file so MkdirAll(~/.gcluster/logs) fails cleanly.
+		blockingFile := filepath.Join(t.TempDir(), "not-a-dir")
+		if err := os.WriteFile(blockingFile, []byte("x"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("HOME", blockingFile)
+
+		file, _, path, err := openInspectOutput(orchestrator.InspectOptions{ClusterName: "arn:aws:eks:us-east-1:123:cluster/prod"}, ".log")
+		if err != nil {
+			t.Fatalf("expected fallback to TempDir, got err: %v", err)
+		}
+		info, statErr := file.Stat()
+		_ = file.Close()
+		t.Cleanup(func() { _ = os.Remove(path) })
+		if statErr != nil || info.Mode().Perm() != 0600 {
+			t.Errorf("TempDir fallback file mode = %v (err=%v), want 0600", info.Mode().Perm(), statErr)
+		}
+		base := filepath.Base(path)
+		if !strings.HasPrefix(path, os.TempDir()) || strings.Contains(base, "/") || !strings.Contains(base, "cluster-prod") {
+			t.Errorf("TempDir fallback path = %q, want sanitized cluster segment under %q", path, os.TempDir())
+		}
+	})
+
+	t.Run("explicit OutputPath is never silently redirected", func(t *testing.T) {
+		explicitPath := filepath.Join(unwritableDir, "explicit.log")
+		if _, _, _, err := openInspectOutput(orchestrator.InspectOptions{ClusterName: "k8s-c", OutputPath: explicitPath}, ".log"); err == nil {
+			t.Fatalf("expected error for unwritable explicit OutputPath %q", explicitPath)
+		}
+	})
+}
+
+func TestConfigureK8sContextAndKueueFailOpen(t *testing.T) {
+	t.Run("resolves current-context when cluster name is empty", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.kubeconfigLoader = func() (*clientcmdapi.Config, error) {
+			return &clientcmdapi.Config{
+				CurrentContext: "cur-ctx",
+				Contexts:       map[string]*clientcmdapi.Context{"cur-ctx": {Cluster: "c1"}},
+			}, nil
+		}
+		if err := orc.configureK8sKubectl(""); err != nil || orc.kubeContext != "cur-ctx" {
+			t.Fatalf("configureK8sKubectl(\"\") = (%q, %v), want (cur-ctx, nil)", orc.kubeContext, err)
+		}
+	})
+
+	t.Run("rejects missing cluster and clears stale kubeContext while allowing matching pinned context", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.kubeconfigLoader = func() (*clientcmdapi.Config, error) { return &clientcmdapi.Config{}, nil }
+		orc.kubeContext = "pinned-ctx"
+		if err := orc.configureK8sKubectl("missing"); err == nil || !strings.Contains(err.Error(), "missing") || orc.kubeContext != "" {
+			t.Fatalf("expected missing-cluster error and cleared kubeContext, got (%q, %v)", orc.kubeContext, err)
+		}
+
+		orc.kubeContext = "pinned-ctx"
+		if err := orc.configureK8sKubectl("pinned-ctx"); err != nil || orc.kubeContext != "pinned-ctx" {
+			t.Fatalf("expected matching pinned context reuse, got (%q, %v)", orc.kubeContext, err)
+		}
+		if err := orc.configureK8sKubectl(""); err != nil || orc.kubeContext != "pinned-ctx" {
+			t.Fatalf("expected empty cluster to reuse pinned context, got (%q, %v)", orc.kubeContext, err)
+		}
+	})
+
+	t.Run("propagates kubeconfig load errors and fails open on Kueue probe errors", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get --raw /apis/kueue.x-k8s.io --request-timeout=10s": {{ExitCode: 1, Stderr: "Unable to connect to the server: timeout"}},
+		}))
+		orc.kubeconfigLoader = func() (*clientcmdapi.Config, error) { return nil, os.ErrPermission }
+		if err := orc.configureK8sKubectl("k8s-c"); err == nil || !strings.Contains(err.Error(), "failed to load kubeconfig") {
+			t.Fatalf("expected kubeconfig load error to propagate, got %v", err)
+		}
+		if !orc.hasKueueInstalled() {
+			t.Errorf("expected hasKueueInstalled() to fail open (true) on transient error")
+		}
+	})
 }

@@ -2447,14 +2447,14 @@ func TestModuleMetadataRules_SlurmTopology(t *testing.T) {
 		wantErr  bool
 		errSub   string
 	}{
-		{"partition fails when no nodeset provided", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute")}, true, "A partition must contain exactly one type of nodeset (nodeset, nodeset_dyn, or nodeset_tpu)"},
-		{"partition fails when nodeset list is empty", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": cty.EmptyTupleVal}, true, "A partition must contain exactly one type of nodeset (nodeset, nodeset_dyn, or nodeset_tpu)"},
-		{"partition fails when nodeset object has only null attributes", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": allNullObjList}, true, "A partition must contain exactly one type of nodeset (nodeset, nodeset_dyn, or nodeset_tpu)"},
+		{"partition fails when no nodeset provided", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute")}, true, "A partition must contain exactly one type of nodeset (nodeset or nodeset_dyn)"},
+		{"partition fails when nodeset list is empty", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": cty.EmptyTupleVal}, true, "A partition must contain exactly one type of nodeset (nodeset or nodeset_dyn)"},
+		{"partition fails when nodeset object has only null attributes", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": allNullObjList}, true, "A partition must contain exactly one type of nodeset (nodeset or nodeset_dyn)"},
 		{"partition passes with nodeset via use", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": useNodeset}, false, ""},
 		{"partition passes with two nodesets of same type via use", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": useTwoStaticNodesets}, false, ""},
 		{"partition passes with literal nodeset object list", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": literalObjList}, false, ""},
 		{"partition passes with nodeset object containing ModuleRef attribute", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": exprAttrObjList}, false, ""},
-		{"partition fails with two nodeset types", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": useNodeset, "nodeset_dyn": useNodesetDyn}, true, "A partition must contain exactly one type of nodeset (nodeset, nodeset_dyn, or nodeset_tpu): the following are set: nodeset, nodeset_dyn"},
+		{"partition fails with two nodeset types", partMod, map[string]cty.Value{"partition_name": cty.StringVal("compute"), "nodeset": useNodeset, "nodeset_dyn": useNodesetDyn}, true, "A partition must contain exactly one type of nodeset (nodeset or nodeset_dyn): the following are set: nodeset, nodeset_dyn"},
 		{"controller fails when partitions omitted", ctrlMod, map[string]cty.Value{}, true, "At least one partition must be provided to the Slurm controller"},
 		{"controller fails when partitions list is empty", ctrlMod, map[string]cty.Value{"partitions": cty.EmptyTupleVal}, true, "At least one partition must be provided to the Slurm controller"},
 		{"controller fails when partitions object has only null attributes", ctrlMod, map[string]cty.Value{"partitions": allNullObjList}, true, "At least one partition must be provided to the Slurm controller"},

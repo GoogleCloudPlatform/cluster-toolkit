@@ -17,6 +17,7 @@ package k8s
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/url"
 	"path"
@@ -27,12 +28,89 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// IsForbiddenError reports whether err indicates a 403 Forbidden RBAC error.
+var (
+	// dnsGatewayRejectedMarkers identify GKE DNS control-plane gateway, IAM, and VPC-SC rejections
+	// that arrive as HTTP 403 / "Error from server (Forbidden)" and must not be mistaken for K8s RBAC.
+	dnsGatewayRejectedMarkers = []string{
+		"allow_external_traffic is disabled",
+		"container.clusters.connect",
+		"container.googleapis.com/clusters.connect",
+		"prohibited by organization's policy",
+		"vpcservicecontrols",
+	}
+	// nonRBACHTMLMarkers identify HTML error pages that can arrive inside a typed 403 StatusError
+	// from apierrors.NewGenericServerResponse when a proxy/WAF responds with text/html.
+	nonRBACHTMLMarkers = []string{
+		"<!doctype",
+		"<html",
+		"</html>",
+		"<title>",
+	}
+	// nonRBACFallbackMarkers identify proxy, WAF, transport, and credential-plugin errors on the
+	// unstructured string fallback path (checked after typed StatusReasonForbidden so K8s usernames
+	// or resource names containing words like "cloudflare" or "oauth2:" are not misclassified).
+	nonRBACFallbackMarkers = []string{
+		"proxyconnect",
+		"tunnel connection failed",
+		"received unexpected response",
+		"from the server (",
+		"access denied by proxy",
+		"cloudflare",
+		"x-amzn-errortype",
+		"unable to connect to the server",
+		"getting credentials",
+		"oauth2:",
+	}
+)
+
+// IsDNSGatewayRejectedText reports whether text indicates a GKE DNS gateway, IAM clusters.connect,
+// or VPC Service Controls 403 rejection rather than a Kubernetes RBAC denial.
+func IsDNSGatewayRejectedText(text string) bool {
+	return containsAnyMarker(strings.ToLower(text), dnsGatewayRejectedMarkers)
+}
+
+func containsAnyMarker(lower string, markers []string) bool {
+	for _, m := range markers {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsForbiddenError reports whether err indicates a Kubernetes RBAC 403 Forbidden error,
+// rejecting transport/credential-plugin errors (*url.Error), non-RBAC 403s from proxies/WAFs
+// (unexpected server responses or HTML), GKE DNS gateways, IAM clusters.connect, and VPC Service Controls.
 func IsForbiddenError(err error) bool {
-	return err != nil && (apierrors.IsForbidden(err) || strings.Contains(strings.ToLower(err.Error()), "forbidden"))
+	if err == nil {
+		return false
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return false
+	}
+	if apierrors.IsUnexpectedServerError(err) {
+		return false
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	if IsDNSGatewayRejectedText(msg) || containsAnyMarker(msg, nonRBACHTMLMarkers) {
+		return false
+	}
+	var statusErr apierrors.APIStatus
+	if errors.As(err, &statusErr) {
+		return statusErr.Status().Reason == metav1.StatusReasonForbidden
+	}
+	if containsAnyMarker(msg, nonRBACFallbackMarkers) {
+		return false
+	}
+	return strings.Contains(msg, "error from server (forbidden)") ||
+		strings.Contains(msg, "403 forbidden") ||
+		strings.Contains(msg, " is forbidden:") ||
+		strings.HasSuffix(msg, " is forbidden")
 }
 
 // DiscoverImagePullSecrets returns the comma-separated names of the kubernetes.io/dockerconfigjson Secrets
@@ -86,6 +164,8 @@ func deferToServiceAccount(client ResourceReader, namespace, name string) bool {
 	case err != nil:
 		logging.Info("Skipping automatic imagePullSecrets discovery: cannot read ServiceAccount %s/%s: %v", namespace, name, err)
 		return true
+	case sa == nil:
+		return false
 	}
 	if refs, _, _ := unstructured.NestedSlice(sa.Object, "imagePullSecrets"); len(refs) > 0 {
 		logging.Info("Skipping automatic imagePullSecrets discovery: ServiceAccount %s/%s already lists imagePullSecrets.", namespace, name)

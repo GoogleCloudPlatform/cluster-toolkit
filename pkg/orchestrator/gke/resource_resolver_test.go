@@ -2023,3 +2023,157 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 		})
 	}
 }
+
+func TestGCETPUHardwareResolver(t *testing.T) {
+	t.Parallel()
+	r := gceTPUHardwareResolver{}
+	for _, tc := range [][2]string{
+		{"tpu7", "tpu7x"},
+		{"tpu7-8", "tpu7x"},
+		{"tpu7-podslice", "tpu7x"},
+		{"tpu7x", "tpu7x"},
+		{"tpu-7x", "tpu7x"},
+		{"tpu-v7x-slice", "tpu7x"},
+		{"TPU_V7X", "tpu7x"},
+		{"ironwood", "tpu7x"},
+		{"tpu7custom", "tpu7custom"},
+		{"ct5l-hightpu-4t", "v5e"},
+		{"TPU_V5_LITE", "v5e"},
+		{"TPU_V4", "v4"},
+		{"v6e-8", "v6e"},
+		{"TRILLIUM", "v6e"},
+		{"custom_accel", "custom_accel"},
+	} {
+		if got := r.NormalizeTPUType(tc[0]); got != tc[1] {
+			t.Errorf("NormalizeTPUType(%q) = %q, want %q", tc[0], got, tc[1])
+		}
+	}
+	for _, tc := range []struct {
+		in   string
+		want bool
+	}{
+		{"v7x", true},
+		{"v7x-1", true},
+		{"ironwood", true},
+		{"ironwood-1", true},
+		{"tpu-7x-1", true},
+		{"tpu-v7x-1", true},
+		{"tpu7x-standard-4t", true},
+		{"v5lite-4", true},
+		{"v5-lite-4", true},
+		{"custom-node-2t", false},
+		{"ctl-plane-0", false},
+		{"output-worker", false},
+		{"my-tpu-baremetal-host", false},
+		{"my-tpu7x-baremetal-host", false},
+		{"node-ironwood-01", false},
+		{"v4-standard-8", false},
+		{"v5e-cpu-worker", false},
+		{"v6e-login", false},
+		{"tpu7-head", false},
+		{"tpu7x-login", false},
+		{"ironwood-mgmt", false},
+	} {
+		if got := r.IsTPUMachine(tc.in); got != tc.want {
+			t.Errorf("IsTPUMachine(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+	assertGCETPUInferAndChips(t, r)
+}
+
+func assertGCETPUInferAndChips(t *testing.T, r gceTPUHardwareResolver) {
+	t.Helper()
+	for _, tc := range []struct {
+		tpuType, rawMachine string
+		chips               int
+		want                string
+	}{
+		{"tpu7x", "", 8, "tpu7x-standard-4t"},
+		{"tpu7x", "", 1, "tpu7x-standard-1t"},
+		{"TPU7X", "", 4, "tpu7x-standard-4t"},
+		{"tpu-v7x-slice", "tpu-v7x-slice", 4, "tpu7x-standard-4t"},
+		{"tpu7x", "tpu7x-8", 0, "tpu7x-standard-4t"},
+		{"tpu7x", "tpu7x-16", 0, "tpu7x-standard-4t"},
+		{"tpu7x", "tpu7x-podslice", 0, "tpu7x-standard-4t"},
+		{"tpu7x", "tpu7x-standard-1t", 4, "tpu7x-standard-1t"},
+		{"", "v7x-1", 0, "tpu7x-standard-1t"},
+		{"", "v7x-8", 0, "tpu7x-standard-4t"},
+		{"", "ironwood-1", 0, "tpu7x-standard-1t"},
+		{"", "tpu-7x-1", 0, "tpu7x-standard-1t"},
+		{"", "tpu-v7x-1", 0, "tpu7x-standard-1t"},
+		{"", "v6e-8", 0, "ct6e-standard-8t"},
+		{"", "tpu-v6e-1", 0, "ct6e-standard-1t"},
+		{"", "tpu-v6e-8", 0, "ct6e-standard-8t"},
+		{"v5e", "v5e-1", 0, "ct5lp-hightpu-1t"},
+		{"v5e", "v5lite-1", 0, "ct5lp-hightpu-1t"},
+		{"v5e", "v5lite-4", 0, "ct5lp-hightpu-4t"},
+		{"v5e", "v5lite-8", 0, "ct5lp-hightpu-8t"},
+		{"v5e", "v5-lite-1", 0, "ct5lp-hightpu-1t"},
+		{"v5e", "v5-lite-8", 0, "ct5lp-hightpu-8t"},
+		{"", "tpu-v5-lite-1", 0, "ct5lp-hightpu-1t"},
+		{"", "tpu-v5-lite-8", 0, "ct5lp-hightpu-8t"},
+		{"v5p", "", 4, "ct5p-hightpu-4t"},
+		{"v4", "", 4, "ct4p-hightpu-4t"},
+		{"", "my-baremetal-host", 0, "my-baremetal-host"},
+		{"", "my-tpu-baremetal-host", 0, "my-tpu-baremetal-host"},
+		{"", "my-tpu7x-baremetal-host", 0, "my-tpu7x-baremetal-host"},
+		{"", "node-ironwood-01", 0, "node-ironwood-01"},
+		{"", "v4-standard-8", 0, "v4-standard-8"},
+		{"", "v5e-cpu-worker", 0, "v5e-cpu-worker"},
+		{"", "v6e-login", 0, "v6e-login"},
+		{"", "tpu7-head", 0, "tpu7-head"},
+		{"", "tpu7x-login", 0, "tpu7x-login"},
+		{"", "ironwood-mgmt", 0, "ironwood-mgmt"},
+	} {
+		if got := r.InferTPUMachine(tc.tpuType, tc.rawMachine, tc.chips); got != tc.want {
+			t.Errorf("InferTPUMachine(%q, %q, %d) = %q, want %q", tc.tpuType, tc.rawMachine, tc.chips, got, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		in   string
+		want int
+	}{
+		{"ct6e-standard-8T", 8},
+		{"ct5lp-hightpu", 8},
+		{"ct6e-standard", 4},
+		{"tpu-4test", 0},
+		{"tpu-v7x-2t", 0},
+		{"custom-node-2t", 0},
+		{"ctl-plane-0", 0},
+		{"output-worker", 0},
+		{"my-baremetal-host", 0},
+		{"my-tpu-baremetal-host", 0},
+		{"my-tpu7x-baremetal-host", 0},
+		{"node-ironwood-01", 0},
+		{"v4-standard-8", 0},
+		{"v5e-cpu-worker", 0},
+		{"v6e-login", 0},
+		{"tpu7-head", 0},
+		{"tpu7x-login", 0},
+		{"ironwood-mgmt", 0},
+		{"v6e-8", 8},
+		{"tpu-v6e-1", 1},
+		{"tpu-v6e-8", 8},
+		{"v5e-1", 1},
+		{"v5lite-1", 1},
+		{"v5lite-8", 8},
+		{"v5-lite-8", 8},
+		{"tpu-v5-lite-1", 1},
+		{"tpu-v5-lite-8", 8},
+		{"v7x-1", 1},
+		{"v7x-8", 4},
+		{"ironwood-1", 1},
+		{"tpu-7x-1", 1},
+		{"tpu-v7x-1", 1},
+		{"tpu7x-1", 1},
+		{"tpu7-8", 4},
+		{"tpu7x-8", 4},
+		{"tpu7x-16", 4},
+		{"tpu7-podslice", 4},
+		{"tpu7x-podslice", 4},
+	} {
+		if got := r.ChipsPerNode(tc.in); got != tc.want {
+			t.Errorf("ChipsPerNode(%q) = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+}

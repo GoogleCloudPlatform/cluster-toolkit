@@ -39,6 +39,10 @@ type VarInfo struct {
 	Deprecated    bool
 	DeprecatedMsg string
 	Validations   []string
+
+	// Constraints holds machine-readable limits the module states for this
+	// input. Like Deprecated and Validations, it is only set by ApplyVarMeta.
+	Constraints *InputConstraints
 }
 
 // OutputInfo stores information about module output values

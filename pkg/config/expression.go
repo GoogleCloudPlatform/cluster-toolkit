@@ -88,32 +88,37 @@ func bpTraversalToTerraform(t hcl.Traversal) (hcl.Traversal, error) {
 
 // BlueprintExpressionLiteralToExpression takes  a content of `$(...)`-literal and transforms it to `Expression`
 func BlueprintExpressionLiteralToExpression(s string) (Expression, error) {
-	// TODO: FIX: this function relies on assumption that
-	// `epxrToTokens(toExpression(tokenize(X))) == tokenize(X)`
-	// This is not correct, e.g.:
-	// ```
-	// epxrToTokens(toExpression(tokenize("pink.lime.0.salmon"))) ==
-	//     tokenize("pink.lime[0].salmon") != tokenize("pink.lime.0.salmon")
-	// ```
-	// As a result `pink.lime.0.salmon` can not be properly translated.
 	bpExp, diag := hclsyntax.ParseExpression([]byte(s), "", hcl.Pos{})
 	if diag.HasErrors() {
 		return nil, diag
 	}
-	toks, err := parseHcl(s)
-	if err != nil {
-		return nil, err
-	}
+
+	// Rewrite only the root identifier of each traversal, located by its
+	// position in the source. Replacing whole traversals by token matching
+	// would rewrite the same occurrence more than once when a reference
+	// appears several times or is a prefix of another reference
+	// (e.g. `a.x + a.x` -> `module.module.a.x + module.module.a.x`).
+	roots := map[int]hclwrite.Tokens{}
 	for _, t := range bpExp.Variables() {
 		new, err := bpTraversalToTerraform(t)
 		if err != nil {
 			return nil, err
 		}
+		n := len(new) - len(t) + 1 // number of traversers that replace the root
+		roots[t.SourceRange().Start.Byte] = trimEOF(hclwrite.TokensForTraversal(new[:n]))
+	}
 
-		toks = replaceTokens(
-			toks,
-			hclwrite.TokensForTraversal(t),
-			hclwrite.TokensForTraversal(new))
+	sToks, diag := hclsyntax.LexExpression([]byte(s), "", hcl.Pos{})
+	if diag.HasErrors() {
+		return nil, diag
+	}
+	toks := hclwrite.Tokens{}
+	for _, st := range sToks {
+		if r, ok := roots[st.Range.Start.Byte]; ok && st.Type == hclsyntax.TokenIdent {
+			toks = append(toks, r...)
+			continue
+		}
+		toks = append(toks, &hclwrite.Token{Type: st.Type, Bytes: st.Bytes})
 	}
 
 	return ParseExpression(string(toks.Bytes()))

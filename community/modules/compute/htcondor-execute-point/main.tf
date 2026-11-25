@@ -45,10 +45,31 @@ locals {
     windows-startup-script-ps1 = local.windows_startup_ps1
   } : {}
 
+  shutdown_metadata = local.is_windows_image ? {
+    # Runs as SYSTEM, which has no HTCondor admin rights here, so condor_off.exe
+    # would be refused. Stopping the service removes the node from the pool.
+    windows-shutdown-script-ps1 = <<-EOT
+      Stop-Service condor -Force -ErrorAction SilentlyContinue
+    EOT
+    } : {
+    shutdown-script = <<-EOT
+      #!/bin/bash
+      if command -v condor_off >/dev/null 2>&1; then
+          condor_off -fast -startd
+          sleep 5
+      elif [ -x /usr/sbin/condor_off ]; then
+          /usr/sbin/condor_off -fast -startd
+          sleep 5
+      fi
+      systemctl stop condor || true
+    EOT
+  }
+
   disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 
   metadata = merge(
     local.windows_startup_metadata,
+    local.shutdown_metadata,
     local.network_storage_metadata,
     local.enable_oslogin,
     local.disable_automatic_updates_metadata,
@@ -73,6 +94,7 @@ locals {
     htcondor_role       = "get_htcondor_execute",
     central_manager_ips = var.central_manager_ips,
     guest_accelerator   = local.guest_accelerator,
+    is_windows          = local.is_windows_image,
   })
 
   execute_object = "gs://${var.htcondor_bucket_name}/${google_storage_bucket_object.execute_config.output_name}"

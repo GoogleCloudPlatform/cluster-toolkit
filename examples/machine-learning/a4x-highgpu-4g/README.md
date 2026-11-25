@@ -33,7 +33,8 @@ REGION=<your-preferred-region>
 gcloud storage buckets create gs://${TF_STATE_BUCKET_NAME} \
     --project=${PROJECT_ID} \
     --default-storage-class=STANDARD --location=${REGION} \
-    --uniform-bucket-level-access
+    --uniform-bucket-level-access \
+    --public-access-prevention
 gcloud storage buckets update gs://${TF_STATE_BUCKET_NAME} --versioning
 ```
 

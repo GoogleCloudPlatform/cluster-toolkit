@@ -31,6 +31,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	_ = os.Unsetenv("GCLUSTER_REFRESH_CREDENTIALS")
 	// Mock store globally for tests to skip prerequisite checks by default.
 	// Tests that need to verify prerequisite checks can override it.
 	store = &MockPrereqStore{
@@ -358,8 +359,21 @@ func resetJobFlags() {
 
 func setupSubmitTestEnv(t *testing.T) {
 	t.Helper()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "empty-kubeconfig"))
+	t.Setenv("DOCKER_CONFIG", t.TempDir())
+	t.Setenv("GCLUSTER_ORCHESTRATOR", "")
+	t.Setenv("GCLUSTER_AIR_GAPPED", "")
+	t.Setenv("GCLUSTER_REFRESH_CREDENTIALS", "")
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
 	resetJobFlags()
+
+	oldStore := store
+	t.Cleanup(func() { store = oldStore })
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
 
 	oldFactory := gkeOrchestratorFactory
 	t.Cleanup(func() {
@@ -379,15 +393,53 @@ func setupSubmitTestEnv(t *testing.T) {
 
 type mockOrchestrator struct {
 	orchestrator.JobOrchestrator
-	initializeFunc func(string, string, string) (string, error)
-	SubmittedJob   orchestrator.JobDefinition
+	initializeFunc     func(string, string, string) (string, error)
+	listJobsFunc       func(orchestrator.ListOptions) ([]orchestrator.JobStatus, error)
+	getJobLogsFunc     func(string, orchestrator.LogsOptions) (string, error)
+	cancelJobFunc      func(string, orchestrator.CancelOptions) error
+	inspectClusterFunc func(orchestrator.InspectOptions) error
+	InitClusterName    string
+	InitLocation       string
+	InitProjectID      string
+	SubmittedJob       orchestrator.JobDefinition
 }
 
 func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
+	m.InitClusterName = clusterName
+	m.InitLocation = location
+	m.InitProjectID = projectID
 	if m.initializeFunc != nil {
 		return m.initializeFunc(clusterName, location, projectID)
 	}
 	return location, nil
+}
+
+func (m *mockOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrator.JobStatus, error) {
+	if m.listJobsFunc != nil {
+		return m.listJobsFunc(opts)
+	}
+	return nil, nil
+}
+
+func (m *mockOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions) (string, error) {
+	if m.getJobLogsFunc != nil {
+		return m.getJobLogsFunc(name, opts)
+	}
+	return "", nil
+}
+
+func (m *mockOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions) error {
+	if m.cancelJobFunc != nil {
+		return m.cancelJobFunc(name, opts)
+	}
+	return nil
+}
+
+func (m *mockOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error {
+	if m.inspectClusterFunc != nil {
+		return m.inspectClusterFunc(opts)
+	}
+	return nil
 }
 
 func (m *mockOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
@@ -1472,6 +1524,11 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsWithoutPathways_Fails(t *testing.T) {
 			extraArgs: []string{"--pathways", "--pathways-gcs-location", "gs://my-bucket", "--pathways-elastic-slices", "-1"},
 			wantErr:   "--pathways-elastic-slices must be non-negative",
 		},
+		{
+			name:      "max-slice-restarts above the int32 range with --pathways",
+			extraArgs: []string{"--pathways", "--pathways-gcs-location", "gs://my-bucket", "--pathways-max-slice-restarts", "2147483648"},
+			wantErr:   "--pathways-max-slice-restarts must be at most 2147483647",
+		},
 	}
 
 	for _, tc := range tests {
@@ -1560,6 +1617,12 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
 			extraArgs:            []string{"--pathways-deploy-sps", "--pathways-max-slice-restarts", "500"},
 			wantElasticSlices:    0,
 			wantMaxSliceRestarts: 500,
+		},
+		{
+			name:                 "accepts max-slice-restarts at the int32 limit",
+			extraArgs:            []string{"--pathways-max-slice-restarts", "2147483647"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 2147483647,
 		},
 	}
 
@@ -2070,6 +2133,98 @@ func TestSubmitCmd_RunSPSWorkload_Validation(t *testing.T) {
 		)
 		if err == nil || !strings.Contains(err.Error(), "--pathways-run-sps-workload connects to an existing SPS instance and cannot be used with --compute-type") {
 			t.Errorf("got err = %v, want unsupported --compute-type error", err)
+		}
+	})
+}
+
+func TestValidateBuildContext_OCIRegistries(t *testing.T) {
+	t.Run("private local base-image succeeds with empty GCLUSTER_IMAGE_REPO and empty USER", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		t.Setenv("DOCKER_CONFIG", t.TempDir())
+		t.Setenv("GCLUSTER_INSECURE_REGISTRY", "")
+		t.Setenv("GCLUSTER_IMAGE_REPO", "")
+		t.Setenv("USER", "")
+		t.Setenv("USERNAME", "")
+
+		ctxDir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(ctxDir, "train.py"), []byte("print(1)\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--skip-prereqs",
+			"--cluster", "test-cluster",
+			"--location", "us-central1-a",
+			"--project", "test-project",
+			"--name", "private-oci-build",
+			"--base-image", "10.128.0.68:5000/jax:v5p",
+			"--build-context", ctxDir,
+			"--command", "python3 train.py",
+			"--compute-type", "v5p-8",
+		)
+		if err != nil {
+			t.Fatalf("expected private/local --base-image + --build-context to pass validation without GCLUSTER_IMAGE_REPO or USER, got: %v", err)
+		}
+		if mockOrc.SubmittedJob.WorkloadName != "private-oci-build" || mockOrc.SubmittedJob.BaseImage != "10.128.0.68:5000/jax:v5p" {
+			t.Errorf("unexpected SubmittedJob: %+v", mockOrc.SubmittedJob)
+		}
+	})
+
+	t.Run("explicit non-GAR GCLUSTER_IMAGE_REPO succeeds without USER env", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		t.Setenv("GCLUSTER_INSECURE_REGISTRY", "")
+		t.Setenv("GCLUSTER_IMAGE_REPO", "harbor.example.com/ml-team")
+		t.Setenv("USER", "")
+		t.Setenv("USERNAME", "")
+		buildContext = t.TempDir()
+		baseImage = "python:3.11-slim"
+
+		if err := validateBuildContext(context.Background(), "", ""); err != nil {
+			t.Fatalf("expected explicit non-GAR GCLUSTER_IMAGE_REPO without USER to pass, got: %v", err)
+		}
+	})
+
+	t.Run("public and cloud base-images without project/location or GCLUSTER_IMAGE_REPO give OCI guidance", func(t *testing.T) {
+		for _, pubBase := range []string{
+			"python:3.11-slim",
+			"cgr.dev/chainguard/python:latest",
+			"registry.access.redhat.com/ubi9/python-311:latest",
+			"mycorp.azurecr.io/ml/base:v1",
+			"123456789012.dkr.ecr.us-east-1.amazonaws.com/ml/base:v1",
+		} {
+			setupSubmitTestEnv(t)
+			t.Setenv("GCLUSTER_INSECURE_REGISTRY", "")
+			t.Setenv("GCLUSTER_IMAGE_REPO", "")
+			buildContext = t.TempDir()
+			baseImage = pubBase
+
+			err := validateBuildContext(context.Background(), "", "")
+			if err == nil || !strings.Contains(err.Error(), "<registry-host>/<repository>") {
+				t.Fatalf("baseImage=%q: expected OCI GCLUSTER_IMAGE_REPO=<registry-host>/<repository> guidance, got: %v", pubBase, err)
+			}
+		}
+	})
+
+	t.Run("malformed GCLUSTER_IMAGE_REPO fails immediately in validateBuildContext", func(t *testing.T) {
+		for _, badRepo := range []string{
+			"harbor.local/ml-team:latest",
+			"harbor.local/invalid!!repo",
+			"harbor.local/a//b",
+			"harbor.local/a/../b",
+		} {
+			setupSubmitTestEnv(t)
+			t.Setenv("GCLUSTER_INSECURE_REGISTRY", "")
+			t.Setenv("GCLUSTER_IMAGE_REPO", badRepo)
+			buildContext = t.TempDir()
+			baseImage = "python:3.11-slim"
+
+			if err := validateBuildContext(context.Background(), "", ""); err == nil {
+				t.Fatalf("expected malformed GCLUSTER_IMAGE_REPO=%q to fail in validateBuildContext", badRepo)
+			}
 		}
 	})
 }
