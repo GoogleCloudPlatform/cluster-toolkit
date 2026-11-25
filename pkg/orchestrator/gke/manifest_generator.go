@@ -563,6 +563,22 @@ func validatePodSpecVolumes(contextPrefix string, podSpec *corev1.PodSpec) error
 	return nil
 }
 
+func validatePodSpecEnv(contextPrefix string, podSpec *corev1.PodSpec) error {
+	for _, c := range slices.Concat(podSpec.InitContainers, podSpec.Containers) {
+		seenEnv := make(map[string]bool, len(c.Env))
+		for _, e := range c.Env {
+			if e.Name == "" {
+				continue
+			}
+			if seenEnv[e.Name] {
+				return fmt.Errorf("%s container %q defines duplicate environment variable %q. If you use --gke-custom-templates-path, re-extract the default templates with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations", contextPrefix, c.Name, e.Name)
+			}
+			seenEnv[e.Name] = true
+		}
+	}
+	return nil
+}
+
 func validatePodFailurePolicy(contextPrefix string, pfp *batchv1.PodFailurePolicy, podSpec *corev1.PodSpec) error {
 	if pfp == nil {
 		return nil
@@ -650,6 +666,9 @@ func ValidateJobSetManifest(manifestContent string) error {
 			prefix = fmt.Sprintf("invalid JobSet manifest: replicatedJob %q", jobName)
 		}
 		if err := validatePodFailurePolicy(prefix, pfp, &tmpl.Spec); err != nil {
+			return err
+		}
+		if err := validatePodSpecEnv(prefix, &tmpl.Spec); err != nil {
 			return err
 		}
 		return validatePodSpecVolumes(prefix, &tmpl.Spec)

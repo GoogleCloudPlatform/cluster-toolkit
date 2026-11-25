@@ -4012,6 +4012,204 @@ spec:
 	}
 }
 
+func TestValidateJobSetManifest_DuplicateEnv(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		manifest string
+		wantErr  string
+	}{
+		{
+			name: "duplicate env in JobSet container rejected",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: dup-env
+spec:
+  replicatedJobs:
+  - name: pathways-head
+    replicas: 1
+    template:
+      spec:
+        parallelism: 1
+        completions: 1
+        template:
+          spec:
+            containers:
+            - name: workload-container
+              image: busybox
+              env:
+              - name: JAX_PLATFORMS
+                value: proxy
+              - name: JAX_PLATFORMS
+                value: cpu
+`,
+			wantErr: `container "workload-container" defines duplicate environment variable "JAX_PLATFORMS"`,
+		},
+		{
+			name: "duplicate env in JobSet initContainer rejected",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: dup-init-env
+spec:
+  replicatedJobs:
+  - name: pathways-head
+    replicas: 1
+    template:
+      spec:
+        parallelism: 1
+        completions: 1
+        template:
+          spec:
+            initContainers:
+            - name: pathways-proxy
+              image: busybox
+              env:
+              - name: FOO
+                value: "1"
+              - name: FOO
+                value: "2"
+            containers:
+            - name: workload-container
+              image: busybox
+`,
+			wantErr: `container "pathways-proxy" defines duplicate environment variable "FOO"`,
+		},
+		{
+			name: "duplicate env in batch Job container rejected",
+			manifest: `apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dup-job-env
+spec:
+  template:
+    spec:
+      containers:
+      - name: workload-container
+        image: busybox
+        env:
+        - name: MASTER_ADDR
+          value: a
+        - name: MASTER_ADDR
+          value: b
+`,
+			wantErr: `container "workload-container" defines duplicate environment variable "MASTER_ADDR"`,
+		},
+		{
+			name: "duplicate env across valueFrom and value rejected",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: dup-valuefrom
+spec:
+  replicatedJobs:
+  - name: pathways-head
+    replicas: 1
+    template:
+      spec:
+        parallelism: 1
+        completions: 1
+        template:
+          spec:
+            containers:
+            - name: workload-container
+              image: busybox
+              env:
+              - name: PATHWAYS_HEAD
+                valueFrom:
+                  fieldRef:
+                    fieldPath: status.podIP
+              - name: PATHWAYS_HEAD
+                value: custom-head
+`,
+			wantErr: `container "workload-container" defines duplicate environment variable "PATHWAYS_HEAD"`,
+		},
+		{
+			name: "empty env names are skipped without duplicate error",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: empty-env-names
+spec:
+  replicatedJobs:
+  - name: pathways-head
+    replicas: 1
+    template:
+      spec:
+        parallelism: 1
+        completions: 1
+        template:
+          spec:
+            containers:
+            - name: workload-container
+              image: busybox
+              env:
+              - name: ""
+                value: a
+              - name: ""
+                value: b
+`,
+		},
+		{
+			name: "same env name in different containers allowed",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: distinct-containers
+spec:
+  replicatedJobs:
+  - name: pathways-head
+    replicas: 1
+    template:
+      spec:
+        parallelism: 1
+        completions: 1
+        template:
+          spec:
+            initContainers:
+            - name: pathways-proxy
+              image: busybox
+              env:
+              - name: LOG_LEVEL
+                value: info
+            containers:
+            - name: workload-container
+              image: busybox
+              env:
+              - name: LOG_LEVEL
+                value: debug
+`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateJobSetManifest(tc.manifest)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("ValidateJobSetManifest() err = %v, want substring %q", err, tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), "gke-template-extract") {
+					t.Errorf("expected custom template extract hint in err, got: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ValidateJobSetManifest() unexpected err: %v", err)
+			}
+		})
+	}
+}
+
+func TestGeneratePathwaysManifest_LegacyTemplateDuplicateEnv(t *testing.T) {
+	_, err := generatePathwaysTestManifest(t, writeLegacyPathwaysTemplate(t), false, "", "", nil, func(j *orchestrator.JobDefinition) {
+		j.Env = map[string]string{"PATHWAYS_HEAD": "custom-head"}
+	})
+	if err == nil || !strings.Contains(err.Error(), `defines duplicate environment variable "PATHWAYS_HEAD"`) {
+		t.Fatalf("legacy template colliding --env err = %v, want duplicate PATHWAYS_HEAD error", err)
+	}
+}
+
 func TestGeneratePathwaysManifest_DeploySPS(t *testing.T) {
 	tests := []struct {
 		name       string

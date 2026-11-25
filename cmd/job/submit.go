@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/imagebuilder"
-	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -116,6 +115,9 @@ and workload scheduling configurations like workload name, queue, nodes, and res
 			return fmt.Errorf("--pathways-run-sps-workload cannot be empty")
 		}
 		if err := validateWorkloadNameLength(workloadName, isPathwaysJob); err != nil {
+			return err
+		}
+		if err := k8s.ValidateNonNegativeInt32("--restarts", restarts); err != nil {
 			return err
 		}
 		computeType = strings.TrimSpace(computeType)
@@ -436,11 +438,8 @@ func validatePathwaysFlags(cmd *cobra.Command) error {
 		if pathways.ElasticSlices < 0 {
 			return fmt.Errorf("--pathways-elastic-slices must be non-negative")
 		}
-		if pathways.MaxSliceRestarts < 0 {
-			return fmt.Errorf("--pathways-max-slice-restarts must be non-negative")
-		}
-		if pathways.MaxSliceRestarts > math.MaxInt32 {
-			return fmt.Errorf("--pathways-max-slice-restarts must be at most %d", math.MaxInt32)
+		if err := k8s.ValidateNonNegativeInt32("--pathways-max-slice-restarts", pathways.MaxSliceRestarts); err != nil {
+			return err
 		}
 		return nil
 	}

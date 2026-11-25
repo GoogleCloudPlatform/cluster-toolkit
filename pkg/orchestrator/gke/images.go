@@ -78,39 +78,38 @@ func resolvePathwaysImages(p orchestrator.PathwaysJobDefinition) (orchestrator.P
 // the reference names no release (a bare digest or another tag), in which case the tag is latest. pinnedByDigest is
 // true when the reference includes a digest (@sha256:...), which container runtimes pull instead of the tag.
 func publicSidecarRelease(image string) (tag string, exact, pinnedByDigest, ok bool) {
-	rest, found := strings.CutPrefix(image, publicPathwaysSidecarImage)
-	if !found || (rest != "" && rest[0] != ':' && rest[0] != '@') {
+	parsed := k8s.ParseImageRef(image)
+	if parsed.RawName != publicPathwaysSidecarImage {
 		return "", false, false, false
 	}
-	ref, _, hasDigest := strings.Cut(rest, "@")
 	switch {
-	case ref == "" && !hasDigest:
+	case !parsed.HasTag && !parsed.HasDigest:
 		return "latest", true, false, true // A bare reference pulls latest.
-	case ref != "" && publicPathwaysReleaseTag.MatchString(ref[1:]):
-		return ref[1:], true, hasDigest, true
+	case parsed.Tag != "" && publicPathwaysReleaseTag.MatchString(parsed.Tag):
+		return parsed.Tag, true, parsed.HasDigest, true
 	default:
-		return "latest", false, hasDigest, true
+		return "latest", false, parsed.HasDigest, true
 	}
 }
 
 // proxyImageFor derives the proxy image that matches an SPS server image, as pathwaysutils does.
 func proxyImageFor(serverImage string) string {
 	// Pathways server and proxy images never share a digest, so only a tag can carry over.
-	if strings.Contains(serverImage, "@") {
+	parsed := k8s.ParseImageRef(serverImage)
+	if parsed.HasDigest {
 		return ""
 	}
-	if prefix, ok := strings.CutSuffix(serverImage, "/server"); ok && prefix != "" {
+	prefix, ok := strings.CutSuffix(parsed.RawName, "/server")
+	if !ok || prefix == "" {
+		return ""
+	}
+	if !parsed.HasTag {
 		return prefix + "/proxy_server:latest"
 	}
-	i := strings.LastIndex(serverImage, "/server:")
-	if i <= 0 {
+	if parsed.Tag == "" {
 		return ""
 	}
-	tag := serverImage[i+len("/server:"):]
-	if tag == "" || strings.Contains(tag, "/") {
-		return ""
-	}
-	return serverImage[:i] + "/proxy_server:" + tag
+	return prefix + "/proxy_server:" + parsed.Tag
 }
 
 // pathwaysImageNouns names the images the rendered JobSet runs besides the sidecar, and the flags that set them.

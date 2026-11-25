@@ -253,7 +253,7 @@ func (g *GKEOrchestrator) pinTelemetryAndValidate(job *orchestrator.JobDefinitio
 
 // validateSubmitLocalPreflight runs the checks that need no cluster access or image build: GKE-only flag
 // rejection in TypeK8s, Tier-3 flag compatibility when GCLUSTER_DISABLE_JOBSET is set, mount syntax,
-// ML Diagnostics flags, Pathways image resolution, and custom template parsing.
+// restart bounds, ML Diagnostics flags, Pathways image resolution, and custom template parsing.
 func (g *GKEOrchestrator) validateSubmitLocalPreflight(sm *StorageManager, job orchestrator.JobDefinition) error {
 	if g.mode == orchestrator.TypeK8s {
 		if err := orchestrator.ValidateK8sSubmitJob(job); err != nil {
@@ -277,6 +277,9 @@ func (g *GKEOrchestrator) validateSubmitLocalPreflight(sm *StorageManager, job o
 		if _, _, _, err := resolvePathwaysImages(job.Pathways); err != nil {
 			return err
 		}
+	}
+	if err := k8s.ValidateNonNegativeInt32("--restarts", job.MaxRestarts); err != nil {
+		return err
 	}
 	return k8s.ValidateCustomWorkloadTemplates(g.gkeCustomTemplatesPath, g.resolveWorkloadTemplateName(job))
 }

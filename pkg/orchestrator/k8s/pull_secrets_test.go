@@ -80,31 +80,6 @@ func makeTestDockerSecret(name string, authKeys ...string) unstructured.Unstruct
 	return rawDockerSecret(name, base64.StdEncoding.EncodeToString(raw))
 }
 
-func TestSplitImageRef(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		ref, wantHost, wantPath string
-		wantOK                  bool
-	}{
-		{"", "", "", false},
-		{":latest", "", "", false},
-		{"alpine:3.20", "docker.io", "library/alpine", true},
-		{"myreg:5000", "docker.io", "library/myreg", true},
-		{"pytorch/pytorch:2.4@sha256:1111", "docker.io", "pytorch/pytorch", true},
-		{"docker.io/nginx", "docker.io", "library/nginx", true},
-		{"index.docker.io/team/app:v1", "docker.io", "team/app", true},
-		{"gcr.io/proj/img@sha256:abc", "gcr.io", "proj/img", true},
-		{"localhost:5000/repo/img:tag", "localhost:5000", "repo/img", true},
-		{"[fd00::1]:5000/obs/collector:v1", "[fd00::1]:5000", "obs/collector", true},
-	}
-	for _, tc := range cases {
-		gotHost, gotPath, gotOK := splitImageRef(tc.ref)
-		if gotHost != tc.wantHost || gotPath != tc.wantPath || gotOK != tc.wantOK {
-			t.Errorf("splitImageRef(%q) = (%q, %q, %v), want (%q, %q, %v)", tc.ref, gotHost, gotPath, gotOK, tc.wantHost, tc.wantPath, tc.wantOK)
-		}
-	}
-}
-
 func TestAuthKeyHostAndPath(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

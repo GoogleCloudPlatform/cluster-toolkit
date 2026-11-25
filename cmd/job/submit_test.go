@@ -19,6 +19,7 @@ import (
 	"context"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1669,6 +1670,81 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSubmitCmd_RestartsBounds(t *testing.T) {
+	t.Run("rejects out-of-range --restarts before image checks", func(t *testing.T) {
+		cases := []struct {
+			name    string
+			val     string
+			wantErr string
+		}{
+			{name: "negative", val: "-1", wantErr: "--restarts must be non-negative"},
+		}
+		if math.MaxInt > math.MaxInt32 {
+			cases = append(cases, struct {
+				name    string
+				val     string
+				wantErr string
+			}{name: "above int32 max", val: "2147483648", wantErr: "--restarts must be at most 2147483647"})
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				setupSubmitTestEnv(t)
+				t.Setenv("GCLUSTER_IMAGE_REPO", "")
+				_, err := executeCommand(JobCmd,
+					"submit",
+					"--name", "bad-restarts",
+					"--base-image", "python:3.12-slim",
+					"--build-context", t.TempDir(),
+					"--command", "echo hello",
+					"--compute-type", "n2d-standard-64",
+					"--restarts", tc.val,
+					"--skip-prereqs",
+					"--cluster", "test-cluster",
+					"--location", "us-central1-a",
+					"--project", "test-project",
+				)
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("got err = %v, want substring %q", err, tc.wantErr)
+				}
+			})
+		}
+	})
+
+	t.Run("accepts --restarts at 0 and int32 max", func(t *testing.T) {
+		for _, tc := range []struct {
+			val  string
+			want int
+		}{
+			{val: "0", want: 0},
+			{val: "2147483647", want: 2147483647},
+		} {
+			t.Run(tc.val, func(t *testing.T) {
+				setupSubmitTestEnv(t)
+				mockOrc := &mockOrchestrator{}
+				gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+				_, err := executeCommand(JobCmd,
+					"submit",
+					"--name", "ok-restarts",
+					"--image", "us-docker.pkg.dev/p/r/img:v1",
+					"--command", "echo hello",
+					"--compute-type", "n2d-standard-64",
+					"--restarts", tc.val,
+					"--skip-prereqs",
+					"--cluster", "test-cluster",
+					"--location", "us-central1-a",
+					"--project", "test-project",
+				)
+				if err != nil {
+					t.Fatalf("--restarts %s failed unexpectedly: %v", tc.val, err)
+				}
+				if got := mockOrc.SubmittedJob.MaxRestarts; got != tc.want {
+					t.Errorf("SubmittedJob.MaxRestarts = %d, want %d", got, tc.want)
+				}
+			})
+		}
+	})
 }
 
 func TestSubmitCmd_DeployPathwaysSPS(t *testing.T) {
