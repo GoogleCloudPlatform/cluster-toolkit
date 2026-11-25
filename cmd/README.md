@@ -96,6 +96,7 @@ gcluster deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 * `--auto-approve`: Automatically approve proposed changes without prompting.
 * `--backend-config <strings>`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
 * `-d, --deployment-file <string>`: Deployment file to override blueprint variables and backend configuration.
+* `--export-to-cluster-director`: Export the deployment to Cluster Director, overriding the blueprint's `export_to_cluster_director` setting (off by default). Pass `=true` to export or update the exported cluster, or `=false` to skip exporting, or to delete a previous export while keeping the infrastructure. Can't be combined with `--only` or `--skip`. See [Export deployments to Cluster Director](../docs/cluster-director.md).
 * `--force`: Forces overwrite of existing deployment directory. If set, `--overwrite-deployment` is implied and no validation is performed on the existing deployment directory.
 * `--json-output`: Write Terraform output to JSON file (instead of default English text to console).
 * `--only <strings>`: Only apply to groups with the given names (comma-separated).
