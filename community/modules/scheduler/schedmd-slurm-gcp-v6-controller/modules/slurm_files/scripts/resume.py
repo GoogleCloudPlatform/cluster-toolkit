@@ -509,7 +509,7 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                 if ignore_rem:
                     handle_resume_failure(
                         ignore_rem,
-                        f"{combined_reason} (skipped power_down for unverified/external VM)",
+                        f"Aborted: sibling nodeset blocked ({combined_reason}); skipped power_down for unverified/external VM",
                         resume_data,
                         error_handler.Action.IGNORE,
                         combined_reason,

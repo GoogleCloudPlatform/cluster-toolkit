@@ -2627,3 +2627,26 @@ def test_resume_mig_nodes_reservation_type_fail_fast(
   assert mock_handle_failure.call_args.args[0] == ["c-n-0"]
   assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
   assert "CALENDAR mode requires RESERVATION_BOUND" in mock_handle_failure.call_args.args[1]
+
+  # 12. Exclusive multi-nodeset job where healthy sibling is downgraded to IGNORE (e.g. GCE lookup error):
+  #     sibling reason must NOT start with MIG_UNSUPPORTED_RESERVATION_PREFIX so slurmsync won't freeze it.
+  mock_execute.reset_mock()
+  mock_handle_failure.reset_mock()
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.reservations().get().execute.return_value = {"deploymentType": "DENSE"}
+  lkp_sib_err = util.Lookup(cfg_multi)
+  with unittest.mock.patch.object(
+      util.Lookup, "instance", side_effect=RuntimeError("transient GCE error")
+  ):
+    resume.resume_mig_nodes(["c-n-0", "c-ok-0"], excl_job_id=99, lkp=lkp_sib_err)
+  mock_compute.regionInstanceGroupManagers().createInstances.assert_not_called()
+  assert mock_handle_failure.call_count == 2
+  blocked_call, sibling_call = mock_handle_failure.call_args_list
+  assert blocked_call.args[0] == ["c-n-0"]
+  assert blocked_call.args[1].startswith(util.MIG_UNSUPPORTED_RESERVATION_PREFIX)
+  assert blocked_call.args[3] == error_handler.Action.IGNORE
+  assert sibling_call.args[0] == ["c-ok-0"]
+  assert sibling_call.args[3] == error_handler.Action.IGNORE
+  assert not sibling_call.args[1].startswith(util.MIG_UNSUPPORTED_RESERVATION_PREFIX)
+  assert "sibling nodeset blocked" in sibling_call.args[1]
