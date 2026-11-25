@@ -93,10 +93,6 @@ deployment_groups:
             hosts: all
             become: true
             vars:
-              dcgm_packages:
-              - datacenter-gpu-manager-4-core
-              - datacenter-gpu-manager-4-dev
-              - datacenter-gpu-manager-4-cuda13
               nvidia_packages:
               - nvidia-container-toolkit
               - nvidia-container-toolkit-base
@@ -108,14 +104,10 @@ deployment_groups:
               - datacenter-gpu-manager-4-core
               - datacenter-gpu-manager-4-dev
               - datacenter-gpu-manager-4-cuda13
+              - nccl-gib
             tasks:
-            - name: Install NVIDIA DCGM
-              ansible.builtin.apt:
-                name: "{{ dcgm_packages }}"
-                state: present
-                update_cache: true
-            # Freeze NVIDIA fabric and DCGM
-            - name: Freeze NVIDIA fabric and DCGM
+            # Freeze NVIDIA fabric, DCGM, and NCCL-GIB packages
+            - name: Freeze NVIDIA fabric, DCGM, and NCCL-GIB packages
               ansible.builtin.command:
                 argv:
                 - apt-mark
@@ -179,43 +171,6 @@ deployment_groups:
           cd ../
           rm -rf openmpi-5.0.8.tar.bz2 openmpi-5.0.8
 
-      # Install NCCL-GIB network plugin as per nccl-gib specification for a4x
-      - type: ansible-local
-        destination: install_nccl_gib.yml
-        content: |
-          ---
-          - name: Install Google NCCL-GIB Plugin
-            hosts: localhost
-            become: true
-            tasks:
-            - name: Add artifact registry gpg key for us-apt.pkg.dev
-              ansible.builtin.apt_key:
-                url: https://us-apt.pkg.dev/doc/repo-signing-key.gpg
-                state: present
-            - name: Add artifact registry gpg key for packages.cloud.google.com
-              ansible.builtin.apt_key:
-                url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-                state: present
-            - name: Install Apt Transport AR Apt Repo
-              apt_repository:
-                repo: 'deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main'
-                state: present
-            - name: Install AR transport
-              ansible.builtin.apt:
-                name: "apt-transport-artifact-registry"
-                update_cache: true
-            - name: Install Google NCCL-GIB Plugin
-              apt_repository:
-                repo: "deb ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-gib-apt main"
-                state: present
-            - name: Install NCCL-GIB Plugin
-              ansible.builtin.apt:
-                name: "nccl-gib"
-                update_cache: true
-            - name: Freeze NCCL GIB Plugin
-              ansible.builtin.dpkg_selections:
-                name: "nccl-gib"
-                selection: hold
       - type: ansible-local
         destination: update_ldconfig.yml
         content: |

@@ -131,7 +131,7 @@ deployment_groups:
           * - cpu unlimited
           * - rtprio unlimited
 
-      # Configure Nvidia driver / CUDA services (driver, CUDA, and NCCL-GIB are pre-installed in base image)
+      # Configure Nvidia driver / CUDA services (driver, CUDA, DCGM, and NCCL-GIB are pre-installed in base image)
       - type: ansible-local
         destination: install_a4h_drivers.yml
         content: |
@@ -140,10 +140,6 @@ deployment_groups:
             hosts: all
             become: true
             vars:
-              dcgm_packages:
-              - datacenter-gpu-manager-4-core
-              - datacenter-gpu-manager-4-dev
-              - datacenter-gpu-manager-4-cuda13
               nvidia_packages:
               - datacenter-gpu-manager-4-core
               - datacenter-gpu-manager-4-dev
@@ -152,11 +148,6 @@ deployment_groups:
               - nvidia-fabricmanager*
               - nccl-gib
             tasks:
-            - name: Install NVIDIA DCGM
-              ansible.builtin.apt:
-                name: "{{ dcgm_packages }}"
-                state: present
-                update_cache: true
             - name: Freeze NVIDIA fabric, DCGM, and NCCL-GIB packages
               ansible.builtin.command:
                 argv:
