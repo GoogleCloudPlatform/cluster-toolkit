@@ -1141,28 +1141,3 @@ type connectivityChecker struct {
 	getenv func(string) string
 	probe  func(ctx context.Context) bool
 }
-
-// batchJobInfoJSON captures the fields needed by GetJobLogs when falling back to a standalone batch/v1 Job.
-type batchJobInfoJSON struct {
-	Metadata struct {
-		Name   string            `json:"name"`
-		Labels map[string]string `json:"labels"`
-	} `json:"metadata"`
-	Spec struct {
-		Suspend     *bool `json:"suspend"`
-		Parallelism *int  `json:"parallelism"`
-		Completions *int  `json:"completions"`
-		Template    struct {
-			Spec struct {
-				InitContainers []struct{ Name string } `json:"initContainers"`
-				Containers     []struct{ Name string } `json:"containers"`
-			} `json:"spec"`
-		} `json:"template"`
-	} `json:"spec"`
-	Status struct {
-		Conditions []struct {
-			Type   string `json:"type"`
-			Status string `json:"status"`
-		} `json:"conditions"`
-	} `json:"status"`
-}

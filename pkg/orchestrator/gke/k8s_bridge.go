@@ -159,10 +159,7 @@ func scaleExpectedStreams(livePods, liveStreams, expectedPods, expectedStreams i
 }
 
 func (g *GKEOrchestrator) allPodsLogsCommand(namespace, name string, maxReqs int, follow, isBatchJob bool) string {
-	selector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", name)
-	if isBatchJob {
-		selector = fmt.Sprintf("%s=%s,batch.kubernetes.io/job-name=%s", workloadLabel, name, name)
-	}
+	selector := workloadPodSelector(name, isBatchJob)
 	args := []string{"logs", "-n", namespace, "-l", selector, "--all-containers", "--prefix"}
 	if follow {
 		args = append(args, "-f")

@@ -3271,9 +3271,23 @@ func TestProbeURLConnectivity_StatusCodesAndTimeout(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			var srv *httptest.Server
+			srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if tc.delay > 0 {
-					time.Sleep(tc.delay)
+					select {
+					case <-r.Context().Done():
+						return
+					case <-time.After(tc.delay):
+					}
+				}
+				if tc.status == http.StatusFound && r.URL.Path == "/" {
+					w.Header().Set("Location", srv.URL+"/ok")
+					w.WriteHeader(http.StatusFound)
+					return
+				}
+				if tc.status == http.StatusFound && r.URL.Path == "/ok" {
+					w.WriteHeader(http.StatusOK)
+					return
 				}
 				w.WriteHeader(tc.status)
 			}))
@@ -3283,6 +3297,14 @@ func TestProbeURLConnectivity_StatusCodesAndTimeout(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("rejects_https_to_http_scheme_downgrade", func(t *testing.T) {
+		prev, _ := http.NewRequest(http.MethodHead, "https://github.com/", nil)
+		next, _ := http.NewRequest(http.MethodHead, "http://github.com/", nil)
+		if err := checkConnectivityProbeRedirect(next, []*http.Request{prev}, "github.com"); err == nil || !strings.Contains(err.Error(), "downgrade") {
+			t.Errorf("checkConnectivityProbeRedirect(https->http) = %v, want scheme downgrade error", err)
+		}
+	})
 }
 
 func TestConnectivityReset_SessionResetReprobesGitHub(t *testing.T) {

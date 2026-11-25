@@ -892,6 +892,7 @@ func TestInspector_HasJobSetGateAndUnqueuedWorkloadsList(t *testing.T) {
 			"kubectl describe pods -l gcluster.google.com/workload=t3-job,batch.kubernetes.io/job-name=t3-job -n ml":    {{ExitCode: 0, Stdout: "Events: <none>"}},
 		})
 		orc := newTestGKEOrchestrator(mockExec)
+		orc.kubeClient = nil
 		orc.connectivity = &connectivityChecker{
 			getenv: func(k string) string {
 				if k == disableJobSetEnvVar {
@@ -955,6 +956,7 @@ func TestInspector_MissingBatchJobWhenHasJobSetFalseKeepsJobSelectors(t *testing
 		"kubectl get job gone-job -n ml -o json": {{ExitCode: 1, Stderr: `Error from server (NotFound): jobs.batch "gone-job" not found`}},
 	})
 	orc := newTestGKEOrchestrator(mockExec)
+	orc.kubeClient = nil
 	var buf strings.Builder
 	w := &inspectWriter{writer: &buf, orc: orc}
 	orc.inspectWorkload(w, "gone-job", "ml", true, false)
@@ -1009,6 +1011,7 @@ func TestDescribeWorkloadResource_ForbiddenJobSetFallsBackToTier3Job(t *testing.
 		"kubectl describe pods -l gcluster.google.com/workload=t3-rb,batch.kubernetes.io/job-name=t3-rb -n ml":    {{ExitCode: 0, Stdout: "Events: <none>"}},
 	})
 	orc := newTestGKEOrchestrator(mockExec)
+	orc.kubeClient = nil
 	var buf strings.Builder
 	w := &inspectWriter{writer: &buf, orc: orc}
 	orc.inspectWorkload(w, "t3-rb", "ml", true, true)

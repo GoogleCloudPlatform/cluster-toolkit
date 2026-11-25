@@ -909,3 +909,26 @@ func TestCancelJob_BatchJobDeletePreservesSameNamedLiveJobSetPVC(t *testing.T) {
 		}
 	})
 }
+
+func TestCancelJob_SkipsJobSetOwnerRefService(t *testing.T) {
+	notFoundErr := apierrors.NewNotFound(jobSetGVR.GroupResource(), "tier3-job")
+	jsOwnedSvc := makeTestOwnedService("tier3-job", "js-ref")
+	jsOwnedSvc.SetOwnerReferences([]metav1.OwnerReference{{APIVersion: "jobset.x-k8s.io/v1alpha2", Kind: "JobSet", Name: "tier3-job", UID: "js-uid"}})
+	mock := &MockKubeClient{
+		Namespace:       "default",
+		DeleteJobSetErr: notFoundErr,
+		Objects: map[string][]unstructured.Unstructured{
+			"jobs":     {makeTestOwnedBatchJob("tier3-job", "1")},
+			"services": {jsOwnedSvc},
+		},
+	}
+	if err := cancelTestOrchestrator(mock).CancelJob("tier3-job", cancelOpts); err != nil {
+		t.Fatalf("CancelJob(JobSet-ownerRef Service) err = %v, want nil", err)
+	}
+	if !reflect.DeepEqual(mock.Deleted["jobs"], []string{"tier3-job"}) {
+		t.Errorf("expected batch Job deleted, deleted=%v", mock.Deleted)
+	}
+	if len(mock.Deleted["services"]) != 0 {
+		t.Errorf("JobSet-owned Service (via ownerReferences) must not be deleted, deleted=%v", mock.Deleted)
+	}
+}

@@ -642,6 +642,29 @@ func kubectlCommandLine(kubeContext string, args ...string) string {
 	return strings.Join(parts, " ")
 }
 
+// kubectlOutputError returns an error wrapping kubectl's combined stderr/stdout for non-spawn failures,
+// or nil when ExitCode == -1 (process spawn failure or timeout) so callers never misclassify spawn errors as HTTP/RBAC statuses.
+func kubectlOutputError(res shell.CommandResult) error {
+	if res.ExitCode == -1 {
+		return nil
+	}
+	return errors.New(strings.TrimSpace(res.Stderr + "\n" + res.Stdout))
+}
+
+func kubectlCommandError(prefix string, res shell.CommandResult) error {
+	detail := strings.TrimSpace(res.Stderr + "\n" + res.Stdout)
+	if detail == "" {
+		if res.Err != nil {
+			return fmt.Errorf("%s: %w", prefix, res.Err)
+		}
+		return fmt.Errorf("%s: exit status %d", prefix, res.ExitCode)
+	}
+	if res.Err != nil {
+		return fmt.Errorf("%s: %s (%w)", prefix, detail, res.Err)
+	}
+	return fmt.Errorf("%s: %s", prefix, detail)
+}
+
 // kubectlIn runs kubectl with DefaultLocalCommandTimeout against an explicit non-blank kubeContext,
 // refusing a blank context so probes never silently fall back to current-context.
 func (g *GKEOrchestrator) kubectlIn(kubeContext string, args ...string) shell.CommandResult {

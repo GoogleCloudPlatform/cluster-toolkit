@@ -116,8 +116,7 @@ func (g *GKEOrchestrator) checkResourceExists(kind, name, namespace string) (exi
 	if res.ExitCode == 0 {
 		return strings.TrimSpace(res.Stdout) != "", false, nil
 	}
-	rawErr := errors.New(strings.TrimSpace(res.Stderr + "\n" + res.Stdout))
-	if res.ExitCode != -1 && k8s.IsForbiddenError(rawErr) {
+	if rawErr := kubectlOutputError(res); rawErr != nil && k8s.IsForbiddenError(rawErr) {
 		logging.Warn("Insufficient RBAC permissions to read %s %s (403 Forbidden). Assuming it exists.", kind, name)
 		return true, true, nil
 	}
@@ -254,10 +253,6 @@ func jobSetManifestFile(kubeContext string) string {
 	return scopedManifestFile("jobset", kubeContext)
 }
 
-func kueueManifestFile(kubeContext string) string {
-	return scopedManifestFile("kueue", kubeContext)
-}
-
 // waitForJobSetWebhook waits for the controller that installJobSetCRD applied, then for a ready webhook endpoint.
 func (g *GKEOrchestrator) waitForJobSetWebhook() error {
 	logging.Info("Waiting up to 10 minutes for the JobSet controller to roll out...")
@@ -333,10 +328,10 @@ func (g *GKEOrchestrator) checkServiceEndpointsReady(namespace, service string) 
 	res := g.kubectl("get", "endpointslice", "-l", "kubernetes.io/service-name="+service, "-n", namespace, "-o", "json", kubectlReadTimeout)
 	if res.ExitCode != 0 {
 		cmdErr := kubectlCommandError("kubectl get endpointslice failed", res)
-		if res.ExitCode == -1 {
+		rawErr := kubectlOutputError(res)
+		if rawErr == nil {
 			return false, false, cmdErr
 		}
-		rawErr := errors.New(strings.TrimSpace(res.Stderr + "\n" + res.Stdout))
 		if k8s.IsForbiddenError(rawErr) {
 			logging.Warn("Insufficient RBAC permissions to read %s endpoints in %s (403 Forbidden). Skipping endpoint readiness check.", service, namespace)
 			return true, true, nil
@@ -563,14 +558,6 @@ func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interf
 	}
 }
 
-func (g *GKEOrchestrator) injectKueueControllerTolerations(data map[interface{}]interface{}) {
-	podSpec, _, ok := matchDeploymentPodSpec(data, "kueue-controller-manager")
-	if !ok {
-		return
-	}
-	appendControllerTolerations(podSpec)
-}
-
 func matchDeploymentPodSpec(data map[interface{}]interface{}, deployNames ...string) (podSpec, template map[interface{}]interface{}, ok bool) {
 	kind, ok := data["kind"].(string)
 	if !ok || kind != "Deployment" {
@@ -717,12 +704,8 @@ func (g *GKEOrchestrator) getenv() func(string) string {
 }
 
 func (g *GKEOrchestrator) isEnvTruthy(key string) bool {
-	switch strings.ToLower(strings.TrimSpace(g.getenv()(key))) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
+	v, _ := shell.ParseBoolEnv(g.getenv()(key))
+	return v
 }
 
 func (g *GKEOrchestrator) jobSetEnabled() bool {
@@ -758,12 +741,10 @@ func (g *GKEOrchestrator) isAirGapped() bool {
 }
 
 func (g *GKEOrchestrator) airGapReason() string {
-	switch strings.ToLower(strings.TrimSpace(g.getenv()(shell.AirGappedEnvVar))) {
-	case "1", "true", "yes", "on":
+	if g.isEnvTruthy(shell.AirGappedEnvVar) {
 		return fmt.Sprintf("when %s is enabled", shell.AirGappedEnvVar)
-	default:
-		return "in an air-gapped or offline environment"
 	}
+	return "in an air-gapped or offline environment"
 }
 
 func (g *GKEOrchestrator) isOfflineForAddons() bool {
@@ -844,13 +825,7 @@ func probeURLConnectivityOnce(ctx context.Context, rawURL, initialHost string) (
 	client := &http.Client{
 		Transport: tr,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 10 {
-				return errors.New("stopped after 10 redirects")
-			}
-			if !isAllowedConnectivityProbeHost(req.URL.Hostname(), initialHost) {
-				return fmt.Errorf("redirect to untrusted host %q", req.URL.Hostname())
-			}
-			return nil
+			return checkConnectivityProbeRedirect(req, via, initialHost)
 		},
 	}
 	resp, err := client.Do(req)
@@ -862,6 +837,19 @@ func probeURLConnectivityOnce(ctx context.Context, rawURL, initialHost string) (
 		return true, false
 	}
 	return false, resp.StatusCode >= http.StatusInternalServerError
+}
+
+func checkConnectivityProbeRedirect(req *http.Request, via []*http.Request, initialHost string) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	if len(via) > 0 && strings.EqualFold(via[len(via)-1].URL.Scheme, "https") && !strings.EqualFold(req.URL.Scheme, "https") {
+		return fmt.Errorf("refusing redirect scheme downgrade from https to %q", req.URL.Scheme)
+	}
+	if !isAllowedConnectivityProbeHost(req.URL.Hostname(), initialHost) {
+		return fmt.Errorf("redirect to untrusted host %q", req.URL.Hostname())
+	}
+	return nil
 }
 
 // probeAPIGroupOnForbidden checks /apis/<group> when a privileged CRD/namespace GET returns 403 Forbidden.
@@ -971,64 +959,6 @@ func classifyJobSetPresence(crdExists, serviceExists bool) jobSetAddonProbe {
 	}
 }
 
-func (g *GKEOrchestrator) classifyKueueAddon() (kueueAddonProbe, error) {
-	if g.isEnvTruthy(disableKueueEnvVar) {
-		logging.Info("%s is set; skipping Kueue queueing.", disableKueueEnvVar)
-		return kueueAddonProbe{state: addonStateDisabled}, nil
-	}
-	crdInstalled, crdForbidden, err := g.isKueueCRDInstalled()
-	if err != nil {
-		return kueueAddonProbe{}, fmt.Errorf("failed to verify Kueue CRD status: %w", err)
-	}
-	dep, depInstalled, depForbidden, err := g.getKueueDeploymentWithStatus()
-	if err != nil {
-		return kueueAddonProbe{}, fmt.Errorf("failed to verify Kueue deployment status: %w", err)
-	}
-	if crdForbidden || depForbidden {
-		if present, checked := g.probeAPIGroupOnForbidden("kueue.x-k8s.io"); checked {
-			crdInstalled, depInstalled = resolveForbiddenAddonPresence(present, crdInstalled, crdForbidden, depInstalled, depForbidden)
-		}
-	}
-	return g.buildKueueAddonProbe(crdInstalled, depInstalled, dep), nil
-}
-
-func (g *GKEOrchestrator) buildKueueAddonProbe(crdInstalled, depInstalled bool, dep *kueueDeployment) kueueAddonProbe {
-	switch {
-	case crdInstalled && depInstalled:
-		var ver string
-		if dep != nil {
-			logging.Info("Kueue deployment found.")
-			if v, errVer := g.getKueueVersion(dep); errVer == nil {
-				ver = v
-			} else {
-				logging.Info("Warning: Unable to determine installed Kueue version: %v", errVer)
-			}
-		}
-		return kueueAddonProbe{
-			state:          addonStateInstalled,
-			crdExists:      true,
-			dep:            dep,
-			currentVersion: ver,
-		}
-	case !crdInstalled && !depInstalled:
-		return kueueAddonProbe{state: addonStateMissing}
-	default:
-		return kueueAddonProbe{
-			state:     addonStatePartial,
-			crdExists: crdInstalled,
-			dep:       dep,
-		}
-	}
-}
-
-func (p kueueAddonProbe) isPresent() bool {
-	return p.state == addonStateInstalled || p.state == addonStatePartial || p.crdExists || p.dep != nil
-}
-
-func (g *GKEOrchestrator) needsKueueUpgrade(probe kueueAddonProbe) bool {
-	return g.mode != orchestrator.TypeK8s && probe.currentVersion != "" && g.isVersionBelow(probe.currentVersion, defaultKueueVersion)
-}
-
 func (g *GKEOrchestrator) ensureJobSetProbeReady(probe jobSetAddonProbe) error {
 	if probe.checkedEP && probe.epReady {
 		return nil
@@ -1044,21 +974,6 @@ func (g *GKEOrchestrator) ensureJobSetProbeReady(probe jobSetAddonProbe) error {
 	if err := g.waitForJobSetWebhookEndpoints(); err != nil {
 		return fmt.Errorf("JobSet is installed but its webhook is not ready, and gcluster did not modify the existing JobSet installation: %w", err)
 	}
-	return nil
-}
-
-func (g *GKEOrchestrator) checkDynamicSlicingBlocksKueue(clusterName string) error {
-	if g.mode != orchestrator.TypeK8s && g.checkDynamicSlicingViaGKE() {
-		return fmt.Errorf("automatic Kueue installation/modification blocked: cluster %s is set up for Dynamic-Slicing (found 'PROVISION_ONLY' in node pool placementPolicy). Automatic installation or modification of Kueue could conflict with custom topology configurations. Please install Kueue and required CRDs manually", clusterName)
-	}
-	return nil
-}
-
-func (g *GKEOrchestrator) verifyKueueWebhookReady(dep *kueueDeployment) error {
-	if err := g.waitForKueueWebhookFast(dep); err != nil {
-		return fmt.Errorf("kueue is installed but currently unhealthy. Please check deployment health with '%s': %w", kubectlCommandLine(g.kubeContext, "get", "deployment", "kueue-controller-manager", "-n", "kueue-system"), err)
-	}
-	logging.Info("Kueue is already installed.")
 	return nil
 }
 
@@ -1523,22 +1438,6 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 		return g.ensureClusterQueueCoverage(localQueue, ns)
 	}
 	return nil
-}
-
-func selectDiscoveredLocalQueue(queues []string) (string, error) {
-	if len(queues) == 1 {
-		logging.Info("Auto-discovered Kueue LocalQueue: %s", queues[0])
-		return queues[0], nil
-	}
-	if slices.Contains(queues, defaultLocalQueue) {
-		logging.Info("Multiple LocalQueues found %v. Defaulting to standard LocalQueue '%s'.", queues, defaultLocalQueue)
-		return defaultLocalQueue, nil
-	}
-	if slices.Contains(queues, multisliceLocalQueue) {
-		logging.Info("Multiple LocalQueues found %v. Defaulting to '%s'.", queues, multisliceLocalQueue)
-		return multisliceLocalQueue, nil
-	}
-	return "", fmt.Errorf("multiple LocalQueues found (%v) and no standard '%s' or '%s' present. Please specify which one to use using --queue flag", queues, defaultLocalQueue, multisliceLocalQueue)
 }
 
 // ensureLocalQueueExists verifies that the specified LocalQueue exists in the namespace, prompting to create it if missing.

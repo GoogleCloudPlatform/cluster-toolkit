@@ -165,13 +165,39 @@ func calculateNodesFromTopology(topology string, chipsPerNode int) int {
 	return totalChips / chipsPerNode
 }
 
+// IsNoMatchError reports whether err indicates a missing Kubernetes API group, resource, or CRD
+// (distinct from an object-level 404 NotFound).
+func IsNoMatchError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if meta.IsNoMatchError(err) {
+		return true
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return false
+	}
+	var statusErr apierrors.APIStatus
+	if errors.As(err, &statusErr) && !apierrors.IsNotFound(err) {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "error from server (") && !strings.Contains(msg, "error from server (notfound)") {
+		return false
+	}
+	return strings.Contains(msg, "could not find the requested resource") ||
+		strings.Contains(msg, "doesn't have a resource type") ||
+		strings.Contains(msg, "no matches for kind")
+}
+
 // IsNotFoundOrNoMatchError reports whether err indicates a missing Kubernetes API resource,
 // CRD, or object (typed NotFound/NoMatch or equivalent kubectl stderr text).
 func IsNotFoundOrNoMatchError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if apierrors.IsNotFound(err) || meta.IsNoMatchError(err) {
+	if apierrors.IsNotFound(err) || IsNoMatchError(err) {
 		return true
 	}
 	var statusErr apierrors.APIStatus
@@ -183,12 +209,7 @@ func IsNotFoundOrNoMatchError(err error) bool {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "error from server (") {
-		return strings.Contains(msg, "error from server (notfound)")
-	}
-	return strings.Contains(msg, "could not find the requested resource") ||
-		strings.Contains(msg, "doesn't have a resource type") ||
-		strings.Contains(msg, "no matches for kind")
+	return strings.Contains(msg, "error from server (notfound)")
 }
 
 // DiscoverInventory queries Kubernetes nodes, TPU Slices and PartitionTrees, and the non-privileged
@@ -1662,18 +1683,13 @@ func nestedString(obj map[string]interface{}, fields ...string) string {
 	return strings.TrimSpace(val)
 }
 
-// FirstNonEmpty returns the first trimmed non-empty string in vals.
-func FirstNonEmpty(vals ...string) string {
+func firstNonEmpty(vals ...string) string {
 	for _, v := range vals {
 		if trimmed := strings.TrimSpace(v); trimmed != "" {
 			return trimmed
 		}
 	}
 	return ""
-}
-
-func firstNonEmpty(vals ...string) string {
-	return FirstNonEmpty(vals...)
 }
 
 func minNonEmpty(cur, cand string) string {

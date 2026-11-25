@@ -247,10 +247,7 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, w
 		g.inspectKueueWorkload(writer, workloadName, workloadNamespace, isBatchJob)
 	}
 
-	podSelector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", workloadName)
-	if isBatchJob {
-		podSelector = fmt.Sprintf("%s=%s,batch.kubernetes.io/job-name=%s", workloadLabel, workloadName, workloadName)
-	}
+	podSelector := workloadPodSelector(workloadName, isBatchJob)
 	writer.runAndLog(fmt.Sprintf("Pods: Status for %s", workloadName), "kubectl", "get", "pods", "-l", podSelector, "-n", workloadNamespace, "-o", "wide")
 	writer.runAndLog(fmt.Sprintf("Pods: Config and Events for %s", workloadName), "kubectl", "describe", "pods", "-l", podSelector, "-n", workloadNamespace)
 }

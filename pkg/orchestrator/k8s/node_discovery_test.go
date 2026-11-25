@@ -1425,4 +1425,13 @@ func TestIsNotFoundOrNoMatchError(t *testing.T) {
 			}
 		})
 	}
+	if IsNoMatchError(apierrors.NewNotFound(gr, "j1")) {
+		t.Errorf("IsNoMatchError must return false for object-level 404 NotFound")
+	}
+	if !IsNoMatchError(apierrors.NewNotFound(gr, "the server could not find the requested resource")) {
+		t.Errorf("IsNoMatchError must return true for missing-CRD 404 StatusError")
+	}
+	if !IsNoMatchError(&meta.NoKindMatchError{GroupKind: schema.GroupKind{Group: "jobset.x-k8s.io", Kind: "JobSet"}}) {
+		t.Errorf("IsNoMatchError must return true for *meta.NoKindMatchError")
+	}
 }

@@ -33,7 +33,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -6179,6 +6181,147 @@ func TestAttachOwnerRefConflictWarnsAndBatchList403IsInfo(t *testing.T) {
 	}
 	if listWarn != "" {
 		t.Errorf("403 on secondary batch/v1 Job list should log Info, not Warn; got:\n%s", listWarn)
+	}
+}
+
+func TestLookupJobSetConflict_GKEForbiddenFallbackAndNoKindMatch(t *testing.T) {
+	t.Run("gke_cluster_list_403_falls_back_to_namespaced_get", func(t *testing.T) {
+		dyn := &versionTrackingDynamicClient{
+			listByGVR: func(gvr schema.GroupVersionResource, _ string, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				if gvr == jobSetGVR {
+					return nil, apierrors.NewForbidden(jobSetGVR.GroupResource(), "", errors.New("cluster list denied"))
+				}
+				return &unstructured.UnstructuredList{}, nil
+			},
+			getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+				if gvr == jobSetGVR && ns == "ml" && name == "gke-js" {
+					return &unstructured.Unstructured{Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": "js-1"},
+						"spec":     map[string]interface{}{"suspend": false},
+					}}, nil
+				}
+				return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+			},
+		}
+		orc := &GKEOrchestrator{mode: orchestrator.TypeGKE, namespace: "ml", dynClient: dyn}
+		status, err := orc.getJobStatus("gke-js")
+		if err != nil || status != "Pending" {
+			t.Fatalf("getJobStatus(GKE 403 list -> namespaced get) = (%q, %v), want (Pending, nil)", status, err)
+		}
+	})
+
+	t.Run("gke_no_kind_match_triggers_strict_tier3_collision_check", func(t *testing.T) {
+		noKindErr := &meta.NoKindMatchError{GroupKind: schema.GroupKind{Group: "jobset.x-k8s.io", Kind: "JobSet"}}
+		dyn := &versionTrackingDynamicClient{
+			listByGVR: func(gvr schema.GroupVersionResource, _ string, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				if gvr == jobSetGVR {
+					return nil, noKindErr
+				}
+				return &unstructured.UnstructuredList{}, nil
+			},
+			getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+				if gvr == jobGVR && ns == "ml" && name == "collide" {
+					return &unstructured.Unstructured{Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name, "namespace": ns, "labels": map[string]interface{}{"app": "other"}},
+					}}, nil
+				}
+				return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+			},
+		}
+		orc := &GKEOrchestrator{mode: orchestrator.TypeGKE, namespace: "ml", dynClient: dyn}
+		if _, err := orc.getJobStatus("collide"); err == nil || !strings.Contains(err.Error(), "not managed by gcluster") {
+			t.Fatalf("getJobStatus(NoKindMatch + unowned batch Job) err = %v, want collision error", err)
+		}
+	})
+}
+
+func TestAttachOwnerRef_SkipsJobSetOwnerRefService(t *testing.T) {
+	patchCalls := 0
+	dyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			if gvr == jobGVR {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": "job-uid", "labels": map[string]interface{}{workloadLabel: name}},
+				}}, nil
+			}
+			return &unstructured.Unstructured{Object: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name": name, "namespace": ns, "uid": "svc-uid",
+					"labels": map[string]interface{}{workloadLabel: name},
+					"ownerReferences": []interface{}{
+						map[string]interface{}{"apiVersion": "jobset.x-k8s.io/v1alpha2", "kind": "JobSet", "name": name, "uid": "js-uid"},
+					},
+				},
+			}}, nil
+		},
+		patchByGVR: func(schema.GroupVersionResource, string, string, types.PatchType, []byte) (*unstructured.Unstructured, error) {
+			patchCalls++
+			return &unstructured.Unstructured{}, nil
+		},
+	}
+	orc := &GKEOrchestrator{namespace: "ml", dynClient: dyn}
+	orc.syncKubeClient()
+	orc.attachBatchJobServiceOwnerRefWithTarget("t3-job", "", "", "")
+	if patchCalls != 0 {
+		t.Errorf("expected 0 Patch calls on JobSet-ownerRef Service, got %d", patchCalls)
+	}
+}
+
+func TestAwaitDirectPermanentFailFastAndParseBatchJobInfo(t *testing.T) {
+	origSleep := directAwaitSleep
+	sleepCalls := 0
+	directAwaitSleep = func(time.Duration) { sleepCalls++ }
+	t.Cleanup(func() { directAwaitSleep = origSleep })
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get job forbidden-job -n ml -o json --request-timeout=10s": {{ExitCode: 1, Stderr: `Error from server (Forbidden): jobs.batch "forbidden-job" is forbidden`}},
+		"kubectl get job empty-job -n ml -o json --request-timeout=10s":     {{ExitCode: 0, Stdout: ""}},
+		"kubectl get job bad-json -n ml -o json --request-timeout=10s":      {{ExitCode: 0, Stdout: "{bad"}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.submissionSession = submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: false}}
+	if err := orc.awaitWorkloadDirect("forbidden-job", "c", "ml", "1m", ""); err == nil || !k8s.IsForbiddenError(err) {
+		t.Fatalf("awaitWorkloadDirect(403) err = %v, want Forbidden", err)
+	}
+	if sleepCalls != 0 {
+		t.Errorf("permanent 403 await error must fail fast without sleeping, got %d sleeps", sleepCalls)
+	}
+	if _, err := orc.getBatchJobInfo("ml", "empty-job"); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("getBatchJobInfo(empty stdout) err = %v, want not found", err)
+	}
+	if _, err := orc.getBatchJobInfo("ml", "bad-json"); err == nil || !strings.Contains(err.Error(), "failed to parse") {
+		t.Errorf("getBatchJobInfo(malformed JSON) err = %v, want parse error", err)
+	}
+
+	info := parseBatchJobInfo(batchv1.Job{
+		Status: batchv1.JobStatus{
+			Conditions: []batchv1.JobCondition{
+				{Type: batchv1.JobComplete, Status: corev1.ConditionFalse},
+				{Type: batchv1.JobFailed, Status: corev1.ConditionTrue},
+				{Type: batchv1.JobSuspended, Status: corev1.ConditionTrue},
+			},
+		},
+	})
+	if info.terminalState != "Failed" || !info.suspended {
+		t.Errorf("parseBatchJobInfo = %+v, want terminalState=Failed and suspended=true", info)
+	}
+}
+
+func TestResolveWorkloadOwnerUID_UnownedBatchJobGuard(t *testing.T) {
+	t.Setenv(disableJobSetEnvVar, "1")
+	dyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			if gvr == jobGVR {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": "u-1", "labels": map[string]interface{}{"app": "other"}},
+				}}, nil
+			}
+			return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+		},
+	}
+	kc := &DefaultKubeClient{dynClient: dyn}
+	if _, err := kc.resolveWorkloadOwnerUID("ml", "other-job"); err == nil || !strings.Contains(err.Error(), "not managed by gcluster") {
+		t.Fatalf("resolveWorkloadOwnerUID(unowned Job) err = %v, want not managed by gcluster error", err)
 	}
 }
 
