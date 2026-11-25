@@ -317,6 +317,7 @@ func (m Module) InfoOrDie() modulereader.ModuleInfo {
 type Blueprint struct {
 	BlueprintName            string      `yaml:"blueprint_name"`
 	GhpcVersion              string      `yaml:"ghpc_version,omitempty"`
+	ExportToClusterDirector  *bool       `yaml:"export_to_cluster_director,omitempty"`
 	AIAssisted               bool        `yaml:"ai_assisted,omitempty"`
 	Validators               []Validator `yaml:"validators,omitempty"`
 	ValidationLevel          int         `yaml:"validation_level,omitempty"`
@@ -347,6 +348,10 @@ type Blueprint struct {
 
 func (bp *Blueprint) Clone() Blueprint {
 	c := *bp // copy immutable fields
+	if bp.ExportToClusterDirector != nil {
+		v := *bp.ExportToClusterDirector
+		c.ExportToClusterDirector = &v
+	}
 	// copy slices & maps of immutable types
 	c.Validators = slices.Clone(bp.Validators)
 	c.stagedFiles = maps.Clone(bp.stagedFiles)
@@ -400,6 +405,7 @@ func (bp *Blueprint) visitDicts(cb func(dictPath, *Dict)) {
 
 // DeploymentSettings are deployment-specific override settings
 type DeploymentSettings struct {
+	ExportToClusterDirector  *bool            `yaml:"export_to_cluster_director,omitempty"`
 	AIAssisted               bool             `yaml:"ai_assisted,omitempty"`
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
 	Vars                     Dict
@@ -781,6 +787,23 @@ func validateSlurmClusterName(bp Blueprint) error {
 		}}
 	}
 	return nil
+}
+
+// ExportToClusterDirectorEnabled returns whether Cluster Director export is enabled
+// at the top level of the blueprint (`export_to_cluster_director` field).
+// Export is opt-in, so it defaults to false when not set.
+func (bp *Blueprint) ExportToClusterDirectorEnabled() bool {
+	if bp.ExportToClusterDirector != nil {
+		return *bp.ExportToClusterDirector
+	}
+	return false
+}
+
+// SetExportToClusterDirector overrides the top-level `export_to_cluster_director`
+// setting from the `--export-to-cluster-director` CLI flag.
+func (bp *Blueprint) SetExportToClusterDirector(enabled bool) {
+	v := enabled
+	bp.ExportToClusterDirector = &v
 }
 
 // checkToolkitModulesUrlAndVersion returns an error if either

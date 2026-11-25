@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
@@ -138,19 +139,21 @@ func ConfigureTerraform(workingDir string) (*tfexec.Terraform, error) {
 // will download plugins (e.g. google provider) as needed; no reliable mechanism
 // has been found (e.g. tfexec.PluginDir("/dev/null")) that avoids erroring on
 // properly-initialized root modules
-func needsInit(tf *tfexec.Terraform) bool {
+func needsInit(ctx context.Context, tf *tfexec.Terraform) bool {
 	getOpt := tfexec.Get(false)
 	backendOpt := tfexec.Backend(false)
-	e := tf.Init(context.Background(), getOpt, backendOpt)
+	e := tf.Init(ctx, getOpt, backendOpt)
 
 	return e != nil
 }
 
-func initModule(tf *tfexec.Terraform) error {
+// InitModule initializes the Terraform working directory when needed, returning
+// a HintError with actionable guidance on failure.
+func InitModule(ctx context.Context, tf *tfexec.Terraform) error {
 	var err error
-	if needsInit(tf) {
+	if needsInit(ctx, tf) {
 		logging.Info("Initializing deployment group %s", tf.WorkingDir())
-		err = tf.Init(context.Background())
+		err = tf.Init(ctx)
 	}
 
 	if err != nil {
@@ -165,7 +168,11 @@ func initModule(tf *tfexec.Terraform) error {
 			Err:  err}
 	}
 
-	return err
+	return nil
+}
+
+func initModule(tf *tfexec.Terraform) error {
+	return InitModule(context.Background(), tf)
 }
 
 func outputModule(tf *tfexec.Terraform) (map[string]cty.Value, error) {
@@ -345,6 +352,10 @@ func applyPlanConsoleOutput(tf *tfexec.Terraform, path string) error {
 	return nil
 }
 
+// ErrDestroySkipped is returned by Destroy when the user chose to continue
+// without applying the destroy plan at the interactive prompt.
+var ErrDestroySkipped = errors.New("destroy plan was not applied")
+
 // generate a Terraform plan to apply or destroy a module
 // recall "destroy" is just an alias for "apply -destroy"!
 // apply the plan automatically or after prompting the user
@@ -381,23 +392,25 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, of OutputFormat, dest
 	}
 
 	if !apply {
+		if destroy && wantsChange {
+			return ErrDestroySkipped
+		}
 		return nil
 	}
 
+	return applyPlan(tf, f.Name(), of)
+}
+
+// applyPlan applies the Terraform plan at path, writing its output in format of.
+func applyPlan(tf *tfexec.Terraform, path string, of OutputFormat) error {
 	switch of {
 	case JsonOutput:
-		if err := applyPlanJsonOutput(tf, f.Name()); err != nil {
-			return err
-		}
+		return applyPlanJsonOutput(tf, path)
 	case TextOutput: // Text output to the console is also the default choice
-		if err := applyPlanConsoleOutput(tf, f.Name()); err != nil {
-			return err
-		}
+		return applyPlanConsoleOutput(tf, path)
 	default:
 		panic("Unknown output format requested")
 	}
-
-	return nil
 }
 
 func getOutputs(tf *tfexec.Terraform, b ApplyBehavior, o OutputFormat) (map[string]cty.Value, error) {

@@ -18,13 +18,17 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/dependencies"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
+	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
 	compute "google.golang.org/api/compute/v1"
 )
@@ -43,7 +47,7 @@ func TestDestroyGroupsUnsupportedKind(t *testing.T) {
 	}
 	ctx := &config.YamlCtx{}
 
-	destroyFailed, _, _ := destroyGroups("", "", bp, ctx)
+	destroyFailed, _, _, _ := destroyGroups("", "", bp, ctx)
 
 	if !destroyFailed {
 		t.Errorf("destroyGroups() failed to report destruction failure for unsupported kind.")
@@ -142,13 +146,13 @@ func TestRunDestroyCmd(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Mock destroyGroups to control its behavior
 			destroyGroupsCallCount := 0
-			destroyGroupsFunc = func(_ string, _ string, _ config.Blueprint, _ *config.YamlCtx) (bool, []string, error) {
+			destroyGroupsFunc = func(_ string, _ string, _ config.Blueprint, _ *config.YamlCtx) (bool, []string, map[config.GroupName]bool, error) {
 				destroyGroupsCallCount++
 				var err error
 				if tc.abortRetries {
 					err = errUserAborted
 				}
-				return tc.destroyFailed, []string{}, err
+				return tc.destroyFailed, []string{}, nil, err
 			}
 
 			// Set the flags
@@ -383,7 +387,7 @@ func TestDestroyGroupsRobust(t *testing.T) {
 			bp.Groups = []config.Group{tc.group}
 
 			// We only care about the failure flag, not the packer manifests
-			destroyFailed, _, _ := destroyGroups("", "", bp, &config.YamlCtx{})
+			destroyFailed, _, _, _ := destroyGroups("", "", bp, &config.YamlCtx{})
 
 			if cleanupCalled != tc.expectCleanupCall {
 				t.Errorf("cleanupFirewallRules call was %v, expected %v", cleanupCalled, tc.expectCleanupCall)
@@ -550,5 +554,105 @@ func runUnreachableGKETestCase(t *testing.T, tc unreachableGKETestCase, unreacha
 	expectedConfirmCalled := tc.robust && !tc.autoApprove && tc.destroyErr == unreachableErr
 	if confirmCalled != expectedConfirmCalled {
 		t.Errorf("confirmCalled = %v, expected %v", confirmCalled, expectedConfirmCalled)
+	}
+}
+
+func TestDestroyGroupsRecordsSkippedGroups(t *testing.T) {
+	originalShellConfigure := shellConfigureTerraformFunc
+	originalShellDestroy := shellDestroyFunc
+	t.Cleanup(func() {
+		shellConfigureTerraformFunc = originalShellConfigure
+		shellDestroyFunc = originalShellDestroy
+	})
+	shellConfigureTerraformFunc = func(workingDir string) (*tfexec.Terraform, error) {
+		return tfexec.NewTerraform(workingDir, "dummy-terraform-path")
+	}
+	shellDestroyFunc = func(tf *tfexec.Terraform, _ shell.ApplyBehavior, _ shell.OutputFormat) error {
+		if filepath.Base(tf.WorkingDir()) == "network" {
+			return shell.ErrDestroySkipped
+		}
+		return nil
+	}
+
+	bp := testBlueprint("us-central1-a")
+	deplRoot := t.TempDir()
+	for _, g := range bp.Groups {
+		_ = os.MkdirAll(filepath.Join(deplRoot, string(g.Name)), 0755)
+	}
+	withGroupSelection(t, nil, nil)
+	failed, _, skipped, err := destroyGroups(deplRoot, t.TempDir(), bp, &config.YamlCtx{})
+	if failed || err != nil {
+		t.Fatalf("destroyGroups() = (failed=%v, err=%v), want (false, nil)", failed, err)
+	}
+	if !skipped["network"] || skipped["compute"] {
+		t.Errorf("skipped = %v, want only \"network\" skipped", skipped)
+	}
+}
+
+func setupFakeDestroyDeployment(t *testing.T) (string, string) {
+	t.Helper()
+	deplRoot := t.TempDir()
+	artDir := modulewriter.ArtifactsDir(deplRoot)
+	if err := os.MkdirAll(artDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	bp := testBlueprint("us-central1-a")
+	for _, g := range bp.Groups {
+		if err := os.MkdirAll(filepath.Join(deplRoot, string(g.Name)), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := bp.Export(filepath.Join(artDir, modulewriter.ExpandedBlueprintName)); err != nil {
+		t.Fatal(err)
+	}
+	return deplRoot, artDir
+}
+
+func TestRunDestroyCmdInvokesClusterDirectorHookAndWarnsOnFailure(t *testing.T) {
+	origEnsure := ensureDependenciesFn
+	origDestroyGroups := destroyGroupsFunc
+	origDeleteCd := deleteClusterDirectorFunc
+	origArtifactsFlag := flagArtifactsDir
+	t.Cleanup(func() {
+		ensureDependenciesFn = origEnsure
+		destroyGroupsFunc = origDestroyGroups
+		deleteClusterDirectorFunc = origDeleteCd
+		flagArtifactsDir = origArtifactsFlag
+	})
+	flagArtifactsDir = ""
+	withGroupSelection(t, nil, nil)
+	ensureDependenciesFn = func(_ dependencies.DownloadDecision, _ ...string) error { return nil }
+
+	deplRoot, _ := setupFakeDestroyDeployment(t)
+
+	// 1. Successful Terraform destroy calls deleteClusterDirectorFunc with skippedGroups.
+	destroyGroupsFunc = func(string, string, config.Blueprint, *config.YamlCtx) (bool, []string, map[config.GroupName]bool, error) {
+		return false, nil, map[config.GroupName]bool{"network": true}, nil
+	}
+	hookCalls := 0
+	var gotSkipped map[config.GroupName]bool
+	deleteClusterDirectorFunc = func(_ *cobra.Command, _ string, _ string, _ config.Blueprint, skipped map[config.GroupName]bool) error {
+		hookCalls++
+		gotSkipped = skipped
+		return nil
+	}
+	cmd := &cobra.Command{Use: "destroy"}
+	runDestroyCmd(cmd, []string{deplRoot})
+	if hookCalls != 1 || !gotSkipped["network"] {
+		t.Errorf("deleteClusterDirectorFunc calls=%d skipped=%v, want 1 call with skipped[network]=true", hookCalls, gotSkipped)
+	}
+
+	// 2. When Cluster Director delete fails after Terraform succeeded, runDestroyCmd
+	// logs a warning (including the manual gcloud delete command) and exits 0.
+	deleteClusterDirectorFunc = func(_ *cobra.Command, _ string, _ string, _ config.Blueprint, _ map[config.GroupName]bool) error {
+		hookCalls++
+		return errors.New("v1alpha unavailable; run gcloud alpha cluster-director clusters delete ctkdemo")
+	}
+	snapshot, restore := logging.CaptureForTesting(t)
+	defer restore()
+	runDestroyCmd(cmd, []string{deplRoot})
+	_, errOut := snapshot()
+	if hookCalls != 2 || !strings.Contains(errOut, "gcloud alpha cluster-director clusters delete ctkdemo") {
+		t.Errorf("runDestroyCmd() on CD failure: calls=%d errOut=%q, want warning with manual delete command", hookCalls, errOut)
 	}
 }

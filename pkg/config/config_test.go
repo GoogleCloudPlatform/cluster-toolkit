@@ -133,6 +133,8 @@ func (s *zeroSuite) TestExpand(c *C) {
 	}
 
 	c.Check(bp.Expand(), IsNil)
+	c.Check(bp.ExportToClusterDirectorEnabled(), Equals, false)
+	c.Check(bp.ListUnusedVariables(), DeepEquals, []string{})
 }
 
 func (s *zeroSuite) TestCheckModulesAndGroups(c *C) {
@@ -989,6 +991,18 @@ func (s *zeroSuite) TestValidateSlurmClusterName(c *C) {
 		c.Check(errors.As(err, &e), Equals, true)
 		c.Check(err, ErrorMatches, ".*lowercase letter.*")
 	}
+}
+
+func (s *zeroSuite) TestValidateExportToClusterDirector(c *C) {
+	c.Check((&Blueprint{}).ExportToClusterDirectorEnabled(), Equals, false)
+
+	tr := true
+	bpTrue := Blueprint{ExportToClusterDirector: &tr}
+	c.Check(bpTrue.ExportToClusterDirectorEnabled(), Equals, true)
+
+	f := false
+	bpFalse := Blueprint{ExportToClusterDirector: &f}
+	c.Check(bpFalse.ExportToClusterDirectorEnabled(), Equals, false)
 }
 
 // mockTransport intercepts HTTP calls and returns predefined responses.
