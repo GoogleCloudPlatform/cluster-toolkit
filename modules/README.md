@@ -189,12 +189,16 @@ Modules that are still in development and less stable are labeled with the
 * **[dependencies-installer]** ![community-badge] ![experimental-badge] :
   Installs common GKE workload dependencies via Helm, including Kueue, JobSet,
   the NVIDIA GPU Operator, and the NVIDIA DRA driver.
+* **[custom-compute-class]** ![community-badge] ![experimental-badge] :
+  Templates and applies GKE Custom Compute Class (`ComputeClass`) CRDs to a GKE
+  cluster by wrapping `modules/management/kubectl-apply`.
 
 [kubectl-apply]: management/kubectl-apply/README.md
 [kubernetes-namespace]: management/kubernetes-namespace/README.md
 [direct-helm-install]: ../community/modules/management/direct-helm-install/README.md
 [helm-upgrade]: ../community/modules/management/helm-upgrade/README.md
 [dependencies-installer]: ../community/modules/management/dependencies-installer/README.md
+[custom-compute-class]: ../community/modules/management/custom-compute-class/README.md
 
 ### Monitoring
 

@@ -101,6 +101,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [sycomp](#sycomp--) ![community-badge] ![experimental-badge]
   * [alphaevolve](#alphaevolve-) ![community-badge]
   * [gke-large-scale](#gke-large-scale-) ![core-badge]
+  * [gke-custom-compute-class.yaml](#gke-custom-compute-classyaml--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -283,6 +284,7 @@ the experimental badge (![experimental-badge]).
 | [community/examples/fsi/ibm-symphony-on-gce/symphony.yaml](../community/examples/fsi/ibm-symphony-on-gce/symphony.yaml) | none | c2-standard-30, c2-standard-4 | This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit. The blueprint automates infrastructure provisioning, custom base image creation via... |
 | [community/examples/fsi/ibm-symphony-on-gke/symphony.yaml](../community/examples/fsi/ibm-symphony-on-gke/symphony.yaml) | gke | c2-standard-16, c2-standard-4 | This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit and Google Kubernetes Engine (GKE). The blueprint automates infrastructure provisioning... |
 | [community/examples/gcloud-example.yaml](../community/examples/gcloud-example.yaml) | none | - | This blueprint demonstrates how to use the gcloud community module to run arbitrary gcloud commands during deployment and destroy. It shows an example of creating and deleting a network, subnet, and VM instance. |
+| [community/examples/gke-custom-compute-class/gke-custom-compute-class.yaml](../community/examples/gke-custom-compute-class/gke-custom-compute-class.yaml) | gke | - | Demonstrates how to deploy a GKE Standard cluster with Node Auto-Provisioning (NAP) and configure GKE Custom Compute Classes (ComputeClass CRDs) using the custom-compute-class community module in both structured inline and custom .tftpl... |
 | [community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml](../community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml) | gke | g4-standard-48 | This benchmark provisions a GKE cluster with a single-zone Spot G4 node pool (g4-standard-48, 1x NVIDIA RTX PRO 6000), serves google/diffusiongemma-26B-A4B-it with vLLM and runs a vllm bench serve throughput and latency benchmark... |
 | [community/examples/hpc-build-slurm-image.yaml](../community/examples/hpc-build-slurm-image.yaml) | slurm | n2d-standard-2 | This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, aci-cpu-rocky-linux-9-amd64 in the case of this example. |
 | [community/examples/hpc-slinky/hpc-slinky.yaml](../community/examples/hpc-slinky/hpc-slinky.yaml) | slurm-on-gke (slinky) | n2d-standard-8, h3-standard-88 | The SchedMD Slinky Project deploys Slurm on Kubernetes. Slinky is particularly useful for: 1. Those with a prefer a Slurm workload management paradigm, but a cloud-native operational experience 2. Those who want the flexibility of... |
@@ -2147,6 +2149,14 @@ This directory includes the following blueprints:
 The deployment, scaling, and teardown instructions can be found in the [README](./gke-large-scale/README.md).
 
 [gke-large-scale]: ./gke-large-scale
+
+### [gke-custom-compute-class.yaml] ![community-badge] ![experimental-badge]
+
+Demonstrates how to deploy a GKE Standard cluster with Node Auto-Provisioning (NAP) and configure GKE Custom Compute Classes (`ComputeClass` CRDs) using the `custom-compute-class` community module in both structured inline and custom `.tftpl` template modes.
+
+The deployment instructions can be found in the [README](../community/examples/gke-custom-compute-class/README.md).
+
+[gke-custom-compute-class.yaml]: ../community/examples/gke-custom-compute-class/gke-custom-compute-class.yaml
 
 ## Blueprint Schema
 
