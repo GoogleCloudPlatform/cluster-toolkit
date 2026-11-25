@@ -93,8 +93,8 @@ variable "size_gb" {
   type        = number
   default     = 2560
   validation {
-    condition     = var.size_gb >= 1024
-    error_message = "No Filestore tier supports less than 1024GiB.\nSee https://cloud.google.com/filestore/docs/service-tiers."
+    condition     = var.size_gb >= 100
+    error_message = "No Filestore tier supports less than 100GiB.\nSee https://cloud.google.com/filestore/docs/service-tiers."
   }
 }
 
