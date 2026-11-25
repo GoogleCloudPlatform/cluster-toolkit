@@ -22,8 +22,8 @@ import (
 )
 
 // realExecutable returns the path of the running gcluster binary with symlinks
-// resolved. uv and pipx put a symlink in ~/.local/bin that points into the
-// environment they installed gcluster in.
+// resolved. On Linux and macOS, uv and pipx put a symlink in ~/.local/bin that
+// points into the environment they installed gcluster in.
 func realExecutable() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -35,21 +35,37 @@ func realExecutable() string {
 	return exe
 }
 
-// installedShareDir returns the folder where a pip, uv or pipx install puts the
-// example blueprints, <prefix>/share/cluster-toolkit, for a gcluster binary at
-// <prefix>/bin/gcluster (<prefix>\Scripts\gcluster.exe on Windows). It returns
-// "" if gcluster wasn't installed that way. It is a variable so tests can
+// shareDirFor returns the folder where the examples were installed with the
+// gcluster binary at exe, or "" if there is none:
+//   - <prefix>/share/cluster-toolkit for <prefix>/bin/gcluster or
+//     <prefix>\Scripts\gcluster.exe: pip into a venv or a Python install, and
+//     pip --user, uv and pipx on Linux and macOS;
+//   - <userbase>\share\cluster-toolkit for
+//     <userbase>\Python3XX\Scripts\gcluster.exe: pip --user on Windows.
+//
+// uv and pipx on Windows copy gcluster.exe out of the environment they
+// installed it in, so its examples can't be found from the binary. That isn't
+// supported yet.
+func shareDirFor(exe string) string {
+	bin := filepath.Dir(exe)
+	for _, up := range []string{"..", filepath.Join("..", "..")} {
+		dir := filepath.Clean(filepath.Join(bin, up, "share", "cluster-toolkit"))
+		if looksLikeToolkitRoot(dir) {
+			return dir
+		}
+	}
+	return ""
+}
+
+// installedShareDir returns the folder where the running gcluster's examples
+// were installed (see shareDirFor), or "". It is a variable so tests can
 // replace it.
 var installedShareDir = func() string {
 	exe := realExecutable()
 	if exe == "" {
 		return ""
 	}
-	dir := filepath.Join(filepath.Dir(exe), "..", "share", "cluster-toolkit")
-	if !looksLikeToolkitRoot(dir) {
-		return ""
-	}
-	return filepath.Clean(dir)
+	return shareDirFor(exe)
 }
 
 // installedExamplePath returns the installed copy of an example blueprint (or
@@ -76,11 +92,12 @@ func installedExamplePath(p string) (string, bool) {
 
 // resolveBlueprintPath lets `gcluster deploy examples/hpc-slurm.yaml` work from
 // any folder after a pip, uv or pipx install. A path that exists locally always
-// wins. Otherwise, if p names an example installed with gcluster, the installed
-// file is used. Anything else is returned unchanged, so the usual "does not
-// exist" error follows.
+// wins, even a broken symlink (like checkExists, it uses Lstat). Otherwise, if p
+// names an example installed with gcluster, the installed file is used.
+// Anything else is returned unchanged, so the usual "does not exist" error
+// follows.
 func resolveBlueprintPath(p string) string {
-	if _, err := os.Stat(p); err == nil {
+	if _, err := os.Lstat(p); err == nil {
 		return p
 	}
 	if installed, ok := installedExamplePath(p); ok {
@@ -98,10 +115,18 @@ func isInstalledFile(path string) bool {
 	if share == "" || path == "" {
 		return false
 	}
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return false
-	}
-	rel, err := filepath.Rel(share, absPath)
+	rel, err := filepath.Rel(realPath(share), realPath(path))
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// realPath returns the absolute path of p with symlinks resolved, or as much of
+// that as can be worked out.
+func realPath(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		p = resolved
+	}
+	return p
 }

@@ -338,10 +338,7 @@ func findExplainRepoRoot() string {
 	if root := walkUpForExplainRoot(cwd); root != "" {
 		return root
 	}
-	if exe, err := os.Executable(); err == nil {
-		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-			exe = resolved
-		}
+	if exe := realExecutable(); exe != "" {
 		if root := walkUpForExplainRoot(filepath.Dir(exe)); root != "" {
 			return root
 		}

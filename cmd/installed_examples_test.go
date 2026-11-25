@@ -139,14 +139,88 @@ func (s *MySuite) TestIsInstalledFile(c *C) {
 	c.Check(isInstalledFile("examples/hpc-test.yaml"), Equals, false) // relative to the working directory
 }
 
-func (s *MySuite) TestInstalledShareDirLayout(c *C) {
-	// The real lookup: <prefix>/bin/gcluster -> <prefix>/share/cluster-toolkit.
-	prefix := c.MkDir()
-	c.Check(looksLikeToolkitRoot(filepath.Join(prefix, "share", "cluster-toolkit")), Equals, false)
+// makeShare creates an installed examples folder at dir.
+func makeShare(c *C, dir string) {
 	for _, d := range []string{"examples", filepath.Join("community", "examples")} {
-		c.Assert(os.MkdirAll(filepath.Join(prefix, "share", "cluster-toolkit", d), 0o755), IsNil)
+		c.Assert(os.MkdirAll(filepath.Join(dir, d), 0o755), IsNil)
 	}
-	c.Check(looksLikeToolkitRoot(filepath.Join(prefix, "bin", "..", "share", "cluster-toolkit")), Equals, true)
+}
+
+func (s *MySuite) TestShareDirFor(c *C) {
+	share := func(base string) string { return filepath.Join(base, "share", "cluster-toolkit") }
+	cases := []struct {
+		name   string
+		exe    func(root string) string // the gcluster binary, relative to a temp root
+		shares func(root string) []string
+		want   func(root string) string
+	}{
+		{
+			name:   "venv or Python install (bin)",
+			exe:    func(r string) string { return filepath.Join(r, "venv", "bin", "gcluster") },
+			shares: func(r string) []string { return []string{share(filepath.Join(r, "venv"))} },
+			want:   func(r string) string { return share(filepath.Join(r, "venv")) },
+		},
+		{
+			name:   "Windows venv or Python install (Scripts)",
+			exe:    func(r string) string { return filepath.Join(r, "venv", "Scripts", "gcluster.exe") },
+			shares: func(r string) []string { return []string{share(filepath.Join(r, "venv"))} },
+			want:   func(r string) string { return share(filepath.Join(r, "venv")) },
+		},
+		{
+			name:   "Windows pip --user",
+			exe:    func(r string) string { return filepath.Join(r, "Python", "Python311", "Scripts", "gcluster.exe") },
+			shares: func(r string) []string { return []string{share(filepath.Join(r, "Python"))} },
+			want:   func(r string) string { return share(filepath.Join(r, "Python")) },
+		},
+		{
+			name: "the folder next to bin wins",
+			exe:  func(r string) string { return filepath.Join(r, "a", "b", "bin", "gcluster") },
+			shares: func(r string) []string {
+				return []string{share(filepath.Join(r, "a", "b")), share(filepath.Join(r, "a"))}
+			},
+			want: func(r string) string { return share(filepath.Join(r, "a", "b")) },
+		},
+		{
+			name:   "not installed with examples",
+			exe:    func(r string) string { return filepath.Join(r, "usr", "local", "bin", "gcluster") },
+			shares: func(r string) []string { return nil },
+			want:   func(r string) string { return "" },
+		},
+	}
+	for _, tc := range cases {
+		root := c.MkDir()
+		for _, d := range tc.shares(root) {
+			makeShare(c, d)
+		}
+		c.Check(shareDirFor(tc.exe(root)), Equals, tc.want(root), Commentf(tc.name))
+	}
+
+	// A share folder without the example folders doesn't count.
+	root := c.MkDir()
+	c.Assert(os.MkdirAll(share(root), 0o755), IsNil)
+	c.Check(shareDirFor(filepath.Join(root, "bin", "gcluster")), Equals, "")
+}
+
+func (s *MySuite) TestResolveBlueprintPathKeepsBrokenLocalSymlink(c *C) {
+	_, restore := fakeInstall(c)
+	defer restore()
+	c.Assert(os.MkdirAll("examples", 0o755), IsNil)
+	link := filepath.Join("examples", "hpc-test.yaml")
+	if err := os.Symlink("missing-target.yaml", link); err != nil {
+		c.Skip("symlinks not supported: " + err.Error())
+	}
+	// Same answer as checkExists (Lstat): the local path, so the real error shows.
+	c.Check(resolveBlueprintPath(link), Equals, link)
+}
+
+func (s *MySuite) TestIsInstalledFileThroughSymlink(c *C) {
+	share, restore := fakeInstall(c)
+	defer restore()
+	link := filepath.Join(c.MkDir(), "link")
+	if err := os.Symlink(share, link); err != nil {
+		c.Skip("symlinks not supported: " + err.Error())
+	}
+	c.Check(isInstalledFile(filepath.Join(link, "examples", "hpc-test.yaml")), Equals, true)
 }
 
 func (s *MySuite) TestFindExplainRepoRootUsesInstalledExamples(c *C) {
