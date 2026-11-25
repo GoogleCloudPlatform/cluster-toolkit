@@ -44,6 +44,15 @@ deployment_groups:
           set -ex
           echo \$(ansible --version)
 
+  - id: workstation-default
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: default
+      add_deployment_name_before_prefix: true
+
   - id: workstation-ubuntu-2404
     source: modules/compute/vm-instance
     use:
@@ -98,6 +107,7 @@ deployment_groups:
     source: community/modules/scripts/wait-for-startup
     settings:
       instance_names:
+      - $(workstation-default.name[0])
       - $(workstation-ubuntu-2404.name[0])
       - $(workstation-ubuntu-2404-arm.name[0])
       - $(workstation-rocky-9.name[0])

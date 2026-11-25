@@ -112,7 +112,8 @@ variable "source_image_project_id" {
   description = <<EOD
 A list of project IDs to search for the source image. Packer will search the
 first project ID in the list first, and fall back to the next in the list,
-until it finds the source image.
+until it finds the source image. When unset, defaults to
+[var.project_id, "advanced-compute-images"] for aci-* images.
 EOD
   type        = list(string)
   default     = null

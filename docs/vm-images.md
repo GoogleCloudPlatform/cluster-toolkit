@@ -112,10 +112,12 @@ project and the new image name in the `instance_image` field discussed in
 ### Rocky Linux 9
 
 Rocky Linux 9 is the primary supported VM image for HPC workloads on Google Cloud.
-The `vm-instance`, `batch-job-template` and `custom-image` modules default to
-the `aci-cpu-rocky-linux-9-amd64` image family in the `advanced-compute-images`
-project. The [Overview of Advanced Compute Images][aci-images] lists the machine
-series that each image family supports.
+The `vm-instance`, `batch-job-template`, `custom-image`, `nfs-server`, and
+`htcondor-execute-point` modules default to the `aci-cpu-rocky-linux-9-amd64`
+image family (50 GB disk size, so custom `disk_size_gb` or Packer `disk_size`
+overrides must be `>= 50`) in the `advanced-compute-images` project. The
+[Overview of Advanced Compute Images][aci-images] lists the machine series that
+each image family supports.
 
 ### Ubuntu 24.04 LTS
 

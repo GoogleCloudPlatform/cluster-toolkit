@@ -95,8 +95,8 @@ locals {
   compute_version      = var.compute_endpoint_version == null ? "" : var.compute_endpoint_version
 
   source_image_project_id = (
-    var.source_image_project_id == null && var.source_image == null && var.source_image_family != null
-    ? (startswith(var.source_image_family, "aci-") ? [var.project_id, "advanced-compute-images"] : null)
+    var.source_image_project_id == null && startswith(coalesce(var.source_image, var.source_image_family, "_"), "aci-")
+    ? [var.project_id, "advanced-compute-images"]
     : var.source_image_project_id
   )
 }

@@ -138,7 +138,7 @@
       ansible.builtin.wait_for:
         path: "{{ lock_dir }}/done"
         state: present
-        timeout: 600
+        timeout: 1800
         sleep: 10
       when: lock_out.rc != 0
 
