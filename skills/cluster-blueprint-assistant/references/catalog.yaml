@@ -683,7 +683,7 @@ blueprints:
   - id: a5x-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-a5x-net-0, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_gcsfuse_csi, enable_private_endpoint, enable_shielded_nodes, k8s_service_account_name, master_authorized_networks, monitoring_components, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_gcsfuse_csi, enable_private_endpoint, enable_shielded_nodes, k8s_service_account_name, master_authorized_networks, monitoring_components, release_channel, system_node_pool_disk_size_gb, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: workload_policy
     source: modules/compute/resource-policy
     settings: [name, project_id, region, workload_policy]
