@@ -95,8 +95,8 @@ func TestDiscoverK8sInventory_TPUSliceExplicitModeAndCacheInvalidation(t *testin
 	mockExec.assertAllKubectlPinned(t, "tpu-slice-ctx")
 
 	orc.mode = orchestrator.TypeK8s
-	if err := orc.SubmitJob(orchestrator.JobDefinition{}); err == nil {
-		t.Fatalf("expected UnsupportedK8sSubmitError for TypeK8s")
+	if err := orc.SubmitJob(orchestrator.JobDefinition{}); err == nil || err.Error() != orchestrator.UnsupportedK8sSubmitError().Error() {
+		t.Fatalf("SubmitJob(TypeK8s) err = %v, want UnsupportedK8sSubmitError", err)
 	}
 	if orc.inventory != nil {
 		t.Errorf("TypeK8s SubmitJob early return must clear cached inventory")
@@ -287,5 +287,20 @@ func TestConfigureKubectlAndK8sKubectl_InventoryAndDynClientLifecycle(t *testing
 			t.Errorf("configureK8sKubectl(switch) = (ctx=%q, cluster=%q), want (ctx-b, cluster-b)", k8sOrc.kubeContext, k8sOrc.k8sCluster)
 		}
 		assertConfigureClearedState(t, fmt.Sprintf("configureK8sKubectl(managed=%v)", managed), k8sOrc, k8sDyn, !managed)
+	}
+}
+
+func TestAllPodsLogsCommand_BatchJobAndAddonsReset(t *testing.T) {
+	orc := &GKEOrchestrator{mode: orchestrator.TypeK8s, kubeContext: "k8s-ctx"}
+	cmd := orc.allPodsLogsCommand("ml", "t3-job", 10, false, true)
+	if !strings.Contains(cmd, "batch.kubernetes.io/job-name=t3-job") || !strings.Contains(cmd, `"gcluster.google.com/workload=t3-job,batch.kubernetes.io/job-name=t3-job"`) {
+		t.Errorf("allPodsLogsCommand(isBatchJob=true) = %q, want quoted batch.kubernetes.io/job-name selector", cmd)
+	}
+	orc.addons = addonPlan{resolved: true, jobSetEnabled: false}
+	if err := orc.configureK8sKubectl(""); err != nil {
+		t.Fatalf("configureK8sKubectl() err = %v", err)
+	}
+	if orc.addons.resolved {
+		t.Errorf("configureK8sKubectl() did not reset cached addons: %+v", orc.addons)
 	}
 }

@@ -926,6 +926,7 @@ func (g *GKEOrchestrator) endpointConnectivityError(clusterName string, attempts
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
 	g.resetStorageCaches()
 	g.inventory = nil
+	g.addons = addonPlan{}
 	if g.mode == orchestrator.TypeK8s {
 		return g.configureK8sKubectl(clusterName)
 	}

@@ -532,15 +532,17 @@ func (s *MySuite) TestIsInteractive_NonTerminalPipe(c *C) {
 }
 
 func (s *MySuite) TestIsInteractive_PipedStdoutReturnsFalse(c *C) {
-	pipeRead, pipeWrite, err := os.Pipe()
-	c.Assert(err, IsNil)
-	defer func() {
-		_ = pipeRead.Close()
-		_ = pipeWrite.Close()
-	}()
-	origStdout := os.Stdout
-	os.Stdout = pipeWrite
-	defer func() { os.Stdout = origStdout }()
+	c.Assert(isInteractiveWith(0, 1, func(fd int) bool { return fd == 0 }), Equals, false)
+	c.Assert(isInteractiveWith(0, 1, func(fd int) bool { return fd == 1 }), Equals, false)
+	c.Assert(isInteractiveWith(0, 1, func(int) bool { return false }), Equals, false)
+	c.Assert(isInteractiveWith(0, 1, func(int) bool { return true }), Equals, true)
+}
 
-	c.Assert(IsInteractive(), Equals, false)
+func (s *MySuite) TestIsExplicitlyAirGapped_IgnoresProcessDefault(c *C) {
+	defer SetDefaultAirGapped(false)
+	SetDefaultAirGapped(true)
+	c.Assert(IsAirGappedEnv(func(string) string { return "" }), Equals, true)
+	c.Assert(IsExplicitlyAirGappedEnv(func(string) string { return "" }), Equals, false)
+	c.Assert(IsExplicitlyAirGappedEnv(func(string) string { return "true" }), Equals, true)
+	c.Assert(IsExplicitlyAirGappedEnv(func(string) string { return "false" }), Equals, false)
 }

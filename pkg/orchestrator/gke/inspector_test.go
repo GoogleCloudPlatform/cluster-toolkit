@@ -903,13 +903,31 @@ func TestInspector_HasJobSetGateAndUnqueuedWorkloadsList(t *testing.T) {
 		if orc.hasJobSetInstalled() {
 			t.Fatalf("hasJobSetInstalled() = true when %s=1, want false", disableJobSetEnvVar)
 		}
+		orc.connectivity = &connectivityChecker{
+			getenv: func(k string) string {
+				if k == disableJobSetEnvVar || k == disableKueueEnvVar {
+					return "1"
+				}
+				return ""
+			},
+		}
+		if orc.hasKueueInstalled() {
+			t.Fatalf("hasKueueInstalled() = true when %s=1, want false", disableKueueEnvVar)
+		}
 		var buf strings.Builder
 		w := &inspectWriter{writer: &buf, orc: orc}
-		orc.inspectWorkload(w, "t3-job", "ml", false, false)
+		orc.inspectWorkload(w, "t3-job", "ml", true, false)
+		sawJobWorkload := false
 		for _, call := range mockExec.calls {
 			if strings.Contains(call, "describe jobsets") {
 				t.Errorf("must not call describe jobsets when hasJobSet=false: %v", mockExec.calls)
 			}
+			if strings.Contains(call, "describe workloads job-t3-job -n ml") {
+				sawJobWorkload = true
+			}
+		}
+		if !sawJobWorkload {
+			t.Errorf("expected describe workloads job-t3-job when hasKueue=true & hasJobSet=false; calls=%v", mockExec.calls)
 		}
 		if !strings.Contains(buf.String(), "Job: Config for t3-job") {
 			t.Errorf("expected batch Job inspection output, got:\n%s", buf.String())
@@ -930,4 +948,21 @@ func TestInspector_HasJobSetGateAndUnqueuedWorkloadsList(t *testing.T) {
 			t.Errorf("logClusterWorkloads(hasKueue=true, hasJobSet=false) must still list standalone batch Jobs; got:\n%s", out)
 		}
 	})
+}
+
+func TestInspector_MissingBatchJobWhenHasJobSetFalseKeepsJobSelectors(t *testing.T) {
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get job gone-job -n ml -o json": {{ExitCode: 1, Stderr: `Error from server (NotFound): jobs.batch "gone-job" not found`}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	var buf strings.Builder
+	w := &inspectWriter{writer: &buf, orc: orc}
+	orc.inspectWorkload(w, "gone-job", "ml", true, false)
+	joined := strings.Join(mockExec.calls, "\n")
+	if strings.Contains(joined, "jobset-gone-job") || strings.Contains(joined, "jobset.sigs.k8s.io/jobset-name") || strings.Contains(joined, "kind=JobSet") {
+		t.Errorf("must not fall back to JobSet selectors/events when hasJobSet=false:\n%s", joined)
+	}
+	if !strings.Contains(joined, "describe workloads job-gone-job -n ml") || !strings.Contains(joined, "batch.kubernetes.io/job-name=gone-job") {
+		t.Errorf("expected job- prefix and batch.kubernetes.io/job-name selector:\n%s", joined)
+	}
 }

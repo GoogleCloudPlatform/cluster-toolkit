@@ -368,6 +368,8 @@ func setupSubmitTestEnv(t *testing.T) {
 	t.Setenv("GCLUSTER_AIR_GAPPED", "")
 	t.Setenv("GCLUSTER_REFRESH_CREDENTIALS", "")
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	t.Setenv("GCLUSTER_DISABLE_JOBSET", "")
+	t.Setenv("GCLUSTER_DISABLE_KUEUE", "")
 	t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
 	resetJobFlags()
 

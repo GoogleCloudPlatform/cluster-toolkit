@@ -152,8 +152,9 @@ func (g *GKEOrchestrator) readSPSInstance(ref, ns string) (spsInstance, error) {
 
 // runSPSWorkload runs job.CommandToRun on an existing SPS instance: on this machine when no image is given, in the cluster otherwise.
 func (g *GKEOrchestrator) runSPSWorkload(job orchestrator.JobDefinition) error {
+	job.Pathways.RunSPSWorkload = strings.TrimSpace(job.Pathways.RunSPSWorkload)
 	if !g.jobSetEnabled() {
-		return g.validateTier3Flags(&job)
+		return fmt.Errorf("Pathways workloads (--pathways / --pathways-run-sps-workload) require JobSet, which is not installed or is disabled on this cluster; ask your cluster administrator to install JobSet (or unset %s if set)", disableJobSetEnvVar)
 	}
 	logging.Info("Configuring kubectl for GKE cluster '%s'...", job.ClusterName)
 	if err := g.configureKubectl(job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
@@ -190,6 +191,9 @@ func (g *GKEOrchestrator) runSPSWorkload(job orchestrator.JobDefinition) error {
 
 func (g *GKEOrchestrator) applySPSKueueAndHeadDefaults(job *orchestrator.JobDefinition, inst *spsInstance) {
 	if !g.kueueEnabled() {
+		if job.KueueQueueName != "" {
+			logging.Warn("--queue %q was specified, but Kueue is not installed or is disabled; omitting kueue.x-k8s.io/queue-name.", job.KueueQueueName)
+		}
 		job.KueueQueueName = ""
 	} else if job.KueueQueueName == "" {
 		job.KueueQueueName = inst.KueueQueueName

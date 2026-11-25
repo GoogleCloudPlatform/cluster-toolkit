@@ -241,8 +241,8 @@ type GKEOrchestrator struct {
 	kubeContext      string
 	dynClientManaged bool
 	dynClientContext string
-	k8sCluster      string
-	preflightClient storagePreflightClient
+	k8sCluster       string
+	preflightClient  storagePreflightClient
 	// connectivity lazily probes outbound GitHub reachability once per run when an add-on install is considered.
 	connectivity *connectivityChecker
 	// isInteractiveFunc and promptLineFunc allow race-free test injection of TTY detection and 3-way prompt reads.

@@ -148,6 +148,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err := g.validateSubmitLocalPreflight(sm, job); err != nil {
 		return err
 	}
+	job.Pathways.RunSPSWorkload = strings.TrimSpace(job.Pathways.RunSPSWorkload)
 	if job.Pathways.RunSPSWorkload != "" {
 		return g.runSPSWorkload(job)
 	}
@@ -183,9 +184,6 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 
 func (g *GKEOrchestrator) prepareAndValidateSubmission(job *orchestrator.JobDefinition) error {
 	if err := g.initializeJobSubmission(job); err != nil {
-		return err
-	}
-	if err := g.validateResolvedCustomTemplate(*job); err != nil {
 		return err
 	}
 	return g.fetchClusterState(job)
@@ -224,7 +222,7 @@ func (g *GKEOrchestrator) resolveWorkloadTemplateName(job orchestrator.JobDefini
 }
 
 func (g *GKEOrchestrator) validateResolvedCustomTemplate(job orchestrator.JobDefinition) error {
-	if g.gkeCustomTemplatesPath == "" {
+	if g.gkeCustomTemplatesPath == "" || g.isEnvTruthy(disableJobSetEnvVar) {
 		return nil
 	}
 	resolved := g.resolveWorkloadTemplateName(job)
@@ -249,9 +247,15 @@ func (g *GKEOrchestrator) pinTelemetryAndValidate(job *orchestrator.JobDefinitio
 	return g.validateMTCConfig(job)
 }
 
-// validateSubmitLocalPreflight runs the checks that need no cluster access or image build: mount syntax,
-// ML Diagnostics flags, Pathways image resolution, and custom template parsing.
+// validateSubmitLocalPreflight runs the checks that need no cluster access or image build: Tier-3 flag
+// compatibility when GCLUSTER_DISABLE_JOBSET is set, mount syntax, ML Diagnostics flags, Pathways image
+// resolution, and custom template parsing.
 func (g *GKEOrchestrator) validateSubmitLocalPreflight(sm *StorageManager, job orchestrator.JobDefinition) error {
+	if !g.jobSetEnabled() {
+		if err := g.validateTier3FlagsWithWarn(&job, false); err != nil {
+			return err
+		}
+	}
 	if err := sm.validateJobMounts(job.RawMounts, job.IsPathwaysJob, job.Pathways.ColocatedPythonSidecarImage != ""); err != nil {
 		return err
 	}
@@ -263,7 +267,7 @@ func (g *GKEOrchestrator) validateSubmitLocalPreflight(sm *StorageManager, job o
 			return err
 		}
 	}
-	return k8s.ValidateCustomWorkloadTemplates(g.gkeCustomTemplatesPath, workloadTemplateName(job))
+	return k8s.ValidateCustomWorkloadTemplates(g.gkeCustomTemplatesPath, g.resolveWorkloadTemplateName(job))
 }
 
 func (g *GKEOrchestrator) finishJobSubmission(job orchestrator.JobDefinition) error {
@@ -851,7 +855,7 @@ func (g *GKEOrchestrator) submitWorkloadTemplate(tmplName string, job orchestrat
 		if err != nil {
 			return err
 		}
-		return g.generateAndApplyJobManifest(manifestOpts, profile, job.DryRunManifest)
+		return g.generateAndApplyJobManifest(manifestOpts, profile, job.DryRunManifest, job.ClusterName, job.ProjectID)
 	default:
 		return fmt.Errorf("internal error: no manifest generator is wired for workload template %q", tmplName)
 	}
@@ -1076,6 +1080,9 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 		}
 	}
 	if err := g.validateTier3Flags(job); err != nil {
+		return err
+	}
+	if err := g.validateResolvedCustomTemplate(*job); err != nil {
 		return err
 	}
 
@@ -1640,7 +1647,7 @@ func (g *GKEOrchestrator) generateAndApplyManifest(opts ManifestOptions, profile
 	return g.ApplyManifest(gkeManifestContent, outputManifestPath, opts.WorkloadName)
 }
 
-func (g *GKEOrchestrator) generateAndApplyJobManifest(opts ManifestOptions, profile JobProfile, outputManifestPath string) error {
+func (g *GKEOrchestrator) generateAndApplyJobManifest(opts ManifestOptions, profile JobProfile, outputManifestPath, clusterName, projectID string) error {
 	logging.Info("Generating standalone batch/v1 Indexed Job manifest...")
 	jobManifestContent, err := g.GenerateJobManifest(opts, profile)
 	if err != nil {
@@ -1651,7 +1658,7 @@ func (g *GKEOrchestrator) generateAndApplyJobManifest(opts ManifestOptions, prof
 		return err
 	}
 	if outputManifestPath == "" {
-		g.attachBatchJobServiceOwnerRef(opts.WorkloadName)
+		g.attachBatchJobServiceOwnerRefWithTarget(opts.WorkloadName, clusterName, opts.ClusterLocation, k8s.FirstNonEmpty(projectID, g.projectID))
 	}
 	return nil
 }
@@ -1660,6 +1667,10 @@ func (g *GKEOrchestrator) generateAndApplyJobManifest(opts ManifestOptions, prof
 // (with controller=true and without blockOwnerDeletion to avoid jobs/finalizers RBAC requirements), so Kubernetes
 // garbage-collects the Service when ttlSecondsAfterFinished deletes the Job and prevents stale DNS selectors.
 func (g *GKEOrchestrator) attachBatchJobServiceOwnerRef(name string) {
+	g.attachBatchJobServiceOwnerRefWithTarget(name, "", "", g.projectID)
+}
+
+func (g *GKEOrchestrator) attachBatchJobServiceOwnerRefWithTarget(name, clusterName, location, projectID string) {
 	if g.dynClient == nil || g.namespace == "" || name == "" {
 		return
 	}
@@ -1687,8 +1698,28 @@ func (g *GKEOrchestrator) attachBatchJobServiceOwnerRef(name string) {
 		return
 	}
 	if _, err := g.dynClient.Resource(serviceGVR).Namespace(g.namespace).Patch(ctx, name, k8stypes.MergePatchType, patchBytes, metav1.PatchOptions{}); err != nil {
-		logging.Warn("Could not attach Job ownerReference to headless Service %q in namespace %q (%v); run 'gcluster job cancel %s%s' to clean up the Service after the Job expires.", name, g.namespace, err, name, g.k8sJobCLIFlags("", g.namespace))
+		logging.Warn("Could not attach Job ownerReference to headless Service %q in namespace %q (%v); run '%s' to clean up the Service after the Job expires.", name, g.namespace, err, g.formatCancelHint(name, clusterName, location, projectID))
 	}
+}
+
+func (g *GKEOrchestrator) formatCancelHint(name, clusterName, location, projectID string) string {
+	if g.mode == orchestrator.TypeK8s {
+		return fmt.Sprintf("gcluster job cancel %s%s", name, g.k8sJobCLIFlags(clusterName, g.namespace))
+	}
+	parts := []string{"gcluster", "job", "cancel", name}
+	if c := strings.TrimSpace(clusterName); c != "" {
+		parts = append(parts, "--cluster", c)
+	}
+	if l := strings.TrimSpace(location); l != "" {
+		parts = append(parts, "--location", l)
+	}
+	if p := strings.TrimSpace(projectID); p != "" {
+		parts = append(parts, "--project", p)
+	}
+	if ns := strings.TrimSpace(g.namespace); ns != "" {
+		parts = append(parts, "--gke-namespace", ns)
+	}
+	return strings.Join(parts, " ")
 }
 
 func (g *GKEOrchestrator) lookupOwnedBatchJobUID(ctx context.Context, name string) (string, bool) {
@@ -2026,7 +2057,7 @@ func (g *GKEOrchestrator) getBatchJobStatus(client dynamic.Interface, name strin
 	if err != nil || status != "" {
 		return status, err
 	}
-	if g.namespace != "" && !g.jobSetEnabled() {
+	if g.namespace != "" {
 		if svcErr := g.checkUnownedServiceConflict(client, g.namespace, name); svcErr != nil {
 			return "", svcErr
 		}
@@ -2528,6 +2559,10 @@ func calculatePollInterval(timeout time.Duration) time.Duration {
 }
 
 func (g *GKEOrchestrator) findTargetWorkload(ns, workloadName string, timeout time.Duration) (string, error) {
+	return g.findTargetWorkloadForKind(ns, workloadName, timeout, !g.jobSetEnabled())
+}
+
+func (g *GKEOrchestrator) findTargetWorkloadForKind(ns, workloadName string, timeout time.Duration, isBatchJob bool) (string, error) {
 	if g.needsDynamicClientInit() {
 		if _, err := g.getDynamicClient(); err != nil {
 			return "", fmt.Errorf("kubernetes client is not initialized: %w", err)
@@ -2558,7 +2593,7 @@ func (g *GKEOrchestrator) findTargetWorkload(ns, workloadName string, timeout ti
 		time.Sleep(pollInterval)
 	}
 
-	warnEvents := g.checkWorkloadWarningEvents(ns, workloadName, !g.jobSetEnabled())
+	warnEvents := g.checkWorkloadWarningEvents(ns, workloadName, isBatchJob)
 	var warnSuffix string
 	if warnEvents != "" {
 		warnSuffix = fmt.Sprintf("\nJobSet warning events:\n%s", warnEvents)

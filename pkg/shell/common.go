@@ -231,7 +231,11 @@ Please select an option [d,a,s,c]: `)
 // Requiring stdout to be a TTY avoids hanging when prompts are hidden in a pipe or command substitution.
 // It is a package variable so tests can override interactivity deterministically.
 var IsInteractive = func() bool {
-	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
+	return isInteractiveWith(int(os.Stdin.Fd()), int(os.Stdout.Fd()), term.IsTerminal)
+}
+
+func isInteractiveWith(inFd, outFd int, isTTY func(int) bool) bool {
+	return isTTY(inFd) && isTTY(outFd)
 }
 
 // PromptLine prints prompt and reads one trimmed line from standard input.

@@ -3467,3 +3467,76 @@ func TestValidateTier3Workload_GKECoSchedulingAndOfflineProbeWarn(t *testing.T) 
 		t.Errorf("expected WARN for outbound connectivity failure, got stderr logs:\n%s", errLogs)
 	}
 }
+
+func TestClassifyAddons_Confirmed404CRDWith403CompanionAnd200GroupStaysPartial(t *testing.T) {
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get crd clusterqueues.kueue.x-k8s.io": {{ExitCode: 1, Stderr: `Error from server (NotFound): crd "clusterqueues.kueue.x-k8s.io" not found`}},
+		"kubectl get deployment kueue-controller-manager": {
+			{ExitCode: 1, Stderr: `Error from server (Forbidden): deployments.apps "kueue-controller-manager" is forbidden`},
+		},
+		"kubectl get --raw /apis/kueue.x-k8s.io": {{ExitCode: 0, Stdout: `{"kind":"APIGroup"}`}},
+		"kubectl get crd jobsets.jobset.x-k8s.io": {
+			{ExitCode: 0, Stdout: ""},
+		},
+		"kubectl get service jobset-webhook-service": {
+			{ExitCode: 1, Stderr: `Error from server (Forbidden): services "jobset-webhook-service" is forbidden`},
+		},
+		"kubectl get --raw /apis/jobset.x-k8s.io": {{ExitCode: 0, Stdout: `{"kind":"APIGroup"}`}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.kubeContext = "tenant-ctx"
+	kProbe, err := orc.classifyKueueAddon()
+	if err != nil || kProbe.state != addonStatePartial {
+		t.Fatalf("classifyKueueAddon(404 CRD + 403 deploy + 200 group) = (%+v, %v), want Partial", kProbe, err)
+	}
+	jsProbe, err := orc.classifyJobSetAddon()
+	if err != nil || jsProbe.state != addonStatePartial {
+		t.Fatalf("classifyJobSetAddon(404 CRD + 403 svc + 200 group) = (%+v, %v), want Partial", jsProbe, err)
+	}
+}
+
+func TestResolveClusterAddons_OfflineOutdatedKueueWarnsAndContinues(t *testing.T) {
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get crd jobsets.jobset.x-k8s.io":                                        {{ExitCode: 0, Stdout: "crd/jobsets"}},
+		"kubectl get endpointslice -l kubernetes.io/service-name=jobset-webhook-service": {{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.2"],"conditions":{"ready":true}}]}]}`}},
+		"kubectl get crd clusterqueues.kueue.x-k8s.io":                                   {{ExitCode: 0, Stdout: "crd/clusterqueues"}},
+		"kubectl get deployment kueue-controller-manager":                                {{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.10.2"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`}},
+		"kubectl get endpoints kueue-webhook-service":                                    {{ExitCode: 0, Stdout: `{"subsets":[{"addresses":[{"ip":"10.0.0.3"}]}]}`}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = orchestrator.TypeGKE
+	orc.connectivity = &connectivityChecker{
+		getenv: func(k string) string {
+			if k == shell.AirGappedEnvVar {
+				return "true"
+			}
+			return ""
+		},
+	}
+	if err := orc.resolveClusterAddons(&orchestrator.JobDefinition{ClusterName: "gke-clus"}, false); err != nil {
+		t.Fatalf("resolveClusterAddons(air-gapped older Kueue) err = %v, want nil", err)
+	}
+	if len(commandsWithPrefix(mockExec, "kubectl delete")) != 0 || len(commandsWithPrefix(mockExec, "kubectl apply")) != 0 {
+		t.Errorf("air-gapped older Kueue must not delete or reinstall: calls=%v", mockExec.calls)
+	}
+}
+
+func TestInstallMissingAddons_ChecksLiveJobSetObjectsBeforeInstallingKueue(t *testing.T) {
+	mockExec := NewMockExecutor(nil)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.kubeClient = &MockKubeClient{
+		Objects: map[string][]unstructured.Unstructured{
+			"deployments": {{Object: map[string]interface{}{
+				"metadata": map[string]interface{}{"name": "jobset-controller-manager", "namespace": jobSetNamespace},
+			}}},
+		},
+	}
+	jsOn, kueueOn := false, false
+	err := orc.installMissingAddons("gke-clus", true, true, &jsOn, &kueueOn)
+	if err == nil || !strings.Contains(err.Error(), "gcluster made no changes") {
+		t.Fatalf("installMissingAddons(leftover JobSet) err = %v, want made no changes error", err)
+	}
+	if len(commandsWithPrefix(mockExec, "kubectl apply")) != 0 {
+		t.Errorf("must not apply Kueue before checkNoLiveJobSetObjects passes; calls=%v", mockExec.calls)
+	}
+}

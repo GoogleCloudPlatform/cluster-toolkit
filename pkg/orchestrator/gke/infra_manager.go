@@ -198,8 +198,8 @@ func (g *GKEOrchestrator) installJobSetOnFreshClusterWithPermCheck(checkPerms bo
 	if g.isAirGapped() {
 		return fmt.Errorf("JobSet is not installed and cannot be downloaded %s; pre-install JobSet %s on the cluster first", g.airGapReason(), defaultJobSetVersion)
 	}
-	logging.Info("JobSet CRD %s and Service %s/%s not found. Checking the permissions needed to install JobSet...", jobSetCRDName, jobSetNamespace, jobSetWebhookServiceName)
 	if checkPerms {
+		logging.Info("JobSet CRD %s and Service %s/%s not found. Checking the permissions needed to install JobSet...", jobSetCRDName, jobSetNamespace, jobSetWebhookServiceName)
 		if err := g.checkJobSetInstallPermissions(); err != nil {
 			return err
 		}
@@ -939,6 +939,13 @@ func (g *GKEOrchestrator) probeAPIGroupOnForbidden(group string) (present, check
 	return ok, true
 }
 
+func resolveForbiddenAddonPresence(present, crdPresent, crdForbidden, compPresent, compForbidden bool) (bool, bool) {
+	if !present {
+		return false, compPresent && !compForbidden
+	}
+	return crdPresent || crdForbidden, compPresent || compForbidden
+}
+
 func (g *GKEOrchestrator) classifyJobSetAddon() (jobSetAddonProbe, error) {
 	if g.isEnvTruthy(disableJobSetEnvVar) {
 		logging.Info("%s is set; disabling JobSet and using standalone batch/v1 Indexed Job.", disableJobSetEnvVar)
@@ -957,14 +964,7 @@ func (g *GKEOrchestrator) classifyJobSetAddon() (jobSetAddonProbe, error) {
 	}
 	if crdForbidden || svcForbidden {
 		if present, checked := g.probeAPIGroupOnForbidden("jobset.x-k8s.io"); checked {
-			if !present {
-				// API group is absent (CRD missing); preserve any confirmed-present Service so leftovers stay Partial.
-				return classifyJobSetPresence(false, serviceExists && !svcForbidden), nil
-			}
-			if !svcForbidden && !serviceExists {
-				return jobSetAddonProbe{state: addonStatePartial, crdExists: true}, nil
-			}
-			return jobSetAddonProbe{state: addonStateInstalled, crdExists: true}, nil
+			crdExists, serviceExists = resolveForbiddenAddonPresence(present, crdExists, crdForbidden, serviceExists, svcForbidden)
 		}
 	}
 	return classifyJobSetPresence(crdExists, serviceExists), nil
@@ -1025,14 +1025,7 @@ func (g *GKEOrchestrator) classifyKueueAddon() (kueueAddonProbe, error) {
 	}
 	if crdForbidden || depForbidden {
 		if present, checked := g.probeAPIGroupOnForbidden("kueue.x-k8s.io"); checked {
-			if !present {
-				// API group is absent (CRD missing); preserve any confirmed-present Deployment so leftovers stay Partial.
-				return g.buildKueueAddonProbe(false, depInstalled && !depForbidden, dep), nil
-			}
-			crdInstalled = true
-			if depForbidden {
-				depInstalled = true
-			}
+			crdInstalled, depInstalled = resolveForbiddenAddonPresence(present, crdInstalled, crdForbidden, depInstalled, depForbidden)
 		}
 	}
 	return g.buildKueueAddonProbe(crdInstalled, depInstalled, dep), nil
@@ -1093,13 +1086,12 @@ func (g *GKEOrchestrator) ensureInstalledKueueReady(probe kueueAddonProbe, clust
 	if g.needsKueueUpgrade(probe) {
 		if !allowUpgrade {
 			logging.Warn("Installed Kueue version %s is below recommended %s; skipping Kueue re-installation and continuing with installed APIs.", probe.currentVersion, defaultKueueVersion)
+		} else if !g.isConnected() {
+			logging.Warn("Installed Kueue version %s is below recommended %s, but cannot re-install Kueue %s; continuing with installed Kueue.", probe.currentVersion, defaultKueueVersion, g.airGapReason())
 		} else {
 			reason := fmt.Sprintf("Current Kueue version %s is below target %s.", probe.currentVersion, defaultKueueVersion)
 			if g.checkDynamicSlicingViaGKE() {
 				return fmt.Errorf("automatic Kueue installation/modification blocked: cluster %s is set up for Dynamic-Slicing (found 'PROVISION_ONLY' in node pool placementPolicy). Automatic installation or modification of Kueue could conflict with custom topology configurations. Please install Kueue and required CRDs manually", clusterName)
-			}
-			if !g.isConnected() {
-				return fmt.Errorf("cannot re-install Kueue (%s) %s; install Kueue %s on the cluster first", reason, g.airGapReason(), defaultKueueVersion)
 			}
 			if err := g.checkKueueInstallPermissions(defaultKueueVersion); err != nil {
 				return err
@@ -1108,7 +1100,7 @@ func (g *GKEOrchestrator) ensureInstalledKueueReady(probe kueueAddonProbe, clust
 		}
 	}
 	if err := g.waitForKueueWebhookFast(probe.dep); err != nil {
-		return fmt.Errorf("kueue is installed but currently unhealthy. Please check deployment health with 'kubectl get deployment kueue-controller-manager -n kueue-system': %w", err)
+		return fmt.Errorf("kueue is installed but currently unhealthy. Please check deployment health with '%s': %w", kubectlCommandLine(g.kubeContext, "get", "deployment", "kueue-controller-manager", "-n", "kueue-system"), err)
 	}
 	logging.Info("Kueue is already installed.")
 	return nil
@@ -1186,7 +1178,7 @@ func (g *GKEOrchestrator) verifyInstalledAddonsReadOnly(jsProbe jobSetAddonProbe
 	}
 	if kueueProbe.state == addonStateInstalled && !g.needsKueueUpgrade(kueueProbe) {
 		if err := g.waitForKueueWebhookFast(kueueProbe.dep); err != nil {
-			return fmt.Errorf("kueue is installed but currently unhealthy. Please check deployment health with 'kubectl get deployment kueue-controller-manager -n kueue-system': %w", err)
+			return fmt.Errorf("kueue is installed but currently unhealthy. Please check deployment health with '%s': %w", kubectlCommandLine(g.kubeContext, "get", "deployment", "kueue-controller-manager", "-n", "kueue-system"), err)
 		}
 		logging.Info("Kueue is already installed.")
 	}
@@ -1230,6 +1222,9 @@ func (g *GKEOrchestrator) resolveMissingAddons(clusterName string, dryRun, missi
 func (g *GKEOrchestrator) installMissingAddons(clusterName string, missingJobSet, missingKueue bool, jobSetEnabled, kueueEnabled *bool) error {
 	preChecked := false
 	if missingKueue && missingJobSet {
+		if err := g.checkNoLiveJobSetObjects(); err != nil {
+			return err
+		}
 		if err := g.checkKueuePermissions("install", defaultKueueVersion); err != nil {
 			return err
 		}

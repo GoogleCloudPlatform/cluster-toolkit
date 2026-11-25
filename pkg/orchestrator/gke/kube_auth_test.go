@@ -58,6 +58,8 @@ func TestMain(m *testing.M) {
 	_ = os.Unsetenv(refreshCredentialsEnv)
 	_ = os.Unsetenv(shell.AirGappedEnvVar)
 	_ = os.Unsetenv(k8s.LabelSchemeEnvVar)
+	_ = os.Unsetenv(disableJobSetEnvVar)
+	_ = os.Unsetenv(disableKueueEnvVar)
 	shell.SetDefaultAirGapped(false)
 	os.Exit(m.Run())
 }
@@ -1267,6 +1269,10 @@ func TestKubectlCommandLine(t *testing.T) {
 			}
 		})
 	}
+	sel := "gcluster.google.com/workload=j,batch.kubernetes.io/job-name=j"
+	if got := kubectlCommandLine(testContext, "logs", "-l", sel); got != `kubectl --context `+testContext+` logs -l "`+sel+`"` {
+		t.Errorf("kubectlCommandLine(comma selector) = %s, want quoted selector", got)
+	}
 }
 
 func TestKubectlHelpers_PinContext(t *testing.T) {
@@ -2167,6 +2173,17 @@ func TestTypeK8s_ZeroGCloudAcrossLifecycle(t *testing.T) {
 
 	mockExec := newTypeK8sInspectMockExecutor()
 	orc.SetExecutor(mockExec)
+
+	if err := orc.SubmitJob(orchestrator.JobDefinition{
+		WorkloadName:           "blocked",
+		GKENamespace:           "other-ns",
+		GkeCustomTemplatesPath: "/tmp/custom",
+	}); err == nil || err.Error() != orchestrator.UnsupportedK8sSubmitError().Error() {
+		t.Fatalf("SubmitJob(TypeK8s) err = %v, want UnsupportedK8sSubmitError", err)
+	}
+	if orc.namespace != "" || orc.gkeCustomTemplatesPath != "" || len(mockExec.calls) != 0 {
+		t.Fatalf("SubmitJob(TypeK8s) mutated state or ran commands: ns=%q tmpl=%q calls=%v", orc.namespace, orc.gkeCustomTemplatesPath, mockExec.calls)
+	}
 
 	if loc, err := orc.Initialize("local-k8s", "", ""); err != nil || loc != "" {
 		t.Fatalf("Initialize(TypeK8s) = (%q, %v), want ('', nil)", loc, err)

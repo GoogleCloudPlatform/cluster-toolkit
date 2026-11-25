@@ -162,6 +162,9 @@ func (g *GKEOrchestrator) prepareInspectKubectl(opts orchestrator.InspectOptions
 // hasKueueInstalled checks the non-privileged /apis/kueue.x-k8s.io discovery endpoint.
 // Unexpected errors fail open so Kueue diagnostics are not silently hidden from RBAC-restricted users.
 func (g *GKEOrchestrator) hasKueueInstalled() bool {
+	if !g.kueueEnabled() {
+		return false
+	}
 	present, err := g.HasAPIGroupVersion("kueue.x-k8s.io")
 	if err != nil {
 		return true
@@ -234,39 +237,13 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, w
 	if workloadName == "" {
 		return
 	}
-
 	if hasKueue {
 		g.logWorkloadList(writer.writer, "EVERYTHING", workloadName, workloadNamespace)
 	}
 
-	isBatchJob := false
-	checkBatchJob := !hasJobSet
-	if hasJobSet {
-		exitCode, stderr := writer.runAndLogResult(fmt.Sprintf("JobSet: Config for %s", workloadName), "kubectl", "describe", "jobsets", workloadName, "-n", workloadNamespace)
-		checkBatchJob = exitCode != 0 && isNotFoundOrNoMatchStderr(stderr)
-	}
-	if checkBatchJob {
-		if _, err := g.getBatchJobInfo(workloadNamespace, workloadName); err == nil {
-			isBatchJob = true
-			writer.runAndLog(fmt.Sprintf("Job: Config for %s", workloadName), "kubectl", "describe", "job", workloadName, "-n", workloadNamespace)
-			writer.runAndLog(fmt.Sprintf("Service: Config for %s", workloadName), "kubectl", "describe", "service", workloadName, "-n", workloadNamespace)
-		}
-	}
-
+	isBatchJob := g.describeWorkloadResource(writer, workloadName, workloadNamespace, hasJobSet)
 	if hasKueue {
-		targetWorkload := fmt.Sprintf("jobset-%s", workloadName)
-		if isBatchJob {
-			targetWorkload = fmt.Sprintf("job-%s", workloadName)
-		}
-		if g.needsDynamicClientInit() {
-			_, _ = g.getDynamicClient()
-		}
-		if g.kubeClient != nil {
-			if tw, err := g.findTargetWorkload(workloadNamespace, workloadName, 2*time.Second); err == nil {
-				targetWorkload = tw
-			}
-		}
-		writer.runAndLog(fmt.Sprintf("Kueue: Workload config for %s", workloadName), "kubectl", "describe", "workloads", targetWorkload, "-n", workloadNamespace)
+		g.inspectKueueWorkload(writer, workloadName, workloadNamespace, isBatchJob)
 	}
 
 	podSelector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", workloadName)
@@ -275,6 +252,43 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, w
 	}
 	writer.runAndLog(fmt.Sprintf("Pods: Status for %s", workloadName), "kubectl", "get", "pods", "-l", podSelector, "-n", workloadNamespace, "-o", "wide")
 	writer.runAndLog(fmt.Sprintf("Pods: Config and Events for %s", workloadName), "kubectl", "describe", "pods", "-l", podSelector, "-n", workloadNamespace)
+}
+
+func (g *GKEOrchestrator) describeWorkloadResource(writer *inspectWriter, workloadName, workloadNamespace string, hasJobSet bool) bool {
+	isBatchJob := !hasJobSet
+	checkBatchJob := !hasJobSet
+	if hasJobSet {
+		exitCode, stderr := writer.runAndLogResult(fmt.Sprintf("JobSet: Config for %s", workloadName), "kubectl", "describe", "jobsets", workloadName, "-n", workloadNamespace)
+		checkBatchJob = exitCode != 0 && isNotFoundOrNoMatchStderr(stderr)
+	}
+	if !checkBatchJob {
+		return isBatchJob
+	}
+	_, err := g.getBatchJobInfo(workloadNamespace, workloadName)
+	if err == nil || !hasJobSet {
+		isBatchJob = true
+		writer.runAndLog(fmt.Sprintf("Job: Config for %s", workloadName), "kubectl", "describe", "job", workloadName, "-n", workloadNamespace)
+		if err == nil {
+			writer.runAndLog(fmt.Sprintf("Service: Config for %s", workloadName), "kubectl", "describe", "service", workloadName, "-n", workloadNamespace)
+		}
+	}
+	return isBatchJob
+}
+
+func (g *GKEOrchestrator) inspectKueueWorkload(writer *inspectWriter, workloadName, workloadNamespace string, isBatchJob bool) {
+	targetWorkload := fmt.Sprintf("jobset-%s", workloadName)
+	if isBatchJob {
+		targetWorkload = fmt.Sprintf("job-%s", workloadName)
+	}
+	if g.needsDynamicClientInit() {
+		_, _ = g.getDynamicClient()
+	}
+	if g.kubeClient != nil {
+		if tw, err := g.findTargetWorkloadForKind(workloadNamespace, workloadName, 2*time.Second, isBatchJob); err == nil {
+			targetWorkload = tw
+		}
+	}
+	writer.runAndLog(fmt.Sprintf("Kueue: Workload config for %s", workloadName), "kubectl", "describe", "workloads", targetWorkload, "-n", workloadNamespace)
 }
 
 func (g *GKEOrchestrator) logNodeCounts(w io.Writer) {

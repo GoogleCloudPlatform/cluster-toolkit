@@ -5341,9 +5341,11 @@ func TestGetJobLogs_FallbackBatchJobAndMainOnlyRank0(t *testing.T) {
 func TestGetJobStatus_FallbackAnd403Propagation(t *testing.T) {
 	t.Parallel()
 	t.Run("NoMatch_falls_back_to_owned_batch_job", func(t *testing.T) {
+		jobSetListHits := 0
 		dyn := &versionTrackingDynamicClient{
 			listByGVR: func(gvr schema.GroupVersionResource, _ string, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
 				if gvr == jobSetGVR {
+					jobSetListHits++
 					return nil, apierrors.NewNotFound(gvr.GroupResource(), "jobsets")
 				}
 				return &unstructured.UnstructuredList{}, nil
@@ -5359,14 +5361,14 @@ func TestGetJobStatus_FallbackAnd403Propagation(t *testing.T) {
 			},
 		}
 		orc := &GKEOrchestrator{
-			mode:              orchestrator.TypeK8s,
+			mode:              orchestrator.TypeGKE,
 			namespace:         "ml-ns",
 			dynClient:         dyn,
-			submissionSession: submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: false, kueueEnabled: false}},
+			submissionSession: submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false}},
 		}
 		status, err := orc.getJobStatus("tier3-job")
-		if err != nil || status != "Succeeded" {
-			t.Fatalf("getJobStatus(NoMatch fallback) = (%q, %v), want (\"Succeeded\", nil)", status, err)
+		if err != nil || status != "Succeeded" || jobSetListHits != 1 {
+			t.Fatalf("getJobStatus(NoMatch fallback) = (%q, %v, hits=%d), want (\"Succeeded\", nil, 1)", status, err, jobSetListHits)
 		}
 	})
 
@@ -5736,10 +5738,109 @@ func TestDefaultKubeClient_DeletePropagationAndResolveBatchOwnerUIDAndSPSGuard(t
 	if err != nil || uid != "batch-uid-9" || sawJobSetGet {
 		t.Fatalf("resolveWorkloadOwnerUID(jobSetDisabled) = (%q, %v), sawJobSetGet=%v, want (batch-uid-9, nil, false)", uid, err, sawJobSetGet)
 	}
+}
 
+func TestRunSPSWorkload_GuardsAndQueueWarning(t *testing.T) {
 	spsOrc := newTestGKEOrchestrator(NewMockExecutor(nil))
 	spsOrc.addons = addonPlan{resolved: true, jobSetEnabled: false}
-	if err := spsOrc.runSPSWorkload(orchestrator.JobDefinition{Pathways: orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-1"}}); err == nil || !strings.Contains(err.Error(), "require JobSet") {
-		t.Fatalf("runSPSWorkload(jobSetDisabled) err = %v, want require JobSet", err)
+	if err := spsOrc.runSPSWorkload(orchestrator.JobDefinition{Pathways: orchestrator.PathwaysJobDefinition{RunSPSWorkload: "   "}}); err == nil || !strings.Contains(err.Error(), "require JobSet") {
+		t.Fatalf("runSPSWorkload(whitespace + jobSetDisabled) err = %v, want require JobSet", err)
+	}
+	spsOrc.addons = addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false}
+	snap, restore := logging.CaptureForTesting(t)
+	defer restore()
+	spsJob := orchestrator.JobDefinition{KueueQueueName: "team-q"}
+	spsOrc.applySPSKueueAndHeadDefaults(&spsJob, &spsInstance{KueueQueueName: "inst-q"})
+	_, errLogs := snap()
+	if spsJob.KueueQueueName != "" || !strings.Contains(errLogs, "--queue \"team-q\"") {
+		t.Errorf("applySPSKueueAndHeadDefaults(kueueDisabled) = (queue=%q, logs=%q), want cleared + warning", spsJob.KueueQueueName, errLogs)
+	}
+}
+
+func TestTier3PreflightAndOwnerRefGKEHint(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "jobset.tmpl"), []byte("{{ invalid"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "job.tmpl"), []byte("apiVersion: batch/v1\nkind: Job\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.gkeCustomTemplatesPath = tmpDir
+	orc.connectivity = &connectivityChecker{
+		getenv: func(k string) string {
+			if k == disableJobSetEnvVar {
+				return "1"
+			}
+			return ""
+		},
+	}
+	sm := &StorageManager{orchestrator: orc}
+	if err := orc.validateSubmitLocalPreflight(sm, orchestrator.JobDefinition{NumSlices: 2}); err == nil || !strings.Contains(err.Error(), "require JobSet") {
+		t.Fatalf("validateSubmitLocalPreflight(disableJobSet + NumSlices=2) err = %v, want require JobSet", err)
+	}
+	if err := orc.validateSubmitLocalPreflight(sm, orchestrator.JobDefinition{NumSlices: 1}); err != nil {
+		t.Fatalf("validateSubmitLocalPreflight(disableJobSet with valid job.tmpl & broken jobset.tmpl) err = %v, want nil", err)
+	}
+
+	gkeOrc := &GKEOrchestrator{mode: orchestrator.TypeGKE, namespace: "ml", projectID: "proj-1", kubeContext: "gke_proj-1_us-central1_clus-1"}
+	hint := gkeOrc.formatCancelHint("t3-job", "clus-1", "us-central1", gkeOrc.projectID)
+	want := "gcluster job cancel t3-job --cluster clus-1 --location us-central1 --project proj-1 --gke-namespace ml"
+	if hint != want {
+		t.Errorf("formatCancelHint(GKE) = %q, want %q", hint, want)
+	}
+}
+
+func TestCloudStoragePreflight_NotDisabledByGitHubProbeAirGap(t *testing.T) {
+	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
+	shell.SetDefaultAirGapped(true)
+	t.Setenv(shell.AirGappedEnvVar, "")
+
+	called := false
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.preflightClient = &fakePreflightClient{
+		locations: map[string]bucketLocation{
+			"flat-bkt": {Location: "US-CENTRAL1", LocationType: "region", HierarchicalNamespace: false},
+		},
+	}
+	sm := &StorageManager{orchestrator: orc}
+	// Inline flat bucket without implicit-dirs emits a WARN only when runCloudStoragePreflight actually runs.
+	snap, restore := logging.CaptureForTesting(t)
+	err := sm.runCloudStoragePreflight("proj-1", "us-central1-a", nil, []string{"flat-bkt"}, false)
+	_, errLogs := snap()
+	restore()
+	called = strings.Contains(errLogs, "flat-bkt")
+	if err != nil || !called {
+		t.Fatalf("runCloudStoragePreflight(defaultAirGap=true, env unset) = (err=%v, called=%v), want preflight to execute", err, called)
+	}
+
+	t.Setenv(shell.AirGappedEnvVar, "true")
+	snap2, restore2 := logging.CaptureForTesting(t)
+	if err := sm.runCloudStoragePreflight("proj-1", "us-central1-a", nil, []string{"flat-bkt"}, false); err != nil {
+		restore2()
+		t.Fatalf("runCloudStoragePreflight(explicit GCLUSTER_AIR_GAPPED=true) err = %v", err)
+	}
+	_, errLogs2 := snap2()
+	restore2()
+	if strings.Contains(errLogs2, "flat-bkt") {
+		t.Errorf("explicit GCLUSTER_AIR_GAPPED=true must skip runCloudStoragePreflight, got logs:\n%s", errLogs2)
+	}
+}
+
+func TestGenerateAndApplyJobManifest_DryRunAndLiveOwnerRef(t *testing.T) {
+	orc := newGPUDerivationTestOrc(t)
+	orc.namespace = "ml"
+	opts := ManifestOptions{
+		WorkloadName: "t3-apply", FullImageName: "img:v1", CommandToRun: "echo hi",
+		ComputeType: "g2-standard-48", MachineType: "g2-standard-48", ClusterLocation: "us-central1-a",
+		NumSlices: 1, NodesPerSlice: 1, ParallelContainers: 1, TtlSecondsAfterFinished: 3600, TerminationGracePeriodSeconds: 30,
+	}
+	profile := JobProfile{CapacityCount: 4}
+	outPath := filepath.Join(t.TempDir(), "t3.yaml")
+	if err := orc.generateAndApplyJobManifest(opts, profile, outPath, "clus-1", "proj-1"); err != nil {
+		t.Fatalf("generateAndApplyJobManifest(dry-run) err = %v", err)
+	}
+	if _, err := os.Stat(outPath); err != nil {
+		t.Fatalf("expected dry-run manifest at %s: %v", outPath, err)
 	}
 }
