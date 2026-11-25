@@ -15,6 +15,7 @@
 resource "google_cloudbuild_trigger" "hotfix_test" {
   for_each    = data.external.list_tests_midnight.result
   name        = "HOTFIX-test-${each.key}"
+  project     = var.project_id
   description = "Runs the '${each.key}' integration test with emergency hotfix priority against a hotfix PR"
 
   filename = "tools/cloud-build/daily-tests/builds/${each.key}.yaml"

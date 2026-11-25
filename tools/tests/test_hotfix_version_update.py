@@ -493,6 +493,25 @@ sys.exit(1)
         self.assertEqual(res.returncode, 0, msg=res.stderr)
         self.assertEqual(len(self._created_prs()), 2)
 
+    def test_works_when_develop_is_orphan_branch_with_no_common_ancestor(self) -> None:
+        _git(self.work_repo, "switch", "--orphan", "orphan-develop")
+        with open(os.path.join(self.work_repo, "ORPHAN.md"), "w", encoding="utf-8") as f:
+            f.write("unrelated history\n")
+        _git(self.work_repo, "add", ".")
+        _git(self.work_repo, "commit", "-m", "orphan develop root")
+        _git(self.work_repo, "push", "--force", "origin", "HEAD:refs/heads/develop")
+
+        _git(self.work_repo, "switch", "-c", "hotfix-v1.109.1", "main")
+        with open(os.path.join(self.work_repo, "pkg/fix.go"), "w", encoding="utf-8") as f:
+            f.write("package pkg\n// fix crash\n")
+        _git(self.work_repo, "add", ".")
+        _git(self.work_repo, "commit", "-m", "fix: resolve crash")
+        _git(self.work_repo, "push", "-u", "origin", "hotfix-v1.109.1")
+
+        res = self._run_script("-r", "example-fork/cluster-toolkit", "-b", "hotfix-v1.109.1")
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+        self.assertEqual(len(self._created_prs()), 2)
+
 
 class ReleaseWorkflowContractTest(unittest.TestCase):
     def _run_release_step(self, workflow_path: str, branch: str) -> subprocess.CompletedProcess:
@@ -528,6 +547,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
     def test_hotfix_provision_trigger_and_hygiene(self) -> None:
         with open(HOTFIX_TF_PATH, "r", encoding="utf-8") as f:
             tf_text = f.read()
+        self.assertIn("project     = var.project_id", tf_text)
         self.assertIn('_TEST_PREFIX = "hotfix-"', tf_text)
         self.assertIn("approval_required = true", tf_text)
         self.assertIn('branch          = "^(main|hotfix-.*)$"', tf_text)
