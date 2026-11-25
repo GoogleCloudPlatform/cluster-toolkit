@@ -72,6 +72,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		TERRAFORM_VERSION,
 		INSTALLATION_MODE,
 		IS_AI_ASSISTED,
+		EXPORT_TO_CLUSTER_DIRECTOR,
 		EXPLAIN_TARGET,
 		IS_TEST_DATA,
 		EXIT_CODE,
@@ -3688,5 +3689,65 @@ func TestResolveProjectIdentifiers_ShortNegativeCacheOnTransientErrors(t *testin
 		t.Run(tc.name, func(t *testing.T) {
 			assertShortNegativeCacheCase(t, tc.projErr, tc.billErr, tc.wantProjNum)
 		})
+	}
+}
+
+func TestIsExportToClusterDirector(t *testing.T) {
+	enabled, disabled := true, false
+	newCmd := func(setTo string) *cobra.Command {
+		cmd := &cobra.Command{Use: "deploy"}
+		var v bool
+		cmd.Flags().BoolVar(&v, "export-to-cluster-director", false, "")
+		if setTo != "" {
+			if err := cmd.Flags().Set("export-to-cluster-director", setTo); err != nil {
+				t.Fatalf("Set(%q) returned an unexpected error: %v", setTo, err)
+			}
+		}
+		return cmd
+	}
+
+	tests := []struct {
+		name string
+		bp   config.Blueprint
+		cmd  *cobra.Command
+		want bool
+	}{
+		{name: "defaults to false", bp: config.Blueprint{}, cmd: newCmd(""), want: false},
+		{name: "nil command uses the blueprint", bp: config.Blueprint{ExportToClusterDirector: &enabled}, cmd: nil, want: true},
+		{name: "blueprint true", bp: config.Blueprint{ExportToClusterDirector: &enabled}, cmd: newCmd(""), want: true},
+		{name: "blueprint false", bp: config.Blueprint{ExportToClusterDirector: &disabled}, cmd: newCmd(""), want: false},
+		{name: "flag true overrides blueprint false", bp: config.Blueprint{ExportToClusterDirector: &disabled}, cmd: newCmd("true"), want: true},
+		{name: "flag false overrides blueprint true", bp: config.Blueprint{ExportToClusterDirector: &enabled}, cmd: newCmd("false"), want: false},
+		{name: "command without the flag uses the blueprint", bp: config.Blueprint{ExportToClusterDirector: &enabled}, cmd: &cobra.Command{Use: "destroy"}, want: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isExportToClusterDirector(tc.bp, tc.cmd); got != tc.want {
+				t.Errorf("isExportToClusterDirector() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGetBlueprintMergesDeploymentFileExportToClusterDirector(t *testing.T) {
+	dir := t.TempDir()
+	bpPath := filepath.Join(dir, "bp.yaml")
+	if err := os.WriteFile(bpPath, []byte("blueprint_name: test-bp\nvars:\n  project_id: p\n  deployment_name: d\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	depPath := filepath.Join(dir, "deployment.yaml")
+	if err := os.WriteFile(depPath, []byte("export_to_cluster_director: true\nvars:\n  project_id: p\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{Use: "deploy"}
+	cmd.Flags().StringP("deployment-file", "d", "", "")
+	if err := cmd.Flags().Set("deployment-file", depPath); err != nil {
+		t.Fatal(err)
+	}
+
+	bp := getBlueprint(cmd, []string{bpPath})
+	if !isExportToClusterDirector(bp, cmd) {
+		t.Error("isExportToClusterDirector() = false when export_to_cluster_director: true is set in -d deployment.yaml, want true")
 	}
 }
