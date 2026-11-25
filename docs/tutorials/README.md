@@ -8,13 +8,14 @@ Find the quickstart tutorial on
 ## HTCondor Tutorial
 
 Walk through deploying an HTCondor pool that supports jobs running inside Docker
-containers or the base [HPC VM Image][hpc-vm-image].
+containers or the base Rocky Linux 9 image from
+[Advanced Compute Images][aci-images].
 
 Click the button below to launch the HTCondor tutorial.
 
 [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_open_in_editor=community%2Fexamples%2Fhtc-htcondor.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fhtcondor.md)
 
-[hpc-vm-image]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+[aci-images]: https://cloud.google.com/compute/docs/images/workload/aci-images
 
 ## SC-23 Tutorial
 

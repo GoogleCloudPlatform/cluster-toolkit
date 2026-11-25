@@ -284,7 +284,7 @@ the experimental badge (![experimental-badge]).
 | [community/examples/fsi/ibm-symphony-on-gke/symphony.yaml](../community/examples/fsi/ibm-symphony-on-gke/symphony.yaml) | gke | c2-standard-16, c2-standard-4 | This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit and Google Kubernetes Engine (GKE). The blueprint automates infrastructure provisioning... |
 | [community/examples/gcloud-example.yaml](../community/examples/gcloud-example.yaml) | none | - | This blueprint demonstrates how to use the gcloud community module to run arbitrary gcloud commands during deployment and destroy. It shows an example of creating and deleting a network, subnet, and VM instance. |
 | [community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml](../community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml) | gke | g4-standard-48 | This benchmark provisions a GKE cluster with a single-zone Spot G4 node pool (g4-standard-48, 1x NVIDIA RTX PRO 6000), serves google/diffusiongemma-26B-A4B-it with vLLM and runs a vllm bench serve throughput and latency benchmark... |
-| [community/examples/hpc-build-slurm-image.yaml](../community/examples/hpc-build-slurm-image.yaml) | slurm | n2d-standard-2 | This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, hpc-rocky-linux-9 in the case of this example. |
+| [community/examples/hpc-build-slurm-image.yaml](../community/examples/hpc-build-slurm-image.yaml) | slurm | n2d-standard-2 | This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, aci-cpu-rocky-linux-9-amd64 in the case of this example. |
 | [community/examples/hpc-slinky/hpc-slinky.yaml](../community/examples/hpc-slinky/hpc-slinky.yaml) | slurm-on-gke (slinky) | n2d-standard-8, h3-standard-88 | The SchedMD Slinky Project deploys Slurm on Kubernetes. Slinky is particularly useful for: 1. Those with a prefer a Slurm workload management paradigm, but a cloud-native operational experience 2. Those who want the flexibility of... |
 | [community/examples/hpc-slurm-google-cloud-dedicated/eda/eda-gcd-cluster.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/eda/eda-gcd-cluster.yaml) | slurm | c3-standard-8, c3-standard-176 | This directory provides a Cluster Toolkit (gcluster) blueprint (eda-gcd-cluster.yaml) and end-to-end Electronic Design Automation (EDA) workload examples for Google Cloud Dedicated (GCD) environments (*.apis-<location>.goog): |
 | [community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml](../community/examples/hpc-slurm-google-cloud-dedicated/hpc-slurm-google-cloud-dedicated.yaml) | slurm | c3-standard-4, c3-standard-176 | Creates a Slurm cluster on C3 machine types for Google Cloud Dedicated (GCD) and sovereign cloud environments using Packer to pre-build a custom Slurm image based on Rocky Linux 9, configured with NFS home directories, SAuth... |
@@ -300,7 +300,7 @@ the experimental badge (![experimental-badge]).
 | [community/examples/hpc-slurm-sharedvpc.yaml](../community/examples/hpc-slurm-sharedvpc.yaml) | slurm | n2-standard-2 | This blueprint demonstrates the use of the Slurm and Filestore modules in the service project of an existing Shared VPC. Before attempting to deploy the blueprint, one must first complete initial setup for provisioning Filestore in a... |
 | [community/examples/hpc-slurm6-apptainer.yaml](../community/examples/hpc-slurm6-apptainer.yaml) | slurm | - | This blueprint creates a custom Apptainer enabled image and builds an auto-scaling Slurm cluster using that image. You can deploy containerized workloads on that cluster as described here. |
 | [community/examples/hpc-slurm6-hybrid.yaml](../community/examples/hpc-slurm6-hybrid.yaml) | slurm | - | This blueprint extends an on-premise Slurm cluster with cloud nodes. It builds a compute image matching the on-premise Slurm installation and generates the configuration the on-premise controller needs to burst into GCP. See the hybrid... |
-| [community/examples/htc-htcondor.yaml](../community/examples/htc-htcondor.yaml) | htcondor | - | This blueprint provisions an auto-scaling HTCondor pool based upon the HPC VM Image. |
+| [community/examples/htc-htcondor.yaml](../community/examples/htc-htcondor.yaml) | htcondor | - | This blueprint provisions an auto-scaling HTCondor pool based upon the Rocky Linux 9 image from Advanced Compute Images. |
 | [community/examples/htc-slurm.yaml](../community/examples/htc-slurm.yaml) | slurm | c2-standard-30, n2-standard-2, n2-standard-4 | This blueprint provisions a cluster using the Slurm scheduler in a configuration tuned for the execution of many short-duration, loosely-coupled (non-MPI) jobs. |
 | [community/examples/kms-key-per-service.yaml](../community/examples/kms-key-per-service.yaml) | slurm | n2-standard-2 | The same CMEK Slurm cluster as kms-key.yaml, but with one key per class of resource instead of one shared key, each granted only to the service agent that uses it: the Compute Engine agent can decrypt the disks and nothing else, the... |
 | [community/examples/kms-key.yaml](../community/examples/kms-key.yaml) | slurm | n2-standard-2 | An end-to-end CMEK Slurm cluster. The kms-key module creates one Cloud KMS key ring and symmetric CryptoKey, kms-key-iam grants the service agents that encrypt with it, and every encrypted resource picks the key up through use... |
@@ -1012,7 +1012,7 @@ For this example the following is needed in the selected region:
 ### [hpc-build-slurm-image.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top
-of an existing image, `hpc-rocky-linux-9` in the case of this example.
+of an existing image, `aci-cpu-rocky-linux-9-amd64` in the case of this example.
 
 The blueprint contains 3 groups:
 
@@ -1635,14 +1635,14 @@ This folder holds multiple GKE blueprint examples that demonstrate different con
 ### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions an auto-scaling [HTCondor][htcondor] pool based upon
-the [HPC VM Image][hpcvmimage].
+the Rocky Linux 9 image from [Advanced Compute Images][aci-images].
 
 Also see the [tutorial](../docs/tutorials/README.md#htcondor-tutorial), which
 walks through the use of this blueprint.
 
 [htcondor]: https://htcondor.org/
 [htc-htcondor.yaml]: ../community/examples/htc-htcondor.yaml
-[hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+[aci-images]: https://cloud.google.com/compute/docs/images/workload/aci-images
 
 ### [htc-slurm.yaml] ![community-badge]
 
