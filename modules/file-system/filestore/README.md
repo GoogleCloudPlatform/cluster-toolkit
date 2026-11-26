@@ -46,12 +46,37 @@ specified in the Toolkit using the following names:
 
 [tierapi]: https://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier
 
-**Please review the minimum storage requirements for each tier**. The Terraform
-module can only enforce the minimum value of the `size_gb` parameter for the
-lowest tier of service. If you supply a value that is too low, Filestore
-creation will fail when you run `terraform apply`.
+Minimum storage capacities enforced at plan time by this module (see [Filestore service tiers][tiers] for full tier details):
+
+- `"BASIC_HDD"`: 1,024 GiB
+- `"BASIC_SSD"`: 2,560 GiB
+- `"ENTERPRISE"`: 1,024 GiB
+- `"HIGH_SCALE_SSD"`: 10,240 GiB
+- `"ZONAL"` and `"REGIONAL"`: 100 GiB (capacities below 1,024 GiB require `performance_config` to be set)
 
 [tiers]: https://cloud.google.com/filestore/docs/service-tiers
+
+### Custom performance
+
+For `"ZONAL"` and `"REGIONAL"` tiers, you can configure [custom performance][custom-perf] independently of capacity using `performance_config`, specifying either `fixed_iops` (`max_iops` >= 2,000) or `iops_per_tb` (`max_iops_per_tb` > 0). Setting `performance_config` is required when `size_gb` is between 100 and 1,023 GiB and optional at 1,024 GiB and above. Once enabled on an instance, custom performance cannot be cleared in-place (removing `performance_config` plans an in-place update that fails at `terraform apply` and requires replacing the instance); existing instances without custom performance support also cannot enable it in-place. Updating IOPS values or switching between `fixed_iops` and `iops_per_tb` on an instance created with custom performance is an in-place update.
+
+```yaml
+- id: homefs
+  source: modules/file-system/filestore
+  use: [network1]
+  settings:
+    filestore_tier: ZONAL
+    size_gb: 100
+    local_mount: /home
+    performance_config:
+      fixed_iops:
+        max_iops: 2000
+      # Or scale linearly with capacity (mutually exclusive with fixed_iops):
+      # iops_per_tb:
+      #   max_iops_per_tb: 4000
+```
+
+[custom-perf]: https://cloud.google.com/filestore/docs/configure-performance
 
 ### Filestore protocols and mount options
 After Filestore instance is created, you can mount this to the compute node
@@ -104,7 +129,7 @@ tier, [make a request and wait for it to be approved][hs-ssd-quota].
 The Filestore instance defined below will have the following attributes:
 
 - (default) `BASIC_SSD` tier
-- (default) 1TiB capacity
+- (default) 2.5TiB (2560 GiB) capacity
 - `homefs` module ID
 - mount point at `/home`
 - connected to the network defined in the `network1` module
@@ -191,14 +216,14 @@ limitations under the License.
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.4 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.12.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | >= 6.4 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 6.12.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
@@ -231,6 +256,7 @@ No modules.
 | <a name="input_name"></a> [name](#input\_name) | The resource name of the instance. | `string` | `null` | no |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_nfs_export_options"></a> [nfs\_export\_options](#input\_nfs\_export\_options) | Define NFS export options. | <pre>list(object({<br/>    access_mode = optional(string)<br/>    ip_ranges   = optional(list(string))<br/>    squash_mode = optional(string)<br/>  }))</pre> | `[]` | no |
+| <a name="input_performance_config"></a> [performance\_config](#input\_performance\_config) | Custom performance configuration for the Filestore instance. Only supported<br/>on ZONAL and REGIONAL tiers, and required when `size_gb` is less than 1024.<br/>Specify exactly one of `fixed_iops` (`max_iops` >= 2000) or `iops_per_tb`<br/>(`max_iops_per_tb` > 0). Once enabled on an instance, custom performance<br/>cannot be cleared in-place (removing `performance_config` fails at apply<br/>and requires replacing the instance); existing instances without custom<br/>performance support also cannot enable it in-place. Adjusting IOPS or<br/>switching between `fixed_iops` and `iops_per_tb` on a custom-performance<br/>instance is an in-place update.<br/>See https://cloud.google.com/filestore/docs/configure-performance. | <pre>object({<br/>    fixed_iops = optional(object({<br/>      max_iops = number<br/>    }))<br/>    iops_per_tb = optional(object({<br/>      max_iops_per_tb = number<br/>    }))<br/>  })</pre> | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Filestore instance will be created. | `string` | n/a | yes |
 | <a name="input_protocol"></a> [protocol](#input\_protocol) | NFS protocol version. Default is NFS\_V3. NFS\_V4\_1 is only supported with HIGH\_SCALE\_SSD, ZONAL, REGIONAL, and ENTERPRISE tiers. | `string` | `"NFS_V3"` | no |
 | <a name="input_region"></a> [region](#input\_region) | Location for Filestore instances at Enterprise tier. | `string` | n/a | yes |
