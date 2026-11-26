@@ -36,9 +36,25 @@ locals {
     if length(trimspace(replace(doc, "/(?m)^[ \t]*#.*$/", ""))) > 0
   ]
   decoded_manifests = [for doc in local.manifest_docs : yamldecode(doc)]
-  parsed_manifests = {
-    for idx, doc in local.decoded_manifests : idx => doc if doc != null && can(doc.apiVersion)
-  }
+  parsed_manifests = [
+    for doc in local.decoded_manifests : doc if doc != null && can(doc.apiVersion)
+  ]
+
+  manifest_entries = [
+    for idx, doc in local.parsed_manifests : {
+      doc = doc
+      slug = trim(replace(lower(
+        coalesce(try(tostring(doc.metadata.name), null), "${var.module_id}-${idx}")
+      ), "/[^a-z0-9-]+/", "-"), "-")
+      identity_hash = substr(sha1(join("|", [
+        var.module_id,
+        coalesce(try(tostring(doc.apiVersion), null), "_"),
+        coalesce(try(tostring(doc.kind), null), "_"),
+        coalesce(try(tostring(doc.metadata.namespace), null), "_"),
+        coalesce(try(tostring(doc.metadata.name), null), tostring(idx)),
+      ])), 0, 8)
+    }
+  ]
 }
 
 module "kubectl_apply" {
@@ -52,8 +68,9 @@ module "kubectl_apply" {
   cluster_ca_certificate = var.cluster_ca_certificate
 
   apply_manifests = [
-    for idx, doc in local.parsed_manifests : {
-      content       = yamlencode(doc)
+    for entry in local.manifest_entries : {
+      name          = "${trim(substr(entry.slug != "" ? entry.slug : "cc", 0, 35), "-")}-${entry.identity_hash}"
+      content       = yamlencode(entry.doc)
       template_vars = {}
     }
   ]

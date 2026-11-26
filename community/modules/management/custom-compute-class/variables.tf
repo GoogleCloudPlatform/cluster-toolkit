@@ -23,6 +23,7 @@ variable "project_id" {
 variable "cluster_id" {
   description = "The GKE cluster ID (e.g. projects/PROJECT_ID/locations/LOCATION/clusters/CLUSTER_NAME)."
   type        = string
+  nullable    = false
 
   validation {
     condition     = can(regex("^projects/[^/]+/locations/[^/]+/clusters/[^/]+$", var.cluster_id))
@@ -85,7 +86,8 @@ variable "compute_classes" {
       consolidation_threshold     = optional(number, 0)
     }))
   }))
-  default = []
+  default  = []
+  nullable = false
 }
 
 variable "custom_manifest_path" {
@@ -98,10 +100,12 @@ variable "custom_template_vars" {
   description = "Optional template variables for custom_manifest_path if it is a templatefile."
   type        = any
   default     = {}
+  nullable    = false
 }
 
 variable "module_id" {
   description = "The ID of the module as defined in the blueprint. Injected by ghpc."
   type        = string
   default     = "custom-compute-class"
+  nullable    = false
 }
