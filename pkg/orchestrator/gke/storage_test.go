@@ -269,6 +269,18 @@ func TestParseSingleVolume(t *testing.T) {
 			wantErrSub: "specify the access mode as a ';rw' --mount segment",
 		},
 		{
+			name:       "o=ro inside options= is rejected in favor of --mount mode segment",
+			input:      "gs://my-bucket;/data;rw;options=o=ro",
+			wantErr:    true,
+			wantErrSub: "specify the access mode as a ';ro' --mount segment",
+		},
+		{
+			name:       "o=rw inside options= is rejected in favor of --mount mode segment",
+			input:      "gs://my-bucket;/data;options=o=rw",
+			wantErr:    true,
+			wantErrSub: "specify the access mode as a ';rw' --mount segment",
+		},
+		{
 			name:        "profile alias training",
 			input:       "gs://my-bucket;/data;profile=training",
 			wantSrc:     "gs://my-bucket",

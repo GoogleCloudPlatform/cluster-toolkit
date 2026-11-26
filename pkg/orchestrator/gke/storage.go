@@ -193,6 +193,9 @@ func newMountBuildState() *mountBuildState {
 }
 
 func (s *mountBuildState) volumeNameFor(pvName string, idx int) (name string, reused bool) {
+	if s == nil {
+		return fmt.Sprintf("vol-%d", idx), false
+	}
 	if existing, ok := s.gatewayVolumeNames[pvName]; ok {
 		return existing, true
 	}
@@ -365,7 +368,7 @@ func buildPodLevelMount(pm parsedMount, idx int, state *mountBuildState) MountIn
 	}
 
 	volName := fmt.Sprintf("vol-%d", idx)
-	if volType == "pvc" && state != nil {
+	if volType == "pvc" {
 		volName, _ = state.volumeNameFor("pvc:"+pm.Src, idx)
 	}
 
@@ -774,8 +777,9 @@ func rejectDisallowedGCSOptionToken(opt, token string) error {
 	switch token {
 	case "defaults", "_netdev":
 		return fmt.Errorf("invalid GCSFuse mount option %q: fstab-only options are not supported by the Cloud Storage FUSE CSI driver; remove %q from options=", opt, opt)
-	case "ro", "rw":
-		return fmt.Errorf("invalid GCSFuse mount option %q: specify the access mode as a ';%s' --mount segment instead of in options= (e.g., gs://<bucket>;<dest>;%s)", opt, token, token)
+	case "ro", "rw", "o=ro", "o=rw":
+		mode := strings.TrimPrefix(token, "o=")
+		return fmt.Errorf("invalid GCSFuse mount option %q: specify the access mode as a ';%s' --mount segment instead of in options= (e.g., gs://<bucket>;<dest>;%s)", opt, mode, mode)
 	}
 	return nil
 }
