@@ -16,10 +16,13 @@ package k8s
 
 import "strings"
 
-// ParseImageRef splits an OCI image reference into its normalized registry host,
-// repository path, raw name, tag, and digest presence. Unlike go-containerregistry's
+// ParseImageRef splits an OCI image reference into its registry host, repository
+// path, raw name, tag, and digest presence. It returns (ImageRef{}, false) when
+// the reference has no valid repository path (for example empty, ":tag", or
+// "registry/"). Host case is preserved to match the kubelet credential keyring,
+// with exact "index.docker.io" mapped to "docker.io". Unlike go-containerregistry's
 // name.ParseReference, it preserves tags on tag+digest refs and accepts synthetic digests.
-func ParseImageRef(ref string) ImageRef {
+func ParseImageRef(ref string) (ImageRef, bool) {
 	name, _, hasDigest := strings.Cut(ref, "@")
 	lastSlash := strings.LastIndex(name, "/")
 	rawName := name
@@ -31,30 +34,25 @@ func ParseImageRef(ref string) ImageRef {
 		hasTag = true
 	}
 
-	res := ImageRef{
-		RawName:   rawName,
-		Tag:       tag,
-		HasTag:    hasTag,
-		HasDigest: hasDigest,
-	}
-
 	host, repo, hasSlash := strings.Cut(rawName, "/")
 	// Bare names and org/repo shorthands have no '.', ':', or 'localhost' in the first segment.
-	if !hasSlash || (!strings.ContainsAny(host, ".:") && !strings.EqualFold(host, "localhost")) {
+	if !hasSlash || (!strings.ContainsAny(host, ".:") && host != "localhost") {
 		host, repo = "docker.io", rawName
-	} else {
-		host = strings.ToLower(host)
-		if host == "index.docker.io" {
-			host = "docker.io"
-		}
+	} else if host == "index.docker.io" {
+		host = "docker.io"
 	}
 	if repo == "" || strings.HasPrefix(repo, "/") || strings.HasSuffix(repo, "/") {
-		return res
+		return ImageRef{}, false
 	}
 	if host == "docker.io" && !strings.Contains(repo, "/") {
 		repo = "library/" + repo
 	}
-	res.Host = host
-	res.Repo = repo
-	return res
+	return ImageRef{
+		RawName:   rawName,
+		Host:      host,
+		Repo:      repo,
+		Tag:       tag,
+		HasTag:    hasTag,
+		HasDigest: hasDigest,
+	}, true
 }

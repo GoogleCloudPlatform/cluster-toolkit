@@ -159,10 +159,11 @@ func compareImageRefs(a, b string) int {
 }
 
 func semverTag(ref string) string {
-	tag := ParseImageRef(ref).Tag
-	if tag == "" {
+	parsed, ok := ParseImageRef(ref)
+	if !ok || parsed.Tag == "" {
 		return ""
 	}
+	tag := parsed.Tag
 	if !strings.HasPrefix(tag, "v") {
 		if !strings.Contains(tag, ".") {
 			return ""
@@ -208,8 +209,8 @@ func nodeHasTPUAllocatable(node unstructured.Unstructured) bool {
 }
 
 func classifyCollectorImageBucket(ref string) int {
-	parsed := ParseImageRef(ref)
-	if parsed.Repo == "" {
+	parsed, ok := ParseImageRef(ref)
+	if !ok {
 		return -1
 	}
 	switch path.Base(parsed.Repo) {

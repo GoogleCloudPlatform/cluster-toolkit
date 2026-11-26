@@ -4077,7 +4077,7 @@ spec:
 			wantErr: `invalid JobSet manifest: replicatedJob "pathways-head" container "pathways-proxy" defines duplicate environment variable "FOO"`,
 		},
 		{
-			name: "duplicate env in batch Job container rejected",
+			name: "duplicate env in batch Job container allowed",
 			manifest: `apiVersion: batch/v1
 kind: Job
 metadata:
@@ -4094,7 +4094,6 @@ spec:
         - name: MASTER_ADDR
           value: b
 `,
-			wantErr: `invalid Job manifest: container "workload-container" defines duplicate environment variable "MASTER_ADDR"`,
 		},
 		{
 			name: "duplicate env across valueFrom and value rejected",

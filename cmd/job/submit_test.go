@@ -1692,6 +1692,12 @@ func TestSubmitCmd_RestartsBounds(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				setupSubmitTestEnv(t)
 				t.Setenv("GCLUSTER_IMAGE_REPO", "")
+				oldLookup := lookupArtifactRegistryRepos
+				t.Cleanup(func() { lookupArtifactRegistryRepos = oldLookup })
+				lookupArtifactRegistryRepos = func(context.Context, string, string) ([]string, bool) {
+					t.Errorf("lookupArtifactRegistryRepos must not run on invalid --restarts")
+					return nil, false
+				}
 				_, err := executeCommand(JobCmd,
 					"submit",
 					"--name", "bad-restarts",
@@ -1748,6 +1754,38 @@ func TestSubmitCmd_RestartsBounds(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestSubmitCmd_LocalValidationRunsBeforeImageLookup(t *testing.T) {
+	setupSubmitTestEnv(t)
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
+	arCalled := false
+	oldLookup := lookupArtifactRegistryRepos
+	t.Cleanup(func() { lookupArtifactRegistryRepos = oldLookup })
+	lookupArtifactRegistryRepos = func(context.Context, string, string) ([]string, bool) {
+		arCalled = true
+		return nil, false
+	}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "bad-env-before-ar",
+		"--base-image", "python:3.12-slim",
+		"--build-context", t.TempDir(),
+		"--command", "echo hello",
+		"--compute-type", "n2d-standard-64",
+		"--env", "123BAD=val",
+		"--skip-prereqs",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+	)
+	if err == nil || !strings.Contains(err.Error(), "invalid environment variable name") {
+		t.Fatalf("got err = %v, want invalid environment variable name error", err)
+	}
+	if arCalled {
+		t.Errorf("lookupArtifactRegistryRepos was called despite invalid local --env flag")
+	}
 }
 
 func TestValidateNonNegativeInt32(t *testing.T) {

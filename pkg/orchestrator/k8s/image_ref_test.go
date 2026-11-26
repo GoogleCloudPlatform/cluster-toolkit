@@ -23,24 +23,26 @@ import (
 func TestParseImageRef(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name string
-		ref  string
-		want ImageRef
+		name   string
+		ref    string
+		want   ImageRef
+		wantOK bool
 	}{
 		{
 			name: "empty",
 			ref:  "",
-			want: ImageRef{},
 		},
 		{
-			name: "bare docker hub image",
-			ref:  "nginx",
-			want: ImageRef{RawName: "nginx", Host: "docker.io", Repo: "library/nginx"},
+			name:   "bare docker hub image",
+			ref:    "nginx",
+			want:   ImageRef{RawName: "nginx", Host: "docker.io", Repo: "library/nginx"},
+			wantOK: true,
 		},
 		{
-			name: "docker hub image with tag",
-			ref:  "python:3.12-slim",
-			want: ImageRef{RawName: "python", Host: "docker.io", Repo: "library/python", Tag: "3.12-slim", HasTag: true},
+			name:   "docker hub image with tag",
+			ref:    "python:3.12-slim",
+			want:   ImageRef{RawName: "python", Host: "docker.io", Repo: "library/python", Tag: "3.12-slim", HasTag: true},
+			wantOK: true,
 		},
 		{
 			name: "docker hub org image with tag and digest",
@@ -49,51 +51,67 @@ func TestParseImageRef(t *testing.T) {
 				RawName: "pytorch/pytorch", Host: "docker.io", Repo: "pytorch/pytorch",
 				Tag: "2.4", HasTag: true, HasDigest: true,
 			},
+			wantOK: true,
 		},
 		{
-			name: "explicit docker.io bare image adds library prefix",
-			ref:  "docker.io/nginx",
-			want: ImageRef{RawName: "docker.io/nginx", Host: "docker.io", Repo: "library/nginx"},
+			name:   "explicit docker.io bare image adds library prefix",
+			ref:    "docker.io/nginx",
+			want:   ImageRef{RawName: "docker.io/nginx", Host: "docker.io", Repo: "library/nginx"},
+			wantOK: true,
 		},
 		{
-			name: "uppercase DOCKER.IO normalizes to docker.io",
-			ref:  "DOCKER.IO/nginx",
-			want: ImageRef{RawName: "DOCKER.IO/nginx", Host: "docker.io", Repo: "library/nginx"},
+			name:   "uppercase DOCKER.IO preserves host case",
+			ref:    "DOCKER.IO/nginx",
+			want:   ImageRef{RawName: "DOCKER.IO/nginx", Host: "DOCKER.IO", Repo: "nginx"},
+			wantOK: true,
 		},
 		{
-			name: "index.docker.io normalizes to docker.io",
-			ref:  "index.docker.io/busybox:latest",
-			want: ImageRef{RawName: "index.docker.io/busybox", Host: "docker.io", Repo: "library/busybox", Tag: "latest", HasTag: true},
+			name:   "index.docker.io normalizes to docker.io",
+			ref:    "index.docker.io/busybox:latest",
+			want:   ImageRef{RawName: "index.docker.io/busybox", Host: "docker.io", Repo: "library/busybox", Tag: "latest", HasTag: true},
+			wantOK: true,
 		},
 		{
-			name: "index.docker.io org image preserves org",
-			ref:  "Index.Docker.IO/team/app:v1",
-			want: ImageRef{RawName: "Index.Docker.IO/team/app", Host: "docker.io", Repo: "team/app", Tag: "v1", HasTag: true},
+			name:   "index.docker.io org image preserves org",
+			ref:    "index.docker.io/team/app:v1",
+			want:   ImageRef{RawName: "index.docker.io/team/app", Host: "docker.io", Repo: "team/app", Tag: "v1", HasTag: true},
+			wantOK: true,
 		},
 		{
-			name: "portless localhost registry preserved",
-			ref:  "localhost/team/app:v1",
-			want: ImageRef{RawName: "localhost/team/app", Host: "localhost", Repo: "team/app", Tag: "v1", HasTag: true},
+			name:   "mixed-case Index.Docker.IO preserves host case",
+			ref:    "Index.Docker.IO/team/app:v1",
+			want:   ImageRef{RawName: "Index.Docker.IO/team/app", Host: "Index.Docker.IO", Repo: "team/app", Tag: "v1", HasTag: true},
+			wantOK: true,
 		},
 		{
-			name: "uppercase portless LOCALHOST normalized to localhost",
-			ref:  "LOCALHOST/team/app:v1",
-			want: ImageRef{RawName: "LOCALHOST/team/app", Host: "localhost", Repo: "team/app", Tag: "v1", HasTag: true},
+			name:   "portless localhost registry preserved",
+			ref:    "localhost/team/app:v1",
+			want:   ImageRef{RawName: "localhost/team/app", Host: "localhost", Repo: "team/app", Tag: "v1", HasTag: true},
+			wantOK: true,
 		},
 		{
-			name: "localhost with port and no tag",
-			ref:  "localhost:5000/team/app",
-			want: ImageRef{RawName: "localhost:5000/team/app", Host: "localhost:5000", Repo: "team/app"},
+			name:   "uppercase portless LOCALHOST treated as docker.io namespace",
+			ref:    "LOCALHOST/team/app:v1",
+			want:   ImageRef{RawName: "LOCALHOST/team/app", Host: "docker.io", Repo: "LOCALHOST/team/app", Tag: "v1", HasTag: true},
+			wantOK: true,
 		},
 		{
-			name: "IPv6 bracketed host with port and tag",
-			ref:  "[fd00::1]:5000/obs/collector:v1",
-			want: ImageRef{RawName: "[fd00::1]:5000/obs/collector", Host: "[fd00::1]:5000", Repo: "obs/collector", Tag: "v1", HasTag: true},
+			name:   "localhost with port and no tag",
+			ref:    "localhost:5000/team/app",
+			want:   ImageRef{RawName: "localhost:5000/team/app", Host: "localhost:5000", Repo: "team/app"},
+			wantOK: true,
 		},
 		{
-			name: "name with numeric tag and no slash",
-			ref:  "myreg:5000",
-			want: ImageRef{RawName: "myreg", Host: "docker.io", Repo: "library/myreg", Tag: "5000", HasTag: true},
+			name:   "IPv6 bracketed host with port and tag",
+			ref:    "[fd00::1]:5000/obs/collector:v1",
+			want:   ImageRef{RawName: "[fd00::1]:5000/obs/collector", Host: "[fd00::1]:5000", Repo: "obs/collector", Tag: "v1", HasTag: true},
+			wantOK: true,
+		},
+		{
+			name:   "name with numeric tag and no slash",
+			ref:    "myreg:5000",
+			want:   ImageRef{RawName: "myreg", Host: "docker.io", Repo: "library/myreg", Tag: "5000", HasTag: true},
+			wantOK: true,
 		},
 		{
 			name: "localhost with port, tag, and digest",
@@ -102,41 +120,49 @@ func TestParseImageRef(t *testing.T) {
 				RawName: "localhost:5000/team/app", Host: "localhost:5000", Repo: "team/app",
 				Tag: "v2", HasTag: true, HasDigest: true,
 			},
+			wantOK: true,
 		},
 		{
-			name: "uppercase localhost with port, DNS host, and IPv6 host normalize Host to lowercase",
-			ref:  "LOCALHOST:5000/team/app:v1",
-			want: ImageRef{RawName: "LOCALHOST:5000/team/app", Host: "localhost:5000", Repo: "team/app", Tag: "v1", HasTag: true},
+			name:   "uppercase localhost with port preserves Host case",
+			ref:    "LOCALHOST:5000/team/app:v1",
+			want:   ImageRef{RawName: "LOCALHOST:5000/team/app", Host: "LOCALHOST:5000", Repo: "team/app", Tag: "v1", HasTag: true},
+			wantOK: true,
 		},
 		{
-			name: "mixed-case registry host with port normalizes Host while preserving RawName",
-			ref:  "Harbor.Local:8443/team-a/app:v1",
-			want: ImageRef{RawName: "Harbor.Local:8443/team-a/app", Host: "harbor.local:8443", Repo: "team-a/app", Tag: "v1", HasTag: true},
+			name:   "mixed-case registry host with port preserves Host case",
+			ref:    "Harbor.Local:8443/team-a/app:v1",
+			want:   ImageRef{RawName: "Harbor.Local:8443/team-a/app", Host: "Harbor.Local:8443", Repo: "team-a/app", Tag: "v1", HasTag: true},
+			wantOK: true,
 		},
 		{
-			name: "uppercase GAR host normalizes Host to lowercase",
-			ref:  "US-DOCKER.PKG.DEV/p/r/img:v1",
-			want: ImageRef{RawName: "US-DOCKER.PKG.DEV/p/r/img", Host: "us-docker.pkg.dev", Repo: "p/r/img", Tag: "v1", HasTag: true},
+			name:   "uppercase GAR host preserves Host case",
+			ref:    "US-DOCKER.PKG.DEV/p/r/img:v1",
+			want:   ImageRef{RawName: "US-DOCKER.PKG.DEV/p/r/img", Host: "US-DOCKER.PKG.DEV", Repo: "p/r/img", Tag: "v1", HasTag: true},
+			wantOK: true,
 		},
 		{
-			name: "uppercase IPv6 host normalizes Host to lowercase",
-			ref:  "[FD00::1]:5000/obs/collector:v1",
-			want: ImageRef{RawName: "[FD00::1]:5000/obs/collector", Host: "[fd00::1]:5000", Repo: "obs/collector", Tag: "v1", HasTag: true},
+			name:   "uppercase IPv6 host preserves Host case",
+			ref:    "[FD00::1]:5000/obs/collector:v1",
+			want:   ImageRef{RawName: "[FD00::1]:5000/obs/collector", Host: "[FD00::1]:5000", Repo: "obs/collector", Tag: "v1", HasTag: true},
+			wantOK: true,
 		},
 		{
-			name: "non-docker.io single-segment repo does not add library prefix",
-			ref:  "localhost:5000/app:v1",
-			want: ImageRef{RawName: "localhost:5000/app", Host: "localhost:5000", Repo: "app", Tag: "v1", HasTag: true},
+			name:   "non-docker.io single-segment repo does not add library prefix",
+			ref:    "localhost:5000/app:v1",
+			want:   ImageRef{RawName: "localhost:5000/app", Host: "localhost:5000", Repo: "app", Tag: "v1", HasTag: true},
+			wantOK: true,
 		},
 		{
-			name: "bare docker hub image containing dot without slash",
-			ref:  "my.app:v1",
-			want: ImageRef{RawName: "my.app", Host: "docker.io", Repo: "library/my.app", Tag: "v1", HasTag: true},
+			name:   "bare docker hub image containing dot without slash",
+			ref:    "my.app:v1",
+			want:   ImageRef{RawName: "my.app", Host: "docker.io", Repo: "library/my.app", Tag: "v1", HasTag: true},
+			wantOK: true,
 		},
 		{
-			name: "bare image named localhost without slash defaults to docker.io",
-			ref:  "localhost:v1",
-			want: ImageRef{RawName: "localhost", Host: "docker.io", Repo: "library/localhost", Tag: "v1", HasTag: true},
+			name:   "bare image named localhost without slash defaults to docker.io",
+			ref:    "localhost:v1",
+			want:   ImageRef{RawName: "localhost", Host: "docker.io", Repo: "library/localhost", Tag: "v1", HasTag: true},
+			wantOK: true,
 		},
 		{
 			name: "GAR image with digest only",
@@ -145,6 +171,7 @@ func TestParseImageRef(t *testing.T) {
 				RawName: "us-docker.pkg.dev/proj/repo/server", Host: "us-docker.pkg.dev", Repo: "proj/repo/server",
 				HasDigest: true,
 			},
+			wantOK: true,
 		},
 		{
 			name: "trailing colon sets HasTag with empty Tag",
@@ -153,6 +180,7 @@ func TestParseImageRef(t *testing.T) {
 				RawName: "us-docker.pkg.dev/proj/repo/server", Host: "us-docker.pkg.dev", Repo: "proj/repo/server",
 				Tag: "", HasTag: true,
 			},
+			wantOK: true,
 		},
 		{
 			name: "trailing at-sign sets HasDigest",
@@ -161,46 +189,45 @@ func TestParseImageRef(t *testing.T) {
 				RawName: "us-docker.pkg.dev/proj/repo/server", Host: "us-docker.pkg.dev", Repo: "proj/repo/server",
 				HasDigest: true,
 			},
+			wantOK: true,
 		},
 		{
-			name: "tag only with empty name leaves Host and Repo empty",
+			name: "tag only with empty name returns false",
 			ref:  ":latest",
-			want: ImageRef{Tag: "latest", HasTag: true},
 		},
 		{
-			name: "digest only with empty name leaves Host and Repo empty",
+			name: "digest only with empty name returns false",
 			ref:  "@sha256:abcdef",
-			want: ImageRef{HasDigest: true},
 		},
 		{
-			name: "registry host with empty repo leaves Host and Repo empty",
+			name: "registry host with empty repo returns false",
 			ref:  "us-docker.pkg.dev/",
-			want: ImageRef{RawName: "us-docker.pkg.dev/"},
 		},
 		{
-			name: "double slash after registry host leaves Host and Repo empty",
+			name: "double slash after registry host returns false",
 			ref:  "us-docker.pkg.dev//proj/img",
-			want: ImageRef{RawName: "us-docker.pkg.dev//proj/img"},
 		},
 		{
-			name: "leading slash leaves Host and Repo empty",
+			name: "leading slash returns false",
 			ref:  "/nginx",
-			want: ImageRef{RawName: "/nginx"},
 		},
 		{
-			name: "trailing slash leaves Host and Repo empty",
+			name: "trailing slash returns false",
 			ref:  "myorg/",
-			want: ImageRef{RawName: "myorg/"},
 		},
 		{
-			name: "slash after colon is not treated as tag",
-			ref:  "us-docker.pkg.dev/proj/server:bad/path",
-			want: ImageRef{RawName: "us-docker.pkg.dev/proj/server:bad/path", Host: "us-docker.pkg.dev", Repo: "proj/server:bad/path"},
+			name:   "slash after colon is not treated as tag",
+			ref:    "us-docker.pkg.dev/proj/server:bad/path",
+			want:   ImageRef{RawName: "us-docker.pkg.dev/proj/server:bad/path", Host: "us-docker.pkg.dev", Repo: "proj/server:bad/path"},
+			wantOK: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := ParseImageRef(tc.ref)
+			got, gotOK := ParseImageRef(tc.ref)
+			if gotOK != tc.wantOK {
+				t.Errorf("ParseImageRef(%q) ok = %v, want %v", tc.ref, gotOK, tc.wantOK)
+			}
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("ParseImageRef(%q) mismatch (-want +got):\n%s", tc.ref, diff)
 			}

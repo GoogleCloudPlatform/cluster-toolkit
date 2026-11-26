@@ -176,8 +176,8 @@ func deferToServiceAccount(client ResourceReader, namespace, name string) bool {
 
 // matchingSecretNames returns the sorted names of the secrets holding credentials for img.
 func matchingSecretNames(secrets []unstructured.Unstructured, img string) []string {
-	parsed := ParseImageRef(img)
-	if parsed.Repo == "" {
+	parsed, ok := ParseImageRef(img)
+	if !ok {
 		return nil
 	}
 	var names []string
@@ -232,11 +232,10 @@ func authKeyHostAndPath(key string) (string, string, bool) {
 		p = p[3:]
 	}
 	p = strings.Trim(p, "/")
-	host := strings.ToLower(u.Host)
-	if host == "index.docker.io" && p == "" {
+	if u.Host == "index.docker.io" && p == "" {
 		return "docker.io", "", true
 	}
-	return host, p, true
+	return u.Host, p, true
 }
 
 // authHostMatches mirrors the kubelet's URL matching: equal ports, the same number of dot-separated labels,

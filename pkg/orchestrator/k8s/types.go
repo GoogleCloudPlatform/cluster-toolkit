@@ -116,10 +116,10 @@ type dockerConfigJSON struct {
 // ImageRef holds the parsed components of an OCI image reference ([registry/]repository[:tag][@digest]).
 type ImageRef struct {
 	RawName   string // Reference with tag and digest stripped, preserving original registry/repo prefix.
-	Host      string // Normalized registry host ("docker.io" for Docker Hub shorthand/index.docker.io).
-	Repo      string // Normalized repository path (bare Docker Hub names become "library/<name>").
+	Host      string // Registry host preserving case ("docker.io" for Docker Hub shorthand or exact "index.docker.io").
+	Repo      string // Repository path (bare Docker Hub names become "library/<name>").
 	Tag       string // Explicit tag without leading ":", or empty if absent.
-	HasTag    bool   // True when a ":" tag separator appeared in the final path segment.
+	HasTag    bool   // True when a ":" tag separator appeared in the final path segment (Tag is "" for a trailing ":").
 	HasDigest bool   // True when an "@" digest separator was present.
 }
 

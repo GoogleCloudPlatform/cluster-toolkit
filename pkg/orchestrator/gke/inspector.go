@@ -872,10 +872,11 @@ func lastReadySlices(logs string) string {
 // imageVersions reads the Python and JAX versions from an image tag such as
 // sidecar:20260831-maxtext-v0.2.4-jax0.11.1-pwutils. Missing versions are returned empty.
 func imageVersions(image string) (python, jax string) {
-	tag := k8s.ParseImageRef(image).Tag
-	if tag == "" {
+	parsed, ok := k8s.ParseImageRef(image)
+	if !ok || parsed.Tag == "" {
 		return "", ""
 	}
+	tag := parsed.Tag
 	if m := pythonVersionRe.FindStringSubmatch(tag); m != nil {
 		python = m[1]
 	}

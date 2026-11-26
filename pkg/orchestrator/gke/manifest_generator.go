@@ -563,8 +563,10 @@ func validatePodSpecVolumes(contextPrefix string, podSpec *corev1.PodSpec) error
 	return nil
 }
 
-// validatePodSpecEnv rejects duplicate env var names (including value and valueFrom collisions)
-// within each initContainer and container, skipping empty names for API-server schema validation.
+// validatePodSpecEnv mirrors the JobSet CRD's map-list check on env.name (which rejects
+// duplicate env var names, including value and valueFrom collisions, at apply time) so
+// conflicts fail earlier with a clearer error. Skips empty names for API-server validation.
+// Scoped to JobSet because the core batch/v1 Job API accepts duplicate env entries.
 func validatePodSpecEnv(contextPrefix string, podSpec *corev1.PodSpec) error {
 	for _, c := range slices.Concat(podSpec.InitContainers, podSpec.Containers) {
 		seenEnv := make(map[string]bool, len(c.Env))
@@ -670,8 +672,10 @@ func ValidateJobSetManifest(manifestContent string) error {
 		if err := validatePodFailurePolicy(prefix, pfp, &tmpl.Spec); err != nil {
 			return err
 		}
-		if err := validatePodSpecEnv(prefix, &tmpl.Spec); err != nil {
-			return err
+		if kind == "JobSet" {
+			if err := validatePodSpecEnv(prefix, &tmpl.Spec); err != nil {
+				return err
+			}
 		}
 		return validatePodSpecVolumes(prefix, &tmpl.Spec)
 	})

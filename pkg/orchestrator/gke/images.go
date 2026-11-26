@@ -78,8 +78,8 @@ func resolvePathwaysImages(p orchestrator.PathwaysJobDefinition) (orchestrator.P
 // the reference names no release (a bare digest or another tag), in which case the tag is latest. pinnedByDigest is
 // true when the reference includes a digest (@sha256:...), which container runtimes pull instead of the tag.
 func publicSidecarRelease(image string) (tag string, exact, pinnedByDigest, ok bool) {
-	parsed := k8s.ParseImageRef(image)
-	if parsed.RawName != publicPathwaysSidecarImage {
+	parsed, valid := k8s.ParseImageRef(image)
+	if !valid || parsed.RawName != publicPathwaysSidecarImage {
 		return "", false, false, false
 	}
 	switch {
@@ -95,8 +95,8 @@ func publicSidecarRelease(image string) (tag string, exact, pinnedByDigest, ok b
 // proxyImageFor derives the proxy image that matches an SPS server image, as pathwaysutils does.
 func proxyImageFor(serverImage string) string {
 	// Pathways server and proxy images never share a digest, so only a tag can carry over.
-	parsed := k8s.ParseImageRef(serverImage)
-	if parsed.HasDigest || parsed.Repo == "" {
+	parsed, ok := k8s.ParseImageRef(serverImage)
+	if !ok || parsed.HasDigest {
 		return ""
 	}
 	prefix, ok := strings.CutSuffix(parsed.RawName, "/server")

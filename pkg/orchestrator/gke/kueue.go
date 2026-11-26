@@ -656,11 +656,11 @@ func (g *GKEOrchestrator) getKueueVersion(dep *kueueDeployment) (string, error) 
 			image = strings.TrimSpace(c.Image)
 		}
 	}
-	tag := k8s.ParseImageRef(image).Tag
-	if tag == "" {
+	parsed, ok := k8s.ParseImageRef(image)
+	if !ok || parsed.Tag == "" {
 		return "", fmt.Errorf("no tag found in Kueue image: %s", image)
 	}
-	return tag, nil
+	return parsed.Tag, nil
 }
 
 func (g *GKEOrchestrator) isVersionBelow(current, target string) bool {
