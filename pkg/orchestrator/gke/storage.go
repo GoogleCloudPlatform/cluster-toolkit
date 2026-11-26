@@ -259,7 +259,7 @@ func (sm *StorageManager) pvcNeedsGCSFuseSidecar(pvcName string, job orchestrato
 		logging.Warn("Could not resolve namespace to inspect PVC %q for GCSFuse CSI driver (%v); defaulting to \"default\".", pvcName, err)
 		ns = "default"
 	}
-	needsSidecar := sm.isGCSFuseBackedPVC(pvcName, ns, job.DryRunManifest != "")
+	needsSidecar := sm.isGCSFuseBackedPVC(pvcName, ns)
 	if state != nil && state.pvcNeedsSidecar != nil {
 		state.pvcNeedsSidecar[pvcName] = needsSidecar
 	}
@@ -287,7 +287,7 @@ func (sm *StorageManager) setInspectedPVC(ns, pvcName string, res pvcInspectResu
 // isGCSFuseBackedPVC reports whether an existing PVC is backed by the GCSFuse CSI driver
 // (via its storage-provisioner annotation, a bound PV with spec.csi.driver=gcsfuse.csi.storage.gke.io,
 // or a GCSFuse StorageClass), which requires the pod to carry the gke-gcsfuse/volumes: "true" webhook annotation.
-func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string, dryRun bool) bool {
+func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string) bool {
 	if strings.HasPrefix(pvcName, gcsFuseGatewayPrefix+"-") {
 		return true
 	}
@@ -299,9 +299,6 @@ func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string, dryRun bool) bo
 	if cached, ok := sm.getInspectedPVC(ns, pvcName); ok {
 		volumeName, storageClassName, provisioner = cached.volumeName, cached.storageClassName, cached.provisioner
 	} else {
-		if dryRun {
-			return false
-		}
 		res := sm.orchestrator.kubectl("get", "pvc", "-n", ns, "--ignore-not-found", kubectlReadTimeout,
 			"-o", pvcGCSFuseJSONPath, "--", pvcName)
 		if res.ExitCode != 0 {
@@ -319,9 +316,6 @@ func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string, dryRun bool) bo
 
 	if isKnownGCSFuseProfileStorageClass(storageClassName) {
 		return true
-	}
-	if dryRun {
-		return false
 	}
 	return sm.hasGCSFuseCSIField("pv", volumeName, pvcName, pvCSIDriverTemplate) ||
 		sm.hasGCSFuseCSIField("storageclass", storageClassName, pvcName, "jsonpath={.provisioner}")

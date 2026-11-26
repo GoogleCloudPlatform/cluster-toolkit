@@ -132,26 +132,27 @@ const (
 
 // PoolCapacity summarizes per-node and aggregate allocatable resources for one node pool or machine-type group.
 type PoolCapacity struct {
-	MachineType         string
-	NodePoolName        string
-	TotalNodes          int
-	ReadyNodes          int
-	IsControlPlane      bool
-	IsSystemPool        bool
-	IsTPU               bool
-	IsGPU               bool
-	TPUType             string
-	GPUType             string
-	GPUResourceName     string
-	InstanceTypeLabel   string
-	GPUProductLabel     string
-	GKEAcceleratorLabel string
-	TPUsPerNode         int
-	GPUsPerNode         int
-	AllocatableCPUMilli int64
-	MemMiBPerNode       int
-	Topologies          []string
-	SliceNames          []string
+	MachineType            string
+	NodePoolName           string
+	TotalNodes             int
+	ReadyNodes             int
+	IsControlPlane         bool
+	IsSystemPool           bool
+	IsTPU                  bool
+	IsGPU                  bool
+	TPUType                string
+	GPUType                string
+	GPUResourceName        string
+	InstanceTypeLabel      string
+	GPUProductLabel        string
+	GKEAcceleratorLabel    string
+	GKETPUAcceleratorLabel string
+	TPUsPerNode            int
+	GPUsPerNode            int
+	AllocatableCPUMilli    int64
+	MemMiBPerNode          int
+	Topologies             []string
+	SliceNames             []string
 }
 
 // SliceInfo describes a discovered slice.tpu.google.com Slice resource or node-derived slice.
@@ -228,7 +229,6 @@ type nodeSignals struct {
 	hasGKELabels       bool
 	hasPartitionLabels bool
 	poolControlPlane   map[string]bool
-	poolSystem         map[string]bool
 	nodeSlices         map[string]*nodeSliceAgg
 }
 
@@ -286,32 +286,32 @@ func (o observedLabel) resolved() string {
 }
 
 type poolBuilder struct {
-	key                  poolGroupKey
-	cap                  PoolCapacity
-	allMachineType       string
-	readyMachineType     string
-	allTPUType           string
-	readyTPUType         string
-	allGPUType           string
-	readyGPUType         string
-	allGPUResourceName   string
-	readyGPUResourceName string
-	allInstanceLabel     observedLabel
-	readyInstanceLabel   observedLabel
-	allGPUProductLabel   observedLabel
-	readyGPUProductLabel observedLabel
-	allGKEAccelLabel     observedLabel
-	readyGKEAccelLabel   observedLabel
-	allCPUMilli          int64
-	readyCPUMilli        int64
-	allMemMiB            int
-	readyMemMiB          int
-	allTPUs              int
-	readyTPUs            int
-	allGPUs              int
-	readyGPUs            int
-	topologies           map[string]struct{}
-	slices               map[string]struct{}
+	key                   poolGroupKey
+	cap                   PoolCapacity
+	allMachineType        string
+	readyMachineType      string
+	allTPUType            string
+	readyTPUType          string
+	allGPUType            string
+	readyGPUType          string
+	allInstanceLabel      observedLabel
+	readyInstanceLabel    observedLabel
+	allGPUProductLabel    observedLabel
+	readyGPUProductLabel  observedLabel
+	allGKEAccelLabel      observedLabel
+	readyGKEAccelLabel    observedLabel
+	allGKETPUAccelLabel   observedLabel
+	readyGKETPUAccelLabel observedLabel
+	allCPUMilli           int64
+	readyCPUMilli         int64
+	allMemMiB             int
+	readyMemMiB           int
+	allTPUs               int
+	readyTPUs             int
+	allGPUs               int
+	readyGPUs             int
+	topologies            map[string]struct{}
+	slices                map[string]struct{}
 }
 
 type nodeSnapshot struct {
@@ -328,6 +328,7 @@ type nodeSnapshot struct {
 	instanceTypeLabel string
 	gpuProductLabel   string
 	gkeAccelLabel     string
+	gkeTPUAccelLabel  string
 	machineType       string
 	poolKey           string
 	nodePool          string
@@ -346,4 +347,10 @@ type crdDiscoveryResult struct {
 	treeErr    error
 	slices     []SliceInfo
 	trees      []PartitionTreeInfo
+}
+
+type gpuResourceRule struct {
+	key          string
+	isPrefix     bool
+	inferredType string
 }

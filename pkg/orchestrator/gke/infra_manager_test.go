@@ -3419,10 +3419,10 @@ func TestValidateTier3Workload_StaticSliceReuseGuard(t *testing.T) {
 			wantSlice: "precreated-slice",
 		},
 		{
-			name:      "allows_nodes_200_slices_403_with_named_slice",
-			inv:       &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice, ExplicitMode: false, SliceInventoryUnavailable: true},
-			job:       orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "precreated-slice"}},
-			wantSlice: "precreated-slice",
+			name:    "rejects_nodes_200_slices_403_with_unknown_named_slice",
+			inv:     &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice, ExplicitMode: false, SliceInventoryUnavailable: true},
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "precreated-slice"}},
+			wantErr: "Slice objects could not be listed",
 		},
 		{
 			name: "known_non_ready_slice_still_rejected_when_slice_inventory_unavailable",

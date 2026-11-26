@@ -79,10 +79,6 @@ func (g *GKEOrchestrator) getZonesForMachineType(machineType string) []string {
 }
 
 func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (MachineTypeCap, error) {
-	if g.mode == orchestrator.TypeK8s {
-		return g.resolveK8sMachineCapabilities(machineType)
-	}
-
 	cacheKey := machineType + ":" + zone
 	if g.machineCapCache != nil {
 		if cap, ok := g.machineCapCache[cacheKey]; ok {
@@ -779,15 +775,16 @@ func isCandidateCompatibleForComputeType(computeType, candidate string) bool {
 	if !config.IsTPU(candidate) {
 		return true
 	}
-	topo, err := config.ResolveTopologyForChips(strings.ToLower(computeType), candidate)
+	normCandidate := normalizeConfigTPUMachine(candidate)
+	topo, err := config.ResolveTopologyForChips(strings.ToLower(computeType), normCandidate)
 	if err != nil {
 		return true
 	}
-	nodes, err := config.CalculateAcceleratorNodes(candidate, topo, 0)
+	nodes, err := config.CalculateAcceleratorNodes(normCandidate, topo, 0)
 	if err != nil {
 		return false
 	}
-	hostChips := config.AcceleratorsPerVM(candidate)
+	hostChips := config.AcceleratorsPerVM(normCandidate)
 	return nodes == 1 || hostChips == 4
 }
 

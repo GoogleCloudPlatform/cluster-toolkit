@@ -2209,9 +2209,8 @@ func TestK8sResourceResolution_TPUShorthandDisambiguation(t *testing.T) {
 	if got := orc4t.resolveK8sMachineType("v6e-8", nil); got != "ct6e-standard-4t" {
 		t.Errorf("resolveK8sMachineType(v6e-8 on 4t pool) = %q, want ct6e-standard-4t", got)
 	}
-	cap1t := orc4t.machineTypeCapFromTPUInventory("ct6e-standard-1t")
-	if len(cap1t.Accelerators) != 1 || cap1t.Accelerators[0].Count != 1 {
-		t.Errorf("machineTypeCapFromTPUInventory(ct6e-standard-1t) = %+v, want 1 chip", cap1t)
+	if chips := orc4t.resolveK8sTPUChipsPerNode("ct6e-standard-1t", k8s.PoolCapacity{}, false, 0); chips != 1 {
+		t.Errorf("resolveK8sTPUChipsPerNode(ct6e-standard-1t) = %d, want 1 chip", chips)
 	}
 }
 
@@ -2263,8 +2262,8 @@ func TestK8sResourceResolution_SuffixesAndExplicitCPUFallback(t *testing.T) {
 		{"n2-custom-16-65536", 16},
 		{"kind-worker-1", 0},
 	} {
-		if got := fallbackK8sMachineTypeCap(tc.mt, "").GuestCpus; got != tc.want {
-			t.Errorf("fallbackK8sMachineTypeCap(%q) GuestCpus = %d, want %d", tc.mt, got, tc.want)
+		if got := inferFallbackGCECPUCount(tc.mt); got != tc.want {
+			t.Errorf("inferFallbackGCECPUCount(%q) = %d, want %d", tc.mt, got, tc.want)
 		}
 	}
 }
@@ -2570,7 +2569,7 @@ func TestK8sRebuttalFixes_V4V5pTopoCustomSliceZeroGPUPoolAndCaseValidation(t *te
 	}
 
 	// C4 + C12 + C14: Custom bm-host TPU slice matches; s.Topology=="" validates against s.NodesPerSlice;
-	// ExplicitMode slice ChipsPerNode honored; resolveK8sMachineCapabilities respects TPU family guard.
+	// ExplicitMode slice ChipsPerNode honored; resolveK8sTPUChipsPerNode respects TPU family guard.
 	bmOrc := &GKEOrchestrator{
 		mode: orchestrator.TypeK8s,
 		submissionSession: submissionSession{
@@ -2600,9 +2599,8 @@ func TestK8sRebuttalFixes_V4V5pTopoCustomSliceZeroGPUPoolAndCaseValidation(t *te
 	if chips := bmOrc.resolveK8sTPUChipsPerNode("custom-8", k8s.PoolCapacity{}, false, 8); chips != 8 {
 		t.Errorf("resolveK8sTPUChipsPerNode(custom-8, sliceChips=8) = %d, want 8", chips)
 	}
-	v5pCap, err := bmOrc.resolveK8sMachineCapabilities("ct5p-hightpu")
-	if err != nil || len(v5pCap.Accelerators) == 0 || v5pCap.Accelerators[0].Count == 8 {
-		t.Errorf("resolveK8sMachineCapabilities(ct5p-hightpu) leaked v6e 8t inventory: %+v, err=%v", v5pCap, err)
+	if chips := bmOrc.resolveK8sTPUChipsPerNode("ct5p-hightpu", k8s.PoolCapacity{}, false, 0); chips == 8 {
+		t.Errorf("resolveK8sTPUChipsPerNode(ct5p-hightpu) leaked v6e 8t inventory: got %d", chips)
 	}
 	assertZeroGPURankingAndCaseValidation(t)
 }
@@ -2632,8 +2630,8 @@ func assertZeroGPURankingAndCaseValidation(t *testing.T) {
 	if _, _, gpu, tpu, err := gpuOrc.calculateK8sMachineResourceLimits(ManifestOptions{MachineType: "bm-host"}, JobProfile{}); err != nil || tpu != "4" || gpu != "" {
 		t.Errorf("calculateK8sMachineResourceLimits(bm-host, empty profile) = (gpu=%q tpu=%q err=%v), want tpu=4", gpu, tpu, err)
 	}
-	if _, _, gpu, tpu, err := gpuOrc.calculateK8sMachineResourceLimits(ManifestOptions{MachineType: "output-gpu-worker"}, JobProfile{}); err != nil || gpu != "1" || tpu != "" {
-		t.Errorf("calculateK8sMachineResourceLimits(output-gpu-worker) = (gpu=%q tpu=%q err=%v), want gpu=1", gpu, tpu, err)
+	if prof, err := gpuOrc.buildK8sJobProfile(&orchestrator.JobDefinition{MachineType: "output-gpu-worker"}, k8s.PoolCapacity{}, false, false); err != nil || prof.IsCPUMachine || prof.CapacityCount != 1 {
+		t.Errorf("buildK8sJobProfile(output-gpu-worker) = (%+v, %v), want gpu CapacityCount=1", prof, err)
 	}
 	if _, _, gpu, _, err := gpuOrc.calculateK8sMachineResourceLimits(ManifestOptions{ComputeType: "nvidia.com/mig-3g.40gb", MachineType: "a3-highgpu-8g"}, JobProfile{}); err != nil || gpu != "2" {
 		t.Errorf("calculateK8sMachineResourceLimits(mig-3g.40gb) = (gpu=%q err=%v), want gpu=2", gpu, err)
@@ -2672,5 +2670,75 @@ func assertCaseAndNamedSliceShorthandValidation(t *testing.T) {
 	}
 	if got := sliceOrc.resolveK8sMachineType("v6e-8", map[string]string{k8s.TPUSliceNameLabel: "s-4t"}); got != "ct6e-standard-4t" {
 		t.Errorf("resolveK8sMachineType(v6e-8 on s-4t) = %q, want ct6e-standard-4t", got)
+	}
+}
+
+func TestResolveParallelContainerCount_GKEAndK8s(t *testing.T) {
+	tests := []struct {
+		name string
+		mode orchestrator.Type
+		job  orchestrator.JobDefinition
+		want int
+	}{
+		{
+			name: "gke_tpu7x_4t_uses_2_containers",
+			mode: orchestrator.TypeGKE,
+			job:  orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", UseParallelContainers: true},
+			want: 2,
+		},
+		{
+			name: "gke_tpu7x_1t_uses_1_container",
+			mode: orchestrator.TypeGKE,
+			job:  orchestrator.JobDefinition{MachineType: "tpu7x-standard-1t", UseParallelContainers: true},
+			want: 1,
+		},
+		{
+			name: "gke_tpu7x_4t_disabled_uses_1_container",
+			mode: orchestrator.TypeGKE,
+			job:  orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", UseParallelContainers: false},
+			want: 1,
+		},
+		{
+			name: "gke_tpu7x_pathways_uses_1_container",
+			mode: orchestrator.TypeGKE,
+			job:  orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", UseParallelContainers: true, IsPathwaysJob: true},
+			want: 1,
+		},
+		{
+			name: "gke_non_tpu7x_uses_1_container",
+			mode: orchestrator.TypeGKE,
+			job:  orchestrator.JobDefinition{MachineType: "ct6e-standard-4t", UseParallelContainers: true},
+			want: 1,
+		},
+		{
+			name: "k8s_tpu7x_4t_uses_1_container",
+			mode: orchestrator.TypeK8s,
+			job:  orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", UseParallelContainers: true},
+			want: 1,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{mode: tc.mode}
+			if got := orc.resolveParallelContainerCount(tc.job); got != tc.want {
+				t.Errorf("resolveParallelContainerCount() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+
+	// Verify defensive divisibility check in calculateResourceLimits rejects indivisible parallel splits.
+	k8sOrc := &GKEOrchestrator{mode: orchestrator.TypeK8s}
+	_, _, _, _, err := k8sOrc.calculateResourceLimits(
+		ManifestOptions{ComputeType: "tpu7x-standard-1t", MachineType: "tpu7x-standard-1t", ParallelContainers: 2},
+		JobProfile{IsTPU: true, CapacityCount: 1},
+	)
+	if err == nil || !strings.Contains(err.Error(), "cannot be evenly split") {
+		t.Errorf("calculateResourceLimits(1 chip / 2 containers) err = %v, want divisibility error", err)
+	}
+
+	// Verify GKE resolveGKETPUHardware rejects --num-nodes on TPU workloads.
+	gkeOrc := &GKEOrchestrator{mode: orchestrator.TypeGKE}
+	if _, _, err := gkeOrc.resolveGKETPUHardware(&orchestrator.JobDefinition{MachineType: "ct6e-standard-4t", NumNodesSpecified: true}); err == nil || !strings.Contains(err.Error(), "--num-nodes cannot be used with TPU jobs") {
+		t.Errorf("resolveGKETPUHardware(NumNodesSpecified=true) err = %v, want --num-nodes rejection", err)
 	}
 }

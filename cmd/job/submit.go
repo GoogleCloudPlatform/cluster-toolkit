@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/imagebuilder"
 	"math"
 	"os"
@@ -196,7 +195,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&cpuAffinityStr, "cpu-affinity", "", "CPU affinity rules (e.g., 'numa').")
 	SubmitCmd.Flags().IntSliceVar(&restartOnExitCodes, "restart-on-exit-codes", nil, "List of exit codes that should not trigger a job failure.")
 	SubmitCmd.Flags().StringVar(&imagePullSecrets, "image-pull-secret", "", "Comma-separated list of secrets for pulling images. If omitted, matching dockerconfigjson secrets in the target namespace are attached; pass \"\" to attach none.")
-	SubmitCmd.Flags().StringVar(&serviceAccountName, "service-account", "", "Kubernetes ServiceAccount for the pods (GKE Workload Identity). On TPU and Pathways jobs, setting it disables hostNetwork.")
+	SubmitCmd.Flags().StringVar(&serviceAccountName, "service-account", "", "Kubernetes ServiceAccount for the pods (GKE Workload Identity). On GKE TPU and Pathways jobs, setting it disables hostNetwork.")
 	SubmitCmd.Flags().StringVar(&topology, "topology", "", "TPU slice topology (e.g., 2x2x1).")
 	SubmitCmd.Flags().StringVar(&gkeScheduler, "gke-scheduler", "", "Kubernetes Scheduler name (e.g., gke.io/topology-aware-auto).")
 	SubmitCmd.Flags().BoolVar(&awaitJobCompletion, "await-job-completion", false, "If true, gcluster will wait for the submitted job to complete.")
@@ -235,31 +234,60 @@ func init() {
 	_ = SubmitCmd.MarkFlagRequired("name")
 }
 
+func buildSubmitJobDefinitionBase(cmd *cobra.Command) orchestrator.JobDefinition {
+	return orchestrator.JobDefinition{
+		ImageName:                   imageName,
+		BaseImage:                   baseImage,
+		BuildContext:                buildContext,
+		Platform:                    platform,
+		CommandToRun:                commandToRun,
+		ComputeType:                 computeType,
+		DryRunManifest:              dryRunManifest,
+		ProjectID:                   projectID,
+		ClusterName:                 clusterName,
+		ClusterLocation:             location,
+		GKENamespace:                gkeNamespace,
+		WorkloadName:                workloadName,
+		KueueQueueName:              kueueQueueName,
+		NumSlices:                   numSlices,
+		NodesPerSlice:               numNodes,
+		NumNodesSpecified:           cmd.Flags().Changed("num-nodes"),
+		MaxRestarts:                 restarts,
+		PlacementPolicy:             placementPolicy,
+		NodeConstraint:              nodeConstraint,
+		RestartOnExitCodes:          restartOnExitCodes,
+		ImagePullSecrets:            imagePullSecrets,
+		ServiceAccountName:          serviceAccountName,
+		Topology:                    strings.ToLower(strings.TrimSpace(topology)),
+		GKEScheduler:                gkeScheduler,
+		AwaitJobCompletion:          awaitJobCompletion,
+		UseParallelContainers:       !gkeDisableParallelContainers,
+		Timeout:                     timeout,
+		PriorityClassName:           priority,
+		Verbose:                     verbose,
+		MLDiagnosticsEnabled:        enableMLDiagnostics,
+		MLDiagnosticsImageSpecified: cmd.Flags().Changed("ml-diagnostics-image"),
+		GKEMTCEnabled:               gkeMtcEnabled,
+		GKEMTCRamdiskDirectory:      gkeMtcRamdiskDirectory,
+		GkeCustomTemplatesPath:      gkeCustomTemplatesPath,
+		GKENAPProvisioning:          gkeNapProvisioning,
+		GKENAPReservation:           gkeNapReservation,
+		IsPathwaysJob:               isPathwaysJob,
+		Pathways:                    pathways,
+		RawMounts:                   volumeStr,
+		ImagePullSecretsSpecified:   cmd.Flags().Changed("image-pull-secret"),
+	}
+}
+
 func validateK8sSubmitPreRun(cmd *cobra.Command) error {
 	if cmd.Flags().Changed("gke-disable-parallel-containers") {
 		return fmt.Errorf("--gke-disable-parallel-containers is a GKE-only flag and is not supported in Kubernetes (k8s) mode")
 	}
-	preRunPathways := pathways
-	if len(pathwaysProxyEnv) > 0 {
-		preRunPathways.ProxyEnv = map[string]string{"_": "_"}
+	jobDef := buildSubmitJobDefinitionBase(cmd)
+	if isPathwaysJob || hasChangedPathwaysFlags(cmd) {
+		jobDef.IsPathwaysJob = true
 	}
-	if len(pathwaysServerEnv) > 0 {
-		preRunPathways.ServerEnv = map[string]string{"_": "_"}
-	}
-	if len(pathwaysWorkerEnv) > 0 {
-		preRunPathways.WorkerEnv = map[string]string{"_": "_"}
-	}
-	return orchestrator.ValidateK8sSubmitJob(orchestrator.JobDefinition{
-		IsPathwaysJob:          isPathwaysJob || hasChangedPathwaysFlags(cmd),
-		Pathways:               preRunPathways,
-		GKEScheduler:           gkeScheduler,
-		PlacementPolicy:        placementPolicy,
-		GKEMTCEnabled:          gkeMtcEnabled,
-		GKEMTCRamdiskDirectory: gkeMtcRamdiskDirectory,
-		GKENAPProvisioning:     gkeNapProvisioning,
-		GKENAPReservation:      gkeNapReservation,
-		RawMounts:              volumeStr,
-	})
+	return orchestrator.ValidateK8sSubmitJob(jobDef)
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
@@ -288,63 +316,16 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		awaitJobCompletion = true
 	}
 
-	if detectedOrchestratorType != orchestrator.TypeK8s && config.IsTPU(computeType) && cmd.Flags().Changed("num-nodes") {
-		return fmt.Errorf("--num-nodes cannot be used with TPU jobs (it is calculated automatically from topology)")
-	}
-
-	jobTopology := strings.ToLower(strings.TrimSpace(topology))
 	applyPathwaysSubmitDefaults(cmd)
 	resolvedMLDiagImg, resolvedMLDiagPort := resolveSubmitMLDiagnostics(cmd)
 
-	jobDef := orchestrator.JobDefinition{
-		ImageName:                     imageName,
-		BaseImage:                     baseImage,
-		BuildContext:                  buildContext,
-		Platform:                      platform,
-		CommandToRun:                  commandToRun,
-		ComputeType:                   computeType,
-		DryRunManifest:                dryRunManifest,
-		ProjectID:                     projectID,
-		ClusterName:                   clusterName,
-		ClusterLocation:               location,
-		GKENamespace:                  gkeNamespace,
-		WorkloadName:                  workloadName,
-		KueueQueueName:                kueueQueueName,
-		NumSlices:                     numSlices,
-		NodesPerSlice:                 numNodes,
-		NumNodesSpecified:             cmd.Flags().Changed("num-nodes"),
-		MaxRestarts:                   restarts,
-		TtlSecondsAfterFinished:       ttlSeconds,
-		TerminationGracePeriodSeconds: gracePeriodSeconds,
-		PlacementPolicy:               placementPolicy,
-		NodeConstraint:                nodeConstraint,
-		Affinity:                      affinity,
-		RestartOnExitCodes:            restartOnExitCodes,
-		ImagePullSecrets:              imagePullSecrets,
-		ServiceAccountName:            serviceAccountName,
-		Topology:                      jobTopology,
-		GKEScheduler:                  gkeScheduler,
-		AwaitJobCompletion:            awaitJobCompletion,
-		UseParallelContainers:         !gkeDisableParallelContainers,
-		Timeout:                       timeout,
-		PriorityClassName:             priority,
-		Verbose:                       verbose,
-		MLDiagnosticsEnabled:          enableMLDiagnostics,
-		MLDiagnosticsImage:            resolvedMLDiagImg,
-		MLDiagnosticsImageSpecified:   cmd.Flags().Changed("ml-diagnostics-image"),
-		MLDiagnosticsTelemetryPort:    resolvedMLDiagPort,
-		GKEMTCEnabled:                 gkeMtcEnabled,
-		GKEMTCRamdiskDirectory:        gkeMtcRamdiskDirectory,
-		GkeCustomTemplatesPath:        gkeCustomTemplatesPath,
-		GKENAPProvisioning:            gkeNapProvisioning,
-		GKENAPReservation:             gkeNapReservation,
-		IsPathwaysJob:                 isPathwaysJob,
-		Pathways:                      pathways,
-		RawMounts:                     volumeStr,
-		Env:                           parseEnvFlags(envVars),
-
-		ImagePullSecretsSpecified: cmd.Flags().Changed("image-pull-secret"),
-	}
+	jobDef := buildSubmitJobDefinitionBase(cmd)
+	jobDef.TtlSecondsAfterFinished = ttlSeconds
+	jobDef.TerminationGracePeriodSeconds = gracePeriodSeconds
+	jobDef.Affinity = affinity
+	jobDef.MLDiagnosticsImage = resolvedMLDiagImg
+	jobDef.MLDiagnosticsTelemetryPort = resolvedMLDiagPort
+	jobDef.Env = parseEnvFlags(envVars)
 
 	return orc.SubmitJob(jobDef)
 }

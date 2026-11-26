@@ -542,7 +542,6 @@ func resolveLabelScheme(override LabelScheme, tpuSliceDetected, gkeDetected bool
 func accumulateNodes(nodes []unstructured.Unstructured, inv *Inventory, hw TPUHardwareResolver, override LabelScheme) nodeSignals {
 	signals := nodeSignals{
 		poolControlPlane: make(map[string]bool),
-		poolSystem:       make(map[string]bool),
 		nodeSlices:       make(map[string]*nodeSliceAgg),
 	}
 	builders := make(map[poolGroupKey]*poolBuilder)
@@ -574,6 +573,7 @@ func extractNodeSnapshot(node unstructured.Unstructured, hw TPUHardwareResolver,
 	observedInstanceLabel := strings.TrimSpace(labels[InstanceTypeLabel])
 	observedGPUProductLabel := strings.TrimSpace(labels[NvidiaGPUProductLabel])
 	observedGKEAccelLabel := strings.TrimSpace(labels[GKEAcceleratorLabel])
+	observedGKETPUAccelLabel := strings.TrimSpace(labels[GKETPUAcceleratorLabel])
 	rawInstance := firstNonEmpty(observedInstanceLabel, labels[BetaInstanceTypeLabel])
 	rawTPUType, topology := pickNodeTPULabels(labels, override)
 	sliceName := strings.TrimSpace(labels[TPUSliceNameLabel])
@@ -604,6 +604,7 @@ func extractNodeSnapshot(node unstructured.Unstructured, hw TPUHardwareResolver,
 		instanceTypeLabel: observedInstanceLabel,
 		gpuProductLabel:   observedGPUProductLabel,
 		gkeAccelLabel:     observedGKEAccelLabel,
+		gkeTPUAccelLabel:  observedGKETPUAccelLabel,
 		machineType:       machineType,
 		poolKey:           poolKey,
 		nodePool:          nodePool,
@@ -704,10 +705,10 @@ func addNodeToPool(builders map[poolGroupKey]*poolBuilder, snap nodeSnapshot) {
 	b.allMachineType = minNonEmpty(b.allMachineType, snap.machineType)
 	b.allTPUType = minNonEmpty(b.allTPUType, snap.tpuType)
 	b.allGPUType = minNonEmpty(b.allGPUType, snap.gpuType)
-	b.allGPUResourceName = minNonEmpty(b.allGPUResourceName, snap.gpuResourceName)
 	b.allInstanceLabel.observe(snap.instanceTypeLabel)
 	b.allGPUProductLabel.observe(snap.gpuProductLabel)
 	b.allGKEAccelLabel.observe(snap.gkeAccelLabel)
+	b.allGKETPUAccelLabel.observe(snap.gkeTPUAccelLabel)
 	b.allCPUMilli = minPositive(b.allCPUMilli, snap.cpuMilli)
 	b.allMemMiB = minPositive(b.allMemMiB, snap.memMiB)
 	b.allTPUs = minPositive(b.allTPUs, snap.tpus)
@@ -718,10 +719,10 @@ func addNodeToPool(builders map[poolGroupKey]*poolBuilder, snap nodeSnapshot) {
 		b.readyMachineType = minNonEmpty(b.readyMachineType, snap.machineType)
 		b.readyTPUType = minNonEmpty(b.readyTPUType, snap.tpuType)
 		b.readyGPUType = minNonEmpty(b.readyGPUType, snap.gpuType)
-		b.readyGPUResourceName = minNonEmpty(b.readyGPUResourceName, snap.gpuResourceName)
 		b.readyInstanceLabel.observe(snap.instanceTypeLabel)
 		b.readyGPUProductLabel.observe(snap.gpuProductLabel)
 		b.readyGKEAccelLabel.observe(snap.gkeAccelLabel)
+		b.readyGKETPUAccelLabel.observe(snap.gkeTPUAccelLabel)
 		b.readyCPUMilli = minPositive(b.readyCPUMilli, snap.cpuMilli)
 		b.readyMemMiB = minPositive(b.readyMemMiB, snap.memMiB)
 		b.readyTPUs = minPositive(b.readyTPUs, snap.tpus)
@@ -740,15 +741,17 @@ func finalizeBuilderCapacity(b *poolBuilder) PoolCapacity {
 	c.MachineType = firstNonEmpty(b.readyMachineType, b.allMachineType)
 	c.TPUType = firstNonEmpty(b.readyTPUType, b.allTPUType)
 	c.GPUType = firstNonEmpty(b.readyGPUType, b.allGPUType)
-	c.GPUResourceName = firstNonEmpty(b.readyGPUResourceName, b.allGPUResourceName)
+	c.GPUResourceName = b.key.gpuResourceName
 	if b.cap.ReadyNodes > 0 {
 		c.InstanceTypeLabel = b.readyInstanceLabel.resolved()
 		c.GPUProductLabel = b.readyGPUProductLabel.resolved()
 		c.GKEAcceleratorLabel = b.readyGKEAccelLabel.resolved()
+		c.GKETPUAcceleratorLabel = b.readyGKETPUAccelLabel.resolved()
 	} else {
 		c.InstanceTypeLabel = b.allInstanceLabel.resolved()
 		c.GPUProductLabel = b.allGPUProductLabel.resolved()
 		c.GKEAcceleratorLabel = b.allGKEAccelLabel.resolved()
+		c.GKETPUAcceleratorLabel = b.allGKETPUAccelLabel.resolved()
 	}
 	c.AllocatableCPUMilli = cmp.Or(b.readyCPUMilli, b.allCPUMilli)
 	c.MemMiBPerNode = cmp.Or(b.readyMemMiB, b.allMemMiB)
@@ -871,52 +874,77 @@ func finalizePools(inv *Inventory, builders map[poolGroupKey]*poolBuilder, signa
 		b := byName[name]
 		inv.Pools[name] = finalizeBuilderCapacity(b)
 		signals.poolControlPlane[name] = b.key.controlPlane
-		signals.poolSystem[name] = b.key.systemPool
 	}
-	inv.CPUPoolCap = selectCPUPoolCap(inv, signals)
+	inv.CPUPoolCap = selectCPUPoolCap(inv)
 }
 
-func selectCPUPoolCap(inv *Inventory, signals *nodeSignals) *PoolCapacity {
+func selectCPUPoolCap(inv *Inventory) *PoolCapacity {
 	var best *PoolCapacity
 	bestName := ""
-	bestCtrl := true
-	bestSys := true
 
 	for _, name := range inv.PoolNames {
 		pool := inv.Pools[name]
 		if pool.IsTPU || pool.IsGPU {
 			continue
 		}
-		isCtrl := signals.poolControlPlane[name]
-		isSys := signals.poolSystem[name]
-		if isBetterCPUPool(name, pool, isCtrl, isSys, bestName, best, bestCtrl, bestSys) {
+		if best == nil || IsBetterPool(name, pool, bestName, *best) {
 			p := pool
 			best = &p
 			bestName = name
-			bestCtrl = isCtrl
-			bestSys = isSys
 		}
 	}
 	return best
 }
 
-func isBetterCPUPool(candName string, cand PoolCapacity, candCtrl, candSys bool, curName string, cur *PoolCapacity, curCtrl, curSys bool) bool {
-	if cur == nil {
-		return true
+// PoolPreferenceScore ranks discovered pools by scheduling suitability:
+// non-control-plane > usable accelerator capacity > non-system > ReadyNodes > 0.
+func PoolPreferenceScore(pool PoolCapacity) int {
+	score := 0
+	if !pool.IsControlPlane {
+		score += 8
 	}
-	if candCtrl != curCtrl {
-		return !candCtrl
+	if (!pool.IsGPU || pool.GPUsPerNode > 0) && (!pool.IsTPU || pool.TPUsPerNode > 0) {
+		score += 4
 	}
-	if candSys != curSys {
-		return !candSys
+	if !pool.IsSystemPool {
+		score += 2
 	}
-	if (cand.ReadyNodes > 0) != (cur.ReadyNodes > 0) {
-		return cand.ReadyNodes > 0
+	if pool.ReadyNodes > 0 {
+		score++
+	}
+	return score
+}
+
+// IsBetterPool reports whether cand should be preferred over cur using PoolPreferenceScore,
+// breaking ties by AllocatableCPUMilli and then lexicographic pool name.
+func IsBetterPool(candName string, cand PoolCapacity, curName string, cur PoolCapacity) bool {
+	candScore, curScore := PoolPreferenceScore(cand), PoolPreferenceScore(cur)
+	if candScore != curScore {
+		return candScore > curScore
 	}
 	if cand.AllocatableCPUMilli != cur.AllocatableCPUMilli {
 		return cand.AllocatableCPUMilli > cur.AllocatableCPUMilli
 	}
 	return candName < curName
+}
+
+// TopPreferredPools returns all pools tied for the highest PoolPreferenceScore in input order.
+func TopPreferredPools(candidates []PoolCapacity) []PoolCapacity {
+	if len(candidates) == 0 {
+		return nil
+	}
+	bestScore := PoolPreferenceScore(candidates[0])
+	top := []PoolCapacity{candidates[0]}
+	for _, c := range candidates[1:] {
+		s := PoolPreferenceScore(c)
+		if s > bestScore {
+			bestScore = s
+			top = []PoolCapacity{c}
+		} else if s == bestScore {
+			top = append(top, c)
+		}
+	}
+	return top
 }
 
 func nodeAllocatableMap(node unstructured.Unstructured) (map[string]interface{}, bool) {
@@ -946,53 +974,60 @@ func parseNodeAllocatable(node unstructured.Unstructured) (cpuMilli int64, memMi
 	return cpuMilli, memMiB, tpus, gpus, inferredGPU, gpuResourceName
 }
 
+var gpuResourceRules = []gpuResourceRule{
+	{key: "nvidia.com/gpu", inferredType: "nvidia"},
+	{key: "nvidia.com/gpu.shared", inferredType: "nvidia"},
+	{key: "nvidia.com/mig-", isPrefix: true},
+	{key: "amd.com/gpu", inferredType: "amd"},
+	{key: "gpu.intel.com/i915"},
+	{key: "gpu.intel.com/xe"},
+	{key: "gpu.intel.com/", isPrefix: true},
+}
+
+func matchGPUResourceRule(k string, rule gpuResourceRule) bool {
+	if !rule.isPrefix {
+		return k == rule.key
+	}
+	if !strings.HasPrefix(k, rule.key) || len(k) <= len(rule.key) {
+		return false
+	}
+	return rule.key != "gpu.intel.com/" || !isIntelGPUMetadataKey(k)
+}
+
 func parseAllocatableGPUs(alloc map[string]interface{}) (int, string, string) {
-	if q, ok := parseQuantityField(alloc, "nvidia.com/gpu"); ok && q.Value() > 0 {
-		return int(q.Value()), "nvidia", "nvidia.com/gpu"
+	var gpuKeys []string
+	for k := range alloc {
+		if IsGPUResourceName(k) {
+			gpuKeys = append(gpuKeys, k)
+		}
 	}
-	if count, profile := parsePrefixGPUAllocatable(alloc, "nvidia.com/mig-"); count > 0 {
-		return count, profile, profile
+	if len(gpuKeys) == 0 {
+		return 0, "", ""
 	}
-	if q, ok := parseQuantityField(alloc, "amd.com/gpu"); ok && q.Value() > 0 {
-		return int(q.Value()), "amd", "amd.com/gpu"
-	}
-	if count, profile := parseIntelGPUAllocatable(alloc); count > 0 {
-		return count, profile, profile
+	slices.Sort(gpuKeys)
+	for _, rule := range gpuResourceRules {
+		for _, k := range gpuKeys {
+			if !matchGPUResourceRule(k, rule) {
+				continue
+			}
+			if q, ok := parseQuantityField(alloc, k); ok && q.Value() > 0 {
+				return int(q.Value()), cmp.Or(rule.inferredType, k), k
+			}
+		}
 	}
 	return 0, "", ""
 }
 
-func parseIntelGPUAllocatable(alloc map[string]interface{}) (int, string) {
-	for _, key := range []string{"gpu.intel.com/i915", "gpu.intel.com/xe"} {
-		if q, ok := parseQuantityField(alloc, key); ok && q.Value() > 0 {
-			return int(q.Value()), key
-		}
-	}
-	keys := make([]string, 0)
-	for k := range alloc {
-		if !strings.HasPrefix(k, "gpu.intel.com/") || isIntelGPUMetadataKey(k) {
-			continue
-		}
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	return firstPositiveGPUAllocatableKey(alloc, keys)
-}
-
 // IsGPUResourceName reports whether key is a recognized Kubernetes GPU extended resource name
-// (NVIDIA full/MIG, AMD, or Intel non-metadata GPU resource keys).
+// (NVIDIA full/time-sliced/MIG, AMD, or Intel non-metadata GPU resource keys).
 func IsGPUResourceName(key string) bool {
 	k := strings.TrimSpace(key)
-	switch {
-	case k == "nvidia.com/gpu", k == "amd.com/gpu":
-		return true
-	case strings.HasPrefix(k, "nvidia.com/mig-"):
-		return len(k) > len("nvidia.com/mig-")
-	case strings.HasPrefix(k, "gpu.intel.com/"):
-		return len(k) > len("gpu.intel.com/") && !isIntelGPUMetadataKey(k)
-	default:
-		return false
+	for _, rule := range gpuResourceRules {
+		if matchGPUResourceRule(k, rule) {
+			return true
+		}
 	}
+	return false
 }
 
 func isIntelGPUMetadataKey(k string) bool {
@@ -1002,26 +1037,6 @@ func isIntelGPUMetadataKey(k string) bool {
 	default:
 		return strings.HasSuffix(k, "_monitoring")
 	}
-}
-
-func parsePrefixGPUAllocatable(alloc map[string]interface{}, prefix string) (int, string) {
-	keys := make([]string, 0)
-	for k := range alloc {
-		if strings.HasPrefix(k, prefix) {
-			keys = append(keys, k)
-		}
-	}
-	slices.Sort(keys)
-	return firstPositiveGPUAllocatableKey(alloc, keys)
-}
-
-func firstPositiveGPUAllocatableKey(alloc map[string]interface{}, keys []string) (int, string) {
-	for _, k := range keys {
-		if q, ok := parseQuantityField(alloc, k); ok && q.Value() > 0 {
-			return int(q.Value()), k
-		}
-	}
-	return 0, ""
 }
 
 func parseQuantityField(alloc map[string]interface{}, key string) (resource.Quantity, bool) {
@@ -1362,11 +1377,16 @@ func buildNodeDerivedSlice(agg *nodeSliceAgg, hw TPUHardwareResolver) SliceInfo 
 	}
 	nodesPerSlice := resolveSliceNodeCount(topology, chips, agg.totalNodes)
 	ready := sliceNodesReady(agg.readyNodes, agg.totalNodes, nodesPerSlice)
+	state := ""
+	if !ready && agg.totalNodes > 0 {
+		state = fmt.Sprintf("NodesNotReady (%d/%d)", agg.readyNodes, max(agg.totalNodes, nodesPerSlice))
+	}
 	return SliceInfo{
 		Name:          agg.name,
 		TPUType:       tpuType,
 		MachineType:   machineType,
 		Topology:      topology,
+		State:         state,
 		Ready:         ready,
 		NodesPerSlice: nodesPerSlice,
 		ChipsPerNode:  chips,
@@ -1387,7 +1407,11 @@ func enrichSliceFromNodes(s *SliceInfo, agg *nodeSliceAgg, hw TPUHardwareResolve
 	updateEnrichedSliceChipsAndMachine(s, machineType, nodeChips, hw)
 	s.NodesPerSlice = resolveSliceNodeCount(s.Topology, s.ChipsPerNode, agg.totalNodes)
 	if agg.totalNodes > 0 {
-		s.Ready = s.Ready && sliceNodesReady(agg.readyNodes, agg.totalNodes, s.NodesPerSlice)
+		nodesReady := sliceNodesReady(agg.readyNodes, agg.totalNodes, s.NodesPerSlice)
+		if s.Ready && !nodesReady {
+			s.State = fmt.Sprintf("NodesNotReady (%d/%d)", agg.readyNodes, max(agg.totalNodes, s.NodesPerSlice))
+		}
+		s.Ready = s.Ready && nodesReady
 	}
 }
 

@@ -185,28 +185,233 @@ func TestResolveFallbackTPUChips_CaseInsensitiveSingleChip(t *testing.T) {
 			if err != nil || tpuLim != "1" {
 				t.Errorf("limitsFromK8sPool(%q) = (%q, %v), want (\"1\", nil)", mt, tpuLim, err)
 			}
-			capFromPool, err := machineTypeCapFromPool(pool, "")
-			if err != nil || len(capFromPool.Accelerators) != 1 || capFromPool.Accelerators[0].Count != 1 {
-				t.Errorf("machineTypeCapFromPool(%q) = (%+v, %v), want 1 chip", mt, capFromPool, err)
-			}
 			orc := &GKEOrchestrator{
 				mode: orchestrator.TypeK8s,
 				submissionSession: submissionSession{
 					inventory: &k8s.Inventory{TPU: &k8s.TPUInventory{}},
 				},
 			}
-			capFromInv := orc.machineTypeCapFromTPUInventory(mt)
-			if len(capFromInv.Accelerators) != 1 || capFromInv.Accelerators[0].Count != 1 {
-				t.Errorf("machineTypeCapFromTPUInventory(%q) = %+v, want 1 chip", mt, capFromInv)
-			}
-			fallbackCap := fallbackK8sMachineTypeCap(mt, "")
-			if len(fallbackCap.Accelerators) != 1 || fallbackCap.Accelerators[0].Count != 1 {
-				t.Errorf("fallbackK8sMachineTypeCap(%q) = %+v, want 1 chip", mt, fallbackCap)
-			}
 			if got := orc.resolveK8sTPUChipsPerNode(mt, k8s.PoolCapacity{}, false, 0); got != 1 {
 				t.Errorf("resolveK8sTPUChipsPerNode(%q) = %d, want 1", mt, got)
 			}
 		})
+	}
+}
+
+func TestResolveK8sHardwareRequirements_MixedClusterAutoDiscovery(t *testing.T) {
+	orc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				PoolNames:   []string{"a3-highgpu-8g", "n2-standard-32"},
+				Pools: map[string]k8s.PoolCapacity{
+					"a3-highgpu-8g":  {MachineType: "a3-highgpu-8g", IsGPU: true, GPUsPerNode: 8, GPUType: "nvidia-h100-80gb", GPUResourceName: "nvidia.com/gpu", ReadyNodes: 2},
+					"n2-standard-32": {MachineType: "n2-standard-32", AllocatableCPUMilli: 32000, ReadyNodes: 4},
+				},
+			},
+		},
+	}
+	job := orchestrator.JobDefinition{NumSlices: 1}
+	_, _, _, err := orc.resolveK8sHardwareRequirements(&job)
+	if err == nil || !strings.Contains(err.Error(), "--compute-type is required; discovered:") ||
+		!strings.Contains(err.Error(), "a3-highgpu-8g") || !strings.Contains(err.Error(), "n2-standard-32") {
+		t.Fatalf("mixed GPU+CPU auto-discovery err = %v, want ambiguous discovered list", err)
+	}
+
+	ctrlAndGPU := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				PoolNames:   []string{"ctrl", "gpu"},
+				Pools: map[string]k8s.PoolCapacity{
+					"ctrl": {MachineType: "e2-standard-4", IsControlPlane: true, AllocatableCPUMilli: 4000, ReadyNodes: 1},
+					"gpu":  {MachineType: "g2-standard-12", IsGPU: true, GPUsPerNode: 1, GPUType: "nvidia-l4", GPUResourceName: "nvidia.com/gpu", ReadyNodes: 2},
+				},
+			},
+		},
+	}
+	gpuJob := orchestrator.JobDefinition{NumSlices: 1}
+	if prof, _, _, err := ctrlAndGPU.resolveK8sHardwareRequirements(&gpuJob); err != nil || prof.IsCPUMachine || prof.CapacityCount != 1 {
+		t.Fatalf("control-plane + single GPU worker = (prof=%+v, err=%v), want 1 GPU", prof, err)
+	}
+}
+
+func TestResolveK8sHardwareRequirements_TwoGPUPoolsAmbiguity(t *testing.T) {
+	orc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				PoolNames:   []string{"a3-highgpu-8g", "g2-standard-12"},
+				Pools: map[string]k8s.PoolCapacity{
+					"a3-highgpu-8g":  {MachineType: "a3-highgpu-8g", IsGPU: true, GPUsPerNode: 8, GPUType: "nvidia-h100-80gb", GPUResourceName: "nvidia.com/gpu", ReadyNodes: 2},
+					"g2-standard-12": {MachineType: "g2-standard-12", IsGPU: true, GPUsPerNode: 1, GPUType: "nvidia-l4", GPUResourceName: "nvidia.com/gpu", ReadyNodes: 2},
+				},
+			},
+		},
+	}
+	omitted := orchestrator.JobDefinition{NumSlices: 1}
+	if _, _, _, err := orc.resolveK8sHardwareRequirements(&omitted); err == nil || !strings.Contains(err.Error(), "--compute-type is required; discovered:") ||
+		!strings.Contains(err.Error(), "nvidia-l4") || !strings.Contains(err.Error(), "nvidia-h100-80gb") {
+		t.Fatalf("two-GPU omitted compute-type err = %v, want ambiguous discovered list", err)
+	}
+	byRes := orchestrator.JobDefinition{ComputeType: "nvidia.com/gpu", NumSlices: 1}
+	if _, _, _, err := orc.resolveK8sHardwareRequirements(&byRes); err == nil || !strings.Contains(err.Error(), "--compute-type is required") ||
+		!strings.Contains(err.Error(), "nvidia-l4") || !strings.Contains(err.Error(), "nvidia-h100-80gb") {
+		t.Fatalf("two-GPU nvidia.com/gpu query err = %v, want ambiguous discovered list", err)
+	}
+	specific := orchestrator.JobDefinition{ComputeType: "nvidia-l4", NumSlices: 1}
+	if prof, _, _, err := orc.resolveK8sHardwareRequirements(&specific); err != nil || prof.CapacityCount != 1 {
+		t.Fatalf("specific nvidia-l4 query = (prof=%+v, err=%v), want 1 GPU", prof, err)
+	}
+}
+
+func TestResolveK8sHardwareRequirements_SharedMachineTypeAndRestartingGPUAmbiguity(t *testing.T) {
+	// Shared MachineType with distinct GPU types (e.g., n1-standard-8 T4 vs V100) must be flagged ambiguous.
+	sharedMT := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGKE,
+				PoolNames:   []string{"n1-t4", "n1-v100"},
+				Pools: map[string]k8s.PoolCapacity{
+					"n1-t4":   {MachineType: "n1-standard-8", IsGPU: true, GPUsPerNode: 1, GPUType: "nvidia-tesla-t4", GPUResourceName: "nvidia.com/gpu", ReadyNodes: 2},
+					"n1-v100": {MachineType: "n1-standard-8", IsGPU: true, GPUsPerNode: 1, GPUType: "nvidia-tesla-v100", GPUResourceName: "nvidia.com/gpu", ReadyNodes: 2},
+				},
+			},
+		},
+	}
+	for _, ct := range []string{"", "nvidia.com/gpu", "n1-standard-8"} {
+		job := orchestrator.JobDefinition{ComputeType: ct, NumSlices: 1}
+		if _, _, _, err := sharedMT.resolveK8sHardwareRequirements(&job); err == nil ||
+			!strings.Contains(err.Error(), "nvidia-tesla-t4") || !strings.Contains(err.Error(), "nvidia-tesla-v100") {
+			t.Errorf("shared-MT compute-type=%q err = %v, want ambiguity listing both T4 and V100", ct, err)
+		}
+	}
+
+	// Heterogeneous MIG profiles sharing MachineType + GPUType must include MIG resource names in display labels.
+	migOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				PoolNames:   []string{"a3-mig1", "a3-mig3"},
+				Pools: map[string]k8s.PoolCapacity{
+					"a3-mig1": {MachineType: "a3-highgpu-8g", IsGPU: true, GPUsPerNode: 7, GPUType: "NVIDIA-H100-80GB-HBM3", GPUResourceName: "nvidia.com/mig-1g.10gb", ReadyNodes: 2},
+					"a3-mig3": {MachineType: "a3-highgpu-8g", IsGPU: true, GPUsPerNode: 2, GPUType: "NVIDIA-H100-80GB-HBM3", GPUResourceName: "nvidia.com/mig-3g.40gb", ReadyNodes: 2},
+				},
+			},
+		},
+	}
+	migByMT := orchestrator.JobDefinition{ComputeType: "a3-highgpu-8g", NumSlices: 1}
+	if _, _, _, err := migOrc.resolveK8sHardwareRequirements(&migByMT); err == nil ||
+		!strings.Contains(err.Error(), "nvidia.com/mig-1g.10gb") || !strings.Contains(err.Error(), "nvidia.com/mig-3g.40gb") {
+		t.Errorf("MIG shared-MT query err = %v, want both MIG resource names listed", err)
+	}
+	migSpecific := orchestrator.JobDefinition{ComputeType: "nvidia.com/mig-3g.40gb", NumSlices: 1}
+	if prof, _, _, err := migOrc.resolveK8sHardwareRequirements(&migSpecific); err != nil || prof.CapacityCount != 2 {
+		t.Errorf("specific MIG query = (prof=%+v, err=%v), want 2 MIG instances", prof, err)
+	}
+
+	// Single GPU pool + one restarting 0-GPU node must still auto-discover cleanly when --compute-type is omitted.
+	restartingOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				PoolNames:   []string{"a-restarting-0gpu", "b-healthy-8gpu"},
+				Pools: map[string]k8s.PoolCapacity{
+					"a-restarting-0gpu": {MachineType: "a3-highgpu-8g", IsGPU: true, GPUsPerNode: 0, GPUType: "nvidia-h100-80gb", ReadyNodes: 1},
+					"b-healthy-8gpu":    {MachineType: "a3-highgpu-8g", IsGPU: true, GPUsPerNode: 8, GPUType: "nvidia-h100-80gb", GPUResourceName: "nvidia.com/gpu", ReadyNodes: 7},
+				},
+			},
+		},
+	}
+	autoJob := orchestrator.JobDefinition{NumSlices: 1}
+	if prof, _, _, err := restartingOrc.resolveK8sHardwareRequirements(&autoJob); err != nil || prof.CapacityCount != 8 {
+		t.Errorf("single GPU pool with restarting 0-GPU node = (prof=%+v, err=%v), want 8 GPUs", prof, err)
+	}
+}
+
+func TestResolveK8sHardwareRequirements_NodeDerivedSliceTypoAndTopologyDerivation(t *testing.T) {
+	// Nodes readable (ExplicitMode=false) + Slice CRD 403 (SliceInventoryUnavailable=true):
+	// typo slice name must be rejected rather than silently accepted.
+	typoOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme:               k8s.SchemeTPUSlice,
+				ExplicitMode:              false,
+				SliceInventoryUnavailable: true,
+				Slices: []k8s.SliceInfo{
+					{Name: "real-slice", TPUType: "tpu7x", MachineType: "tpu7x-standard-4t", Topology: "2x2x1", ChipsPerNode: 4, NodesPerSlice: 1, Ready: true},
+				},
+			},
+			addons: addonPlan{resolved: true, jobSetEnabled: true},
+		},
+	}
+	typoJob := orchestrator.JobDefinition{
+		ComputeType:    "tpu7x-standard-4t",
+		Topology:       "2x2x1",
+		NumSlices:      1,
+		NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "reel-slice-typo"},
+	}
+	if _, _, _, err := typoOrc.resolveK8sHardwareRequirements(&typoJob); err == nil ||
+		!strings.Contains(err.Error(), `TPU slice "reel-slice-typo" does not exist`) ||
+		!strings.Contains(err.Error(), "Slice objects could not be listed") {
+		t.Fatalf("typo slice with nodes-200/slices-403 err = %v, want missing slice with Slice-API note", err)
+	}
+
+	// deriveSliceTopologyFromNodes must work for tpu7x (including 1t and multi-host) and ct5l-.
+	for _, tc := range []struct {
+		name    string
+		tpuType string
+		mt      string
+		chips   int
+		nodes   int
+		want    string
+	}{
+		{"tpu7x_1t_single_node", "tpu7x", "tpu7x-standard-1t", 1, 1, "1x1x1"},
+		{"tpu7x_4t_1_node", "tpu7x", "tpu7x-standard-4t", 4, 1, "2x2x1"},
+		{"tpu7x_4t_2_nodes", "tpu7x", "tpu7x-standard-4t", 4, 2, "2x2x2"},
+		{"tpu7x_4t_4_nodes", "tpu7x", "tpu7x-standard-4t", 4, 4, "2x2x4"},
+		{"ct5l_4t_2_nodes", "v5e", "ct5l-hightpu-4t", 4, 2, "2x4"},
+		{"v6e_4t_2_nodes", "v6e", "ct6e-standard-4t", 4, 2, "2x4"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := deriveSliceTopologyFromNodes(
+				&orchestrator.JobDefinition{MachineType: tc.mt},
+				k8s.SliceInfo{TPUType: tc.tpuType, MachineType: tc.mt, ChipsPerNode: tc.chips, NodesPerSlice: tc.nodes},
+			)
+			if got != tc.want {
+				t.Errorf("deriveSliceTopologyFromNodes(%s, %d nodes x %d chips) = %q, want %q", tc.mt, tc.nodes, tc.chips, got, tc.want)
+			}
+		})
+	}
+
+	// --compute-type v5e-8 on a ct5l-hightpu-8t pool must resolve topology 2x4 cleanly.
+	ct5lOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGKE,
+				PoolNames:   []string{"ct5l-8t"},
+				Pools: map[string]k8s.PoolCapacity{
+					"ct5l-8t": {MachineType: "ct5l-hightpu-8t", IsTPU: true, TPUType: "v5e", TPUsPerNode: 8, GKETPUAcceleratorLabel: "tpu-v5-lite-device", ReadyNodes: 1},
+				},
+			},
+			addons: addonPlan{resolved: true, jobSetEnabled: true},
+		},
+	}
+	v5eJob := orchestrator.JobDefinition{ComputeType: "v5e-8", NumSlices: 1}
+	prof, _, _, err := ct5lOrc.resolveK8sHardwareRequirements(&v5eJob)
+	if err != nil {
+		t.Fatalf("resolveK8sHardwareRequirements(v5e-8 on ct5l-hightpu-8t) err = %v", err)
+	}
+	if !prof.IsTPU || v5eJob.MachineType != "ct5l-hightpu-8t" || v5eJob.Topology != "2x4" || v5eJob.NodesPerSlice != 1 {
+		t.Errorf("v5e-8 on ct5l-hightpu-8t = (IsTPU=%v mt=%q topo=%q nodes=%d), want (true, ct5l-hightpu-8t, 2x4, 1)", prof.IsTPU, v5eJob.MachineType, v5eJob.Topology, v5eJob.NodesPerSlice)
 	}
 }
 

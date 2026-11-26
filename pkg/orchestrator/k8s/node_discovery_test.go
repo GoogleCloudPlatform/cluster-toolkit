@@ -1633,3 +1633,105 @@ func TestDiscoverInventory_GKEAccelLabelTerminatingSliceAndExplicitNoMatch(t *te
 		t.Errorf("expected SliceInventoryUnavailable=true when ExplicitMode+tpu-slice gets NoMatch on Slice CRDs")
 	}
 }
+
+func TestDiscoverInventory_TimeSlicedGPUAndObservedGKETPULabel(t *testing.T) {
+	t.Parallel()
+	if !IsGPUResourceName("nvidia.com/gpu.shared") {
+		t.Errorf("IsGPUResourceName(nvidia.com/gpu.shared) = false, want true")
+	}
+
+	sharedGPUNode := makeNode("gpu-shared-0", map[string]string{
+		InstanceTypeLabel:     "g2-standard-12",
+		NvidiaGPUProductLabel: "NVIDIA-L4-SHARED",
+		GKENodePoolLabel:      "shared-l4-pool",
+	}, map[string]interface{}{"cpu": "12", "memory": "48Gi", "nvidia.com/gpu.shared": "4"}, true)
+
+	ct5lNode := makeNode("tpu-ct5l-0", map[string]string{
+		InstanceTypeLabel:      "ct5l-hightpu-8t",
+		GKETPUAcceleratorLabel: "tpu-v5-lite-device",
+		GKETPUTopologyLabel:    "2x4",
+		GKENodePoolLabel:       "v5e-pool",
+	}, map[string]interface{}{"cpu": "224", "memory": "400Gi", "google.com/tpu": "8"}, true)
+
+	inv, err := DiscoverInventory(&fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR: {sharedGPUNode, ct5lNode},
+		},
+	}, nil, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory() err = %v", err)
+	}
+	var checkedShared, checkedCT5L bool
+	for _, p := range inv.Pools {
+		switch p.NodePoolName {
+		case "shared-l4-pool":
+			checkedShared = true
+			if !p.IsGPU || p.GPUsPerNode != 4 || p.GPUResourceName != "nvidia.com/gpu.shared" {
+				t.Errorf("shared-l4-pool = %+v, want IsGPU=true GPUsPerNode=4 GPUResourceName=nvidia.com/gpu.shared", p)
+			}
+		case "v5e-pool":
+			checkedCT5L = true
+			if !p.IsTPU || p.GKETPUAcceleratorLabel != "tpu-v5-lite-device" {
+				t.Errorf("v5e-pool = %+v, want IsTPU=true GKETPUAcceleratorLabel=tpu-v5-lite-device", p)
+			}
+		}
+	}
+	if !checkedShared || !checkedCT5L {
+		t.Fatalf("missing expected pools (checkedShared=%v checkedCT5L=%v): %+v", checkedShared, checkedCT5L, inv.Pools)
+	}
+}
+
+func TestDiscoverInventory_NodesNotReadySliceStateAndPoolComparator(t *testing.T) {
+	t.Parallel()
+	// Downgrading a Ready Slice CR because of NotReady nodes must update State to NodesNotReady (ready/expected).
+	degradedSlice := makeSliceCRD("s-degraded", "", "tpu7x", "2x2x4", "True", "SliceReady", nil)
+	nodes := []unstructured.Unstructured{
+		makeNode("n0", map[string]string{TPUSliceNameLabel: "s-degraded", TPUSliceTypeLabel: "tpu7x"}, map[string]interface{}{"google.com/tpu": "4"}, true),
+		makeNode("n1", map[string]string{TPUSliceNameLabel: "s-degraded", TPUSliceTypeLabel: "tpu7x"}, map[string]interface{}{"google.com/tpu": "4"}, true),
+		makeNode("n2", map[string]string{TPUSliceNameLabel: "s-degraded", TPUSliceTypeLabel: "tpu7x"}, map[string]interface{}{"google.com/tpu": "4"}, true),
+		makeNode("n3", map[string]string{TPUSliceNameLabel: "s-degraded", TPUSliceTypeLabel: "tpu7x"}, map[string]interface{}{"google.com/tpu": "4"}, false),
+	}
+	sliceInv, err := DiscoverInventory(&fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR:     nodes,
+			TPUSliceGVR: {degradedSlice},
+		},
+	}, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory(degraded slice) err = %v", err)
+	}
+	if len(sliceInv.Slices) != 1 || sliceInv.Slices[0].Ready || sliceInv.Slices[0].State != "NodesNotReady (3/4)" {
+		t.Errorf("degraded slice = %+v, want Ready=false State=\"NodesNotReady (3/4)\"", sliceInv.Slices)
+	}
+
+	// Unified pool preference comparator: non-control-plane > usable accel > non-system > ReadyNodes.
+	ctrlReady := PoolCapacity{IsControlPlane: true, ReadyNodes: 1}
+	workerUnready := PoolCapacity{IsControlPlane: false, ReadyNodes: 0}
+	if !IsBetterPool("worker", workerUnready, "ctrl", ctrlReady) {
+		t.Errorf("non-control-plane worker must outrank ready control-plane node")
+	}
+	if top := TopPreferredPools([]PoolCapacity{ctrlReady, workerUnready}); len(top) != 1 || top[0].IsControlPlane {
+		t.Errorf("TopPreferredPools = %+v, want single worker pool", top)
+	}
+	brokenWorkerGPU := PoolCapacity{IsGPU: true, GPUsPerNode: 0, ReadyNodes: 1}
+	healthySysGPU := PoolCapacity{IsGPU: true, GPUsPerNode: 4, IsSystemPool: true, ReadyNodes: 1}
+	if !IsBetterPool("sys-gpu", healthySysGPU, "broken-gpu", brokenWorkerGPU) {
+		t.Errorf("healthy system GPU pool must outrank broken 0-GPU worker pool")
+	}
+
+	// Node-derived slice (nodes-200 / slices-403) with NotReady node must populate NodesNotReady State.
+	derivedNodes := []unstructured.Unstructured{
+		makeNode("dn0", map[string]string{TPUSliceNameLabel: "s-node-only", TPUSliceTypeLabel: "tpu7x"}, map[string]interface{}{"google.com/tpu": "4"}, true),
+		makeNode("dn1", map[string]string{TPUSliceNameLabel: "s-node-only", TPUSliceTypeLabel: "tpu7x"}, map[string]interface{}{"google.com/tpu": "4"}, false),
+	}
+	derivedInv, err := DiscoverInventory(&fakeDiscoveryLister{
+		byGVR:  map[schema.GroupVersionResource][]unstructured.Unstructured{NodeGVR: derivedNodes},
+		errGVR: map[schema.GroupVersionResource]error{TPUSliceGVR: apierrors.NewForbidden(TPUSliceGVR.GroupResource(), "", errors.New("denied"))},
+	}, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory(node-derived degraded slice) err = %v", err)
+	}
+	if len(derivedInv.Slices) != 1 || derivedInv.Slices[0].Ready || derivedInv.Slices[0].State != "NodesNotReady (1/2)" {
+		t.Errorf("node-derived degraded slice = %+v, want Ready=false State=\"NodesNotReady (1/2)\"", derivedInv.Slices)
+	}
+}

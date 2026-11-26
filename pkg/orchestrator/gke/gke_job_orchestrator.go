@@ -2848,6 +2848,12 @@ func (g *GKEOrchestrator) resolveNodeSelectorAccelerator(job orchestrator.JobDef
 
 func (g *GKEOrchestrator) resolveK8sGKEAcceleratorLabel(machineType string, profile JobProfile, isTPU bool) string {
 	if isTPU {
+		if profile.K8sPool != nil && profile.K8sPool.IsTPU {
+			if obs := strings.TrimSpace(profile.K8sPool.GKETPUAcceleratorLabel); obs != "" && !strings.Contains(obs, "/") {
+				return obs
+			}
+			return ""
+		}
 		mapped := g.GenerateGKENodeSelectorLabel(machineType)
 		if !strings.Contains(mapped, "/") {
 			return mapped
@@ -2887,8 +2893,8 @@ func (g *GKEOrchestrator) applyGKEPlatformNodeSelectorLabels(nodeSelector map[st
 		} else {
 			nodeSelector["cloud.google.com/gke-accelerator"] = accelLabel
 		}
-	} else if g.mode == orchestrator.TypeK8s && isGPU {
-		g.applyGenericObservedNodeSelector(nodeSelector, schedOpts.NodeAffinityLabels, profile, machineType, true)
+	} else if g.mode == orchestrator.TypeK8s && (isGPU || isTPU) {
+		g.applyGenericObservedNodeSelector(nodeSelector, schedOpts.NodeAffinityLabels, profile, machineType, isGPU)
 	}
 	return g.addTopologyLabel(nodeSelector, schedOpts, isGPU, isCPUMachine)
 }

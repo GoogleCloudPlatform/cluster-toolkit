@@ -209,8 +209,10 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 	}
 }
 
-func TestSubmitCmd_TPUWithNumNodes_Fails(t *testing.T) {
+func TestSubmitCmd_TPUWithNumNodes_ForwardsFlagToOrchestrator(t *testing.T) {
 	setupSubmitTestEnv(t)
+	mockOrc := &mockOrchestrator{}
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
 
 	oldStore := store
 	defer func() { store = oldStore }()
@@ -226,25 +228,23 @@ func TestSubmitCmd_TPUWithNumNodes_Fails(t *testing.T) {
 		},
 	}
 
-	output, err := executeCommand(JobCmd,
+	_, err := executeCommand(JobCmd,
 		"submit",
-		"--name", "tpu-fail-test",
+		"--name", "tpu-num-nodes-test",
 		"--image", "busybox",
 		"--command", "echo hello",
 		"--cluster", "test-cluster",
 		"--location", "us-central1-a",
 		"--project", "test-project",
-		"--compute-type", "v6e-8", // TPU type
-		"--num-nodes", "2", // Explicitly set!
+		"--compute-type", "v6e-8",
+		"--num-nodes", "2",
 	)
-
-	if err == nil {
-		t.Fatalf("expected error when passing --num-nodes for TPU job, but got nil")
+	if err != nil {
+		t.Fatalf("expected CLI to delegate TPU --num-nodes check to orchestrator, got err: %v", err)
 	}
-
-	expectedErr := "--num-nodes cannot be used with TPU jobs"
-	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
-		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
+	if !mockOrc.SubmittedJob.NumNodesSpecified || mockOrc.SubmittedJob.NodesPerSlice != 2 {
+		t.Errorf("expected NumNodesSpecified=true NodesPerSlice=2 forwarded to orchestrator, got (%v, %d)",
+			mockOrc.SubmittedJob.NumNodesSpecified, mockOrc.SubmittedJob.NodesPerSlice)
 	}
 }
 

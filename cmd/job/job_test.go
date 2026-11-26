@@ -1410,7 +1410,7 @@ func newK8sTPUDryRunServer(t *testing.T) *httptest.Server {
 	return srv
 }
 
-func stubK8sDryRunSubprocess(t *testing.T) {
+func stubK8sDryRunSubprocess(t *testing.T) *[]string {
 	t.Helper()
 	origExec := shell.ExecuteCommand
 	origExecTimeout := shell.ExecuteCommandWithTimeout
@@ -1418,14 +1418,13 @@ func stubK8sDryRunSubprocess(t *testing.T) {
 		shell.ExecuteCommand = origExec
 		shell.ExecuteCommandWithTimeout = origExecTimeout
 	})
+	var recorded []string
 	handle := func(name string, args ...string) shell.CommandResult {
 		joined := strings.Join(args, " ")
-		if name == "gcloud" {
-			t.Errorf("unexpected gcloud subprocess in TypeK8s submit: %s %s", name, joined)
-			return shell.CommandResult{ExitCode: 1, Stderr: "gcloud forbidden in TypeK8s"}
-		}
+		recorded = append(recorded, name+" "+joined)
 		if name != "kubectl" {
-			return shell.CommandResult{ExitCode: 0}
+			t.Errorf("unexpected non-kubectl subprocess in TypeK8s dry-run: %s %s", name, joined)
+			return shell.CommandResult{ExitCode: 1, Stderr: "unexpected subprocess in TypeK8s dry-run"}
 		}
 		if strings.Contains(joined, "get deployment kueue-controller-manager") || strings.Contains(joined, "get crd clusterqueues.kueue.x-k8s.io") {
 			return shell.CommandResult{ExitCode: 1, Stderr: `Error from server (NotFound): resource not found`}
@@ -1433,6 +1432,8 @@ func stubK8sDryRunSubprocess(t *testing.T) {
 		for prefix, out := range map[string]string{
 			"get --raw /apis/slice.tpu.google.com":                           "{}",
 			"get crd jobsets.jobset.x-k8s.io":                                "customresourcedefinition.apiextensions.k8s.io/jobsets.jobset.x-k8s.io",
+			"get deployment jobset-controller-manager":                       `{"status":{"availableReplicas":1}}`,
+			"get service jobset-webhook-service":                             `{"metadata":{"name":"jobset-webhook-service"}}`,
 			"get endpointslice -l kubernetes.io/service-name=jobset-webhook": `{"items":[{"endpoints":[{"addresses":["10.0.0.2"],"conditions":{"ready":true}}]}]}`,
 			"get serviceaccount":                                             `{"metadata":{"name":"default"}}`,
 			"get secrets":                                                    `{"items":[]}`,
@@ -1441,16 +1442,35 @@ func stubK8sDryRunSubprocess(t *testing.T) {
 				return shell.CommandResult{ExitCode: 0, Stdout: out}
 			}
 		}
-		return shell.CommandResult{ExitCode: 0}
+		t.Errorf("unexpected kubectl command outside dry-run allowlist: kubectl %s", joined)
+		return shell.CommandResult{ExitCode: 1, Stderr: "unexpected kubectl command: " + joined}
 	}
 	shell.ExecuteCommand = handle
 	shell.ExecuteCommandWithTimeout = func(_ time.Duration, name string, args ...string) shell.CommandResult {
 		return handle(name, args...)
 	}
+	return &recorded
 }
 
-func assertK8sSubmitPreRunRejections(t *testing.T) {
+func assertNoForbiddenDryRunSubprocessCalls(t *testing.T, calls []string) {
 	t.Helper()
+	forbidden := []string{" pvc", " pv", " storageclass", " priorityclass", " apply"}
+	for _, call := range calls {
+		lower := strings.ToLower(call)
+		for _, tok := range forbidden {
+			if strings.Contains(lower, tok) {
+				t.Errorf("forbidden subprocess call during TypeK8s dry-run (%q): %s", strings.TrimSpace(tok), call)
+			}
+		}
+	}
+}
+
+func TestSubmitCmd_TypeK8sPreRunRejections(t *testing.T) {
+	setupSubmitTestEnv(t)
+	t.Setenv(shell.AirGappedEnvVar, "true")
+	k8sSrv := newK8sTPUDryRunServer(t)
+	t.Setenv("KUBECONFIG", writeOnPremProdContextKubeconfig(t, "k8s-tpu", k8sSrv.URL))
+
 	for _, tc := range []struct {
 		name    string
 		jobName string
@@ -1517,9 +1537,9 @@ func TestSubmitCmd_TypeK8sRealOrchestratorDryRun(t *testing.T) {
 		{
 			name:        "tpu7x_1t_single_container_and_1_chip",
 			computeType: "tpu7x-standard-1t",
-			extraArgs:   []string{"--node-constraint", "tpu.google.com/slice-name=slice-1t"},
-			wantSubstr:  []string{"name: workload-container", `google.com/tpu: "1"`, "tpu.google.com/slice-name: slice-1t"},
-			forbid:      []string{"workload-container-0", "workload-container-1", `google.com/tpu: "0"`},
+			extraArgs:   []string{"--node-constraint", "tpu.google.com/slice-name=slice-1t", "--priority", "high", "--mount", "my-pvc;/data"},
+			wantSubstr:  []string{"name: workload-container", `google.com/tpu: "1"`, "tpu.google.com/slice-name: slice-1t", "priorityClassName: high", "claimName: my-pvc"},
+			forbid:      []string{"workload-container-0", "workload-container-1", `google.com/tpu: "0"`, "gke-gcsfuse/volumes"},
 		},
 		{
 			name:        "tpu7x_4t_single_container_and_4_chips_no_gke_parallel_split",
@@ -1538,7 +1558,7 @@ func TestSubmitCmd_TypeK8sRealOrchestratorDryRun(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resetJobFlags()
-			stubK8sDryRunSubprocess(t)
+			calls := stubK8sDryRunSubprocess(t)
 			gkeOrchestratorFactory = nil
 			outPath := filepath.Join(t.TempDir(), tc.name+".yaml")
 			args := append([]string{
@@ -1552,6 +1572,7 @@ func TestSubmitCmd_TypeK8sRealOrchestratorDryRun(t *testing.T) {
 			if _, err := executeCommand(JobCmd, args...); err != nil {
 				t.Fatalf("executeCommand(%v) err = %v", args, err)
 			}
+			assertNoForbiddenDryRunSubprocessCalls(t, *calls)
 			raw, err := os.ReadFile(outPath)
 			if err != nil {
 				t.Fatalf("ReadFile(%s): %v", outPath, err)
@@ -1559,7 +1580,6 @@ func TestSubmitCmd_TypeK8sRealOrchestratorDryRun(t *testing.T) {
 			assertManifestStrings(t, string(raw), tc.wantSubstr, tc.forbid)
 		})
 	}
-	assertK8sSubmitPreRunRejections(t)
 }
 
 func assertManifestStrings(t *testing.T, manifest string, wantSubstr, forbid []string) {

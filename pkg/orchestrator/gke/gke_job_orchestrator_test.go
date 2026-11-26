@@ -5923,16 +5923,14 @@ func TestK8sGPUAndTPUFallbackResolution(t *testing.T) {
 		mode:              orchestrator.TypeK8s,
 		submissionSession: submissionSession{inventory: &k8s.Inventory{LabelScheme: k8s.SchemeGKE, ExplicitMode: true}},
 	}
-	h100Cap, _ := explicitOrc.resolveK8sMachineCapabilities("a3-highgpu-8g")
-	if len(h100Cap.Accelerators) != 1 || h100Cap.Accelerators[0].Type != "nvidia-h100-80gb" {
-		t.Errorf("explicit SchemeGKE a3-highgpu-8g cap = %+v, want nvidia-h100-80gb", h100Cap)
+	if lbl := explicitOrc.resolveK8sGKEAcceleratorLabel("a3-highgpu-8g", JobProfile{}, false); lbl != "nvidia-h100-80gb" {
+		t.Errorf("explicit SchemeGKE a3-highgpu-8g label = %q, want nvidia-h100-80gb", lbl)
 	}
-	g4Cap, _ := explicitOrc.resolveK8sMachineCapabilities("g4-standard-192")
-	if len(g4Cap.Accelerators) != 1 || g4Cap.Accelerators[0].Count != 4 {
-		t.Errorf("explicit g4-standard-192 cap = %+v, want 4 GPUs", g4Cap)
+	if prof, err := explicitOrc.buildK8sJobProfile(&orchestrator.JobDefinition{MachineType: "g4-standard-192"}, k8s.PoolCapacity{}, false, false); err != nil || prof.IsCPUMachine || prof.CapacityCount != 4 {
+		t.Errorf("explicit g4-standard-192 profile = (%+v, %v), want 4 GPUs", prof, err)
 	}
-	if cpuCap, _ := explicitOrc.resolveK8sMachineCapabilities("custom-mem-64g"); len(cpuCap.Accelerators) != 0 {
-		t.Errorf("custom-mem-64g cap = %+v, want 0 accelerators", cpuCap)
+	if prof, err := explicitOrc.buildK8sJobProfile(&orchestrator.JobDefinition{MachineType: "custom-mem-64g"}, k8s.PoolCapacity{}, false, false); err != nil || !prof.IsCPUMachine {
+		t.Errorf("custom-mem-64g profile = (%+v, %v), want CPU profile", prof, err)
 	}
 }
 
@@ -6928,7 +6926,7 @@ func TestResolveHostNetwork_TypeK8sPreservesHostNetworkWithServiceAccount(t *tes
 	}
 }
 
-func TestStorageManager_TypeK8sAndDryRunSkipGCSFuseSidecar(t *testing.T) {
+func TestStorageManager_TypeK8sSkipsGCSFuseSidecar(t *testing.T) {
 	mockExec := NewMockExecutor(nil)
 	k8sOrc := newTestGKEOrchestrator(mockExec)
 	k8sOrc.mode = orchestrator.TypeK8s
@@ -6940,15 +6938,81 @@ func TestStorageManager_TypeK8sAndDryRunSkipGCSFuseSidecar(t *testing.T) {
 		t.Errorf("TypeK8s pvcNeedsGCSFuseSidecar made unexpected kubectl calls: %v", mockExec.calls)
 	}
 
-	gkeExec := NewMockExecutor(nil)
+	// GKE dry-run must still inspect PVCs so gke-gcsfuse/volumes is preserved in dry-run manifests.
+	gkeExec := NewMockExecutor(map[string][]shell.CommandResult{
+		fmt.Sprintf("kubectl get pvc -n default --ignore-not-found %s -o %s -- my-gcs-pvc", kubectlReadTimeout, pvcGCSFuseJSONPath): {{
+			ExitCode: 0,
+			Stdout:   "pv-gcs\tstandard\tgcsfuse.csi.storage.gke.io\t",
+		}},
+	})
 	gkeOrc := newTestGKEOrchestrator(gkeExec)
 	gkeOrc.mode = orchestrator.TypeGKE
 	gkeSM := &StorageManager{orchestrator: gkeOrc}
-	if gkeSM.pvcNeedsGCSFuseSidecar("uncached-pvc", orchestrator.JobDefinition{DryRunManifest: "/tmp/out.yaml"}, &mountBuildState{}) {
-		t.Errorf("GKE dry-run must not assume GCSFuse sidecar for uncached PVC")
+	if !gkeSM.pvcNeedsGCSFuseSidecar("my-gcs-pvc", orchestrator.JobDefinition{DryRunManifest: "/tmp/out.yaml"}, &mountBuildState{}) {
+		t.Errorf("GKE dry-run must still emit gke-gcsfuse/volumes for GCSFuse-backed PVC")
 	}
-	if len(gkeExec.calls) != 0 {
-		t.Errorf("GKE dry-run pvcNeedsGCSFuseSidecar must not run kubectl get pvc; got %v", gkeExec.calls)
+}
+
+func TestSchemeGKETPUNodeSelector_PrefersObservedLabel(t *testing.T) {
+	tpuPool := k8s.PoolCapacity{
+		MachineType:            "ct5l-hightpu-8t",
+		IsTPU:                  true,
+		TPUType:                "v5e",
+		TPUsPerNode:            8,
+		GKETPUAcceleratorLabel: "tpu-v5-lite-device",
+		InstanceTypeLabel:      "ct5l-hightpu-8t",
+		NodePoolName:           "v5e-pool",
+		ReadyNodes:             1,
+	}
+	orc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGKE,
+				PoolNames:   []string{"v5e-pool"},
+				Pools:       map[string]k8s.PoolCapacity{"v5e-pool": tpuPool},
+			},
+		},
+	}
+	selYAML, err := orc.buildNodeSelectorWithProfile(SchedulingOptions{Topology: "2x4", IsTPU: true}, orchestrator.JobDefinition{MachineType: "ct5l-hightpu-8t"}, JobProfile{IsTPU: true, K8sPool: &tpuPool, CapacityCount: 8})
+	if err != nil {
+		t.Fatalf("buildNodeSelectorWithProfile(ct5l-hightpu-8t on SchemeGKE) err = %v", err)
+	}
+	if !strings.Contains(selYAML, "cloud.google.com/gke-tpu-accelerator: tpu-v5-lite-device") {
+		t.Errorf("expected observed gke-tpu-accelerator label tpu-v5-lite-device, got:\n%s", selYAML)
+	}
+	if strings.Contains(selYAML, "cloud.google.com/gke-tpu-accelerator: ct5l-hightpu-8t") {
+		t.Errorf("must not emit raw ct5l-hightpu-8t into gke-tpu-accelerator:\n%s", selYAML)
+	}
+
+	// ExplicitMode (no matched pool) falls back to static machine map.
+	explicitOrc := &GKEOrchestrator{
+		mode:              orchestrator.TypeK8s,
+		submissionSession: submissionSession{inventory: &k8s.Inventory{LabelScheme: k8s.SchemeGKE, ExplicitMode: true}},
+	}
+	explicitYAML, err := explicitOrc.buildNodeSelectorWithProfile(SchedulingOptions{Topology: "2x2", IsTPU: true}, orchestrator.JobDefinition{MachineType: "ct6e-standard-4t"}, JobProfile{IsTPU: true, CapacityCount: 4})
+	if err != nil {
+		t.Fatalf("buildNodeSelectorWithProfile(explicit SchemeGKE TPU) err = %v", err)
+	}
+	if !strings.Contains(explicitYAML, "cloud.google.com/gke-tpu-accelerator: tpu-v6e-slice") {
+		t.Errorf("expected static map fallback tpu-v6e-slice when no pool matched, got:\n%s", explicitYAML)
+	}
+
+	// Matched SchemeGKE TPU pool without gke-tpu-accelerator label falls back to observed instance-type label.
+	unlabeledTPUPool := k8s.PoolCapacity{
+		MachineType:       "ct5l-hightpu-8t",
+		IsTPU:             true,
+		TPUType:           "v5e",
+		TPUsPerNode:       8,
+		InstanceTypeLabel: "ct5l-hightpu-8t",
+		ReadyNodes:        1,
+	}
+	fallbackYAML, err := orc.buildNodeSelectorWithProfile(SchedulingOptions{Topology: "2x4", IsTPU: true}, orchestrator.JobDefinition{MachineType: "ct5l-hightpu-8t"}, JobProfile{IsTPU: true, K8sPool: &unlabeledTPUPool, CapacityCount: 8})
+	if err != nil {
+		t.Fatalf("buildNodeSelectorWithProfile(unlabeled SchemeGKE TPU pool) err = %v", err)
+	}
+	if strings.Contains(fallbackYAML, "cloud.google.com/gke-tpu-accelerator") || !strings.Contains(fallbackYAML, "node.kubernetes.io/instance-type: ct5l-hightpu-8t") {
+		t.Errorf("unlabeled SchemeGKE TPU pool should fall back to observed instance-type, got:\n%s", fallbackYAML)
 	}
 }
 
