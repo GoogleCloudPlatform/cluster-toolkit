@@ -86,13 +86,13 @@ locals {
     EOT
   )
 
-  mldiagnostics_agent_message = !var.ml_diagnostics_agent.enable ? "" : trimspace(
+  mldiagnostics_daemon_message = !var.enable_ml_diagnostics_daemon ? "" : trimspace(
     <<-EOT
       Diagon 2.0 ML Diagnostics daemon has been deployed:
-        - DaemonSet 'diagon-daemon' is deployed in namespace 'diagon' (targeting x86 GPU and TPU nodes with image '${var.ml_diagnostics_agent.image}').
+        - DaemonSet 'diagon-daemon' is deployed in namespace 'diagon' (targeting x86 GPU and TPU nodes with image '${var.ml_diagnostics_daemon_image}').
         - Verify daemon health: kubectl logs -n diagon -l name=diagon-daemon --tail=50
-        - Ensure the '_Default' log bucket has Log Analytics enabled and the node pool service account has 'roles/storage.objectUser' and 'roles/storage.bucketViewer' for host-network profiling uploads.
-        - Workload Monitoring and Auto-Capture require GKE ${local.mldiagnostics_agent_wlm_minimum_version} or higher.
+        - Ensure the '_Default' log bucket has Log Analytics enabled and the node pool service account has 'roles/storage.objectUser' and 'roles/storage.bucketViewer' on Diagon's bucket ('diagon-<project_number>-*') for host-network profiling uploads.
+        - Workload Monitoring and Auto-Capture require GKE ${local.mldiagnostics_daemon_wlm_minimum_version} or higher.
     EOT
   )
 }
@@ -111,7 +111,7 @@ output "instructions" {
 
       ${local.mldiagnostics_message}
 
-      ${local.mldiagnostics_agent_message}
+      ${local.mldiagnostics_daemon_message}
     EOT
   )
 }

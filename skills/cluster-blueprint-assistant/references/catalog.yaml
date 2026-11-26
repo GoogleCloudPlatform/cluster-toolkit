@@ -1706,6 +1706,7 @@ blueprints:
     deployment_name: gke-tpu-7x
     enable_dynamic_slicing_for_tpus: false
     enable_flex_start: false
+    enable_ml_diagnostics_daemon: false
     enable_pathways_for_tpus: true
     enable_queued_provisioning: false
     kueue_configuration_path: null
@@ -1727,14 +1728,14 @@ blueprints:
     settings: [firewall_rules, secondary_ranges_list, subnetworks]
   - id: node_pool_service_account
     source: modules/project/service-account
-    settings: [name, project_roles]
+    settings: [conditional_project_roles, name, project_roles]
   - id: workload_service_account
     source: modules/project/service-account
     settings: [name, project_roles]
   - id: gke-tpu-7x-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-tpu-7x-net, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_ml_diagnostics, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, enable_slice_controller, maintenance_exclusions, master_authorized_networks, namespace, release_channel, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
+    settings: [configure_workload_identity_sa, enable_dataplane_v2, enable_ml_diagnostics, enable_ml_diagnostics_daemon, enable_pathways_for_tpus, enable_private_endpoint, enable_private_ipv6_google_access, enable_slice_controller, maintenance_exclusions, master_authorized_networks, namespace, release_channel, system_node_pool_machine_type, system_node_pool_taints, version_prefix]
   - id: workload_policy
     source: modules/compute/resource-policy
     settings: [name, project_id, region, workload_policy]
