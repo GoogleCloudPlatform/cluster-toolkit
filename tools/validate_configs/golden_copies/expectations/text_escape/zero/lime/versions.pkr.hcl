@@ -16,6 +16,7 @@ packer {
   required_version = ">= 1.15.3, < 2.0.0"
 
   # packer plugin 1.0.16 and above includes HPC VM Image
+  # >= 1.2.8 includes GH-355 (startup-script status when the hostname is an FQDN)
   required_plugins {
     googlecompute = {
       version = "~> 1.2.8"

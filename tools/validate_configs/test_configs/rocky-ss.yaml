@@ -40,8 +40,8 @@ deployment_groups:
     use: [network1]
     settings:
       instance_image:
-        project: rocky-linux-cloud
-        family: rocky-linux-8
+        project: advanced-compute-images
+        family: aci-cpu-rocky-linux-9-amd64
 
   - id: spack-setup
     source: community/modules/scripts/spack-setup
@@ -81,5 +81,5 @@ deployment_groups:
     settings:
       machine_type: n2d-standard-4
       instance_image:
-        family: rocky-linux-8
-        project: rocky-linux-cloud
+        family: aci-cpu-rocky-linux-9-amd64
+        project: advanced-compute-images

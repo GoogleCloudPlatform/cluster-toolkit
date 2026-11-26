@@ -303,9 +303,9 @@ machine type and disk size but never Spot: those modules do not accept it.
 Rules the agent must respect:
 
 - **Hardware-named partitions expose node counts and Spot, never
-  `machine_type`** (`h3`, `a2`, `g2`, `n2`, `c2`, `c2d`, `c3`, `a2_8`,
-  `a2_16`). The hardware name *is* the partition's identity; "run the `g2`
-  partition on g4" is "add a partition" → Pattern 2/3 (copy the blueprint), not a
+  `machine_type`** (`h3`, `n2`, `c2`, `c2d`, `c3`, `a2_8`, `a2_16`). The
+  hardware name *is* the partition's identity; "run the `h3` partition on c3"
+  is "add a partition" → Pattern 2/3 (copy the blueprint), not a
   `deployment.yaml` override. Functionally named pools (`compute`, `debug`,
   `hp_pool`, …) do expose `<role>_machine_type`.
 - **Hardware-locked blueprints hardcode `machine_type` in the module.** The
