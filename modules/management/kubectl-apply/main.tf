@@ -191,6 +191,186 @@ locals {
     local.kueue_pods_ready_recovery_timeout != null ? { recoveryTimeout = local.kueue_pods_ready_recovery_timeout } : {},
     try(var.kueue.wait_for_pods_ready.block_admission, null) != null ? { blockAdmission = var.kueue.wait_for_pods_ready.block_admission } : {}
   ) : null
+
+  # Custom Kueue Helm chart values rendering and validation helpers
+  kueue_helm_values_path        = try(var.kueue.helm_values_path, null) != null ? trimspace(var.kueue.helm_values_path) : ""
+  kueue_helm_values_file_exists = local.install_kueue && local.kueue_helm_values_path != "" ? fileexists(local.kueue_helm_values_path) : false
+
+  kueue_user_helm_values_content = local.kueue_helm_values_file_exists ? (
+    endswith(local.kueue_helm_values_path, ".tftpl") || (var.kueue.helm_values_template_vars != null && length(var.kueue.helm_values_template_vars) > 0) ?
+    templatefile(local.kueue_helm_values_path, var.kueue.helm_values_template_vars != null ? var.kueue.helm_values_template_vars : {}) :
+    file(local.kueue_helm_values_path)
+  ) : ""
+
+  kueue_helm_values_is_mapping = (
+    local.kueue_user_helm_values_content == "" ||
+    try(yamldecode(local.kueue_user_helm_values_content) == null, false) ||
+    can(keys(yamldecode(local.kueue_user_helm_values_content)))
+  )
+  kueue_user_helm_values_parsed = yamldecode(
+    local.kueue_user_helm_values_content != "" && can(keys(yamldecode(local.kueue_user_helm_values_content)))
+    ? local.kueue_user_helm_values_content
+    : "{}"
+  )
+  kueue_helm_values_not_k8s_manifest = (
+    !contains(keys(local.kueue_user_helm_values_parsed), "apiVersion") &&
+    !contains(keys(local.kueue_user_helm_values_parsed), "kind")
+  )
+
+  # Feature-gate merging by .name (preserves TopologyAwareScheduling and Kueue >= 0.18 DRA disables unless explicitly overridden)
+  kueue_has_user_feature_gates_field = try(local.kueue_user_helm_values_parsed.controllerManager.featureGates != null, false)
+  kueue_user_feature_gates_valid = (
+    !local.kueue_has_user_feature_gates_field || (
+      !can(keys(local.kueue_user_helm_values_parsed.controllerManager.featureGates)) &&
+      can([
+        for fg in local.kueue_user_helm_values_parsed.controllerManager.featureGates : {
+          name    = tostring(fg.name)
+          enabled = tobool(fg.enabled)
+        }
+      ])
+    )
+  )
+  kueue_user_feature_gates = [
+    for fg in yamldecode(
+      local.kueue_has_user_feature_gates_field && local.kueue_user_feature_gates_valid
+      ? yamlencode(local.kueue_user_helm_values_parsed.controllerManager.featureGates)
+      : "[]"
+      ) : {
+      name    = tostring(fg.name)
+      enabled = tobool(fg.enabled)
+    }
+  ]
+  kueue_user_feature_gates_by_name = {
+    for name, vals in { for fg in local.kueue_user_feature_gates : fg.name => fg.enabled... } :
+    name => vals[length(vals) - 1]
+  }
+  kueue_base_feature_gates = concat(
+    [{ name = "TopologyAwareScheduling", enabled = true }],
+    [
+      for name in [
+        "KueueDRAIntegration",
+        "KueueDRARejectWorkloadsWhenDRADisabled",
+        "KueueDRAIntegrationExtendedResource",
+        "KueueDRAIntegrationPartitionableDevices",
+      ] : { name = name, enabled = false }
+      if module.kueue_dra_version_check.is_greater_than_or_equal
+    ]
+  )
+  kueue_merged_feature_gates = concat(
+    [
+      for fg in local.kueue_base_feature_gates : {
+        name    = fg.name
+        enabled = lookup(local.kueue_user_feature_gates_by_name, fg.name, fg.enabled)
+      }
+    ],
+    [
+      for name in distinct([for fg in local.kueue_user_feature_gates : fg.name]) : {
+        name    = name
+        enabled = local.kueue_user_feature_gates_by_name[name]
+      }
+      if !contains([for fg in local.kueue_base_feature_gates : fg.name], name)
+    ]
+  )
+
+  # Toleration preservation (keeps GKE system node-pool gke-managed-components toleration unless overridden)
+  kueue_has_user_tolerations = (
+    try(local.kueue_user_helm_values_parsed.controllerManager.tolerations != null, false) &&
+    !can(keys(local.kueue_user_helm_values_parsed.controllerManager.tolerations)) &&
+    can(length(local.kueue_user_helm_values_parsed.controllerManager.tolerations))
+  )
+  kueue_user_tolerations = yamldecode(
+    local.kueue_has_user_tolerations
+    ? yamlencode(local.kueue_user_helm_values_parsed.controllerManager.tolerations)
+    : "[]"
+  )
+  kueue_merged_tolerations = concat(
+    yamldecode(
+      anytrue([for t in local.kueue_user_tolerations : try(t.key, "") == "components.gke.io/gke-managed-components"])
+      ? "[]"
+      : yamlencode(yamldecode(file("${path.module}/kueue/kueue-helm-values.yaml")).controllerManager.tolerations)
+    ),
+    local.kueue_user_tolerations
+  )
+
+  # Structured merge for managerConfig.controllerManagerConfigYaml (maps merged, lists replaced)
+  kueue_has_user_manager_config_field = try(local.kueue_user_helm_values_parsed.managerConfig.controllerManagerConfigYaml != null, false)
+  kueue_user_manager_config_valid_yaml = (
+    !local.kueue_has_user_manager_config_field || (
+      !can(keys(local.kueue_user_helm_values_parsed.managerConfig.controllerManagerConfigYaml)) &&
+      try(trimspace(local.kueue_user_helm_values_parsed.managerConfig.controllerManagerConfigYaml) != "", false) &&
+      can(keys(yamldecode(trimspace(local.kueue_user_helm_values_parsed.managerConfig.controllerManagerConfigYaml))))
+    )
+  )
+  kueue_user_manager_config = yamldecode(
+    local.kueue_has_user_manager_config_field && local.kueue_user_manager_config_valid_yaml
+    ? trimspace(local.kueue_user_helm_values_parsed.managerConfig.controllerManagerConfigYaml)
+    : "{}"
+  )
+  kueue_user_manager_config_valid_kind = (
+    !local.kueue_has_user_manager_config_field ||
+    !local.kueue_user_manager_config_valid_yaml ||
+    try(local.kueue_user_manager_config.kind, "Configuration") == "Configuration"
+  )
+
+  kueue_raw_base_manager_config = yamldecode(file("${path.module}/kueue/kueue-manager-config.yaml"))
+  kueue_base_manager_config = merge(
+    local.kueue_raw_base_manager_config,
+    {
+      controller = merge(
+        local.kueue_raw_base_manager_config.controller,
+        {
+          groupKindConcurrency = {
+            for k, v in local.kueue_raw_base_manager_config.controller.groupKindConcurrency : k => v
+            if k != "Cohort.kueue.x-k8s.io" || module.kueue_pods_ready_default_on_check.is_greater_than_or_equal
+          }
+        }
+      )
+      integrations = merge(
+        local.kueue_raw_base_manager_config.integrations,
+        {
+          frameworks = [
+            for f in local.kueue_raw_base_manager_config.integrations.frameworks : f
+            if f != "ray.io/rayservice" || !can(regex("^0\\.(15|16)\\.", var.kueue.version))
+          ]
+        }
+      )
+    }
+  )
+
+  kueue_merged_wfpr_entry = yamldecode(
+    !(contains(keys(local.kueue_user_manager_config), "waitForPodsReady") && try(local.kueue_user_manager_config.waitForPodsReady == null, false)) &&
+    (local.kueue_wait_for_pods_ready != null || can(keys(local.kueue_user_manager_config.waitForPodsReady)))
+    ? yamlencode({
+      waitForPodsReady = merge(
+        yamldecode(local.kueue_wait_for_pods_ready != null ? yamlencode(local.kueue_wait_for_pods_ready) : "{}"),
+        yamldecode(can(keys(local.kueue_user_manager_config.waitForPodsReady)) ? yamlencode(local.kueue_user_manager_config.waitForPodsReady) : "{}")
+      )
+    })
+    : "{}"
+  )
+
+  kueue_merged_manager_config = merge(
+    local.kueue_base_manager_config,
+    local.kueue_user_manager_config,
+    {
+      health           = try(merge(local.kueue_base_manager_config.health, local.kueue_user_manager_config.health), local.kueue_base_manager_config.health)
+      metrics          = try(merge(local.kueue_base_manager_config.metrics, local.kueue_user_manager_config.metrics), local.kueue_base_manager_config.metrics)
+      webhook          = try(merge(local.kueue_base_manager_config.webhook, local.kueue_user_manager_config.webhook), local.kueue_base_manager_config.webhook)
+      leaderElection   = try(merge(local.kueue_base_manager_config.leaderElection, local.kueue_user_manager_config.leaderElection), local.kueue_base_manager_config.leaderElection)
+      clientConnection = try(merge(local.kueue_base_manager_config.clientConnection, local.kueue_user_manager_config.clientConnection), local.kueue_base_manager_config.clientConnection)
+      integrations     = try(merge(local.kueue_base_manager_config.integrations, local.kueue_user_manager_config.integrations), local.kueue_base_manager_config.integrations)
+      controller = merge(
+        try(merge(local.kueue_base_manager_config.controller, local.kueue_user_manager_config.controller), local.kueue_base_manager_config.controller),
+        {
+          groupKindConcurrency = try(
+            merge(local.kueue_base_manager_config.controller.groupKindConcurrency, local.kueue_user_manager_config.controller.groupKindConcurrency),
+            local.kueue_base_manager_config.controller.groupKindConcurrency
+          )
+        }
+      )
+    },
+    local.kueue_merged_wfpr_entry
+  )
 }
 
 module "kueue_pods_ready_default_on_check" {
@@ -251,40 +431,8 @@ module "install_kueue" {
   create_namespace = true
   values_yaml = compact([
     file("${path.module}/kueue/kueue-helm-values.yaml"),
-    local.kueue_wait_for_pods_ready != null ? yamlencode({
-      managerConfig = {
-        controllerManagerConfigYaml = yamlencode(merge(
-          yamldecode(file("${path.module}/kueue/kueue-manager-config.yaml")),
-          { waitForPodsReady = local.kueue_wait_for_pods_ready }
-        ))
-      }
-    }) : "",
-    local.kueue_controller_cpu != null || local.kueue_controller_memory != null || local.kueue_controller_replicas != null || module.kueue_dra_version_check.is_greater_than_or_equal ? yamlencode({
+    local.kueue_controller_cpu != null || local.kueue_controller_memory != null || local.kueue_controller_replicas != null ? yamlencode({
       controllerManager = merge(
-        module.kueue_dra_version_check.is_greater_than_or_equal ? {
-          featureGates = [
-            {
-              name    = "TopologyAwareScheduling"
-              enabled = true
-            },
-            {
-              name    = "KueueDRAIntegration"
-              enabled = false
-            },
-            {
-              name    = "KueueDRARejectWorkloadsWhenDRADisabled"
-              enabled = false
-            },
-            {
-              name    = "KueueDRAIntegrationExtendedResource"
-              enabled = false
-            },
-            {
-              name    = "KueueDRAIntegrationPartitionableDevices"
-              enabled = false
-            }
-          ]
-        } : {},
         local.kueue_controller_replicas != null ? { replicas = local.kueue_controller_replicas } : {},
         local.kueue_controller_cpu != null || local.kueue_controller_memory != null ? {
           manager = {
@@ -301,12 +449,28 @@ module "install_kueue" {
           }
         } : {}
       )
-    }) : ""
+    }) : "",
+    local.kueue_user_helm_values_content,
+    (module.kueue_dra_version_check.is_greater_than_or_equal || local.kueue_has_user_feature_gates_field) ? yamlencode({
+      controllerManager = {
+        featureGates = local.kueue_merged_feature_gates
+      }
+    }) : "",
+    local.kueue_has_user_tolerations ? yamlencode({
+      controllerManager = {
+        tolerations = local.kueue_merged_tolerations
+      }
+    }) : "",
+    (local.kueue_wait_for_pods_ready != null || local.kueue_has_user_manager_config_field) ? yamlencode({
+      managerConfig = {
+        controllerManagerConfigYaml = yamlencode(local.kueue_merged_manager_config)
+      }
+    }) : "",
   ])
 
   dependencies = var.system_node_pool_id != null ? [var.system_node_pool_id] : []
 
-  depends_on = [var.gke_cluster_exists]
+  depends_on = [var.gke_cluster_exists, terraform_data.kueue_validations]
 }
 
 # This sleep ensures that subsequent configuration of Kueue custom resources

@@ -79,6 +79,30 @@ resource "terraform_data" "kueue_validations" {
       condition     = !var.kueue.install || var.kueue.wait_for_pods_ready == null || module.kueue_pods_ready_default_on_check.is_greater_than_or_equal
       error_message = "kueue.wait_for_pods_ready is only supported on Kueue >= 0.19.0."
     }
+    precondition {
+      condition     = !local.install_kueue || local.kueue_helm_values_path == "" || local.kueue_helm_values_file_exists
+      error_message = "kueue.helm_values_path '${local.kueue_helm_values_path}' does not exist. Ensure the file exists and is staged with ghpc_stage(...) when referenced from a blueprint."
+    }
+    precondition {
+      condition     = !local.install_kueue || local.kueue_helm_values_path == "" || !local.kueue_helm_values_file_exists || local.kueue_helm_values_is_mapping
+      error_message = "kueue.helm_values_path must render to a valid YAML mapping of Kueue Helm chart values."
+    }
+    precondition {
+      condition     = !local.install_kueue || local.kueue_helm_values_path == "" || !local.kueue_helm_values_file_exists || !local.kueue_helm_values_is_mapping || local.kueue_helm_values_not_k8s_manifest
+      error_message = "kueue.helm_values_path expects Kueue Helm chart values (for example managerConfig.controllerManagerConfigYaml and controllerManager.featureGates), not a Kubernetes manifest with top-level 'apiVersion' or 'kind'. Wrap Kueue Configuration YAML under managerConfig.controllerManagerConfigYaml, or use kueue.config_path for post-install resources such as ClusterQueue and LocalQueue."
+    }
+    precondition {
+      condition     = !local.install_kueue || local.kueue_helm_values_path == "" || !local.kueue_helm_values_file_exists || !local.kueue_helm_values_is_mapping || local.kueue_user_feature_gates_valid
+      error_message = "controllerManager.featureGates in kueue.helm_values_path must be a YAML list of {name, enabled} objects (for example: [{name: 'VisibilityOnDemand', enabled: true}])."
+    }
+    precondition {
+      condition     = !local.install_kueue || local.kueue_helm_values_path == "" || !local.kueue_helm_values_file_exists || !local.kueue_helm_values_is_mapping || local.kueue_user_manager_config_valid_yaml
+      error_message = "managerConfig.controllerManagerConfigYaml in kueue.helm_values_path must be a YAML string (use '|') containing a valid Kueue Configuration mapping."
+    }
+    precondition {
+      condition     = !local.install_kueue || local.kueue_helm_values_path == "" || !local.kueue_helm_values_file_exists || !local.kueue_helm_values_is_mapping || !local.kueue_user_manager_config_valid_yaml || local.kueue_user_manager_config_valid_kind
+      error_message = "managerConfig.controllerManagerConfigYaml in kueue.helm_values_path must have kind 'Configuration' (or omit kind to inherit defaults)."
+    }
   }
 }
 
@@ -191,7 +215,7 @@ variable "enable_multi_tier_checkpointing" {
 
 
 variable "kueue" {
-  description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
+  description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. Custom Helm chart values (such as managerConfig.controllerManagerConfigYaml and controllerManager.featureGates) can be provided with helm_values_path (and helm_values_template_vars for template files). A post-install configuration yaml/template file (for example ClusterQueue, LocalQueue, and ResourceFlavor manifests) can be provided with config_path (and config_template_vars)."
   type = object({
     # ATTENTION: If you update the KUEUE's default version below, please also update the corresponding
     # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go (note the 'v' prefix there)
@@ -200,6 +224,8 @@ variable "kueue" {
     install                         = optional(bool, false)
     config_path                     = optional(string, null)
     config_template_vars            = optional(map(any), null)
+    helm_values_path                = optional(string, null)
+    helm_values_template_vars       = optional(map(any), null)
     enable_pathways_for_tpus        = optional(bool, false)
     enable_dynamic_slicing_for_tpus = optional(bool, false)
     accelerator_topology_mode       = optional(string, null)
