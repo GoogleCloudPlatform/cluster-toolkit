@@ -145,10 +145,9 @@ managerConfig:
     managedJobsNamespaceSelector:
       matchExpressions:
         - key: kubernetes.io/metadata.name
-          operator: NotIn
+          operator: In
           values:
-            - kube-system
-            - kueue-system
+            - default
     resources:
       excludeResourcePrefixes:
         - networking.gke.io.networks/
@@ -158,6 +157,7 @@ When `helm_values_path` is provided:
 * `controllerManager.featureGates` entries are merged by `name` onto the module's base feature gates (`TopologyAwareScheduling: true`, plus disabled DRA feature gates on Kueue `>= 0.18.0`), with user entries taking precedence on matching gate names.
 * `controllerManager.tolerations` preserves the GKE `components.gke.io/gke-managed-components` toleration unless explicitly overridden.
 * `managerConfig.controllerManagerConfigYaml` is merged onto the module's base `Configuration` (and any Pathways / `wait_for_pods_ready` defaults): nested maps such as `metrics`, `controller.groupKindConcurrency`, and `waitForPodsReady` merge keys so partial overrides work without repeating base boilerplate, while list fields such as `integrations.frameworks` replace the base list when specified.
+* Pass only the chart keys you want to override (not a full `helm show values` export): chart fields like `controllerManager.replicas` and `controllerManager.manager.resources` override `kueue.controller_*` (including `enable_dynamic_slicing_for_tpus` defaults), and `waitForPodsReady` fields in `controllerManagerConfigYaml` override `kueue.wait_for_pods_ready`.
 
 You can specify a particular kueue version that you would like to use using the `version` flag. By default, we recommend customers to [use v0.19.6](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L126). You can find the list of supported kueue versions [here](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L24).
 

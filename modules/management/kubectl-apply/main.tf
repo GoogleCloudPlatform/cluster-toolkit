@@ -196,38 +196,76 @@ locals {
   kueue_helm_values_path        = try(var.kueue.helm_values_path, null) != null ? trimspace(var.kueue.helm_values_path) : ""
   kueue_helm_values_file_exists = local.install_kueue && local.kueue_helm_values_path != "" ? fileexists(local.kueue_helm_values_path) : false
 
-  kueue_user_helm_values_content = local.kueue_helm_values_file_exists ? (
-    endswith(local.kueue_helm_values_path, ".tftpl") || (var.kueue.helm_values_template_vars != null && length(var.kueue.helm_values_template_vars) > 0) ?
+  kueue_user_helm_values_raw = local.kueue_helm_values_file_exists ? (
+    can(regex("\\.tftpl(_[0-9a-f]{10})?$", local.kueue_helm_values_path)) || var.kueue.helm_values_template_vars != null ?
     templatefile(local.kueue_helm_values_path, var.kueue.helm_values_template_vars != null ? var.kueue.helm_values_template_vars : {}) :
     file(local.kueue_helm_values_path)
   ) : ""
+  kueue_user_helm_values_is_blank = (
+    local.kueue_user_helm_values_raw == "" ||
+    length(regexall("(?m)^\\s*[^#\\s]", local.kueue_user_helm_values_raw)) == 0
+  )
+  kueue_user_helm_values_content = (
+    local.kueue_user_helm_values_is_blank || try(yamldecode(local.kueue_user_helm_values_raw) == null, false)
+    ? ""
+    : local.kueue_user_helm_values_raw
+  )
 
   kueue_helm_values_is_mapping = (
     local.kueue_user_helm_values_content == "" ||
-    try(yamldecode(local.kueue_user_helm_values_content) == null, false) ||
     can(keys(yamldecode(local.kueue_user_helm_values_content)))
   )
   kueue_user_helm_values_parsed = yamldecode(
-    local.kueue_user_helm_values_content != "" && can(keys(yamldecode(local.kueue_user_helm_values_content)))
+    local.kueue_user_helm_values_content != "" && local.kueue_helm_values_is_mapping
     ? local.kueue_user_helm_values_content
     : "{}"
   )
   kueue_helm_values_not_k8s_manifest = (
     !contains(keys(local.kueue_user_helm_values_parsed), "apiVersion") &&
-    !contains(keys(local.kueue_user_helm_values_parsed), "kind")
+    !contains(keys(local.kueue_user_helm_values_parsed), "kind") &&
+    !(
+      !local.kueue_helm_values_is_mapping &&
+      can(regex("(?m)^(apiVersion|kind)\\s*:", local.kueue_user_helm_values_content))
+    )
+  )
+  kueue_helm_values_check_fields = (
+    local.kueue_helm_values_file_exists &&
+    local.kueue_helm_values_is_mapping &&
+    local.kueue_helm_values_not_k8s_manifest
+  )
+
+  kueue_helm_values_preserves_fullname = alltrue([
+    for k in ["fullnameOverride", "nameOverride"] :
+    !contains(keys(local.kueue_user_helm_values_parsed), k) ||
+    try(local.kueue_user_helm_values_parsed[k] == null, false) ||
+    try(
+      local.kueue_user_helm_values_parsed[k] == tostring(local.kueue_user_helm_values_parsed[k]) &&
+      contains(["", "kueue"], tostring(local.kueue_user_helm_values_parsed[k])),
+      false
+    )
+  ])
+  kueue_user_controller_manager_valid = (
+    !contains(keys(local.kueue_user_helm_values_parsed), "controllerManager") ||
+    can(keys(local.kueue_user_helm_values_parsed.controllerManager))
+  )
+  kueue_user_manager_config_container_valid = (
+    !contains(keys(local.kueue_user_helm_values_parsed), "managerConfig") ||
+    can(keys(local.kueue_user_helm_values_parsed.managerConfig))
   )
 
   # Feature-gate merging by .name (preserves TopologyAwareScheduling and Kueue >= 0.18 DRA disables unless explicitly overridden)
-  kueue_has_user_feature_gates_field = try(local.kueue_user_helm_values_parsed.controllerManager.featureGates != null, false)
+  kueue_has_user_feature_gates_field = contains(
+    try(keys(local.kueue_user_helm_values_parsed.controllerManager), []), "featureGates"
+  )
   kueue_user_feature_gates_valid = (
     !local.kueue_has_user_feature_gates_field || (
+      try(local.kueue_user_helm_values_parsed.controllerManager.featureGates != null, false) &&
       !can(keys(local.kueue_user_helm_values_parsed.controllerManager.featureGates)) &&
-      can([
-        for fg in local.kueue_user_helm_values_parsed.controllerManager.featureGates : {
-          name    = tostring(fg.name)
-          enabled = tobool(fg.enabled)
-        }
-      ])
+      try(alltrue([
+        for fg in local.kueue_user_helm_values_parsed.controllerManager.featureGates :
+        can(keys(fg)) && fg.name != null && fg.name == tostring(fg.name) &&
+        trimspace(tostring(fg.name)) != "" && (fg.enabled == true || fg.enabled == false)
+      ]), false)
     )
   )
   kueue_user_feature_gates = [
@@ -273,11 +311,20 @@ locals {
   )
 
   # Toleration preservation (keeps GKE system node-pool gke-managed-components toleration unless overridden)
-  kueue_has_user_tolerations = (
-    try(local.kueue_user_helm_values_parsed.controllerManager.tolerations != null, false) &&
-    !can(keys(local.kueue_user_helm_values_parsed.controllerManager.tolerations)) &&
-    can(length(local.kueue_user_helm_values_parsed.controllerManager.tolerations))
+  kueue_has_user_tolerations_field = contains(
+    try(keys(local.kueue_user_helm_values_parsed.controllerManager), []), "tolerations"
   )
+  kueue_user_tolerations_valid = (
+    !local.kueue_has_user_tolerations_field || (
+      try(local.kueue_user_helm_values_parsed.controllerManager.tolerations != null, false) &&
+      !can(keys(local.kueue_user_helm_values_parsed.controllerManager.tolerations)) &&
+      try(alltrue([
+        for t in local.kueue_user_helm_values_parsed.controllerManager.tolerations :
+        t != null && can(keys(t))
+      ]), false)
+    )
+  )
+  kueue_has_user_tolerations = local.kueue_has_user_tolerations_field && local.kueue_user_tolerations_valid
   kueue_user_tolerations = yamldecode(
     local.kueue_has_user_tolerations
     ? yamlencode(local.kueue_user_helm_values_parsed.controllerManager.tolerations)
@@ -293,12 +340,17 @@ locals {
   )
 
   # Structured merge for managerConfig.controllerManagerConfigYaml (maps merged, lists replaced)
-  kueue_has_user_manager_config_field = try(local.kueue_user_helm_values_parsed.managerConfig.controllerManagerConfigYaml != null, false)
+  kueue_has_user_manager_config_field = contains(
+    try(keys(local.kueue_user_helm_values_parsed.managerConfig), []), "controllerManagerConfigYaml"
+  )
   kueue_user_manager_config_valid_yaml = (
-    !local.kueue_has_user_manager_config_field || (
+    !local.kueue_has_user_manager_config_field || try(
+      local.kueue_user_helm_values_parsed.managerConfig.controllerManagerConfigYaml != null &&
+      local.kueue_user_helm_values_parsed.managerConfig.controllerManagerConfigYaml == tostring(local.kueue_user_helm_values_parsed.managerConfig.controllerManagerConfigYaml) &&
       !can(keys(local.kueue_user_helm_values_parsed.managerConfig.controllerManagerConfigYaml)) &&
-      try(trimspace(local.kueue_user_helm_values_parsed.managerConfig.controllerManagerConfigYaml) != "", false) &&
-      can(keys(yamldecode(trimspace(local.kueue_user_helm_values_parsed.managerConfig.controllerManagerConfigYaml))))
+      trimspace(local.kueue_user_helm_values_parsed.managerConfig.controllerManagerConfigYaml) != "" &&
+      can(keys(yamldecode(trimspace(local.kueue_user_helm_values_parsed.managerConfig.controllerManagerConfigYaml)))),
+      false
     )
   )
   kueue_user_manager_config = yamldecode(
@@ -310,6 +362,26 @@ locals {
     !local.kueue_has_user_manager_config_field ||
     !local.kueue_user_manager_config_valid_yaml ||
     try(local.kueue_user_manager_config.kind, "Configuration") == "Configuration"
+  )
+  kueue_user_manager_config_no_feature_gates = (
+    !local.kueue_has_user_manager_config_field ||
+    !local.kueue_user_manager_config_valid_yaml ||
+    !contains(keys(local.kueue_user_manager_config), "featureGates") ||
+    try(local.kueue_user_manager_config.featureGates == null, false)
+  )
+  kueue_user_manager_config_sections_valid = (
+    !local.kueue_has_user_manager_config_field || !local.kueue_user_manager_config_valid_yaml || (
+      alltrue([
+        for k in ["health", "metrics", "webhook", "leaderElection", "clientConnection", "integrations", "controller", "waitForPodsReady"] :
+        !contains(keys(local.kueue_user_manager_config), k) ||
+        try(local.kueue_user_manager_config[k] == null, false) ||
+        can(keys(local.kueue_user_manager_config[k]))
+        ]) && (
+        !contains(try(keys(local.kueue_user_manager_config.controller), []), "groupKindConcurrency") ||
+        try(local.kueue_user_manager_config.controller.groupKindConcurrency == null, false) ||
+        can(keys(local.kueue_user_manager_config.controller.groupKindConcurrency))
+      )
+    )
   )
 
   kueue_raw_base_manager_config = yamldecode(file("${path.module}/kueue/kueue-manager-config.yaml"))
@@ -328,10 +400,23 @@ locals {
       integrations = merge(
         local.kueue_raw_base_manager_config.integrations,
         {
-          frameworks = [
-            for f in local.kueue_raw_base_manager_config.integrations.frameworks : f
-            if f != "ray.io/rayservice" || !can(regex("^0\\.(15|16)\\.", var.kueue.version))
-          ]
+          frameworks = concat(
+            [
+              for f in local.kueue_raw_base_manager_config.integrations.frameworks : f
+              if(f != "ray.io/rayservice" || !can(regex("^v?0\\.(15|16)\\.", var.kueue.version))) &&
+              (!contains(["pod", "deployment", "statefulset", "leaderworkerset.x-k8s.io/leaderworkerset"], f) || !can(regex("^v?0\\.15\\.", var.kueue.version)))
+            ],
+            [
+              for f in [
+                "kubeflow.org/paddlejob",
+                "kubeflow.org/pytorchjob",
+                "kubeflow.org/tfjob",
+                "kubeflow.org/xgboostjob",
+                "kubeflow.org/jaxjob",
+              ] : f
+              if !module.kueue_pods_ready_default_on_check.is_greater_than_or_equal
+            ]
+          )
         }
       )
     }
@@ -352,13 +437,15 @@ locals {
   kueue_merged_manager_config = merge(
     local.kueue_base_manager_config,
     local.kueue_user_manager_config,
+    merge([
+      for k in ["health", "metrics", "webhook", "leaderElection", "clientConnection", "integrations"] : {
+        (k) = try(
+          merge(local.kueue_base_manager_config[k], local.kueue_user_manager_config[k]),
+          local.kueue_base_manager_config[k]
+        )
+      }
+    ]...),
     {
-      health           = try(merge(local.kueue_base_manager_config.health, local.kueue_user_manager_config.health), local.kueue_base_manager_config.health)
-      metrics          = try(merge(local.kueue_base_manager_config.metrics, local.kueue_user_manager_config.metrics), local.kueue_base_manager_config.metrics)
-      webhook          = try(merge(local.kueue_base_manager_config.webhook, local.kueue_user_manager_config.webhook), local.kueue_base_manager_config.webhook)
-      leaderElection   = try(merge(local.kueue_base_manager_config.leaderElection, local.kueue_user_manager_config.leaderElection), local.kueue_base_manager_config.leaderElection)
-      clientConnection = try(merge(local.kueue_base_manager_config.clientConnection, local.kueue_user_manager_config.clientConnection), local.kueue_base_manager_config.clientConnection)
-      integrations     = try(merge(local.kueue_base_manager_config.integrations, local.kueue_user_manager_config.integrations), local.kueue_base_manager_config.integrations)
       controller = merge(
         try(merge(local.kueue_base_manager_config.controller, local.kueue_user_manager_config.controller), local.kueue_base_manager_config.controller),
         {

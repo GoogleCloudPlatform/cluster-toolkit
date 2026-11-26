@@ -84,24 +84,48 @@ resource "terraform_data" "kueue_validations" {
       error_message = "kueue.helm_values_path '${local.kueue_helm_values_path}' does not exist. Ensure the file exists and is staged with ghpc_stage(...) when referenced from a blueprint."
     }
     precondition {
-      condition     = !local.install_kueue || local.kueue_helm_values_path == "" || !local.kueue_helm_values_file_exists || local.kueue_helm_values_is_mapping
-      error_message = "kueue.helm_values_path must render to a valid YAML mapping of Kueue Helm chart values."
+      condition     = !local.kueue_helm_values_file_exists || !local.kueue_helm_values_not_k8s_manifest || local.kueue_helm_values_is_mapping
+      error_message = "kueue.helm_values_path must render to a valid single-document YAML mapping of Kueue Helm chart values."
     }
     precondition {
-      condition     = !local.install_kueue || local.kueue_helm_values_path == "" || !local.kueue_helm_values_file_exists || !local.kueue_helm_values_is_mapping || local.kueue_helm_values_not_k8s_manifest
+      condition     = !local.kueue_helm_values_file_exists || local.kueue_helm_values_not_k8s_manifest
       error_message = "kueue.helm_values_path expects Kueue Helm chart values (for example managerConfig.controllerManagerConfigYaml and controllerManager.featureGates), not a Kubernetes manifest with top-level 'apiVersion' or 'kind'. Wrap Kueue Configuration YAML under managerConfig.controllerManagerConfigYaml, or use kueue.config_path for post-install resources such as ClusterQueue and LocalQueue."
     }
     precondition {
-      condition     = !local.install_kueue || local.kueue_helm_values_path == "" || !local.kueue_helm_values_file_exists || !local.kueue_helm_values_is_mapping || local.kueue_user_feature_gates_valid
-      error_message = "controllerManager.featureGates in kueue.helm_values_path must be a YAML list of {name, enabled} objects (for example: [{name: 'VisibilityOnDemand', enabled: true}])."
+      condition     = !local.kueue_helm_values_check_fields || local.kueue_helm_values_preserves_fullname
+      error_message = "fullnameOverride and nameOverride in kueue.helm_values_path must not be customized (leave unset, empty, or 'kueue') so gcluster job can locate kueue-controller-manager and kueue-webhook-service."
     }
     precondition {
-      condition     = !local.install_kueue || local.kueue_helm_values_path == "" || !local.kueue_helm_values_file_exists || !local.kueue_helm_values_is_mapping || local.kueue_user_manager_config_valid_yaml
-      error_message = "managerConfig.controllerManagerConfigYaml in kueue.helm_values_path must be a YAML string (use '|') containing a valid Kueue Configuration mapping."
+      condition     = !local.kueue_helm_values_check_fields || local.kueue_user_controller_manager_valid
+      error_message = "controllerManager in kueue.helm_values_path must be a YAML mapping."
     }
     precondition {
-      condition     = !local.install_kueue || local.kueue_helm_values_path == "" || !local.kueue_helm_values_file_exists || !local.kueue_helm_values_is_mapping || !local.kueue_user_manager_config_valid_yaml || local.kueue_user_manager_config_valid_kind
+      condition     = !local.kueue_helm_values_check_fields || local.kueue_user_feature_gates_valid
+      error_message = "controllerManager.featureGates in kueue.helm_values_path must be a YAML list of {name, enabled} objects with non-empty string name and boolean enabled (for example: [{name: 'VisibilityOnDemand', enabled: true}])."
+    }
+    precondition {
+      condition     = !local.kueue_helm_values_check_fields || local.kueue_user_tolerations_valid
+      error_message = "controllerManager.tolerations in kueue.helm_values_path must be a YAML list of toleration objects."
+    }
+    precondition {
+      condition     = !local.kueue_helm_values_check_fields || local.kueue_user_manager_config_container_valid
+      error_message = "managerConfig in kueue.helm_values_path must be a YAML mapping."
+    }
+    precondition {
+      condition     = !local.kueue_helm_values_check_fields || local.kueue_user_manager_config_valid_yaml
+      error_message = "managerConfig.controllerManagerConfigYaml in kueue.helm_values_path must be a YAML string (use '|') containing a valid single-document Kueue Configuration mapping."
+    }
+    precondition {
+      condition     = !local.kueue_helm_values_check_fields || !local.kueue_user_manager_config_valid_yaml || local.kueue_user_manager_config_valid_kind
       error_message = "managerConfig.controllerManagerConfigYaml in kueue.helm_values_path must have kind 'Configuration' (or omit kind to inherit defaults)."
+    }
+    precondition {
+      condition     = !local.kueue_helm_values_check_fields || !local.kueue_user_manager_config_valid_yaml || !local.kueue_user_manager_config_valid_kind || local.kueue_user_manager_config_no_feature_gates
+      error_message = "featureGates cannot be set inside managerConfig.controllerManagerConfigYaml because Kueue rejects specifying feature gates in both CLI flags and Configuration; set controllerManager.featureGates in kueue.helm_values_path instead."
+    }
+    precondition {
+      condition     = !local.kueue_helm_values_check_fields || !local.kueue_user_manager_config_valid_yaml || !local.kueue_user_manager_config_valid_kind || local.kueue_user_manager_config_sections_valid
+      error_message = "Nested configuration sections in managerConfig.controllerManagerConfigYaml (health, metrics, webhook, leaderElection, clientConnection, integrations, controller, controller.groupKindConcurrency, waitForPodsReady) must be YAML mappings when set."
     }
   }
 }

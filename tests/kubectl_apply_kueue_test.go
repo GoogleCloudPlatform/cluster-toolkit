@@ -17,6 +17,7 @@ package tests
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -32,12 +33,14 @@ import (
 	"github.com/zclconf/go-cty/cty/function"
 	"github.com/zclconf/go-cty/cty/function/stdlib"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
+	yamlv3 "gopkg.in/yaml.v3"
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
 const kubectlApplyModuleDir = "../modules/management/kubectl-apply"
 
 var kueueOrderedLocalNames = []string{
+	"kueue_supported_versions",
 	"enable_pathways",
 	"enable_slicing",
 	"install_kueue",
@@ -49,16 +52,24 @@ var kueueOrderedLocalNames = []string{
 	"kueue_wait_for_pods_ready",
 	"kueue_helm_values_path",
 	"kueue_helm_values_file_exists",
+	"kueue_user_helm_values_raw",
+	"kueue_user_helm_values_is_blank",
 	"kueue_user_helm_values_content",
 	"kueue_helm_values_is_mapping",
 	"kueue_user_helm_values_parsed",
 	"kueue_helm_values_not_k8s_manifest",
+	"kueue_helm_values_check_fields",
+	"kueue_helm_values_preserves_fullname",
+	"kueue_user_controller_manager_valid",
+	"kueue_user_manager_config_container_valid",
 	"kueue_has_user_feature_gates_field",
 	"kueue_user_feature_gates_valid",
 	"kueue_user_feature_gates",
 	"kueue_user_feature_gates_by_name",
 	"kueue_base_feature_gates",
 	"kueue_merged_feature_gates",
+	"kueue_has_user_tolerations_field",
+	"kueue_user_tolerations_valid",
 	"kueue_has_user_tolerations",
 	"kueue_user_tolerations",
 	"kueue_merged_tolerations",
@@ -66,6 +77,8 @@ var kueueOrderedLocalNames = []string{
 	"kueue_user_manager_config_valid_yaml",
 	"kueue_user_manager_config",
 	"kueue_user_manager_config_valid_kind",
+	"kueue_user_manager_config_no_feature_gates",
+	"kueue_user_manager_config_sections_valid",
 	"kueue_raw_base_manager_config",
 	"kueue_base_manager_config",
 	"kueue_merged_wfpr_entry",
@@ -90,25 +103,44 @@ type kueueParsedHCL struct {
 	valuesYAML    hcl.Expression
 }
 
+// yamlDecodeCtyFunc matches Terraform's yamldecode(): rejects empty/comment-only
+// input (EOF) and multi-document streams ('---'), and decodes explicit null (~ / null).
 func yamlDecodeCtyFunc() function.Function {
 	return function.New(&function.Spec{
 		Params: []function.Parameter{{Name: "src", Type: cty.String}},
 		Type:   function.StaticReturnType(cty.DynamicPseudoType),
 		Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
-			jsonBytes, err := sigsyaml.YAMLToJSON([]byte(args[0].AsString()))
-			if err != nil {
+			raw := args[0].AsString()
+			dec := yamlv3.NewDecoder(strings.NewReader(raw))
+			var first yamlv3.Node
+			if err := dec.Decode(&first); err != nil {
 				return cty.NilVal, err
 			}
-			if bytes.Equal(bytes.TrimSpace(jsonBytes), []byte("null")) {
-				return cty.NullVal(cty.DynamicPseudoType), nil
-			}
-			ty, err := ctyjson.ImpliedType(jsonBytes)
-			if err != nil {
+			var extra yamlv3.Node
+			if err := dec.Decode(&extra); err != io.EOF {
+				if err == nil {
+					return cty.NilVal, fmt.Errorf("cannot decode multi-document YAML")
+				}
 				return cty.NilVal, err
 			}
-			return ctyjson.Unmarshal(jsonBytes, ty)
+			return singleYAMLDocToCty(raw)
 		},
 	})
+}
+
+func singleYAMLDocToCty(raw string) (cty.Value, error) {
+	jsonBytes, err := sigsyaml.YAMLToJSON([]byte(raw))
+	if err != nil {
+		return cty.NilVal, err
+	}
+	if bytes.Equal(bytes.TrimSpace(jsonBytes), []byte("null")) {
+		return cty.NullVal(cty.DynamicPseudoType), nil
+	}
+	ty, err := ctyjson.ImpliedType(jsonBytes)
+	if err != nil {
+		return cty.NilVal, err
+	}
+	return ctyjson.Unmarshal(jsonBytes, ty)
 }
 
 func yamlEncodeCtyFunc() function.Function {
@@ -128,23 +160,6 @@ func yamlEncodeCtyFunc() function.Function {
 				return cty.NilVal, err
 			}
 			return cty.StringVal(string(yamlBytes)), nil
-		},
-	})
-}
-
-func mergeCtyFunc() function.Function {
-	return function.New(&function.Spec{
-		VarParam: &function.Parameter{Name: "maps", Type: cty.DynamicPseudoType, AllowNull: true},
-		Type:     function.StaticReturnType(cty.DynamicPseudoType),
-		Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
-			out := make(map[string]cty.Value)
-			for _, arg := range args {
-				if arg.IsNull() || (!arg.Type().IsObjectType() && !arg.Type().IsMapType()) {
-					return cty.NilVal, fmt.Errorf("merge requires non-null map or object")
-				}
-				maps.Copy(out, arg.AsValueMap())
-			}
-			return cty.ObjectVal(out), nil
 		},
 	})
 }
@@ -180,23 +195,7 @@ func fileSystemCtyFuncs() map[string]function.Function {
 		},
 		Type: function.StaticReturnType(cty.String),
 		Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
-			src, err := os.ReadFile(args[0].AsString())
-			if err != nil {
-				return cty.NilVal, err
-			}
-			expr, diags := hclsyntax.ParseTemplate(src, args[0].AsString(), hcl.InitialPos)
-			if diags.HasErrors() {
-				return cty.NilVal, diags
-			}
-			vars := map[string]cty.Value{}
-			if !args[1].IsNull() {
-				maps.Copy(vars, args[1].AsValueMap())
-			}
-			val, diags := expr.Value(&hcl.EvalContext{Variables: vars, Functions: stubTemplateFuncs()})
-			if diags.HasErrors() {
-				return cty.NilVal, diags
-			}
-			return val, nil
+			return renderTemplateFile(args[0].AsString(), args[1])
 		},
 	})
 	return map[string]function.Function{
@@ -204,6 +203,26 @@ func fileSystemCtyFuncs() map[string]function.Function {
 		"fileexists":   fileExistsFn,
 		"templatefile": templateFileFn,
 	}
+}
+
+func renderTemplateFile(path string, varsVal cty.Value) (cty.Value, error) {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return cty.NilVal, err
+	}
+	expr, diags := hclsyntax.ParseTemplate(src, path, hcl.InitialPos)
+	if diags.HasErrors() {
+		return cty.NilVal, diags
+	}
+	vars := map[string]cty.Value{}
+	if !varsVal.IsNull() {
+		maps.Copy(vars, varsVal.AsValueMap())
+	}
+	val, diags := expr.Value(&hcl.EvalContext{Variables: vars, Functions: stubTemplateFuncs()})
+	if diags.HasErrors() {
+		return cty.NilVal, diags
+	}
+	return val, nil
 }
 
 func kueueEvalFunctions() map[string]function.Function {
@@ -219,7 +238,7 @@ func kueueEvalFunctions() map[string]function.Function {
 		Type:   function.StaticReturnType(cty.Bool),
 		Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
 			for it := args[0].ElementIterator(); it.Next(); {
-				if _, v := it.Element(); !v.True() {
+				if _, v := it.Element(); v.IsNull() || !v.True() {
 					return cty.False, nil
 				}
 			}
@@ -231,25 +250,11 @@ func kueueEvalFunctions() map[string]function.Function {
 		Type:   function.StaticReturnType(cty.Bool),
 		Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
 			for it := args[0].ElementIterator(); it.Next(); {
-				if _, v := it.Element(); v.True() {
+				if _, v := it.Element(); !v.IsNull() && v.True() {
 					return cty.True, nil
 				}
 			}
 			return cty.False, nil
-		},
-	})
-	tostringFn := function.New(&function.Spec{
-		Params: []function.Parameter{{Type: cty.String}},
-		Type:   function.StaticReturnType(cty.String),
-		Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
-			return args[0], nil
-		},
-	})
-	toboolFn := function.New(&function.Spec{
-		Params: []function.Parameter{{Type: cty.Bool}},
-		Type:   function.StaticReturnType(cty.Bool),
-		Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
-			return args[0], nil
 		},
 	})
 
@@ -267,11 +272,11 @@ func kueueEvalFunctions() map[string]function.Function {
 		"keys":       stdlib.KeysFunc,
 		"length":     stdlib.LengthFunc,
 		"lookup":     stdlib.LookupFunc,
-		"merge":      mergeCtyFunc(),
+		"merge":      stdlib.MergeFunc,
 		"regex":      stdlib.RegexFunc,
 		"regexall":   stdlib.RegexAllFunc,
-		"tostring":   tostringFn,
-		"tobool":     toboolFn,
+		"tostring":   stdlib.MakeToFunc(cty.String),
+		"tobool":     stdlib.MakeToFunc(cty.Bool),
 		"trimspace":  stdlib.TrimSpaceFunc,
 		"try":        tryfunc.TryFunc,
 		"yamldecode": yamlDecodeCtyFunc(),
@@ -386,13 +391,7 @@ func evalKueueHCL(t *testing.T, parsed kueueParsedHCL, in kueueEvalInput) ([]str
 	if ver == "" {
 		ver = "0.19.6"
 	}
-	localMap := map[string]cty.Value{
-		"kueue_supported_versions": cty.ListVal([]cty.Value{
-			cty.StringVal("0.19.6"), cty.StringVal("0.18.2"), cty.StringVal("0.17.1"),
-			cty.StringVal("0.16.0"), cty.StringVal("0.15.3"), cty.StringVal("0.15.2"),
-			cty.StringVal("0.15.1"), cty.StringVal("0.15.0"),
-		}),
-	}
+	localMap := map[string]cty.Value{}
 	ctx := &hcl.EvalContext{
 		Functions: kueueEvalFunctions(),
 		Variables: map[string]cty.Value{
@@ -427,20 +426,7 @@ func evalKueueHCL(t *testing.T, parsed kueueParsedHCL, in kueueEvalInput) ([]str
 		ctx.Variables["local"] = cty.ObjectVal(localMap)
 	}
 
-	var failedMsgs []string
-	for _, pre := range parsed.preconditions {
-		cond, diags := pre.condition.Value(ctx)
-		if diags.HasErrors() {
-			t.Fatalf("precondition evaluation failed: %v", diags)
-		}
-		if !cond.True() {
-			msgVal, msgDiags := pre.errorMessage.Value(ctx)
-			if msgDiags.HasErrors() {
-				t.Fatalf("precondition error_message evaluation failed: %v", msgDiags)
-			}
-			failedMsgs = append(failedMsgs, msgVal.AsString())
-		}
-	}
+	failedMsgs := evaluatePreconditions(t, parsed.preconditions, ctx)
 
 	valsVal, diags := parsed.valuesYAML.Value(ctx)
 	if diags.HasErrors() {
@@ -454,7 +440,26 @@ func evalKueueHCL(t *testing.T, parsed kueueParsedHCL, in kueueEvalInput) ([]str
 	return valuesYAML, failedMsgs
 }
 
-// simulateHelmValuesMerge mimics Helm's -f values merging (maps deep-merge, slices/scalars replace).
+func evaluatePreconditions(t *testing.T, preconditions []validationRule, ctx *hcl.EvalContext) []string {
+	t.Helper()
+	var failedMsgs []string
+	for _, pre := range preconditions {
+		cond, diags := pre.condition.Value(ctx)
+		if diags.HasErrors() {
+			t.Fatalf("precondition evaluation failed: %v", diags)
+		}
+		if !cond.True() {
+			msgVal, msgDiags := pre.errorMessage.Value(ctx)
+			if msgDiags.HasErrors() {
+				t.Fatalf("precondition error_message evaluation failed: %v", msgDiags)
+			}
+			failedMsgs = append(failedMsgs, msgVal.AsString())
+		}
+	}
+	return failedMsgs
+}
+
+// simulateHelmValuesMerge mimics Helm's -f values merging (maps deep-merge, nil deletes keys, slices/scalars replace).
 func simulateHelmValuesMerge(t *testing.T, layers []string) map[string]any {
 	t.Helper()
 	merged := make(map[string]any)
@@ -470,6 +475,10 @@ func simulateHelmValuesMerge(t *testing.T, layers []string) map[string]any {
 
 func deepMergeMaps(dst, src map[string]any) {
 	for k, v := range src {
+		if v == nil {
+			delete(dst, k)
+			continue
+		}
 		srcMap, srcIsMap := v.(map[string]any)
 		dstMap, dstIsMap := dst[k].(map[string]any)
 		if srcIsMap && dstIsMap {
@@ -509,6 +518,17 @@ func extractFeatureGateMap(t *testing.T, helmValues map[string]any) map[string]b
 		gates[name] = m["enabled"].(bool)
 	}
 	return gates
+}
+
+func extractTolerationKeys(t *testing.T, helmValues map[string]any) []string {
+	t.Helper()
+	cm := helmValues["controllerManager"].(map[string]any)
+	tols := cm["tolerations"].([]any)
+	out := make([]string, 0, len(tols))
+	for _, item := range tols {
+		out = append(out, item.(map[string]any)["key"].(string))
+	}
+	return out
 }
 
 func decodeControllerManagerConfig(t *testing.T, helmValues map[string]any) map[string]any {
@@ -586,10 +606,9 @@ managerConfig:
     managedJobsNamespaceSelector:
       matchExpressions:
         - key: kubernetes.io/metadata.name
-          operator: NotIn
+          operator: In
           values:
-            - kube-system
-            - kueue-system
+            - default
     resources:
       excludeResourcePrefixes:
         - networking.gke.io.networks/
@@ -638,9 +657,9 @@ managerConfig:
 		t.Fatalf("featureGates mismatch:\ngot:  %#v\nwant: %#v", gates, wantGates)
 	}
 
-	tols := merged["controllerManager"].(map[string]any)["tolerations"].([]any)
-	if len(tols) != 2 {
-		t.Fatalf("expected GKE base toleration + user toleration (2 total), got %#v", tols)
+	wantTolKeys := []string{"components.gke.io/gke-managed-components", "dedicated"}
+	if gotTolKeys := extractTolerationKeys(t, merged); !slices.Equal(gotTolKeys, wantTolKeys) {
+		t.Fatalf("toleration keys = %v, want %v", gotTolKeys, wantTolKeys)
 	}
 
 	cfg := decodeControllerManagerConfig(t, merged)
@@ -670,7 +689,47 @@ func assertSharedClusterManagerConfig(t *testing.T, cfg map[string]any) {
 	}
 }
 
-func TestKueueHelmValuesPathwaysPartialAndTemplate(t *testing.T) {
+func TestKueueHelmValuesControllerSizingAndTolerationOverride(t *testing.T) {
+	parsed := readKubectlApplyKueueHCL(t)
+	cpu, mem, replicas := "4", "8Gi", int64(2)
+	valuesPath := writeTempValuesFile(t, "sizing-and-tol.yaml", `
+fullnameOverride: "kueue"
+nameOverride: ""
+controllerManager:
+  replicas: 3
+  tolerations:
+    - key: "components.gke.io/gke-managed-components"
+      operator: "Equal"
+      value: "true"
+      effect: "PreferNoSchedule"
+`)
+	layers, errs := evalKueueHCL(t, parsed, kueueEvalInput{
+		install:            true,
+		version:            "0.19.6",
+		helmValuesPath:     valuesPath,
+		controllerCPU:      &cpu,
+		controllerMemory:   &mem,
+		controllerReplicas: &replicas,
+	})
+	if len(errs) > 0 {
+		t.Fatalf("unexpected validation errors: %v", errs)
+	}
+	merged := simulateHelmValuesMerge(t, layers)
+	cm := merged["controllerManager"].(map[string]any)
+	if cm["replicas"] != float64(3) {
+		t.Fatalf("expected helm_values_path replicas=3 to override controller_replicas=2, got %#v", cm["replicas"])
+	}
+	reqs := cm["manager"].(map[string]any)["resources"].(map[string]any)["requests"].(map[string]any)
+	if reqs["cpu"] != "4" || reqs["memory"] != "8Gi" {
+		t.Fatalf("expected controller_cpu/memory preserved when unset in helm_values_path, got %#v", reqs)
+	}
+	tols := cm["tolerations"].([]any)
+	if len(tols) != 1 || tols[0].(map[string]any)["effect"] != "PreferNoSchedule" {
+		t.Fatalf("expected explicit GKE toleration override without duplication, got %#v", tols)
+	}
+}
+
+func TestKueueHelmValuesPathwaysPartialAndNullWaitForPodsReady(t *testing.T) {
 	parsed := readKubectlApplyKueueHCL(t)
 	tmplPath := writeTempValuesFile(t, "kueue-helm-values.yaml.tftpl", `
 controllerManager:
@@ -702,61 +761,131 @@ managerConfig:
 	if len(errs) > 0 {
 		t.Fatalf("unexpected validation errors: %v", errs)
 	}
-
 	merged := simulateHelmValuesMerge(t, layers)
-	gates := extractFeatureGateMap(t, merged)
-	if gates["TopologyAwareScheduling"] {
-		t.Fatalf("explicit user TopologyAwareScheduling=false should win, got %#v", gates)
+	if extractFeatureGateMap(t, merged)["TopologyAwareScheduling"] {
+		t.Fatalf("explicit user TopologyAwareScheduling=false should win")
 	}
-
 	cfg := decodeControllerManagerConfig(t, merged)
 	wfpr := cfg["waitForPodsReady"].(map[string]any)
 	if wfpr["timeout"] != "30m" || wfpr["recoveryTimeout"] != "0s" || wfpr["requeuingStrategy"] == nil {
 		t.Fatalf("expected Pathways waitForPodsReady defaults preserved alongside requeuingStrategy, got %#v", wfpr)
 	}
-	selector := cfg["managedJobsNamespaceSelector"].(map[string]any)["matchExpressions"].([]any)[0].(map[string]any)
-	if selector["values"].([]any)[0] != "kuberay-system" {
-		t.Fatalf("template var excluded_ns not rendered: %#v", selector)
+
+	// Explicit waitForPodsReady: null in controllerManagerConfigYaml must suppress Pathways waitForPodsReady
+	nullWfprPath := writeTempValuesFile(t, "null-wfpr.yaml", `
+managerConfig:
+  controllerManagerConfigYaml: |
+    waitForPodsReady: null
+`)
+	nullLayers, nullErrs := evalKueueHCL(t, parsed, kueueEvalInput{
+		install:        true,
+		version:        "0.19.6",
+		enablePathways: true,
+		helmValuesPath: nullWfprPath,
+	})
+	if len(nullErrs) > 0 {
+		t.Fatalf("unexpected validation errors for waitForPodsReady: null: %v", nullErrs)
+	}
+	nullCfg := decodeControllerManagerConfig(t, simulateHelmValuesMerge(t, nullLayers))
+	if nullCfg["waitForPodsReady"] != nil {
+		t.Fatalf("expected waitForPodsReady to remain nil when explicitly nulled, got %#v", nullCfg["waitForPodsReady"])
+	}
+}
+
+func TestKueueHelmValuesStagedTftplHashAndBlankFiles(t *testing.T) {
+	parsed := readKubectlApplyKueueHCL(t)
+
+	// ghpc_stage appends _<10-hex-chars> after .tftpl; must still render via templatefile() when template vars are nil
+	stagedPath := writeTempValuesFile(t, "kueue-helm-values.yaml.tftpl_a1b2c3d4e5", `
+%{ if true ~}
+enablePrometheus: true
+%{ endif ~}
+`)
+	layers, errs := evalKueueHCL(t, parsed, kueueEvalInput{
+		install:        true,
+		version:        "0.19.6",
+		helmValuesPath: stagedPath,
+	})
+	if len(errs) > 0 {
+		t.Fatalf("unexpected validation errors on staged .tftpl_<hash>: %v", errs)
+	}
+	if simulateHelmValuesMerge(t, layers)["enablePrometheus"] != true {
+		t.Fatalf("staged .tftpl_<hash> template directive was not rendered")
+	}
+
+	// Comment-only and conditionally empty templates must succeed as no-ops
+	for name, content := range map[string]string{
+		"comments.yaml":               "# comment only\n   # another comment\n",
+		"empty.yaml.tftpl_0123456789": "%{ if false }enablePrometheus: true%{ endif }\n",
+		"explicit-null.yaml":          "---\n~\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := writeTempValuesFile(t, name, content)
+			gotLayers, gotErrs := evalKueueHCL(t, parsed, kueueEvalInput{
+				install:        true,
+				version:        "0.19.6",
+				helmValuesPath: p,
+			})
+			if len(gotErrs) > 0 {
+				t.Fatalf("blank/comment-only file %s failed validation: %v", name, gotErrs)
+			}
+			if len(gotLayers) != 2 {
+				t.Fatalf("expected 2 default layers for blank file %s, got %d", name, len(gotLayers))
+			}
+		})
 	}
 }
 
 func TestKueueHelmValuesOlderVersionCompatAndInstallFalse(t *testing.T) {
 	parsed := readKubectlApplyKueueHCL(t)
 
-	// install = false with missing path must not error or fail preconditions
 	missing := "/nonexistent/path/kueue-values.yaml"
 	if _, errs := evalKueueHCL(t, parsed, kueueEvalInput{install: false, helmValuesPath: &missing}); len(errs) > 0 {
 		t.Fatalf("install=false must skip file checks, got %v", errs)
 	}
 
-	// Kueue 0.16.0 partial manager config must not inject >=0.17 rayservice, >=0.18 DRA gates, or >=0.19 Cohort gkc
 	partialPath := writeTempValuesFile(t, "partial.yaml", `
 managerConfig:
   controllerManagerConfigYaml: |
     manageJobsWithoutQueueName: true
 `)
+	assertOlderVersionDefaults(t, parsed, partialPath, "0.15.2", false, false)
+	assertOlderVersionDefaults(t, parsed, partialPath, "0.16.0", true, false)
+	assertOlderVersionDefaults(t, parsed, partialPath, "0.17.1", true, true)
+}
+
+func assertOlderVersionDefaults(t *testing.T, parsed kueueParsedHCL, path *string, ver string, wantPodIntegration, wantRayService bool) {
+	t.Helper()
 	layers, errs := evalKueueHCL(t, parsed, kueueEvalInput{
 		install:        true,
-		version:        "0.16.0",
-		helmValuesPath: partialPath,
+		version:        ver,
+		helmValuesPath: path,
 	})
 	if len(errs) > 0 {
-		t.Fatalf("unexpected validation errors on 0.16.0: %v", errs)
+		t.Fatalf("unexpected validation errors on %s: %v", ver, errs)
 	}
 	merged := simulateHelmValuesMerge(t, layers)
 	gates := extractFeatureGateMap(t, merged)
 	if len(gates) != 1 || !gates["TopologyAwareScheduling"] {
-		t.Fatalf("expected only TopologyAwareScheduling on 0.16.0, got %#v", gates)
+		t.Fatalf("expected only TopologyAwareScheduling on %s, got %#v", ver, gates)
 	}
 	cfg := decodeControllerManagerConfig(t, merged)
 	gkc := cfg["controller"].(map[string]any)["groupKindConcurrency"].(map[string]any)
 	if _, hasCohort := gkc["Cohort.kueue.x-k8s.io"]; hasCohort {
-		t.Fatalf("0.16.0 base config must not inject Cohort.kueue.x-k8s.io: %#v", gkc)
+		t.Fatalf("%s base config must not inject Cohort.kueue.x-k8s.io: %#v", ver, gkc)
 	}
+	var fws []string
 	for _, f := range cfg["integrations"].(map[string]any)["frameworks"].([]any) {
-		if f == "ray.io/rayservice" {
-			t.Fatalf("0.16.0 base config must not inject ray.io/rayservice")
-		}
+		fws = append(fws, f.(string))
+	}
+	if slices.Contains(fws, "pod") != wantPodIntegration {
+		t.Fatalf("%s pod integration = %t, want %t (%v)", ver, !wantPodIntegration, wantPodIntegration, fws)
+	}
+	if slices.Contains(fws, "ray.io/rayservice") != wantRayService {
+		t.Fatalf("%s rayservice = %t, want %t (%v)", ver, !wantRayService, wantRayService, fws)
+	}
+	if !slices.Contains(fws, "kubeflow.org/pytorchjob") {
+		t.Fatalf("%s must retain Kubeflow Training v1 pytorchjob default (%v)", ver, fws)
 	}
 }
 
@@ -770,46 +899,32 @@ func TestKueueHelmValuesValidationGuardrails(t *testing.T) {
 		content    string
 		wantSubstr string
 	}{
-		{
-			name:       "missing_file",
-			path:       &missing,
-			wantSubstr: "does not exist",
-		},
-		{
-			name:       "invalid_yaml_syntax",
-			content:    "controllerManager: [unclosed",
-			wantSubstr: "valid YAML mapping",
-		},
-		{
-			name:       "yaml_list_not_mapping",
-			content:    "- item1\n- item2\n",
-			wantSubstr: "valid YAML mapping",
-		},
-		{
-			name:       "raw_configmap_manifest",
-			content:    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: kueue-manager-config\n",
-			wantSubstr: "not a Kubernetes manifest",
-		},
-		{
-			name:       "raw_clusterqueue_manifest",
-			content:    "apiVersion: kueue.x-k8s.io/v1beta2\nkind: ClusterQueue\nmetadata:\n  name: cq\n",
-			wantSubstr: "kueue.config_path",
-		},
-		{
-			name:       "feature_gates_as_map",
-			content:    "controllerManager:\n  featureGates:\n    LocalQueueDefaulting: true\n",
-			wantSubstr: "controllerManager.featureGates",
-		},
-		{
-			name:       "manager_config_as_nested_map_not_string",
-			content:    "managerConfig:\n  controllerManagerConfigYaml:\n    manageJobsWithoutQueueName: true\n",
-			wantSubstr: "must be a YAML string",
-		},
-		{
-			name:       "manager_config_wrong_kind",
-			content:    "managerConfig:\n  controllerManagerConfigYaml: |\n    apiVersion: v1\n    kind: ConfigMap\n",
-			wantSubstr: "kind 'Configuration'",
-		},
+		{name: "missing_file", path: &missing, wantSubstr: "does not exist"},
+		{name: "invalid_yaml_syntax", content: "controllerManager: [unclosed", wantSubstr: "single-document YAML mapping"},
+		{name: "yaml_list_not_mapping", content: "- item1\n- item2\n", wantSubstr: "single-document YAML mapping"},
+		{name: "multi_doc_non_k8s_yaml", content: "enablePrometheus: true\n---\nenableCertManager: true\n", wantSubstr: "single-document YAML mapping"},
+		{name: "raw_configmap_manifest", content: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: kueue-manager-config\n", wantSubstr: "not a Kubernetes manifest"},
+		{name: "raw_clusterqueue_manifest", content: "apiVersion: kueue.x-k8s.io/v1beta2\nkind: ClusterQueue\nmetadata:\n  name: cq\n", wantSubstr: "kueue.config_path"},
+		{name: "multi_doc_k8s_manifests", content: "apiVersion: kueue.x-k8s.io/v1beta2\nkind: ResourceFlavor\nmetadata:\n  name: rf\n---\napiVersion: kueue.x-k8s.io/v1beta2\nkind: ClusterQueue\nmetadata:\n  name: cq\n", wantSubstr: "kueue.config_path"},
+		{name: "fullname_override_custom", content: "fullnameOverride: custom-kueue\n", wantSubstr: "fullnameOverride and nameOverride"},
+		{name: "name_override_custom", content: "nameOverride: custom-kueue\n", wantSubstr: "fullnameOverride and nameOverride"},
+		{name: "controller_manager_null", content: "controllerManager: null\n", wantSubstr: "controllerManager in kueue.helm_values_path must be a YAML mapping"},
+		{name: "feature_gates_null", content: "controllerManager:\n  featureGates:\n", wantSubstr: "controllerManager.featureGates"},
+		{name: "feature_gates_as_map", content: "controllerManager:\n  featureGates:\n    VisibilityOnDemand: true\n", wantSubstr: "controllerManager.featureGates"},
+		{name: "feature_gates_null_name", content: "controllerManager:\n  featureGates:\n    - name: null\n      enabled: true\n", wantSubstr: "controllerManager.featureGates"},
+		{name: "feature_gates_blank_name", content: "controllerManager:\n  featureGates:\n    - name: \"   \"\n      enabled: true\n", wantSubstr: "controllerManager.featureGates"},
+		{name: "feature_gates_null_enabled", content: "controllerManager:\n  featureGates:\n    - name: VisibilityOnDemand\n      enabled: null\n", wantSubstr: "controllerManager.featureGates"},
+		{name: "feature_gates_string_enabled", content: "controllerManager:\n  featureGates:\n    - name: VisibilityOnDemand\n      enabled: \"true\"\n", wantSubstr: "controllerManager.featureGates"},
+		{name: "tolerations_null", content: "controllerManager:\n  tolerations:\n", wantSubstr: "controllerManager.tolerations"},
+		{name: "tolerations_string", content: "controllerManager:\n  tolerations: \"invalid\"\n", wantSubstr: "controllerManager.tolerations"},
+		{name: "tolerations_map", content: "controllerManager:\n  tolerations:\n    key: foo\n", wantSubstr: "controllerManager.tolerations"},
+		{name: "manager_config_null", content: "managerConfig: null\n", wantSubstr: "managerConfig in kueue.helm_values_path must be a YAML mapping"},
+		{name: "manager_config_yaml_null", content: "managerConfig:\n  controllerManagerConfigYaml: null\n", wantSubstr: "must be a YAML string"},
+		{name: "manager_config_as_nested_map_not_string", content: "managerConfig:\n  controllerManagerConfigYaml:\n    manageJobsWithoutQueueName: true\n", wantSubstr: "must be a YAML string"},
+		{name: "manager_config_wrong_kind", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    apiVersion: v1\n    kind: ConfigMap\n", wantSubstr: "kind 'Configuration'"},
+		{name: "manager_config_feature_gates_conflict", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    featureGates:\n      VisibilityOnDemand: true\n", wantSubstr: "featureGates cannot be set inside managerConfig.controllerManagerConfigYaml"},
+		{name: "manager_config_invalid_section_type", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    integrations:\n      - batch/job\n", wantSubstr: "Nested configuration sections"},
+		{name: "manager_config_invalid_gkc_type", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    controller:\n      groupKindConcurrency:\n        - Pod\n", wantSubstr: "Nested configuration sections"},
 	}
 
 	for _, tc := range cases {
@@ -823,12 +938,11 @@ func TestKueueHelmValuesValidationGuardrails(t *testing.T) {
 				version:        "0.19.6",
 				helmValuesPath: p,
 			})
-			if len(errs) == 0 {
-				t.Fatalf("expected validation failure containing %q, but all preconditions passed", tc.wantSubstr)
+			if len(errs) != 1 {
+				t.Fatalf("got %d validation errors, want 1:\n%s", len(errs), strings.Join(errs, "\n"))
 			}
-			joined := strings.Join(errs, "\n")
-			if !strings.Contains(joined, tc.wantSubstr) {
-				t.Fatalf("expected error containing %q, got:\n%s", tc.wantSubstr, joined)
+			if !strings.Contains(errs[0], tc.wantSubstr) {
+				t.Fatalf("expected error containing %q, got:\n%s", tc.wantSubstr, errs[0])
 			}
 		})
 	}
