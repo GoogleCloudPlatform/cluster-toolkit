@@ -65,6 +65,7 @@ urlpatterns = [
         name='partition-delete'
     ),
     path("vpc/<int:pk>", VPCDetailView.as_view(), name="vpc-detail"),
+    path("vpc/log/<int:pk>", VPCLogView.as_view(), name="vpc-log"),
     path(
         "application/<int:pk>",
         ApplicationDetailView.as_view(),

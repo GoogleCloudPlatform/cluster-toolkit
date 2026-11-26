@@ -17,7 +17,6 @@
 
 import json
 import logging
-import os
 import subprocess
 from pathlib import Path
 
@@ -96,81 +95,44 @@ def create_filesystem(fs: Filesystem) -> None:
         raise NotImplementedError("No support yet for this filesystem")
 
 
-def _run_ghpc(target_dir: Path, cred_env: dict) -> None:
-    ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
-
-    # env= replaces the whole environment, so add the credential to the real
-    # one, as clusterinfo.py's _run_ghpc does; without HOME, ghpc fails.
-    env = os.environ.copy()
-    env.update(cred_env)
-
-    try:
-        logger.info("Invoking ghpc create")
-        log_out_fn = target_dir / "ghpc_create_log.stdout"
-        log_err_fn = target_dir / "ghpc_create_log.stderr"
-        with log_out_fn.open("wb") as log_out:
-            with log_err_fn.open("wb") as log_err:
-                subprocess.run(
-                    [ghpc_path, "create", "filesystem.yaml"],
-                    cwd=target_dir,
-                    stdout=log_out,
-                    stderr=log_err,
-                    check=True,
-                    env=env,
-                )
-    except subprocess.CalledProcessError as cpe:
-        logger.error("ghpc exec failed", exc_info=cpe)
-        # No logs from stdout/err - get dumped to files
-        raise
-
-
 def start_filesystem(fs: Filesystem) -> None:
-    """Effectively, just 'terraform apply'"""
+    """`gcluster create` and `gcluster deploy` the filesystem's blueprint."""
     fs.cloud_state = "cm"
     fs.save()
+    base_dir = _base_dir_for_fs(fs)
+    creds = _get_credentials_file(fs)
     try:
-        extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": _get_credentials_file(fs)
-        }
-        _run_ghpc(_base_dir_for_fs(fs), extra_env)
+        logger.info("Invoking gcluster create/deploy for fs %s:%s",
+                    fs.id, fs.name)
+        utils.run_gcluster(base_dir, "create", "filesystem.yaml", "-w",
+                           credentials_file=creds)
+        utils.run_gcluster(base_dir, "deploy", fs.name, "--auto-approve",
+                           credentials_file=creds)
 
-        target_dir = _tf_dir_for_fs(fs)
-        utils.run_terraform(target_dir, "init", extra_env=extra_env)
-        utils.run_terraform(target_dir, "plan", extra_env=extra_env)
-
-        logger.info("Invoking terraform apply for fs %s:%s", fs.id, fs.name)
-        utils.run_terraform(target_dir, "apply", extra_env=extra_env)
-
-        logger.info(
-            "terraform apply complete, getting status for fs %s:%s",
-            fs.id,
-            fs.name,
+        logger.info("gcluster deploy complete, getting status for fs %s:%s",
+                    fs.id, fs.name)
+        state = utils.get_terraform_state(
+            _tf_dir_for_fs(fs),
+            {"GOOGLE_APPLICATION_CREDENTIALS": str(creds)},
         )
-        (out_fn, _) = utils.run_terraform(
-            target_dir, "output", arguments=["-json"], extra_env=extra_env
-        )
-        with out_fn.open("r") as outputfp:
-            results = json.load(outputfp)
-            data = results[f"network_storage_{fs.name}"]["value"]
-            fs.cloud_id = f"network_storage_{fs.name}"
-            fs.hostname_or_ip = data["server_ip"]
-            fs.cloud_state = "m"
-            fs.save()
+        data = state["outputs"][f"network_storage_{fs.name}"]["value"]
+        fs.cloud_id = f"network_storage_{fs.name}"
+        fs.hostname_or_ip = data["server_ip"]
+        fs.cloud_state = "m"
+        fs.save()
     except subprocess.CalledProcessError as cpe:
         fs.cloud_state = "nm"
         fs.save()
-        logger.error("Terraform apply failed", exc_info=cpe)
+        logger.error("gcluster deploy failed", exc_info=cpe)
         if cpe.stdout:
-            logger.info("TF stdout:\n%s\n", cpe.stdout.decode("utf-8"))
-        if cpe.stderr:
-            logger.info("TF stderr:\n%s\n", cpe.stderr.decode("utf-8"))
+            logger.info("gcluster output:\n%s\n", cpe.stdout.decode("utf-8"))
         raise
 
 
 def destroy_filesystem(fs: Filesystem) -> None:
-    target_dir = _tf_dir_for_fs(fs)
-    extra_env = {"GOOGLE_APPLICATION_CREDENTIALS": _get_credentials_file(fs)}
-    utils.run_terraform(target_dir, "destroy", extra_env=extra_env)
+    utils.run_gcluster(_base_dir_for_fs(fs), "destroy", fs.name,
+                       "--auto-approve",
+                       credentials_file=_get_credentials_file(fs))
 
 
 def get_terraform_dir(fs: Filesystem) -> Path:

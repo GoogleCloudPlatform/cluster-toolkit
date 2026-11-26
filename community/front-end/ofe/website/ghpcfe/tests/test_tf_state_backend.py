@@ -171,8 +171,8 @@ class WriteBackendTfTests(unittest.TestCase):
             self.assertIn('prefix = "vpcs/vpc_3"', content)
 
     def test_is_idempotent(self):
-        # create_subnet re-enters a VPC directory created earlier, so writing
-        # the backend again must leave it unchanged rather than duplicating it.
+        # A later run re-enters a directory created earlier, so writing the
+        # backend again must leave it unchanged rather than duplicating it.
         with tempfile.TemporaryDirectory() as tmp:
             first = self._write(tmp, "vpcs/vpc_3").read_text()
             second = self._write(tmp, "vpcs/vpc_3").read_text()
@@ -302,10 +302,10 @@ class BlueprintBackendTests(unittest.TestCase):
 
 
 class RawTemplateBackendTests(unittest.TestCase):
-    """Networks and workbenches get their backend written at copy time."""
+    """Workbenches get their backend written at copy time."""
 
     def test_backend_written_after_template_copy(self):
-        for name in ("vpc.py", "workbenchinfo.py"):
+        for name in ("workbenchinfo.py",):
             with self.subTest(module=name):
                 text = (CLUSTER_MANAGER / name).read_text()
                 self.assertIn("write_backend_tf(", text)
@@ -341,13 +341,9 @@ class TerraformInitCredentialsTests(unittest.TestCase):
     in a different project.
     """
 
-    PROVISIONING_MODULES = (
-        "clusterinfo.py",
-        "image.py",
-        "vpc.py",
-        "filesystem.py",
-        "workbenchinfo.py",
-    )
+    # Only workbenches still run Terraform directly; every blueprint goes
+    # through gcluster (utils.run_gcluster), which passes the credential.
+    PROVISIONING_MODULES = ("workbenchinfo.py",)
 
     def test_every_init_passes_credentials(self):
         # Matches a run_terraform(..., "init" ...) call and the rest of its

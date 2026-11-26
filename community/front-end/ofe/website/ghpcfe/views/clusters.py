@@ -793,7 +793,7 @@ class ClusterLogFileView(LoginRequiredMixin, StreamingFileView):
 
     bucket = utils.load_config()["server"]["gcs_bucket"]
     valid_logs = [
-        {"title": "Terraform Log", "type": TerraformLogFile, "args": ()},
+        {"title": "Deployment Log", "type": TerraformLogFile, "args": ()},
         {
             "title": "Startup Log",
             "type": GCSFile,

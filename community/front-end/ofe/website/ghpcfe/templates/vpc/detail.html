@@ -20,6 +20,29 @@
   {% if "c" in object.cloud_state or "t" in object.cloud_state or "d" in object.cloud_state %}
   <meta http-equiv="refresh" content="15" />
   {% endif %}
+  {% if object.cloud_state != "nm" %}
+  <script>
+window.onload = function (event) {
+  var xhr_ = new XMLHttpRequest();
+  xhr_.open("GET", "{% url 'vpc-log' object.id %}", true);
+  xhr_.onprogress = function () {
+    $('#id_log_1').append(xhr_.responseText);
+    $('#id_log_1').scrollTop($('#id_log_1')[0].scrollHeight);
+  }
+  xhr_.onload = function () {
+    $('#id_log_1').val(xhr_.responseText);
+    $('#id_log_1').scrollTop($('#id_log_1')[0].scrollHeight);
+  }
+  xhr_.send()
+}
+  </script>
+  <style>
+.log-file {
+  white-space: pre;
+  font-family: monospace;
+}
+  </style>
+  {% endif %}
 {% endblock %}
 
 {% block content %}
@@ -134,6 +157,27 @@
     {% if "m" in object.cloud_state %}
     <a href="{% url 'vpc-destroy' object.id %}" class="btn btn-primary"">Destroy</a>
     {% endif %}
+    {% endif %}
+
+    {% if psa_blocked_project %}
+    <div class="alert alert-warning mt-3">
+      <p><b>Destroy is waiting on private service access.</b> Google has not
+      yet released this network's Service Networking connection, usually
+      because a Cloud SQL instance on it was deleted recently. Retry Destroy
+      later.</p>
+      <p class="mb-1">If nothing else uses private service access on this
+      network (for example Cloud SQL or Memorystore created outside OFE), you
+      can remove the peering now and then retry Destroy:</p>
+      <pre class="mb-0">gcloud compute networks peerings delete servicenetworking-googleapis-com \
+  --network={{ object.cloud_id }} --project={{ psa_blocked_project }}</pre>
+    </div>
+    {% endif %}
+
+    {% if object.cloud_state != "nm" %}
+    <hr>
+    <div><h5>gcluster log...</h5>
+        <textarea class="log-file form-control" id="id_log_1" rows=10 disabled readonly></textarea>
+    </div>
     {% endif %}
 
 {% endblock %}

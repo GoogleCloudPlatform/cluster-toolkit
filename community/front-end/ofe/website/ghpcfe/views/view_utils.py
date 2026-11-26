@@ -59,7 +59,13 @@ class LocalFile:
 
 
 class TerraformLogFile(LocalFile):
-    """Terraform log file helper"""
+    """Deployment log helper.
+
+    prefix is a deployment group folder (<base>/<deployment>/<group>). The
+    log is <base>/gcluster.log, written by cluster_manager.utils.run_gcluster;
+    resources deployed by earlier OFE versions fall back to the Terraform logs
+    in the group folder.
+    """
 
     def __init__(self, prefix):
         self.prefix = Path(prefix)
@@ -69,6 +75,10 @@ class TerraformLogFile(LocalFile):
         self.prefix = Path(prefix)
 
     def get_file(self):
+        gcluster_log = self.prefix.parent.parent / "gcluster.log"
+        if gcluster_log.exists():
+            return gcluster_log
+
         for phase in ["destroy", "apply", "plan", "init"]:
             tf_log = self.prefix / f"terraform_{phase}_log.stderr"
 
@@ -86,7 +96,8 @@ class TerraformLogFile(LocalFile):
         return tf_log
 
     def get_filename(self):
-        return "terraform.log"
+        name = self.get_file().name
+        return name if name == "gcluster.log" else "terraform.log"
 
 
 class GCSFile:
