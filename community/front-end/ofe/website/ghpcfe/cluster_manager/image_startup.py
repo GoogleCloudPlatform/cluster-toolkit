@@ -25,9 +25,8 @@ that reports its result, success or failure, under the instance name from the
 metadata server.
 
 Temporary: the upstream fix (hashicorp/packer-plugin-googlecompute#355) is
-merged but not released. The `~> 1.2.5` constraint in
-modules/packer/custom-image/versions.pkr.hcl picks up a fixed release, after
-which this wrapper can be removed.
+released in v1.2.8, and modules/packer/custom-image/versions.pkr.hcl now
+requires ~> 1.2.8, so this wrapper can be removed in a follow-up cleanup.
 
 Standard library only, so tests can load it without Django.
 """
