@@ -32,9 +32,10 @@ locals {
 
   combined_yaml = join("\n---\n", [for manifest in [local.templated_manifest, local.custom_manifest] : manifest if trimspace(manifest) != ""])
 
-  manifest_docs = [for doc in split("\n---", local.combined_yaml) : trimspace(doc) if length(trimspace(doc)) > 0]
+  manifest_docs     = [for doc in split("\n---", local.combined_yaml) : trimspace(doc) if length(trimspace(doc)) > 0]
+  decoded_manifests = [for doc in local.manifest_docs : try(yamldecode(doc), null)]
   parsed_manifests = {
-    for idx, doc in local.manifest_docs : idx => yamldecode(doc)
+    for idx, doc in local.decoded_manifests : idx => doc if can(doc.apiVersion)
   }
 }
 
