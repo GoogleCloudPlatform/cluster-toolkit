@@ -57,8 +57,11 @@ steps:
     echo '      add_deployment_name_before_prefix: true' >> $${EXAMPLE_BP}
 
     bash tools/add_ttl_label.sh "$${EXAMPLE_BP}"
+    SA_EMAIL=$(gcloud config get-value account)
+    SA_UNIQUE_ID=$(gcloud iam service-accounts describe "$${SA_EMAIL}" --format="value(uniqueId)")
+    OSLOGIN_USER="sa_$${SA_UNIQUE_ID}"
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} full_build_id=$BUILD_ID" \
+        --user="$${OSLOGIN_USER}" --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} full_build_id=$BUILD_ID" \
         --extra-vars="@tools/cloud-build/daily-tests/tests/gke-custom-compute-class.yml" \
         --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
         --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \

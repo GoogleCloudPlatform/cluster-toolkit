@@ -26,6 +26,7 @@
       --region {{ region }} --project {{ custom_vars.project }} --dns-endpoint \
       || gcloud container clusters get-credentials {{ deployment_name }} \
       --zone {{ zone }} --project {{ custom_vars.project }} --dns-endpoint
+  changed_when: false
 
 - name: Verify inline and template-defined ComputeClass CRDs exist
   delegate_to: localhost
