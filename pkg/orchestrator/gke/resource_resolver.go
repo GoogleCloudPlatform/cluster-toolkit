@@ -749,10 +749,22 @@ func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefin
 	}, isDynamicSlicing, isStaticSlicing, nil
 }
 
-func (g *GKEOrchestrator) resolveGKETPUHardware(job *orchestrator.JobDefinition) (isDynamicSlicing, isStaticSlicing bool, err error) {
-	if job.NumNodesSpecified {
-		return false, false, fmt.Errorf("--num-nodes cannot be used with TPU jobs (it is calculated automatically from topology)")
+// errTPUNumNodes is shared by the GKE preflight and the k8s post-discovery TPU --num-nodes checks.
+var errTPUNumNodes = errors.New("--num-nodes cannot be used with TPU jobs (it is calculated automatically from topology)")
+
+// validateGKETPUNumNodes rejects --num-nodes on GKE TPU jobs before any cluster access or add-on prompts. In k8s
+// mode the equivalent check runs after node discovery, since custom TPU pools are only identifiable from inventory.
+func validateGKETPUNumNodes(job orchestrator.JobDefinition) error {
+	if !job.NumNodesSpecified {
+		return nil
 	}
+	if config.IsTPU(job.ComputeType) {
+		return errTPUNumNodes
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) resolveGKETPUHardware(job *orchestrator.JobDefinition) (isDynamicSlicing, isStaticSlicing bool, err error) {
 	isDynamicSlicing, isStaticSlicing, err = g.resolveTPURequirements(job)
 	if err != nil {
 		return false, false, err

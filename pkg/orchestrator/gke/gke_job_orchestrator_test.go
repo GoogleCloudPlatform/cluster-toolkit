@@ -7203,3 +7203,58 @@ func TestInitializeK8sJobSubmission_ValidatesResolvedCustomTemplate(t *testing.T
 		t.Fatalf("initializeK8sJobSubmission(broken custom job.tmpl) err = %v, want job.tmpl validation error", err)
 	}
 }
+
+func TestResolveK8sGKETPUAcceleratorLabel_NoPoolFallbackNeverEmitsRawMachineType(t *testing.T) {
+	orc := &GKEOrchestrator{
+		mode:              orchestrator.TypeK8s,
+		submissionSession: submissionSession{inventory: &k8s.Inventory{LabelScheme: k8s.SchemeGKE, ExplicitMode: true}},
+	}
+	for machineType, want := range map[string]string{
+		"ct5l-hightpu-8t":   "",
+		"bm-host":           "",
+		"ct5lp-hightpu-4t":  "tpu-v5-lite-podslice",
+		"ct6e-standard-4t":  "tpu-v6e-slice",
+		"tpu7x-standard-4t": "tpu7x",
+	} {
+		if got := orc.resolveK8sGKEAcceleratorLabel(machineType, JobProfile{}, true); got != want {
+			t.Errorf("resolveK8sGKEAcceleratorLabel(%q, no pool) = %q, want %q", machineType, got, want)
+		}
+	}
+	observed := JobProfile{K8sPool: &k8s.PoolCapacity{IsTPU: true, GKETPUAcceleratorLabel: "tpu-v5-lite-device"}}
+	if got := orc.resolveK8sGKEAcceleratorLabel("ct5l-hightpu-8t", observed, true); got != "tpu-v5-lite-device" {
+		t.Errorf("resolveK8sGKEAcceleratorLabel(ct5l-hightpu-8t, observed pool) = %q, want tpu-v5-lite-device", got)
+	}
+}
+
+func TestGKELocalPreflight_RejectsTPUNumNodesBeforeClusterAccess(t *testing.T) {
+	mockExec := NewMockExecutor(nil)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = orchestrator.TypeGKE
+	sm := &StorageManager{orchestrator: orc}
+	for _, ct := range []string{"v6e-8", "ct6e-standard-4t", "tpu7x"} {
+		err := orc.validateSubmitLocalPreflight(sm, orchestrator.JobDefinition{ComputeType: ct, NumNodesSpecified: true, NumSlices: 1})
+		if !errors.Is(err, errTPUNumNodes) {
+			t.Errorf("GKE preflight(%q, --num-nodes) err = %v, want errTPUNumNodes", ct, err)
+		}
+	}
+	if len(mockExec.calls) != 0 || len(mockExec.timeouts) != 0 {
+		t.Errorf("GKE preflight executed commands %v, want none before rejecting --num-nodes", mockExec.calls)
+	}
+
+	for _, job := range []orchestrator.JobDefinition{
+		{ComputeType: "v6e-8", NumSlices: 1},
+		{ComputeType: "n2-standard-32", NumNodesSpecified: true, NumSlices: 1},
+		{ComputeType: "nvidia-l4", NumNodesSpecified: true, NumSlices: 1},
+	} {
+		if err := validateGKETPUNumNodes(job); err != nil {
+			t.Errorf("validateGKETPUNumNodes(%+v) err = %v, want nil", job, err)
+		}
+	}
+
+	k8sOrc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	k8sOrc.mode = orchestrator.TypeK8s
+	err := k8sOrc.validateSubmitLocalPreflight(&StorageManager{orchestrator: k8sOrc}, orchestrator.JobDefinition{ComputeType: "v6e-8", NumNodesSpecified: true, NumSlices: 1})
+	if errors.Is(err, errTPUNumNodes) {
+		t.Errorf("k8s preflight err = %v; TPU --num-nodes must be checked after node discovery in k8s mode", err)
+	}
+}

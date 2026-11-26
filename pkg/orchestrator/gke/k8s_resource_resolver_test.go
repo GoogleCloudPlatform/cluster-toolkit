@@ -482,3 +482,133 @@ func TestResolveAndValidateTPUSlices_Tier3DuplicatePipeAndProfileIsTPU(t *testin
 		t.Errorf("validatePostHardwareChecks(IsTPU=false on bm-host) unexpected err = %v", err)
 	}
 }
+
+type k8sPoolResolutionCase struct {
+	name        string
+	inv         *k8s.Inventory
+	job         orchestrator.JobDefinition
+	wantErr     string
+	wantTPU     bool
+	wantCPU     bool
+	wantCap     int
+	wantTPUType string
+}
+
+func runK8sPoolResolutionCase(t *testing.T, tc k8sPoolResolutionCase) {
+	t.Helper()
+	orc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: tc.inv,
+			addons:    addonPlan{resolved: true, jobSetEnabled: true},
+		},
+	}
+	job := tc.job
+	prof, _, _, err := orc.resolveK8sHardwareRequirements(&job)
+	if tc.wantErr != "" {
+		if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+			t.Fatalf("resolveK8sHardwareRequirements() err = %v, want substring %q", err, tc.wantErr)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("resolveK8sHardwareRequirements() unexpected err = %v", err)
+	}
+	if prof.IsTPU != tc.wantTPU || prof.IsCPUMachine != tc.wantCPU || (tc.wantCap > 0 && prof.CapacityCount != tc.wantCap) {
+		t.Errorf("profile = {IsTPU:%v IsCPU:%v Cap:%d}, want {IsTPU:%v IsCPU:%v Cap:%d}", prof.IsTPU, prof.IsCPUMachine, prof.CapacityCount, tc.wantTPU, tc.wantCPU, tc.wantCap)
+	}
+	if tc.wantTPUType != "" && (prof.K8sPool == nil || !strings.EqualFold(prof.K8sPool.TPUType, tc.wantTPUType)) {
+		t.Errorf("matched pool = %+v, want TPUType %q", prof.K8sPool, tc.wantTPUType)
+	}
+}
+
+func TestResolveK8sHardwareRequirements_SharedHostLabelAndRestartingPools(t *testing.T) {
+	sharedBMHost := &k8s.Inventory{
+		LabelScheme: k8s.SchemeGeneric,
+		PoolNames:   []string{"bm-tpu7x", "bm-v6e"},
+		Pools: map[string]k8s.PoolCapacity{
+			"bm-tpu7x": {MachineType: "bm-host", IsTPU: true, TPUType: "tpu7x", TPUsPerNode: 4, ReadyNodes: 1},
+			"bm-v6e":   {MachineType: "bm-host", IsTPU: true, TPUType: "v6e", TPUsPerNode: 4, ReadyNodes: 1},
+		},
+	}
+	gpuAndCPU := func(gpus int, res string) *k8s.Inventory {
+		return &k8s.Inventory{
+			LabelScheme: k8s.SchemeGeneric,
+			PoolNames:   []string{"a3", "n2"},
+			Pools: map[string]k8s.PoolCapacity{
+				"a3": {MachineType: "a3-highgpu-8g", IsGPU: true, GPUsPerNode: gpus, GPUType: "nvidia-h100-80gb", GPUResourceName: res, ReadyNodes: 1},
+				"n2": {MachineType: "n2-standard-32", AllocatableCPUMilli: 31000, ReadyNodes: 2},
+			},
+		}
+	}
+	for _, tc := range []k8sPoolResolutionCase{
+		{name: "v6e_on_shared_bm-host", inv: sharedBMHost, job: orchestrator.JobDefinition{ComputeType: "v6e", Topology: "2x2", NumSlices: 1}, wantTPU: true, wantCap: 4, wantTPUType: "v6e"},
+		{name: "tpu7x_on_shared_bm-host", inv: sharedBMHost, job: orchestrator.JobDefinition{ComputeType: "tpu7x", Topology: "2x2x1", NumSlices: 1}, wantTPU: true, wantCap: 4, wantTPUType: "tpu7x"},
+		{name: "bare_shared_bm-host_stays_ambiguous", inv: sharedBMHost, job: orchestrator.JobDefinition{ComputeType: "bm-host", Topology: "2x2", NumSlices: 1}, wantErr: "matches multiple pools"},
+		{name: "restarting_gpu_pool_plus_cpu_pool_is_ambiguous", inv: gpuAndCPU(0, ""), job: orchestrator.JobDefinition{NumSlices: 1}, wantErr: "--compute-type is required"},
+		{name: "healthy_gpu_pool_plus_cpu_pool_is_ambiguous", inv: gpuAndCPU(8, "nvidia.com/gpu"), job: orchestrator.JobDefinition{NumSlices: 1}, wantErr: "--compute-type is required"},
+		{name: "restarting_gpu_node_shadowed_by_same_class_pool", inv: &k8s.Inventory{
+			LabelScheme: k8s.SchemeGeneric,
+			PoolNames:   []string{"a3-healthy", "a3-restarting", "n2"},
+			Pools: map[string]k8s.PoolCapacity{
+				"a3-healthy":    {MachineType: "a3-highgpu-8g", IsGPU: true, GPUsPerNode: 8, GPUType: "nvidia-h100-80gb", GPUResourceName: "nvidia.com/gpu", ReadyNodes: 1},
+				"a3-restarting": {MachineType: "a3-highgpu-8g", IsGPU: true, GPUsPerNode: 0, GPUType: "nvidia-h100-80gb", ReadyNodes: 1},
+				"n2":            {MachineType: "n2-standard-32", AllocatableCPUMilli: 31000, ReadyNodes: 2},
+			},
+		}, job: orchestrator.JobDefinition{NumSlices: 1}, wantErr: "discovered: a3-highgpu-8g (nvidia-h100-80gb), n2-standard-32"},
+		{name: "explicit_cpu_with_restarting_gpu_pool", inv: gpuAndCPU(0, ""), job: orchestrator.JobDefinition{ComputeType: "n2-standard-32", NumSlices: 1}, wantCPU: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) { runK8sPoolResolutionCase(t, tc) })
+	}
+}
+
+func TestResolveK8sHardwareRequirements_NamedSliceTopologyDivisibility(t *testing.T) {
+	sliceInv := func(machineType string, chips int) *k8s.Inventory {
+		return &k8s.Inventory{
+			LabelScheme: k8s.SchemeTPUSlice,
+			PoolNames:   []string{"p"},
+			Pools:       map[string]k8s.PoolCapacity{"p": {MachineType: machineType, IsTPU: true, TPUType: "v6e", TPUsPerNode: chips, ReadyNodes: 1}},
+			Slices:      []k8s.SliceInfo{{Name: "s1", TPUType: "v6e", MachineType: machineType, ChipsPerNode: chips, NodesPerSlice: 1, Ready: true}},
+		}
+	}
+	s1 := map[string]string{k8s.TPUSliceNameLabel: "s1"}
+	for _, tc := range []k8sPoolResolutionCase{
+		{name: "8t_slice_2x2_rejected", inv: sliceInv("ct6e-standard-8t", 8), job: orchestrator.JobDefinition{ComputeType: "ct6e-standard-8t", Topology: "2x2", NumSlices: 1, NodeConstraint: s1}, wantErr: "is invalid for slice"},
+		{name: "4t_slice_1x1_rejected", inv: sliceInv("ct6e-standard-4t", 4), job: orchestrator.JobDefinition{ComputeType: "ct6e-standard-4t", Topology: "1x1", NumSlices: 1, NodeConstraint: s1}, wantErr: "is invalid for slice"},
+		{name: "8t_slice_2x4_ok", inv: sliceInv("ct6e-standard-8t", 8), job: orchestrator.JobDefinition{ComputeType: "ct6e-standard-8t", Topology: "2x4", NumSlices: 1, NodeConstraint: s1}, wantTPU: true, wantCap: 8},
+		{name: "4t_slice_2x2_ok", inv: sliceInv("ct6e-standard-4t", 4), job: orchestrator.JobDefinition{ComputeType: "ct6e-standard-4t", Topology: "2x2", NumSlices: 1, NodeConstraint: s1}, wantTPU: true, wantCap: 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) { runK8sPoolResolutionCase(t, tc) })
+	}
+}
+
+func TestResolveK8sHardwareRequirements_CustomTPUTypePools(t *testing.T) {
+	customTPU := &k8s.Inventory{
+		LabelScheme: k8s.SchemeGeneric,
+		PoolNames:   []string{"tpu8i"},
+		Pools:       map[string]k8s.PoolCapacity{"tpu8i": {MachineType: "tpu8i-node", IsTPU: true, TPUType: "tpu8i", TPUsPerNode: 4, ReadyNodes: 1}},
+	}
+	unlabeledTPU := &k8s.Inventory{
+		LabelScheme: k8s.SchemeGeneric,
+		PoolNames:   []string{"tpu"},
+		Pools:       map[string]k8s.PoolCapacity{"tpu": {IsTPU: true, TPUType: "v8", TPUsPerNode: 4, ReadyNodes: 1}},
+	}
+	customTPUAndCPU := &k8s.Inventory{
+		LabelScheme: k8s.SchemeGeneric,
+		PoolNames:   []string{"cpu", "tpu8i"},
+		Pools: map[string]k8s.PoolCapacity{
+			"cpu":   {MachineType: "output-worker", AllocatableCPUMilli: 15000, ReadyNodes: 1},
+			"tpu8i": {MachineType: "tpu8i-node", IsTPU: true, TPUType: "tpu8i", TPUsPerNode: 4, ReadyNodes: 1},
+		},
+	}
+	for _, tc := range []k8sPoolResolutionCase{
+		{name: "autodiscovered_custom_tpu_type", inv: customTPU, job: orchestrator.JobDefinition{Topology: "2x2", NumSlices: 1}, wantTPU: true, wantCap: 4, wantTPUType: "tpu8i"},
+		{name: "explicit_custom_tpu_type", inv: customTPU, job: orchestrator.JobDefinition{ComputeType: "tpu8i", Topology: "2x2", NumSlices: 1}, wantTPU: true, wantCap: 4, wantTPUType: "tpu8i"},
+		{name: "explicit_custom_tpu_type_rejects_num_nodes", inv: customTPU, job: orchestrator.JobDefinition{ComputeType: "tpu8i", NumNodesSpecified: true, NumSlices: 1}, wantErr: "--num-nodes cannot be used with TPU jobs"},
+		{name: "autodiscovered_unlabeled_tpu_type", inv: unlabeledTPU, job: orchestrator.JobDefinition{Topology: "2x2", NumSlices: 1}, wantTPU: true, wantCap: 4, wantTPUType: "v8"},
+		{name: "output-worker_stays_cpu", inv: customTPUAndCPU, job: orchestrator.JobDefinition{ComputeType: "output-worker", NumSlices: 1}, wantCPU: true},
+		{name: "unknown_name_does_not_match_tpu_pool", inv: customTPUAndCPU, job: orchestrator.JobDefinition{ComputeType: "tpu8", NumSlices: 1}, wantCPU: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) { runK8sPoolResolutionCase(t, tc) })
+	}
+}

@@ -2735,10 +2735,4 @@ func TestResolveParallelContainerCount_GKEAndK8s(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "cannot be evenly split") {
 		t.Errorf("calculateResourceLimits(1 chip / 2 containers) err = %v, want divisibility error", err)
 	}
-
-	// Verify GKE resolveGKETPUHardware rejects --num-nodes on TPU workloads.
-	gkeOrc := &GKEOrchestrator{mode: orchestrator.TypeGKE}
-	if _, _, err := gkeOrc.resolveGKETPUHardware(&orchestrator.JobDefinition{MachineType: "ct6e-standard-4t", NumNodesSpecified: true}); err == nil || !strings.Contains(err.Error(), "--num-nodes cannot be used with TPU jobs") {
-		t.Errorf("resolveGKETPUHardware(NumNodesSpecified=true) err = %v, want --num-nodes rejection", err)
-	}
 }

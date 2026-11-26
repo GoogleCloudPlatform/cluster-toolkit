@@ -341,13 +341,24 @@ func selectBestK8sPool(candidates []k8s.PoolCapacity) (k8s.PoolCapacity, bool) {
 	return top[0], true
 }
 
+// k8sPoolIdentityKey distinguishes pools by hardware class plus GPU device-plugin resource name (e.g. MIG profiles).
 func k8sPoolIdentityKey(pool k8s.PoolCapacity) string {
-	mt := strings.ToLower(strings.TrimSpace(pool.MachineType))
-	if pool.IsTPU {
-		return "tpu:" + mt + ":" + strings.ToLower(strings.TrimSpace(pool.TPUType))
-	}
+	key := k8sPoolHardwareClassKey(pool)
 	if pool.IsGPU {
-		return "gpu:" + mt + ":" + strings.ToLower(strings.TrimSpace(pool.GPUType)) + ":" + strings.ToLower(strings.TrimSpace(pool.GPUResourceName))
+		key += ":" + strings.ToLower(strings.TrimSpace(pool.GPUResourceName))
+	}
+	return key
+}
+
+// k8sPoolHardwareClassKey identifies hardware without the device-plugin resource name, which a restarting node
+// may not advertise yet.
+func k8sPoolHardwareClassKey(p k8s.PoolCapacity) string {
+	mt := strings.ToLower(strings.TrimSpace(p.MachineType))
+	switch {
+	case p.IsTPU:
+		return "tpu:" + mt + ":" + strings.ToLower(strings.TrimSpace(p.TPUType))
+	case p.IsGPU:
+		return "gpu:" + mt + ":" + strings.ToLower(strings.TrimSpace(p.GPUType))
 	}
 	return "cpu:" + mt
 }
@@ -406,7 +417,7 @@ func (g *GKEOrchestrator) findK8sPoolForRequest(computeType, machineType string)
 		}
 	}
 	if mt != "" {
-		if pool, ok := g.findK8sPoolByMachineType(mt); ok {
+		if pool, ok := g.findK8sPoolByMachineType(mt, g.requestedK8sTPUType(ct)); ok {
 			return pool, true
 		}
 		if pool, ok := g.findK8sGPUPoolByQuery(mt); ok {
@@ -415,23 +426,42 @@ func (g *GKEOrchestrator) findK8sPoolForRequest(computeType, machineType string)
 		if defaultTPUHardwareResolver.IsTPUMachine(mt) {
 			return g.findK8sTPUPoolForMachineType(mt)
 		}
+		if pool, ok := g.findK8sTPUPoolByCustomType(mt); ok {
+			return pool, true
+		}
 	}
 	if ct != "" && ct != mt {
-		if pool, ok := g.findK8sPoolByMachineType(ct); ok {
+		if pool, ok := g.findK8sPoolByMachineType(ct, ""); ok {
 			return pool, true
 		}
 		if defaultTPUHardwareResolver.IsTPUMachine(ct) {
 			return g.findK8sTPUPoolForMachineType(ct)
 		}
+		return g.findK8sTPUPoolByCustomType(ct)
 	}
 	return k8s.PoolCapacity{}, false
 }
 
-func (g *GKEOrchestrator) findK8sPoolByMachineType(machineType string) (k8s.PoolCapacity, bool) {
+// findK8sTPUPoolByCustomType matches non-GCE TPU types (e.g. "tpu8i", "v8") discovered from node labels by exact
+// pool TPUType, so auto-discovered custom TPU pools resolve back to themselves instead of a BestEffort CPU job.
+func (g *GKEOrchestrator) findK8sTPUPoolByCustomType(tpuType string) (k8s.PoolCapacity, bool) {
 	var matches []k8s.PoolCapacity
 	for _, name := range g.inventory.PoolNames {
 		pool := g.inventory.Pools[name]
-		if strings.EqualFold(pool.MachineType, machineType) {
+		if pool.IsTPU && pool.TPUType != "" && strings.EqualFold(strings.TrimSpace(pool.TPUType), tpuType) {
+			matches = append(matches, pool)
+		}
+	}
+	return selectBestK8sPool(matches)
+}
+
+// findK8sPoolByMachineType matches pools by machine type; a non-empty wantTPUType restricts matches to TPU pools of
+// that type, so pools sharing a generic host label (e.g. "bm-host") across TPU generations stay distinguishable.
+func (g *GKEOrchestrator) findK8sPoolByMachineType(machineType, wantTPUType string) (k8s.PoolCapacity, bool) {
+	var matches []k8s.PoolCapacity
+	for _, name := range g.inventory.PoolNames {
+		pool := g.inventory.Pools[name]
+		if strings.EqualFold(pool.MachineType, machineType) && k8sPoolMatchesTPUType(pool, wantTPUType) {
 			matches = append(matches, pool)
 		}
 	}
@@ -475,10 +505,11 @@ func (g *GKEOrchestrator) checkAmbiguousK8sPoolQuery(computeType, machineType st
 	if mt == "" {
 		return nil
 	}
+	wantTPUType := g.requestedK8sTPUType(q)
 	var mtMatches []k8s.PoolCapacity
 	for _, name := range g.inventory.PoolNames {
 		pool := g.inventory.Pools[name]
-		if strings.EqualFold(pool.MachineType, mt) {
+		if strings.EqualFold(pool.MachineType, mt) && k8sPoolMatchesTPUType(pool, wantTPUType) {
 			mtMatches = append(mtMatches, pool)
 		}
 	}
@@ -487,6 +518,33 @@ func (g *GKEOrchestrator) checkAmbiguousK8sPoolQuery(computeType, machineType st
 		return fmt.Errorf("--compute-type is required; %q matches multiple pools, discovered: %s", cmp.Or(q, mt), strings.Join(labels, ", "))
 	}
 	return nil
+}
+
+// requestedK8sTPUType returns the TPU type named by --compute-type (GCE TPU names/shorthands, or a custom TPU type
+// observed on a pool), or "" when the request does not identify a TPU type.
+func (g *GKEOrchestrator) requestedK8sTPUType(computeType string) string {
+	ct := strings.TrimSpace(computeType)
+	if ct == "" {
+		return ""
+	}
+	if defaultTPUHardwareResolver.IsTPUMachine(ct) {
+		return defaultTPUHardwareResolver.NormalizeTPUType(ct)
+	}
+	if pool, ok := g.findK8sTPUPoolByCustomType(ct); ok {
+		return pool.TPUType
+	}
+	return ""
+}
+
+func k8sPoolMatchesTPUType(pool k8s.PoolCapacity, wantTPUType string) bool {
+	if wantTPUType == "" {
+		return true
+	}
+	if !pool.IsTPU {
+		return false
+	}
+	have := strings.TrimSpace(pool.TPUType)
+	return have == "" || strings.EqualFold(have, wantTPUType)
 }
 
 func (g *GKEOrchestrator) findK8sTPUPoolForMachineType(machineType string) (k8s.PoolCapacity, bool) {
@@ -661,7 +719,7 @@ func (g *GKEOrchestrator) resolveK8sHardwareRequirements(job *orchestrator.JobDe
 	isTPU := (hasPool && matchedPool.IsTPU) || (!hasPool && (defaultTPUHardwareResolver.IsTPUMachine(job.MachineType) || defaultTPUHardwareResolver.IsTPUMachine(job.ComputeType)))
 	if isTPU {
 		if job.NumNodesSpecified {
-			return JobProfile{}, false, false, fmt.Errorf("--num-nodes cannot be used with TPU jobs (it is calculated automatically from topology)")
+			return JobProfile{}, false, false, errTPUNumNodes
 		}
 		if err := g.resolveK8sTPURequirements(job, matchedPool, hasPool); err != nil {
 			return JobProfile{}, false, false, err
@@ -767,17 +825,27 @@ func (g *GKEOrchestrator) candidateAutoDiscoverPools() []k8s.PoolCapacity {
 	return filterUsableAutoDiscoverPools(candidates)
 }
 
+// filterUsableAutoDiscoverPools drops an accelerator pool reporting 0 allocatable devices only when a usable pool
+// with the same hardware identity exists, so a restarting device plugin never hides a distinct hardware class.
 func filterUsableAutoDiscoverPools(pools []k8s.PoolCapacity) []k8s.PoolCapacity {
-	var usable []k8s.PoolCapacity
+	usableClasses := make(map[string]struct{}, len(pools))
 	for _, p := range pools {
-		if (!p.IsGPU || p.GPUsPerNode > 0) && (!p.IsTPU || p.TPUsPerNode > 0) {
-			usable = append(usable, p)
+		if isUsableAutoDiscoverPool(p) {
+			usableClasses[k8sPoolHardwareClassKey(p)] = struct{}{}
 		}
 	}
-	if len(usable) > 0 {
-		return usable
+	var kept []k8s.PoolCapacity
+	for _, p := range pools {
+		if _, shadowed := usableClasses[k8sPoolHardwareClassKey(p)]; shadowed && !isUsableAutoDiscoverPool(p) {
+			continue
+		}
+		kept = append(kept, p)
 	}
-	return pools
+	return kept
+}
+
+func isUsableAutoDiscoverPool(p k8s.PoolCapacity) bool {
+	return (!p.IsGPU || p.GPUsPerNode > 0) && (!p.IsTPU || p.TPUsPerNode > 0)
 }
 
 func k8sPoolComputeTarget(pool k8s.PoolCapacity) (computeType, source string, unlabeledCPU bool) {
@@ -1074,7 +1142,11 @@ func (g *GKEOrchestrator) validateSliceHardwareMatch(job *orchestrator.JobDefini
 	if job.Topology != "" && s.Topology == "" && s.NodesPerSlice > 0 {
 		chips := cmp.Or(s.ChipsPerNode, defaultTPUHardwareResolver.ChipsPerNode(job.MachineType))
 		if chips > 0 {
-			if nodes, err := config.CalculateAcceleratorNodes(job.MachineType, job.Topology, chips); err == nil && nodes != s.NodesPerSlice {
+			nodes, err := config.CalculateAcceleratorNodes(job.MachineType, job.Topology, chips)
+			if err != nil {
+				return fmt.Errorf("requested topology %q is invalid for slice %q: %w", job.Topology, sliceName, err)
+			}
+			if nodes != s.NodesPerSlice {
 				return fmt.Errorf("requested topology %q (%d nodes) does not match slice %q (%d nodes)", job.Topology, nodes, sliceName, s.NodesPerSlice)
 			}
 		}

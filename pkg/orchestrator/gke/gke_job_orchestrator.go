@@ -259,6 +259,8 @@ func (g *GKEOrchestrator) validateSubmitLocalPreflight(sm *StorageManager, job o
 		if err := orchestrator.ValidateK8sSubmitJob(job); err != nil {
 			return err
 		}
+	} else if err := validateGKETPUNumNodes(job); err != nil {
+		return err
 	}
 	if !g.jobSetEnabled() {
 		if err := g.validateTier3FlagsWithWarn(&job, false); err != nil {
@@ -2848,17 +2850,7 @@ func (g *GKEOrchestrator) resolveNodeSelectorAccelerator(job orchestrator.JobDef
 
 func (g *GKEOrchestrator) resolveK8sGKEAcceleratorLabel(machineType string, profile JobProfile, isTPU bool) string {
 	if isTPU {
-		if profile.K8sPool != nil && profile.K8sPool.IsTPU {
-			if obs := strings.TrimSpace(profile.K8sPool.GKETPUAcceleratorLabel); obs != "" && !strings.Contains(obs, "/") {
-				return obs
-			}
-			return ""
-		}
-		mapped := g.GenerateGKENodeSelectorLabel(machineType)
-		if !strings.Contains(mapped, "/") {
-			return mapped
-		}
-		return ""
+		return g.resolveK8sGKETPUAcceleratorLabel(machineType, profile)
 	}
 	if profile.K8sPool != nil && profile.K8sPool.IsGPU {
 		return strings.TrimSpace(profile.K8sPool.GKEAcceleratorLabel)
@@ -2871,6 +2863,23 @@ func (g *GKEOrchestrator) resolveK8sGKEAcceleratorLabel(machineType string, prof
 		return mapped
 	}
 	return ""
+}
+
+// resolveK8sGKETPUAcceleratorLabel prefers the observed pool label and falls back to the static machine map only
+// when no pool matched. GenerateGKENodeSelectorLabel echoes unmapped input (e.g. "ct5l-hightpu-8t", "bm-host"),
+// so a raw machine type is never emitted as the accelerator label.
+func (g *GKEOrchestrator) resolveK8sGKETPUAcceleratorLabel(machineType string, profile JobProfile) string {
+	if profile.K8sPool != nil && profile.K8sPool.IsTPU {
+		if obs := strings.TrimSpace(profile.K8sPool.GKETPUAcceleratorLabel); obs != "" && !strings.Contains(obs, "/") {
+			return obs
+		}
+		return ""
+	}
+	mapped := g.GenerateGKENodeSelectorLabel(machineType)
+	if mapped == "" || strings.Contains(mapped, "/") || strings.EqualFold(mapped, strings.TrimSpace(machineType)) {
+		return ""
+	}
+	return mapped
 }
 
 func (g *GKEOrchestrator) applyPlatformNodeSelectorLabels(nodeSelector map[string]string, schedOpts SchedulingOptions, profile JobProfile, accelLabel, machineType string, isTPU, isGPU, isCPUMachine bool) error {
