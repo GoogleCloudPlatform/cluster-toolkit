@@ -109,6 +109,9 @@ deployment_groups:
       - stackdriver.resourceMetadata.writer
       - storage.objectViewer
       - artifactregistry.reader
+      # Uncomment both roles below when enabling Diagon 2.0 (`ml_diagnostics_agent`) for host-network profiling uploads:
+      # - storage.objectUser
+      # - storage.bucketViewer
 
   - id: workload_service_account
     source: modules/project/service-account
@@ -136,6 +139,12 @@ deployment_groups:
       enable_private_ipv6_google_access: false
       configure_workload_identity_sa: true
       enable_ml_diagnostics: true
+      # Optional: deploy the self-managed Diagon 2.0 daemon (`mldiagnostics-daemon`) on TPU nodes.
+      # Workload Monitoring and Auto-Capture require GKE 1.36.4-gke.1247000+ (update version_prefix below to "1.36." if needed).
+      # Also uncomment `storage.objectUser` and `storage.bucketViewer` on `node_pool_service_account` above.
+      # ml_diagnostics_agent:
+      #   enable: true
+      #   image: us-central1-docker.pkg.dev/hypercomputediagon-release/daemon-docker/mldiagnostics-daemon:latest
       namespace: $(vars.user_namespace)
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.

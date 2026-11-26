@@ -1,0 +1,88 @@
+# Copyright 2026 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: diagon
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: diagon-daemon-sa
+  namespace: diagon
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: diagon-daemon
+  namespace: diagon
+  labels:
+    app.kubernetes.io/name: diagon-daemon
+    app.kubernetes.io/part-of: diagon
+spec:
+  selector:
+    matchLabels:
+      name: diagon-daemon
+  template:
+    metadata:
+      labels:
+        name: diagon-daemon
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      serviceAccountName: diagon-daemon-sa
+      terminationGracePeriodSeconds: 30
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      - operator: Exists
+        effect: NoExecute
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+              - key: cloud.google.com/gke-tpu-accelerator
+                operator: Exists
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+              - key: cloud.google.com/gke-accelerator
+                operator: Exists
+      containers:
+      - name: diagon-daemon
+        image: ${jsonencode(image)}
+        imagePullPolicy: Always
+        command:
+        - /mldiagnostics_extension_files/bin/mldiagnostics_extension
+        - -standalone=true
+        - -channel=hypercomputecluster.googleapis.com/diagnostics
+        - -alsologtostderr=true
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 256Mi  # No CPU limit; continuous profiling bursts to ~0.3 cores.
