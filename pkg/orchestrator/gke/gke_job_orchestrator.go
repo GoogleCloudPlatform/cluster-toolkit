@@ -166,7 +166,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err != nil {
 		return err
 	}
-	if err := g.validatePostHardwareChecks(sm, &job); err != nil {
+	if err := g.validatePostHardwareChecks(sm, &job, profile); err != nil {
 		return err
 	}
 
@@ -194,11 +194,8 @@ func (g *GKEOrchestrator) prepareAndValidateSubmission(job *orchestrator.JobDefi
 	return g.fetchClusterState(job)
 }
 
-func (g *GKEOrchestrator) validatePostHardwareChecks(sm *StorageManager, job *orchestrator.JobDefinition) error {
-	if err := g.validateTPUSliceScheduling(job); err != nil {
-		return err
-	}
-	if err := g.validateTier3Workload(job); err != nil {
+func (g *GKEOrchestrator) validatePostHardwareChecks(sm *StorageManager, job *orchestrator.JobDefinition, profile JobProfile) error {
+	if err := g.validateTier3Workload(job, profile.IsTPU); err != nil {
 		return err
 	}
 	if err := sm.ValidateClusterMounts(*job); err != nil {
@@ -207,7 +204,7 @@ func (g *GKEOrchestrator) validatePostHardwareChecks(sm *StorageManager, job *or
 	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
 		return err
 	}
-	return g.pinTelemetryAndValidate(job)
+	return g.pinTelemetryAndValidate(job, profile.IsTPU)
 }
 
 // workloadTemplateName selects the JobSet workload template assumed before cluster add-on resolution.
@@ -242,11 +239,11 @@ func (g *GKEOrchestrator) validateResolvedCustomTemplate(job orchestrator.JobDef
 // pinTelemetryAndValidate runs the cheap name-conflict check, then resolves the ML Diagnostics collector before
 // the image build, so a missing TPU node image cache or an RBAC denial fails fast and PrepareManifestOptions sees
 // the resolved image as explicit, and finally validates the MTC configuration.
-func (g *GKEOrchestrator) pinTelemetryAndValidate(job *orchestrator.JobDefinition) error {
+func (g *GKEOrchestrator) pinTelemetryAndValidate(job *orchestrator.JobDefinition, isTPU bool) error {
 	if err := g.validateJobConflicts(*job); err != nil {
 		return err
 	}
-	telemetryImg, _, err := g.resolveTelemetryCollector(*job)
+	telemetryImg, _, err := g.resolveTelemetryCollector(*job, isTPU)
 	if err != nil {
 		return err
 	}
@@ -2797,10 +2794,6 @@ func injectProvisioningLabels(nodeSelector map[string]string, provisioning strin
 	}
 }
 
-func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orchestrator.JobDefinition, isCPUMachine bool) (string, error) {
-	return g.buildNodeSelectorWithProfile(schedOpts, job, JobProfile{IsCPUMachine: isCPUMachine})
-}
-
 func (g *GKEOrchestrator) buildNodeSelectorWithProfile(schedOpts SchedulingOptions, job orchestrator.JobDefinition, profile JobProfile) (string, error) {
 	nodeSelector := make(map[string]string)
 	existing, err := getNodeSelector(schedOpts)
@@ -2905,7 +2898,7 @@ func (g *GKEOrchestrator) applyGenericObservedNodeSelector(nodeSelector, affinit
 	if profile.K8sPool != nil {
 		pool = *profile.K8sPool
 	} else if strings.TrimSpace(machineType) != "" {
-		foundPool, ok := g.findK8sPoolForMachineType(machineType)
+		foundPool, ok := g.findK8sPoolForRequest("", machineType)
 		if !ok {
 			return
 		}

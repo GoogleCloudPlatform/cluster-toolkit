@@ -91,14 +91,14 @@ func (g *GKEOrchestrator) nonTPUTelemetryHint(job orchestrator.JobDefinition) st
 
 // resolveTelemetryCollector returns the native sidecar image and metrics port for job, or an empty image when
 // GKE's managed webhook provides ML Diagnostics. Off GKE, an unnamed image is discovered from the TPU node image cache.
-func (g *GKEOrchestrator) resolveTelemetryCollector(job orchestrator.JobDefinition) (string, int, error) {
+func (g *GKEOrchestrator) resolveTelemetryCollector(job orchestrator.JobDefinition, isTPU bool) (string, int, error) {
 	if err := g.validateTelemetryFlags(job); err != nil {
 		return "", 0, err
 	}
 	if !g.telemetrySidecarRequested(job) {
 		return "", 0, nil
 	}
-	if !g.isK8sTPURequest(job.ComputeType, job.MachineType) {
+	if !isTPU {
 		return "", 0, fmt.Errorf("ML Diagnostics collector sidecar injection (selected by %s) is only supported for TPU workloads (got compute-type=%q, machine-type=%q); %s", g.telemetrySidecarTrigger(job), job.ComputeType, job.MachineType, g.nonTPUTelemetryHint(job))
 	}
 	img := strings.TrimSpace(job.MLDiagnosticsImage)

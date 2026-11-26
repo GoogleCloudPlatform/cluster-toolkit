@@ -3478,15 +3478,18 @@ func TestValidateTier3Workload_StaticSliceReuseGuard(t *testing.T) {
 				},
 			}
 			job := tc.job
-			err := orc.validateTier3Workload(&job)
+			err := orc.validateTier3Workload(&job, true)
+			if err == nil {
+				_, err = orc.resolveAndValidateTPUSlices(&job)
+			}
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("validateTier3Workload() err = %v, want substring %q", err, tc.wantErr)
+					t.Fatalf("Tier-3 slice validation err = %v, want substring %q", err, tc.wantErr)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("validateTier3Workload() unexpected err = %v", err)
+				t.Fatalf("Tier-3 slice validation unexpected err = %v", err)
 			}
 			if got := job.NodeConstraint[k8s.TPUSliceNameLabel]; got != tc.wantSlice {
 				t.Errorf("bound slice = %q, want %q", got, tc.wantSlice)
@@ -3883,18 +3886,18 @@ func TestValidateTier3Workload_GKECoSchedulingAndOfflineProbeWarn(t *testing.T) 
 		submissionSession: submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: false}},
 	}
 	multiHostJob := orchestrator.JobDefinition{MachineType: "ct6e-standard-4t", Topology: "2x4", NodesPerSlice: 2, NumSlices: 1}
-	if err := gkeTier3.validatePostHardwareChecks(&StorageManager{orchestrator: gkeTier3}, &multiHostJob); err == nil || !strings.Contains(err.Error(), k8s.GKENodePoolLabel) {
+	if err := gkeTier3.validatePostHardwareChecks(&StorageManager{orchestrator: gkeTier3}, &multiHostJob, JobProfile{IsTPU: true}); err == nil || !strings.Contains(err.Error(), k8s.GKENodePoolLabel) {
 		t.Fatalf("validatePostHardwareChecks(multi-host GKE unpinned) err = %v, want nodepool pinning error", err)
 	}
-	if err := gkeTier3.validateTier3Workload(&multiHostJob); err == nil || !strings.Contains(err.Error(), k8s.GKENodePoolLabel) {
+	if err := gkeTier3.validateTier3Workload(&multiHostJob, true); err == nil || !strings.Contains(err.Error(), k8s.GKENodePoolLabel) {
 		t.Fatalf("validateTier3Workload(multi-host GKE unpinned) err = %v, want nodepool pinning error", err)
 	}
 	multiHostJob.NodeConstraint = map[string]string{k8s.GKENodePoolLabel: "tpu-np-1|tpu-np-2"}
-	if err := gkeTier3.validateTier3Workload(&multiHostJob); err == nil || !strings.Contains(err.Error(), k8s.GKENodePoolLabel) {
+	if err := gkeTier3.validateTier3Workload(&multiHostJob, true); err == nil || !strings.Contains(err.Error(), k8s.GKENodePoolLabel) {
 		t.Fatalf("validateTier3Workload(multi-host GKE pipe-delimited pools) err = %v, want rejection", err)
 	}
 	multiHostJob.NodeConstraint = map[string]string{k8s.GKENodePoolLabel: "tpu-np-1"}
-	if err := gkeTier3.validateTier3Workload(&multiHostJob); err != nil {
+	if err := gkeTier3.validateTier3Workload(&multiHostJob, true); err != nil {
 		t.Fatalf("validateTier3Workload(multi-host GKE pinned) err = %v, want nil", err)
 	}
 
@@ -4157,24 +4160,24 @@ func TestValidateTPUSliceScheduling_ExplicitSliceRequired(t *testing.T) {
 		{
 			name:    "unnamed_tpu_job_on_tpu_slice_rejected",
 			inv:     readyInv,
-			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
+			job:     orchestrator.JobDefinition{ComputeType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
 			wantErr: k8s.TPUSliceNameLabel,
 		},
 		{
 			name: "named_ready_slice_passes",
 			inv:  readyInv,
-			job:  orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "ready-slice"}},
+			job:  orchestrator.JobDefinition{ComputeType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "ready-slice"}},
 		},
 		{
 			name:    "named_pending_slice_rejected",
 			inv:     readyInv,
-			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x2", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "pending-slice"}},
+			job:     orchestrator.JobDefinition{ComputeType: "tpu7x-standard-4t", Topology: "2x2x2", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "pending-slice"}},
 			wantErr: "is not READY",
 		},
 		{
 			name: "cpu_job_on_tpu_slice_passes_without_slice_name",
 			inv:  readyInv,
-			job:  orchestrator.JobDefinition{MachineType: "n2-standard-8", NumSlices: 1, NodesPerSlice: 1},
+			job:  orchestrator.JobDefinition{ComputeType: "n2-standard-8", NumSlices: 1, NodesPerSlice: 1},
 		},
 	}
 	for _, tc := range tests {
@@ -4187,15 +4190,15 @@ func TestValidateTPUSliceScheduling_ExplicitSliceRequired(t *testing.T) {
 				},
 			}
 			job := tc.job
-			err := orc.validateTPUSliceScheduling(&job)
+			_, _, _, err := orc.resolveK8sHardwareRequirements(&job)
 			if tc.wantErr == "" {
 				if err != nil {
-					t.Fatalf("validateTPUSliceScheduling() unexpected err = %v", err)
+					t.Fatalf("resolveK8sHardwareRequirements() unexpected err = %v", err)
 				}
 				return
 			}
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("validateTPUSliceScheduling() err = %v, want substring %q", err, tc.wantErr)
+				t.Fatalf("resolveK8sHardwareRequirements() err = %v, want substring %q", err, tc.wantErr)
 			}
 		})
 	}

@@ -2446,9 +2446,9 @@ func TestK8sResourceResolution_UnlabeledCPUAndPoolRanking(t *testing.T) {
 			},
 		},
 	}
-	picked, ok := rankOrc.findK8sPoolForMachineType("n2-standard-8")
+	picked, ok := rankOrc.findK8sPoolForRequest("", "n2-standard-8")
 	if !ok || picked.NodePoolName != "workers" {
-		t.Errorf("findK8sPoolForMachineType = (%+v, %v), want workers pool", picked, ok)
+		t.Errorf("findK8sPoolForRequest = (%+v, %v), want workers pool", picked, ok)
 	}
 
 	// Empty PoolNames with inventory.TPU still resolves TPU shorthands.

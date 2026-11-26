@@ -529,7 +529,7 @@ func TestBuildNodeSelector_PlacementPolicy(t *testing.T) {
 		PlacementPolicy: "tpu7x-16-2x2x2-placement-policy",
 		IsTPU:           true,
 	}
-	tpuSelectorStr, err := g.buildNodeSelector(tpuOpts, tpuJob, false)
+	tpuSelectorStr, err := g.buildNodeSelectorWithProfile(tpuOpts, tpuJob, JobProfile{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -548,7 +548,7 @@ func TestBuildNodeSelector_PlacementPolicy(t *testing.T) {
 		PlacementPolicy: "compact-placement-group",
 		MachineType:     "a3-highgpu-8g",
 	}
-	nonTpuSelectorStr, err := g.buildNodeSelector(nonTpuOpts, nonTpuJob, false)
+	nonTpuSelectorStr, err := g.buildNodeSelectorWithProfile(nonTpuOpts, nonTpuJob, JobProfile{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -562,7 +562,7 @@ func TestBuildNodeSelector_PlacementPolicy(t *testing.T) {
 	// 2b. Non-TPU workload under NAP additionally gets cloud.google.com/gke-placement-group
 	napOpts := nonTpuOpts
 	napOpts.IsNAP = true
-	napSelectorStr, err := g.buildNodeSelector(napOpts, nonTpuJob, false)
+	napSelectorStr, err := g.buildNodeSelectorWithProfile(napOpts, nonTpuJob, JobProfile{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -581,7 +581,7 @@ func TestBuildNodeSelector_PlacementPolicy(t *testing.T) {
 		PlacementPolicy: "projects/my-proj/regions/us-central1/resourcePolicies/tpu7x-16-2x2x2-placement-policy/",
 		IsTPU:           true,
 	}
-	uriSelectorStr, err := g.buildNodeSelector(uriOpts, uriJob, false)
+	uriSelectorStr, err := g.buildNodeSelectorWithProfile(uriOpts, uriJob, JobProfile{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

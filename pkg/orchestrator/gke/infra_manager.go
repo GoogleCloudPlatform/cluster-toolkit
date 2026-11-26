@@ -16,7 +16,6 @@ package gke
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -730,7 +729,7 @@ func (g *GKEOrchestrator) hasGKENodePoolLabel(machineType string, pool *k8s.Pool
 	if pool != nil {
 		return pool.NodePoolName != ""
 	}
-	if matched, ok := g.findK8sPoolForMachineType(machineType); ok {
+	if matched, ok := g.findK8sPoolForRequest("", machineType); ok {
 		return matched.NodePoolName != ""
 	}
 	for _, p := range g.inventory.Pools {
@@ -1405,99 +1404,14 @@ func (g *GKEOrchestrator) validateTier3FlagsWithWarn(job *orchestrator.JobDefini
 	return nil
 }
 
-func parseTargetSliceNames(raw string) ([]string, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return nil, nil
-	}
-	seen := make(map[string]struct{})
-	var unique []string
-	for _, part := range strings.Split(trimmed, "|") {
-		name := strings.TrimSpace(part)
-		if name == "" {
-			return nil, fmt.Errorf("empty slice name in --node-constraint %s=%q", k8s.TPUSliceNameLabel, trimmed)
-		}
-		if _, dup := seen[name]; dup {
-			continue
-		}
-		seen[name] = struct{}{}
-		unique = append(unique, name)
-	}
-	return unique, nil
-}
-
-// validateTPUSliceScheduling gates unnamed-slice TPU workloads on SchemeTPUSlice clusters
-// until pod-template dynamic slice provisioning lands, ensuring TPU pods always carry an explicit
-// slice selector rather than submitting unconstrained.
-func (g *GKEOrchestrator) validateTPUSliceScheduling(job *orchestrator.JobDefinition) error {
-	if g.mode != orchestrator.TypeK8s || g.labelScheme() != k8s.SchemeTPUSlice || !g.jobSetEnabled() {
-		return nil
-	}
-	if !g.isK8sTPURequest(job.ComputeType, job.MachineType) {
-		return nil
-	}
-	names, err := parseTargetSliceNames(job.NodeConstraint[k8s.TPUSliceNameLabel])
-	if err != nil {
-		return err
-	}
-	if len(names) == 0 {
-		return fmt.Errorf("TPU workloads on tpu-slice clusters currently require targeting an existing READY slice via --node-constraint %s=<ready-slice-name>", k8s.TPUSliceNameLabel)
-	}
-	if need := max(1, job.NumSlices); len(names) < need {
-		return fmt.Errorf("--num-slices=%d requires at least %d distinct READY slices in --node-constraint %s (got %d: %s)",
-			need, need, k8s.TPUSliceNameLabel, len(names), strings.Join(names, ", "))
-	}
-	for _, name := range names {
-		if err := g.validateExplicitTPUSlice(job, name, false); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (g *GKEOrchestrator) validateExplicitTPUSlice(job *orchestrator.JobDefinition, sliceName string, tier3 bool) error {
-	slice, found := g.findSliceByName(sliceName)
-	if !found {
-		if g.inventory == nil || g.inventory.SliceInventoryUnavailable {
-			if tier3 {
-				logging.Info("JobSet is unavailable; targeting explicitly named TPU slice %q via standalone batch/v1 Indexed Job.", sliceName)
-			}
-			return nil
-		}
-		if tier3 {
-			return fmt.Errorf("standalone batch/v1 Indexed Job without JobSet cannot dynamically provision TPU slice %q (not found in cluster inventory); target an existing READY slice via --node-constraint %s=<ready-slice-name>",
-				sliceName, k8s.TPUSliceNameLabel)
-		}
-		return fmt.Errorf("TPU slice %q does not exist; target an existing READY slice via --node-constraint %s=<ready-slice-name>", sliceName, k8s.TPUSliceNameLabel)
-	}
-	if !slice.Ready {
-		state := cmp.Or(slice.State, "unknown")
-		if tier3 {
-			return fmt.Errorf("standalone batch/v1 Indexed Job without JobSet requires a READY TPU slice, but slice %q is not READY (state=%q); wait for it to become READY or target a READY slice via --node-constraint %s=<ready-slice-name>",
-				sliceName, state, k8s.TPUSliceNameLabel)
-		}
-		return fmt.Errorf("TPU slice %q is not READY (state=%q); wait for it to become READY or target a READY slice via --node-constraint %s=<ready-slice-name>",
-			sliceName, state, k8s.TPUSliceNameLabel)
-	}
-	if err := g.validateSliceHardwareMatch(job, sliceName, slice); err != nil {
-		return err
-	}
-	if tier3 {
-		logging.Info("JobSet is unavailable; reusing existing READY TPU slice %q (type=%s, topology=%s) via standalone batch/v1 Indexed Job.", slice.Name, slice.TPUType, slice.Topology)
-	}
-	return nil
-}
-
-// validateTier3Workload enforces the Tier-3 static slice reuse guard and GKE multi-host co-scheduling guard
-// when JobSet is absent/disabled.
-func (g *GKEOrchestrator) validateTier3Workload(job *orchestrator.JobDefinition) error {
+// validateTier3Workload enforces Tier-3 flag compatibility and the GKE multi-host co-scheduling guard
+// when JobSet is absent/disabled. SchemeTPUSlice static slice validation runs earlier inside
+// resolveK8sTPURequirements so missing or unready slices report before topology checks.
+func (g *GKEOrchestrator) validateTier3Workload(job *orchestrator.JobDefinition, isTPU bool) error {
 	if err := g.validateTier3FlagsWithWarn(job, false); err != nil {
 		return err
 	}
-	if g.jobSetEnabled() {
-		return nil
-	}
-	if !g.isK8sTPURequest(job.ComputeType, job.MachineType) {
+	if g.jobSetEnabled() || !isTPU {
 		return nil
 	}
 	if g.mode != orchestrator.TypeK8s || g.labelScheme() == k8s.SchemeGKE {
@@ -1506,34 +1420,8 @@ func (g *GKEOrchestrator) validateTier3Workload(job *orchestrator.JobDefinition)
 			return fmt.Errorf("multi-host TPU workloads (nodes_per_slice=%d) without JobSet on GKE cannot guarantee intra-node-pool pod co-scheduling and may split pods across TPU node pools; install/enable JobSet (or unset %s if set), or pin a single TPU node pool via --node-constraint %s=<node-pool>",
 				job.NodesPerSlice, disableJobSetEnvVar, k8s.GKENodePoolLabel)
 		}
-		return nil
 	}
-	if g.labelScheme() != k8s.SchemeTPUSlice {
-		return nil
-	}
-
-	requestedSlice := strings.TrimSpace(job.NodeConstraint[k8s.TPUSliceNameLabel])
-	if requestedSlice == "" {
-		return fmt.Errorf("standalone batch/v1 Indexed Job without JobSet cannot dynamically provision a new TPU slice; target an existing READY slice via --node-constraint %s=<ready-slice-name>",
-			k8s.TPUSliceNameLabel)
-	}
-	if strings.Contains(requestedSlice, "|") {
-		return fmt.Errorf("standalone batch/v1 Indexed Job without JobSet cannot target multiple TPU slices (%q); specify a single existing READY slice via --node-constraint %s=<ready-slice-name>",
-			requestedSlice, k8s.TPUSliceNameLabel)
-	}
-	return g.validateExplicitTPUSlice(job, requestedSlice, true)
-}
-
-func (g *GKEOrchestrator) findSliceByName(name string) (k8s.SliceInfo, bool) {
-	if g.inventory == nil {
-		return k8s.SliceInfo{}, false
-	}
-	for _, s := range g.inventory.Slices {
-		if s.Name == name {
-			return s, true
-		}
-	}
-	return k8s.SliceInfo{}, false
+	return nil
 }
 
 // Initialize fetches GKE cluster metadata and resolves the cluster location,

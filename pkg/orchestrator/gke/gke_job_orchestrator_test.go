@@ -5401,6 +5401,7 @@ func TestSubmitJob_TypeK8sExplicitModeRBACRequirements(t *testing.T) {
 			ClusterName:    "explicit-cluster",
 			GKENamespace:   "ml-ns",
 			ComputeType:    "tpu7x",
+			NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "precreated-slice"},
 			ImageName:      "registry.local/jax:v1",
 			CommandToRun:   "echo hi",
 			NumSlices:      1,

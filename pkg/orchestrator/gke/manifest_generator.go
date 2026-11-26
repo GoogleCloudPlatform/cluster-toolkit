@@ -224,7 +224,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 
 	pathwaysInstanceType := derivePathwaysInstanceType(g.GenerateGKENodeSelectorLabel(originalAccelType), job.MachineType, originalAccelType, schedOpts.Topology)
 
-	telemetryImg, telemetryPort, err := g.resolveTelemetryCollector(job)
+	telemetryImg, telemetryPort, err := g.resolveTelemetryCollector(job, schedOpts.IsTPU)
 	if err != nil {
 		return ManifestOptions{}, err
 	}
@@ -432,10 +432,6 @@ func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservation
 		}
 	}
 	return tolerations
-}
-
-func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumptionModel string, reservationName string, indent int) (string, error) {
-	return g.resolveTolerationsForWorkload(acceleratorType, config.IsTPU(acceleratorType), consumptionModel, reservationName, indent)
 }
 
 func (g *GKEOrchestrator) resolveTolerationsForWorkload(acceleratorType string, isTPU bool, consumptionModel string, reservationName string, indent int) (string, error) {
