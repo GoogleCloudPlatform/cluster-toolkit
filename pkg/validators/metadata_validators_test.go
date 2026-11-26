@@ -1343,6 +1343,94 @@ func TestConditionalValidator_TriggersNilExpectedValue(t *testing.T) {
 	}
 }
 
+func TestConditionalRegexValidator_MIGUnsupportedFields(t *testing.T) {
+	testSource := "test/mig-unsupported-fields"
+	info := modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{
+			{Name: "provisioning_engine", Default: "AUTO"},
+			{Name: "dws_flex", Default: map[string]interface{}{"enabled": false}},
+			{Name: "future_reservation", Default: ""},
+			{Name: "maintenance_interval", Default: nil},
+			{Name: "instance_properties", Default: nil},
+		},
+	}
+	modulereader.SetModuleInfo(testSource, "terraform", info)
+	modulereader.SetModuleInfo(testSource, "", info)
+	t.Cleanup(func() {
+		modulereader.SetModuleInfo(testSource, "terraform", modulereader.ModuleInfo{})
+		modulereader.SetModuleInfo(testSource, "", modulereader.ModuleInfo{})
+	})
+
+	validator := ConditionalRegexValidator{}
+	for _, tc := range []struct {
+		field string
+		val   cty.Value
+		empty cty.Value
+	}{
+		{"future_reservation", cty.StringVal("fr-1"), cty.StringVal("")},
+		{"maintenance_interval", cty.StringVal("PERIODIC"), cty.StringVal("")},
+		{"instance_properties", cty.ObjectVal(map[string]cty.Value{"scheduling": cty.StringVal("x")}), cty.EmptyObjectVal},
+	} {
+		rule := modulereader.ValidationRule{
+			Validator:    "conditional_regex",
+			ErrorMessage: tc.field + " is not supported with provisioning_engine = 'MIG'.",
+			Inputs: map[string]interface{}{
+				"triggers": map[string]interface{}{
+					tc.field:           nil,
+					"dws_flex.enabled": false,
+				},
+				"dependent":      "provisioning_engine",
+				"pattern":        "^MIG$",
+				"match_expected": false,
+			},
+		}
+
+		mkBP := func(settings map[string]cty.Value) config.Blueprint {
+			return config.Blueprint{
+				BlueprintName: "test-bp",
+				Groups: []config.Group{{
+					Name: "primary",
+					Modules: []config.Module{{
+						ID:       "test-ns",
+						Source:   testSource,
+						Settings: config.NewDict(settings),
+					}},
+				}},
+			}
+		}
+
+		// Explicit MIG with unsupported field -> must fail
+		bpFail := mkBP(map[string]cty.Value{
+			tc.field:              tc.val,
+			"provisioning_engine": cty.StringVal("MIG"),
+		})
+		if err := validator.Validate(bpFail, bpFail.Groups[0].Modules[0], rule, bpFail.Groups[0], 0); err == nil {
+			t.Fatalf("%s: expected validation error with provisioning_engine=MIG, got nil", tc.field)
+		}
+
+		// AUTO (omitted) or BULK_INSERT with unsupported field -> must pass (falls back to BULK_INSERT)
+		for _, eng := range []string{"", "AUTO", "BULK_INSERT"} {
+			settings := map[string]cty.Value{tc.field: tc.val}
+			if eng != "" {
+				settings["provisioning_engine"] = cty.StringVal(eng)
+			}
+			bpOK := mkBP(settings)
+			if err := validator.Validate(bpOK, bpOK.Groups[0].Modules[0], rule, bpOK.Groups[0], 0); err != nil {
+				t.Fatalf("%s (engine=%q): expected pass, got: %v", tc.field, eng, err)
+			}
+		}
+
+		// Explicit MIG with empty/unset field -> must pass
+		bpEmpty := mkBP(map[string]cty.Value{
+			tc.field:              tc.empty,
+			"provisioning_engine": cty.StringVal("MIG"),
+		})
+		if err := validator.Validate(bpEmpty, bpEmpty.Groups[0].Modules[0], rule, bpEmpty.Groups[0], 0); err != nil {
+			t.Fatalf("%s (empty): expected pass with MIG, got: %v", tc.field, err)
+		}
+	}
+}
+
 func TestConditionalValidator_Dependents(t *testing.T) {
 	baseBP := config.Blueprint{
 		BlueprintName: "test-bp",
