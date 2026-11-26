@@ -471,65 +471,25 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
 
     # Fail fast before any MIG template patch or createInstances call if an explicit MIG nodeset
     # targets a DENSE, CALENDAR, or policy-attached reservation unsupported by static MIG templates.
-    nodes_by_nodeset: Dict[str, List[str]] = {}
-    for node in nodes:
-        ns_name = lkp.node_nodeset_name(node)
-        nodes_by_nodeset.setdefault(ns_name, []).append(node)
-
-    blocked_nodes_set: set[str] = set()
-    blocked_entries: List[Tuple[str, List[str], str]] = []
-    for ns_name, ns_nodes in nodes_by_nodeset.items():
-        ns = lkp.node_nodeset(ns_nodes[0])
-        res_err = _mig_unsupported_reservation_reason(ns, lkp)
-        if res_err:
-            short_ns_nodes = list(dict.fromkeys(n.split(".")[0] for n in ns_nodes))
-            blocked_nodes_set.update(ns_nodes)
-            blocked_entries.append((ns_name, short_ns_nodes, res_err))
-
-    if blocked_entries:
-        combined_reason = "; ".join(dict.fromkeys(err for _, _, err in blocked_entries))
-        for ns_name, short_ns_nodes, res_err in blocked_entries:
-            requeue_ns, ignore_ns = _partition_abort_nodes(short_ns_nodes)
-            down_ns = list(dict.fromkeys(requeue_ns + ignore_ns))
-            log.error(f"Aborting MIG resume for nodeset {ns_name} ({to_hostlist(short_ns_nodes)}): {res_err}")
-            if down_ns:
-                handle_resume_failure(
-                    down_ns,
-                    res_err,
-                    resume_data,
-                    error_handler.Action.IGNORE,
-                    combined_reason if excl_job_id is not None else res_err,
-                )
-        if excl_job_id is not None:
-            remaining_short = list(dict.fromkeys(
-                n.split(".")[0] for n in nodes if n not in blocked_nodes_set
-            ))
-            if remaining_short:
-                requeue_rem, ignore_rem = _partition_abort_nodes(remaining_short)
-                if ignore_rem:
-                    handle_resume_failure(
-                        ignore_rem,
-                        f"Aborted: sibling nodeset blocked ({combined_reason}); skipped power_down for unverified/external VM",
-                        resume_data,
-                        error_handler.Action.IGNORE,
-                        combined_reason,
-                    )
-                if requeue_rem:
-                    handle_resume_failure(
-                        requeue_rem,
-                        combined_reason,
-                        resume_data,
-                        error_handler.Action.REQUEUE,
-                        combined_reason,
-                    )
-            return
-        nodes_by_mig = {
-            m: [n for n in m_nodes if n not in blocked_nodes_set]
-            for m, m_nodes in nodes_by_mig.items()
-        }
-        nodes_by_mig = {m: m_nodes for m, m_nodes in nodes_by_mig.items() if m_nodes}
-        if not nodes_by_mig:
-            return
+    # resume_nodes() -> group_nodes_bulk() -> create_placements() emits one chunk per nodeset, so
+    # every production call contains a single nodeset; cross-nodeset exclusive jobs follow the
+    # existing per-chunk failure semantics.
+    ns_name = lkp.node_nodeset_name(nodes[0])
+    res_err = _mig_unsupported_reservation_reason(lkp.node_nodeset(nodes[0]), lkp)
+    if res_err:
+        short_nodes = list(dict.fromkeys(n.split(".")[0] for n in nodes))
+        requeue_ns, ignore_ns = _partition_abort_nodes(short_nodes)
+        down_ns = list(dict.fromkeys(requeue_ns + ignore_ns))
+        log.error(f"Aborting MIG resume for nodeset {ns_name} ({to_hostlist(short_nodes)}): {res_err}")
+        if down_ns:
+            handle_resume_failure(
+                down_ns,
+                res_err,
+                resume_data,
+                error_handler.Action.IGNORE,
+                res_err,
+            )
+        return
 
     for mig_name, mig_nodes in nodes_by_mig.items():
         nodeset = lkp.node_nodeset(mig_nodes[0])

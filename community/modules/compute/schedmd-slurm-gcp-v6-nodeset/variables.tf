@@ -735,6 +735,11 @@ variable "provisioning_engine" {
       or an A4X / A4X Max slice-aligned accelerator_topology with zone_target_shape = 'ANY_SINGLE_ZONE')
       to 'MIG'. Dynamic, hybrid (static + dynamic), TPU, reserved, and non-topology compact-placement
       NodeSets stay on 'BULK_INSERT'.
+      Warning: on a deployed nodeset where 'AUTO' resolved to 'MIG', changing any eligibility input
+      (e.g. node_count_dynamic_max > 0, adding reservation_name, enabling enable_placement, or resizing
+      an A4X / A4X Max nodeset off a slice multiple) flips it back to 'BULK_INSERT' and terraform apply
+      destroys the managed instance group and its running VMs. Drain the nodeset first, or pin
+      provisioning_engine.
     - 'MIG': Forces Managed Instance Group provisioning. Requires node_count_dynamic_max = 0;
       enable_placement is only supported with an A4X / A4X Max accelerator_topology; future_reservation,
       maintenance_interval, and instance_properties are not supported; and reservation_name currently

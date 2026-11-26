@@ -2501,31 +2501,24 @@ def test_resume_mig_nodes_reservation_type_fail_fast(
   assert mock_handle_failure.call_args.args[0] == ["c-n-1"]
   assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
 
-  # 8. Exclusive multi-nodeset job: dense nodeset -> IGNORE (DOWN), healthy sibling -> REQUEUE (no creates)
+  # 8. Single-nodeset exclusive job on blocked MIG nodeset -> IGNORE (DOWN), no createInstances
   mock_execute.reset_mock()
   mock_handle_failure.reset_mock()
   mock_compute = unittest.mock.MagicMock()
   mock_compute_prop.return_value = mock_compute
   mock_compute.reservations().get().execute.return_value = {"deploymentType": "DENSE"}
-  cfg_multi = _make_cfg({
-      "ok": TstNodeset(
-          nodeset_name="ok",
-          region="us-central1",
-          node_count_static=2,
-          provisioning_engine="MIG",
-      )
-  })
-  lkp_excl = util.Lookup(cfg_multi)
+  lkp_excl = util.Lookup(_make_cfg())
   with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
-    resume.resume_mig_nodes(["c-n-0", "c-ok-0"], excl_job_id=77, lkp=lkp_excl)
+    resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=77, lkp=lkp_excl)
   mock_compute.regionInstanceGroupManagers().createInstances.assert_not_called()
-  assert mock_handle_failure.call_count == 2
-  assert mock_handle_failure.call_args_list[0].args[0] == ["c-n-0"]
-  assert mock_handle_failure.call_args_list[0].args[3] == error_handler.Action.IGNORE
-  assert mock_handle_failure.call_args_list[1].args[0] == ["c-ok-0"]
-  assert mock_handle_failure.call_args_list[1].args[3] == error_handler.Action.REQUEUE
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[0] == ["c-n-0", "c-n-1"]
+  assert mock_handle_failure.call_args.args[1].startswith(util.MIG_UNSUPPORTED_RESERVATION_PREFIX)
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
+  assert mock_handle_failure.call_args.args[4] == mock_handle_failure.call_args.args[1]
 
-  # 9. Non-exclusive multi-nodeset batch: dense nodeset -> IGNORE (DOWN), healthy sibling still resumes
+  # 9. Cross-nodeset exclusive job via resume_nodes(): create_placements() splits into single-nodeset
+  #    chunks, so resume_mig_nodes is invoked once per nodeset (blocked -> IGNORE, healthy -> resumes)
   mock_execute.reset_mock()
   mock_handle_failure.reset_mock()
   mock_compute = unittest.mock.MagicMock()
@@ -2535,52 +2528,39 @@ def test_resume_mig_nodes_reservation_type_fail_fast(
       "managedInstances": []
   }
   mock_execute.return_value = {"status": "DONE"}
-  lkp_non_excl = util.Lookup(cfg_multi)
-  with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
-    resume.resume_mig_nodes(["c-n-0", "c-ok-0"], excl_job_id=None, lkp=lkp_non_excl)
-  mock_handle_failure.assert_called_once()
-  assert mock_handle_failure.call_args.args[0] == ["c-n-0"]
-  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
-  mock_compute.regionInstanceGroupManagers().createInstances.assert_called_once()
-  assert mock_compute.regionInstanceGroupManagers().createInstances.call_args.kwargs["body"]["instances"] == [
-      {"name": "c-ok-0"}
-  ]
-
-  # 10. Exclusive job with two distinct blocked nodesets preserves both reasons in AdminComment
-  mock_execute.reset_mock()
-  mock_handle_failure.reset_mock()
-  mock_compute = unittest.mock.MagicMock()
-  mock_compute_prop.return_value = mock_compute
-  res_b = "projects/host-proj/reservations/res-b"
-  def _get_res_side_effect(**kwargs):
-    res_mock = unittest.mock.MagicMock()
-    if kwargs.get("reservation") == "res-b":
-      res_mock.execute.return_value = {"reservationMode": "CALENDAR"}
-    else:
-      res_mock.execute.return_value = {"deploymentType": "DENSE"}
-    return res_mock
-  mock_compute.reservations().get.side_effect = _get_res_side_effect
-  cfg_two_blocked = _make_cfg({
-      "m": TstNodeset(
-          nodeset_name="m",
+  cfg_multi = _make_cfg({
+      "ok": TstNodeset(
+          nodeset_name="ok",
           region="us-central1",
           node_count_static=2,
           provisioning_engine="MIG",
-          reservation_name=res_b,
-          zone_policy_allow=["us-central1-a"],
       )
   })
-  lkp_two = util.Lookup(cfg_two_blocked)
-  with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
-    resume.resume_mig_nodes(["c-n-0", "c-m-0"], excl_job_id=88, lkp=lkp_two)
-  mock_compute.regionInstanceGroupManagers().createInstances.assert_not_called()
-  assert mock_handle_failure.call_count == 2
-  for call in mock_handle_failure.call_args_list:
-    assert call.args[3] == error_handler.Action.IGNORE
-    assert "DENSE deployment" in call.args[4]
-    assert "CALENDAR mode" in call.args[4]
+  lkp_cross = util.Lookup(cfg_multi)
+  excl_resume_data = resume.ResumeData(
+      jobs=[resume.ResumeJobData(job_id=77, partition="p", nodes_alloc=["c-n-0", "c-ok-0"])]
+  )
+  with (
+      unittest.mock.patch("resume.lookup", return_value=lkp_cross),
+      unittest.mock.patch("resume.resume_mig_nodes", wraps=resume.resume_mig_nodes) as spy_mig,
+      unittest.mock.patch.object(util.Lookup, "instance", return_value=None),
+      unittest.mock.patch.object(util.Lookup, "is_provisioning_flex_node", return_value=False),
+      unittest.mock.patch.object(util.Lookup, "is_tpu_node", return_value=False),
+  ):
+    resume.resume_nodes(["c-n-0", "c-ok-0"], resume_data=excl_resume_data)
+  assert spy_mig.call_count == 2
+  dispatched = {(tuple(c.args[0]), c.args[1]) for c in spy_mig.call_args_list}
+  assert dispatched == {(("c-n-0",), 77), (("c-ok-0",), 77)}
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[0] == ["c-n-0"]
+  assert mock_handle_failure.call_args.args[1].startswith(util.MIG_UNSUPPORTED_RESERVATION_PREFIX)
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
+  mock_compute.regionInstanceGroupManagers().createInstances.assert_called_once()
+  assert mock_compute.regionInstanceGroupManagers().createInstances.call_args.kwargs["body"]["instances"] == [
+      {"name": "c-ok-0", "preservedState": {"metadata": {"slurm_job_id": "77"}}}
+  ]
 
-  # 11. Dormant (upcoming) CALENDAR reservation on explicit MIG fails fast immediately via resume_nodes
+  # 10. Dormant (upcoming) CALENDAR reservation on explicit MIG fails fast immediately via resume_nodes
   #     while BULK_INSERT still treats it as dormant ("Reservation is not active")
   mock_execute.reset_mock()
   mock_handle_failure.reset_mock()
@@ -2627,26 +2607,3 @@ def test_resume_mig_nodes_reservation_type_fail_fast(
   assert mock_handle_failure.call_args.args[0] == ["c-n-0"]
   assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
   assert "CALENDAR mode requires RESERVATION_BOUND" in mock_handle_failure.call_args.args[1]
-
-  # 12. Exclusive multi-nodeset job where healthy sibling is downgraded to IGNORE (e.g. GCE lookup error):
-  #     sibling reason must NOT start with MIG_UNSUPPORTED_RESERVATION_PREFIX so slurmsync won't freeze it.
-  mock_execute.reset_mock()
-  mock_handle_failure.reset_mock()
-  mock_compute = unittest.mock.MagicMock()
-  mock_compute_prop.return_value = mock_compute
-  mock_compute.reservations().get().execute.return_value = {"deploymentType": "DENSE"}
-  lkp_sib_err = util.Lookup(cfg_multi)
-  with unittest.mock.patch.object(
-      util.Lookup, "instance", side_effect=RuntimeError("transient GCE error")
-  ):
-    resume.resume_mig_nodes(["c-n-0", "c-ok-0"], excl_job_id=99, lkp=lkp_sib_err)
-  mock_compute.regionInstanceGroupManagers().createInstances.assert_not_called()
-  assert mock_handle_failure.call_count == 2
-  blocked_call, sibling_call = mock_handle_failure.call_args_list
-  assert blocked_call.args[0] == ["c-n-0"]
-  assert blocked_call.args[1].startswith(util.MIG_UNSUPPORTED_RESERVATION_PREFIX)
-  assert blocked_call.args[3] == error_handler.Action.IGNORE
-  assert sibling_call.args[0] == ["c-ok-0"]
-  assert sibling_call.args[3] == error_handler.Action.IGNORE
-  assert not sibling_call.args[1].startswith(util.MIG_UNSUPPORTED_RESERVATION_PREFIX)
-  assert "sibling nodeset blocked" in sibling_call.args[1]
