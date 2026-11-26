@@ -1501,3 +1501,135 @@ func TestIsNotFoundOrNoMatchErrorAndFirstNonEmpty(t *testing.T) {
 		t.Errorf("firstNonEmpty(blank) = %q, want empty", got)
 	}
 }
+
+func TestDiscoverInventory_MIGPoolSplitAndRoleFlags(t *testing.T) {
+	t.Parallel()
+	mig1g := makeNode("gpu-mig-1g", map[string]string{
+		InstanceTypeLabel:     "a2-highgpu-1g",
+		NvidiaGPUProductLabel: "NVIDIA-A100-SXM4-40GB",
+	}, map[string]interface{}{"cpu": "12", "nvidia.com/mig-1g.5gb": "7"}, true)
+	mig3g := makeNode("gpu-mig-3g", map[string]string{
+		InstanceTypeLabel:     "a2-highgpu-1g",
+		NvidiaGPUProductLabel: "NVIDIA-A100-SXM4-40GB",
+	}, map[string]interface{}{"cpu": "12", "nvidia.com/mig-3g.20gb": "2"}, true)
+	ctrlNode := makeNode("ctrl-1", map[string]string{
+		InstanceTypeLabel:     "n2-standard-8",
+		ControlPlaneRoleLabel: "",
+	}, map[string]interface{}{"cpu": "8"}, true)
+	sysNode := makeNodeWithSpec("sys-1", map[string]string{
+		InstanceTypeLabel: "n2-standard-8",
+		GKENodePoolLabel:  "addons",
+	}, map[string]interface{}{"cpu": "8"}, true, false, []interface{}{
+		map[string]interface{}{"key": "CriticalAddonsOnly", "value": "true", "effect": "NoSchedule"},
+	})
+
+	lister := &fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR: {mig1g, mig3g, ctrlNode, sysNode},
+		},
+	}
+	inv, err := DiscoverInventory(lister, nil, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory() err = %v", err)
+	}
+	migRes := map[string]int{}
+	sawCtrl, sawSys := false, false
+	for _, p := range inv.Pools {
+		if p.IsGPU {
+			migRes[p.GPUResourceName] = p.GPUsPerNode
+		}
+		if p.IsControlPlane {
+			sawCtrl = true
+		}
+		if p.IsSystemPool {
+			sawSys = true
+		}
+	}
+	if migRes["nvidia.com/mig-1g.5gb"] != 7 || migRes["nvidia.com/mig-3g.20gb"] != 2 {
+		t.Errorf("heterogeneous MIG pools were not split by gpuResourceName: got %v", migRes)
+	}
+	if !sawCtrl || !sawSys {
+		t.Errorf("expected IsControlPlane and IsSystemPool flags to be populated, got sawCtrl=%v sawSys=%v", sawCtrl, sawSys)
+	}
+}
+
+func TestIsGPUResourceName(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		key  string
+		want bool
+	}{
+		{"nvidia.com/gpu", true},
+		{"nvidia.com/mig-1g.5gb", true},
+		{"amd.com/gpu", true},
+		{"gpu.intel.com/i915", true},
+		{"gpu.intel.com/xe", true},
+		{"gpu.intel.com/millicores", false},
+		{"gpu.intel.com/tiles", false},
+		{"gpu.intel.com/memory.max", false},
+		{"gpu.intel.com/i915_monitoring", false},
+		{"google.com/tpu", false},
+		{"cpu", false},
+	}
+	for _, tc := range cases {
+		if got := IsGPUResourceName(tc.key); got != tc.want {
+			t.Errorf("IsGPUResourceName(%q) = %v, want %v", tc.key, got, tc.want)
+		}
+	}
+}
+
+func TestDiscoverInventory_GKEAccelLabelTerminatingSliceAndExplicitNoMatch(t *testing.T) {
+	t.Parallel()
+	migNode := makeNode("mig-only", map[string]string{
+		InstanceTypeLabel:     "a2-highgpu-1g",
+		GKENodePoolLabel:      "mig-pool",
+		NvidiaGPUProductLabel: "NVIDIA-A100-SXM4-40GB",
+	}, map[string]interface{}{"cpu": "12", "nvidia.com/mig-1g.5gb": "7"}, true)
+	gkeNode := makeNode("gke-gpu", map[string]string{
+		InstanceTypeLabel:   "g2-standard-8",
+		GKENodePoolLabel:    "l4-pool",
+		GKEAcceleratorLabel: "nvidia-l4",
+	}, map[string]interface{}{"cpu": "8", "nvidia.com/gpu": "1"}, true)
+
+	termSlice := makeSliceCRD("term-slice", "", "tpu7x", "2x2x1", "True", "Ready", nil)
+	termSlice.Object["metadata"].(map[string]interface{})["deletionTimestamp"] = "2026-11-25T10:00:00Z"
+
+	inv, err := DiscoverInventory(&fakeDiscoveryLister{
+		byGVR: map[schema.GroupVersionResource][]unstructured.Unstructured{
+			NodeGVR:     {migNode, gkeNode},
+			TPUSliceGVR: {termSlice},
+		},
+	}, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{
+		LabelSchemeOverride: SchemeTPUSlice,
+		HardwareResolver:    testHardwareResolver{},
+	})
+	if err != nil {
+		t.Fatalf("DiscoverInventory() err = %v", err)
+	}
+	for _, p := range inv.Pools {
+		if p.NodePoolName == "mig-pool" && p.GKEAcceleratorLabel != "" {
+			t.Errorf("mig-pool without GKE accelerator label must have empty GKEAcceleratorLabel, got %q", p.GKEAcceleratorLabel)
+		}
+		if p.NodePoolName == "l4-pool" && p.GKEAcceleratorLabel != "nvidia-l4" {
+			t.Errorf("l4-pool GKEAcceleratorLabel = %q, want nvidia-l4", p.GKEAcceleratorLabel)
+		}
+	}
+	if len(inv.Slices) != 1 || inv.Slices[0].Ready || inv.Slices[0].State != "Terminating" {
+		t.Errorf("terminating slice = %+v, want Ready=false State=Terminating", inv.Slices)
+	}
+
+	// ExplicitMode + SchemeTPUSlice + NoMatch on Slice CRDs must set SliceInventoryUnavailable = true.
+	explicitInv, err := DiscoverInventory(&fakeDiscoveryLister{
+		errGVR: map[schema.GroupVersionResource]error{
+			NodeGVR:            apierrors.NewForbidden(NodeGVR.GroupResource(), "", errors.New("denied")),
+			TPUSliceGVR:        apierrors.NewNotFound(TPUSliceGVR.GroupResource(), "the server could not find the requested resource"),
+			TPUSliceV1Beta1GVR: apierrors.NewNotFound(TPUSliceV1Beta1GVR.GroupResource(), "the server could not find the requested resource"),
+		},
+	}, nil, DiscoverOptions{LabelSchemeOverride: SchemeTPUSlice, HardwareResolver: testHardwareResolver{}})
+	if err != nil {
+		t.Fatalf("DiscoverInventory(explicit NoMatch) err = %v", err)
+	}
+	if !explicitInv.SliceInventoryUnavailable {
+		t.Errorf("expected SliceInventoryUnavailable=true when ExplicitMode+tpu-slice gets NoMatch on Slice CRDs")
+	}
+}

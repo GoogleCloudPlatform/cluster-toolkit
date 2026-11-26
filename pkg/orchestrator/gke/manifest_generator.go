@@ -17,6 +17,7 @@ package gke
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
@@ -176,7 +177,7 @@ func (g *GKEOrchestrator) buildResourcesStringWithGPUKey(cpu, mem, gpu, gpuResou
 		if err != nil {
 			return "", fmt.Errorf("failed to parse GPU quantity %q: %w", gpu, err)
 		}
-		limits[corev1.ResourceName(k8s.FirstNonEmpty(gpuResourceName, "nvidia.com/gpu"))] = q
+		limits[corev1.ResourceName(cmp.Or(strings.TrimSpace(gpuResourceName), "nvidia.com/gpu"))] = q
 	}
 	if tpu != "" {
 		q, err := resource.ParseQuantity(tpu)
@@ -207,6 +208,7 @@ func (g *GKEOrchestrator) buildResourcesStringWithGPUKey(cpu, mem, gpu, gpuResou
 func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) (ManifestOptions, error) {
 	originalAccelType := job.ComputeType
 
+	omitGKENodePool := !g.hasGKENodePoolLabel(job.MachineType, profile.K8sPool)
 	schedOpts := SchedulingOptions{
 		PlacementPolicy:    job.PlacementPolicy,
 		NodeAffinityLabels: job.NodeConstraint,
@@ -215,9 +217,9 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		IsDynamicSlicing:   isDynamicSlicing,
 		IsStaticSlicing:    isStaticSlicing,
 		MachineType:        job.MachineType,
-		IsTPU:              config.IsTPU(job.MachineType) || config.IsTPU(originalAccelType),
+		IsTPU:              profile.IsTPU || (g.mode != orchestrator.TypeK8s && (config.IsTPU(job.MachineType) || config.IsTPU(originalAccelType))),
 		IsNAP:              job.GKENAPProvisioning != "",
-		OmitGKENodePool:    !g.hasGKENodePoolLabel(),
+		OmitGKENodePool:    omitGKENodePool,
 	}
 
 	pathwaysInstanceType := derivePathwaysInstanceType(g.GenerateGKENodeSelectorLabel(originalAccelType), job.MachineType, originalAccelType, schedOpts.Topology)
@@ -234,6 +236,8 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 	opts := ManifestOptions{
 		IsDynamicSlicing:              isDynamicSlicing,
 		IsStaticSlicing:               isStaticSlicing,
+		OmitGKENodePool:               omitGKENodePool,
+		K8sPool:                       profile.K8sPool,
 		WorkloadName:                  job.WorkloadName,
 		FullImageName:                 fullImageName,
 		CommandToRun:                  job.CommandToRun,
@@ -273,7 +277,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		}
 	}
 
-	if err := g.fillManifestStrings(&opts, schedOpts, job, isDynamicSlicing, isStaticSlicing, profile.IsCPUMachine); err != nil {
+	if err := g.fillManifestStrings(&opts, schedOpts, job, isDynamicSlicing, isStaticSlicing, profile); err != nil {
 		return ManifestOptions{}, err
 	}
 
@@ -347,8 +351,8 @@ func derivePathwaysInstanceType(gkeLabel, machineType, accelType, topology strin
 	return fmt.Sprintf("%s:%s", pathwaysPlatform, topology)
 }
 
-func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts SchedulingOptions, job orchestrator.JobDefinition, isDynamicSlicing bool, isStaticSlicing bool, isCPUMachine bool) error {
-	nodeSelectorStr, err := g.buildNodeSelector(schedOpts, job, isCPUMachine)
+func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts SchedulingOptions, job orchestrator.JobDefinition, isDynamicSlicing bool, isStaticSlicing bool, profile JobProfile) error {
+	nodeSelectorStr, err := g.buildNodeSelectorWithProfile(schedOpts, job, profile)
 	if err != nil {
 		return err
 	}
@@ -368,7 +372,7 @@ func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts S
 	isSubSlicing := isDynamicSlicing || isStaticSlicing
 	opts.TopologyAnnotation = g.buildTopologyAnnotation(schedOpts.Topology, job.MachineType, job.NumSlices, job.NodesPerSlice, isSubSlicing)
 
-	tolerationsStr, err := g.resolveTolerations(job.MachineType, job.GKENAPProvisioning, job.GKENAPReservation, 16)
+	tolerationsStr, err := g.resolveTolerationsForWorkload(job.MachineType, schedOpts.IsTPU, job.GKENAPProvisioning, job.GKENAPReservation, 16)
 	if err != nil {
 		return err
 	}
@@ -431,8 +435,23 @@ func (g *GKEOrchestrator) resolveReservationTolerations(machineType, reservation
 }
 
 func (g *GKEOrchestrator) resolveTolerations(acceleratorType string, consumptionModel string, reservationName string, indent int) (string, error) {
-	// Copy the slice to avoid mutating any shared underlying array returned by GetTolerations
-	tolerations := append([]corev1.Toleration(nil), GetTolerations(acceleratorType)...)
+	return g.resolveTolerationsForWorkload(acceleratorType, config.IsTPU(acceleratorType), consumptionModel, reservationName, indent)
+}
+
+func (g *GKEOrchestrator) resolveTolerationsForWorkload(acceleratorType string, isTPU bool, consumptionModel string, reservationName string, indent int) (string, error) {
+	var tolerations []corev1.Toleration
+	if g.mode == orchestrator.TypeK8s {
+		if isTPU {
+			tolerations = append(tolerations, corev1.Toleration{
+				Key:      "google.com/tpu",
+				Operator: corev1.TolerationOpExists,
+				Effect:   corev1.TaintEffectNoSchedule,
+			})
+		}
+	} else {
+		// Copy the slice to avoid mutating any shared underlying array returned by GetTolerations
+		tolerations = append([]corev1.Toleration(nil), GetTolerations(acceleratorType)...)
+	}
 
 	switch consumptionModel {
 	case "spot":
@@ -858,15 +877,24 @@ func warnPathwaysWorkerRestartPolicy(jobSet string) bool {
 	return false
 }
 
-func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
-	exclusiveTopology := ""
-	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
-		if opts.NodesPerSlice <= 1 {
-			exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname"
-		} else if g.hasGKENodePoolLabel() {
-			exclusiveTopology = "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
-		}
+func (g *GKEOrchestrator) resolveExclusiveTopologyAnnotation(opts ManifestOptions, isTPU bool) string {
+	if opts.IsDynamicSlicing || opts.IsStaticSlicing {
+		return ""
 	}
+	if opts.NodesPerSlice <= 1 {
+		return "alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname"
+	}
+	if g.mode == orchestrator.TypeK8s && g.labelScheme() == k8s.SchemeTPUSlice && isTPU {
+		return "alpha.jobset.sigs.k8s.io/exclusive-topology: " + k8s.TPUSliceNameLabel
+	}
+	if !opts.OmitGKENodePool && g.hasGKENodePoolLabel(opts.MachineType, opts.K8sPool) {
+		return "alpha.jobset.sigs.k8s.io/exclusive-topology: cloud.google.com/gke-nodepool"
+	}
+	return ""
+}
+
+func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
+	exclusiveTopology := g.resolveExclusiveTopologyAnnotation(opts, isTPU)
 
 	workerBackoffLimit := pathwaysWorkerBackoffLimit(opts.Pathways.MaxSliceRestarts, opts.NodesPerSlice)
 
@@ -896,7 +924,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 	}
 
 	proxyEnv, workloadEnv := resolvePathwaysEnv(opts)
-	hostNetworkEnabled := resolveHostNetwork(opts, isTPU, isGPU)
+	hostNetworkEnabled := resolveHostNetwork(opts, isTPU, isGPU, g.mode != orchestrator.TypeK8s)
 
 	return jobSetTemplateData{
 		WorkloadName:                  opts.WorkloadName,
@@ -1031,9 +1059,9 @@ func withSidecarNameArg(proxyArgs []string) []string {
 	return append(proxyArgs, "--sidecar_name=external")
 }
 
-func resolveHostNetwork(opts ManifestOptions, isTPU, isGPU bool) bool {
+func resolveHostNetwork(opts ManifestOptions, isTPU, isGPU, isGKE bool) bool {
 	if opts.IsPathwaysJob || isTPU {
-		if opts.ServiceAccountName != "" {
+		if isGKE && opts.ServiceAccountName != "" {
 			if opts.NumSlices > 1 {
 				logging.Warn("Disabling hostNetwork for --service-account %q (GKE Workload Identity); GKE recommends hostNetwork: true for multi-slice TPU DCN performance.", opts.ServiceAccountName)
 			} else {
@@ -1043,7 +1071,7 @@ func resolveHostNetwork(opts ManifestOptions, isTPU, isGPU bool) bool {
 		}
 		return true
 	}
-	if isGPU && opts.ServiceAccountName != "" {
+	if isGKE && isGPU && opts.ServiceAccountName != "" {
 		logging.Warn("--service-account %q is set on a GPU workload, which uses hostNetwork: true. Pods with hostNetwork: true bypass GKE Workload Identity and authenticate to Google Cloud APIs as the node pool IAM service account unless GCS FUSE CSI with hostNetworkPodKSA is used.", opts.ServiceAccountName)
 	}
 	return isGPU

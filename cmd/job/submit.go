@@ -107,6 +107,11 @@ It accepts parameters for the container image, command to execute, accelerator t
 and workload scheduling configurations like workload name, queue, nodes, and restarts.`,
 	RunE: runSubmitCmd,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if detectedOrchestratorType == orchestrator.TypeK8s {
+			if err := validateK8sSubmitPreRun(cmd); err != nil {
+				return err
+			}
+		}
 		pathways.RunSPSWorkload = strings.TrimSpace(pathways.RunSPSWorkload)
 		if cmd.Flags().Changed("pathways-run-sps-workload") && pathways.RunSPSWorkload == "" {
 			return fmt.Errorf("--pathways-run-sps-workload cannot be empty")
@@ -222,12 +227,39 @@ func init() {
 
 	SubmitCmd.Flags().BoolVar(&gkeMtcEnabled, "gke-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")
 	SubmitCmd.Flags().StringVar(&gkeMtcRamdiskDirectory, "gke-mtc-ramdisk-dir", "", "Ramdisk directory path for Multi-Tier Checkpointing (MTC). Required when --gke-mtc-enabled is set.")
-	SubmitCmd.Flags().BoolVar(&enableMLDiagnostics, "enable-ml-diagnostics", false, "Enables ML Diagnostics for the workload (uses the GKE managed webhook by default, or injects the collector native sidecar on Kubernetes 1.29+ TPU pods when --ml-diagnostics-image or GCLUSTER_TELEMETRY_IMAGE is set).")
-	SubmitCmd.Flags().StringVar(&mlDiagnosticsImage, "ml-diagnostics-image", "", "Container image for the ML Diagnostics telemetry collector native sidecar on Kubernetes 1.29+ TPU workloads (requires --enable-ml-diagnostics; overrides GCLUSTER_TELEMETRY_IMAGE, and --ml-diagnostics-image=\"\" ignores it so GKE uses the managed webhook).")
+	SubmitCmd.Flags().BoolVar(&enableMLDiagnostics, "enable-ml-diagnostics", false, "Enables ML Diagnostics for the workload (uses the GKE managed webhook by default on GKE, or injects the collector native sidecar on Kubernetes 1.29+ TPU pods when --ml-diagnostics-image or GCLUSTER_TELEMETRY_IMAGE is set, or automatically in Kubernetes (k8s) mode via TPU node image cache discovery).")
+	SubmitCmd.Flags().StringVar(&mlDiagnosticsImage, "ml-diagnostics-image", "", "Container image for the ML Diagnostics telemetry collector native sidecar on Kubernetes 1.29+ TPU workloads (requires --enable-ml-diagnostics; overrides GCLUSTER_TELEMETRY_IMAGE and k8s TPU node auto-discovery, and --ml-diagnostics-image=\"\" ignores GCLUSTER_TELEMETRY_IMAGE so GKE uses the managed webhook).")
 	SubmitCmd.Flags().IntVar(&mlDiagnosticsTelemetryPort, "ml-diagnostics-telemetry-port", k8s.DefaultTelemetryCollectorPort, "Prometheus metrics port exposed by the ML Diagnostics collector sidecar (requires --enable-ml-diagnostics with --ml-diagnostics-image or GCLUSTER_TELEMETRY_IMAGE on GKE; ports 8431-8438, 8471, 8476-8479, and 13133 are reserved).")
 	SubmitCmd.Flags().StringVar(&gkeCustomTemplatesPath, "gke-custom-templates-path", "", "Path to a local directory containing custom GKE templates overrides.")
 
 	_ = SubmitCmd.MarkFlagRequired("name")
+}
+
+func validateK8sSubmitPreRun(cmd *cobra.Command) error {
+	if cmd.Flags().Changed("gke-disable-parallel-containers") {
+		return fmt.Errorf("--gke-disable-parallel-containers is a GKE-only flag and is not supported in Kubernetes (k8s) mode")
+	}
+	preRunPathways := pathways
+	if len(pathwaysProxyEnv) > 0 {
+		preRunPathways.ProxyEnv = map[string]string{"_": "_"}
+	}
+	if len(pathwaysServerEnv) > 0 {
+		preRunPathways.ServerEnv = map[string]string{"_": "_"}
+	}
+	if len(pathwaysWorkerEnv) > 0 {
+		preRunPathways.WorkerEnv = map[string]string{"_": "_"}
+	}
+	return orchestrator.ValidateK8sSubmitJob(orchestrator.JobDefinition{
+		IsPathwaysJob:          isPathwaysJob || hasChangedPathwaysFlags(cmd),
+		Pathways:               preRunPathways,
+		GKEScheduler:           gkeScheduler,
+		PlacementPolicy:        placementPolicy,
+		GKEMTCEnabled:          gkeMtcEnabled,
+		GKEMTCRamdiskDirectory: gkeMtcRamdiskDirectory,
+		GKENAPProvisioning:     gkeNapProvisioning,
+		GKENAPReservation:      gkeNapReservation,
+		RawMounts:              volumeStr,
+	})
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
@@ -256,7 +288,7 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		awaitJobCompletion = true
 	}
 
-	if config.IsTPU(computeType) && cmd.Flags().Changed("num-nodes") {
+	if detectedOrchestratorType != orchestrator.TypeK8s && config.IsTPU(computeType) && cmd.Flags().Changed("num-nodes") {
 		return fmt.Errorf("--num-nodes cannot be used with TPU jobs (it is calculated automatically from topology)")
 	}
 

@@ -366,6 +366,8 @@ func setupSubmitTestEnv(t *testing.T) {
 	t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "empty-kubeconfig"))
 	t.Setenv("DOCKER_CONFIG", t.TempDir())
 	t.Setenv("GCLUSTER_ORCHESTRATOR", "")
+	t.Setenv("GCLUSTER_LABEL_SCHEME", "")
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
 	t.Setenv("GCLUSTER_AIR_GAPPED", "")
 	t.Setenv("GCLUSTER_REFRESH_CREDENTIALS", "")
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
@@ -1346,7 +1348,6 @@ func TestSubmitCmd_SkipPrereqsFalse_RunsChecks(t *testing.T) {
 // Build prerequisites (Artifact Registry API, Docker credentials) only apply when
 // gcluster builds and pushes the image; a pre-built --image is pulled by the nodes.
 func TestSubmitCmd_BuildPrerequisitesOnlyForCraneBuild(t *testing.T) {
-	t.Setenv("GCLUSTER_IMAGE_REPO", "test-repo")
 	t.Setenv("USER", "tester")
 	buildDir := t.TempDir()
 
@@ -1371,6 +1372,7 @@ func TestSubmitCmd_BuildPrerequisitesOnlyForCraneBuild(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setupSubmitTestEnv(t)
+			t.Setenv("GCLUSTER_IMAGE_REPO", "test-repo")
 			executed := stubPrereqCommands(t)
 
 			args := append([]string{

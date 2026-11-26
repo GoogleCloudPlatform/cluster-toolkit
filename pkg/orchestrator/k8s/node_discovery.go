@@ -460,6 +460,8 @@ func discoverTPUSliceCRDs(lister ResourceLister, apiChecker APIGroupChecker, pro
 	if res.sliceFound {
 		inv.TPUSliceAPIPresent = true
 		inv.Slices = res.slices
+	} else if inv.ExplicitMode && (override == SchemeTPUSlice || inv.TPUSliceAPIPresent) {
+		inv.SliceInventoryUnavailable = true
 	}
 	if len(res.trees) > 0 {
 		inv.PartitionTrees = res.trees
@@ -571,6 +573,7 @@ func extractNodeSnapshot(node unstructured.Unstructured, hw TPUHardwareResolver,
 
 	observedInstanceLabel := strings.TrimSpace(labels[InstanceTypeLabel])
 	observedGPUProductLabel := strings.TrimSpace(labels[NvidiaGPUProductLabel])
+	observedGKEAccelLabel := strings.TrimSpace(labels[GKEAcceleratorLabel])
 	rawInstance := firstNonEmpty(observedInstanceLabel, labels[BetaInstanceTypeLabel])
 	rawTPUType, topology := pickNodeTPULabels(labels, override)
 	sliceName := strings.TrimSpace(labels[TPUSliceNameLabel])
@@ -600,6 +603,7 @@ func extractNodeSnapshot(node unstructured.Unstructured, hw TPUHardwareResolver,
 		gpuResourceName:   gpuResourceName,
 		instanceTypeLabel: observedInstanceLabel,
 		gpuProductLabel:   observedGPUProductLabel,
+		gkeAccelLabel:     observedGKEAccelLabel,
 		machineType:       machineType,
 		poolKey:           poolKey,
 		nodePool:          nodePool,
@@ -666,12 +670,13 @@ func getOrCreatePoolBuilder(builders map[poolGroupKey]*poolBuilder, snap nodeSna
 		accelType = strings.ToLower(snap.gpuType)
 	}
 	key := poolGroupKey{
-		poolKey:      snap.poolKey,
-		nodePool:     snap.nodePool,
-		class:        nodePoolClass(snap),
-		accelType:    accelType,
-		controlPlane: snap.controlPlane,
-		systemPool:   snap.systemPool,
+		poolKey:         snap.poolKey,
+		nodePool:        snap.nodePool,
+		class:           nodePoolClass(snap),
+		accelType:       accelType,
+		gpuResourceName: snap.gpuResourceName,
+		controlPlane:    snap.controlPlane,
+		systemPool:      snap.systemPool,
 	}
 	if b, ok := builders[key]; ok {
 		return b
@@ -679,7 +684,9 @@ func getOrCreatePoolBuilder(builders map[poolGroupKey]*poolBuilder, snap nodeSna
 	b := &poolBuilder{
 		key: key,
 		cap: PoolCapacity{
-			NodePoolName: snap.nodePool,
+			NodePoolName:   snap.nodePool,
+			IsControlPlane: snap.controlPlane,
+			IsSystemPool:   snap.systemPool,
 		},
 		topologies: make(map[string]struct{}),
 		slices:     make(map[string]struct{}),
@@ -700,6 +707,7 @@ func addNodeToPool(builders map[poolGroupKey]*poolBuilder, snap nodeSnapshot) {
 	b.allGPUResourceName = minNonEmpty(b.allGPUResourceName, snap.gpuResourceName)
 	b.allInstanceLabel.observe(snap.instanceTypeLabel)
 	b.allGPUProductLabel.observe(snap.gpuProductLabel)
+	b.allGKEAccelLabel.observe(snap.gkeAccelLabel)
 	b.allCPUMilli = minPositive(b.allCPUMilli, snap.cpuMilli)
 	b.allMemMiB = minPositive(b.allMemMiB, snap.memMiB)
 	b.allTPUs = minPositive(b.allTPUs, snap.tpus)
@@ -713,6 +721,7 @@ func addNodeToPool(builders map[poolGroupKey]*poolBuilder, snap nodeSnapshot) {
 		b.readyGPUResourceName = minNonEmpty(b.readyGPUResourceName, snap.gpuResourceName)
 		b.readyInstanceLabel.observe(snap.instanceTypeLabel)
 		b.readyGPUProductLabel.observe(snap.gpuProductLabel)
+		b.readyGKEAccelLabel.observe(snap.gkeAccelLabel)
 		b.readyCPUMilli = minPositive(b.readyCPUMilli, snap.cpuMilli)
 		b.readyMemMiB = minPositive(b.readyMemMiB, snap.memMiB)
 		b.readyTPUs = minPositive(b.readyTPUs, snap.tpus)
@@ -735,9 +744,11 @@ func finalizeBuilderCapacity(b *poolBuilder) PoolCapacity {
 	if b.cap.ReadyNodes > 0 {
 		c.InstanceTypeLabel = b.readyInstanceLabel.resolved()
 		c.GPUProductLabel = b.readyGPUProductLabel.resolved()
+		c.GKEAcceleratorLabel = b.readyGKEAccelLabel.resolved()
 	} else {
 		c.InstanceTypeLabel = b.allInstanceLabel.resolved()
 		c.GPUProductLabel = b.allGPUProductLabel.resolved()
+		c.GKEAcceleratorLabel = b.allGKEAccelLabel.resolved()
 	}
 	c.AllocatableCPUMilli = cmp.Or(b.readyCPUMilli, b.allCPUMilli)
 	c.MemMiBPerNode = cmp.Or(b.readyMemMiB, b.allMemMiB)
@@ -777,6 +788,7 @@ func comparePoolGroupKeys(a, b poolGroupKey) int {
 		strings.Compare(a.nodePool, b.nodePool),
 		strings.Compare(a.class, b.class),
 		strings.Compare(a.accelType, b.accelType),
+		strings.Compare(a.gpuResourceName, b.gpuResourceName),
 		compareBool(a.controlPlane, b.controlPlane),
 		compareBool(a.systemPool, b.systemPool),
 	)
@@ -808,6 +820,9 @@ func formatDisambiguatedPoolKey(key poolGroupKey) string {
 	}
 	if key.accelType != "" {
 		parts = append(parts, key.accelType)
+	}
+	if key.gpuResourceName != "" && !strings.EqualFold(key.gpuResourceName, key.accelType) {
+		parts = append(parts, key.gpuResourceName)
 	}
 	if key.systemPool {
 		parts = append(parts, "system")
@@ -962,6 +977,22 @@ func parseIntelGPUAllocatable(alloc map[string]interface{}) (int, string) {
 	}
 	slices.Sort(keys)
 	return firstPositiveGPUAllocatableKey(alloc, keys)
+}
+
+// IsGPUResourceName reports whether key is a recognized Kubernetes GPU extended resource name
+// (NVIDIA full/MIG, AMD, or Intel non-metadata GPU resource keys).
+func IsGPUResourceName(key string) bool {
+	k := strings.TrimSpace(key)
+	switch {
+	case k == "nvidia.com/gpu", k == "amd.com/gpu":
+		return true
+	case strings.HasPrefix(k, "nvidia.com/mig-"):
+		return len(k) > len("nvidia.com/mig-")
+	case strings.HasPrefix(k, "gpu.intel.com/"):
+		return len(k) > len("gpu.intel.com/") && !isIntelGPUMetadataKey(k)
+	default:
+		return false
+	}
 }
 
 func isIntelGPUMetadataKey(k string) bool {
@@ -1123,6 +1154,7 @@ func parseTPUSlice(obj unstructured.Unstructured, hw TPUHardwareResolver) SliceI
 	ready, reason, _ := findReadyCondition(obj.Object)
 	if obj.GetDeletionTimestamp() != nil {
 		ready = false
+		reason = "Terminating"
 	}
 	partitionIDs, _, _ := unstructured.NestedStringSlice(obj.Object, "spec", "partitionIds")
 

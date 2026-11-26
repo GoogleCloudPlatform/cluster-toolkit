@@ -6474,6 +6474,13 @@ func TestGenerateJobManifest_TypedServiceJobAndCustomGPUResourceKey(t *testing.T
 	if err != nil {
 		t.Fatalf("GenerateJobManifest() err = %v", err)
 	}
+	if err := ValidateJobSetManifest(manifest); err != nil {
+		t.Fatalf("ValidateJobSetManifest(Tier 3 Service + Job) err = %v", err)
+	}
+	badSvcManifest := "apiVersion: v1\nkind: Service\nmetadata:\n  name: bad-svc\nspec:\n  ports: not-a-list\n"
+	if err := ValidateJobSetManifest(badSvcManifest); err == nil || !strings.Contains(err.Error(), "failed to parse Service manifest spec") {
+		t.Fatalf("ValidateJobSetManifest(malformed Service) err = %v, want Service parse error", err)
+	}
 	docs, err := splitYAMLDocuments(manifest)
 	if err != nil || len(docs) != 2 {
 		t.Fatalf("splitYAMLDocuments() len=%d err=%v, want 2 (Service + Job)", len(docs), err)

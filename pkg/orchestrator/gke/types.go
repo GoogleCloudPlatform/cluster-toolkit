@@ -344,9 +344,11 @@ type permissionCheck struct {
 
 type JobProfile struct {
 	IsCPUMachine        bool
+	IsTPU               bool
 	CapacityCount       int
 	AllocatableCPUMilli int64
 	GPUResourceName     string
+	K8sPool             *k8s.PoolCapacity
 }
 
 type ManifestOptions struct {
@@ -385,6 +387,8 @@ type ManifestOptions struct {
 	IsDynamicSlicing              bool
 	IsStaticSlicing               bool
 	IsCPUMachine                  bool
+	OmitGKENodePool               bool
+	K8sPool                       *k8s.PoolCapacity
 	Pathways                      orchestrator.PathwaysJobDefinition
 	IsPathwaysJob                 bool
 	GKEMTCEnabled                 bool

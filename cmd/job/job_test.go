@@ -1385,3 +1385,193 @@ func TestJobCmd_ReportsTelemetryProjectID_Suppression(t *testing.T) {
 		}
 	})
 }
+
+func newK8sTPUDryRunServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/nodes":
+			_, _ = w.Write([]byte(`{"apiVersion":"v1","kind":"NodeList","items":[
+				{"metadata":{"name":"tpu-1t-0","labels":{"node.kubernetes.io/instance-type":"tpu7x-standard-1t","tpu.google.com/type":"tpu7x","tpu.google.com/topology":"1x1x1","tpu.google.com/slice-name":"slice-1t"}},"status":{"allocatable":{"cpu":"60","memory":"256Gi","google.com/tpu":"1"},"conditions":[{"type":"Ready","status":"True"}]}},
+				{"metadata":{"name":"tpu-4t-0","labels":{"node.kubernetes.io/instance-type":"tpu7x-standard-4t","tpu.google.com/type":"tpu7x","tpu.google.com/topology":"2x2x1","tpu.google.com/slice-name":"slice-4t"}},"status":{"allocatable":{"cpu":"240","memory":"1024Gi","google.com/tpu":"4"},"conditions":[{"type":"Ready","status":"True"}]}},
+				{"metadata":{"name":"cpu-0","labels":{"node.kubernetes.io/instance-type":"output-worker"}},"status":{"allocatable":{"cpu":"16","memory":"64Gi"},"conditions":[{"type":"Ready","status":"True"}]}}
+			]}`))
+		case "/apis/slice.tpu.google.com/v1alpha1/slices":
+			_, _ = w.Write([]byte(`{"apiVersion":"slice.tpu.google.com/v1alpha1","kind":"SliceList","items":[
+				{"metadata":{"name":"slice-1t"},"spec":{"type":"tpu7x","topology":"1x1x1"},"status":{"conditions":[{"type":"Ready","status":"True","reason":"SliceReady"}]}},
+				{"metadata":{"name":"slice-4t"},"spec":{"type":"tpu7x","topology":"2x2x1"},"status":{"conditions":[{"type":"Ready","status":"True","reason":"SliceReady"}]}}
+			]}`))
+		default:
+			_, _ = w.Write([]byte(`{"apiVersion":"v1","kind":"List","items":[]}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func stubK8sDryRunSubprocess(t *testing.T) {
+	t.Helper()
+	origExec := shell.ExecuteCommand
+	origExecTimeout := shell.ExecuteCommandWithTimeout
+	t.Cleanup(func() {
+		shell.ExecuteCommand = origExec
+		shell.ExecuteCommandWithTimeout = origExecTimeout
+	})
+	handle := func(name string, args ...string) shell.CommandResult {
+		joined := strings.Join(args, " ")
+		if name == "gcloud" {
+			t.Errorf("unexpected gcloud subprocess in TypeK8s submit: %s %s", name, joined)
+			return shell.CommandResult{ExitCode: 1, Stderr: "gcloud forbidden in TypeK8s"}
+		}
+		if name != "kubectl" {
+			return shell.CommandResult{ExitCode: 0}
+		}
+		if strings.Contains(joined, "get deployment kueue-controller-manager") || strings.Contains(joined, "get crd clusterqueues.kueue.x-k8s.io") {
+			return shell.CommandResult{ExitCode: 1, Stderr: `Error from server (NotFound): resource not found`}
+		}
+		for prefix, out := range map[string]string{
+			"get --raw /apis/slice.tpu.google.com":                           "{}",
+			"get crd jobsets.jobset.x-k8s.io":                                "customresourcedefinition.apiextensions.k8s.io/jobsets.jobset.x-k8s.io",
+			"get endpointslice -l kubernetes.io/service-name=jobset-webhook": `{"items":[{"endpoints":[{"addresses":["10.0.0.2"],"conditions":{"ready":true}}]}]}`,
+			"get serviceaccount":                                             `{"metadata":{"name":"default"}}`,
+			"get secrets":                                                    `{"items":[]}`,
+		} {
+			if strings.Contains(joined, prefix) {
+				return shell.CommandResult{ExitCode: 0, Stdout: out}
+			}
+		}
+		return shell.CommandResult{ExitCode: 0}
+	}
+	shell.ExecuteCommand = handle
+	shell.ExecuteCommandWithTimeout = func(_ time.Duration, name string, args ...string) shell.CommandResult {
+		return handle(name, args...)
+	}
+}
+
+func assertK8sSubmitPreRunRejections(t *testing.T) {
+	t.Helper()
+	for _, tc := range []struct {
+		name    string
+		jobName string
+		flagArg []string
+		wantErr string
+	}{
+		{"gke_disable_parallel_containers", "k8s-reject", []string{"--gke-disable-parallel-containers"}, "--gke-disable-parallel-containers"},
+		{"gke_scheduler", "k8s-reject", []string{"--gke-scheduler", "gke.io/topology-aware-auto"}, "--gke-scheduler"},
+		{"pathways", "k8s-reject", []string{"--pathways"}, "Pathways"},
+		{"pathways_long_name_still_reports_k8s_error", "my-k8s-workload-25-chars", []string{"--pathways"}, "Pathways workloads (--pathways) require GKE mode"},
+		{"pathways_zero_valued_flag", "k8s-reject", []string{"--pathways-max-slice-restarts=0"}, "Pathways workloads (--pathways) require GKE mode"},
+		{"pathways_proxy_env", "k8s-reject", []string{"--pathways-proxy-env", "A=1"}, "Pathways"},
+		{"pathways_server_env", "k8s-reject", []string{"--pathways-server-env", "A=1"}, "Pathways"},
+		{"pathways_worker_env", "k8s-reject", []string{"--pathways-worker-env", "A=1"}, "Pathways"},
+		{"placement_policy", "k8s-reject", []string{"--placement-policy", "compact"}, "--placement-policy"},
+		{"mtc_enabled", "k8s-reject", []string{"--gke-mtc-enabled"}, "--gke-mtc-enabled"},
+		{"nap_provisioning", "k8s-reject", []string{"--gke-nap-provisioning", "spot"}, "--gke-nap-provisioning"},
+		{"gcs_mount", "k8s-reject", []string{"--mount", "gs://bucket;/data"}, "GCS mounts"},
+	} {
+		t.Run("prerun_rejects_"+tc.name, func(t *testing.T) {
+			resetJobFlags()
+			mockOrc := &mockOrchestrator{}
+			gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+			args := append([]string{
+				"submit", "--skip-prereqs",
+				"--name", tc.jobName,
+				"--image", "registry.local/app:v1",
+				"--command", "echo hi",
+			}, tc.flagArg...)
+			if _, err := executeCommand(JobCmd, args...); err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("executeCommand(%v) err = %v, want substring %q", args, err, tc.wantErr)
+			}
+			if mockOrc.SubmittedJob.WorkloadName != "" {
+				t.Errorf("SubmitJob must not be invoked when PreRunE rejects %s", tc.name)
+			}
+		})
+	}
+	t.Run("num_nodes_omitted_sets_NumNodesSpecified_false", func(t *testing.T) {
+		resetJobFlags()
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+		if _, err := executeCommand(JobCmd, "submit", "--skip-prereqs", "--name", "k8s-default-nodes", "--image", "registry.local/app:v1", "--command", "echo hi"); err != nil {
+			t.Fatalf("executeCommand(default num-nodes) err = %v", err)
+		}
+		if mockOrc.SubmittedJob.NumNodesSpecified {
+			t.Errorf("expected NumNodesSpecified=false when --num-nodes is omitted")
+		}
+	})
+}
+
+func TestSubmitCmd_TypeK8sRealOrchestratorDryRun(t *testing.T) {
+	setupSubmitTestEnv(t)
+	t.Setenv(shell.AirGappedEnvVar, "true")
+	k8sSrv := newK8sTPUDryRunServer(t)
+	t.Setenv("KUBECONFIG", writeOnPremProdContextKubeconfig(t, "k8s-tpu", k8sSrv.URL))
+
+	for _, tc := range []struct {
+		name        string
+		computeType string
+		extraArgs   []string
+		wantSubstr  []string
+		forbid      []string
+	}{
+		{
+			name:        "tpu7x_1t_single_container_and_1_chip",
+			computeType: "tpu7x-standard-1t",
+			extraArgs:   []string{"--node-constraint", "tpu.google.com/slice-name=slice-1t"},
+			wantSubstr:  []string{"name: workload-container", `google.com/tpu: "1"`, "tpu.google.com/slice-name: slice-1t"},
+			forbid:      []string{"workload-container-0", "workload-container-1", `google.com/tpu: "0"`},
+		},
+		{
+			name:        "tpu7x_4t_single_container_and_4_chips_no_gke_parallel_split",
+			computeType: "tpu7x-standard-4t",
+			extraArgs:   []string{"--node-constraint", "tpu.google.com/slice-name=slice-4t"},
+			wantSubstr:  []string{"name: workload-container", `google.com/tpu: "4"`, "tpu.google.com/slice-name: slice-4t"},
+			forbid:      []string{"workload-container-0", "workload-container-1"},
+		},
+		{
+			name:        "output_worker_cpu_allows_num_nodes",
+			computeType: "output-worker",
+			extraArgs:   []string{"--num-nodes", "2"},
+			wantSubstr:  []string{"parallelism: 2", "completions: 2", "node.kubernetes.io/instance-type: output-worker"},
+			forbid:      []string{"google.com/tpu"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetJobFlags()
+			stubK8sDryRunSubprocess(t)
+			gkeOrchestratorFactory = nil
+			outPath := filepath.Join(t.TempDir(), tc.name+".yaml")
+			args := append([]string{
+				"submit", "--skip-prereqs",
+				"--name", "k8s-e2e",
+				"--image", "registry.local/app:v1",
+				"--command", "python3 train.py",
+				"--compute-type", tc.computeType,
+				"--dry-run-out", outPath,
+			}, tc.extraArgs...)
+			if _, err := executeCommand(JobCmd, args...); err != nil {
+				t.Fatalf("executeCommand(%v) err = %v", args, err)
+			}
+			raw, err := os.ReadFile(outPath)
+			if err != nil {
+				t.Fatalf("ReadFile(%s): %v", outPath, err)
+			}
+			assertManifestStrings(t, string(raw), tc.wantSubstr, tc.forbid)
+		})
+	}
+	assertK8sSubmitPreRunRejections(t)
+}
+
+func assertManifestStrings(t *testing.T, manifest string, wantSubstr, forbid []string) {
+	t.Helper()
+	for _, w := range wantSubstr {
+		if !strings.Contains(manifest, w) {
+			t.Errorf("manifest missing %q:\n%s", w, manifest)
+		}
+	}
+	for _, f := range forbid {
+		if strings.Contains(manifest, f) {
+			t.Errorf("manifest must not contain %q:\n%s", f, manifest)
+		}
+	}
+}

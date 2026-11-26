@@ -2916,6 +2916,7 @@ type addonMatrixCase struct {
 	name           string
 	mode           orchestrator.Type
 	scheme         k8s.LabelScheme
+	computeType    string
 	jsState        addonState
 	kueueState     addonState
 	interactive    bool
@@ -2964,7 +2965,7 @@ func runAddonMatrixCase(t *testing.T, tc addonMatrixCase) {
 		return tc.promptAnswers[idx], true
 	}
 
-	err := orc.resolveClusterAddons(&orchestrator.JobDefinition{ClusterName: "test-cluster"}, tc.dryRun)
+	err := orc.resolveClusterAddons(&orchestrator.JobDefinition{ClusterName: "test-cluster", ComputeType: tc.computeType}, tc.dryRun)
 	assertAddonMatrixOutcome(t, tc, orc, mockExec, err, promptCalls, probeCalls)
 }
 
@@ -3020,8 +3021,14 @@ func TestResolveClusterAddons_PolicyMatrix(t *testing.T) {
 		},
 		{
 			name: "tpu_slice_missing_kueue_silent_continue_zero_probe_zero_prompt",
-			mode: orchestrator.TypeK8s, scheme: k8s.SchemeTPUSlice, jsState: addonStateInstalled, kueueState: addonStateMissing,
+			mode: orchestrator.TypeK8s, scheme: k8s.SchemeTPUSlice, computeType: "tpu7x", jsState: addonStateInstalled, kueueState: addonStateMissing,
 			interactive: true, connected: true, wantJobSet: true, wantKueue: false,
+		},
+		{
+			name: "tpu_slice_cpu_workload_missing_kueue_prompts_normally",
+			mode: orchestrator.TypeK8s, scheme: k8s.SchemeTPUSlice, computeType: "n2-standard-8", jsState: addonStateInstalled, kueueState: addonStateMissing,
+			interactive: true, promptAnswers: []string{"2"}, connected: true,
+			wantJobSet: true, wantKueue: false, wantPrompts: 1, wantProbes: 1,
 		},
 		{
 			name: "interactive_connected_k8s_both_missing_choice_continue_single_prompt",
@@ -3267,7 +3274,7 @@ func TestConfigureClusterEnvironment_TypeK8sLocalQueueResolution(t *testing.T) {
 			kueueOn: true,
 			inQueue: "missing-q",
 			responses: map[string][]shell.CommandResult{
-				"kubectl get localqueue missing-q -n ml-ns": {{ExitCode: 1, Stderr: `Error from server (NotFound): localqueues "missing-q" not found`}},
+				"kubectl get localqueue missing-q -n ml-ns": {{ExitCode: 0, Stdout: ""}},
 				"kubectl get localqueue -n ml-ns":           {{ExitCode: 0, Stdout: "team-lq"}},
 			},
 			wantErr: `LocalQueue "missing-q" does not exist in namespace "ml-ns" (available: team-lq)`,
@@ -3394,22 +3401,16 @@ func TestValidateTier3Workload_StaticSliceReuseGuard(t *testing.T) {
 			wantErr: "does not match slice",
 		},
 		{
-			name:      "auto_reuses_matching_ready_default_slice",
-			inv:       readyInv,
-			job:       orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
-			wantSlice: "ready-slice",
-		},
-		{
-			name:    "rejects_dynamic_provisioning_when_no_ready_slice_matches_topology",
+			name:    "rejects_unnamed_slice_even_when_ready_slice_exists",
 			inv:     readyInv,
-			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "4x4x4", NumSlices: 1},
-			wantErr: "no matching READY slice exists",
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
+			wantErr: "target an existing READY slice via --node-constraint tpu.google.com/slice-name=<ready-slice-name>",
 		},
 		{
 			name:    "rejects_slice_inventory_unavailable_without_named_slice",
 			inv:     &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice, ExplicitMode: true, SliceInventoryUnavailable: true},
 			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
-			wantErr: "cannot dynamically provision a new TPU slice when slice inventory is unavailable",
+			wantErr: "target an existing READY slice via --node-constraint tpu.google.com/slice-name=<ready-slice-name>",
 		},
 		{
 			name:      "allows_slice_inventory_unavailable_with_named_slice",
@@ -3422,6 +3423,16 @@ func TestValidateTier3Workload_StaticSliceReuseGuard(t *testing.T) {
 			inv:       &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice, ExplicitMode: false, SliceInventoryUnavailable: true},
 			job:       orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "precreated-slice"}},
 			wantSlice: "precreated-slice",
+		},
+		{
+			name: "known_non_ready_slice_still_rejected_when_slice_inventory_unavailable",
+			inv: &k8s.Inventory{
+				LabelScheme:               k8s.SchemeTPUSlice,
+				SliceInventoryUnavailable: true,
+				Slices:                    []k8s.SliceInfo{{Name: "pending-slice", TPUType: "tpu7x", Topology: "2x2x1", Ready: false, State: "Provisioning"}},
+			},
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "pending-slice"}},
+			wantErr: "is not READY",
 		},
 		{
 			name:    "rejects_nodes_403_slices_200_empty_with_unknown_named_slice",
@@ -3446,23 +3457,14 @@ func TestValidateTier3Workload_StaticSliceReuseGuard(t *testing.T) {
 			wantErr: "is not READY",
 		},
 		{
-			name: "explicit_mode_with_populated_ready_slice_auto_binds",
+			name: "explicit_mode_with_populated_ready_slice_still_requires_explicit_constraint",
 			inv: &k8s.Inventory{
 				LabelScheme:  k8s.SchemeTPUSlice,
 				ExplicitMode: true,
 				Slices:       []k8s.SliceInfo{{Name: "ready-s", TPUType: "tpu7x", Topology: "2x2x1", Ready: true, NodesPerSlice: 1}},
 			},
-			job:       orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
-			wantSlice: "ready-s",
-		},
-		{
-			name: "rejects_ready_slice_with_empty_tpu_type_when_type_requested",
-			inv: &k8s.Inventory{
-				LabelScheme: k8s.SchemeTPUSlice,
-				Slices:      []k8s.SliceInfo{{Name: "untyped-slice", TPUType: "", Topology: "2x2x1", Ready: true}},
-			},
 			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
-			wantErr: "no matching READY slice exists",
+			wantErr: "target an existing READY slice via --node-constraint tpu.google.com/slice-name=<ready-slice-name>",
 		},
 	}
 
@@ -3511,15 +3513,21 @@ func TestValidateK8sPriorityClass(t *testing.T) {
 			res:       shell.CommandResult{ExitCode: 1, Stderr: `Error from server (Forbidden): priorityclasses.scheduling.k8s.io "high" is forbidden`},
 		},
 		{
+			name:      "invalid_flag_like_name_rejected_before_kubectl",
+			requested: "-A",
+			res:       shell.CommandResult{ExitCode: 0, Stdout: "priorityclass.scheduling.k8s.io/system-cluster-critical\n"},
+			wantErr:   `invalid priority class name "-A"`,
+		},
+		{
 			name:      "not_found_fails_fast",
 			requested: "missing-pc",
-			res:       shell.CommandResult{ExitCode: 1, Stderr: `Error from server (NotFound): priorityclasses.scheduling.k8s.io "missing-pc" not found`},
+			res:       shell.CommandResult{ExitCode: 0, Stdout: ""},
 			wantErr:   `priority class "missing-pc" does not exist`,
 		},
 		{
 			name:      "user_controlled_forbidden_name_does_not_bypass_not_found",
 			requested: "403-forbidden-pc",
-			res:       shell.CommandResult{ExitCode: 1, Stderr: `Error from server (NotFound): priorityclasses.scheduling.k8s.io "403-forbidden-pc" not found`},
+			res:       shell.CommandResult{ExitCode: 0, Stdout: ""},
 			wantErr:   `priority class "403-forbidden-pc" does not exist`,
 		},
 		{
@@ -4130,4 +4138,102 @@ func TestJobSetProbeAndInstallRBACEdgeCases(t *testing.T) {
 			t.Errorf("checkServiceEndpointsReady(ExitCode -1) = (%v, %v, %v), want fail-fast wrapped spawnErr", ready, forbidden, err)
 		}
 	})
+}
+
+func TestValidateTPUSliceScheduling_ExplicitSliceRequired(t *testing.T) {
+	readyInv := &k8s.Inventory{
+		LabelScheme: k8s.SchemeTPUSlice,
+		Slices: []k8s.SliceInfo{
+			{Name: "ready-slice", TPUType: "tpu7x", Topology: "2x2x1", Ready: true, NodesPerSlice: 1},
+			{Name: "pending-slice", TPUType: "tpu7x", Topology: "2x2x2", Ready: false, State: "Provisioning"},
+		},
+	}
+	tests := []struct {
+		name    string
+		inv     *k8s.Inventory
+		job     orchestrator.JobDefinition
+		wantErr string
+	}{
+		{
+			name:    "unnamed_tpu_job_on_tpu_slice_rejected",
+			inv:     readyInv,
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
+			wantErr: k8s.TPUSliceNameLabel,
+		},
+		{
+			name: "named_ready_slice_passes",
+			inv:  readyInv,
+			job:  orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "ready-slice"}},
+		},
+		{
+			name:    "named_pending_slice_rejected",
+			inv:     readyInv,
+			job:     orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", Topology: "2x2x2", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "pending-slice"}},
+			wantErr: "is not READY",
+		},
+		{
+			name: "cpu_job_on_tpu_slice_passes_without_slice_name",
+			inv:  readyInv,
+			job:  orchestrator.JobDefinition{MachineType: "n2-standard-8", NumSlices: 1, NodesPerSlice: 1},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{
+				mode: orchestrator.TypeK8s,
+				submissionSession: submissionSession{
+					inventory: tc.inv,
+					addons:    addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false},
+				},
+			}
+			job := tc.job
+			err := orc.validateTPUSliceScheduling(&job)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateTPUSliceScheduling() unexpected err = %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("validateTPUSliceScheduling() err = %v, want substring %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestHasGKENodePoolLabel_MultiPool(t *testing.T) {
+	poolWithLabel := &k8s.PoolCapacity{MachineType: "ct6e-standard-4t", NodePoolName: "tpu-pool"}
+	poolWithoutLabel := &k8s.PoolCapacity{MachineType: "n2-standard-8", NodePoolName: ""}
+	gkeInv := &k8s.Inventory{
+		LabelScheme: k8s.SchemeGKE,
+		PoolNames:   []string{"tpu", "cpu"},
+		Pools: map[string]k8s.PoolCapacity{
+			"tpu": *poolWithLabel,
+			"cpu": *poolWithoutLabel,
+		},
+	}
+	orcGKE := &GKEOrchestrator{mode: orchestrator.TypeK8s, submissionSession: submissionSession{inventory: gkeInv}}
+	if !orcGKE.hasGKENodePoolLabel("ct6e-standard-4t", poolWithLabel) {
+		t.Errorf("expected true for target pool with NodePoolName")
+	}
+	if orcGKE.hasGKENodePoolLabel("n2-standard-8", poolWithoutLabel) {
+		t.Errorf("expected false for target pool without NodePoolName even when another pool has one")
+	}
+	if !orcGKE.hasGKENodePoolLabel("a3-highgpu-8g", nil) {
+		t.Errorf("expected true for scaled-to-zero target pool on SchemeGKE cluster where other pools carry gke-nodepool")
+	}
+
+	orcExplicit := &GKEOrchestrator{mode: orchestrator.TypeK8s, submissionSession: submissionSession{
+		inventory: &k8s.Inventory{LabelScheme: k8s.SchemeGKE, ExplicitMode: true},
+	}}
+	if !orcExplicit.hasGKENodePoolLabel("ct6e-standard-4t", nil) {
+		t.Errorf("expected true for SchemeGKE in ExplicitMode")
+	}
+
+	orcGeneric := &GKEOrchestrator{mode: orchestrator.TypeK8s, submissionSession: submissionSession{
+		inventory: &k8s.Inventory{LabelScheme: k8s.SchemeGeneric, PoolNames: []string{"tpu"}, Pools: map[string]k8s.PoolCapacity{"tpu": *poolWithLabel}},
+	}}
+	if orcGeneric.hasGKENodePoolLabel("ct6e-standard-4t", poolWithLabel) {
+		t.Errorf("expected false for SchemeGeneric")
+	}
 }

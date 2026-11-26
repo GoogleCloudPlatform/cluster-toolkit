@@ -258,3 +258,51 @@ func assertDetectorOverrideErrors(t *testing.T, cfg *clientcmdapi.Config, mockPr
 		t.Errorf("Detect(\"\", \"\", \"\") with %s=mesos = (%+v, %v), want error naming \"mesos\" and '\"gke\", \"k8s\"'", EnvVar, got, err)
 	}
 }
+
+func TestValidateK8sSubmitJob(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		job     JobDefinition
+		wantErr string
+	}{
+		{name: "valid_k8s_job_with_custom_scheduler_and_nfs", job: JobDefinition{
+			GKEScheduler: "volcano",
+			RawMounts:    []string{"nfs://10.0.0.1/export;/data", "my-pvc;/models;rw", "/var/tmp;/scratch"},
+		}},
+		{name: "pathways_flag", job: JobDefinition{IsPathwaysJob: true}, wantErr: "Pathways"},
+		{name: "pathways_deploy_sps", job: JobDefinition{Pathways: PathwaysJobDefinition{DeploySPS: true}}, wantErr: "Pathways"},
+		{name: "pathways_headless", job: JobDefinition{Pathways: PathwaysJobDefinition{Headless: true}}, wantErr: "Pathways"},
+		{name: "pathways_run_sps", job: JobDefinition{Pathways: PathwaysJobDefinition{RunSPSWorkload: "sps-1"}}, wantErr: "Pathways"},
+		{name: "pathways_proxy_image", job: JobDefinition{Pathways: PathwaysJobDefinition{ProxyServerImage: "img:1"}}, wantErr: "Pathways"},
+		{name: "pathways_server_image", job: JobDefinition{Pathways: PathwaysJobDefinition{ServerImage: "img:1"}}, wantErr: "Pathways"},
+		{name: "pathways_worker_image", job: JobDefinition{Pathways: PathwaysJobDefinition{WorkerImage: "img:1"}}, wantErr: "Pathways"},
+		{name: "pathways_gcs_location", job: JobDefinition{Pathways: PathwaysJobDefinition{GCSLocation: "gs://b/p"}}, wantErr: "Pathways"},
+		{name: "pathways_sidecar", job: JobDefinition{Pathways: PathwaysJobDefinition{ColocatedPythonSidecarImage: "sc:1"}}, wantErr: "Pathways"},
+		{name: "pathways_proxy_env", job: JobDefinition{Pathways: PathwaysJobDefinition{ProxyEnv: map[string]string{"A": "1"}}}, wantErr: "Pathways"},
+		{name: "pathways_elastic_slices", job: JobDefinition{Pathways: PathwaysJobDefinition{ElasticSlices: 2}}, wantErr: "Pathways"},
+		{name: "pathways_max_slice_restarts", job: JobDefinition{Pathways: PathwaysJobDefinition{MaxSliceRestarts: 5}}, wantErr: "Pathways"},
+		{name: "gke_scheduler", job: JobDefinition{GKEScheduler: "gke.io/topology-aware-auto"}, wantErr: "--gke-scheduler"},
+		{name: "placement_policy", job: JobDefinition{PlacementPolicy: "compact"}, wantErr: "--placement-policy"},
+		{name: "mtc_enabled", job: JobDefinition{GKEMTCEnabled: true}, wantErr: "--gke-mtc-enabled"},
+		{name: "mtc_ramdisk", job: JobDefinition{GKEMTCRamdiskDirectory: "/tmp/ckpt"}, wantErr: "--gke-mtc-ramdisk-dir"},
+		{name: "nap_provisioning", job: JobDefinition{GKENAPProvisioning: "spot"}, wantErr: "--gke-nap-provisioning"},
+		{name: "nap_reservation", job: JobDefinition{GKENAPReservation: "res-1"}, wantErr: "--gke-nap-reservation"},
+		{name: "gcs_mount", job: JobDefinition{RawMounts: []string{"gs://my-bucket;/data"}}, wantErr: "GCS mounts"},
+		{name: "filestore_mount", job: JobDefinition{RawMounts: []string{"filestore://10.0.0.1/share;/data"}}, wantErr: "Filestore mounts"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateK8sSubmitJob(tc.job)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("ValidateK8sSubmitJob() unexpected err = %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("ValidateK8sSubmitJob() err = %v, want substring %q", err, tc.wantErr)
+			}
+		})
+	}
+}

@@ -246,6 +246,9 @@ func (sm *StorageManager) dispatchMount(pm parsedMount, idx int, job orchestrato
 }
 
 func (sm *StorageManager) pvcNeedsGCSFuseSidecar(pvcName string, job orchestrator.JobDefinition, state *mountBuildState) bool {
+	if sm.orchestrator != nil && sm.orchestrator.mode == orchestrator.TypeK8s {
+		return false
+	}
 	if state != nil && state.pvcNeedsSidecar != nil {
 		if needsSidecar, checked := state.pvcNeedsSidecar[pvcName]; checked {
 			return needsSidecar
@@ -256,7 +259,7 @@ func (sm *StorageManager) pvcNeedsGCSFuseSidecar(pvcName string, job orchestrato
 		logging.Warn("Could not resolve namespace to inspect PVC %q for GCSFuse CSI driver (%v); defaulting to \"default\".", pvcName, err)
 		ns = "default"
 	}
-	needsSidecar := sm.isGCSFuseBackedPVC(pvcName, ns)
+	needsSidecar := sm.isGCSFuseBackedPVC(pvcName, ns, job.DryRunManifest != "")
 	if state != nil && state.pvcNeedsSidecar != nil {
 		state.pvcNeedsSidecar[pvcName] = needsSidecar
 	}
@@ -284,7 +287,7 @@ func (sm *StorageManager) setInspectedPVC(ns, pvcName string, res pvcInspectResu
 // isGCSFuseBackedPVC reports whether an existing PVC is backed by the GCSFuse CSI driver
 // (via its storage-provisioner annotation, a bound PV with spec.csi.driver=gcsfuse.csi.storage.gke.io,
 // or a GCSFuse StorageClass), which requires the pod to carry the gke-gcsfuse/volumes: "true" webhook annotation.
-func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string) bool {
+func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string, dryRun bool) bool {
 	if strings.HasPrefix(pvcName, gcsFuseGatewayPrefix+"-") {
 		return true
 	}
@@ -296,6 +299,9 @@ func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string) bool {
 	if cached, ok := sm.getInspectedPVC(ns, pvcName); ok {
 		volumeName, storageClassName, provisioner = cached.volumeName, cached.storageClassName, cached.provisioner
 	} else {
+		if dryRun {
+			return false
+		}
 		res := sm.orchestrator.kubectl("get", "pvc", "-n", ns, "--ignore-not-found", kubectlReadTimeout,
 			"-o", pvcGCSFuseJSONPath, "--", pvcName)
 		if res.ExitCode != 0 {
@@ -311,12 +317,20 @@ func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string) bool {
 		return false
 	}
 
-	lowerSC := strings.ToLower(storageClassName)
-	if sc := gcsFuseProfileStorageClasses[lowerSC]; sc != "" && sc == lowerSC {
+	if isKnownGCSFuseProfileStorageClass(storageClassName) {
 		return true
+	}
+	if dryRun {
+		return false
 	}
 	return sm.hasGCSFuseCSIField("pv", volumeName, pvcName, pvCSIDriverTemplate) ||
 		sm.hasGCSFuseCSIField("storageclass", storageClassName, pvcName, "jsonpath={.provisioner}")
+}
+
+func isKnownGCSFuseProfileStorageClass(storageClassName string) bool {
+	lowerSC := strings.ToLower(storageClassName)
+	sc := gcsFuseProfileStorageClasses[lowerSC]
+	return sc != "" && sc == lowerSC
 }
 
 func parsePVCGCSFuseFields(stdout string) (volumeName, storageClassName, provisioner string) {

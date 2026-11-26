@@ -136,6 +136,8 @@ type PoolCapacity struct {
 	NodePoolName        string
 	TotalNodes          int
 	ReadyNodes          int
+	IsControlPlane      bool
+	IsSystemPool        bool
 	IsTPU               bool
 	IsGPU               bool
 	TPUType             string
@@ -143,6 +145,7 @@ type PoolCapacity struct {
 	GPUResourceName     string
 	InstanceTypeLabel   string
 	GPUProductLabel     string
+	GKEAcceleratorLabel string
 	TPUsPerNode         int
 	GPUsPerNode         int
 	AllocatableCPUMilli int64
@@ -244,12 +247,13 @@ type nodeSliceAgg struct {
 }
 
 type poolGroupKey struct {
-	poolKey      string
-	nodePool     string
-	class        string
-	accelType    string
-	controlPlane bool
-	systemPool   bool
+	poolKey         string
+	nodePool        string
+	class           string
+	accelType       string
+	gpuResourceName string
+	controlPlane    bool
+	systemPool      bool
 }
 
 type observedLabel struct {
@@ -296,6 +300,8 @@ type poolBuilder struct {
 	readyInstanceLabel   observedLabel
 	allGPUProductLabel   observedLabel
 	readyGPUProductLabel observedLabel
+	allGKEAccelLabel     observedLabel
+	readyGKEAccelLabel   observedLabel
 	allCPUMilli          int64
 	readyCPUMilli        int64
 	allMemMiB            int
@@ -321,6 +327,7 @@ type nodeSnapshot struct {
 	gpuResourceName   string
 	instanceTypeLabel string
 	gpuProductLabel   string
+	gkeAccelLabel     string
 	machineType       string
 	poolKey           string
 	nodePool          string
