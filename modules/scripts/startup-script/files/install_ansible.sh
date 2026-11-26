@@ -163,9 +163,12 @@ resolve_python_version() {
 
 # Returns 0 if the given major/minor version is non-numeric or older than 3.${REQ_PYTHON3_VERSION}.
 is_python_version_too_old() {
-	if ! [ "$1" -eq "$1" ] 2>/dev/null || ! [ "$2" -eq "$2" ] 2>/dev/null; then
-		return 0
-	fi
+	case "$1" in
+	''|*[!0-9]*) return 0 ;;
+	esac
+	case "$2" in
+	''|*[!0-9]*) return 0 ;;
+	esac
 	[ "$1" -lt 3 ] || { [ "$1" -eq 3 ] && [ "$2" -lt "${REQ_PYTHON3_VERSION}" ]; }
 }
 
@@ -217,6 +220,12 @@ main() {
 		fi
 	fi
 	if [ "${recreate_venv}" = true ]; then
+		case "${venv_path%/}" in
+		''|/bin|/boot|/dev|/etc|/home|/lib|/lib64|/opt|/proc|/root|/sbin|/sys|/tmp|/usr|/usr/local|/var)
+			echo "Error: Refusing to delete dangerous virtual environment path: ${venv_path}" >&2
+			return 1
+			;;
+		esac
 		rm -rf "${venv_path}"
 		${python_path} -m venv "${venv_path}" --copies --clear
 	else
