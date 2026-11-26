@@ -246,6 +246,9 @@ func (sm *StorageManager) dispatchMount(pm parsedMount, idx int, job orchestrato
 }
 
 func (sm *StorageManager) pvcNeedsGCSFuseSidecar(pvcName string, job orchestrator.JobDefinition, state *mountBuildState) bool {
+	if sm.orchestrator != nil && sm.orchestrator.mode == orchestrator.TypeK8s {
+		return false
+	}
 	if state != nil && state.pvcNeedsSidecar != nil {
 		if needsSidecar, checked := state.pvcNeedsSidecar[pvcName]; checked {
 			return needsSidecar
@@ -311,12 +314,17 @@ func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string) bool {
 		return false
 	}
 
-	lowerSC := strings.ToLower(storageClassName)
-	if sc := gcsFuseProfileStorageClasses[lowerSC]; sc != "" && sc == lowerSC {
+	if isKnownGCSFuseProfileStorageClass(storageClassName) {
 		return true
 	}
 	return sm.hasGCSFuseCSIField("pv", volumeName, pvcName, pvCSIDriverTemplate) ||
 		sm.hasGCSFuseCSIField("storageclass", storageClassName, pvcName, "jsonpath={.provisioner}")
+}
+
+func isKnownGCSFuseProfileStorageClass(storageClassName string) bool {
+	lowerSC := strings.ToLower(storageClassName)
+	sc := gcsFuseProfileStorageClasses[lowerSC]
+	return sc != "" && sc == lowerSC
 }
 
 func parsePVCGCSFuseFields(stdout string) (volumeName, storageClassName, provisioner string) {

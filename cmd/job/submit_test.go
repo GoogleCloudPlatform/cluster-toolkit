@@ -209,8 +209,10 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 	}
 }
 
-func TestSubmitCmd_TPUWithNumNodes_Fails(t *testing.T) {
+func TestSubmitCmd_TPUWithNumNodes_ForwardsFlagToOrchestrator(t *testing.T) {
 	setupSubmitTestEnv(t)
+	mockOrc := &mockOrchestrator{}
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
 
 	oldStore := store
 	defer func() { store = oldStore }()
@@ -226,25 +228,23 @@ func TestSubmitCmd_TPUWithNumNodes_Fails(t *testing.T) {
 		},
 	}
 
-	output, err := executeCommand(JobCmd,
+	_, err := executeCommand(JobCmd,
 		"submit",
-		"--name", "tpu-fail-test",
+		"--name", "tpu-num-nodes-test",
 		"--image", "busybox",
 		"--command", "echo hello",
 		"--cluster", "test-cluster",
 		"--location", "us-central1-a",
 		"--project", "test-project",
-		"--compute-type", "v6e-8", // TPU type
-		"--num-nodes", "2", // Explicitly set!
+		"--compute-type", "v6e-8",
+		"--num-nodes", "2",
 	)
-
-	if err == nil {
-		t.Fatalf("expected error when passing --num-nodes for TPU job, but got nil")
+	if err != nil {
+		t.Fatalf("expected CLI to delegate TPU --num-nodes check to orchestrator, got err: %v", err)
 	}
-
-	expectedErr := "--num-nodes cannot be used with TPU jobs"
-	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
-		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
+	if !mockOrc.SubmittedJob.NumNodesSpecified || mockOrc.SubmittedJob.NodesPerSlice != 2 {
+		t.Errorf("expected NumNodesSpecified=true NodesPerSlice=2 forwarded to orchestrator, got (%v, %d)",
+			mockOrc.SubmittedJob.NumNodesSpecified, mockOrc.SubmittedJob.NodesPerSlice)
 	}
 }
 
@@ -352,6 +352,7 @@ func resetCommandFlags(cmd *cobra.Command) {
 }
 
 func resetJobFlags() {
+	detectedOrchestratorType = ""
 	pathways = orchestrator.PathwaysJobDefinition{}
 	resetCommandFlags(JobCmd)
 	nodeConstraint = make(map[string]string)
@@ -365,6 +366,8 @@ func setupSubmitTestEnv(t *testing.T) {
 	t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "empty-kubeconfig"))
 	t.Setenv("DOCKER_CONFIG", t.TempDir())
 	t.Setenv("GCLUSTER_ORCHESTRATOR", "")
+	t.Setenv("GCLUSTER_LABEL_SCHEME", "")
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
 	t.Setenv("GCLUSTER_AIR_GAPPED", "")
 	t.Setenv("GCLUSTER_REFRESH_CREDENTIALS", "")
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
@@ -1345,7 +1348,6 @@ func TestSubmitCmd_SkipPrereqsFalse_RunsChecks(t *testing.T) {
 // Build prerequisites (Artifact Registry API, Docker credentials) only apply when
 // gcluster builds and pushes the image; a pre-built --image is pulled by the nodes.
 func TestSubmitCmd_BuildPrerequisitesOnlyForCraneBuild(t *testing.T) {
-	t.Setenv("GCLUSTER_IMAGE_REPO", "test-repo")
 	t.Setenv("USER", "tester")
 	buildDir := t.TempDir()
 
@@ -1370,6 +1372,7 @@ func TestSubmitCmd_BuildPrerequisitesOnlyForCraneBuild(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setupSubmitTestEnv(t)
+			t.Setenv("GCLUSTER_IMAGE_REPO", "test-repo")
 			executed := stubPrereqCommands(t)
 
 			args := append([]string{
@@ -2249,4 +2252,57 @@ func TestValidateBuildContext_OCIRegistries(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestSubmitCmd_EmptyComputeTypeRejectedAndNumNodesSpecifiedPropagated(t *testing.T) {
+	kcPath := filepath.Join(t.TempDir(), "kubeconfig")
+	kcYAML := "apiVersion: v1\nkind: Config\ncurrent-context: k8s-ctx\nclusters:\n- name: c\n  cluster:\n    server: https://127.0.0.1:6443\ncontexts:\n- name: k8s-ctx\n  context:\n    cluster: c\n    namespace: default\n"
+	if err := os.WriteFile(kcPath, []byte(kcYAML), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, rawVal := range []string{"", "   "} {
+		for _, orchType := range []orchestrator.Type{orchestrator.TypeK8s, orchestrator.TypeGKE} {
+			setupSubmitTestEnv(t)
+			t.Setenv("KUBECONFIG", kcPath)
+			t.Setenv("GCLUSTER_ORCHESTRATOR", string(orchType))
+			args := []string{
+				"submit",
+				"--name", "empty-ct-job",
+				"--image", "busybox",
+				"--command", "echo hi",
+				"--compute-type=" + rawVal,
+			}
+			if orchType == orchestrator.TypeGKE {
+				args = append(args, "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "test-project")
+			}
+			_, err := executeCommand(JobCmd, args...)
+			if err == nil || !strings.Contains(err.Error(), `flag "compute-type" cannot be empty`) {
+				t.Fatalf("orch=%s compute-type=%q err = %v, want empty compute-type error", orchType, rawVal, err)
+			}
+		}
+	}
+
+	setupSubmitTestEnv(t)
+	t.Setenv("KUBECONFIG", kcPath)
+	t.Setenv("GCLUSTER_ORCHESTRATOR", "gke")
+	mockOrc := &mockOrchestrator{}
+	oldFactory := gkeOrchestratorFactory
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+	t.Cleanup(func() { gkeOrchestratorFactory = oldFactory })
+	if _, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "num-nodes-flag-job",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--compute-type", "n2-standard-4",
+		"--image", "busybox",
+		"--command", "echo hi",
+		"--num-nodes", "2",
+	); err != nil {
+		t.Fatalf("submit with --num-nodes failed: %v", err)
+	}
+	if !mockOrc.SubmittedJob.NumNodesSpecified || mockOrc.SubmittedJob.NodesPerSlice != 2 {
+		t.Errorf("captured NumNodesSpecified=%v NodesPerSlice=%d, want (true, 2)", mockOrc.SubmittedJob.NumNodesSpecified, mockOrc.SubmittedJob.NodesPerSlice)
+	}
 }

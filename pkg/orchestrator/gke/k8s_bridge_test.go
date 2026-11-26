@@ -95,8 +95,8 @@ func TestDiscoverK8sInventory_TPUSliceExplicitModeAndCacheInvalidation(t *testin
 	mockExec.assertAllKubectlPinned(t, "tpu-slice-ctx")
 
 	orc.mode = orchestrator.TypeK8s
-	if err := orc.SubmitJob(orchestrator.JobDefinition{}); err == nil || err.Error() != orchestrator.UnsupportedK8sSubmitError().Error() {
-		t.Fatalf("SubmitJob(TypeK8s) err = %v, want UnsupportedK8sSubmitError", err)
+	if err := orc.SubmitJob(orchestrator.JobDefinition{GKEMTCEnabled: true}); err == nil || !strings.Contains(err.Error(), "not supported in Kubernetes (k8s) mode") {
+		t.Fatalf("SubmitJob(TypeK8s MTC) err = %v, want TypeK8s unsupported error", err)
 	}
 	if orc.inventory != nil {
 		t.Errorf("TypeK8s SubmitJob early return must clear cached inventory")

@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/imagebuilder"
 	"math"
 	"os"
@@ -96,17 +95,22 @@ var (
 
 var SubmitCmd = &cobra.Command{
 	Use:   "submit",
-	Short: "Submits a workload on a GKE cluster using JobSet (or standalone batch/v1 Job).",
-	Long: `The 'submit' command deploys a workload on a GKE cluster using Kubernetes
-JobSet integrated with Kueue, or falls back to a standalone batch/v1 Indexed Job
-when JobSet is absent or disabled (single-slice, non-Pathways workloads). Image
-can be pre-built (--image) or built on-the-fly using Crane (--base-image with
---build-context).
+	Short: "Submits a workload on a GKE or Kubernetes cluster.",
+	Long: `The 'submit' command deploys a workload on a GKE or Kubernetes cluster using
+Kubernetes JobSet with optional Kueue integration, or falls back to a standalone
+batch/v1 Indexed Job when JobSet is absent or disabled (single-slice, non-Pathways
+workloads). Image can be pre-built (--image) or built on-the-fly using Crane
+(--base-image with --build-context).
 
 It accepts parameters for the container image, command to execute, accelerator type,
-and workload/queueing configurations like workload name, queue, nodes, and restarts.`,
+and workload scheduling configurations like workload name, queue, nodes, and restarts.`,
 	RunE: runSubmitCmd,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if detectedOrchestratorType == orchestrator.TypeK8s {
+			if err := validateK8sSubmitPreRun(cmd); err != nil {
+				return err
+			}
+		}
 		pathways.RunSPSWorkload = strings.TrimSpace(pathways.RunSPSWorkload)
 		if cmd.Flags().Changed("pathways-run-sps-workload") && pathways.RunSPSWorkload == "" {
 			return fmt.Errorf("--pathways-run-sps-workload cannot be empty")
@@ -114,7 +118,11 @@ and workload/queueing configurations like workload name, queue, nodes, and resta
 		if err := validateWorkloadNameLength(workloadName, isPathwaysJob); err != nil {
 			return err
 		}
-		if computeType == "" && pathways.RunSPSWorkload == "" {
+		computeType = strings.TrimSpace(computeType)
+		if cmd.Flags().Changed("compute-type") && computeType == "" {
+			return fmt.Errorf("flag \"compute-type\" cannot be empty")
+		}
+		if computeType == "" && pathways.RunSPSWorkload == "" && detectedOrchestratorType != orchestrator.TypeK8s {
 			return fmt.Errorf("required flag(s) \"compute-type\" not set")
 		}
 
@@ -187,7 +195,7 @@ func init() {
 	SubmitCmd.Flags().StringVar(&cpuAffinityStr, "cpu-affinity", "", "CPU affinity rules (e.g., 'numa').")
 	SubmitCmd.Flags().IntSliceVar(&restartOnExitCodes, "restart-on-exit-codes", nil, "List of exit codes that should not trigger a job failure.")
 	SubmitCmd.Flags().StringVar(&imagePullSecrets, "image-pull-secret", "", "Comma-separated list of secrets for pulling images. If omitted, matching dockerconfigjson secrets in the target namespace are attached; pass \"\" to attach none.")
-	SubmitCmd.Flags().StringVar(&serviceAccountName, "service-account", "", "Kubernetes ServiceAccount for the pods (GKE Workload Identity). On TPU and Pathways jobs, setting it disables hostNetwork.")
+	SubmitCmd.Flags().StringVar(&serviceAccountName, "service-account", "", "Kubernetes ServiceAccount for the pods (GKE Workload Identity). On GKE TPU and Pathways jobs, setting it disables hostNetwork.")
 	SubmitCmd.Flags().StringVar(&topology, "topology", "", "TPU slice topology (e.g., 2x2x1).")
 	SubmitCmd.Flags().StringVar(&gkeScheduler, "gke-scheduler", "", "Kubernetes Scheduler name (e.g., gke.io/topology-aware-auto).")
 	SubmitCmd.Flags().BoolVar(&awaitJobCompletion, "await-job-completion", false, "If true, gcluster will wait for the submitted job to complete.")
@@ -218,12 +226,68 @@ func init() {
 
 	SubmitCmd.Flags().BoolVar(&gkeMtcEnabled, "gke-mtc-enabled", false, "Enable Multi-Tier Checkpointing (MTC).")
 	SubmitCmd.Flags().StringVar(&gkeMtcRamdiskDirectory, "gke-mtc-ramdisk-dir", "", "Ramdisk directory path for Multi-Tier Checkpointing (MTC). Required when --gke-mtc-enabled is set.")
-	SubmitCmd.Flags().BoolVar(&enableMLDiagnostics, "enable-ml-diagnostics", false, "Enables ML Diagnostics for the workload (uses the GKE managed webhook by default, or injects the collector native sidecar on Kubernetes 1.29+ TPU pods when --ml-diagnostics-image or GCLUSTER_TELEMETRY_IMAGE is set).")
-	SubmitCmd.Flags().StringVar(&mlDiagnosticsImage, "ml-diagnostics-image", "", "Container image for the ML Diagnostics telemetry collector native sidecar on Kubernetes 1.29+ TPU workloads (requires --enable-ml-diagnostics; overrides GCLUSTER_TELEMETRY_IMAGE, and --ml-diagnostics-image=\"\" ignores it so GKE uses the managed webhook).")
+	SubmitCmd.Flags().BoolVar(&enableMLDiagnostics, "enable-ml-diagnostics", false, "Enables ML Diagnostics for the workload (uses the GKE managed webhook by default on GKE, or injects the collector native sidecar on Kubernetes 1.29+ TPU pods when --ml-diagnostics-image or GCLUSTER_TELEMETRY_IMAGE is set, or automatically in Kubernetes (k8s) mode via TPU node image cache discovery).")
+	SubmitCmd.Flags().StringVar(&mlDiagnosticsImage, "ml-diagnostics-image", "", "Container image for the ML Diagnostics telemetry collector native sidecar on Kubernetes 1.29+ TPU workloads (requires --enable-ml-diagnostics; overrides GCLUSTER_TELEMETRY_IMAGE and k8s TPU node auto-discovery, and --ml-diagnostics-image=\"\" ignores GCLUSTER_TELEMETRY_IMAGE so GKE uses the managed webhook).")
 	SubmitCmd.Flags().IntVar(&mlDiagnosticsTelemetryPort, "ml-diagnostics-telemetry-port", k8s.DefaultTelemetryCollectorPort, "Prometheus metrics port exposed by the ML Diagnostics collector sidecar (requires --enable-ml-diagnostics with --ml-diagnostics-image or GCLUSTER_TELEMETRY_IMAGE on GKE; ports 8431-8438, 8471, 8476-8479, and 13133 are reserved).")
 	SubmitCmd.Flags().StringVar(&gkeCustomTemplatesPath, "gke-custom-templates-path", "", "Path to a local directory containing custom GKE templates overrides.")
 
 	_ = SubmitCmd.MarkFlagRequired("name")
+}
+
+func buildSubmitJobDefinitionBase(cmd *cobra.Command) orchestrator.JobDefinition {
+	return orchestrator.JobDefinition{
+		ImageName:                   imageName,
+		BaseImage:                   baseImage,
+		BuildContext:                buildContext,
+		Platform:                    platform,
+		CommandToRun:                commandToRun,
+		ComputeType:                 computeType,
+		DryRunManifest:              dryRunManifest,
+		ProjectID:                   projectID,
+		ClusterName:                 clusterName,
+		ClusterLocation:             location,
+		GKENamespace:                gkeNamespace,
+		WorkloadName:                workloadName,
+		KueueQueueName:              kueueQueueName,
+		NumSlices:                   numSlices,
+		NodesPerSlice:               numNodes,
+		NumNodesSpecified:           cmd.Flags().Changed("num-nodes"),
+		MaxRestarts:                 restarts,
+		PlacementPolicy:             placementPolicy,
+		NodeConstraint:              nodeConstraint,
+		RestartOnExitCodes:          restartOnExitCodes,
+		ImagePullSecrets:            imagePullSecrets,
+		ServiceAccountName:          serviceAccountName,
+		Topology:                    strings.ToLower(strings.TrimSpace(topology)),
+		GKEScheduler:                gkeScheduler,
+		AwaitJobCompletion:          awaitJobCompletion,
+		UseParallelContainers:       !gkeDisableParallelContainers,
+		Timeout:                     timeout,
+		PriorityClassName:           priority,
+		Verbose:                     verbose,
+		MLDiagnosticsEnabled:        enableMLDiagnostics,
+		MLDiagnosticsImageSpecified: cmd.Flags().Changed("ml-diagnostics-image"),
+		GKEMTCEnabled:               gkeMtcEnabled,
+		GKEMTCRamdiskDirectory:      gkeMtcRamdiskDirectory,
+		GkeCustomTemplatesPath:      gkeCustomTemplatesPath,
+		GKENAPProvisioning:          gkeNapProvisioning,
+		GKENAPReservation:           gkeNapReservation,
+		IsPathwaysJob:               isPathwaysJob,
+		Pathways:                    pathways,
+		RawMounts:                   volumeStr,
+		ImagePullSecretsSpecified:   cmd.Flags().Changed("image-pull-secret"),
+	}
+}
+
+func validateK8sSubmitPreRun(cmd *cobra.Command) error {
+	if cmd.Flags().Changed("gke-disable-parallel-containers") {
+		return fmt.Errorf("--gke-disable-parallel-containers is a GKE-only flag and is not supported in Kubernetes (k8s) mode")
+	}
+	jobDef := buildSubmitJobDefinitionBase(cmd)
+	if isPathwaysJob || hasChangedPathwaysFlags(cmd) {
+		jobDef.IsPathwaysJob = true
+	}
+	return orchestrator.ValidateK8sSubmitJob(jobDef)
 }
 
 func runSubmitCmd(cmd *cobra.Command, args []string) error {
@@ -252,62 +316,16 @@ func runSubmitCmd(cmd *cobra.Command, args []string) error {
 		awaitJobCompletion = true
 	}
 
-	if config.IsTPU(computeType) && cmd.Flags().Changed("num-nodes") {
-		return fmt.Errorf("--num-nodes cannot be used with TPU jobs (it is calculated automatically from topology)")
-	}
-
-	jobTopology := strings.ToLower(strings.TrimSpace(topology))
 	applyPathwaysSubmitDefaults(cmd)
 	resolvedMLDiagImg, resolvedMLDiagPort := resolveSubmitMLDiagnostics(cmd)
 
-	jobDef := orchestrator.JobDefinition{
-		ImageName:                     imageName,
-		BaseImage:                     baseImage,
-		BuildContext:                  buildContext,
-		Platform:                      platform,
-		CommandToRun:                  commandToRun,
-		ComputeType:                   computeType,
-		DryRunManifest:                dryRunManifest,
-		ProjectID:                     projectID,
-		ClusterName:                   clusterName,
-		ClusterLocation:               location,
-		GKENamespace:                  gkeNamespace,
-		WorkloadName:                  workloadName,
-		KueueQueueName:                kueueQueueName,
-		NumSlices:                     numSlices,
-		NodesPerSlice:                 numNodes,
-		MaxRestarts:                   restarts,
-		TtlSecondsAfterFinished:       ttlSeconds,
-		TerminationGracePeriodSeconds: gracePeriodSeconds,
-		PlacementPolicy:               placementPolicy,
-		NodeConstraint:                nodeConstraint,
-		Affinity:                      affinity,
-		RestartOnExitCodes:            restartOnExitCodes,
-		ImagePullSecrets:              imagePullSecrets,
-		ServiceAccountName:            serviceAccountName,
-		Topology:                      jobTopology,
-		GKEScheduler:                  gkeScheduler,
-		AwaitJobCompletion:            awaitJobCompletion,
-		UseParallelContainers:         !gkeDisableParallelContainers,
-		Timeout:                       timeout,
-		PriorityClassName:             priority,
-		Verbose:                       verbose,
-		MLDiagnosticsEnabled:          enableMLDiagnostics,
-		MLDiagnosticsImage:            resolvedMLDiagImg,
-		MLDiagnosticsImageSpecified:   cmd.Flags().Changed("ml-diagnostics-image"),
-		MLDiagnosticsTelemetryPort:    resolvedMLDiagPort,
-		GKEMTCEnabled:                 gkeMtcEnabled,
-		GKEMTCRamdiskDirectory:        gkeMtcRamdiskDirectory,
-		GkeCustomTemplatesPath:        gkeCustomTemplatesPath,
-		GKENAPProvisioning:            gkeNapProvisioning,
-		GKENAPReservation:             gkeNapReservation,
-		IsPathwaysJob:                 isPathwaysJob,
-		Pathways:                      pathways,
-		RawMounts:                     volumeStr,
-		Env:                           parseEnvFlags(envVars),
-
-		ImagePullSecretsSpecified: cmd.Flags().Changed("image-pull-secret"),
-	}
+	jobDef := buildSubmitJobDefinitionBase(cmd)
+	jobDef.TtlSecondsAfterFinished = ttlSeconds
+	jobDef.TerminationGracePeriodSeconds = gracePeriodSeconds
+	jobDef.Affinity = affinity
+	jobDef.MLDiagnosticsImage = resolvedMLDiagImg
+	jobDef.MLDiagnosticsTelemetryPort = resolvedMLDiagPort
+	jobDef.Env = parseEnvFlags(envVars)
 
 	return orc.SubmitJob(jobDef)
 }
