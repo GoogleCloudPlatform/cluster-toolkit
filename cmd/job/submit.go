@@ -27,6 +27,7 @@ import (
 	"slices"
 	"time"
 
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/k8s"
@@ -50,6 +51,8 @@ var (
 	kueueQueueName   string
 	numNodes         int
 	numSlices        int
+	cpuRequest       string
+	memoryRequest    string
 	restarts         int
 	ttlAfterFinished string
 	gracePeriodStr   string
@@ -133,6 +136,15 @@ and workload scheduling configurations like workload name, queue, nodes, and res
 			return fmt.Errorf("required flag \"command\" not set")
 		}
 
+		if isPathwaysJob {
+			if err := validateSPSModeFlags(cmd); err != nil {
+				return err
+			}
+		}
+
+		if err := validateCPUResourceFlags(cmd); err != nil {
+			return err
+		}
 		if err := validatePathwaysFlags(cmd); err != nil {
 			return err
 		}
@@ -188,6 +200,8 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&kueueQueueName, "queue", "q", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
 	SubmitCmd.Flags().IntVar(&numNodes, "num-nodes", 1, "The number of nodes to use per group/slice. Defaults to 1 for CPU/GPU, or auto-calculated for TPUs.")
 	SubmitCmd.Flags().IntVar(&numSlices, "num-slices", 1, "The number of independent groups/slices to use.")
+	SubmitCmd.Flags().StringVar(&cpuRequest, "cpu", "", "CPU request per pod for CPU-only jobs (e.g. 8, 4500m); sets requests only and enables node sharing.")
+	SubmitCmd.Flags().StringVar(&memoryRequest, "memory", "", "Memory request per pod for CPU-only jobs (e.g. 64Gi, 200G); sets requests only and enables node sharing.")
 	SubmitCmd.Flags().IntVar(&restarts, "restarts", 1, "Max JobSet restarts (0..2147483647; 30 with --pathways-deploy-sps, 0 with --pathways-run-sps-workload, otherwise 1).")
 	SubmitCmd.Flags().StringVar(&ttlAfterFinished, "gke-ttl-after-finished", "1h", "Time to retain the JobSet after it finishes (e.g. 5m, 1h).")
 	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Pod termination grace period (e.g. 30s, 2m). On Pathways jobs, applies only to worker pods (pathways-head keeps 30s; ignored by --pathways-run-sps-workload).")
@@ -255,6 +269,8 @@ func buildSubmitJobDefinitionBase(cmd *cobra.Command) orchestrator.JobDefinition
 		NumSlices:                   numSlices,
 		NodesPerSlice:               numNodes,
 		NumNodesSpecified:           cmd.Flags().Changed("num-nodes"),
+		CPURequest:                  strings.TrimSpace(cpuRequest),
+		MemoryRequest:               strings.TrimSpace(memoryRequest),
 		MaxRestarts:                 restarts,
 		PlacementPolicy:             placementPolicy,
 		NodeConstraint:              nodeConstraint,
@@ -462,9 +478,21 @@ func validateNonNegativeInt32(flagName string, value int) error {
 	return nil
 }
 
+func validateCPUResourceFlags(cmd *cobra.Command) error {
+	if cmd.Flags().Changed("cpu") && strings.TrimSpace(cpuRequest) == "" {
+		return fmt.Errorf("--cpu cannot be empty")
+	}
+	if cmd.Flags().Changed("memory") && strings.TrimSpace(memoryRequest) == "" {
+		return fmt.Errorf("--memory cannot be empty")
+	}
+	return k8s.ValidateCPURequestPreflight(computeType, cpuRequest, memoryRequest, isPathwaysJob || pathways.HasMode(), config.IsKnownAccelerator(computeType), detectedOrchestratorType != orchestrator.TypeK8s)
+}
+
 var unsupportedRunSPSWorkloadFlags = []string{
 	"compute-type",
 	"num-nodes",
+	"cpu",
+	"memory",
 	"topology",
 	"gpus",
 	"pathways-server-image",

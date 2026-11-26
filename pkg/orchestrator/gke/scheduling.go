@@ -15,8 +15,10 @@
 package gke
 
 import (
+	"cmp"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"path"
 	"slices"
 	"strconv"
@@ -52,16 +54,20 @@ func requiresWorkloadPolicy(machineType string) bool {
 }
 
 type SchedulingOptions struct {
-	PlacementPolicy    string
-	Topology           string
-	Scheduler          string
-	MachineType        string
-	IsTPU              bool
-	IsNAP              bool
-	NodeAffinityLabels map[string]string
-	IsDynamicSlicing   bool
-	IsStaticSlicing    bool
-	OmitGKENodePool    bool
+	PlacementPolicy     string
+	Topology            string
+	Scheduler           string
+	MachineType         string
+	IsTPU               bool
+	IsNAP               bool
+	ClusterNAPEnabled   bool
+	PinCPUMachine       bool
+	ExcludeAccelerators bool
+	NodeAffinityLabels  map[string]string
+	ExcludedNodePools   []string
+	IsDynamicSlicing    bool
+	IsStaticSlicing     bool
+	OmitGKENodePool     bool
 }
 
 func getNodeSelector(opts SchedulingOptions) (map[string]string, error) {
@@ -99,10 +105,24 @@ func getNodeSelector(opts SchedulingOptions) (map[string]string, error) {
 		nodeSelector[k] = v
 	}
 
+	if opts.PinCPUMachine {
+		addCPUMachineSelectors(nodeSelector, opts.NodeAffinityLabels, opts.IsNAP || opts.ClusterNAPEnabled, opts.MachineType)
+	}
+
 	if len(nodeSelector) == 0 {
 		return nil, nil
 	}
 	return nodeSelector, nil
+}
+
+func excludedNodePoolValues(extra []string) []string {
+	excluded := []string{"default-pool"}
+	for _, pool := range extra {
+		if pool != "" && !slices.Contains(excluded, pool) {
+			excluded = append(excluded, pool)
+		}
+	}
+	return excluded
 }
 
 func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
@@ -111,10 +131,12 @@ func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
 		term.MatchExpressions = append(term.MatchExpressions, corev1.NodeSelectorRequirement{
 			Key:      nodePoolLabel,
 			Operator: corev1.NodeSelectorOpNotIn,
-			Values:   []string{"default-pool"},
+			Values:   excludedNodePoolValues(opts.ExcludedNodePools),
 		})
 	}
-
+	if opts.ExcludeAccelerators {
+		appendAcceleratorExclusions(&term, opts.NodeAffinityLabels)
+	}
 	// Collect and sort keys of NodeAffinityLabels to ensure deterministic output
 	keys := make([]string, 0, len(opts.NodeAffinityLabels))
 	for k := range opts.NodeAffinityLabels {
@@ -218,4 +240,242 @@ func GetTolerations(acceleratorType string) []corev1.Toleration {
 		}
 	}
 	return nil
+}
+
+func appendAcceleratorExclusions(term *corev1.NodeSelectorTerm, userConstraints map[string]string) {
+	for _, key := range []string{k8s.GKEAcceleratorLabel, k8s.GKETPUAcceleratorLabel} {
+		if strings.TrimSpace(userConstraints[key]) == "" {
+			term.MatchExpressions = append(term.MatchExpressions, corev1.NodeSelectorRequirement{
+				Key:      key,
+				Operator: corev1.NodeSelectorOpDoesNotExist,
+			})
+		}
+	}
+}
+
+func hasUserCPUPoolConstraint(constraints map[string]string) bool {
+	for _, key := range []string{corev1.LabelInstanceTypeStable, nodePoolLabel, machineFamilyLabel, computeClassLabel} {
+		if strings.TrimSpace(constraints[key]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func isCustomMachineType(lower string) bool {
+	return strings.HasPrefix(lower, "custom-") || strings.Contains(lower, "-custom-")
+}
+
+func predefinedMachineFamily(machineType string) string {
+	lower := strings.ToLower(strings.TrimSpace(machineType))
+	switch lower {
+	case "", "custom":
+		return ""
+	case "f1-micro", "g1-small":
+		return "n1"
+	}
+	if isCustomMachineType(lower) {
+		return ""
+	}
+	family, _, ok := strings.Cut(lower, "-")
+	if !ok || family == "" {
+		return ""
+	}
+	return family
+}
+
+func addCPUMachineSelectors(nodeSelector, userConstraints map[string]string, napEnabled bool, machineType string) {
+	normalized := strings.ToLower(strings.TrimSpace(machineType))
+	if normalized == "" || hasUserCPUPoolConstraint(userConstraints) {
+		return
+	}
+	nodeSelector[corev1.LabelInstanceTypeStable] = normalized
+	if napEnabled {
+		if family := predefinedMachineFamily(normalized); family != "" {
+			nodeSelector[machineFamilyLabel] = family
+		}
+	}
+}
+
+func (g *GKEOrchestrator) hasStaticNodePoolForMachineType(machineType, provisioning, reservationName string) bool {
+	if strings.TrimSpace(machineType) == "" {
+		return false
+	}
+	prov := strings.ToLower(strings.TrimSpace(provisioning))
+	return slices.ContainsFunc(g.clusterDesc.NodePools, func(np gkeJobNodePool) bool {
+		return g.isEligibleStaticCPUPool(np, machineType, prov, reservationName)
+	})
+}
+
+func (g *GKEOrchestrator) isEligibleStaticCPUPool(np gkeJobNodePool, machineType, prov, reservationName string) bool {
+	if np.Name == "default-pool" || g.isSystemPool(np) || len(np.Config.Accelerators) > 0 ||
+		g.getNodeCount(np) == 0 || !strings.EqualFold(np.Config.MachineType, machineType) {
+		return false
+	}
+	if provisioningMismatchesPool(prov, reservationName, np) {
+		return false
+	}
+	copiesAllTaints := prov == "reservation" && poolMatchesReservation(np.Config, reservationName)
+	return !hasBlockingTaint(np.Config.Taints, prov, reservationName, copiesAllTaints)
+}
+
+func (g *GKEOrchestrator) shouldPinCPUMachine(isCPUMachine bool, cpuReq, memReq, napProvisioning, napReservation, machineType string) bool {
+	if !isCPUMachine {
+		return false
+	}
+	if cpuReq != "" || memReq != "" || strings.TrimSpace(napProvisioning) != "" {
+		return true
+	}
+	return g.napEnabled && !g.hasStaticNodePoolForMachineType(machineType, napProvisioning, napReservation)
+}
+
+func pipeConstraintContains(constraintVal, target string) bool {
+	for part := range strings.SplitSeq(constraintVal, "|") {
+		if strings.EqualFold(strings.TrimSpace(part), target) {
+			return true
+		}
+	}
+	return false
+}
+
+func headPoolMatchesUserMachine(headMachine, targetMachine string, constraints map[string]string) bool {
+	if strings.TrimSpace(headMachine) == "" {
+		return false
+	}
+	if inst := strings.TrimSpace(constraints[corev1.LabelInstanceTypeStable]); inst != "" {
+		return pipeConstraintContains(inst, headMachine)
+	}
+	if fam := strings.TrimSpace(constraints[machineFamilyLabel]); fam != "" {
+		headFamily := predefinedMachineFamily(headMachine)
+		return headFamily != "" && pipeConstraintContains(fam, headFamily)
+	}
+	return strings.EqualFold(headMachine, targetMachine)
+}
+
+func isToleratedProvisioningTaint(t gkeTaint, effect, prov, reservationName string) bool {
+	if effect != "NO_SCHEDULE" && effect != "NOSCHEDULE" {
+		return false
+	}
+	if prov == "spot" && t.Key == "cloud.google.com/gke-provisioning" && t.Value == "spot" {
+		return true
+	}
+	if prov == "reservation" && t.Key == "cloud.google.com/reservation-name" {
+		reqRes := parseReservationURI(reservationName)
+		taintRes := parseReservationURI(t.Value)
+		return reqRes.Name != "" && taintRes.Name == reqRes.Name
+	}
+	return false
+}
+
+func hasBlockingTaint(taints []gkeTaint, prov, reservationName string, copiesAllPoolTaints bool) bool {
+	if copiesAllPoolTaints {
+		return false
+	}
+	return slices.ContainsFunc(taints, func(t gkeTaint) bool {
+		effect := strings.ToUpper(strings.TrimSpace(t.Effect))
+		if isToleratedProvisioningTaint(t, effect, prov, reservationName) {
+			return false
+		}
+		switch effect {
+		case "NO_SCHEDULE", "NOSCHEDULE", "NO_EXECUTE", "NOEXECUTE":
+			return true
+		}
+		return false
+	})
+}
+
+func matchParsedReservation(poolRes parsedReservation, poolLabels map[string]string, reqRes parsedReservation) bool {
+	if poolRes.Name == "" || !strings.EqualFold(poolRes.Name, reqRes.Name) {
+		return false
+	}
+	if reqRes.Project != "" {
+		poolProject := cmp.Or(poolRes.Project, strings.TrimSpace(poolLabels["cloud.google.com/reservation-project"]))
+		if !strings.EqualFold(poolProject, reqRes.Project) {
+			return false
+		}
+	}
+	if reqRes.Block != "" {
+		poolBlock := cmp.Or(poolRes.Block, strings.TrimSpace(poolLabels["cloud.google.com/reservation-blocks"]))
+		if !strings.EqualFold(poolBlock, reqRes.Block) {
+			return false
+		}
+	}
+	if reqRes.Subblock != "" {
+		poolSubblock := cmp.Or(poolRes.Subblock, strings.TrimSpace(poolLabels["cloud.google.com/reservation-subblocks"]))
+		if !strings.EqualFold(poolSubblock, reqRes.Subblock) {
+			return false
+		}
+	}
+	return true
+}
+
+func poolMatchesReservation(cfg gkeNodePoolConfig, reservationName string) bool {
+	reqRes := parseReservationURI(reservationName)
+	if reqRes.Name == "" {
+		return false
+	}
+	if lblVal := strings.TrimSpace(cfg.Labels["cloud.google.com/reservation-name"]); lblVal != "" {
+		if matchParsedReservation(parseReservationURI(lblVal), cfg.Labels, reqRes) {
+			return true
+		}
+	}
+	if ra := cfg.ReservationAffinity; ra != nil &&
+		strings.EqualFold(ra.ConsumeReservationType, "SPECIFIC_RESERVATION") &&
+		ra.Key == "compute.googleapis.com/reservation-name" {
+		for _, v := range ra.Values {
+			if matchParsedReservation(parseReservationURI(v), cfg.Labels, reqRes) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func provisioningMismatchesPool(prov, reservationName string, np gkeJobNodePool) bool {
+	switch prov {
+	case "reservation":
+		return !poolMatchesReservation(np.Config, reservationName)
+	case "spot":
+		return !np.Config.Spot
+	case "on-demand":
+		return np.Config.Spot
+	default:
+		return false
+	}
+}
+
+func (g *GKEOrchestrator) isCandidatePathwaysHeadPool(np gkeJobNodePool) bool {
+	return (np.Name == "cpu-np" || np.Name == "pathways-np") &&
+		len(np.Config.Accelerators) == 0 &&
+		!config.IsTPU(np.Config.MachineType) &&
+		!g.isSystemPool(np)
+}
+
+func (g *GKEOrchestrator) shouldExcludeHeadPool(headNP gkeJobNodePool, schedOpts *SchedulingOptions, prov, reservationName string) bool {
+	if g.getNodeCount(headNP) == 0 ||
+		!headPoolMatchesUserMachine(headNP.Config.MachineType, schedOpts.MachineType, schedOpts.NodeAffinityLabels) ||
+		provisioningMismatchesPool(prov, reservationName, headNP) {
+		return true
+	}
+	// resolveReservationTolerations only copies extra pool taints when the pool's machine type matches schedOpts.MachineType.
+	copiesAllPoolTaints := prov == "reservation" && strings.EqualFold(headNP.Config.MachineType, schedOpts.MachineType)
+	return hasBlockingTaint(headNP.Config.Taints, prov, reservationName, copiesAllPoolTaints)
+}
+
+// applyCPUHeadPoolAvoidance excludes incompatible Pathways head pools via NotIn so
+// Kueue skips pathways-flavor and falls through to flavor-default on static and NAP clusters.
+func (g *GKEOrchestrator) applyCPUHeadPoolAvoidance(schedOpts *SchedulingOptions, provisioning, reservationName string) {
+	if schedOpts == nil ||
+		!g.kueueEnabled() ||
+		!schedOpts.PinCPUMachine ||
+		strings.TrimSpace(schedOpts.NodeAffinityLabels[nodePoolLabel]) != "" ||
+		strings.TrimSpace(schedOpts.NodeAffinityLabels[computeClassLabel]) != "" {
+		return
+	}
+	prov := strings.ToLower(strings.TrimSpace(provisioning))
+	for _, headNP := range g.clusterDesc.NodePools {
+		if g.isCandidatePathwaysHeadPool(headNP) && g.shouldExcludeHeadPool(headNP, schedOpts, prov, reservationName) {
+			schedOpts.ExcludedNodePools = append(schedOpts.ExcludedNodePools, headNP.Name)
+		}
+	}
 }

@@ -26,6 +26,8 @@ import (
 	"hpc-toolkit/pkg/shell"
 
 	"github.com/google/go-cmp/cmp"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const testSPSJobSetJSON = `{
@@ -313,6 +315,57 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 			},
 			nil,
 		)
+	})
+
+	t.Run("in-cluster and terminal SPS clients omit limits on pathways-head containers", func(t *testing.T) {
+		for _, tc := range []struct {
+			name     string
+			image    string
+			wantReqs map[string]corev1.ResourceList
+		}{
+			{
+				name:  "in-cluster",
+				image: "us-docker.pkg.dev/my-proj/img:latest",
+				wantReqs: map[string]corev1.ResourceList{
+					"pathways-proxy": {
+						corev1.ResourceCPU:    resource.MustParse("8"),
+						corev1.ResourceMemory: resource.MustParse("32Gi"),
+					},
+					"workload-container": {
+						corev1.ResourceCPU:    resource.MustParse("2"),
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
+					},
+				},
+			},
+			{
+				name:  "terminal",
+				image: "",
+				wantReqs: map[string]corev1.ResourceList{
+					"pathways-proxy": {
+						corev1.ResourceCPU:    resource.MustParse("8"),
+						corev1.ResourceMemory: resource.MustParse("32Gi"),
+					},
+				},
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				job := orchestrator.JobDefinition{
+					WorkloadName:              "sps-client-res",
+					NumSlices:                 1,
+					TtlSecondsAfterFinished:   3600,
+					CommandToRun:              "python3 train.py",
+					ImagePullSecretsSpecified: true,
+					Pathways: mustResolveSPSPathways(t, orchestrator.PathwaysJobDefinition{
+						RunSPSWorkload: "sps-j6080103",
+					}, inst),
+				}
+				manifest, err := orc.generateSPSClientManifest(job, inst, tc.image)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				assertPathwaysHeadResources(t, manifest, tc.wantReqs)
+			})
+		}
 	})
 }
 
