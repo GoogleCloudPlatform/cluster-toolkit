@@ -23,8 +23,8 @@ ghpc:
   - validator: range
     inputs:
       vars: [size_gb]
-      min: 1024
-    error_message: "The 'size_gb' value must be at least 1024 GiB. See https://cloud.google.com/filestore/docs/service-tiers for details."
+      min: 100
+    error_message: "The 'size_gb' value must be at least 100 GiB. See https://cloud.google.com/filestore/docs/service-tiers for details."
 
   - validator: regex
     inputs:
