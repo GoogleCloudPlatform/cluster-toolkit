@@ -148,6 +148,27 @@ install_pip3() {
 	fi
 }
 
+# Checks that python_path points to a functional Python binary and populates
+# python_major_version and python_minor_version (resetting them on failure).
+resolve_python_version() {
+	if [ -n "${python_path}" ] && "${python_path}" -c "import sys" >/dev/null 2>&1; then
+		get_python_major_version "${python_path}"
+		get_python_minor_version "${python_path}"
+	else
+		python_path=""
+		python_major_version=0
+		python_minor_version=0
+	fi
+}
+
+# Returns 0 if the given major/minor version is non-numeric or older than 3.${REQ_PYTHON3_VERSION}.
+is_python_version_too_old() {
+	if ! [ "$1" -eq "$1" ] 2>/dev/null || ! [ "$2" -eq "$2" ] 2>/dev/null; then
+		return 0
+	fi
+	[ "$1" -lt 3 ] || { [ "$1" -eq 3 ] && [ "$2" -lt "${REQ_PYTHON3_VERSION}" ]; }
+}
+
 main() {
 	if [ $# -gt 1 ]; then
 		echo "Error: provide only 1 optional argument identifying virtual environment path for Ansible"
@@ -158,26 +179,17 @@ main() {
 
 	# Get the python3 executable, or install it if not found
 	get_python_path
-	if [ -n "${python_path}" ]; then
-		get_python_major_version "${python_path}"
-		get_python_minor_version "${python_path}"
-	else
-		python_major_version=0
-		python_minor_version=0
-	fi
-	if [ "${python_path}" = "" ] || [ "${python_major_version}" -lt 3 ] || { [ "${python_major_version}" -eq 3 ] && [ "${python_minor_version}" -lt "${REQ_PYTHON3_VERSION}" ]; }; then
+	resolve_python_version
+	if [ -z "${python_path}" ] || is_python_version_too_old "${python_major_version}" "${python_minor_version}"; then
 		if ! install_python3; then
 			return 1
 		fi
-		if [ -n "${python_path}" ]; then
-			get_python_major_version "${python_path}"
-			get_python_minor_version "${python_path}"
-		fi
+		resolve_python_version
 	else
 		install_python_deps
 	fi
 
-	if [ -z "${python_path}" ] || [ "${python_major_version}" -lt 3 ] || { [ "${python_major_version}" -eq 3 ] && [ "${python_minor_version}" -lt "${REQ_PYTHON3_VERSION}" ]; }; then
+	if [ -z "${python_path}" ] || is_python_version_too_old "${python_major_version}" "${python_minor_version}"; then
 		echo "Error: Python 3.${REQ_PYTHON3_VERSION} or later is required, but no compatible Python installation is available." >&2
 		return 1
 	fi
@@ -199,7 +211,7 @@ main() {
 		else
 			existing_venv_major=$(${existing_venv_python} -c "import sys; print(sys.version_info.major)" 2>/dev/null || echo 0)
 			existing_venv_minor=$(${existing_venv_python} -c "import sys; print(sys.version_info.minor)" 2>/dev/null || echo 0)
-			if [ "${existing_venv_major}" -lt 3 ] || { [ "${existing_venv_major}" -eq 3 ] && [ "${existing_venv_minor}" -lt "${REQ_PYTHON3_VERSION}" ]; }; then
+			if is_python_version_too_old "${existing_venv_major}" "${existing_venv_minor}"; then
 				recreate_venv=true
 			fi
 		fi
