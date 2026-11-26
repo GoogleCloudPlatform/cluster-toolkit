@@ -178,9 +178,8 @@ func hasGKEFlags(projectID, location string) bool {
 	return strings.TrimSpace(projectID) != "" || strings.TrimSpace(location) != ""
 }
 
-func isMultiCloudOrAttachedGKEName(s string) bool {
-	parts := strings.SplitN(strings.TrimSpace(s), "_", 4)
-	if len(parts) != 4 || parts[0] != "gke" || parts[2] == "" {
+func isMultiCloudOrAttachedGKEParts(parts []string) bool {
+	if len(parts) != 4 || parts[0] != "gke" || strings.TrimSpace(parts[2]) == "" {
 		return false
 	}
 	switch parts[1] {
@@ -191,12 +190,38 @@ func isMultiCloudOrAttachedGKEName(s string) bool {
 	}
 }
 
-func isCanonicalGKEName(s string) bool {
+func isMultiCloudOrAttachedGKEName(s string) bool {
+	return isMultiCloudOrAttachedGKEParts(strings.SplitN(strings.TrimSpace(s), "_", 4))
+}
+
+func parseCanonicalGKEName(s string) (project, location, cluster string, ok bool) {
 	parts := strings.SplitN(strings.TrimSpace(s), "_", 4)
-	if len(parts) != 4 || parts[0] != "gke" || parts[1] == "" || parts[2] == "" || parts[3] == "" {
-		return false
+	if len(parts) != 4 || parts[0] != "gke" {
+		return "", "", "", false
 	}
-	return !isMultiCloudOrAttachedGKEName(s)
+	project = strings.TrimSpace(parts[1])
+	location = strings.TrimSpace(parts[2])
+	cluster = strings.TrimSpace(parts[3])
+	if project == "" || location == "" || cluster == "" || isMultiCloudOrAttachedGKEParts(parts) {
+		return "", "", "", false
+	}
+	return project, location, cluster, true
+}
+
+func isCanonicalGKEName(s string) bool {
+	_, _, _, ok := parseCanonicalGKEName(s)
+	return ok
+}
+
+// ExtractProjectIDFromContext returns the GCP project ID encoded in a canonical
+// gcloud GKE context name ("gke_<project>_<location>_<cluster>"), or "" if the
+// context name is not a canonical GKE context (including multi-cloud/attached names).
+func ExtractProjectIDFromContext(ctxName string) string {
+	project, _, _, ok := parseCanonicalGKEName(ctxName)
+	if !ok {
+		return ""
+	}
+	return project
 }
 
 func isConnectGatewayHost(host string) bool {

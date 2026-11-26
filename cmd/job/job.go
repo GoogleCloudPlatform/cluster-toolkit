@@ -35,6 +35,9 @@ var (
 )
 
 var (
+	// OnTelemetryProjectResolved is an optional hook wired by package cmd to
+	// propagate the resolved GCP project ID to the root telemetry collector.
+	OnTelemetryProjectResolved func(projectID string)
 	// gkeOrchestratorFactory overrides registry-based orchestrator construction when set in unit tests.
 	gkeOrchestratorFactory func() orchestrator.JobOrchestrator
 	orc                    orchestrator.JobOrchestrator
@@ -48,16 +51,23 @@ var JobCmd = &cobra.Command{
 Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic kubeconfig detection, or GCLUSTER_AIR_GAPPED=true in disconnected environments.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.Name() == "gke-template-extract" {
+			reportTelemetryProjectID("")
 			return nil
 		}
 
+		projectFlagChanged := cmd.Flags().Changed("project")
 		savedClusterName, savedGKE, err := applySavedContextDefaults(cmd)
 		if err != nil {
 			return err
 		}
+		var det orchestrator.Detection
+		// Cover early-return and flag-validation paths; L89 reports earlier so FatalHook paths observe the resolved project.
+		defer func() {
+			reportTelemetryProjectID(resolveTelemetryProjectID(projectID, projectFlagChanged, det))
+		}()
 		savedClusterUsed := !cmd.Flags().Changed("cluster") && savedClusterName != ""
 
-		det, err := detectJobOrchestrator(cmd, savedClusterName, savedGKE)
+		det, err = detectJobOrchestrator(cmd, savedClusterName, savedGKE)
 		if err != nil {
 			return err
 		}
@@ -76,8 +86,38 @@ Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic kubeconfig detection, or
 		}
 		logging.Info("Orchestrator: %s (%s)", det.Type, det.Reason)
 
+		// Report before initCommandOrchestrator so FatalHook paths observe the resolved project.
+		reportTelemetryProjectID(resolveTelemetryProjectID(projectID, projectFlagChanged, det))
 		return initCommandOrchestrator(cmd, det)
 	},
+}
+
+func reportTelemetryProjectID(proj string) {
+	if OnTelemetryProjectResolved != nil {
+		OnTelemetryProjectResolved(proj)
+	}
+}
+
+func resolveTelemetryProjectID(proj string, projectFlagChanged bool, det orchestrator.Detection) string {
+	if det.Type == orchestrator.TypeK8s {
+		return ""
+	}
+	if det.Type == "" {
+		if projectFlagChanged {
+			return strings.TrimSpace(proj)
+		}
+		return ""
+	}
+	if p := strings.TrimSpace(proj); p != "" {
+		return p
+	}
+	if det.Type == orchestrator.TypeGKE {
+		if p := gke.ExtractProjectIDFromContext(det.KubeContext); p != "" {
+			return p
+		}
+		return gke.ExtractProjectIDFromContext(det.ClusterName)
+	}
+	return ""
 }
 
 func canOverrideSavedGKEWithK8sCluster(cmdName string, clusterChanged, explicitGKEFlags, savedGKE bool, savedClusterName string) bool {

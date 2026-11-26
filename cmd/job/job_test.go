@@ -1194,3 +1194,203 @@ func assertBothGKEAndBareProdPrefersGKEContext(t *testing.T) {
 		t.Fatalf("both-contexts hits: gkeDeletes=%d onPremHits=%d, want (2, 0)", gkeDeletes.Load(), onPremHits.Load())
 	}
 }
+
+func TestResolveTelemetryProjectID(t *testing.T) {
+	tests := []struct {
+		name               string
+		proj               string
+		projectFlagChanged bool
+		det                orchestrator.Detection
+		want               string
+	}{
+		{
+			name:               "explicit project wins over kubeconfig context on GKE",
+			proj:               "explicit-proj",
+			projectFlagChanged: true,
+			det:                orchestrator.Detection{Type: orchestrator.TypeGKE, KubeContext: "gke_other-proj_us-central1_c1"},
+			want:               "explicit-proj",
+		},
+		{
+			name: "extracts project from canonical GKE kubeconfig context when project empty",
+			proj: "",
+			det:  orchestrator.Detection{Type: orchestrator.TypeGKE, KubeContext: "gke_ctx-proj_us-central1_c1"},
+			want: "ctx-proj",
+		},
+		{
+			name: "extracts project from canonical GKE cluster name for renamed context alias",
+			proj: "",
+			det:  orchestrator.Detection{Type: orchestrator.TypeGKE, KubeContext: "prod-gpu", ClusterName: "gke_alias-proj_us-central1_c1"},
+			want: "alias-proj",
+		},
+		{
+			name:               "returns empty for TypeK8s even when --project was passed",
+			proj:               "ar-proj",
+			projectFlagChanged: true,
+			det:                orchestrator.Detection{Type: orchestrator.TypeK8s, KubeContext: "admin@onprem-k8s"},
+			want:               "",
+		},
+		{
+			name: "returns empty for TypeK8s even if context name looks GKE-like",
+			proj: "",
+			det:  orchestrator.Detection{Type: orchestrator.TypeK8s, KubeContext: "gke_ctx-proj_us-central1_c1"},
+			want: "",
+		},
+		{
+			name:               "detection failure does not leak stale saved project when --project was not passed",
+			proj:               "stale-saved-proj",
+			projectFlagChanged: false,
+			det:                orchestrator.Detection{},
+			want:               "",
+		},
+		{
+			name:               "detection failure still reports explicit --project flag",
+			proj:               "explicit-proj",
+			projectFlagChanged: true,
+			det:                orchestrator.Detection{},
+			want:               "explicit-proj",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resolveTelemetryProjectID(tc.proj, tc.projectFlagChanged, tc.det); got != tc.want {
+				t.Errorf("resolveTelemetryProjectID(%q, %v, %+v) = %q, want %q", tc.proj, tc.projectFlagChanged, tc.det, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestJobCmd_ReportsTelemetryProjectID_GKE(t *testing.T) {
+	origHook := OnTelemetryProjectResolved
+	t.Cleanup(func() { OnTelemetryProjectResolved = origHook })
+
+	var reported string
+	OnTelemetryProjectResolved = func(p string) {
+		reported = p
+	}
+
+	t.Run("reports saved context project on GKE command", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "nonexistent"))
+		if err := saveContext(Context{ProjectID: "saved-proj", Location: "us-central1", ClusterName: "my-cluster"}); err != nil {
+			t.Fatalf("saveContext: %v", err)
+		}
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+
+		reported = ""
+		if _, err := executeCommand(JobCmd, "list", "--skip-prereqs"); err != nil {
+			t.Fatalf("list err = %v", err)
+		}
+		if reported != "saved-proj" {
+			t.Errorf("reported telemetry project = %q, want %q", reported, "saved-proj")
+		}
+	})
+
+	t.Run("reports project even when GKE flag validation fails", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "nonexistent"))
+
+		reported = ""
+		if _, err := executeCommand(JobCmd, "list", "-p", "flag-only-proj", "--skip-prereqs"); err == nil {
+			t.Fatalf("expected validation error when --cluster is missing")
+		}
+		if reported != "flag-only-proj" {
+			t.Errorf("reported telemetry project = %q, want %q", reported, "flag-only-proj")
+		}
+	})
+
+	t.Run("extracts project from canonical GKE kubeconfig context when project flag is omitted", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		const gkeCtx = "gke_kc-gke-proj_us-central1_my-cluster"
+		kcPath := writeTestKubeconfigFile(t, gkeCtx, gkeCtx, "https://10.0.0.1:443")
+		t.Setenv("KUBECONFIG", kcPath)
+
+		reported = ""
+		// Without --project/--location, GKE flag validation returns an error, yet telemetry still extracts project from the canonical GKE kubeconfig context.
+		if _, err := executeCommand(JobCmd, "list", "-c", gkeCtx, "--skip-prereqs"); err == nil {
+			t.Fatalf("expected GKE flag validation error when --location and --project are omitted")
+		}
+		if reported != "kc-gke-proj" {
+			t.Errorf("reported telemetry project = %q, want %q", reported, "kc-gke-proj")
+		}
+	})
+}
+
+func TestJobCmd_ReportsTelemetryProjectID_Suppression(t *testing.T) {
+	origHook := OnTelemetryProjectResolved
+	t.Cleanup(func() { OnTelemetryProjectResolved = origHook })
+
+	var reported string
+	OnTelemetryProjectResolved = func(p string) {
+		reported = p
+	}
+
+	t.Run("clears stale saved project on TypeK8s command", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		kcPath := writeTestKubeconfigFile(t, "admin@onprem-k8s", "onprem-k8s", "https://10.128.0.68:6443")
+		t.Setenv("KUBECONFIG", kcPath)
+		if err := saveContext(Context{ProjectID: "stale-gke-proj", Location: "us-central1", ClusterName: "old-gke"}); err != nil {
+			t.Fatalf("saveContext: %v", err)
+		}
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+
+		reported = "sentinel"
+		if _, err := executeCommand(JobCmd, "list", "-c", "onprem-k8s", "--skip-prereqs"); err != nil {
+			t.Fatalf("list err = %v", err)
+		}
+		if reported != "" {
+			t.Errorf("reported telemetry project on TypeK8s = %q, want empty", reported)
+		}
+	})
+
+	t.Run("forced TypeK8s suppresses --project flag attribution", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		kcPath := writeTestKubeconfigFile(t, "admin@onprem-k8s", "onprem-k8s", "https://10.128.0.68:6443")
+		t.Setenv("KUBECONFIG", kcPath)
+		t.Setenv(orchestrator.EnvVar, string(orchestrator.TypeK8s))
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+
+		reported = "sentinel"
+		if _, err := executeCommand(JobCmd, "list", "-c", "onprem-k8s", "-p", "ar-only-proj", "--skip-prereqs"); err != nil {
+			t.Fatalf("list err = %v", err)
+		}
+		if reported != "" {
+			t.Errorf("reported telemetry project on forced TypeK8s = %q, want empty", reported)
+		}
+	})
+
+	t.Run("corrupt kubeconfig does not leak stale saved GKE project", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		corruptKC := filepath.Join(t.TempDir(), "corrupt-kubeconfig")
+		if err := os.WriteFile(corruptKC, []byte("clusters: [unclosed\n"), 0600); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		t.Setenv("KUBECONFIG", corruptKC)
+		if err := saveContext(Context{ProjectID: "stale-gke-proj", Location: "us-central1", ClusterName: "old-gke"}); err != nil {
+			t.Fatalf("saveContext: %v", err)
+		}
+
+		reported = "sentinel"
+		if _, err := executeCommand(JobCmd, "list", "-c", "onprem-only", "--skip-prereqs"); err == nil {
+			t.Fatalf("expected corrupt kubeconfig error")
+		}
+		if reported != "" {
+			t.Errorf("reported telemetry project on corrupt kubeconfig = %q, want empty", reported)
+		}
+	})
+
+	t.Run("gke-template-extract explicitly suppresses project attribution", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		outDir := filepath.Join(t.TempDir(), "templates")
+		reported = "sentinel"
+		if _, err := executeCommand(JobCmd, "gke-template-extract", "-p", "ignored-proj", "--output-dir", outDir); err != nil {
+			t.Fatalf("gke-template-extract err = %v", err)
+		}
+		if reported != "" {
+			t.Errorf("reported telemetry project on gke-template-extract = %q, want empty", reported)
+		}
+	})
+}
