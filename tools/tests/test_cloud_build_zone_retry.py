@@ -120,6 +120,42 @@ class TestCloudBuildZoneRetry(unittest.TestCase):
         )
         self.assertEqual(res.returncode, 0)
 
+    def test_check_retriable_error_matches_service_networking_compute_api_propagation(self):
+        """Test check_retriable_error.sh matches NetApp PSA tenant project Compute API race."""
+        cloud_build_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../cloud-build")
+        )
+        check_script = os.path.join(cloud_build_dir, "check_retriable_error.sh")
+        error_msg = (
+            "Error: Error waiting for Create Service Networking Connection: "
+            "Error code 7, message: Compute Engine API has not been used in "
+            "project 1080449625822 before or it is disabled.\n"
+        )
+        log_file = os.path.join(self.test_dir, "psa_compute_api_race_log.txt")
+        with open(log_file, "w", encoding="utf-8") as f:
+            f.write(error_msg)
+
+        res = subprocess.run(
+            ["bash", check_script, log_file],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(res.returncode, 0)
+
+        non_psa_log = os.path.join(self.test_dir, "non_psa_compute_api_log.txt")
+        with open(non_psa_log, "w", encoding="utf-8") as f:
+            f.write(
+                "Error: Compute Engine API has not been used in project "
+                "646513834877 before or it is disabled.\n"
+            )
+
+        res_non_psa = subprocess.run(
+            ["bash", check_script, non_psa_log],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(res_non_psa.returncode, 1)
+
     def test_extract_failed_zone_from_spot_stockout_log(self):
         """Test extracting zone from 'Deploying in ZONE:' only on capacity error."""
         log_content = (

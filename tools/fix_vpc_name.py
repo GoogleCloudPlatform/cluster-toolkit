@@ -19,12 +19,16 @@ def modify_vpcs(blueprint_path, prefix):
     with open(blueprint_path, 'r') as f:
         data = yaml.safe_load(f)
 
-    # Find network used by filestore
+    # Find network used by filestore, managed-lustre, or netapp-storage-pool
     primary_network_id = None
     if data and 'deployment_groups' in data:
         for group in data['deployment_groups']:
             for module in group.get('modules', []):
-                if module.get('source') in ['modules/file-system/filestore', 'modules/file-system/managed-lustre']:
+                if module.get('source') in [
+                    'modules/file-system/filestore',
+                    'modules/file-system/managed-lustre',
+                    'modules/file-system/netapp-storage-pool',
+                ]:
                     uses = module.get('use', [])
                     for u in uses:
                         for g2 in data['deployment_groups']:

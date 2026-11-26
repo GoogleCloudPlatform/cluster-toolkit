@@ -27,5 +27,6 @@ custom_vars:
   mounts:
   - /home
 cli_deployment_vars:
+  test_name: "{{ test_name }}"
   region: "{{ region }}"
   zone: "{{ zone }}"
