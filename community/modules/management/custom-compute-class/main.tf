@@ -16,7 +16,7 @@
 
 locals {
   cluster_id_parts = split("/", var.cluster_id)
-  project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
+  project_id       = var.project_id != null && var.project_id != "" ? var.project_id : local.cluster_id_parts[1]
 
   templated_manifest = length(var.compute_classes) > 0 ? templatefile("${path.module}/templates/compute-class.yaml.tftpl", {
     compute_classes = var.compute_classes
@@ -30,7 +30,7 @@ locals {
 
   combined_yaml = join("\n---\n", [for manifest in [local.templated_manifest, local.custom_manifest] : manifest if trimspace(manifest) != ""])
 
-  manifest_docs     = [for doc in split("\n---", replace(local.combined_yaml, "\r\n", "\n")) : trimspace(doc) if length(trimspace(doc)) > 0]
+  manifest_docs     = [for doc in split("\n---", replace(replace(local.combined_yaml, "\r\n", "\n"), "/(?m)^---[ \t]*(?:#.*)?$/", "---")) : trimspace(doc) if length(trimspace(doc)) > 0]
   decoded_manifests = [for doc in local.manifest_docs : try(yamldecode(doc), null)]
   parsed_manifests = {
     for idx, doc in local.decoded_manifests : idx => doc if can(doc.apiVersion)
