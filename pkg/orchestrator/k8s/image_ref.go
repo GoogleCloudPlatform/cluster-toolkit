@@ -35,8 +35,9 @@ func ParseImageRef(ref string) (ImageRef, bool) {
 	}
 
 	host, repo, hasSlash := strings.Cut(rawName, "/")
-	// Bare names and org/repo shorthands have no '.', ':', or 'localhost' in the first segment.
-	if !hasSlash || (!strings.ContainsAny(host, ".:") && host != "localhost") {
+	// Bare names and lowercase org/repo shorthands have no '.', ':', uppercase, or 'localhost' in the first segment
+	// (matching distribution/reference.splitDockerDomain).
+	if !hasSlash || (!strings.ContainsAny(host, ".:") && host != "localhost" && strings.ToLower(host) == host) {
 		host, repo = "docker.io", rawName
 	} else if host == "index.docker.io" {
 		host = "docker.io"

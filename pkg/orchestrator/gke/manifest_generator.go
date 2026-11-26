@@ -563,7 +563,7 @@ func validatePodSpecVolumes(contextPrefix string, podSpec *corev1.PodSpec) error
 	return nil
 }
 
-// validatePodSpecEnv mirrors the JobSet CRD's map-list check on env.name (which rejects
+// validatePodSpecEnv mirrors the JobSet CRD (v0.6.0+) map-list check on env.name (which rejects
 // duplicate env var names, including value and valueFrom collisions, at apply time) so
 // conflicts fail earlier with a clearer error. Skips empty names for API-server validation.
 // Scoped to JobSet because the core batch/v1 Job API accepts duplicate env entries.

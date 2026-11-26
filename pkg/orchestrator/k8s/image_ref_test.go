@@ -90,9 +90,15 @@ func TestParseImageRef(t *testing.T) {
 			wantOK: true,
 		},
 		{
-			name:   "uppercase portless LOCALHOST treated as docker.io namespace",
+			name:   "uppercase portless LOCALHOST treated as registry host",
 			ref:    "LOCALHOST/team/app:v1",
-			want:   ImageRef{RawName: "LOCALHOST/team/app", Host: "docker.io", Repo: "LOCALHOST/team/app", Tag: "v1", HasTag: true},
+			want:   ImageRef{RawName: "LOCALHOST/team/app", Host: "LOCALHOST", Repo: "team/app", Tag: "v1", HasTag: true},
+			wantOK: true,
+		},
+		{
+			name:   "uppercase portless first segment treated as registry host",
+			ref:    "MyRegistry/team/app:v1",
+			want:   ImageRef{RawName: "MyRegistry/team/app", Host: "MyRegistry", Repo: "team/app", Tag: "v1", HasTag: true},
 			wantOK: true,
 		},
 		{
