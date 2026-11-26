@@ -57,6 +57,9 @@ import (
 func TestMain(m *testing.M) {
 	_ = os.Unsetenv(refreshCredentialsEnv)
 	_ = os.Unsetenv(shell.AirGappedEnvVar)
+	_ = os.Unsetenv(k8s.LabelSchemeEnvVar)
+	_ = os.Unsetenv(disableJobSetEnvVar)
+	_ = os.Unsetenv(disableKueueEnvVar)
 	shell.SetDefaultAirGapped(false)
 	os.Exit(m.Run())
 }
@@ -1266,6 +1269,10 @@ func TestKubectlCommandLine(t *testing.T) {
 			}
 		})
 	}
+	sel := "gcluster.google.com/workload=j,batch.kubernetes.io/job-name=j"
+	if got := kubectlCommandLine(testContext, "logs", "-l", sel); got != `kubectl --context `+testContext+` logs -l "`+sel+`"` {
+		t.Errorf("kubectlCommandLine(comma selector) = %s, want quoted selector", got)
+	}
 }
 
 func TestKubectlHelpers_PinContext(t *testing.T) {
@@ -2123,16 +2130,19 @@ func newTypeK8sInspectMockExecutor() *MockExecutor {
 	okPod := shell.CommandResult{ExitCode: 0, Stdout: "workload-container\n"}
 	okJobSet := shell.CommandResult{ExitCode: 0, Stdout: "\tFalse\tmain-job\n1 1\tworkload-container\n"}
 	return NewMockExecutor(map[string][]shell.CommandResult{
-		"kubectl get --raw /version":                     {{ExitCode: 0, Stdout: `{"major":"1","minor":"32"}`}},
-		"kubectl get --raw /apis/kueue.x-k8s.io":         {{ExitCode: 0, Stdout: "{}"}},
-		"kubectl get nodes -o wide":                      {{ExitCode: 0, Stdout: "NAME STATUS\n"}},
-		"kubectl get nodes -o json":                      {{ExitCode: 0, Stdout: `{"items":[]}`}},
-		"kubectl get pods -n ml-ns":                      {okPod, okPod, okPod},
-		"kubectl get jobsets.jobset.x-k8s.io sample-job": {okJobSet, okJobSet},
-		"kubectl describe ":                              {okDescribe, okDescribe, okDescribe, okDescribe, okDescribe},
-		"kubectl logs ":                                  {okLogs, okLogs, okLogs, okLogs},
-		"kubectl get crd topologies.kueue.x-k8s.io":      {{ExitCode: 1, Stderr: "NotFound"}},
-		"kubectl get workloads ":                         {okWorkloads, okWorkloads, okWorkloads},
+		"kubectl get --raw /version":              {{ExitCode: 0, Stdout: `{"major":"1","minor":"32"}`}},
+		"kubectl get --raw /apis/kueue.x-k8s.io":  {{ExitCode: 0, Stdout: "{}"}},
+		"kubectl get --raw /apis/jobset.x-k8s.io": {{ExitCode: 0, Stdout: "{}"}},
+		"kubectl get nodes -o wide":               {{ExitCode: 0, Stdout: "NAME STATUS\n"}},
+		"kubectl get nodes -o json":               {{ExitCode: 0, Stdout: `{"items":[]}`}},
+		"kubectl get pods -n ml-ns":               {okPod, okPod, okPod},
+		"kubectl get jobsets -n ml-ns -o wide":    {{ExitCode: 0, Stdout: "NAME\n"}},
+		"kubectl get jobs -l gcluster.google.com/workload,!jobset.sigs.k8s.io/jobset-name": {{ExitCode: 0, Stdout: "NAME\n"}},
+		"kubectl get jobsets.jobset.x-k8s.io sample-job":                                   {okJobSet, okJobSet},
+		"kubectl describe ": {okDescribe, okDescribe, okDescribe, okDescribe, okDescribe},
+		"kubectl logs ":     {okLogs, okLogs, okLogs, okLogs},
+		"kubectl get crd topologies.kueue.x-k8s.io": {{ExitCode: 1, Stderr: "NotFound"}},
+		"kubectl get workloads ":                    {okWorkloads, okWorkloads, okWorkloads},
 	})
 }
 
@@ -2164,22 +2174,15 @@ func TestTypeK8s_ZeroGCloudAcrossLifecycle(t *testing.T) {
 	mockExec := newTypeK8sInspectMockExecutor()
 	orc.SetExecutor(mockExec)
 
-	submitErr := orc.SubmitJob(orchestrator.JobDefinition{
-		WorkloadName:           "blocked-job",
-		ImageName:              "busybox:latest",
-		CommandToRun:           "echo hi",
-		GKENamespace:           "should-not-mutate",
-		GkeCustomTemplatesPath: "/should-not-mutate",
-	})
-	wantSubmitErr := orchestrator.UnsupportedK8sSubmitError().Error()
-	if submitErr == nil || submitErr.Error() != wantSubmitErr {
-		t.Fatalf("SubmitJob(TypeK8s) error = %v, want %q", submitErr, wantSubmitErr)
+	if err := orc.SubmitJob(orchestrator.JobDefinition{
+		WorkloadName:           "blocked",
+		GKENamespace:           "other-ns",
+		GkeCustomTemplatesPath: "/tmp/custom",
+	}); err == nil || err.Error() != orchestrator.UnsupportedK8sSubmitError().Error() {
+		t.Fatalf("SubmitJob(TypeK8s) err = %v, want UnsupportedK8sSubmitError", err)
 	}
-	if orc.namespace != "" || orc.gkeCustomTemplatesPath != "" {
-		t.Fatalf("SubmitJob(TypeK8s) mutated state: namespace=%q customTemplatesPath=%q, want both empty", orc.namespace, orc.gkeCustomTemplatesPath)
-	}
-	if len(mockExec.calls) != 0 {
-		t.Fatalf("SubmitJob(TypeK8s) calls = %v, want 0 subprocess calls", mockExec.calls)
+	if orc.namespace != "" || orc.gkeCustomTemplatesPath != "" || len(mockExec.calls) != 0 {
+		t.Fatalf("SubmitJob(TypeK8s) mutated state or ran commands: ns=%q tmpl=%q calls=%v", orc.namespace, orc.gkeCustomTemplatesPath, mockExec.calls)
 	}
 
 	if loc, err := orc.Initialize("local-k8s", "", ""); err != nil || loc != "" {
@@ -2201,8 +2204,8 @@ func TestTypeK8s_ZeroGCloudAcrossLifecycle(t *testing.T) {
 
 func assertTypeK8sListAndLogsZeroGCloud(t *testing.T, orc *GKEOrchestrator, mockExec *MockExecutor, listHits *atomic.Int32) {
 	t.Helper()
-	if jobs, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: "local-k8s"}); err != nil || len(jobs) != 0 || listHits.Load() != 1 {
-		t.Fatalf("ListJobs(TypeK8s) = (%v, %v), listHits=%d, want ([], nil, 1)", jobs, err, listHits.Load())
+	if jobs, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: "local-k8s"}); err != nil || len(jobs) != 0 || listHits.Load() != 2 {
+		t.Fatalf("ListJobs(TypeK8s) = (%v, %v), listHits=%d, want ([], nil, 2)", jobs, err, listHits.Load())
 	}
 	if out, err := orc.GetJobLogs("sample-job", orchestrator.LogsOptions{ClusterName: "local-k8s"}); err != nil || strings.TrimSpace(out) != "controller ok" {
 		t.Fatalf("GetJobLogs(TypeK8s, Follow=false) = (%q, %v), want (\"controller ok\", nil)", out, err)
@@ -2349,15 +2352,15 @@ func TestTypeK8s_ConfigureKubectlReResolutionSyncsDynamicClient(t *testing.T) {
 	if _, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: "cluster-a"}); err != nil {
 		t.Fatalf("ListJobs(cluster-a) error = %v", err)
 	}
-	if hitsA.Load() != 1 || hitsB.Load() != 0 {
-		t.Fatalf("hits after cluster-a = (%d, %d), want (1, 0)", hitsA.Load(), hitsB.Load())
+	if hitsA.Load() != 2 || hitsB.Load() != 0 {
+		t.Fatalf("hits after cluster-a = (%d, %d), want (2, 0)", hitsA.Load(), hitsB.Load())
 	}
 
 	if _, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: "cluster-b"}); err != nil {
 		t.Fatalf("ListJobs(cluster-b) error = %v", err)
 	}
-	if hitsA.Load() != 1 || hitsB.Load() != 1 {
-		t.Fatalf("hits after direct ListJobs(cluster-b) = (%d, %d), want (1, 1)", hitsA.Load(), hitsB.Load())
+	if hitsA.Load() != 2 || hitsB.Load() != 2 {
+		t.Fatalf("hits after direct ListJobs(cluster-b) = (%d, %d), want (2, 2)", hitsA.Load(), hitsB.Load())
 	}
 	kc := orc.usableKubeClient()
 	if kc == nil {
@@ -2366,8 +2369,8 @@ func TestTypeK8s_ConfigureKubectlReResolutionSyncsDynamicClient(t *testing.T) {
 	if _, err := kc.ListJobSets("ns-b", ""); err != nil {
 		t.Fatalf("usableKubeClient().ListJobSets(ns-b) error = %v", err)
 	}
-	if hitsA.Load() != 1 || hitsB.Load() != 2 {
-		t.Fatalf("hits after cluster-b usableKubeClient = (%d, %d), want (1, 2)", hitsA.Load(), hitsB.Load())
+	if hitsA.Load() != 2 || hitsB.Load() != 3 {
+		t.Fatalf("hits after cluster-b usableKubeClient = (%d, %d), want (2, 3)", hitsA.Load(), hitsB.Load())
 	}
 	assertUnseededClusterAndErrorInvalidation(t, cfg)
 	assertSameContextGKERegenerateInvalidatesDynamicClient(t, srvA.URL, srvB.URL, &hitsA, &hitsB)
@@ -2416,8 +2419,8 @@ func assertSeededCurrentContextWinsOverCollidingContextName(t *testing.T, emptyL
 	if _, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: det.ClusterName}); err != nil {
 		t.Fatalf("ListJobs(%q) error = %v", det.ClusterName, err)
 	}
-	if hitsAdmin.Load() != 1 || hitsColliding.Load() != 0 {
-		t.Fatalf("ListJobs(%q) hits = (admin=%d, colliding=%d), want (1, 0)", det.ClusterName, hitsAdmin.Load(), hitsColliding.Load())
+	if hitsAdmin.Load() != 2 || hitsColliding.Load() != 0 {
+		t.Fatalf("ListJobs(%q) hits = (admin=%d, colliding=%d), want (2, 0)", det.ClusterName, hitsAdmin.Load(), hitsColliding.Load())
 	}
 }
 
@@ -3384,4 +3387,111 @@ func TestConfigureKubectl_RefreshesStalePathExecOnlyOnMissingBinary(t *testing.T
 			t.Fatalf("must not invoke get-credentials when bare plugin binary is missing from PATH; calls=%v", exec.calls)
 		}
 	})
+}
+
+func TestHasAPIGroupVersion(t *testing.T) {
+	const testGroupVersion = "kueue.x-k8s.io"
+	const rawCmd = "kubectl get --raw /apis/kueue.x-k8s.io --request-timeout=10s"
+
+	t.Run("present API group returns true, pins context, and bounds timeout", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			rawCmd: {{ExitCode: 0, Stdout: `{"kind":"APIGroup"}`}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.kubeContext = "k8s-ctx"
+
+		ok, err := orc.HasAPIGroupVersion(testGroupVersion)
+		if err != nil || !ok {
+			t.Fatalf("HasAPIGroupVersion = (%v, %v), want (true, nil)", ok, err)
+		}
+		mockExec.assertAllKubectlPinned(t, "k8s-ctx")
+		if len(mockExec.timeouts) != 1 || mockExec.timeouts[0] != apiGroupProbeTimeout {
+			t.Errorf("timeouts = %v, want [%v]", mockExec.timeouts, apiGroupProbeTimeout)
+		}
+	})
+
+	t.Run("404 NotFound markers in stderr or stdout return false without error", func(t *testing.T) {
+		for _, res := range []shell.CommandResult{
+			{ExitCode: 1, Stderr: "Error from server (NotFound): group missing"},
+			{ExitCode: 1, Stderr: "the server could not find the requested resource"},
+			{ExitCode: 1, Stdout: "404 page not found"},
+		} {
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{rawCmd: {res}})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.kubeContext = "generic-ctx"
+
+			ok, err := orc.HasAPIGroupVersion(testGroupVersion)
+			if err != nil || ok {
+				t.Errorf("res %+v: HasAPIGroupVersion = (%v, %v), want (false, nil)", res, ok, err)
+			}
+			if !slices.Equal(mockExec.timeouts, []time.Duration{apiGroupProbeTimeout}) {
+				t.Errorf("timeouts = %v, want [%v]", mockExec.timeouts, apiGroupProbeTimeout)
+			}
+			mockExec.assertAllKubectlPinned(t, "generic-ctx")
+		}
+	})
+}
+
+func TestHasAPIGroupVersion_ErrorsAndBlankInputs(t *testing.T) {
+	t.Parallel()
+	const testGroupVersion = "kueue.x-k8s.io"
+	const rawCmd = "kubectl get --raw /apis/kueue.x-k8s.io --request-timeout=10s"
+	errExecNotFound := errors.New(`exec: "kubectl": executable file not found in $PATH`)
+	errWarnOnly := errors.New("exit status 1")
+
+	for _, tc := range []struct {
+		name          string
+		res           shell.CommandResult
+		wantErrSubstr string
+		wantWrapped   error
+	}{
+		{name: "deadline exceeded wrapped before stderr", res: shell.CommandResult{ExitCode: 0, Stderr: "404 page not found", Err: context.DeadlineExceeded}, wantErrSubstr: "timed out", wantWrapped: context.DeadlineExceeded},
+		{name: "skips WARNING and klog WMMDD lines", res: shell.CommandResult{ExitCode: 1, Stderr: "WARNING: kubeconfig perm\nW1120 12:00:00.000000 1 loader.go:1] warn\nError from server (Forbidden): denied"}, wantErrSubstr: "Forbidden"},
+		{name: "stderr warnings only fall through to stdout", res: shell.CommandResult{ExitCode: 1, Stderr: "\nWARNING: deprecated\nW1120 12:00:00.000000 1 loader.go:1] warn", Stdout: "proxy 503 unavailable"}, wantErrSubstr: "503 unavailable"},
+		{name: "stderr warnings only with empty stdout wraps res.Err", res: shell.CommandResult{ExitCode: 1, Stderr: "WARNING: deprecated\nW1120 12:00:00.000000 1 loader.go:1] warn", Err: errWarnOnly}, wantErrSubstr: "exit status 1", wantWrapped: errWarnOnly},
+		{name: "non-klog W1234x line is preserved", res: shell.CommandResult{ExitCode: 1, Stderr: "W1234x real error"}, wantErrSubstr: "W1234x real error"},
+		{name: "port 4040 connection refused", res: shell.CommandResult{ExitCode: 1, Stderr: "dial tcp 127.0.0.1:4040: connect: connection refused"}, wantErrSubstr: "connection refused"},
+		{name: "kubectl not in PATH wraps res.Err", res: shell.CommandResult{ExitCode: 1, Err: errExecNotFound}, wantErrSubstr: "executable file not found", wantWrapped: errExecNotFound},
+		{name: "stdout error fallback", res: shell.CommandResult{ExitCode: 1, Stdout: "gateway 502 bad gateway"}, wantErrSubstr: "502 bad gateway"},
+		{name: "empty output falls back to exit status", res: shell.CommandResult{ExitCode: 2}, wantErrSubstr: "exit status 2"},
+		{name: "exit 0 non-JSON HTML proxy response", res: shell.CommandResult{ExitCode: 0, Stdout: "<html>login</html>"}, wantErrSubstr: "non-JSON"},
+		{name: "exit 0 empty stdout", res: shell.CommandResult{ExitCode: 0, Stdout: "   "}, wantErrSubstr: "non-JSON"},
+	} {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{rawCmd: {tc.res}})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.kubeContext = "err-ctx"
+		ok, err := orc.HasAPIGroupVersion(testGroupVersion)
+		if err == nil || ok {
+			t.Errorf("%s: expected error from HasAPIGroupVersion, got (%v, %v)", tc.name, ok, err)
+			continue
+		}
+		if tc.wantWrapped != nil && !errors.Is(err, tc.wantWrapped) {
+			t.Errorf("%s: expected wrapped %v, got %v", tc.name, tc.wantWrapped, err)
+		}
+		if !strings.Contains(err.Error(), tc.wantErrSubstr) || strings.HasSuffix(err.Error(), ": ") {
+			t.Errorf("%s: err = %q, want substring %q", tc.name, err.Error(), tc.wantErrSubstr)
+		}
+		if !slices.Equal(mockExec.timeouts, []time.Duration{apiGroupProbeTimeout}) {
+			t.Errorf("%s: timeouts = %v, want [%v]", tc.name, mockExec.timeouts, apiGroupProbeTimeout)
+		}
+		mockExec.assertAllKubectlPinned(t, "err-ctx")
+	}
+	assertHasAPIGroupVersionBlankGuards(t, testGroupVersion)
+}
+
+func assertHasAPIGroupVersionBlankGuards(t *testing.T, nonBlankGV string) {
+	t.Helper()
+	blankExec := NewMockExecutor(nil)
+	orcBlank := newTestGKEOrchestrator(blankExec)
+	for _, blank := range []string{"  ", "/ /", "/ / /", "///"} {
+		if ok, err := orcBlank.HasAPIGroupVersion(blank); err != nil || ok {
+			t.Fatalf("HasAPIGroupVersion(%q) = (%v, %v), want (false, nil)", blank, ok, err)
+		}
+	}
+	if ok, err := orcBlank.HasAPIGroupVersion(nonBlankGV); err == nil || ok || !strings.Contains(err.Error(), "--context") {
+		t.Fatalf("blank kubeContext HasAPIGroupVersion(%q) = (%v, %v), want explicit --context error", nonBlankGV, ok, err)
+	}
+	if len(blankExec.calls) != 0 {
+		t.Fatalf("expected 0 kubectl calls on blank kubeContext, got %v", blankExec.calls)
+	}
 }

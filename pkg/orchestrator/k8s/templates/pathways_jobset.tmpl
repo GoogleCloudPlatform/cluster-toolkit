@@ -85,22 +85,32 @@ spec:
               - {{.}}
               {{- end }}
               env:
+              {{- if not ($.PathwaysServerEnv.Has "REPLICATED_JOB_NAME") }}
               - name: REPLICATED_JOB_NAME
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.annotations['jobset.sigs.k8s.io/replicatedjob-name']
+              {{- end }}
+              {{- if not ($.PathwaysServerEnv.Has "JOBSET_NAME") }}
               - name: JOBSET_NAME
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.annotations['jobset.sigs.k8s.io/jobset-name']
+              {{- end }}
+              {{- if not ($.PathwaysServerEnv.Has "HOST_ADDRESS") }}
               - name: HOST_ADDRESS
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              {{- end }}
+              {{- if not ($.PathwaysServerEnv.Has "TPU_SKIP_MDS_QUERY") }}
               - name: TPU_SKIP_MDS_QUERY
                 value: "true"
+              {{- end }}
+              {{- if not ($.PathwaysServerEnv.Has "ABSL_FLAGS") }}
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- end }}
               {{- range $.PathwaysServerEnv }}
               - name: {{ .Name }}
                 value: {{ printf "%q" .Value }}
@@ -137,12 +147,16 @@ spec:
               - {{.}}
               {{- end }}
               env:
+              {{- if not ($.PathwaysProxyEnv.Has "PATHWAYS_HEAD") }}
               - name: PATHWAYS_HEAD
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              {{- end }}
+              {{- if not ($.PathwaysProxyEnv.Has "ABSL_FLAGS") }}
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- end }}
               {{- range $.PathwaysProxyEnv }}
               - name: {{ .Name }}
                 value: {{ printf "%q" .Value }}
@@ -170,18 +184,28 @@ spec:
                   cpu: "2"
                   memory: "8Gi"
               env:
+              {{- if not ($.Env.Has "PATHWAYS_HEAD") }}
               - name: PATHWAYS_HEAD
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              {{- end }}
+              {{- if not ($.Env.Has "JAX_PLATFORMS") }}
               - name: JAX_PLATFORMS
                 value: proxy
+              {{- end }}
+              {{- if not ($.Env.Has "XCLOUD_ENVIRONMENT") }}
               - name: XCLOUD_ENVIRONMENT
                 value: GCP
+              {{- end }}
+              {{- if not ($.Env.Has "JAX_BACKEND_TARGET") }}
               - name: JAX_BACKEND_TARGET
                 value: grpc://localhost:29000
+              {{- end }}
+              {{- if not ($.Env.Has "ABSL_FLAGS") }}
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- end }}
               {{- range $.Env }}
               - name: {{ .Name }}
                 value: {{ printf "%q" .Value }}
@@ -250,11 +274,7 @@ spec:
             hostNetwork: true
             dnsPolicy: ClusterFirstWithHostNet
 {{- end }}
-{{- if eq .WorkerBackoffLimitPerIndex 0 }}
-            restartPolicy: Never
-{{- else }}
             restartPolicy: OnFailure
-{{- end }}
 {{- with (.RenderBlock "pod_auth_and_priority" 12) }}{{"\n"}}{{(StructuralData .)}}{{- end }}
             terminationGracePeriodSeconds: {{.TerminationGracePeriodSeconds}}
 {{- if or .Pathways.ColocatedPythonSidecarImage .TelemetryCollectorImage }}
@@ -315,41 +335,63 @@ spec:
                 {{- end }}
               env:
               {{- if .Verbose }}
+              {{- if not ($.PathwaysWorkerEnv.Has "TPU_MIN_LOG_LEVEL") }}
               - name: TPU_MIN_LOG_LEVEL
                 value: "0"
+              {{- end }}
+              {{- if not ($.PathwaysWorkerEnv.Has "TF_CPP_MIN_LOG_LEVEL") }}
               - name: TF_CPP_MIN_LOG_LEVEL
                 value: "0"
               {{- end }}
+              {{- end }}
+              {{- if not ($.PathwaysWorkerEnv.Has "XCLOUD_ENVIRONMENT") }}
               - name: XCLOUD_ENVIRONMENT
                 value: GCP
+              {{- end }}
+              {{- if not ($.PathwaysWorkerEnv.Has "MEGASCALE_GRPC_ENABLE_XOR_TRACER") }}
               - name: MEGASCALE_GRPC_ENABLE_XOR_TRACER
                 value: "false"
+              {{- end }}
+              {{- if not ($.PathwaysWorkerEnv.Has "MEGASCALE_NUM_SLICES") }}
               - name: MEGASCALE_NUM_SLICES
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/replicatedjob-replicas']
+              {{- end }}
+              {{- if not ($.PathwaysWorkerEnv.Has "JOBSET_NAME") }}
               - name: JOBSET_NAME
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.annotations['jobset.sigs.k8s.io/jobset-name']
+              {{- end }}
+              {{- if not ($.PathwaysWorkerEnv.Has "REPLICATED_JOB_NAME") }}
               - name: REPLICATED_JOB_NAME
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.annotations['jobset.sigs.k8s.io/replicatedjob-name']
+              {{- end }}
+              {{- if not ($.PathwaysWorkerEnv.Has "MEGASCALE_SLICE_ID") }}
               - name: MEGASCALE_SLICE_ID
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/job-index']
+              {{- end }}
+              {{- if not ($.PathwaysWorkerEnv.Has "PATHWAYS_HEAD") }}
               - name: PATHWAYS_HEAD
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              {{- end }}
+              {{- if not ($.PathwaysWorkerEnv.Has "MEGASCALE_COORDINATOR_ADDRESS") }}
               - name: MEGASCALE_COORDINATOR_ADDRESS
                 valueFrom:
                   fieldRef:
                     fieldPath: metadata.labels['jobset.sigs.k8s.io/coordinator']
+              {{- end }}
+              {{- if not ($.PathwaysWorkerEnv.Has "ABSL_FLAGS") }}
               - name: ABSL_FLAGS
                 value: "--pathways_pipe_unreachable_timeout=60s"
+              {{- end }}
               {{- range $.PathwaysWorkerEnv }}
               - name: {{ .Name }}
                 value: {{ printf "%q" .Value }}

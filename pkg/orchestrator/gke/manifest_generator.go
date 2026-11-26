@@ -24,6 +24,7 @@ import (
 	"hpc-toolkit/pkg/orchestrator/k8s"
 	"io"
 	"maps"
+	"math"
 	"path"
 	"slices"
 	"strings"
@@ -611,6 +612,11 @@ func forEachWorkloadObject(manifestContent string, visit func(kind, jobName stri
 			if err := visit("Job", "", jDoc.Labels, jDoc.Spec.PodFailurePolicy, &jDoc.Spec.Template); err != nil {
 				return err
 			}
+		case "Service":
+			var svc corev1.Service
+			if err := k8syaml.Unmarshal([]byte(doc), &svc); err != nil {
+				return fmt.Errorf("failed to parse Service manifest spec: %w", err)
+			}
 		}
 	}
 	return nil
@@ -631,26 +637,45 @@ func ValidateJobSetManifest(manifestContent string) error {
 }
 
 const (
-	defaultPathwaysProxyImage   = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest"
-	defaultPathwaysServerImage  = "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest"
 	pathwaysTemplateExtractHint = "If you use --gke-custom-templates-path, re-extract pathways_jobset.tmpl and base.tmpl with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations"
 	// workloadTemplateExtractHintFmt takes the workload template name (jobset.tmpl or job.tmpl).
 	workloadTemplateExtractHintFmt = "If you use --gke-custom-templates-path, re-extract %s and base.tmpl with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations"
+	// minPathwaysWorkerRestartsPerVM is the per-VM floor of the worker Job backoffLimit; see pathwaysWorkerBackoffLimit.
+	minPathwaysWorkerRestartsPerVM = 4
 )
+
+// pathwaysWorkerBackoffLimit returns the worker Job backoffLimit for --pathways-max-slice-restarts and the number of
+// VMs per slice. Pathways workers exit (code 1) by design whenever their client disconnects, and rely on an in-place
+// restart. Under restartPolicy OnFailure the Job fails once container restarts summed over a slice's running worker
+// pods (sidecars included, counted over the pods' lifetime) reach backoffLimit, so allow at least 4 per VM: the budget
+// XPK (vms_per_slice*4) and the pathways-job controller (NumVMs*4) use for non-elastic workers. backoffLimit is an
+// int32, so the result is capped at MaxInt32, the value Kubernetes itself defaults it to when backoffLimitPerIndex is
+// set.
+func pathwaysWorkerBackoffLimit(maxSliceRestarts, nodesPerSlice int) int {
+	if nodesPerSlice <= 0 {
+		return 0
+	}
+	perVM := min(max(maxSliceRestarts, minPathwaysWorkerRestartsPerVM), math.MaxInt32)
+	limit := int64(perVM) * int64(min(nodesPerSlice, math.MaxInt32))
+	return int(min(limit, math.MaxInt32))
+}
 
 // GeneratePathwaysManifest generates the Kubernetes JobSet manifest for a Pathways job.
 func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinition, fullImageName string, profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool) (string, error) {
 	job.IsPathwaysJob = true
-	// Set default values for Pathways-specific fields if not provided
-	if job.Pathways.ProxyServerImage == "" {
-		job.Pathways.ProxyServerImage = defaultPathwaysProxyImage
+	var imageNotice string
+	var imageNoticeIsWarning bool
+	var err error
+	job.Pathways, imageNotice, imageNoticeIsWarning, err = resolvePathwaysImages(job.Pathways)
+	if err != nil {
+		return "", err
 	}
-	if job.Pathways.ServerImage == "" {
-		job.Pathways.ServerImage = defaultPathwaysServerImage
-	}
-	if job.Pathways.WorkerImage == "" {
-		// WorkerImage defaults to ServerImage if not explicitly set
-		job.Pathways.WorkerImage = job.Pathways.ServerImage
+	switch {
+	case imageNotice == "":
+	case imageNoticeIsWarning:
+		logging.Warn("%s", imageNotice)
+	default:
+		logging.Info("%s", imageNotice)
 	}
 
 	tmpl, baseBlocks, err := k8s.LoadWorkloadTemplate(g.gkeCustomTemplatesPath, k8s.PathwaysJobSetTemplate)
@@ -690,6 +715,7 @@ func (g *GKEOrchestrator) GeneratePathwaysManifest(job orchestrator.JobDefinitio
 		return "", err
 	}
 	warnPathwaysHostNetworkManifest(buf.String(), opts, data.HostNetworkEnabled)
+	warnPathwaysWorkerRestartPolicy(buf.String())
 
 	manifest := assembleManifest(buf.String(), opts.AdditionalManifests)
 	if err := ValidateJobSetManifest(manifest); err != nil {
@@ -813,6 +839,20 @@ func warnPathwaysHostNetworkManifest(jobSet string, opts ManifestOptions, hostNe
 	return false
 }
 
+// warnPathwaysWorkerRestartPolicy logs a warning when a custom or stale pathways_jobset.tmpl renders worker pods
+// with a restartPolicy other than OnFailure (an empty value is defaulted to OnFailure by the JobSet webhook).
+func warnPathwaysWorkerRestartPolicy(jobSet string) bool {
+	workerTmpl, _, err := extractPathwaysPodTemplates(jobSet)
+	if err != nil || workerTmpl == nil {
+		return false
+	}
+	if rp := workerTmpl.Spec.RestartPolicy; rp != "" && rp != corev1.RestartPolicyOnFailure {
+		logging.Warn("The rendered Pathways worker pods use restartPolicy %q. Pathways restarts each worker when its client disconnects, so without restartPolicy: OnFailure every disconnect, including the end of a run, fails a worker pod; with --pathways-max-slice-restarts 0 that fails the worker Job, so the JobSet restarts or fails instead of completing. %s", rp, pathwaysTemplateExtractHint)
+		return true
+	}
+	return false
+}
+
 func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, command []string, resourcesYAML string, isTPU, isGPU bool) jobSetTemplateData {
 	exclusiveTopology := ""
 	if !opts.IsDynamicSlicing && !opts.IsStaticSlicing {
@@ -823,7 +863,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		}
 	}
 
-	workerBackoffLimit := opts.Pathways.MaxSliceRestarts * opts.NodesPerSlice
+	workerBackoffLimit := pathwaysWorkerBackoffLimit(opts.Pathways.MaxSliceRestarts, opts.NodesPerSlice)
 
 	var proxyArgsList []string
 	if opts.Pathways.ProxyArgs != "" {
@@ -1048,7 +1088,7 @@ func withDefaultEnvVar(env map[string]string, key, defaultVal string) map[string
 	return cloned
 }
 
-func sortedEnvVars(envMap map[string]string) []EnvVar {
+func sortedEnvVars(envMap map[string]string) EnvVars {
 	if len(envMap) == 0 {
 		return nil
 	}
@@ -1057,7 +1097,7 @@ func sortedEnvVars(envMap map[string]string) []EnvVar {
 		envKeys = append(envKeys, k)
 	}
 	slices.Sort(envKeys)
-	res := make([]EnvVar, len(envKeys))
+	res := make(EnvVars, len(envKeys))
 	for i, k := range envKeys {
 		res[i] = EnvVar{Name: k, Value: envMap[k]}
 	}

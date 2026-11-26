@@ -175,7 +175,6 @@ class ApiEndpoint(Enum):
     COMPUTE = "compute"
     BQ = "bq"
     STORAGE = "storage"
-    TPU = "tpu"
     SECRET = "secret_manager"
 
 
@@ -319,6 +318,22 @@ class Instance:
       role = jo.get("labels", {}).get("slurm_instance_role"),
       metadata = {k["key"]: k["value"] for k in jo.get("metadata", {}).get("items", [])},
     )
+
+
+def instance_created_by_mig(inst: Optional[Instance]) -> Optional[str]:
+    """Return the owning MIG short name from GCE ``created-by`` instance metadata, if any."""
+    if inst is None:
+        return None
+    metadata = getattr(inst, "metadata", None)
+    if not isinstance(metadata, dict):
+        return None
+    created_by = metadata.get("created-by")
+    if not isinstance(created_by, str) or not created_by:
+        return None
+    parts = created_by.rstrip("/").split("/")
+    if len(parts) >= 2 and parts[-2] == "instanceGroupManagers" and parts[-1]:
+        return parts[-1]
+    return None
 
 
 @dataclass(frozen=True)
@@ -792,13 +807,12 @@ class _ConfigBlobs:
     partition: List[storage.Blob] = field(default_factory=list)
     nodeset: List[storage.Blob] = field(default_factory=list)
     nodeset_dyn: List[storage.Blob] = field(default_factory=list)
-    nodeset_tpu: List[storage.Blob] = field(default_factory=list)
     login_group: List[storage.Blob] = field(default_factory=list)
 
     @property
     def hash(self) -> str:
         h = hashlib.md5()
-        all = [self.core] + self.partition + self.nodeset + self.nodeset_dyn + self.nodeset_tpu
+        all = [self.core] + self.partition + self.nodeset + self.nodeset_dyn
         if self.controller_addr:
             all.append(self.controller_addr)
     
@@ -821,7 +835,6 @@ class _ConfigFiles:
     partition: List[Path] = field(default_factory=list)
     nodeset: List[Path] = field(default_factory=list)
     nodeset_dyn: List[Path] = field(default_factory=list)
-    nodeset_tpu: List[Path] = field(default_factory=list)
     login_group: List[Path] = field(default_factory=list)
 
 def _list_config_blobs(bucket: Optional[str] = None) -> _ConfigBlobs:
@@ -829,7 +842,7 @@ def _list_config_blobs(bucket: Optional[str] = None) -> _ConfigBlobs:
 
     core: Optional[storage.Blob] = None
     controller_addr: Optional[storage.Blob] = None
-    rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
+    rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "login_group": []}
 
     is_controller = bucket is None and instance_role() == "controller"
 
@@ -856,7 +869,7 @@ def _list_config_files() -> _ConfigFiles:
     file_dir = dirs.slurm_bucket_mount
     core: Optional[Path] = None
     controller_addr: Optional[Path] = None
-    rest: Dict[str, List[Path]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
+    rest: Dict[str, List[Path]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "login_group": []}
 
     if Path(f"{file_dir}/config.yaml").exists():
         core = Path(f"{file_dir}/config.yaml")
@@ -882,14 +895,13 @@ def _fetch_config(old_hash: Optional[str], bucket: Optional[str] = None) -> Opti
         blobs.partition,
         blobs.nodeset,
         blobs.nodeset_dyn,
-        blobs.nodeset_tpu,
         blobs.login_group,
     ]
     # One blob per nodeset; fetching thousands of them in sequence outlasts ResumeTimeout.
     # 10 workers matches the storage client's default HTTP connection pool.
     with ThreadPoolExecutor(max_workers=10) as exe:
         docs = iter(exe.map(lambda b: _yaml_load(b.download_as_text()), chain(*groups)))
-        core, addr, partitions, nodesets, nodesets_dyn, nodesets_tpu, login_groups = (
+        core, addr, partitions, nodesets, nodesets_dyn, login_groups = (
             [next(docs) for _ in g] for g in groups
         )
 
@@ -899,7 +911,6 @@ def _fetch_config(old_hash: Optional[str], bucket: Optional[str] = None) -> Opti
         partitions=partitions,
         nodesets=nodesets,
         nodesets_dyn=nodesets_dyn,
-        nodesets_tpu=nodesets_tpu,
         login_groups=login_groups,
     ), blobs.hash
 
@@ -922,7 +933,6 @@ def _fetch_mounted_config() -> NSDict:
         partitions=_load(files.partition),
         nodesets=_load(files.nodeset),
         nodesets_dyn=_load(files.nodeset_dyn),
-        nodesets_tpu=_load(files.nodeset_tpu),
         login_groups=_load(files.login_group),
     )
 
@@ -939,7 +949,6 @@ def _assemble_config(
         partitions: List[Any],
         nodesets: List[Any],
         nodesets_dyn: List[Any],
-        nodesets_tpu: List[Any],
         login_groups: List[Any],
     ) -> NSDict:
     cfg = NSDict(core)
@@ -975,11 +984,10 @@ def _assemble_config(
 
     _add_nodesets(nodesets, cfg.nodeset)
     _add_nodesets(nodesets_dyn, cfg.nodeset_dyn)
-    _add_nodesets(nodesets_tpu, cfg.nodeset_tpu)
 
     # validate that configs for all referenced nodesets are present
     for p in cfg.partitions.values():
-        for ns_name in chain(p.partition_nodeset, p.partition_nodeset_dyn, p.partition_nodeset_tpu):
+        for ns_name in chain(p.partition_nodeset, p.partition_nodeset_dyn):
             if ns_name not in ns_names:
                 raise DeffetiveStoredConfigError(f"nodeset {ns_name} not defined in config")
             
@@ -1853,7 +1861,7 @@ class Lookup:
         # _node_desc runs once per node; rebuilding this per call was O(nodes x nodesets).
         return frozenset(
             getattr(ns, "nodeset_name", None)
-            for ns in chain(self.cfg.nodeset.values(), self.cfg.nodeset_tpu.values(), self.cfg.nodeset_dyn.values())
+            for ns in chain(self.cfg.nodeset.values(), self.cfg.nodeset_dyn.values())
         )
 
     @lru_cache(maxsize=None)
@@ -1911,22 +1919,7 @@ class Lookup:
 
     def node_nodeset(self, node_name=None):
         nodeset_name = self.node_nodeset_name(node_name)
-        if nodeset_name in self.cfg.nodeset_tpu:
-            return self.cfg.nodeset_tpu[nodeset_name]
-
         return self.cfg.nodeset[nodeset_name]
-
-    def partition_is_tpu(self, part: str) -> bool:
-        """check if partition with name part contains a nodeset of type tpu"""
-        return len(self.cfg.partitions[part].partition_nodeset_tpu) > 0
-
-
-    def node_is_tpu(self, node_name=None):
-        nodeset_name = self.node_nodeset_name(node_name)
-        return self.cfg.nodeset_tpu.get(nodeset_name) is not None
-
-    def nodeset_is_tpu(self, nodeset_name=None) -> bool:
-        return self.cfg.nodeset_tpu.get(nodeset_name) is not None
 
     def is_nodeset_mig(self, nodeset_name: str) -> bool:
         """Returns True if a specific NodeSet is configured with or resolved to MIG."""
@@ -2058,9 +2051,7 @@ class Lookup:
         return parse_self_link(nodeset.subnetwork).region
 
     def nodeset_accelerator_topology(self, nodeset_name: str) -> Optional[str]:
-        if not self.nodeset_is_tpu(nodeset_name):
-            return getattr(self.cfg.nodeset[nodeset_name], 'accelerator_topology', None)
-        return None
+        return getattr(self.cfg.nodeset[nodeset_name], 'accelerator_topology', None)
 
     def nodeset_prefix(self, nodeset_name):
         return f"{self.cfg.slurm_cluster_name}-{nodeset_name}"
@@ -2090,7 +2081,7 @@ class Lookup:
         )
 
     def power_managed_nodesets(self) -> Iterable[NSDict]:
-        return chain(self.cfg.nodeset.values(), self.cfg.nodeset_tpu.values())
+        return self.cfg.nodeset.values()
 
     def is_power_managed_node(self, node_name: str) -> bool:
         try:
@@ -2235,16 +2226,104 @@ class Lookup:
         return {"managedInstances": all_instances}
 
     @lru_cache()
+    def get_mig_instance_names(self, project: str, region: str, self_link: str) -> Set[str]:
+        """Returns the set of short instance names currently managed by a given MIG."""
+        mig_insts = self.get_mig_instances(project, region, self_link)
+        names: Set[str] = set()
+        for m_inst in mig_insts.get("managedInstances", []):
+            if not isinstance(m_inst, dict):
+                continue
+            inst_url = m_inst.get("instance") or ""
+            inst_name = inst_url.split("/")[-1] if inst_url else ""
+            if inst_name:
+                names.add(inst_name)
+            name = m_inst.get("name")
+            if name:
+                names.add(name)
+        return names
+
+    @lru_cache()
     def get_mig_repairing_instances(self, project: str, region: str, self_link: str) -> Set[str]:
         """Returns the set of instance names currently in REPAIRING state in a given MIG."""
         mig_insts = self.get_mig_instances(project, region, self_link)
         repairing: Set[str] = set()
         for m_inst in mig_insts.get("managedInstances", []):
+            if not isinstance(m_inst, dict):
+                continue
             if m_inst.get("currentAction") in ("REPAIRING", "RESTARTING", "RECREATING"):
                 name = m_inst.get("name") or (m_inst.get("instance") or "").split("/")[-1]
                 if name:
                     repairing.add(name)
         return repairing
+
+    @lru_cache()
+    def get_mig_creating_instances(self, project: str, region: str, self_link: str) -> Set[str]:
+        """Returns the set of short instance names currently in CREATING state in a given MIG."""
+        mig_insts = self.get_mig_instances(project, region, self_link)
+        creating: Set[str] = set()
+        for m_inst in mig_insts.get("managedInstances", []):
+            if not isinstance(m_inst, dict):
+                continue
+            if m_inst.get("currentAction") in ("CREATING", "CREATING_WITHOUT_RETRIES"):
+                name = m_inst.get("name") or (m_inst.get("instance") or "").split("/")[-1]
+                if name:
+                    creating.add(name)
+        return creating
+
+    @lru_cache()
+    def get_mig_instance_errors(
+        self, project: str, region: str, self_link: str
+    ) -> Dict[str, Tuple[str, str, str]]:
+        """Returns ``{instance_name: (currentAction, code, message)}`` for failing MIG slots.
+
+        Reads ``lastAttempt.errors.errors`` from ``listManagedInstances()`` so error state
+        tracks the active managed slot with zero extra GCE RPCs and without surfacing stale
+        historical entries from ``listErrors()``. Healthy/booting slots (``currentAction``
+        in ``NONE``/``VERIFYING``/``REFRESHING`` with ``instanceStatus`` in
+        ``RUNNING``/``PROVISIONING``/``STAGING``) and tearing-down slots
+        (``DELETING`` / ``ABANDONING``) are excluded.
+        """
+        mig_insts = self.get_mig_instances(project, region, self_link)
+        errors: Dict[str, Tuple[str, str, str]] = {}
+        for m_inst in mig_insts.get("managedInstances", []):
+            if not isinstance(m_inst, dict):
+                continue
+            action = str(m_inst.get("currentAction") or "")
+            inst_status = str(m_inst.get("instanceStatus") or "")
+            if action in ("DELETING", "ABANDONING"):
+                continue
+            if action in ("NONE", "VERIFYING", "REFRESHING") and inst_status in (
+                "RUNNING",
+                "PROVISIONING",
+                "STAGING",
+            ):
+                continue
+            last_attempt = m_inst.get("lastAttempt")
+            if not isinstance(last_attempt, dict):
+                continue
+            err_container = last_attempt.get("errors")
+            if not isinstance(err_container, dict):
+                continue
+            err_list = err_container.get("errors")
+            if not isinstance(err_list, list) or not err_list:
+                continue
+            first_err = err_list[0]
+            if not isinstance(first_err, dict):
+                continue
+            code = str(first_err.get("code") or "UNKNOWN").strip() or "UNKNOWN"
+            message = str(first_err.get("message") or "").strip()
+            name = m_inst.get("name") or (m_inst.get("instance") or "").split("/")[-1]
+            if name:
+                errors[name] = (action, code, message)
+        return errors
+
+    def clear_mig_caches(self) -> None:
+        """Clears cached MIG instance listings and derived repair/error lookups."""
+        self.get_mig_instances.cache_clear()
+        self.get_mig_instance_names.cache_clear()
+        self.get_mig_repairing_instances.cache_clear()
+        self.get_mig_creating_instances.cache_clear()
+        self.get_mig_instance_errors.cache_clear()
 
     @lru_cache()
     def get_mig_list(

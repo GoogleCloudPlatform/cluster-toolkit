@@ -14,7 +14,7 @@ Due to the sovereign nature of GCD, certain mechanisms that are available in the
 | :---- | :---- | :---- |
 | **Public APIs** • `googleapis.com` | **Sovereign Universe Domains** • `*.apis-<location>.goog` | • **Sovereign API Routing**: Configures cluster deployment tools and client libraries to target sovereign regional endpoints and universe domains directly without relying on public API discovery. • **Offline Configuration**: Supports offline machine-type definitions so cluster deployment can proceed without querying public Google Cloud APIs. |
 | **Google OS Login** • IAM-managed user directory & authentication | **POSIX / Non-OSLogin** • `enable_oslogin: false` • Automated metadata SSH keys | • **Local POSIX Accounts**: Disables OS Login and uses a shared NFS `/home` volume to maintain consistent POSIX UIDs/GIDs across all nodes. • **Automated SSH Configuration**: Attaches an automated startup script across all nodes to provision local user accounts from Compute Engine metadata (`ssh-keys`) and set up passwordless SSH for cluster-wide job execution (`srun`, MPI). |
-| **Pre-baked Public Slurm Images** • External image repositories (`schedmd-slurm-gcp`) | **Self-Contained In-Project Packer Build** • `custom-slurm-image` | • **In-Project Image Baking**: Embeds a dedicated Packer build stage directly into the blueprint to build and bake Slurm images inside your project from a base OS image, eliminating dependencies on external cross-project image repositories. |
+| **Pre-baked Public Slurm Images** • External image repositories (`advanced-compute-images`) | **Self-Contained In-Project Packer Build** • `custom-slurm-image` | • **In-Project Image Baking**: Embeds a dedicated Packer build stage directly into the blueprint to build and bake Slurm images inside your project from a base OS image, eliminating dependencies on external cross-project image repositories. |
 | **External Munge Authentication** • External Munge daemons & shared keys | **Native Slurm SAuth** • `enable_slurm_auth: true` • `slurm.key` over Controller NFS | • **Native SAuth over NFS**: Uses native Slurm authentication (`slurm.key`) generated on the controller and distributed to compute and login nodes over a shared NFS mount, removing the need for external Munge daemons. |
 | **Commercial GCS Endpoints** • Commercial endpoints (`storage.googleapis.com`) | **Sovereign Endpoint Routing** | • **Dedicated Storage Routing**: Directs Cloud Storage requests to dedicated regional sovereign endpoints within the perimeter, ensuring storage operations run independently of commercial Google Cloud endpoints. |
 
@@ -37,7 +37,7 @@ deployment_groups:
     modules:
       - id: slurm-custom-image
         source: modules/packer/custom-image
-        # Builds Rocky Linux 8 image with Slurm v6
+        # Builds Rocky Linux 9 image with Slurm v6
 
   # Group 3: Cluster Provisioning
   - group: cluster
@@ -164,7 +164,7 @@ zone=u-<location>-a,\
 universe_domain=apis-<location>.goog,\
 service_account_email=<account_id>-compute@developer.<prefix>-system.iam.gserviceaccount.com,\
 source_image_project=<prefix>-system:rocky-linux-cloud,\
-source_image_family=rocky-linux-8-optimized-gcp" \
+source_image_family=rocky-linux-9-optimized-gcp" \
   -w --force --validation-level=IGNORE
 ```
 

@@ -138,9 +138,11 @@ var ValidPriorityClasses = []string{"very-low", "low", "medium", "high", "very-h
 
 type PathwaysJobDefinition struct {
 	// Core Pathways Images
-	ProxyServerImage string // Default: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest
-	ServerImage      string // Default: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest
-	WorkerImage      string // Default: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest (or value of ServerImage)
+	// Defaults: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/{proxy_server,server}:latest, or, with the public
+	// colocated Python sidecar, the cloud-pathways images of the sidecar's release. WorkerImage defaults to ServerImage.
+	ProxyServerImage string
+	ServerImage      string
+	WorkerImage      string
 
 	// Pathways specific configurations
 	Headless         bool   // Default: false

@@ -18,6 +18,7 @@
 package gke
 
 import (
+	"cmp"
 	"context"
 	"crypto/x509"
 	"encoding/base64"
@@ -29,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
@@ -514,17 +516,6 @@ var (
 		"unable to read token file",
 		"error loading config file",
 	}
-	// GKE's DNS endpoint returns plain-text HTTP 403 before requests reach kube-apiserver
-	// when external DNS access is disabled, container.clusters.connect IAM is denied, or
-	// VPC Service Controls blocks access. client-go formats these as
-	// "Error from server (Forbidden): ...", which must trigger IP fallback rather than
-	// being mistaken for a reachable cluster with Kubernetes RBAC restrictions on /version.
-	probeDNSGatewayRejectedMarkers = []string{
-		"allow_external_traffic is disabled",
-		"container.googleapis.com/clusters.connect",
-		"prohibited by organization's policy",
-		"vpcservicecontrols",
-	}
 	// Only the apiserver's status error counts as RBAC-forbidden; a forward proxy's "403 Forbidden" on CONNECT is a connectivity failure.
 	probeForbiddenMarkers    = []string{"error from server (forbidden)"}
 	probeConnectivityMarkers = []string{
@@ -573,7 +564,7 @@ func classifyProbeFailure(stderr string) probeOutcome {
 		return probeInvalid
 	case contains(probeAuthMarkers):
 		return probeAuth
-	case contains(probeDNSGatewayRejectedMarkers):
+	case k8s.IsDNSGatewayRejectedText(s):
 		return probeConnectivity
 	case contains(probeForbiddenMarkers):
 		return probeForbidden
@@ -640,15 +631,38 @@ func (g *GKEOrchestrator) loadKubeconfig() (*clientcmdapi.Config, error) {
 }
 
 // kubectlCommandLine renders a kubectl command, pinned like the ones gcluster runs, for users to copy.
-// Arguments that contain whitespace, such as Windows paths, are double-quoted.
+// Arguments that contain whitespace or commas (which PowerShell splits as arrays) are double-quoted.
 func kubectlCommandLine(kubeContext string, args ...string) string {
 	parts := append([]string{"kubectl"}, k8s.WithContext(kubeContext, args)...)
 	for i, p := range parts {
-		if strings.ContainsAny(p, " \t") {
+		if strings.ContainsAny(p, " \t,") {
 			parts[i] = `"` + p + `"`
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// kubectlOutputError returns an error wrapping kubectl's combined stderr/stdout for non-spawn failures,
+// or nil when ExitCode == -1 (process spawn failure or timeout) so callers never misclassify spawn errors as HTTP/RBAC statuses.
+func kubectlOutputError(res shell.CommandResult) error {
+	if res.ExitCode == -1 {
+		return nil
+	}
+	return errors.New(strings.TrimSpace(res.Stderr + "\n" + res.Stdout))
+}
+
+func kubectlCommandError(prefix string, res shell.CommandResult) error {
+	detail := strings.TrimSpace(res.Stderr + "\n" + res.Stdout)
+	if detail == "" {
+		if res.Err != nil {
+			return fmt.Errorf("%s: %w", prefix, res.Err)
+		}
+		return fmt.Errorf("%s: exit status %d", prefix, res.ExitCode)
+	}
+	if res.Err != nil {
+		return fmt.Errorf("%s: %s (%w)", prefix, detail, res.Err)
+	}
+	return fmt.Errorf("%s: %s", prefix, detail)
 }
 
 // kubectlIn runs kubectl with DefaultLocalCommandTimeout against an explicit non-blank kubeContext,
@@ -676,31 +690,67 @@ func (g *GKEOrchestrator) kubectlStream(args ...string) error {
 	return g.executor.ExecuteCommandStream("kubectl", k8s.WithContext(g.kubeContext, args)...)
 }
 
+const apiGroupProbeTimeout = 15 * time.Second
+
 // HasAPIGroupVersion checks whether the Kubernetes apiserver serves /apis/<groupVersion>
-// via the non-privileged API discovery endpoint.
+// via the non-privileged API discovery endpoint (implements k8s.APIGroupChecker).
 func (g *GKEOrchestrator) HasAPIGroupVersion(groupVersion string) (bool, error) {
-	gv := strings.Trim(strings.TrimSpace(groupVersion), "/")
+	gv := strings.TrimFunc(groupVersion, func(r rune) bool {
+		return r == '/' || unicode.IsSpace(r)
+	})
 	if gv == "" {
 		return false, nil
 	}
-	res := g.kubectl("get", "--raw", "/apis/"+gv, kubectlReadTimeout)
-	if res.ExitCode == 0 {
-		return true, nil
+	if strings.TrimSpace(g.kubeContext) == "" {
+		return false, fmt.Errorf("internal error: refusing to query Kubernetes API group %q without an explicit --context", gv)
 	}
-	errText := strings.TrimSpace(res.Stderr)
-	if errText == "" {
-		errText = strings.TrimSpace(res.Stdout)
+	res := g.kubectlWithTimeout(apiGroupProbeTimeout, "get", "--raw", "/apis/"+gv, kubectlReadTimeout)
+	if errors.Is(res.Err, context.DeadlineExceeded) {
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: timed out after %v: %w", gv, apiGroupProbeTimeout, res.Err)
 	}
-	if errText == "" && res.Err != nil {
-		errText = strings.TrimSpace(res.Err.Error())
+	if res.ExitCode == 0 && res.Err == nil {
+		if isJSONObject(res.Stdout) {
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: unexpected non-JSON response %q", gv, cmp.Or(firstLine(strings.TrimSpace(res.Stdout)), firstLine(strings.TrimSpace(res.Stderr))))
 	}
-	if errText == "" {
-		errText = fmt.Sprintf("exit status %d", res.ExitCode)
-	}
-	if isAPIGroupNotFoundText(errText) {
+	combined := res.Stderr + "\n" + res.Stdout
+	if isAPIGroupNotFoundText(combined) {
 		return false, nil
 	}
-	return false, fmt.Errorf("failed to query Kubernetes API group %q: %s", gv, firstLine(errText))
+	if errLine := firstNonWarningLine(combined); errLine != "" {
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: %s", gv, errLine)
+	}
+	if res.Err != nil {
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: %w", gv, res.Err)
+	}
+	if fallback := firstLine(strings.TrimSpace(combined)); fallback != "" {
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: %s", gv, fallback)
+	}
+	return false, fmt.Errorf("failed to query Kubernetes API group %q: exit status %d", gv, res.ExitCode)
+}
+
+func isJSONObject(raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	return strings.HasPrefix(trimmed, "{") && json.Valid([]byte(trimmed))
+}
+
+func firstNonWarningLine(s string) string {
+	for _, raw := range strings.Split(s, "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || isKubectlWarningLine(line) {
+			continue
+		}
+		return line
+	}
+	return ""
+}
+
+func isKubectlWarningLine(line string) bool {
+	if strings.HasPrefix(strings.ToUpper(line), "WARNING:") {
+		return true
+	}
+	return len(line) >= 6 && line[0] == 'W' && line[5] == ' ' && isAllDigits(line[1:5])
 }
 
 func isAPIGroupNotFoundText(text string) bool {
@@ -898,10 +948,13 @@ func (g *GKEOrchestrator) endpointConnectivityError(clusterName string, attempts
 // GCLUSTER_REFRESH_CREDENTIALS=1 skips reuse.
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
 	g.resetStorageCaches()
+	g.inventory = nil
+	g.addons = addonPlan{}
 	if g.mode == orchestrator.TypeK8s {
 		return g.configureK8sKubectl(clusterName)
 	}
 	g.kubeContext = ""
+	g.resetManagedDynamicClient()
 	defer func() {
 		if g.kubeContext == "" {
 			g.resetManagedDynamicClient()
@@ -948,47 +1001,35 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 	return g.regenerateKubeContext(clusterName, clusterLocation, projectID, avoid)
 }
 
+var errKubeClientUninitialized = errors.New("Kubernetes API client is not initialized")
+
+func (g *GKEOrchestrator) requireKubeClient() (KubeClient, error) {
+	if g.needsDynamicClientInit() {
+		g.resetManagedDynamicClient()
+		if g.dynClient == nil && strings.TrimSpace(g.kubeContext) == "" {
+			return nil, errKubeClientUninitialized
+		}
+		if _, err := g.getDynamicClient(); err != nil {
+			return nil, err
+		}
+	}
+	if g.kubeClient == nil {
+		return nil, errKubeClientUninitialized
+	}
+	return g.kubeClient, nil
+}
+
 // usableKubeClient returns the Kubernetes API client for best-effort discovery, or nil when none can be
 // built yet (no pinned context, or an unreadable kubeconfig).
 func (g *GKEOrchestrator) usableKubeClient() KubeClient {
-	if g.needsDynamicClientInit() {
-		g.resetManagedDynamicClient()
-		if g.dynClient == nil && g.kubeContext == "" {
-			return nil
+	kc, err := g.requireKubeClient()
+	if err != nil {
+		if !errors.Is(err, errKubeClientUninitialized) {
+			logging.Warn("Kubernetes API client unavailable (context %q): %v", g.kubeContext, err)
 		}
-		if _, err := g.getDynamicClient(); err != nil {
-			logging.Warn("Kubernetes API client unavailable for cluster discovery (context %q): %v", g.kubeContext, err)
-			return nil
-		}
+		return nil
 	}
-	return g.kubeClient
-}
-
-// activeWorkloadImages returns the distinct images the rendered pods pull: the workload image, the ML
-// Diagnostics telemetry sidecar image when enabled, and, for Pathways, the server, proxy, worker, and
-// colocated sidecar images of the selected deployment mode.
-func activeWorkloadImages(job orchestrator.JobDefinition, fullImageName, telemetryImage string) []string {
-	raw := []string{fullImageName}
-	if job.IsPathwaysJob {
-		pw := job.Pathways
-		if pw.Headless || pw.DeploySPS {
-			raw = nil
-		}
-		if pw.RunSPSWorkload == "" {
-			raw = append(raw, pw.ServerImage, pw.WorkerImage, pw.ColocatedPythonSidecarImage)
-		}
-		if !pw.DeploySPS {
-			raw = append(raw, pw.ProxyServerImage)
-		}
-	}
-	raw = append(raw, telemetryImage)
-	var images []string
-	for _, img := range raw {
-		if img != "" && !slices.Contains(images, img) {
-			images = append(images, img)
-		}
-	}
-	return images
+	return kc
 }
 
 // resolveImagePullSecrets returns the user's --image-pull-secret value verbatim when it was given (an empty value

@@ -153,11 +153,6 @@ def test_to_hostlist(names, expected):
             "beta",
             ClientOptions(api_endpoint="https://storage.googleapis.com/beta/"),
         ),
-        (
-            util.ApiEndpoint.TPU,
-            "alpha",
-            ClientOptions(api_endpoint="https://tpu.googleapis.com/alpha/"),
-        ),
     ],
 )
 def test_create_client_options(
@@ -394,9 +389,7 @@ def test_get_jobs(mocker, stdout, expected_jobs):
         ("c-d-vodoo", None, None), # dynamic nodeset
         ("c-x-44", None, None), # unknown(removed) nodeset
         ("c-n-7", None, None), # Out of bounds: c-n-[0-4] - downsized nodeset
-        ("c-t-7", None, None), # Out of bounds: c-t-[0-4] - downsized nodeset TPU
         ("c-n-2", None, RuntimeError), # something is wrong
-        ("c-t-2", None, RuntimeError), # something is wrong, but TPU
         
         # Check boundaries match [0-5)
         ("c-n-5", None, None), # out of boundaries
@@ -407,8 +400,6 @@ def test_node_state(node: str, state: Optional[NodeState], want: NodeState | Non
         slurm_cluster_name="c",
         nodeset={
             "n": TstNodeset(nodeset_name="n", node_count_static=2, node_count_dynamic_max=3)},
-        nodeset_tpu={
-            "t": TstNodeset(nodeset_name="t", node_count_static=2, node_count_dynamic_max=3)},
         nodeset_dyn={
             "d": TstNodeset(nodeset_name="d")},
     )
@@ -2228,7 +2219,6 @@ def test_fetch_config_downloads_keep_order():
         partition=[],
         nodeset=[blob(f"nodeset_name: ns{i}") for i in range(200)],
         nodeset_dyn=[],
-        nodeset_tpu=[],
         login_group=[],
     )
     with patch.object(util, "_list_config_blobs", return_value=blobs), \
@@ -2251,7 +2241,6 @@ def test_fetch_config_download_error_propagates():
         partition=[],
         nodeset=[bad],
         nodeset_dyn=[],
-        nodeset_tpu=[],
         login_group=[],
     )
     with patch.object(util, "_list_config_blobs", return_value=blobs), \
