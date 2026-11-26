@@ -65,6 +65,12 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     settings:
       release_channel: REGULAR
+      # Optional: hold the cluster on its minor version and block node
+      # upgrades until that minor version reaches the end of support.
+      maintenance_exclusions:
+      - name: no-minor-or-node-upgrades
+        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+        exclusion_end_time_behavior: UNTIL_END_OF_SUPPORT
 ```
 
 #### Step 3: Deploy the cluster
