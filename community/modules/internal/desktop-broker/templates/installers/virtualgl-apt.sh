@@ -48,7 +48,7 @@ install_virtualgl() {
 # runtime - the VNC server, noVNC and the broker itself - and leave no desktop at
 # all rather than a slower one.
 if install_virtualgl; then
-	echo "VirtualGL installed; hardware OpenGL available if a render node exists."
+	echo "VirtualGL installed; hardware OpenGL available on an NVIDIA GPU whose driver has graphics (EGL) support."
 else
 	echo "WARNING: VirtualGL install failed; desktop sessions will use software rendering." >&2
 fi

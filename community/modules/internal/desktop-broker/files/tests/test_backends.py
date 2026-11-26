@@ -80,6 +80,7 @@ def test_tigervnc_explains_it_cannot_use_an_egl_device(monkeypatch):
     # it through VirtualGL, TigerVNC cannot.
     monkeypatch.setattr(gpu, "first_render_node", lambda: None)
     monkeypatch.setattr(gpu, "gpu_display", lambda: "egl0")
+    monkeypatch.setattr(gpu, "virtualgl_available", lambda: True)
 
     tiger = backends.create("tigervnc", "1920x1080", gpu_acceleration=True)
     assert tiger.accelerated() is False
@@ -154,6 +155,59 @@ def test_compute_only_driver_falls_back_and_says_why(gpu_host, monkeypatch):
     assert backend.session_command() == ["dbus-launch", "startxfce4"]
     assert backend.session_environment() == {}
     assert backend.environment() == {"LIBGL_ALWAYS_SOFTWARE": "1"}
+
+
+def test_turbovnc_without_virtualgl_falls_back_and_says_why(
+    gpu_host, monkeypatch
+):
+    # The VirtualGL install is non-fatal, so a GPU host can come up without it.
+    gpu = gpu_host(device_present=True, graphics_driver=True)
+    monkeypatch.setattr(gpu, "virtualgl_available", lambda: False)
+
+    backend = backends.create("turbovnc", "1920x1080", gpu_acceleration=True)
+    assert backend.accelerated() is False
+    assert "VirtualGL is not installed" in backend.acceleration_diagnostic()
+    assert backend.session_command() == ["dbus-launch", "startxfce4"]
+    assert backend.session_environment() == {}
+    assert backend.environment() == {"LIBGL_ALWAYS_SOFTWARE": "1"}
+
+
+def test_tigervnc_accelerates_through_a_render_node(gpu_host):
+    gpu_host(device_present=True, graphics_driver=True)
+
+    backend = backends.create("tigervnc", "1920x1080", gpu_acceleration=True)
+    assert backend.accelerated() is True
+    assert backend.acceleration_diagnostic() is None
+    assert backend.environment() == {}
+
+
+def test_tigervnc_does_not_trust_a_compute_only_render_node(gpu_host):
+    # The NVIDIA kernel driver creates the render node even when the image
+    # has a compute-only driver, so the node alone proves nothing.
+    gpu_host(device_present=True, graphics_driver=False)
+
+    backend = backends.create("tigervnc", "1920x1080", gpu_acceleration=True)
+    assert backend.accelerated() is False
+    assert "compute-only" in backend.acceleration_diagnostic()
+    assert backend.environment() == {"LIBGL_ALWAYS_SOFTWARE": "1"}
+
+
+def test_tigervnc_accelerates_on_a_render_node_without_nvidia(gpu_host):
+    # The compute-only check is about NVIDIA drivers; a render node from any
+    # other GPU is still usable.
+    gpu_host(device_present=False, graphics_driver=False)
+
+    backend = backends.create("tigervnc", "1920x1080", gpu_acceleration=True)
+    assert backend.accelerated() is True
+    assert backend.acceleration_diagnostic() is None
+
+
+def test_tigervnc_stays_quiet_when_gpu_is_off(gpu_host):
+    gpu_host(device_present=True, graphics_driver=False)
+
+    backend = backends.create("tigervnc", "1920x1080", gpu_acceleration=False)
+    assert backend.accelerated() is False
+    assert backend.acceleration_diagnostic() is None
 
 
 def test_software_rendering_is_forced_when_not_accelerated():

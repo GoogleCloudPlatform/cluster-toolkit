@@ -207,9 +207,18 @@ resource "google_compute_instance" "server_vm" {
   }
 
   # The boot disk holds the portal database (db.sqlite3) and the per-resource
-  # run-time directories. A change to the image or disk size would replace an
-  # existing server together with that disk, so it applies to new deployments
-  # only.
+  # run-time directories. A server deployed before v1.109.0 also keeps each
+  # resource's Terraform state there until it is upgraded to Cloud Storage
+  # state (see "Upgrading an existing TKFE to Cloud Storage state" in the
+  # admin guide). A change to the image or disk size would replace an existing
+  # server together with that disk, so it applies to new deployments only.
+  #
+  # Because these changes are ignored, re-applying never moves an existing
+  # server to the new image. To do that on purpose, replace the server
+  # explicitly (terraform apply -replace=google_compute_instance.server_vm)
+  # or tear it down and redeploy. Either way the boot disk and everything on
+  # it is lost, so read "Recovering resources after losing the service
+  # machine" in the admin guide first.
   lifecycle {
     ignore_changes = [
       boot_disk[0].initialize_params[0].image,
