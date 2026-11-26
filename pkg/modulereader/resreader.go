@@ -31,11 +31,18 @@ import (
 
 // VarInfo stores information about a module input variables
 type VarInfo struct {
-	Name        string
-	Type        cty.Type
-	Description string
-	Default     interface{}
-	Required    bool
+	Name          string
+	Type          cty.Type
+	Description   string
+	Default       interface{}
+	Required      bool
+	Deprecated    bool
+	DeprecatedMsg string
+	Validations   []string
+
+	// Constraints holds machine-readable limits the module states for this
+	// input. Like Deprecated and Validations, it is only set by ApplyVarMeta.
+	Constraints *InputConstraints
 }
 
 // OutputInfo stores information about module output values

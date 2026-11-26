@@ -16,6 +16,7 @@ package gke
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,12 +26,16 @@ import (
 	"time"
 
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 
 	"github.com/google/go-cmp/cmp"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -75,15 +80,17 @@ func setupMockMachineConfig(t *testing.T) {
 	config.ClearMachineTypeCache()
 	t.Setenv("GHPC_MOCK_MACHINE_CONFIG", mockJSON)
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	t.Setenv("GCLUSTER_LABEL_SCHEME", "")
 	t.Cleanup(config.ClearMachineTypeCache)
 }
 
 type MockExecutor struct {
 	responses   map[string][]shell.CommandResult
 	callCount   map[string]int
-	calls       []string // every command passed to ExecuteCommand, in order
-	streamCalls []string // commands passed to ExecuteCommandStream
-	contexts    []string // --context values stripped from kubectl calls, in order
+	calls       []string        // every command passed to ExecuteCommand, in order
+	streamCalls []string        // commands passed to ExecuteCommandStream
+	contexts    []string        // --context values stripped from kubectl calls, in order
+	timeouts    []time.Duration // timeouts passed to ExecuteCommandWithTimeout, in order
 }
 
 func NewMockExecutor(responses map[string][]shell.CommandResult) *MockExecutor {
@@ -95,17 +102,14 @@ func NewMockExecutor(responses map[string][]shell.CommandResult) *MockExecutor {
 
 func newTestGKEOrchestrator(executor Executor) *GKEOrchestrator {
 	return &GKEOrchestrator{
-		executor:                 executor,
-		kubeClient:               &MockKubeClient{Namespace: "default"},
-		machineTypeClient:        &MockMachineTypeClient{Executor: executor},
-		acceleratorToMachineType: make(map[string]string),
-		machineCapCache:          make(map[string]MachineTypeCap),
-		topologyCache:            make(map[string]string),
-		dynamicSlicingCache:      make(map[string]bool),
-		staticSlicingCache:       make(map[string]bool),
-		resourcePolicyCache:      make(map[string]*GCEWorkloadPolicy),
+		executor:          executor,
+		kubeClient:        &MockKubeClient{Namespace: "default"},
+		machineTypeClient: &MockMachineTypeClient{Executor: executor},
+		machineCapCache:   make(map[string]MachineTypeCap),
+		submissionSession: newSubmissionSession(),
 		// Never read the developer's real kubeconfig in unit tests.
 		kubeconfigLoader: func() (*clientcmdapi.Config, error) { return clientcmdapi.NewConfig(), nil },
+		preflightClient:  &fakePreflightClient{},
 	}
 }
 
@@ -131,7 +135,8 @@ func (m *MockExecutor) ExecuteCommand(name string, args ...string) shell.Command
 	}
 }
 
-func (m *MockExecutor) ExecuteCommandWithTimeout(_ time.Duration, name string, args ...string) shell.CommandResult {
+func (m *MockExecutor) ExecuteCommandWithTimeout(timeout time.Duration, name string, args ...string) shell.CommandResult {
+	m.timeouts = append(m.timeouts, timeout)
 	return m.ExecuteCommand(name, args...)
 }
 
@@ -142,9 +147,15 @@ func (m *MockExecutor) ExecuteCommandStream(name string, args ...string) error {
 }
 
 func (m *MockExecutor) stripContext(name string, args []string) []string {
-	if name == "kubectl" && len(args) > 2 && args[0] == "--context" {
+	if name != "kubectl" {
+		return args
+	}
+	if len(args) > 2 && args[0] == "--context" {
 		m.contexts = append(m.contexts, args[1])
 		return args[2:]
+	}
+	if len(args) == 0 || args[0] != "config" {
+		m.contexts = append(m.contexts, "")
 	}
 	return args
 }
@@ -172,6 +183,7 @@ type MockKubeClient struct {
 
 	DeleteJobSetErr error
 	DeletedJobSets  []string
+	JobSets         []orchestrator.JobStatus
 
 	// Fixtures keyed by gvr.Resource.
 	Objects            map[string][]unstructured.Unstructured
@@ -226,6 +238,9 @@ func (m *MockKubeClient) DeleteJobSet(namespace string, name string) error {
 }
 
 func (m *MockKubeClient) ListJobSets(namespace string, labelSelector string) ([]orchestrator.JobStatus, error) {
+	if len(m.JobSets) > 0 {
+		return append([]orchestrator.JobStatus(nil), m.JobSets...), m.Err
+	}
 	return []orchestrator.JobStatus{}, m.Err
 }
 
@@ -717,7 +732,7 @@ func TestAwaitJobCompletion(t *testing.T) {
 			orc.kubeClient = mockKube
 			orc.dynClient = &mockDynamicClient{} // Avoid loading real kubeconfig
 
-			err := orc.awaitJobCompletion(workloadName, clusterName, clusterLocation, projectID, "1h")
+			err := orc.awaitJobCompletion(workloadName, clusterName, clusterLocation, projectID, "1h", true)
 
 			if tt.expectedError == "" {
 				if err != nil {
@@ -2787,7 +2802,7 @@ func TestResolveLogsSelector_MainOnlyTargetsMainReplicatedJob(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			orc := newTestGKEOrchestrator(NewMockExecutor(nil))
 
-			selector, mainOnly := orc.resolveLogsSelector("pw-job", &trueVal, 1, tt.firstJob, "")
+			selector, mainOnly := orc.resolveLogsSelectorForWorkload("pw-job", &trueVal, 1, tt.firstJob, false)
 			if !mainOnly {
 				t.Fatalf("resolveLogsSelector() mainOnly = false, want true")
 			}
@@ -3139,7 +3154,7 @@ func TestFetchLogsWithRetry(t *testing.T) {
 			mockExec := NewMockExecutor(responses)
 			g := newTestGKEOrchestrator(mockExec)
 
-			res, err := g.fetchLogsWithRetry("default", "test-job", "jobset.sigs.k8s.io/jobset-name=test-job", false, 0, -1)
+			res, err := g.fetchLogsWithRetryForWorkload("default", "test-job", "jobset.sigs.k8s.io/jobset-name=test-job", false, 0, -1, false)
 			if len(tt.wantErr) == 0 && err != nil {
 				t.Fatalf("fetchLogsWithRetry() error = %v", err)
 			}
@@ -3230,7 +3245,13 @@ func TestGetJobSetInfo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			g := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{query: {tt.result}}))
+			responses := map[string][]shell.CommandResult{
+				query: {tt.result},
+				"kubectl get job test-job -n default -o json": {
+					{ExitCode: 1, Stderr: `Error from server (NotFound): jobs.batch "test-job" not found`},
+				},
+			}
+			g := newTestGKEOrchestrator(NewMockExecutor(responses))
 
 			got, err := g.getJobSetInfo("default", "test-job")
 			if tt.wantErr != "" {
@@ -3380,6 +3401,9 @@ func TestWaitForJobPods(t *testing.T) {
 			responses := map[string][]shell.CommandResult{
 				podsQuery:  tt.pods,
 				stateQuery: tt.states,
+				"kubectl get job test-job -n default -o json": {
+					{ExitCode: 1, Stderr: `Error from server (NotFound): jobs.batch "test-job" not found`},
+				},
 			}
 			if tt.events != nil {
 				responses[eventsQuery] = tt.events
@@ -3848,6 +3872,37 @@ func TestJobSetInfoJSONPath(t *testing.T) {
 			},
 			want: jobSetInfo{firstJob: "trainer", expectedPods: 8},
 		},
+		{
+			name: "heterogeneous replicatedJobs count init and app container streams",
+			obj: map[string]any{
+				"spec": map[string]any{
+					"replicatedJobs": []any{
+						map[string]any{
+							"name":     "pathways-head",
+							"replicas": 1,
+							"template": map[string]any{"spec": map[string]any{
+								"parallelism": 1,
+								"template": map[string]any{"spec": map[string]any{
+									"containers": []any{map[string]any{"name": "proxy"}, map[string]any{"name": "rm"}},
+								}},
+							}},
+						},
+						map[string]any{
+							"name":     "worker",
+							"replicas": 2,
+							"template": map[string]any{"spec": map[string]any{
+								"parallelism": 4,
+								"template": map[string]any{"spec": map[string]any{
+									"initContainers": []any{map[string]any{"name": "sidecar"}},
+									"containers":     []any{map[string]any{"name": "worker"}, map[string]any{"name": "metrics"}},
+								}},
+							}},
+						},
+					},
+				},
+			},
+			want: jobSetInfo{firstJob: "pathways-head", expectedPods: 9, expectedStreams: 26},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -3907,7 +3962,7 @@ func TestGetJobLogs_FollowRecountsStreamsAfterProbe(t *testing.T) {
 		"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
 		// First count sees 1 pod; by the time the probe passes all 7 pods (14 streams) exist.
 		podsQuery:   {{Stdout: "head-init head-main\n"}, {Stdout: "head-init head-main\n" + strings.Repeat("main side\n", 6)}},
-		jobSetQuery: {{Stdout: "\tFalse\tpathways-head\n1 1\n1 6\n"}},
+		jobSetQuery: {{Stdout: "\tFalse\tpathways-head\n1 1\thead-main\n1 6\tmain\n"}},
 		probe:       {{ExitCode: 0, Stdout: "x"}},
 	}
 	mockExec := NewMockExecutor(responses)
@@ -3923,6 +3978,63 @@ func TestGetJobLogs_FollowRecountsStreamsAfterProbe(t *testing.T) {
 		t.Fatalf("stream calls = %q, want [%q]", mockExec.streamCalls, want)
 	}
 	mockExec.assertAllKubectlPinned(t, "gke_test-project_us-central1-a_test-cluster")
+}
+
+func TestGetJobLogs_BatchedMultiContainerUsesSpecStreams(t *testing.T) {
+	oldInterval := logsRetryInterval
+	logsRetryInterval = time.Millisecond
+	defer func() { logsRetryInterval = oldInterval }()
+
+	falseVal := false
+	podsQuery := "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=test-job -o jsonpath=" + podContainersJSONPath
+	jobSetQuery := "kubectl get jobsets.jobset.x-k8s.io test-job -n default -o jsonpath=" + jobSetInfoJSONPath
+	twoLivePods := "workload sidecar\nworkload sidecar\n"
+	eightPodSpec := "\tFalse\tmain-job\n1 8\tworkload sidecar\n"
+	waiting := shell.CommandResult{ExitCode: 1, Stderr: `container "workload" in pod "p-0" is waiting to start: ContainerCreating`}
+
+	t.Run("snapshot_retries_with_spec_max_log_requests", func(t *testing.T) {
+		snapCmd := "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=16 --tail=-1"
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+			"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+			podsQuery:                            {{Stdout: twoLivePods}},
+			jobSetQuery:                          {{Stdout: eightPodSpec}},
+			snapCmd:                              {waiting, {ExitCode: 0, Stdout: "all 16 streams\n"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		out, err := orc.GetJobLogs("test-job", orchestrator.LogsOptions{
+			ClusterName: "test-cluster", ClusterLocation: "us-central1-a", ProjectID: "test-project",
+			MainOnly: &falseVal,
+		})
+		if err != nil || out != "all 16 streams\n" {
+			t.Fatalf("GetJobLogs(snapshot) = (%q, %v), want (\"all 16 streams\\n\", nil)", out, err)
+		}
+		if got := mockExec.callCount[snapCmd]; got != 2 {
+			t.Errorf("snapshot logs call count = %d, want 2", got)
+		}
+	})
+
+	t.Run("follow_probes_and_streams_with_spec_max_log_requests", func(t *testing.T) {
+		probeCmd := "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers --max-log-requests=16 --tail=1"
+		streamCmd := "kubectl logs -n default -l jobset.sigs.k8s.io/jobset-name=test-job --all-containers -f --max-log-requests=16 --tail=-1"
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+			"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+			podsQuery:                            {{Stdout: twoLivePods}, {Stdout: twoLivePods}},
+			jobSetQuery:                          {{Stdout: eightPodSpec}},
+			probeCmd:                             {{ExitCode: 0, Stdout: "ready\n"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		if _, err := orc.GetJobLogs("test-job", orchestrator.LogsOptions{
+			ClusterName: "test-cluster", ClusterLocation: "us-central1-a", ProjectID: "test-project",
+			Follow: true, MainOnly: &falseVal,
+		}); err != nil {
+			t.Fatalf("GetJobLogs(follow) error = %v", err)
+		}
+		if len(mockExec.streamCalls) != 1 || mockExec.streamCalls[0] != streamCmd {
+			t.Fatalf("stream calls = %q, want [%q]", mockExec.streamCalls, streamCmd)
+		}
+	})
 }
 
 func TestGetJobLogs_FollowProbesContainersBeforeStreaming(t *testing.T) {
@@ -4193,6 +4305,396 @@ func TestSubmitJob_MTCFastFailBeforeClusterCalls(t *testing.T) {
 	}
 }
 
+func TestPopulateClusterMetadata_PathwaysHeadNodePoolPreflight(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	tests := []struct {
+		name         string
+		pools        []gkeJobNodePool
+		headNodePool string
+		wantErr      string
+		forbidErr    string
+	}{
+		{
+			name: "non-existent --pathways-head-np fails fast",
+			pools: []gkeJobNodePool{{
+				Name:             "cpu-np",
+				InitialNodeCount: 1,
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+			}},
+			headNodePool: "missing-pool",
+			wantErr:      "Pathways head node pool 'missing-pool' not found in cluster 'test-cluster' (available node pools: cpu-np)",
+		},
+		{
+			name: "non-existent --pathways-head-np omits available node pools when none qualify",
+			pools: []gkeJobNodePool{{
+				Name:             "tpu-np",
+				InitialNodeCount: 1,
+				Config:           gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+			}},
+			headNodePool: "missing-pool",
+			wantErr:      "Pathways head node pool 'missing-pool' not found in cluster 'test-cluster'.",
+			forbidErr:    "available node pools",
+		},
+		{
+			name: "system pool --pathways-head-np fails fast with system pool error",
+			pools: []gkeJobNodePool{{
+				Name:             "default-pool",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2-standard-8",
+					Taints:      []gkeTaint{{Key: "components.gke.io/gke-managed-components", Value: "true", Effect: "NoSchedule"}},
+				},
+			}},
+			headNodePool: "default-pool",
+			wantErr:      "Pathways head node pool 'default-pool' in cluster 'test-cluster' is a GKE system node pool",
+		},
+		{
+			name: "non-CPU --pathways-head-np fails fast",
+			pools: []gkeJobNodePool{{
+				Name:             "tpu-np",
+				InitialNodeCount: 1,
+				Config:           gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+			}},
+			headNodePool: "tpu-np",
+			wantErr:      "Pathways head node pool 'tpu-np' in cluster 'test-cluster' is not a CPU node pool",
+		},
+		{
+			name: "0-node cpu-np with autoscaling disabled fails fast",
+			pools: []gkeJobNodePool{{
+				Name:             "cpu-np",
+				InitialNodeCount: 0,
+				Autoscaling:      gkeAutoscaling{Enabled: false},
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+			}},
+			wantErr: "Pathways head node pool 'cpu-np' in cluster 'test-cluster' has 0 nodes and autoscaling is disabled",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+			orc.clusterDesc = gkeCluster{NodePools: tt.pools}
+			job := &orchestrator.JobDefinition{
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				IsPathwaysJob:   true,
+				Pathways:        orchestrator.PathwaysJobDefinition{HeadNodePool: tt.headNodePool},
+			}
+			err := orc.populateClusterMetadata(job)
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("unexpected error message: %v", err)
+			}
+			if tt.forbidErr != "" && strings.Contains(err.Error(), tt.forbidErr) {
+				t.Errorf("did not expect %q in error, got: %v", tt.forbidErr, err)
+			}
+		})
+	}
+}
+
+func TestPopulateClusterMetadata_PathwaysHeadNodePoolCapacity(t *testing.T) {
+	setupMockMachineConfig(t)
+
+	t.Run("scale-to-zero cpu-np with autoscaling enabled (min=0, max>0) succeeds and creates pathways-flavor", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.machineCapCache["n2-standard-16:us-central1-a"] = MachineTypeCap{GuestCpus: 16, MemoryMb: 65536}
+		orc.clusterDesc = gkeCluster{
+			NodePools: []gkeJobNodePool{{
+				Name:             "cpu-np",
+				InitialNodeCount: 0,
+				Autoscaling:      gkeAutoscaling{Enabled: true, MinNodeCount: 0, MaxNodeCount: 16},
+				Config:           gkeNodePoolConfig{MachineType: "n2-standard-16"},
+			}},
+		}
+		job := &orchestrator.JobDefinition{
+			ClusterName:     "test-cluster",
+			ClusterLocation: "us-central1-a",
+			IsPathwaysJob:   true,
+		}
+		if err := orc.populateClusterMetadata(job); err != nil {
+			t.Fatalf("expected scale-to-zero head node pool to succeed, got error: %v", err)
+		}
+		pwFlavor, ok := orc.capacity.Flavors["pathways-flavor"]
+		if !ok {
+			t.Fatalf("expected pathways-flavor to be populated in cluster capacity, got flavors: %+v", orc.capacity.Flavors)
+		}
+		if pwFlavor.NodeLabels["cloud.google.com/gke-nodepool"] != "cpu-np" {
+			t.Errorf("expected pathways-flavor nodepool label 'cpu-np', got %q", pwFlavor.NodeLabels["cloud.google.com/gke-nodepool"])
+		}
+	})
+
+	t.Run("autoDetectCPUNodePool prefers pool with capacity over 0-node disabled pool", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.clusterDesc = gkeCluster{
+			NodePools: []gkeJobNodePool{
+				{
+					Name:             "cpu-np",
+					InitialNodeCount: 0,
+					Autoscaling:      gkeAutoscaling{Enabled: false},
+					Config:           gkeNodePoolConfig{MachineType: "n2-standard-8"},
+				},
+				{
+					Name:             "pathways-np",
+					InitialNodeCount: 1,
+					Config:           gkeNodePoolConfig{MachineType: "n2-standard-16"},
+				},
+			},
+		}
+		if got := orc.autoDetectCPUNodePool(); got != "pathways-np" {
+			t.Errorf("autoDetectCPUNodePool() = %q, want 'pathways-np'", got)
+		}
+	})
+}
+
+func TestCheckJobSetWarningEvents_IncludesPodSchedulingEvents(t *testing.T) {
+	const jobSetEventsCmd = "kubectl get events -n default --field-selector=involvedObject.name=pw-job,involvedObject.kind=JobSet,type=Warning --request-timeout=10s --no-headers"
+	const jobPodsCmd = "kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=pw-job -o name"
+	const podEventsCmd = "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	podEventsOutput := strings.Join([]string{
+		"2m          Normal    Scheduled           pod/pw-job-worker-0-0-abc   Successfully assigned default/pw-job-worker-0-0-abc to node-1",
+		"70s         Normal    Pulled              pod/pw-job-worker-0-0-abc   Pulled container image with no Warning reported",
+		"90s         Warning   FailedScheduling    pod/pw-job-pathways-head-0-0-xyz   0/5 nodes are available: 5 Insufficient cpu.",
+		"85s         Normal    NotTriggerScaleUp   pod/pw-job-pathways-head-0-0-xyz   pod didn't trigger scale-up: 1 max node group size reached",
+		"80s         Warning   FailedScheduling    pod/other-pw-job-0-0-def   0/5 nodes are available",
+		"75s         Warning   FailedScheduling    pod/pw-job-2-worker-0-0-abc   0/5 nodes are available",
+	}, "\n")
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		jobSetEventsCmd: {{ExitCode: 0, Stdout: ""}},
+		jobPodsCmd:      {{ExitCode: 0, Stdout: "pod/pw-job-worker-0-0-abc\npod/pw-job-pathways-head-0-0-xyz\n"}},
+		podEventsCmd:    {{ExitCode: 0, Stdout: podEventsOutput}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	got := orc.checkJobSetWarningEvents("default", "pw-job")
+	if !strings.Contains(got, "FailedScheduling") || !strings.Contains(got, "pw-job-pathways-head-0-0-xyz") {
+		t.Errorf("expected FailedScheduling event for pw-job head pod, got:\n%s", got)
+	}
+	if !strings.Contains(got, "NotTriggerScaleUp") {
+		t.Errorf("expected NotTriggerScaleUp event for pw-job head pod, got:\n%s", got)
+	}
+	if strings.Contains(got, "Successfully assigned") {
+		t.Errorf("did not expect Normal Scheduled event in warning output, got:\n%s", got)
+	}
+	if strings.Contains(got, "Pulled container image") {
+		t.Errorf("did not expect Normal event mentioning 'Warning' in message, got:\n%s", got)
+	}
+	if strings.Contains(got, "other-pw-job") {
+		t.Errorf("did not expect events from unrelated job with matching suffix, got:\n%s", got)
+	}
+	if strings.Contains(got, "pw-job-2") {
+		t.Errorf("did not expect events from unrelated job with matching prefix, got:\n%s", got)
+	}
+}
+
+func TestFetchLogsWithRetry_SurfacesUnscheduledPodsAndEvents(t *testing.T) {
+	oldInterval := logsRetryInterval
+	logsRetryInterval = time.Millisecond
+	defer func() { logsRetryInterval = oldInterval }()
+
+	const selector = "jobset.sigs.k8s.io/jobset-name=pw-job"
+	const logsCmd = "kubectl logs -n default -l " + selector + " --max-log-requests=10 --tail=-1"
+	const unschedCmd = "kubectl get pods -n default -l " + selector + " -o jsonpath=" + unscheduledPodsJSONPath
+	const podEventsCmd = "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	waiting := shell.CommandResult{ExitCode: 1, Stderr: `container "worker" in pod "pw-job-worker-0-0-abc" is waiting to start: PodInitializing`}
+	timedOut := make([]shell.CommandResult, 12)
+	for i := range timedOut {
+		timedOut[i] = waiting
+	}
+	unschedResult := shell.CommandResult{
+		ExitCode: 0,
+		Stdout: "pw-job-worker-0-0-abc\tPending\tTrue\t\t\n" +
+			"pw-job-pathways-head-0-0-xyz\tPending\tFalse\tUnschedulable\t0/4 nodes are available: 4 node(s) didn't match Pod's node affinity/selector.\n",
+	}
+	podEventResult := shell.CommandResult{
+		ExitCode: 0,
+		Stdout:   "60s Normal NotTriggerScaleUp pod/pw-job-pathways-head-0-0-xyz pod didn't trigger scale-up: 2 node(s) didn't match Pod's node affinity/selector\n",
+	}
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		logsCmd:      timedOut,
+		unschedCmd:   {unschedResult, unschedResult},
+		podEventsCmd: {podEventResult, podEventResult, podEventResult},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	_, err := orc.fetchLogsWithRetryForWorkload("default", "pw-job", selector, false, 0, -1, false)
+	if err == nil {
+		t.Fatal("expected fetchLogsWithRetry to return timeout error, got nil")
+	}
+	for _, want := range []string{
+		"unscheduled pods:",
+		"pw-job-pathways-head-0-0-xyz (Unschedulable: 0/4 nodes are available",
+		"NotTriggerScaleUp",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("expected error to contain %q, got:\n%v", want, err)
+		}
+	}
+	if n := strings.Count(err.Error(), "NotTriggerScaleUp"); n != 1 {
+		t.Errorf("want NotTriggerScaleUp once in the timeout error, got %d:\n%v", n, err)
+	}
+}
+
+func TestGetJobLogs_EmptyLogsSurfacesUnscheduledPods(t *testing.T) {
+	const selector = "jobset.sigs.k8s.io/jobset-name=stuck-pod-test"
+	podsQuery := "kubectl get pods -n default -l " + selector + " -o jsonpath=" + podContainersJSONPath
+	jobSetQuery := "kubectl get jobsets.jobset.x-k8s.io stuck-pod-test -n default -o jsonpath=" + jobSetInfoJSONPath
+	logsCmd := "kubectl logs -n default -l " + selector + " --all-containers --max-log-requests=10 --tail=-1"
+	unschedCmd := "kubectl get pods -n default -l " + selector + " -o jsonpath=" + unscheduledPodsJSONPath
+	podEventsCmd := "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+		"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+		podsQuery:                            {{ExitCode: 0, Stdout: "main\n"}},
+		jobSetQuery:                          {{ExitCode: 0, Stdout: "\tFalse\tmain-job\n1 1\n"}},
+		logsCmd:                              {{ExitCode: 0, Stdout: ""}},
+		unschedCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "stuck-pod-test-main-job-0-0-f9lv8\tPending\tFalse\tUnschedulable\t0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector.\n",
+			},
+		},
+		podEventsCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "2m51s Warning FailedScheduling pod/stuck-pod-test-main-job-0-0-f9lv8 0/1 nodes are available\n3m9s Normal NotTriggerScaleUp pod/stuck-pod-test-main-job-0-0-f9lv8 Pod didn't trigger scale-up\n",
+			},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	got, err := orc.GetJobLogs("stuck-pod-test", orchestrator.LogsOptions{
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "test-project",
+	})
+	if err != nil {
+		t.Fatalf("GetJobLogs() unexpected error: %v", err)
+	}
+	for _, want := range []string{
+		"Job pods are waiting to be scheduled (no container logs available yet):",
+		"stuck-pod-test-main-job-0-0-f9lv8 (Unschedulable: 0/1 nodes are available",
+		"FailedScheduling",
+		"NotTriggerScaleUp",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("GetJobLogs() = %q, want substring %q", got, want)
+		}
+	}
+}
+
+func TestGetJobLogs_MainOnlySurfacesUnscheduledWorkerPods(t *testing.T) {
+	const jobsetSel = "jobset.sigs.k8s.io/jobset-name=pw-job"
+	const headSel = jobsetSel + ",jobset.sigs.k8s.io/replicatedjob-name=pathways-head,jobset.sigs.k8s.io/job-index=0,batch.kubernetes.io/job-completion-index=0"
+	podsQuery := "kubectl get pods -n default -l " + jobsetSel + " -o jsonpath=" + podContainersJSONPath
+	jobSetQuery := "kubectl get jobsets.jobset.x-k8s.io pw-job -n default -o jsonpath=" + jobSetInfoJSONPath
+	logsCmd := "kubectl logs -n default -l " + headSel + " --max-log-requests=10 --tail=-1"
+	unschedCmd := "kubectl get pods -n default -l " + jobsetSel + " -o jsonpath=" + unscheduledPodsJSONPath
+	podEventsCmd := "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+		"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+		// >5 pods automatically narrows log selector to pathways-head rank 0.
+		podsQuery:   {{ExitCode: 0, Stdout: "pathways-head\n" + strings.Repeat("worker\n", 5)}},
+		jobSetQuery: {{ExitCode: 0, Stdout: "\tFalse\tpathways-head\n1 1\n1 5\n"}},
+		logsCmd:     {{ExitCode: 0, Stdout: ""}},
+		unschedCmd: {
+			{
+				ExitCode: 0,
+				Stdout: "pw-job-pathways-head-0-0-abc\tRunning\tTrue\t\t\n" +
+					"pw-job-worker-0-0-xyz\tPending\tFalse\tUnschedulable\t0/2 nodes are available: 2 Insufficient google.com/tpu.\n",
+			},
+		},
+		podEventsCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "30s Warning FailedScheduling pod/pw-job-worker-0-0-xyz 0/2 nodes are available: 2 Insufficient google.com/tpu.\n",
+			},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	got, err := orc.GetJobLogs("pw-job", orchestrator.LogsOptions{
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "test-project",
+	})
+	if err != nil {
+		t.Fatalf("GetJobLogs() unexpected error: %v", err)
+	}
+	for _, want := range []string{
+		"Job pods are waiting to be scheduled (no container logs available yet):",
+		"pw-job-worker-0-0-xyz (Unschedulable: 0/2 nodes are available",
+		"FailedScheduling",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("GetJobLogs() = %q, want substring %q", got, want)
+		}
+	}
+	if strings.Contains(got, "pw-job-pathways-head-0-0-abc") {
+		t.Errorf("did not expect scheduled head pod in unscheduled output, got: %q", got)
+	}
+	mockExec.assertAllKubectlPinned(t, "gke_test-project_us-central1-a_test-cluster")
+}
+
+func TestGetJobLogs_FollowEmptyProbeChecksUnscheduledPods(t *testing.T) {
+	const selector = "jobset.sigs.k8s.io/jobset-name=stuck-pod-test"
+	podsQuery := "kubectl get pods -n default -l " + selector + " -o jsonpath=" + podContainersJSONPath
+	jobSetQuery := "kubectl get jobsets.jobset.x-k8s.io stuck-pod-test -n default -o jsonpath=" + jobSetInfoJSONPath
+	probeCmd := "kubectl logs -n default -l " + selector + " --all-containers --max-log-requests=10 --tail=1"
+	streamCmd := "kubectl logs -n default -l " + selector + " --all-containers -f --max-log-requests=10 --tail=-1"
+	unschedCmd := "kubectl get pods -n default -l " + selector + " -o jsonpath=" + unscheduledPodsJSONPath
+	podEventsCmd := "kubectl get events -n default --field-selector=involvedObject.kind=Pod --request-timeout=10s --no-headers"
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud container clusters get-credentials test-cluster --location us-central1-a --project test-project": {{ExitCode: 0}},
+		"gcloud container clusters describe": {{ExitCode: 0, Stdout: "description"}},
+		podsQuery:                            {{ExitCode: 0, Stdout: "main\n"}, {ExitCode: 0, Stdout: "main\n"}},
+		jobSetQuery:                          {{ExitCode: 0, Stdout: "\tFalse\tmain-job\n1 1\n"}},
+		probeCmd:                             {{ExitCode: 0, Stdout: ""}},
+		unschedCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "stuck-pod-test-main-job-0-0-f9lv8\tPending\tFalse\tUnschedulable\t0/1 nodes are available.\n",
+			},
+		},
+		podEventsCmd: {
+			{
+				ExitCode: 0,
+				Stdout:   "30s Warning FailedScheduling pod/stuck-pod-test-main-job-0-0-f9lv8 0/1 nodes are available\n",
+			},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+
+	if _, err := orc.GetJobLogs("stuck-pod-test", orchestrator.LogsOptions{
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "test-project",
+		Follow:          true,
+	}); err != nil {
+		t.Fatalf("GetJobLogs() unexpected error: %v", err)
+	}
+	if mockExec.callCount[unschedCmd] != 1 {
+		t.Errorf("expected unscheduled pods query to run once, got %d", mockExec.callCount[unschedCmd])
+	}
+	if mockExec.callCount[podEventsCmd] != 1 {
+		t.Errorf("expected pod events query to run once for unscheduled pod, got %d", mockExec.callCount[podEventsCmd])
+	}
+	if len(mockExec.streamCalls) != 1 || mockExec.streamCalls[0] != streamCmd {
+		t.Errorf("streamCalls = %q, want [%q]", mockExec.streamCalls, streamCmd)
+	}
+	mockExec.assertAllKubectlPinned(t, "gke_test-project_us-central1-a_test-cluster")
+}
+
 func TestSubmitJob_TelemetryAndTemplateFastFailBeforeImageBuild(t *testing.T) {
 	setupMockMachineConfig(t)
 	badSyntaxDir := t.TempDir()
@@ -4308,7 +4810,13 @@ func TestSubmitJob_TelemetryAndTemplateFastFailBeforeImageBuild(t *testing.T) {
 			"kubectl get service": {
 				{ExitCode: 0, Stdout: "service/jobset-webhook-service\n"},
 			},
-			"kubectl get endpoints": {
+			"kubectl get endpointslice": {
+				{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`},
+			},
+			"kubectl get deployment kueue-controller-manager": {
+				{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.16.0"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`},
+			},
+			"kubectl get endpoints ": {
 				{ExitCode: 0, Stdout: "10.0.0.1\n"},
 			},
 			"gcloud compute machine-types describe": {
@@ -4336,6 +4844,85 @@ func TestSubmitJob_TelemetryAndTemplateFastFailBeforeImageBuild(t *testing.T) {
 	})
 }
 
+func TestSubmitJob_ClusterMountsResetCacheAndFailFastBeforePinTelemetry(t *testing.T) {
+	setupMockMachineConfig(t)
+	tpuCap := `{"guestCpus": 112, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v6e-slice"}]}`
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud container clusters describe": {
+			{ExitCode: 0, Stdout: `{"locations":["us-central1-a"],"nodePools":[{"name":"tpu-pool","initialNodeCount":2,"config":{"machineType":"ct6e-standard-4t"}}]}`},
+		},
+		"gcloud container clusters get-credentials": {{ExitCode: 0}},
+		"kubectl get --raw /version":                {{ExitCode: 0, Stdout: `{}`}, {ExitCode: 0, Stdout: `{}`}},
+		"kubectl get crd": {
+			{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+			{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+		},
+		"kubectl get service":       {{ExitCode: 0, Stdout: "service/jobset-webhook-service\n"}},
+		"kubectl get endpointslice": {{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}, {ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}},
+		"kubectl get endpoints ":    {{ExitCode: 0, Stdout: "10.0.0.1\n"}},
+		"kubectl get deployment kueue-controller-manager": {
+			{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.16.0"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`},
+		},
+		"kubectl get resourceflavors":           {{ExitCode: 0, Stdout: ""}},
+		"kubectl get localqueue":                {{ExitCode: 0, Stdout: "lq-default"}},
+		"kubectl get nodes":                     {{ExitCode: 0, Stdout: "2x4\n"}},
+		"gcloud compute machine-types list":     {{ExitCode: 0, Stdout: `[{"name":"ct6e-standard-4t"}]`}},
+		"gcloud compute machine-types describe": {{ExitCode: 0, Stdout: tpuCap}, {ExitCode: 0, Stdout: tpuCap}, {ExitCode: 0, Stdout: tpuCap}},
+		"kubectl get pvc": {
+			{ExitCode: 0, Stdout: `{"spec":{"volumeName":"pv-rwo","accessModes":["ReadWriteOnce"]},"status":{"accessModes":["ReadWriteOnce"]}}`},
+		},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	var dynListCalls int
+	orc.dynClient = &mockDynamicClient{
+		getFunc: func(_ context.Context, _ string, _ metav1.GetOptions, _ ...string) (*unstructured.Unstructured, error) {
+			return &unstructured.Unstructured{Object: map[string]interface{}{"kind": "Namespace"}}, nil
+		},
+		listFunc: func(_ context.Context, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+			dynListCalls++
+			return &unstructured.UnstructuredList{}, nil
+		},
+	}
+	orc.inspectedPVCs = map[string]pvcInspectResult{"default/stale": {volumeName: "old"}}
+	orc.nfsAuthChecked = true
+
+	// NodesPerSlice starts at 1; resolveHardwareRequirements derives NodesPerSlice=2
+	// for v6e-8/2x4 on ct6e-standard-4t before ValidateClusterMounts rejects RWO.
+	err := orc.SubmitJob(orchestrator.JobDefinition{
+		WorkloadName:    "rwo-fast-fail",
+		ProjectID:       "test-project",
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		GKENamespace:    " default ",
+		ComputeType:     "v6e-8",
+		Topology:        "2x4",
+		NumSlices:       1,
+		NodesPerSlice:   1,
+		BaseImage:       "python:3.11-slim",
+		BuildContext:    filepath.Join(t.TempDir(), "missing-build-ctx"),
+		CommandToRun:    "python3 train.py",
+		RawMounts:       []string{"train-pvc;/data"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "Multi-Attach") {
+		t.Fatalf("SubmitJob() = %v, want Multi-Attach error after resolveHardwareRequirements and before pinTelemetryAndValidate", err)
+	}
+	if orc.namespace != "default" {
+		t.Errorf("SubmitJob() stored untrimmed namespace %q, want %q", orc.namespace, "default")
+	}
+	if dynListCalls != 0 {
+		t.Errorf("pinTelemetryAndValidate called dynamic List %d times before ValidateClusterMounts failed", dynListCalls)
+	}
+	if orc.nfsAuthChecked {
+		t.Errorf("SubmitJob() did not reset nfsAuthChecked")
+	}
+	if _, stale := orc.inspectedPVCs["default/stale"]; stale {
+		t.Errorf("SubmitJob() did not clear stale inspectedPVCs entry")
+	}
+	if got := orc.inspectedPVCs["default/train-pvc"].volumeName; got != "pv-rwo" {
+		t.Errorf("inspectedPVCs[default/train-pvc].volumeName = %q, want pv-rwo", got)
+	}
+}
+
 func TestSubmitJob_TPUTelemetryNodeCachePinning(t *testing.T) {
 	newTPUSubmitOrc := func(t *testing.T, kc *MockKubeClient) *GKEOrchestrator {
 		t.Helper()
@@ -4351,6 +4938,10 @@ func TestSubmitJob_TPUTelemetryNodeCachePinning(t *testing.T) {
 			"kubectl get crd": {
 				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
 				{ExitCode: 0, Stdout: "jobsets.jobset.x-k8s.io\nworkloads.kueue.x-k8s.io\n"},
+			},
+			"kubectl get endpointslice": {{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.1"],"conditions":{"ready":true}}]}]}`}},
+			"kubectl get deployment kueue-controller-manager": {
+				{ExitCode: 0, Stdout: `{"metadata":{"generation":1},"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"manager","image":"registry.k8s.io/kueue/kueue:v0.16.0"}]}}},"status":{"observedGeneration":1,"replicas":1,"updatedReplicas":1,"availableReplicas":1}}`},
 			},
 			"gcloud compute machine-types list":     {{ExitCode: 0, Stdout: `[{"name":"tpu-v6e-slice"}]`}},
 			"gcloud compute machine-types describe": {{ExitCode: 0, Stdout: tpuCap}, {ExitCode: 0, Stdout: tpuCap}, {ExitCode: 0, Stdout: tpuCap}},
@@ -4419,4 +5010,1378 @@ func TestSubmitJob_TPUTelemetryNodeCachePinning(t *testing.T) {
 		_, templates := parseStrictJobSetTemplates(t, string(raw))
 		assertTelemetrySidecarSpec(t, "JobSet", templates["main-job"].Spec.Template.Spec.InitContainers, 8889, nil)
 	})
+}
+
+type recordingNamespaceKubeClient struct {
+	KubeClient
+	t           *testing.T
+	forbidCalls bool
+	ns          string
+	err         error
+	gotCluster  string
+	gotLocation string
+	gotProject  string
+}
+
+func (r *recordingNamespaceKubeClient) GetCurrentNamespace(cluster, location, project string) (string, error) {
+	if r.forbidCalls {
+		r.t.Fatalf("GetCurrentNamespace must not be invoked")
+	}
+	r.gotCluster = cluster
+	r.gotLocation = location
+	r.gotProject = project
+	return r.ns, r.err
+}
+
+func TestBuildContainerImage_NamespacePrecedenceAndPrebuiltHermeticity(t *testing.T) {
+	t.Run("prebuilt ImageName never touches kubeconfig namespace resolution", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.kubeClient = &recordingNamespaceKubeClient{t: t, forbidCalls: true}
+
+		got, err := orc.BuildContainerImage(orchestrator.JobDefinition{
+			WorkloadName: "prebuilt-job",
+			ImageName:    "10.128.0.68:5000/ml/jax:v5p",
+		})
+		if err != nil || got != "10.128.0.68:5000/ml/jax:v5p" {
+			t.Fatalf("BuildContainerImage(prebuilt) = (%q, %v), want prebuilt URI", got, err)
+		}
+	})
+
+	t.Run("job.GKENamespace takes precedence without mutating g.namespace", func(t *testing.T) {
+		t.Setenv("GCLUSTER_IMAGE_REPO", "")
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.namespace = "unchanged-orch-ns"
+		orc.kubeClient = &recordingNamespaceKubeClient{t: t, forbidCalls: true}
+
+		got, err := orc.BuildContainerImage(orchestrator.JobDefinition{
+			WorkloadName:   "train-v5p",
+			GKENamespace:   "explicit-flag-ns",
+			BaseImage:      "10.128.0.68:5000/ml/jax:v5p",
+			DryRunManifest: "/tmp/dry-run.yaml",
+		})
+		if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/library/gcluster/explicit-flag-ns/train-v5p:") {
+			t.Fatalf("BuildContainerImage(explicit GKENamespace) = (%q, %v)", got, err)
+		}
+		if orc.namespace != "unchanged-orch-ns" {
+			t.Fatalf("BuildContainerImage mutated orc.namespace = %q, want unchanged-orch-ns", orc.namespace)
+		}
+	})
+
+	t.Run("dry-run falls back to default offline while live build fails fast on broken kubeconfig", func(t *testing.T) {
+		t.Setenv("GCLUSTER_IMAGE_REPO", "")
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		spy := &recordingNamespaceKubeClient{t: t, ns: "ctx-ns"}
+		orc.kubeClient = spy
+
+		got, err := orc.BuildContainerImage(orchestrator.JobDefinition{
+			WorkloadName:    "train-v5p",
+			ClusterName:     "clus-a",
+			ClusterLocation: "us-central1-a",
+			ProjectID:       "proj-a",
+			BaseImage:       "10.128.0.68:5000/ml/jax:v5p",
+			DryRunManifest:  "/tmp/dry-run.yaml",
+		})
+		if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/library/gcluster/ctx-ns/train-v5p:") {
+			t.Fatalf("BuildContainerImage(ctx-ns) = (%q, %v)", got, err)
+		}
+		if spy.gotCluster != "clus-a" || spy.gotLocation != "us-central1-a" || spy.gotProject != "proj-a" {
+			t.Fatalf("GetCurrentNamespace args = (%q, %q, %q), want (clus-a, us-central1-a, proj-a)", spy.gotCluster, spy.gotLocation, spy.gotProject)
+		}
+	})
+}
+
+func TestBuildContainerImage_OfflineDryRunFallbackAndLiveError(t *testing.T) {
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
+
+	orcDryOffline := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcDryOffline.kubeClient = &recordingNamespaceKubeClient{t: t, err: fmt.Errorf("no kubeconfig")}
+	got, err := orcDryOffline.BuildContainerImage(orchestrator.JobDefinition{
+		WorkloadName:   "train-v5p",
+		BaseImage:      "10.128.0.68:5000/ml/jax:v5p",
+		DryRunManifest: "/tmp/dry-run.yaml",
+	})
+	if err != nil || !strings.HasPrefix(got, "10.128.0.68:5000/library/gcluster/default/train-v5p:") {
+		t.Fatalf("BuildContainerImage(dry-run offline fallback) = (%q, %v), want default namespace URI", got, err)
+	}
+
+	orcLiveBroken := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orcLiveBroken.kubeClient = &recordingNamespaceKubeClient{t: t, err: fmt.Errorf("broken kubeconfig")}
+	_, err = orcLiveBroken.BuildContainerImage(orchestrator.JobDefinition{
+		WorkloadName: "train-v5p",
+		BaseImage:    "10.128.0.68:5000/ml/jax:v5p",
+		BuildContext: t.TempDir(),
+	})
+	if err == nil || !strings.Contains(err.Error(), "broken kubeconfig") {
+		t.Fatalf("expected live Crane build to fail fast on broken kubeconfig, got: %v", err)
+	}
+}
+
+type stubDynClient struct {
+	dynamic.Interface
+	id string
+}
+
+func TestSetKubeClientAndSetDynamicClientSync(t *testing.T) {
+	t.Parallel()
+	orc := NewGKEOrchestrator()
+	dynA := &stubDynClient{id: "a"}
+	dynB := &stubDynClient{id: "b"}
+	orc.dynClient = dynA
+	orc.dynClientManaged = true
+	orc.dynClientContext = "ctx-a"
+
+	orc.SetKubeClient(&DefaultKubeClient{dynClient: dynB})
+	if orc.dynClient != dynB || orc.dynClientManaged || orc.dynClientContext != "" {
+		t.Fatalf("SetKubeClient(*DefaultKubeClient) did not sync dynClient/managed state")
+	}
+	orc.SetKubeClient(&MockKubeClient{})
+	orc.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeTPUSlice}
+	orc.SetDynamicClient(dynA)
+	if d, ok := orc.kubeClient.(*DefaultKubeClient); !ok || d == nil || d.dynClient != dynA {
+		t.Fatalf("SetDynamicClient did not replace custom KubeClient with *DefaultKubeClient")
+	}
+	if orc.inventory != nil {
+		t.Fatalf("SetDynamicClient must clear cached inventory")
+	}
+	orc.SetDynamicClient(nil)
+	if orc.kubeClient != nil || orc.dynClient != nil {
+		t.Fatalf("SetDynamicClient(nil) should clear both kubeClient and dynClient")
+	}
+}
+
+type versionTrackingDynamicClient struct {
+	dynamic.Interface
+	listByGVR   func(gvr schema.GroupVersionResource, ns string, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
+	getByGVR    func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error)
+	patchByGVR  func(gvr schema.GroupVersionResource, ns, name string, pt types.PatchType, data []byte) (*unstructured.Unstructured, error)
+	deleteByGVR func(gvr schema.GroupVersionResource, ns, name string, opts metav1.DeleteOptions) error
+}
+
+func (c *versionTrackingDynamicClient) Resource(gvr schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
+	return &versionTrackingNSResource{client: c, gvr: gvr}
+}
+
+type versionTrackingNSResource struct {
+	dynamic.NamespaceableResourceInterface
+	client *versionTrackingDynamicClient
+	gvr    schema.GroupVersionResource
+	ns     string
+}
+
+func (r *versionTrackingNSResource) Namespace(ns string) dynamic.ResourceInterface {
+	return &versionTrackingNSResource{client: r.client, gvr: r.gvr, ns: ns}
+}
+
+func (r *versionTrackingNSResource) List(_ context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+	if r.client.listByGVR != nil {
+		return r.client.listByGVR(r.gvr, r.ns, opts)
+	}
+	return &unstructured.UnstructuredList{}, nil
+}
+
+func (r *versionTrackingNSResource) Get(_ context.Context, name string, _ metav1.GetOptions, _ ...string) (*unstructured.Unstructured, error) {
+	if r.client.getByGVR != nil {
+		return r.client.getByGVR(r.gvr, r.ns, name)
+	}
+	return nil, apierrors.NewNotFound(r.gvr.GroupResource(), name)
+}
+
+func (r *versionTrackingNSResource) Patch(_ context.Context, name string, pt types.PatchType, data []byte, _ metav1.PatchOptions, _ ...string) (*unstructured.Unstructured, error) {
+	if r.client.patchByGVR != nil {
+		return r.client.patchByGVR(r.gvr, r.ns, name, pt, data)
+	}
+	return &unstructured.Unstructured{}, nil
+}
+
+func (r *versionTrackingNSResource) Delete(_ context.Context, name string, opts metav1.DeleteOptions, _ ...string) error {
+	if r.client.deleteByGVR != nil {
+		return r.client.deleteByGVR(r.gvr, r.ns, name, opts)
+	}
+	return nil
+}
+
+func TestListKueueWorkloads_V1Beta2ToV1Beta1Fallback(t *testing.T) {
+	t.Parallel()
+	var seenVersions []string
+	dyn := &versionTrackingDynamicClient{
+		listByGVR: func(gvr schema.GroupVersionResource, _ string, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+			seenVersions = append(seenVersions, gvr.Version)
+			if gvr.Version == "v1beta2" {
+				return nil, apierrors.NewNotFound(gvr.GroupResource(), "workloads")
+			}
+			return &unstructured.UnstructuredList{
+				Items: []unstructured.Unstructured{{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "wl-v1beta1"},
+					"status": map[string]interface{}{
+						"conditions": []interface{}{map[string]interface{}{"type": "QuotaReserved", "status": "True", "lastTransitionTime": "2026-01-01T00:00:00Z"}},
+					},
+				}}},
+			}, nil
+		},
+	}
+
+	wlList, err := listKueueWorkloads(dyn, "default", "uid-1")
+	if err != nil || len(wlList.Items) != 1 || wlList.Items[0].GetName() != "wl-v1beta1" {
+		t.Fatalf("listKueueWorkloads() = (%+v, %v), want [wl-v1beta1]", wlList, err)
+	}
+	if !slices.Equal(seenVersions, []string{"v1beta2", "v1beta1"}) {
+		t.Errorf("queried versions = %v, want [v1beta2 v1beta1]", seenVersions)
+	}
+
+	// 403 Forbidden must propagate without falling back to v1beta1.
+	seenVersions = nil
+	forbiddenDyn := &versionTrackingDynamicClient{
+		listByGVR: func(gvr schema.GroupVersionResource, _ string, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+			seenVersions = append(seenVersions, gvr.Version)
+			return nil, apierrors.NewForbidden(gvr.GroupResource(), "workloads", errors.New("denied"))
+		},
+	}
+	if _, err := listKueueWorkloads(forbiddenDyn, "default", "uid-1"); !apierrors.IsForbidden(err) {
+		t.Fatalf("listKueueWorkloads(403) err = %v, want Forbidden", err)
+	}
+	if !slices.Equal(seenVersions, []string{"v1beta2"}) {
+		t.Errorf("queried versions on 403 = %v, want [v1beta2] only", seenVersions)
+	}
+}
+
+func TestListJobs_FallbackAnd403Propagation(t *testing.T) {
+	noMatchErr := errors.New("the server could not find the requested resource")
+	forbiddenErr := apierrors.NewForbidden(jobSetGVR.GroupResource(), "jobsets", errors.New("denied"))
+
+	standaloneJob := unstructured.Unstructured{Object: map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"name":              "tier3-job",
+			"creationTimestamp": "2026-10-01T00:00:00Z",
+			"labels":            map[string]interface{}{workloadLabel: "tier3-job"},
+		},
+		"status": map[string]interface{}{"active": int64(1)},
+	}}
+	childJob := unstructured.Unstructured{Object: map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"name":              "js-child",
+			"creationTimestamp": "2026-10-01T00:00:00Z",
+			"labels":            map[string]interface{}{workloadLabel: "parent-js", "jobset.sigs.k8s.io/jobset-name": "parent-js"},
+		},
+		"status": map[string]interface{}{"active": int64(1)},
+	}}
+
+	t.Run("NoMatch_falls_back_to_standalone_batch_jobs_and_skips_jobset_children", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.mode = orchestrator.TypeK8s
+		orc.kubeContext = "k8s-ctx"
+		orc.dynClient = &versionTrackingDynamicClient{}
+		orc.kubeClient = &MockKubeClient{
+			Namespace: "default",
+			Err:       noMatchErr,
+			Objects:   map[string][]unstructured.Unstructured{"jobs": {standaloneJob, childJob}},
+		}
+		jobs, err := orc.ListJobs(orchestrator.ListOptions{GKENamespace: "default"})
+		if err != nil {
+			t.Fatalf("ListJobs(NoMatch) err = %v", err)
+		}
+		if len(jobs) != 1 || jobs[0].Name != "tier3-job" || jobs[0].Status != "Running" {
+			t.Fatalf("ListJobs(NoMatch) = %+v, want [tier3-job/Running]", jobs)
+		}
+	})
+
+	t.Run("403_Forbidden_propagates_without_fallback", func(t *testing.T) {
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.mode = orchestrator.TypeK8s
+		orc.kubeContext = "k8s-ctx"
+		orc.dynClient = &versionTrackingDynamicClient{}
+		orc.kubeClient = &MockKubeClient{
+			Namespace: "default",
+			Err:       forbiddenErr,
+			Objects:   map[string][]unstructured.Unstructured{"jobs": {standaloneJob}},
+		}
+		if _, err := orc.ListJobs(orchestrator.ListOptions{GKENamespace: "default"}); !apierrors.IsForbidden(err) {
+			t.Fatalf("ListJobs(403) err = %v, want Forbidden", err)
+		}
+	})
+}
+
+func TestGetJobLogs_FallbackBatchJobAndMainOnlyRank0(t *testing.T) {
+	mainOnlyTrue := true
+	t.Run("NoMatch_falls_back_to_batch_job_with_rank0_main_only_selector", func(t *testing.T) {
+		jobJSON := `{"metadata":{"name":"tier3-job","labels":{"gcluster.google.com/workload":"tier3-job"}},"spec":{"parallelism":2,"completions":2,"template":{"spec":{"containers":[{"name":"workload-container"}]}}}}`
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=tier3-job":                                      {{ExitCode: 0, Stdout: ""}},
+			"kubectl get jobsets.jobset.x-k8s.io tier3-job -n default":                                                     {{ExitCode: 1, Stderr: `error: the server doesn't have a resource type "jobsets"`}},
+			"kubectl get job tier3-job -n default -o json":                                                                 {{ExitCode: 0, Stdout: jobJSON}},
+			"kubectl get pods -n default -l gcluster.google.com/workload=tier3-job,batch.kubernetes.io/job-name=tier3-job": {{ExitCode: 0, Stdout: "workload-container\nworkload-container\n"}},
+			"kubectl logs -n default -l gcluster.google.com/workload=tier3-job,batch.kubernetes.io/job-name=tier3-job,batch.kubernetes.io/job-completion-index=0 --max-log-requests=10 --tail=-1": {{ExitCode: 0, Stdout: "rank-0 batch logs"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.mode = orchestrator.TypeK8s
+		orc.kubeContext = "k8s-ctx"
+		out, err := orc.GetJobLogs("tier3-job", orchestrator.LogsOptions{GKENamespace: "default", MainOnly: &mainOnlyTrue})
+		if err != nil || out != "rank-0 batch logs" {
+			t.Fatalf("GetJobLogs(batch fallback) = (%q, %v), want (\"rank-0 batch logs\", nil)", out, err)
+		}
+	})
+
+	t.Run("403_on_jobset_propagates_without_batch_job_fallback", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=tier3-job": {{ExitCode: 0, Stdout: ""}},
+			"kubectl get jobsets.jobset.x-k8s.io tier3-job -n default":                {{ExitCode: 1, Stderr: `Error from server (Forbidden): jobsets.jobset.x-k8s.io "tier3-job" is forbidden`}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.mode = orchestrator.TypeK8s
+		orc.kubeContext = "k8s-ctx"
+		_, err := orc.GetJobLogs("tier3-job", orchestrator.LogsOptions{GKENamespace: "default"})
+		if err == nil || !strings.Contains(err.Error(), "Forbidden") {
+			t.Fatalf("GetJobLogs(403) err = %v, want Forbidden", err)
+		}
+		for _, c := range mockExec.calls {
+			if strings.Contains(c, "kubectl get job ") {
+				t.Errorf("must not fall back to batch/v1 Job on 403; calls=%v", mockExec.calls)
+			}
+		}
+	})
+}
+
+func TestGetJobStatus_FallbackAnd403Propagation(t *testing.T) {
+	t.Parallel()
+	t.Run("NoMatch_falls_back_to_owned_batch_job", func(t *testing.T) {
+		jobSetListHits := 0
+		dyn := &versionTrackingDynamicClient{
+			listByGVR: func(gvr schema.GroupVersionResource, _ string, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				if gvr == jobSetGVR {
+					jobSetListHits++
+					return nil, apierrors.NewNotFound(gvr.GroupResource(), "jobsets")
+				}
+				return &unstructured.UnstructuredList{}, nil
+			},
+			getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+				if gvr == jobGVR && ns == "ml-ns" && name == "tier3-job" {
+					return &unstructured.Unstructured{Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": "u1", "labels": map[string]interface{}{workloadLabel: name}},
+						"status":   map[string]interface{}{"conditions": []interface{}{map[string]interface{}{"type": "Complete", "status": "True"}}},
+					}}, nil
+				}
+				return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+			},
+		}
+		orc := &GKEOrchestrator{
+			mode:              orchestrator.TypeGKE,
+			namespace:         "ml-ns",
+			dynClient:         dyn,
+			submissionSession: submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false}},
+		}
+		status, err := orc.getJobStatus("tier3-job")
+		if err != nil || status != "Succeeded" || jobSetListHits != 1 {
+			t.Fatalf("getJobStatus(NoMatch fallback) = (%q, %v, hits=%d), want (\"Succeeded\", nil, 1)", status, err, jobSetListHits)
+		}
+	})
+
+	t.Run("403_on_jobset_propagates_without_fallback", func(t *testing.T) {
+		dyn := &versionTrackingDynamicClient{
+			getByGVR: func(gvr schema.GroupVersionResource, _, _ string) (*unstructured.Unstructured, error) {
+				return nil, apierrors.NewForbidden(gvr.GroupResource(), "tier3-job", errors.New("denied"))
+			},
+			listByGVR: func(gvr schema.GroupVersionResource, _ string, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				return nil, apierrors.NewForbidden(gvr.GroupResource(), "jobsets", errors.New("denied"))
+			},
+		}
+		orc := &GKEOrchestrator{mode: orchestrator.TypeK8s, namespace: "ml-ns", dynClient: dyn}
+		if _, err := orc.getJobStatus("tier3-job"); !apierrors.IsForbidden(err) {
+			t.Fatalf("getJobStatus(403) err = %v, want Forbidden", err)
+		}
+	})
+}
+
+func TestAwaitWorkloadDirect_Tier2AndTier3(t *testing.T) {
+	t.Run("tier3_batch_job_completes", func(t *testing.T) {
+		jobJSON := `{"metadata":{"name":"t3","labels":{"gcluster.google.com/workload":"t3"}},"spec":{"parallelism":1,"template":{"spec":{"containers":[{"name":"w"}]}}},"status":{"conditions":[{"type":"Complete","status":"True"}]}}`
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get jobsets.jobset.x-k8s.io t3 -n default": {{ExitCode: 1, Stderr: `the server doesn't have a resource type "jobsets"`}},
+			"kubectl get job t3 -n default -o json":             {{ExitCode: 0, Stdout: jobJSON}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.mode = orchestrator.TypeK8s
+		orc.addons = addonPlan{resolved: true, jobSetEnabled: false, kueueEnabled: false}
+		if err := orc.awaitWorkloadDirect("t3", "k8s-clus", "default", "5s", ""); err != nil {
+			t.Fatalf("awaitWorkloadDirect(Complete) err = %v, want nil", err)
+		}
+	})
+
+	t.Run("tier2_jobset_failed_returns_error", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get jobsets.jobset.x-k8s.io t2 -n default": {{ExitCode: 0, Stdout: "Failed\t\tmain\n1 1\tw"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.mode = orchestrator.TypeK8s
+		orc.addons = addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false}
+		err := orc.awaitWorkloadDirect("t2", "k8s-clus", "default", "5s", "")
+		if err == nil || !strings.Contains(err.Error(), "job completed unsuccessfully with status: Failed") {
+			t.Fatalf("awaitWorkloadDirect(Failed) err = %v, want Failed error", err)
+		}
+	})
+}
+
+func TestListJobs_MergesStandaloneBatchJobsAndDisableJobSetSkipsJobSets(t *testing.T) {
+	standaloneJob := unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "batch/v1",
+		"kind":       "Job",
+		"metadata": map[string]interface{}{
+			"name":              "t3-only",
+			"namespace":         "default",
+			"creationTimestamp": "2026-04-20T00:00:00Z",
+			"labels":            map[string]interface{}{workloadLabel: "t3-only"},
+		},
+		"status": map[string]interface{}{"active": int64(1)},
+	}}
+	duplicateJob := unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "batch/v1",
+		"kind":       "Job",
+		"metadata": map[string]interface{}{
+			"name":      "js-1",
+			"namespace": "default",
+			"labels":    map[string]interface{}{workloadLabel: "js-1"},
+		},
+		"status": map[string]interface{}{"succeeded": int64(1)},
+	}}
+	mock := &MockKubeClient{
+		Namespace: "default",
+		JobSets:   []orchestrator.JobStatus{{Name: "js-1", Status: "Running"}},
+		Objects:   map[string][]unstructured.Unstructured{"jobs": {standaloneJob, duplicateJob}},
+	}
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.kubeClient = mock
+	jobs, err := orc.listWorkloadsWithFallback("default")
+	if err != nil {
+		t.Fatalf("listWorkloadsWithFallback(JobSet enabled) err = %v", err)
+	}
+	if len(jobs) != 2 || jobs[0].Name != "js-1" || jobs[1].Name != "t3-only" || jobs[1].Status != "Running" {
+		t.Errorf("jobs = %+v, want [js-1(Running), t3-only(Running)]", jobs)
+	}
+
+	// When GCLUSTER_DISABLE_JOBSET=1, ListJobs must skip ListJobSets entirely (even if JobSet errors with 500/403).
+	mockDisabled := &MockKubeClient{
+		Namespace: "default",
+		Err:       errors.New("must not call ListJobSets when disabled"),
+		Objects:   map[string][]unstructured.Unstructured{"jobs": {standaloneJob}},
+	}
+	orc.kubeClient = mockDisabled
+	orc.connectivity = &connectivityChecker{
+		getenv: func(k string) string {
+			if k == disableJobSetEnvVar {
+				return "1"
+			}
+			return ""
+		},
+	}
+	disabledJobs, err := orc.listWorkloadsWithFallback("default")
+	if err != nil || len(disabledJobs) != 1 || disabledJobs[0].Name != "t3-only" {
+		t.Fatalf("listWorkloadsWithFallback(GCLUSTER_DISABLE_JOBSET=1) = (%+v, %v), want [t3-only]", disabledJobs, err)
+	}
+}
+
+func TestTier3ConflictAndRollback(t *testing.T) {
+	unownedJobDyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			if gvr == jobGVR {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns, "labels": map[string]interface{}{"app": "other"}},
+				}}, nil
+			}
+			return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+		},
+	}
+	orc := &GKEOrchestrator{
+		mode:              orchestrator.TypeK8s,
+		namespace:         "team-a",
+		submissionSession: submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: false}},
+		dynClient:         unownedJobDyn,
+	}
+	if _, err := orc.getJobStatus("taken"); err == nil || !strings.Contains(err.Error(), "not managed by gcluster") {
+		t.Fatalf("getJobStatus(unowned Job) err = %v, want unowned conflict error", err)
+	}
+
+	unownedSvcDyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			if gvr == serviceGVR {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns, "labels": map[string]interface{}{"app": "other"}},
+				}}, nil
+			}
+			return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+		},
+	}
+	orc.dynClient = unownedSvcDyn
+	if _, err := orc.getJobStatus("taken-svc"); err == nil || !strings.Contains(err.Error(), "Kubernetes Service named") {
+		t.Fatalf("getJobStatus(unowned Service) err = %v, want unowned service conflict error", err)
+	}
+
+	mock := &MockKubeClient{
+		Namespace: "ml",
+		Objects: map[string][]unstructured.Unstructured{
+			"jobs":     {makeTestOwnedBatchJob("rb-job", "1")},
+			"services": {makeTestOwnedService("rb-job", "1")},
+		},
+	}
+	rbOrc := &GKEOrchestrator{
+		mode:              orchestrator.TypeK8s,
+		kubeClient:        mock,
+		submissionSession: submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: false}},
+	}
+	if err := rbOrc.rollBackJob("ml", "rb-job", errors.New("gateway broken")); err == nil || !strings.Contains(err.Error(), "was not started") {
+		t.Fatalf("rollBackJob(Tier-3) err = %v, want was not started", err)
+	}
+	if !slices.Equal(mock.Deleted["jobs"], []string{"rb-job"}) || !slices.Equal(mock.Deleted["services"], []string{"rb-job"}) {
+		t.Errorf("rollBackJob(Tier-3) Deleted = %v, want jobs+services=[rb-job]", mock.Deleted)
+	}
+}
+
+func TestAwaitUnqueuedKueueClusterAndTypeK8sPreflight(t *testing.T) {
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get jobsets.jobset.x-k8s.io uq-job -n ml": {
+			{ExitCode: 1, Stderr: "Unable to connect to the server: temporary network blip"},
+			{ExitCode: 0, Stdout: "Completed\t\tmain\n1 1\tw"},
+		},
+	})
+	origSleep := directAwaitSleep
+	directAwaitSleep = func(time.Duration) {}
+	t.Cleanup(func() { directAwaitSleep = origSleep })
+
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = orchestrator.TypeK8s
+	orc.namespace = "ml"
+	orc.dynClient = &mockDynamicClient{}
+	orc.addons = addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: true}
+	if err := orc.awaitJobCompletion("uq-job", "clus", "", "", "5s", false); err != nil {
+		t.Fatalf("awaitJobCompletion(unqueued with transient blip) err = %v, want nil", err)
+	}
+	if dur, err := parseDirectAwaitTimeout("-1s"); err != nil || dur != maxDirectAwaitTimeout {
+		t.Errorf("parseDirectAwaitTimeout(-1s) = (%v, %v), want (%v, nil)", dur, err, maxDirectAwaitTimeout)
+	}
+}
+
+func TestParseBatchJobStatus_DefaultSuspendFalseAndPartialIndexed(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		obj  map[string]interface{}
+		want string
+	}{
+		{
+			name: "api_defaulted_suspend_false_no_pods_is_pending",
+			obj: map[string]interface{}{
+				"spec":   map[string]interface{}{"suspend": false, "completions": int64(2)},
+				"status": map[string]interface{}{},
+			},
+			want: "Pending",
+		},
+		{
+			name: "partial_indexed_completion_stays_running",
+			obj: map[string]interface{}{
+				"spec":   map[string]interface{}{"suspend": false, "completions": int64(4)},
+				"status": map[string]interface{}{"succeeded": int64(1)},
+			},
+			want: "Running",
+		},
+		{
+			name: "all_indexed_completions_succeeded",
+			obj: map[string]interface{}{
+				"spec":   map[string]interface{}{"suspend": false, "completions": int64(4)},
+				"status": map[string]interface{}{"succeeded": int64(4)},
+			},
+			want: "Succeeded",
+		},
+		{
+			name: "partial_indexed_with_failed_reports_failed",
+			obj: map[string]interface{}{
+				"spec":   map[string]interface{}{"suspend": false, "completions": int64(2)},
+				"status": map[string]interface{}{"succeeded": int64(1), "failed": int64(1)},
+			},
+			want: "Failed",
+		},
+		{
+			name: "retried_full_completions_with_prior_failure_reports_succeeded",
+			obj: map[string]interface{}{
+				"spec":   map[string]interface{}{"suspend": false, "completions": int64(2)},
+				"status": map[string]interface{}{"succeeded": int64(2), "failed": int64(1)},
+			},
+			want: "Succeeded",
+		},
+		{
+			name: "suspended_condition_does_not_overwrite_terminal_condition",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"conditions": []interface{}{
+						map[string]interface{}{"type": "Complete", "status": "True"},
+						map[string]interface{}{"type": "Suspended", "status": "True"},
+					},
+				},
+			},
+			want: "Succeeded",
+		},
+		{
+			name: "suspended_spec_reports_suspended",
+			obj: map[string]interface{}{
+				"spec":   map[string]interface{}{"suspend": true},
+				"status": map[string]interface{}{},
+			},
+			want: "Suspended",
+		},
+	}
+	for _, tc := range cases {
+		got, _ := parseBatchJobStatus(tc.obj)
+		if got != tc.want {
+			t.Errorf("%s: parseBatchJobStatus() = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestAttachBatchJobServiceOwnerRef_PatchesAndWarnsWithValidCancelCmd(t *testing.T) {
+	var patched []byte
+	var patchErr error
+	dyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			metaMap := map[string]interface{}{
+				"name": name, "namespace": ns, "uid": "job-uid-123",
+				"labels": map[string]interface{}{workloadLabel: name},
+			}
+			if gvr == jobGVR || gvr == serviceGVR {
+				return &unstructured.Unstructured{Object: map[string]interface{}{"metadata": metaMap}}, nil
+			}
+			return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+		},
+		patchByGVR: func(gvr schema.GroupVersionResource, _, _ string, pt types.PatchType, data []byte) (*unstructured.Unstructured, error) {
+			if patchErr != nil {
+				return nil, patchErr
+			}
+			if gvr == serviceGVR && pt == types.JSONPatchType {
+				patched = data
+			}
+			return &unstructured.Unstructured{}, nil
+		},
+	}
+	orc := &GKEOrchestrator{namespace: "ml", dynClient: dyn}
+	orc.syncKubeClient()
+	orc.attachBatchJobServiceOwnerRefWithTarget("t3-job", "", "", "")
+	patchStr := string(patched)
+	if !strings.Contains(patchStr, `"uid":"job-uid-123"`) || !strings.Contains(patchStr, `"controller":true`) || strings.Contains(patchStr, "blockOwnerDeletion") {
+		t.Fatalf("unexpected Service ownerRef patch: %s", patchStr)
+	}
+
+	// Patch failure warning must suggest positional `gcluster job cancel t3-job` (not `--name`).
+	patchErr = errors.New("403 forbidden")
+	snap, restore := logging.CaptureForTesting(t)
+	defer restore()
+	orc.attachBatchJobServiceOwnerRefWithTarget("t3-job", "", "", "")
+	_, errLogs := snap()
+	if !strings.Contains(errLogs, "gcluster job cancel t3-job") || strings.Contains(errLogs, "cancel --name") {
+		t.Errorf("ownerRef patch warning has invalid cancel syntax:\n%s", errLogs)
+	}
+}
+
+func TestCrossTierCollisions(t *testing.T) {
+	crossDyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			if gvr == jobGVR && name == "active-t3" {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": "u1", "labels": map[string]interface{}{workloadLabel: name}},
+					"status":   map[string]interface{}{"active": int64(1)},
+				}}, nil
+			}
+			if gvr == jobSetGVR && name == "active-js" {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": "u2"},
+					"spec":     map[string]interface{}{"suspend": false},
+				}}, nil
+			}
+			return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+		},
+	}
+	jsOrc := &GKEOrchestrator{mode: orchestrator.TypeK8s, namespace: "ml", dynClient: crossDyn, submissionSession: submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: true}}}
+	if st, err := jsOrc.getJobStatus("active-t3"); err != nil || st == "" {
+		t.Errorf("JobSet submit checking active Tier-3 job = (%q, %v), want non-empty active status", st, err)
+	}
+	t3Orc := &GKEOrchestrator{mode: orchestrator.TypeK8s, namespace: "ml", dynClient: crossDyn, submissionSession: submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: false}}}
+	if st, err := t3Orc.getJobStatus("active-js"); err != nil || st == "" {
+		t.Errorf("Tier-3 submit checking active JobSet = (%q, %v), want non-empty active status", st, err)
+	}
+}
+
+func TestAwaitTimeoutZeroAndQueuedTier3KueueAwait(t *testing.T) {
+	if dur, err := parseDirectAwaitTimeout("0s"); err != nil || dur != 0 {
+		t.Fatalf("parseDirectAwaitTimeout(0s) = (%v, %v), want (0, nil)", dur, err)
+	}
+	pendingJob := `{"metadata":{"name":"t3-zero","labels":{"gcluster.google.com/workload":"t3-zero"}},"spec":{"parallelism":1},"status":{}}`
+	zeroExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get job t3-zero -n ml -o json": {{ExitCode: 0, Stdout: pendingJob}},
+		"kubectl get events -n ml":              {{ExitCode: 0, Stdout: ""}},
+		"kubectl get pods -n ml":                {{ExitCode: 0, Stdout: ""}},
+	})
+	zeroOrc := newTestGKEOrchestrator(zeroExec)
+	zeroOrc.addons = addonPlan{resolved: true, jobSetEnabled: false}
+	if err := zeroOrc.awaitWorkloadDirect("t3-zero", "clus", "ml", "0s", ""); err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("awaitWorkloadDirect(0s pending) err = %v, want immediate timeout", err)
+	}
+	if got := zeroExec.callCount["kubectl get job t3-zero -n ml -o json"]; got != 1 {
+		t.Errorf("awaitWorkloadDirect(0s) poll count = %d, want 1", got)
+	}
+
+	completeJob := `{"metadata":{"name":"t3-q","labels":{"gcluster.google.com/workload":"t3-q"}},"spec":{"parallelism":1},"status":{"conditions":[{"type":"Complete","status":"True"}]}}`
+	qExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl wait --for=condition=Finished workload wl-t3-q -n ml --timeout=5s": {{ExitCode: 0}},
+		"kubectl get job t3-q -n ml -o json":                                        {{ExitCode: 0, Stdout: completeJob}},
+	})
+	qOrc := newTestGKEOrchestrator(qExec)
+	qOrc.mode = orchestrator.TypeK8s
+	qOrc.namespace = "ml"
+	qOrc.dynClient = &mockDynamicClient{}
+	qOrc.kubeClient = &MockKubeClient{Namespace: "ml", Workloads: []string{"wl-t3-q"}}
+	qOrc.addons = addonPlan{resolved: true, jobSetEnabled: false, kueueEnabled: true}
+	if err := qOrc.awaitJobCompletion("t3-q", "k8s-clus", "", "", "5s", true); err != nil {
+		t.Fatalf("awaitJobCompletion(queued Tier-3) err = %v, want nil", err)
+	}
+}
+
+func TestDefaultKubeClient_DeletePropagationAndResolveBatchOwnerUIDAndSPSGuard(t *testing.T) {
+	var gotProp *metav1.DeletionPropagation
+	var sawJobSetGet bool
+	dyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			if gvr == jobSetGVR {
+				sawJobSetGet = true
+				return nil, apierrors.NewForbidden(gvr.GroupResource(), name, errors.New("denied"))
+			}
+			if gvr == jobGVR {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": "batch-uid-9", "labels": map[string]interface{}{workloadLabel: name}},
+				}}, nil
+			}
+			return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+		},
+		deleteByGVR: func(gvr schema.GroupVersionResource, _, _ string, opts metav1.DeleteOptions) error {
+			if gvr == jobGVR {
+				gotProp = opts.PropagationPolicy
+			}
+			return nil
+		},
+	}
+	client := &DefaultKubeClient{dynClient: dyn, jobSetEnabled: func() bool { return false }}
+	if err := client.DeleteResource(jobGVR, "ml", "t3-job", nil); err != nil {
+		t.Fatalf("DeleteResource(jobGVR) err = %v", err)
+	}
+	if gotProp == nil || *gotProp != metav1.DeletePropagationBackground {
+		t.Errorf("DeleteResource(jobGVR) propagation = %v, want Background", gotProp)
+	}
+	uid, err := client.resolveWorkloadOwnerUID("ml", "t3-job")
+	if err != nil || uid != "batch-uid-9" || sawJobSetGet {
+		t.Fatalf("resolveWorkloadOwnerUID(jobSetDisabled) = (%q, %v), sawJobSetGet=%v, want (batch-uid-9, nil, false)", uid, err, sawJobSetGet)
+	}
+}
+
+func TestRunSPSWorkload_GuardsAndQueueWarning(t *testing.T) {
+	spsOrc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	spsOrc.addons = addonPlan{resolved: true, jobSetEnabled: false}
+	if err := spsOrc.runSPSWorkload(orchestrator.JobDefinition{Pathways: orchestrator.PathwaysJobDefinition{RunSPSWorkload: "   "}}); err == nil || !strings.Contains(err.Error(), "require JobSet") {
+		t.Fatalf("runSPSWorkload(whitespace + jobSetDisabled) err = %v, want require JobSet", err)
+	}
+	spsOrc.addons = addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false}
+	snap, restore := logging.CaptureForTesting(t)
+	defer restore()
+	spsJob := orchestrator.JobDefinition{KueueQueueName: "team-q"}
+	spsOrc.applySPSKueueAndHeadDefaults(&spsJob, &spsInstance{KueueQueueName: "inst-q"})
+	_, errLogs := snap()
+	if spsJob.KueueQueueName != "" || !strings.Contains(errLogs, "--queue \"team-q\"") {
+		t.Errorf("applySPSKueueAndHeadDefaults(kueueDisabled) = (queue=%q, logs=%q), want cleared + warning", spsJob.KueueQueueName, errLogs)
+	}
+}
+
+func TestTier3PreflightAndOwnerRefGKEHint(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "jobset.tmpl"), []byte("{{ invalid"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "job.tmpl"), []byte("apiVersion: batch/v1\nkind: Job\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.gkeCustomTemplatesPath = tmpDir
+	orc.connectivity = &connectivityChecker{
+		getenv: func(k string) string {
+			if k == disableJobSetEnvVar {
+				return "1"
+			}
+			return ""
+		},
+	}
+	sm := &StorageManager{orchestrator: orc}
+	if err := orc.validateSubmitLocalPreflight(sm, orchestrator.JobDefinition{NumSlices: 2}); err == nil || !strings.Contains(err.Error(), "require JobSet") {
+		t.Fatalf("validateSubmitLocalPreflight(disableJobSet + NumSlices=2) err = %v, want require JobSet", err)
+	}
+	if err := orc.validateSubmitLocalPreflight(sm, orchestrator.JobDefinition{NumSlices: 1}); err != nil {
+		t.Fatalf("validateSubmitLocalPreflight(disableJobSet with valid job.tmpl & broken jobset.tmpl) err = %v, want nil", err)
+	}
+
+	gkeOrc := &GKEOrchestrator{mode: orchestrator.TypeGKE, namespace: "ml", projectID: "proj-1", kubeContext: "gke_proj-1_us-central1_clus-1"}
+	hint := gkeOrc.formatCancelHintInNamespace("t3-job", "clus-1", "us-central1", gkeOrc.projectID, gkeOrc.namespace)
+	want := "gcluster job cancel t3-job --cluster clus-1 --location us-central1 --project proj-1 --gke-namespace ml"
+	if hint != want {
+		t.Errorf("formatCancelHintInNamespace(GKE) = %q, want %q", hint, want)
+	}
+}
+
+func TestCloudStoragePreflight_NotDisabledByGitHubProbeAirGap(t *testing.T) {
+	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
+	shell.SetDefaultAirGapped(false)
+	t.Setenv(shell.AirGappedEnvVar, "")
+
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.connectivity = &connectivityChecker{
+		getenv: func(string) string { return "" },
+		probe:  func(context.Context) bool { return false },
+	}
+	if orc.isConnected() {
+		t.Fatalf("expected offline GitHub probe")
+	}
+	if shell.IsKnownAirGapped() {
+		t.Fatalf("failed GitHub probe must not mutate global shell.defaultAirGap")
+	}
+	orc.preflightClient = &fakePreflightClient{
+		locations: map[string]bucketLocation{
+			"flat-bkt": {Location: "US-CENTRAL1", LocationType: "region", HierarchicalNamespace: false},
+		},
+	}
+	sm := &StorageManager{orchestrator: orc}
+	snap, restore := logging.CaptureForTesting(t)
+	err := sm.runCloudStoragePreflight("proj-1", "us-central1-a", nil, []string{"flat-bkt"}, false)
+	_, errLogs := snap()
+	restore()
+	if err != nil || !strings.Contains(errLogs, "flat-bkt") {
+		t.Fatalf("runCloudStoragePreflight after failed GitHub probe = (err=%v, logs=%q), want preflight to execute", err, errLogs)
+	}
+
+	// Explicit GCLUSTER_AIR_GAPPED=true via orchestrator getenv skips preflight, and nil orchestrator must not panic.
+	orc.connectivity.getenv = func(k string) string {
+		if k == shell.AirGappedEnvVar {
+			return "true"
+		}
+		return ""
+	}
+	snap2, restore2 := logging.CaptureForTesting(t)
+	if err := sm.runCloudStoragePreflight("proj-1", "us-central1-a", nil, []string{"flat-bkt"}, false); err != nil {
+		restore2()
+		t.Fatalf("runCloudStoragePreflight(explicit GCLUSTER_AIR_GAPPED=true) err = %v", err)
+	}
+	_, errLogs2 := snap2()
+	restore2()
+	if strings.Contains(errLogs2, "flat-bkt") {
+		t.Errorf("explicit GCLUSTER_AIR_GAPPED=true must skip runCloudStoragePreflight, got logs:\n%s", errLogs2)
+	}
+	t.Setenv(shell.AirGappedEnvVar, "true")
+	nilOrcSM := &StorageManager{}
+	if err := nilOrcSM.runCloudStoragePreflight("proj-1", "us-central1-a", nil, []string{"flat-bkt"}, false); err != nil {
+		t.Fatalf("runCloudStoragePreflight(nil orchestrator) err = %v, want nil without panic", err)
+	}
+}
+
+func TestGenerateAndApplyJobManifest_DryRunLiveOwnerRefAndPartialRollback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	opts := ManifestOptions{
+		WorkloadName: "t3-apply", FullImageName: "img:v1", CommandToRun: "echo hi",
+		ComputeType: "g2-standard-48", MachineType: "g2-standard-48", ClusterLocation: "us-central1-a",
+		NumSlices: 1, NodesPerSlice: 1, ParallelContainers: 1, TtlSecondsAfterFinished: 3600, TerminationGracePeriodSeconds: 30,
+	}
+	profile := JobProfile{CapacityCount: 4}
+
+	t.Run("dry_run_saves_manifest", func(t *testing.T) {
+		orc := newGPUDerivationTestOrc(t)
+		orc.namespace = "ml"
+		outPath := filepath.Join(t.TempDir(), "t3.yaml")
+		if err := orc.generateAndApplyJobManifest(opts, profile, outPath, "clus-1", "proj-1"); err != nil {
+			t.Fatalf("generateAndApplyJobManifest(dry-run) err = %v", err)
+		}
+		if _, err := os.Stat(outPath); err != nil {
+			t.Fatalf("expected dry-run manifest at %s: %v", outPath, err)
+		}
+	})
+
+	t.Run("live_apply_patches_service_owner_ref", func(t *testing.T) {
+		var patched bool
+		dyn := &versionTrackingDynamicClient{
+			getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": "job-uid-live", "labels": map[string]interface{}{workloadLabel: name}},
+				}}, nil
+			},
+			patchByGVR: func(gvr schema.GroupVersionResource, _, _ string, pt types.PatchType, data []byte) (*unstructured.Unstructured, error) {
+				if gvr == serviceGVR && pt == types.JSONPatchType && strings.Contains(string(data), "job-uid-live") && strings.Contains(string(data), `"/metadata/ownerReferences"`) {
+					patched = true
+				}
+				return &unstructured.Unstructured{}, nil
+			},
+		}
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud compute machine-types describe g2-standard-48 --zone=us-central1-a --format=json": {
+				{ExitCode: 0, Stdout: `{"guestCpus": 48, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "nvidia-l4"}]}`},
+			},
+			"kubectl apply -n ml -f": {{ExitCode: 0, Stdout: "service/t3-apply created\njob.batch/t3-apply created"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.namespace = "ml"
+		orc.SetDynamicClient(dyn)
+		if err := orc.generateAndApplyJobManifest(opts, profile, "", "clus-1", "proj-1"); err != nil {
+			t.Fatalf("generateAndApplyJobManifest(live) err = %v", err)
+		}
+		if !patched {
+			t.Errorf("expected live Tier-3 apply to patch Service ownerReference")
+		}
+	})
+
+	t.Run("partial_apply_failure_rolls_back_unowned_service", func(t *testing.T) {
+		mockClient := &MockKubeClient{
+			Namespace: "ml",
+			Objects: map[string][]unstructured.Unstructured{
+				"services": {{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "t3-apply", "namespace": "ml", "labels": map[string]interface{}{workloadLabel: "t3-apply"}},
+				}}},
+			},
+		}
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud compute machine-types describe g2-standard-48 --zone=us-central1-a --format=json": {
+				{ExitCode: 0, Stdout: `{"guestCpus": 48, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "nvidia-l4"}]}`},
+			},
+			"kubectl apply -n ml -f": {{ExitCode: 1, Stderr: "Error from server (Forbidden): jobs.batch is forbidden"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.namespace = "ml"
+		orc.kubeClient = mockClient
+		err := orc.generateAndApplyJobManifest(opts, profile, "", "clus-1", "proj-1")
+		if err == nil || !strings.Contains(err.Error(), "jobs.batch is forbidden") {
+			t.Fatalf("expected original apply error, got %v", err)
+		}
+		if len(mockClient.Deleted["services"]) != 1 || mockClient.Deleted["services"][0] != "t3-apply" {
+			t.Errorf("expected partial apply to roll back owned Service t3-apply, deleted=%v", mockClient.Deleted)
+		}
+	})
+}
+
+func TestUnqueuedSlicingAndTopologyNodePoolFallback(t *testing.T) {
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get nodes": {{ExitCode: 1, Stderr: "Error from server (Forbidden): nodes is forbidden"}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.addons = addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false}
+	orc.clusterDesc = gkeCluster{
+		NodePools: []gkeJobNodePool{{
+			Config:          gkeNodePoolConfig{MachineType: "ct6e-standard-4t"},
+			PlacementPolicy: &gkePlacementPolicy{TpuTopology: "2x4"},
+		}},
+	}
+	if orc.hasSliceAdmissionCheck() || orc.hasSlicingTopologies() {
+		t.Fatalf("unqueued submits must disable Kueue slicing checks")
+	}
+	if orc.slicingTopologiesChecked {
+		t.Errorf("unqueued short-circuit must not poison slicingTopologiesChecked cache")
+	}
+	if len(mockExec.calls) != 0 {
+		t.Errorf("unqueued slicing checks must run zero kubectl calls, got %v", mockExec.calls)
+	}
+	out, err := orc.queryDiscoveredTopologies("tpu-v6e-slice", "ct6e-standard-4t")
+	if err != nil || out != "2x4" {
+		t.Fatalf("queryDiscoveredTopologies(get nodes 403 with nodePoolTopologies) = (%q, %v), want (\"2x4\", nil)", out, err)
+	}
+
+	// Single-host TPU / NAP cluster (empty nodePoolTopologies) with 403 on get nodes returns "", nil so selectTopology can fast-track.
+	orcEmpty := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get nodes": {{ExitCode: 1, Stderr: "Error from server (Forbidden): nodes is forbidden"}},
+	}))
+	orcEmpty.addons = addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false}
+	if got, err := orcEmpty.queryDiscoveredTopologies("tpu-v6e-slice", "ct6e-standard-4t"); err != nil || got != "" {
+		t.Fatalf("queryDiscoveredTopologies(empty nodePoolTopologies + 403) = (%q, %v), want (\"\", nil)", got, err)
+	}
+
+	// Non-403 error (e.g. 503) must NOT be masked even when nodePoolTopologies is non-empty.
+	orc503 := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get nodes": {{ExitCode: 1, Stderr: "Error from server (ServiceUnavailable): apiserver busy"}},
+	}))
+	orc503.addons = addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false}
+	orc503.clusterDesc = orc.clusterDesc
+	if _, err := orc503.queryDiscoveredTopologies("tpu-v6e-slice", "ct6e-standard-4t"); err == nil || !strings.Contains(err.Error(), "ServiceUnavailable") {
+		t.Fatalf("queryDiscoveredTopologies(503) err = %v, want ServiceUnavailable error", err)
+	}
+}
+
+func TestOrphanedTier3ServiceConflictAndBatchJobWorkloadLookup(t *testing.T) {
+	t.Run("jobset_submit_flags_owned_orphaned_tier3_service_and_surfaces_unexpected_err", func(t *testing.T) {
+		var jobGets, svcGets int
+		dyn := &versionTrackingDynamicClient{
+			getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+				if gvr == jobGVR {
+					jobGets++
+				}
+				if gvr == serviceGVR {
+					svcGets++
+					if name == "orphan-svc" {
+						return &unstructured.Unstructured{Object: map[string]interface{}{
+							"metadata": map[string]interface{}{"name": name, "namespace": ns, "labels": map[string]interface{}{workloadLabel: name}},
+						}}, nil
+					}
+					if name == "err-svc" {
+						return nil, errors.New("apiserver timeout")
+					}
+				}
+				return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+			},
+		}
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.mode = orchestrator.TypeK8s
+		orc.namespace = "ml"
+		orc.SetDynamicClient(dyn)
+		err := orc.validateJobConflicts(orchestrator.JobDefinition{WorkloadName: "orphan-svc", ClusterName: "c"})
+		if err == nil || !strings.Contains(err.Error(), "leftover headless Service") || strings.Contains(err.Error(), "OrphanedService") {
+			t.Fatalf("validateJobConflicts(orphaned Tier-3 Service) err = %v, want clear leftover Service error", err)
+		}
+		if jobGets != 1 || svcGets != 1 {
+			t.Errorf("expected at most 1 query per GVR, got jobGets=%d svcGets=%d", jobGets, svcGets)
+		}
+		if _, err := orc.getJobStatus("err-svc"); err == nil || !strings.Contains(err.Error(), "apiserver timeout") {
+			t.Fatalf("getJobStatus(unexpected Service error) err = %v, want apiserver timeout", err)
+		}
+	})
+}
+
+func TestFindTargetWorkloadForBatchJobAndCustomTemplate(t *testing.T) {
+	t.Run("findTargetWorkloadForKind_batch_job_skips_jobset_get_and_uses_job_wording", func(t *testing.T) {
+		sawJobSetGet := false
+		dyn := &versionTrackingDynamicClient{
+			getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+				if gvr == jobSetGVR {
+					sawJobSetGet = true
+				}
+				return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+			},
+		}
+		orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+		orc.SetDynamicClient(dyn)
+		_, err := orc.findTargetWorkloadForKind("ml", "t3-job", 0, true)
+		if sawJobSetGet {
+			t.Errorf("findTargetWorkloadForKind(isBatchJob=true) must not query jobSetGVR")
+		}
+		if err == nil || !strings.Contains(err.Error(), "failed to find Kueue workload for job t3-job") {
+			t.Errorf("findTargetWorkloadForKind(isBatchJob=true) err = %v, want 'for job t3-job'", err)
+		}
+	})
+
+	t.Run("validateResolvedCustomTemplate_checks_job_tmpl_on_auto_fallback", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "job.tmpl"), []byte("{{ invalid"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		orc := &GKEOrchestrator{
+			gkeCustomTemplatesPath: dir,
+			submissionSession:      submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: false}},
+		}
+		if err := orc.validateResolvedCustomTemplate(orchestrator.JobDefinition{}); err == nil {
+			t.Fatalf("expected invalid custom job.tmpl to fail validateResolvedCustomTemplate")
+		}
+		if got := orc.resolveWorkloadTemplateName(orchestrator.JobDefinition{
+			Pathways: orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-1"},
+		}); got != k8s.PathwaysJobSetTemplate {
+			t.Errorf("resolveWorkloadTemplateName(RunSPSWorkload) = %q, want %q", got, k8s.PathwaysJobSetTemplate)
+		}
+	})
+}
+
+func TestBuildOwnerRefJSONPatchAndRollbackGuards(t *testing.T) {
+	t.Run("json_patch_preserves_existing_non_controller_owner_and_skips_conflicts", func(t *testing.T) {
+		isCtrl := true
+		patch, conflict := buildOwnerRefJSONPatch([]metav1.OwnerReference{{UID: "webhook-uid", Kind: "ConfigMap"}}, "t3-job", "job-uid")
+		if conflict != "" || !strings.Contains(string(patch), `"/metadata/ownerReferences/-"`) {
+			t.Fatalf("expected JSONPatch append to /metadata/ownerReferences/-, got (%s, %q)", string(patch), conflict)
+		}
+		if p, c := buildOwnerRefJSONPatch([]metav1.OwnerReference{{UID: "job-uid"}}, "t3-job", "job-uid"); len(p) != 0 || c != "" {
+			t.Errorf("expected quiet no-op when jobUID is already present, got (%s, %q)", string(p), c)
+		}
+		if p, c := buildOwnerRefJSONPatch([]metav1.OwnerReference{{Kind: "Job", Name: "old-job", UID: "other-ctrl", Controller: &isCtrl}}, "t3-job", "job-uid"); len(p) != 0 || !strings.Contains(c, "old-job") {
+			t.Errorf("expected conflict owner when another controller ownerRef already exists, got (%s, %q)", string(p), c)
+		}
+	})
+
+	t.Run("rollback_skips_silently_when_job_exists_and_warns_on_403", func(t *testing.T) {
+		mockLive := &MockKubeClient{
+			Namespace: "ml",
+			Objects: map[string][]unstructured.Unstructured{
+				"jobs":     {makeTestOwnedBatchJob("live-job", "1")},
+				"services": {makeTestOwnedService("live-job", "1")},
+			},
+		}
+		orcLive := &GKEOrchestrator{namespace: "ml", kubeClient: mockLive}
+		snapLive, restoreLive := logging.CaptureForTesting(t)
+		orcLive.rollbackPartialBatchJobService("live-job", "c", "l", "p")
+		_, warnLive := snapLive()
+		restoreLive()
+		if len(mockLive.Deleted["services"]) != 0 || warnLive != "" {
+			t.Errorf("live job rollback must not delete or warn: deleted=%v warn=%q", mockLive.Deleted, warnLive)
+		}
+
+		mockForb := &MockKubeClient{
+			Namespace: "ml",
+			GetErr:    apierrors.NewForbidden(jobGVR.GroupResource(), "forb-job", errors.New("denied")),
+			Objects:   map[string][]unstructured.Unstructured{"services": {makeTestOwnedService("forb-job", "1")}},
+		}
+		orcForb := &GKEOrchestrator{namespace: "ml", kubeClient: mockForb}
+		snapForb, restoreForb := logging.CaptureForTesting(t)
+		orcForb.rollbackPartialBatchJobService("forb-job", "c", "l", "p")
+		_, warnForb := snapForb()
+		restoreForb()
+		if len(mockForb.Deleted["services"]) != 0 || !strings.Contains(warnForb, "gcluster job cancel forb-job") {
+			t.Errorf("403 rollback must preserve service and warn with cancel hint: deleted=%v warn=%q", mockForb.Deleted, warnForb)
+		}
+	})
+}
+
+func TestAttachOwnerRefConflictWarnsAndBatchList403IsInfo(t *testing.T) {
+	dyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			if gvr == jobGVR {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": "new-job-uid", "labels": map[string]interface{}{workloadLabel: name}},
+				}}, nil
+			}
+			return &unstructured.Unstructured{Object: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name": name, "namespace": ns, "uid": "svc-uid",
+					"labels": map[string]interface{}{workloadLabel: name},
+					"ownerReferences": []interface{}{
+						map[string]interface{}{"kind": "Job", "name": "stale-job", "uid": "old-uid", "controller": true},
+					},
+				},
+			}}, nil
+		},
+	}
+	orc := &GKEOrchestrator{namespace: "ml", dynClient: dyn}
+	orc.syncKubeClient()
+	snap, restore := logging.CaptureForTesting(t)
+	orc.attachBatchJobServiceOwnerRefWithTarget("t3-job", "", "", "")
+	_, warnLogs := snap()
+	restore()
+	if !strings.Contains(warnLogs, "already controlled by Job/stale-job") || !strings.Contains(warnLogs, "gcluster job cancel t3-job") {
+		t.Errorf("expected conflicting controller warning with cancel hint, got:\n%s", warnLogs)
+	}
+
+	listMock := &MockKubeClient{
+		Namespace: "ml",
+		ListErrs:  map[string]error{"jobs": apierrors.NewForbidden(jobGVR.GroupResource(), "", errors.New("denied"))},
+	}
+	listOrc := &GKEOrchestrator{kubeClient: listMock}
+	snapList, restoreList := logging.CaptureForTesting(t)
+	_, err := listOrc.listWorkloadsWithFallback("ml")
+	_, listWarn := snapList()
+	restoreList()
+	if err != nil {
+		t.Fatalf("listWorkloadsWithFallback(403 jobs) err = %v, want nil", err)
+	}
+	if listWarn != "" {
+		t.Errorf("403 on secondary batch/v1 Job list should log Info, not Warn; got:\n%s", listWarn)
+	}
+}
+
+func TestLookupJobSetConflict_GKEForbiddenFallbackAndNoKindMatch(t *testing.T) {
+	t.Run("gke_cluster_list_403_falls_back_to_namespaced_get", func(t *testing.T) {
+		dyn := &versionTrackingDynamicClient{
+			listByGVR: func(gvr schema.GroupVersionResource, _ string, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				if gvr == jobSetGVR {
+					return nil, apierrors.NewForbidden(jobSetGVR.GroupResource(), "", errors.New("cluster list denied"))
+				}
+				return &unstructured.UnstructuredList{}, nil
+			},
+			getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+				if gvr == jobSetGVR && ns == "ml" && name == "gke-js" {
+					return &unstructured.Unstructured{Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": "js-1"},
+						"spec":     map[string]interface{}{"suspend": false},
+					}}, nil
+				}
+				return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+			},
+		}
+		orc := &GKEOrchestrator{mode: orchestrator.TypeGKE, namespace: "ml", dynClient: dyn}
+		status, err := orc.getJobStatus("gke-js")
+		if err != nil || status != "Pending" {
+			t.Fatalf("getJobStatus(GKE 403 list -> namespaced get) = (%q, %v), want (Pending, nil)", status, err)
+		}
+	})
+
+	t.Run("gke_no_kind_match_triggers_strict_tier3_collision_check", func(t *testing.T) {
+		noKindErr := &meta.NoKindMatchError{GroupKind: schema.GroupKind{Group: "jobset.x-k8s.io", Kind: "JobSet"}}
+		dyn := &versionTrackingDynamicClient{
+			listByGVR: func(gvr schema.GroupVersionResource, _ string, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				if gvr == jobSetGVR {
+					return nil, noKindErr
+				}
+				return &unstructured.UnstructuredList{}, nil
+			},
+			getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+				if gvr == jobGVR && ns == "ml" && name == "collide" {
+					return &unstructured.Unstructured{Object: map[string]interface{}{
+						"metadata": map[string]interface{}{"name": name, "namespace": ns, "labels": map[string]interface{}{"app": "other"}},
+					}}, nil
+				}
+				return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+			},
+		}
+		orc := &GKEOrchestrator{mode: orchestrator.TypeGKE, namespace: "ml", dynClient: dyn}
+		if _, err := orc.getJobStatus("collide"); err == nil || !strings.Contains(err.Error(), "not managed by gcluster") {
+			t.Fatalf("getJobStatus(NoKindMatch + unowned batch Job) err = %v, want collision error", err)
+		}
+	})
+}
+
+func TestAttachOwnerRef_SkipsJobSetOwnerRefService(t *testing.T) {
+	patchCalls := 0
+	dyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			if gvr == jobGVR {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": "job-uid", "labels": map[string]interface{}{workloadLabel: name}},
+				}}, nil
+			}
+			return &unstructured.Unstructured{Object: map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"name": name, "namespace": ns, "uid": "svc-uid",
+					"labels": map[string]interface{}{workloadLabel: name},
+					"ownerReferences": []interface{}{
+						map[string]interface{}{"apiVersion": "jobset.x-k8s.io/v1alpha2", "kind": "JobSet", "name": name, "uid": "js-uid"},
+					},
+				},
+			}}, nil
+		},
+		patchByGVR: func(schema.GroupVersionResource, string, string, types.PatchType, []byte) (*unstructured.Unstructured, error) {
+			patchCalls++
+			return &unstructured.Unstructured{}, nil
+		},
+	}
+	orc := &GKEOrchestrator{namespace: "ml", dynClient: dyn}
+	orc.syncKubeClient()
+	orc.attachBatchJobServiceOwnerRefWithTarget("t3-job", "", "", "")
+	if patchCalls != 0 {
+		t.Errorf("expected 0 Patch calls on JobSet-ownerRef Service, got %d", patchCalls)
+	}
+}
+
+func TestAwaitDirectPermanentFailFastAndParseBatchJobInfo(t *testing.T) {
+	origSleep := directAwaitSleep
+	sleepCalls := 0
+	directAwaitSleep = func(time.Duration) { sleepCalls++ }
+	t.Cleanup(func() { directAwaitSleep = origSleep })
+
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get job forbidden-job -n ml -o json --request-timeout=10s": {{ExitCode: 1, Stderr: `Error from server (Forbidden): jobs.batch "forbidden-job" is forbidden`}},
+		"kubectl get job empty-job -n ml -o json --request-timeout=10s":     {{ExitCode: 0, Stdout: ""}},
+		"kubectl get job bad-json -n ml -o json --request-timeout=10s":      {{ExitCode: 0, Stdout: "{bad"}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.submissionSession = submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: false}}
+	if err := orc.awaitWorkloadDirect("forbidden-job", "c", "ml", "1m", ""); err == nil || !k8s.IsForbiddenError(err) {
+		t.Fatalf("awaitWorkloadDirect(403) err = %v, want Forbidden", err)
+	}
+	if sleepCalls != 0 {
+		t.Errorf("permanent 403 await error must fail fast without sleeping, got %d sleeps", sleepCalls)
+	}
+	if _, err := orc.getBatchJobInfo("ml", "empty-job"); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("getBatchJobInfo(empty stdout) err = %v, want not found", err)
+	}
+	if _, err := orc.getBatchJobInfo("ml", "bad-json"); err == nil || !strings.Contains(err.Error(), "failed to parse") {
+		t.Errorf("getBatchJobInfo(malformed JSON) err = %v, want parse error", err)
+	}
+
+	info := parseBatchJobInfo(batchv1.Job{
+		Status: batchv1.JobStatus{
+			Conditions: []batchv1.JobCondition{
+				{Type: batchv1.JobComplete, Status: corev1.ConditionFalse},
+				{Type: batchv1.JobFailed, Status: corev1.ConditionTrue},
+				{Type: batchv1.JobSuspended, Status: corev1.ConditionTrue},
+			},
+		},
+	})
+	if info.terminalState != "Failed" || !info.suspended {
+		t.Errorf("parseBatchJobInfo = %+v, want terminalState=Failed and suspended=true", info)
+	}
+}
+
+func TestResolveWorkloadOwnerUID_UnownedBatchJobGuard(t *testing.T) {
+	t.Setenv(disableJobSetEnvVar, "1")
+	dyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			if gvr == jobGVR {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": "u-1", "labels": map[string]interface{}{"app": "other"}},
+				}}, nil
+			}
+			return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+		},
+	}
+	kc := &DefaultKubeClient{dynClient: dyn}
+	if _, err := kc.resolveWorkloadOwnerUID("ml", "other-job"); err == nil || !strings.Contains(err.Error(), "not managed by gcluster") {
+		t.Fatalf("resolveWorkloadOwnerUID(unowned Job) err = %v, want not managed by gcluster error", err)
+	}
+}
+
+func TestStrictTier3ConflictAgainstJobSetOwnedObjects(t *testing.T) {
+	dyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			if gvr == jobGVR && name == "train-main-0" {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": name, "namespace": ns,
+						"labels": map[string]interface{}{"jobset.sigs.k8s.io/jobset-name": "train"},
+					},
+				}}, nil
+			}
+			if gvr == serviceGVR && name == "train-svc" {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": name, "namespace": ns,
+						"labels": map[string]interface{}{"jobset.sigs.k8s.io/jobset-name": "train"},
+					},
+				}}, nil
+			}
+			return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+		},
+	}
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.namespace = "ml"
+	orc.addons = addonPlan{resolved: true, jobSetEnabled: false}
+	orc.SetDynamicClient(dyn)
+	if _, err := orc.getJobStatus("train-main-0"); err == nil || !strings.Contains(err.Error(), "not managed by gcluster") {
+		t.Errorf("strict Tier-3 must reject colliding JobSet-owned child Job, got %v", err)
+	}
+	if _, err := orc.getJobStatus("train-svc"); err == nil || !strings.Contains(err.Error(), "Kubernetes Service named") {
+		t.Errorf("strict Tier-3 must reject colliding JobSet-owned Service, got %v", err)
+	}
+}
+
+func TestNamespacedMissingCRD404TriggersStrictBatchJobCheck(t *testing.T) {
+	dyn := &versionTrackingDynamicClient{
+		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
+			if gvr == jobSetGVR {
+				return nil, &apierrors.StatusError{ErrStatus: metav1.Status{
+					Status:  metav1.StatusFailure,
+					Reason:  metav1.StatusReasonNotFound,
+					Message: "the server could not find the requested resource (get jobsets.jobset.x-k8s.io taken)",
+				}}
+			}
+			if gvr == jobGVR && name == "taken" {
+				return &unstructured.Unstructured{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": name, "namespace": ns},
+				}}, nil
+			}
+			return nil, apierrors.NewNotFound(gvr.GroupResource(), name)
+		},
+	}
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.mode = orchestrator.TypeK8s
+	orc.namespace = "ml"
+	orc.SetDynamicClient(dyn)
+	if _, err := orc.getJobStatus("taken"); err == nil || !strings.Contains(err.Error(), "not managed by gcluster") {
+		t.Errorf("namespaced missing-CRD 404 must run strict batch Job conflict check, got %v", err)
+	}
 }

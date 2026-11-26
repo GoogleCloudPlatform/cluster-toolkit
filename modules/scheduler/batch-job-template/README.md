@@ -31,6 +31,29 @@ user will modify the template after running the Cluster Toolkit.
   outputs: [instructions]
 ```
 
+### Example with custom Cloud Storage bucket for startup scripts
+
+When network storage requires startup script runners to mount, the module by
+default creates a new Cloud Storage bucket for staging the startup scripts. An
+existing bucket or bucket path can be supplied via `startup_script_path`:
+
+```yaml
+- id: startup-bucket
+  source: modules/file-system/cloud-storage-bucket
+  settings:
+    name_prefix: my-startup-scripts
+    random_suffix: true
+
+- id: batch-job
+  source: modules/scheduler/batch-job-template
+  use: [network1, appfs]
+  settings:
+    runnable: "echo 'hello world'"
+    machine_type: n2-standard-4
+    startup_script_path: $(startup-bucket.gcs_bucket_path)
+  outputs: [instructions]
+```
+
 See the
 [Google Cloud Batch Example](../../../examples/README.md#batchyaml-)
 for how to use the `batch-job-template` module with other Cluster Toolkit modules such
@@ -96,8 +119,8 @@ deployment_groups:
       machine_type: n2-standard-4
       metadata:
         network_storage: ((jsonencode([module.appfs.network_storage])))
-      source_image_family: hpc-rocky-linux-9
-      source_image_project: cloud-hpc-image-public
+      source_image_family: aci-cpu-rocky-linux-9-amd64
+      source_image_project: advanced-compute-images
 
   - id: batch-job
     source: modules/scheduler/batch-job-template
@@ -168,7 +191,7 @@ limitations under the License.
 | <a name="input_enable_public_ips"></a> [enable\_public\_ips](#input\_enable\_public\_ips) | If set to true, instances will have public IPs | `bool` | `true` | no |
 | <a name="input_gcloud_version"></a> [gcloud\_version](#input\_gcloud\_version) | The version of the gcloud cli being used. Used for output instructions. Valid inputs are `"alpha"`, `"beta"` and "" (empty string for default version) | `string` | `""` | no |
 | <a name="input_image"></a> [image](#input\_image) | DEPRECATED: Google Cloud Batch compute node image. Ignored if `instance_template` is provided. | `any` | `null` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Google Cloud Batch compute node image. Ignored if `instance_template` is provided.<br/><br/>Expected Fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "family": "hpc-rocky-linux-9",<br/>  "project": "cloud-hpc-image-public"<br/>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Google Cloud Batch compute node image. Ignored if `instance_template` is provided.<br/><br/>Expected Fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "family": "aci-cpu-rocky-linux-9-amd64",<br/>  "project": "advanced-compute-images"<br/>}</pre> | no |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Compute VM instance template self-link to be used for Google Cloud Batch compute node. If provided, a number of other variables will be ignored as noted by `Ignored if instance_template is provided` in descriptions. | `string` | `null` | no |
 | <a name="input_job_filename"></a> [job\_filename](#input\_job\_filename) | The filename of the generated job template file. Will default to `<job_id>.yaml` if not specified | `string` | `null` | no |
 | <a name="input_job_id"></a> [job\_id](#input\_job\_id) | An id for the Google Cloud Batch job. Used for output instructions and file naming. Automatically populated by the module id if not set. If setting manually, ensure a unique value across all jobs. | `string` | n/a | yes |
@@ -188,6 +211,7 @@ limitations under the License.
 | <a name="input_runnables"></a> [runnables](#input\_runnables) | A list of shell scripts to be executed in sequence as the main workload of the Google Batch job. These will be used to populate the generated template. | <pre>list(object({<br/>    script = string<br/>  }))</pre> | `null` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the Google Cloud Batch compute node and Batch job allocationPolicy. If `instance_template` is provided, `scopes` is ignored and `email` must match the service account set in that template. | <pre>object({<br/>    email = string,<br/>    scopes = optional(set(string), [<br/>      "https://www.googleapis.com/auth/devstorage.read_only",<br/>      "https://www.googleapis.com/auth/logging.write",<br/>      "https://www.googleapis.com/auth/monitoring.write",<br/>      "https://www.googleapis.com/auth/servicecontrol",<br/>      "https://www.googleapis.com/auth/service.management.readonly",<br/>      "https://www.googleapis.com/auth/trace.append"<br/>    ])<br/>  })</pre> | <pre>{<br/>  "email": null,<br/>  "scopes": [<br/>    "https://www.googleapis.com/auth/devstorage.read_only",<br/>    "https://www.googleapis.com/auth/logging.write",<br/>    "https://www.googleapis.com/auth/monitoring.write",<br/>    "https://www.googleapis.com/auth/servicecontrol",<br/>    "https://www.googleapis.com/auth/service.management.readonly",<br/>    "https://www.googleapis.com/auth/trace.append"<br/>  ]<br/>}</pre> | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script run before Google Cloud Batch job starts. Ignored if `instance_template` is provided. | `string` | `null` | no |
+| <a name="input_startup_script_path"></a> [startup\_script\_path](#input\_startup\_script\_path) | The GCS bucket or bucket path (e.g. 'gs://bucket-name', 'gs://bucket-name/path', or 'bucket-name') to use for startup scripts. If provided, the module will not create a new GCS bucket for startup scripts. | `string` | `null` | no |
 | <a name="input_submit"></a> [submit](#input\_submit) | When set to true, the generated job file will be submitted automatically to Google Cloud as part of terraform apply. | `bool` | `false` | no |
 | <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | The subnetwork that the Batch job should run on. Defaults to 'default' subnet. Ignored if `instance_template` is provided. | `any` | `null` | no |
 | <a name="input_task_count"></a> [task\_count](#input\_task\_count) | Number of parallel tasks | `number` | `1` | no |

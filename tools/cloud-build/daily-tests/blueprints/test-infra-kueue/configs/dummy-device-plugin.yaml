@@ -35,10 +35,8 @@ spec:
         args:
         - --domain=test-locks
         - '--device={"name": "slurm", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
-        - '--device={"name": "ml-slurm", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
-        - '--device={"name": "slurm-gcp-v6-rocky8", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
+        - '--device={"name": "slurm-gcp-v6-rocky9", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "slurm-gcp-v6-ubuntu", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
-        - '--device={"name": "slurm-gcp-v6-debian", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "slurm-gcp-v6-reconfig-size", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "slurm-gcp-v6-ssd", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "hpc-build-slurm-image", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
@@ -69,7 +67,6 @@ spec:
         - '--device={"name": "ml-a3-megagpu-onspot-slurm", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "tpu-v6e", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "gke-tpu-v6e-flex", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
-        - '--device={"name": "slurm-gcp-v6-tpu", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "gke-tpu-v6e", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "tpu-v5e", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "gke-tpu-v5e", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
@@ -87,7 +84,6 @@ spec:
         - '--device={"name": "ansible-vm", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "batch-mpi", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "batch", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
-        - '--device={"name": "crd-ubuntu", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "netapp-volumes", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "crd", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'
         - '--device={"name": "e2e", "groups": [{"count": 1000, "paths": [{"path": "/dev/null"}]}]}'

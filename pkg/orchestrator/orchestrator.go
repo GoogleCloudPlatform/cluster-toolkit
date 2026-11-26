@@ -14,13 +14,135 @@
 
 package orchestrator
 
+import (
+	"fmt"
+	"maps"
+	"slices"
+	"sync"
+	"time"
+
+	"hpc-toolkit/pkg/shell"
+
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+)
+
+// Type identifies a workload job orchestrator platform.
+type Type string
+
+const (
+	// TypeGKE selects the Google Kubernetes Engine job orchestrator.
+	TypeGKE Type = "gke"
+	// TypeK8s selects the generic / air-gapped Kubernetes job orchestrator.
+	TypeK8s Type = "k8s"
+)
+
+// Detection holds the resolved orchestrator platform, pinned kubeconfig context, and diagnostic reason.
+type Detection struct {
+	Type            Type
+	Forced          bool
+	KubeContext     string
+	ClusterName     string
+	DanglingContext string
+	Reason          string
+}
+
+// CommandRunner executes bounded local subprocess commands during provider probes.
+type CommandRunner func(timeout time.Duration, name string, args ...string) shell.CommandResult
+
+// ProbeInput carries the loaded kubeconfig and CLI inputs passed to registered provider probes.
+type ProbeInput struct {
+	ClusterName string
+	Location    string
+	ProjectID   string
+	Config      *clientcmdapi.Config
+	AirGapped   bool
+	Getenv      func(string) string
+	Runner      CommandRunner
+}
+
+// Factory constructs a JobOrchestrator configured with det.
+type Factory func(det Detection) JobOrchestrator
+
+// ProviderSpec binds an orchestrator Type to its prerequisites, context resolver, detection probe, and factory.
+type ProviderSpec struct {
+	Type           Type
+	Prerequisites  []PrereqKind
+	ResolveContext func(cfg *clientcmdapi.Config, clusterName, location, projectID string) (contextName string, kubeCtx *clientcmdapi.Context, resolvedCluster string, ok bool)
+	Probe          func(in ProbeInput) (Detection, bool)
+	Factory        Factory
+}
+
+var (
+	registryMu    sync.RWMutex
+	providerSpecs = make(map[Type]ProviderSpec)
+	providerOrder []Type
+)
+
+// RegisterProvider registers a workload orchestrator provider specification.
+func RegisterProvider(spec ProviderSpec) {
+	if spec.Type == "" || spec.Factory == nil {
+		panic("orchestrator.RegisterProvider requires non-empty Type and non-nil Factory")
+	}
+	spec.Prerequisites = slices.Clone(spec.Prerequisites)
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	if _, exists := providerSpecs[spec.Type]; !exists {
+		providerOrder = append(providerOrder, spec.Type)
+	}
+	providerSpecs[spec.Type] = spec
+}
+
+func unregisterProviderForTest(t Type) {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	delete(providerSpecs, t)
+	providerOrder = slices.DeleteFunc(providerOrder, func(x Type) bool { return x == t })
+}
+
+func snapshotProviders() []ProviderSpec {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	out := make([]ProviderSpec, 0, len(providerOrder))
+	for _, t := range providerOrder {
+		if spec, ok := providerSpecs[t]; ok {
+			out = append(out, spec)
+		}
+	}
+	return out
+}
+
+// RegisteredTypes returns the sorted list of registered orchestrator types.
+func RegisteredTypes() []Type {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	return slices.Sorted(maps.Keys(providerSpecs))
+}
+
+// NewJobOrchestrator instantiates the JobOrchestrator registered for det.Type.
+func NewJobOrchestrator(det Detection) (JobOrchestrator, error) {
+	registryMu.RLock()
+	spec, ok := providerSpecs[det.Type]
+	registryMu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("unsupported orchestrator type %q (registered: %v)", det.Type, RegisteredTypes())
+	}
+	return spec.Factory(det), nil
+}
+
+// UnsupportedK8sSubmitError returns the error reported when workload submission is attempted in TypeK8s mode.
+func UnsupportedK8sSubmitError() error {
+	return fmt.Errorf("gcluster job submit is not yet supported in Kubernetes (k8s) mode (supported: list, logs, cancel, inspect); for GKE, pass --cluster, --location, and --project (with %s=gke if needed)", EnvVar)
+}
+
 var ValidPriorityClasses = []string{"very-low", "low", "medium", "high", "very-high"}
 
 type PathwaysJobDefinition struct {
 	// Core Pathways Images
-	ProxyServerImage string // Default: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest
-	ServerImage      string // Default: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest
-	WorkerImage      string // Default: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest (or value of ServerImage)
+	// Defaults: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/{proxy_server,server}:latest, or, with the public
+	// colocated Python sidecar, the cloud-pathways images of the sidecar's release. WorkerImage defaults to ServerImage.
+	ProxyServerImage string
+	ServerImage      string
+	WorkerImage      string
 
 	// Pathways specific configurations
 	Headless         bool   // Default: false

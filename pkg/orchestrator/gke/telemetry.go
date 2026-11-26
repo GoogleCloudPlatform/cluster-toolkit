@@ -24,20 +24,17 @@ import (
 	"hpc-toolkit/pkg/orchestrator/k8s"
 )
 
-// isGKE reports whether the submission targets a GKE cluster (a project is known) rather than a plain Kubernetes endpoint.
-// The CLI always requires a project, so only programmatic callers reach the non-GKE branch today.
-// TODO: derive this from the detected target platform once platform detection lands, instead of the project.
-func (g *GKEOrchestrator) isGKE(job orchestrator.JobDefinition) bool {
-	return strings.TrimSpace(g.projectID) != "" || strings.TrimSpace(job.ProjectID) != ""
-}
-
-// ambientTelemetryImage returns GCLUSTER_TELEMETRY_IMAGE unless --ml-diagnostics-image was given explicitly
-// (an explicit empty value opts out of the environment default, mirroring --image-pull-secret="").
-func ambientTelemetryImage(job orchestrator.JobDefinition) string {
-	if job.MLDiagnosticsImageSpecified {
-		return ""
+// isGKE reports whether the orchestrator targets GKE rather than a generic Kubernetes endpoint.
+func (g *GKEOrchestrator) isGKE(projectID string) bool {
+	switch g.mode {
+	case orchestrator.TypeGKE:
+		return true
+	case orchestrator.TypeK8s:
+		return false
+	default:
+		// Programmatic callers constructing GKEOrchestrator directly leave mode unset.
+		return strings.TrimSpace(g.projectID) != "" || strings.TrimSpace(projectID) != ""
 	}
-	return k8s.TelemetryImageFromEnv()
 }
 
 // telemetrySidecarRequested reports whether ML Diagnostics runs as the native collector sidecar: always off GKE,
@@ -46,7 +43,7 @@ func (g *GKEOrchestrator) telemetrySidecarRequested(job orchestrator.JobDefiniti
 	if !job.MLDiagnosticsEnabled {
 		return false
 	}
-	return !g.isGKE(job) || strings.TrimSpace(job.MLDiagnosticsImage) != "" || ambientTelemetryImage(job) != ""
+	return !g.isGKE(job.ProjectID) || strings.TrimSpace(job.MLDiagnosticsImage) != "" || ambientTelemetryImage(job) != ""
 }
 
 // telemetrySidecarTrigger names what selected sidecar mode, so a shell-wide GCLUSTER_TELEMETRY_IMAGE that trips the
@@ -84,7 +81,7 @@ func (g *GKEOrchestrator) validateTelemetryFlags(job orchestrator.JobDefinition)
 
 // nonTPUTelemetryHint returns the remediation hint when native sidecar mode is triggered on a non-TPU workload.
 func (g *GKEOrchestrator) nonTPUTelemetryHint(job orchestrator.JobDefinition) string {
-	if !g.isGKE(job) {
+	if !g.isGKE(job.ProjectID) {
 		return "omit --enable-ml-diagnostics for non-TPU workloads"
 	}
 	if strings.TrimSpace(job.MLDiagnosticsImage) != "" {

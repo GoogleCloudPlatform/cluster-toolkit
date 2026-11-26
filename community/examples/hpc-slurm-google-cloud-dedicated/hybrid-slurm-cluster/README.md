@@ -72,7 +72,7 @@ Deploying Multi-Cluster Slurm on **Google Cloud Dedicated (GCD)** partitions req
 | **API Domain** | Private universe domain (e.g. `apis-<location>.goog`) | Standard public `googleapis.com` |
 | **Authentication** | Workforce Identity Federation (WIF) & `wif-login-config.json` | Standard GCP IAM / User / Service Account |
 | **Shared Storage Fabric** | **Standalone NFS VM** (Hyperdisk Balanced) | **Google Cloud Filestore** (`BASIC_SSD`, 2.5TB min) |
-| **Slurm OS Images** | Custom Rocky Linux images copied / built via Packer | Public SchedMD family (`schedmd-slurm-public`) |
+| **Slurm OS Images** | Custom Rocky Linux images copied / built via Packer | Public Advanced Compute Images (`advanced-compute-images`) |
 | **Machine Config Metadata**| Requires offline `GHPC_MOCK_MACHINE_CONFIG` export | Directly resolved via GCP Compute API |
 | **Compute Batch API** | Handled natively via `ThreadPoolExecutor` (PR #6144) | Standard `new_batch_http_request()` works natively |
 | **User Identity** | Local `/home` keygen & non-OSLogin SSH synchronization | Google Cloud OS Login integration |
@@ -192,7 +192,7 @@ From your Cluster Toolkit directory, create the deployment definition:
 
 ### One-Time Setup: Build Custom Slurm OS Image with Packer
 
-In Google Cloud Dedicated (GCD), public SchedMD marketplace images are not available. A custom Slurm VM image (Rocky Linux 9 with Slurm v6) must be built inside the project using the embedded `build-slurm` Packer deployment group in `primary-cluster.yaml`.
+In Google Cloud Dedicated (GCD), public Advanced Compute Images (`advanced-compute-images`) are not available. A custom Slurm VM image (Rocky Linux 9 with Slurm v6) must be built inside the project using the embedded `build-slurm` Packer deployment group in `primary-cluster.yaml`.
 
 > [!NOTE]
 > **This build step is only required ONCE per project/environment.**

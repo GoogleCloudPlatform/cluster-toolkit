@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,6 +35,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
@@ -771,8 +773,10 @@ func renderPathwaysTestManifest(t *testing.T, headless bool, sidecarImage, ramdi
 }
 
 // generatePathwaysTestManifest is renderPathwaysTestManifest with an optional
-// custom templates directory, returning the GeneratePathwaysManifest error.
-func generatePathwaysTestManifest(t *testing.T, customTemplatesPath string, headless bool, sidecarImage, ramdiskDir string, mounts []string) (string, error) {
+// custom templates directory and job mutators (nil entries are skipped),
+// returning the GeneratePathwaysManifest error. The workload image is set
+// only when the job still has a command after the mutators run.
+func generatePathwaysTestManifest(t *testing.T, customTemplatesPath string, headless bool, sidecarImage, ramdiskDir string, mounts []string, mutate ...func(*orchestrator.JobDefinition)) (string, error) {
 	t.Helper()
 	setupMockMachineConfig(t)
 	job := orchestrator.JobDefinition{
@@ -794,9 +798,16 @@ func generatePathwaysTestManifest(t *testing.T, customTemplatesPath string, head
 		GKEMTCEnabled:          ramdiskDir != "",
 		GKEMTCRamdiskDirectory: ramdiskDir,
 	}
-	image := ""
 	if !headless {
 		job.CommandToRun = "python3 train.py"
+	}
+	for _, m := range mutate {
+		if m != nil {
+			m(&job)
+		}
+	}
+	image := ""
+	if job.CommandToRun != "" {
 		image = "test-image:latest"
 	}
 
@@ -991,8 +1002,8 @@ func TestGeneratePathwaysManifest_RestartOnExitCodes(t *testing.T) {
 			if rj.Template.Spec.PodFailurePolicy != nil {
 				t.Errorf("expected worker to NOT have podFailurePolicy, but got %+v", rj.Template.Spec.PodFailurePolicy)
 			}
-			if rj.Template.Spec.Template.Spec.RestartPolicy != "Never" {
-				t.Errorf("expected worker restartPolicy to be Never, got %q", rj.Template.Spec.Template.Spec.RestartPolicy)
+			if rj.Template.Spec.Template.Spec.RestartPolicy != "OnFailure" {
+				t.Errorf("expected worker restartPolicy to be OnFailure, got %q", rj.Template.Spec.Template.Spec.RestartPolicy)
 			}
 		}
 	}
@@ -1037,7 +1048,7 @@ func TestManifestGeneration_Matrix_Pathways_RestartOnExitCodes(t *testing.T) {
 			wantHeadPFP:        false,
 			wantHeadRestart:    "Never",
 			wantWorkerPFP:      false,
-			wantWorkerRestart:  "Never",
+			wantWorkerRestart:  "OnFailure",
 		},
 		{
 			name:               "pathways, with restart-on-exit-codes",
@@ -1046,7 +1057,7 @@ func TestManifestGeneration_Matrix_Pathways_RestartOnExitCodes(t *testing.T) {
 			wantHeadPFP:        true,
 			wantHeadRestart:    "Never",
 			wantWorkerPFP:      false,
-			wantWorkerRestart:  "Never",
+			wantWorkerRestart:  "OnFailure",
 		},
 	}
 
@@ -2286,7 +2297,7 @@ func TestGenerateManifest_CustomGCSFusePVCAnnotation(t *testing.T) {
 			{ExitCode: 0, Stdout: `{"guestCpus": 2}`},
 			{ExitCode: 0, Stdout: `{"guestCpus": 2}`},
 		},
-		fmt.Sprintf("kubectl get pvc ub-verify-dataset-pvc -n default --ignore-not-found --request-timeout=10s -o %s", pvcGCSFuseJSONPath): {
+		fmt.Sprintf("kubectl get pvc -n default --ignore-not-found --request-timeout=10s -o %s -- ub-verify-dataset-pvc", pvcGCSFuseJSONPath): {
 			{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t\t\t"},
 			{ExitCode: 0, Stdout: "ub-verify-dataset-pv\t\t\t"},
 		},
@@ -2756,6 +2767,249 @@ func TestGeneratePathwaysManifest_CustomEnv(t *testing.T) {
 	}
 }
 
+// renderTPUPathwaysEnvManifest renders a verbose two-slice TPU Pathways job with the colocated Python sidecar,
+// after applying the mutators (nil entries are skipped). The workload image is set only when the job still has
+// a command.
+func renderTPUPathwaysEnvManifest(t *testing.T, mutate ...func(*orchestrator.JobDefinition)) string {
+	t.Helper()
+	setupMockMachineConfig(t)
+	orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud compute machine-types describe tpu-v6e-slice --zone=us-central1-a --format=json": {
+			{ExitCode: 0, Stdout: `{"guestCpus": 112, "memoryMb": 196608, "accelerators": [{"guestAcceleratorCount": 4, "guestAcceleratorType": "tpu-v6e-slice"}]}`},
+		},
+	}))
+	orc.clusterZones = []string{"us-central1-a"}
+	job := orchestrator.JobDefinition{
+		WorkloadName:    "pw-env",
+		CommandToRun:    "python3 train.py",
+		ComputeType:     "v6e-4",
+		MachineType:     "tpu-v6e-slice",
+		Topology:        "2x2",
+		NumSlices:       2,
+		NodesPerSlice:   1,
+		ClusterLocation: "us-central1-a",
+		Verbose:         true,
+		IsPathwaysJob:   true,
+		Pathways: orchestrator.PathwaysJobDefinition{
+			GCSLocation:                 "gs://pw-bkt",
+			HeadNodePool:                "cpu-np",
+			ColocatedPythonSidecarImage: "registry.local/colocated-python:v1",
+		},
+	}
+	for _, m := range mutate {
+		if m != nil {
+			m(&job)
+		}
+	}
+	image := ""
+	if job.CommandToRun != "" {
+		image = "registry.local/jax:v1"
+	}
+	manifest, err := orc.GeneratePathwaysManifest(job, image, JobProfile{CapacityCount: 4}, false, false)
+	if err != nil {
+		t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+	}
+	return manifest
+}
+
+// TestGeneratePathwaysManifest_UserEnvReplacesEveryTemplateDefault sets, one user env list at a time, every env
+// name gcluster renders into the containers that list feeds, in every Pathways head mode. Each name must then
+// appear once with the user's value, and no other container may change.
+func TestGeneratePathwaysManifest_UserEnvReplacesEveryTemplateDefault(t *testing.T) {
+	for _, mode := range []struct {
+		name      string
+		telemetry bool
+		mutate    func(*orchestrator.JobDefinition)
+	}{
+		{name: "batch"},
+		{name: "headless", mutate: func(job *orchestrator.JobDefinition) {
+			job.Pathways.Headless, job.CommandToRun = true, ""
+		}},
+		{name: "deploy-sps", mutate: func(job *orchestrator.JobDefinition) {
+			job.Pathways.DeploySPS, job.CommandToRun = true, ""
+		}},
+		{name: "batch with native telemetry sidecar", telemetry: true, mutate: func(job *orchestrator.JobDefinition) {
+			job.MLDiagnosticsEnabled, job.MLDiagnosticsImage = true, "registry.local/ai-telemetry-collector:v1"
+		}},
+	} {
+		t.Run(mode.name, func(t *testing.T) {
+			render := func(t *testing.T, mutate func(*orchestrator.JobDefinition)) map[string]map[string]string {
+				return envByContainer(t, pathwaysPodSpecs(t, renderTPUPathwaysEnvManifest(t, mode.mutate, mutate)))
+			}
+			if mode.telemetry {
+				baseline := render(t, func(*orchestrator.JobDefinition) {})
+				if _, ok := baseline["worker/"+k8s.TelemetryCollectorContainerName]; !ok {
+					t.Fatalf("no %s container on the worker: %v", k8s.TelemetryCollectorContainerName, slices.Sorted(maps.Keys(baseline)))
+				}
+				if _, ok := baseline["worker/pathways-worker"]["TPU_RUNTIME_METRICS_PORTS"]; !ok {
+					t.Fatalf("TPU_RUNTIME_METRICS_PORTS not merged into pathways-worker env: %+v", baseline["worker/pathways-worker"])
+				}
+			}
+			assertUserEnvReplacesDefaults(t, render, workloadEnvList, proxyEnvList, serverEnvList, workerEnvList)
+		})
+	}
+}
+
+// TestGeneratePathwaysManifest_TemplateEnvDefaults pins the env every container of a verbose batch Pathways job
+// gets when the user sets none, so a dropped or inverted default guard cannot pass unnoticed.
+func TestGeneratePathwaysManifest_TemplateEnvDefaults(t *testing.T) {
+	const (
+		coordinator   = "fieldRef:metadata.labels['jobset.sigs.k8s.io/coordinator']"
+		jobSetName    = "fieldRef:metadata.annotations['jobset.sigs.k8s.io/jobset-name']"
+		replicatedJob = "fieldRef:metadata.annotations['jobset.sigs.k8s.io/replicatedjob-name']"
+		pipeTimeout   = "--pathways_pipe_unreachable_timeout=60s"
+	)
+	want := map[string]map[string]string{
+		"pathways-head/pathways-rm": {
+			"REPLICATED_JOB_NAME": replicatedJob,
+			"JOBSET_NAME":         jobSetName,
+			"HOST_ADDRESS":        coordinator,
+			"TPU_SKIP_MDS_QUERY":  "true",
+			"ABSL_FLAGS":          pipeTimeout,
+		},
+		"pathways-head/pathways-proxy": {
+			"PATHWAYS_HEAD": coordinator,
+			"ABSL_FLAGS":    pipeTimeout,
+		},
+		"pathways-head/workload-container": {
+			"PATHWAYS_HEAD":      coordinator,
+			"JAX_PLATFORMS":      "proxy",
+			"XCLOUD_ENVIRONMENT": "GCP",
+			"JAX_BACKEND_TARGET": "grpc://localhost:29000",
+			"ABSL_FLAGS":         pipeTimeout,
+		},
+		"worker/colocated-python-sidecar": {
+			"TCMALLOC_RELEASE_RATE":                "10",
+			"GRPC_SERVER_ADDRESS":                  "0.0.0.0:50051",
+			"CLOUD_PATHWAYS_SIDECAR_SHM_DIRECTORY": "/tmp/sidecar",
+			"PYTHONUNBUFFERED":                     "1",
+		},
+		"worker/pathways-worker": {
+			"TPU_MIN_LOG_LEVEL":                "0",
+			"TF_CPP_MIN_LOG_LEVEL":             "0",
+			"XCLOUD_ENVIRONMENT":               "GCP",
+			"MEGASCALE_GRPC_ENABLE_XOR_TRACER": "false",
+			"MEGASCALE_NUM_SLICES":             "fieldRef:metadata.labels['jobset.sigs.k8s.io/replicatedjob-replicas']",
+			"JOBSET_NAME":                      jobSetName,
+			"REPLICATED_JOB_NAME":              replicatedJob,
+			"MEGASCALE_SLICE_ID":               "fieldRef:metadata.labels['jobset.sigs.k8s.io/job-index']",
+			"PATHWAYS_HEAD":                    coordinator,
+			"MEGASCALE_COORDINATOR_ADDRESS":    coordinator,
+			"ABSL_FLAGS":                       pipeTimeout,
+		},
+	}
+	got := envByContainer(t, pathwaysPodSpecs(t, renderTPUPathwaysEnvManifest(t)))
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("default container env mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// TestGeneratePathwaysManifest_UserEnvReplacesNamedDefault pins the reported cases: a user value for a variable
+// the template also sets is rendered once, replacing a literal or fieldRef default, and nothing else changes.
+func TestGeneratePathwaysManifest_UserEnvReplacesNamedDefault(t *testing.T) {
+	for _, tc := range []struct {
+		list      userEnvList
+		container string
+		name      string
+		value     string
+	}{
+		{list: workloadEnvList, container: "pathways-head/workload-container", name: "JAX_PLATFORMS", value: "proxy,cpu"},
+		{list: workloadEnvList, container: "pathways-head/workload-container", name: "PATHWAYS_HEAD", value: "custom-head:29000"},
+		{list: workloadEnvList, container: "pathways-head/workload-container", name: "PATHWAYS_HEAD", value: ""},
+		{list: proxyEnvList, container: "pathways-head/pathways-proxy", name: "ABSL_FLAGS", value: "--pathways_pipe_unreachable_timeout=120s"},
+		{list: serverEnvList, container: "pathways-head/pathways-rm", name: "ABSL_FLAGS", value: "--pathways_pipe_unreachable_timeout=120s"},
+	} {
+		t.Run(fmt.Sprintf("%s %s=%s", tc.list.flag, tc.name, tc.value), func(t *testing.T) {
+			want := envByContainer(t, pathwaysPodSpecs(t, renderTPUPathwaysEnvManifest(t)))
+			if _, ok := want[tc.container][tc.name]; !ok {
+				t.Fatalf("baseline %s has no default %s to replace: %+v", tc.container, tc.name, want[tc.container])
+			}
+			want[tc.container] = maps.Clone(want[tc.container])
+			want[tc.container][tc.name] = tc.value
+			got := envByContainer(t, pathwaysPodSpecs(t, renderTPUPathwaysEnvManifest(t, func(job *orchestrator.JobDefinition) {
+				tc.list.set(job, map[string]string{tc.name: tc.value})
+			})))
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("container env mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+// TestCustomTemplateLoading_LegacyPathwaysTemplateRendersUserEnv renders the Pathways template users extracted
+// before the env guards (kept verbatim under testdata/) with one user env var per list that collides with no
+// default. Each must be added once to the containers its list feeds and nothing else may change, so legacy custom
+// templates keep working with the EnvVars template data.
+func TestCustomTemplateLoading_LegacyPathwaysTemplateRendersUserEnv(t *testing.T) {
+	customDir := writeLegacyPathwaysTemplate(t)
+	verbose := func(job *orchestrator.JobDefinition) { job.Verbose = true }
+	for _, tc := range []struct {
+		name     string
+		headless bool
+		mutate   func(*orchestrator.JobDefinition)
+	}{
+		{name: "batch"},
+		{name: "headless", headless: true},
+		{name: "deploy-sps", mutate: func(job *orchestrator.JobDefinition) {
+			job.Pathways.DeploySPS, job.CommandToRun = true, ""
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assertUserEnvAddedOnce(t, func(t *testing.T, mutate func(*orchestrator.JobDefinition)) map[string]map[string]string {
+				manifest, err := generatePathwaysTestManifest(t, customDir, tc.headless, "sidecar:v1", "", nil, verbose, tc.mutate, mutate)
+				if err != nil {
+					t.Fatalf("GeneratePathwaysManifest with the legacy template failed: %v", err)
+				}
+				return envByContainer(t, pathwaysPodSpecs(t, manifest))
+			}, workloadEnvList, proxyEnvList, serverEnvList, workerEnvList)
+		})
+	}
+}
+
+// assertUserEnvAddedOnce renders without user env, then with one variable per list whose name no template sets.
+// Each variable must be added once to exactly the containers its list feeds, and every other entry must stay the
+// same.
+func assertUserEnvAddedOnce(t *testing.T, render envRenderer, lists ...userEnvList) {
+	t.Helper()
+	baseline := render(t, func(*orchestrator.JobDefinition) {})
+	varName := func(i int) string { return fmt.Sprintf("GCLUSTER_TEST_USER_VAR_%d", i) }
+	got := render(t, func(job *orchestrator.JobDefinition) {
+		for i, list := range lists {
+			list.set(job, map[string]string{varName(i): "user-" + varName(i)})
+		}
+	})
+	want := make(map[string]map[string]string, len(baseline))
+	for key, env := range baseline {
+		want[key] = maps.Clone(env)
+		for i, list := range lists {
+			if list.feeds(key[strings.Index(key, "/")+1:]) {
+				want[key][varName(i)] = "user-" + varName(i)
+			}
+		}
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("user env vars not added exactly once to the containers they feed (-want +got):\n%s", diff)
+	}
+}
+
+// writeLegacyPathwaysTemplate copies testdata/legacy_pathways_jobset.tmpl into a new custom templates directory
+// and returns it.
+func writeLegacyPathwaysTemplate(t *testing.T) string {
+	t.Helper()
+	legacy, err := os.ReadFile(filepath.Join("testdata", "legacy_pathways_jobset.tmpl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(legacy, []byte(".Has")) {
+		t.Fatal("testdata/legacy_pathways_jobset.tmpl must predate the env guards and not call .Has")
+	}
+	customDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(customDir, k8s.PathwaysJobSetTemplate), legacy, 0644); err != nil {
+		t.Fatal(err)
+	}
+	return customDir
+}
+
 func TestGeneratePathwaysManifest_Headless(t *testing.T) {
 	setupMockMachineConfig(t)
 	job := orchestrator.JobDefinition{
@@ -2901,35 +3155,62 @@ func TestGeneratePathwaysManifest_DefaultImages(t *testing.T) {
 	}
 }
 
+// TestPathwaysWorkerBackoffLimit pins backoffLimit = max(N, 4) x VMs per slice, capped at MaxInt32 because the Job
+// field is an int32 (--pathways-deploy-sps defaults N to 1,000,000, which overflows on slices of more than 2,147 VMs).
+func TestPathwaysWorkerBackoffLimit(t *testing.T) {
+	for _, tc := range []struct {
+		maxSliceRestarts, nodesPerSlice, want int
+	}{
+		{0, 1, 4},
+		{0, 8, 32},
+		{1, 8, 32},
+		{4, 8, 32},
+		{5, 8, 40},
+		{4000, 8, 32000},
+		{1000000, 2147, 2147000000},
+		{1000000, 2148, math.MaxInt32},
+		{1000000, 2304, math.MaxInt32},
+		{math.MaxInt32, 1, math.MaxInt32},
+		{math.MaxInt32, 2304, math.MaxInt32},
+		{math.MaxInt, 2, math.MaxInt32},
+		{1, math.MaxInt, math.MaxInt32},
+		{-1, 8, 32},
+		{0, 0, 0},
+	} {
+		if got := pathwaysWorkerBackoffLimit(tc.maxSliceRestarts, tc.nodesPerSlice); got != tc.want {
+			t.Errorf("pathwaysWorkerBackoffLimit(%d, %d) = %d, want %d", tc.maxSliceRestarts, tc.nodesPerSlice, got, tc.want)
+		}
+	}
+}
+
+// TestGeneratePathwaysManifest_MaxSliceRestarts checks the worker Job retry settings derived from
+// --pathways-max-slice-restarts N: backoffLimitPerIndex N caps pod replacements per worker (0 makes a lost or
+// failed worker pod fail the Job, so the JobSet failurePolicy recreates every slice), while restartPolicy OnFailure with
+// backoffLimit max(N,4) x VMs lets a worker restart in place, which Pathways relies on after its client
+// disconnects at the end of every run.
 func TestGeneratePathwaysManifest_MaxSliceRestarts(t *testing.T) {
+	type workerJobPolicy struct {
+		BackoffLimit         *int32
+		BackoffLimitPerIndex *int32
+		MaxFailedIndexes     *int32
+		PodReplacementPolicy *batchv1.PodReplacementPolicy
+		PodFailurePolicy     *batchv1.PodFailurePolicy
+		RestartPolicy        corev1.RestartPolicy
+	}
+	replaceFailed := batchv1.Failed
+	zero := int32(0)
 	tests := []struct {
 		name                     string
 		maxSliceRestarts         int
-		wantBackoffLimit         string
-		wantBackoffLimitPerIndex string
-		wantRestartPolicy        string
+		wantBackoffLimit         int32
+		wantBackoffLimitPerIndex int32
 	}{
-		{
-			name:                     "flag set to 5 on 2 x v6e-32",
-			maxSliceRestarts:         5,
-			wantBackoffLimit:         "backoffLimit: 40",
-			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 5",
-			wantRestartPolicy:        "restartPolicy: OnFailure",
-		},
-		{
-			name:                     "non-elastic default 0 on 2 x v6e-32",
-			maxSliceRestarts:         0,
-			wantBackoffLimit:         "backoffLimit: 0",
-			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 0",
-			wantRestartPolicy:        "restartPolicy: Never",
-		},
-		{
-			name:                     "elastic default 4000 on 2 x v6e-32",
-			maxSliceRestarts:         4000,
-			wantBackoffLimit:         "backoffLimit: 32000",
-			wantBackoffLimitPerIndex: "backoffLimitPerIndex: 4000",
-			wantRestartPolicy:        "restartPolicy: OnFailure",
-		},
+		{name: "non-elastic default 0 on 2 x v6e-32", maxSliceRestarts: 0, wantBackoffLimit: 32, wantBackoffLimitPerIndex: 0},
+		{name: "flag set to 1 on 2 x v6e-32", maxSliceRestarts: 1, wantBackoffLimit: 32, wantBackoffLimitPerIndex: 1},
+		{name: "flag set to 3 on 2 x v6e-32", maxSliceRestarts: 3, wantBackoffLimit: 32, wantBackoffLimitPerIndex: 3},
+		{name: "flag set to 5 on 2 x v6e-32", maxSliceRestarts: 5, wantBackoffLimit: 40, wantBackoffLimitPerIndex: 5},
+		{name: "elastic default 4000 on 2 x v6e-32", maxSliceRestarts: 4000, wantBackoffLimit: 32000, wantBackoffLimitPerIndex: 4000},
+		{name: "backoffLimit capped at MaxInt32 on 2 x v6e-32", maxSliceRestarts: 300000000, wantBackoffLimit: math.MaxInt32, wantBackoffLimitPerIndex: 300000000},
 	}
 
 	for _, tc := range tests {
@@ -2984,19 +3265,32 @@ func TestGeneratePathwaysManifest_MaxSliceRestarts(t *testing.T) {
 				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
 			}
 
-			parts := strings.Split(manifest, "name: worker")
-			if len(parts) < 2 {
+			_, templates := parseStrictJobSetTemplates(t, manifest)
+			worker, ok := templates["worker"]
+			if !ok {
 				t.Fatalf("worker replicatedJob not found in manifest:\n%s", manifest)
 			}
-			workerManifest := parts[1]
-			if !strings.Contains(workerManifest, tc.wantBackoffLimit) {
-				t.Errorf("worker spec missing %q\nGot:\n%s", tc.wantBackoffLimit, workerManifest)
+			got := workerJobPolicy{
+				BackoffLimit:         worker.Spec.BackoffLimit,
+				BackoffLimitPerIndex: worker.Spec.BackoffLimitPerIndex,
+				MaxFailedIndexes:     worker.Spec.MaxFailedIndexes,
+				PodReplacementPolicy: worker.Spec.PodReplacementPolicy,
+				PodFailurePolicy:     worker.Spec.PodFailurePolicy,
+				RestartPolicy:        worker.Spec.Template.Spec.RestartPolicy,
 			}
-			if !strings.Contains(workerManifest, tc.wantBackoffLimitPerIndex) {
-				t.Errorf("worker spec missing %q\nGot:\n%s", tc.wantBackoffLimitPerIndex, workerManifest)
+			want := workerJobPolicy{
+				BackoffLimit:         &tc.wantBackoffLimit,
+				BackoffLimitPerIndex: &tc.wantBackoffLimitPerIndex,
+				MaxFailedIndexes:     &zero,
+				PodReplacementPolicy: &replaceFailed,
+				RestartPolicy:        corev1.RestartPolicyOnFailure,
 			}
-			if !strings.Contains(workerManifest, tc.wantRestartPolicy) {
-				t.Errorf("worker spec missing %q\nGot:\n%s", tc.wantRestartPolicy, workerManifest)
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("worker Job retry settings mismatch (-want +got):\n%s", diff)
+			}
+			head := templates["pathways-head"]
+			if head.Spec.BackoffLimit == nil || *head.Spec.BackoffLimit != 0 || head.Spec.Template.Spec.RestartPolicy != corev1.RestartPolicyNever {
+				t.Errorf("pathways-head backoffLimit = %v, restartPolicy = %q; want 0 and Never", head.Spec.BackoffLimit, head.Spec.Template.Spec.RestartPolicy)
 			}
 		})
 	}
@@ -3331,15 +3625,126 @@ func TestGeneratePathwaysManifest_ExclusiveTopology(t *testing.T) {
 
 func assertContainerEnvMap(t *testing.T, c corev1.Container, want map[string]string) {
 	t.Helper()
-	got := make(map[string]string, len(c.Env))
-	for _, e := range c.Env {
-		if _, dup := got[e.Name]; dup {
-			t.Errorf("container %q has duplicate env var %q", c.Name, e.Name)
-		}
-		got[e.Name] = e.Value
+	got, dups := containerEnvMap(c)
+	for _, name := range dups {
+		t.Errorf("container %q has duplicate env var %q", c.Name, name)
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("container %q env mismatch (-want +got):\n%s", c.Name, diff)
+	}
+}
+
+// containerEnvMap returns a container's env as name to value, with a fieldRef entry rendered as
+// "fieldRef:<fieldPath>" and any other valueFrom as "valueFrom:<source>", plus every name that appears more
+// than once.
+func containerEnvMap(c corev1.Container) (map[string]string, []string) {
+	got := make(map[string]string, len(c.Env))
+	var dups []string
+	for _, e := range c.Env {
+		if _, dup := got[e.Name]; dup {
+			dups = append(dups, e.Name)
+		}
+		switch {
+		case e.ValueFrom != nil && e.ValueFrom.FieldRef != nil:
+			got[e.Name] = "fieldRef:" + e.ValueFrom.FieldRef.FieldPath
+		case e.ValueFrom != nil:
+			got[e.Name] = "valueFrom:" + e.ValueFrom.String()
+		default:
+			got[e.Name] = e.Value
+		}
+	}
+	return got, dups
+}
+
+// envByContainer returns the env of every container in specs keyed by "<replicated job>/<container>",
+// reporting duplicate names as test errors.
+func envByContainer(t *testing.T, specs map[string]*corev1.PodSpec) map[string]map[string]string {
+	t.Helper()
+	out := make(map[string]map[string]string)
+	for job, spec := range specs {
+		for _, c := range podContainers(spec) {
+			env, dups := containerEnvMap(*c)
+			for _, name := range dups {
+				t.Errorf("%s/%s has duplicate env var %q", job, c.Name, name)
+			}
+			out[job+"/"+c.Name] = env
+		}
+	}
+	return out
+}
+
+// userEnvList is one user env input and the containers it is rendered into.
+type userEnvList struct {
+	flag  string
+	feeds func(container string) bool
+	set   func(job *orchestrator.JobDefinition, env map[string]string)
+}
+
+var (
+	workloadEnvList = userEnvList{
+		flag:  "--env",
+		feeds: func(c string) bool { return strings.HasPrefix(c, "workload-container") },
+		set:   func(job *orchestrator.JobDefinition, env map[string]string) { job.Env = env },
+	}
+	proxyEnvList = userEnvList{
+		flag:  "--pathways-proxy-env",
+		feeds: func(c string) bool { return c == "pathways-proxy" },
+		set:   func(job *orchestrator.JobDefinition, env map[string]string) { job.Pathways.ProxyEnv = env },
+	}
+	serverEnvList = userEnvList{
+		flag:  "--pathways-server-env",
+		feeds: func(c string) bool { return c == "pathways-rm" },
+		set:   func(job *orchestrator.JobDefinition, env map[string]string) { job.Pathways.ServerEnv = env },
+	}
+	workerEnvList = userEnvList{
+		flag:  "--pathways-worker-env",
+		feeds: func(c string) bool { return c == "pathways-worker" },
+		set:   func(job *orchestrator.JobDefinition, env map[string]string) { job.Pathways.WorkerEnv = env },
+	}
+)
+
+// envRenderer renders a workload after applying mutate to its job and returns envByContainer of the result.
+type envRenderer func(t *testing.T, mutate func(*orchestrator.JobDefinition)) map[string]map[string]string
+
+// assertUserEnvReplacesDefaults renders a baseline without user env, then, one list at a time, sets env names of
+// the containers that list feeds to sentinel values: each name alone, then all of them together. The fed
+// containers must carry the sentinels in place of their defaults (one entry per name, no fieldRef left) and every
+// other entry must keep its baseline value. Lists that feed no container of the rendered workload are skipped.
+func assertUserEnvReplacesDefaults(t *testing.T, render envRenderer, lists ...userEnvList) {
+	t.Helper()
+	baseline := render(t, func(*orchestrator.JobDefinition) {})
+	for _, list := range lists {
+		sentinels := make(map[string]string)
+		for key, env := range baseline {
+			if list.feeds(key[strings.Index(key, "/")+1:]) {
+				for name := range env {
+					sentinels[name] = "user-" + name
+				}
+			}
+		}
+		if len(sentinels) == 0 {
+			continue
+		}
+		t.Run(list.flag, func(t *testing.T) {
+			assertOverrides := func(label string, overrides map[string]string) {
+				got := render(t, func(job *orchestrator.JobDefinition) { list.set(job, maps.Clone(overrides)) })
+				want := make(map[string]map[string]string, len(baseline))
+				for key, env := range baseline {
+					want[key] = env
+					if list.feeds(key[strings.Index(key, "/")+1:]) {
+						want[key] = maps.Clone(env)
+						maps.Copy(want[key], overrides)
+					}
+				}
+				if diff := cmp.Diff(want, got); diff != "" {
+					t.Errorf("%s %s: container env mismatch (-want +got):\n%s", list.flag, label, diff)
+				}
+			}
+			for _, name := range slices.Sorted(maps.Keys(sentinels)) {
+				assertOverrides(name, map[string]string{name: sentinels[name]})
+			}
+			assertOverrides("for every default name", sentinels)
+		})
 	}
 }
 
@@ -3505,20 +3910,24 @@ func TestGenerateGKEManifest_CoordinatorEnv_TPU7xParallelContainers(t *testing.T
 		UseParallelContainers: true,
 		Verbose:               true,
 	}
-	profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&job)
-	if err != nil {
-		t.Fatalf("resolveHardwareRequirements failed: %v", err)
-	}
-	opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDyn, isStat)
-	if err != nil {
-		t.Fatalf("PrepareManifestOptions failed: %v", err)
-	}
-	manifest, err := orc.GenerateGKEManifest(opts, profile)
-	if err != nil {
-		t.Fatalf("GenerateGKEManifest failed: %v", err)
+	renderSpecs := func(t *testing.T, job orchestrator.JobDefinition) map[string]*corev1.PodSpec {
+		t.Helper()
+		profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&job)
+		if err != nil {
+			t.Fatalf("resolveHardwareRequirements failed: %v", err)
+		}
+		opts, err := orc.PrepareManifestOptions(job, "test-image:latest", profile, isDyn, isStat)
+		if err != nil {
+			t.Fatalf("PrepareManifestOptions failed: %v", err)
+		}
+		manifest, err := orc.GenerateGKEManifest(opts, profile)
+		if err != nil {
+			t.Fatalf("GenerateGKEManifest failed: %v", err)
+		}
+		return pathwaysPodSpecs(t, manifest)
 	}
 
-	podSpec := pathwaysPodSpecs(t, manifest)["main-job"]
+	podSpec := renderSpecs(t, job)["main-job"]
 	if podSpec == nil || len(podSpec.Containers) != 2 {
 		t.Fatalf("expected 2 parallel containers in main-job podSpec, got %+v", podSpec)
 	}
@@ -3533,6 +3942,13 @@ func TestGenerateGKEManifest_CoordinatorEnv_TPU7xParallelContainers(t *testing.T
 	for _, c := range podSpec.Containers {
 		assertContainerEnvMap(t, c, wantEnv)
 	}
+
+	// --env must replace the --verbose TPU defaults (and the coordinator defaults) in every parallel container.
+	assertUserEnvReplacesDefaults(t, func(t *testing.T, mutate func(*orchestrator.JobDefinition)) map[string]map[string]string {
+		j := job
+		mutate(&j)
+		return envByContainer(t, renderSpecs(t, j))
+	}, workloadEnvList)
 }
 
 func TestValidatePathwaysMTCManifest_CleansMountPath(t *testing.T) {
@@ -4225,6 +4641,53 @@ func TestGenerateJobManifest_TPUv7xDerivationPipeline(t *testing.T) {
 		assertContainerEnvMap(t, c, map[string]string{
 			"MASTER_ADDR":        "tpu7x-idx-job-0.tpu7x-idx-job",
 			"WORKERS_0_HOSTNAME": "tpu7x-idx-job-0.tpu7x-idx-job",
+		})
+	}
+}
+
+// TestGenerateWorkloadManifests_GPUUserEnvReplacesVerboseDefaults checks that --env replaces the --verbose GPU
+// default (and every other env default) in the shared pod_template, for both the JobSet and the Job renderer.
+func TestGenerateWorkloadManifests_GPUUserEnvReplacesVerboseDefaults(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		generate func(*GKEOrchestrator, ManifestOptions, JobProfile) (string, error)
+		specs    func(*testing.T, string) map[string]*corev1.PodSpec
+	}{
+		{name: "JobSet", generate: (*GKEOrchestrator).GenerateGKEManifest, specs: pathwaysPodSpecs},
+		{name: "Job", generate: (*GKEOrchestrator).GenerateJobManifest, specs: func(t *testing.T, manifest string) map[string]*corev1.PodSpec {
+			_, job, _ := parseServiceAndJobDocs(t, manifest)
+			return map[string]*corev1.PodSpec{"job": &job.Spec.Template.Spec}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assertUserEnvReplacesDefaults(t, func(t *testing.T, mutate func(*orchestrator.JobDefinition)) map[string]map[string]string {
+				orc := newGPUDerivationTestOrc(t)
+				job := gpuDerivationJobDef("gpu-env-job")
+				job.Verbose = true
+				job.Env = nil // the baseline must carry no user env
+				mutate(&job)
+				profile, isDyn, isStat, err := orc.resolveHardwareRequirements(&job)
+				if err != nil {
+					t.Fatalf("resolveHardwareRequirements failed: %v", err)
+				}
+				opts, err := orc.PrepareManifestOptions(job, "registry.local/trainer:v1", profile, isDyn, isStat)
+				if err != nil {
+					t.Fatalf("PrepareManifestOptions failed: %v", err)
+				}
+				manifest, err := tc.generate(orc, opts, profile)
+				if err != nil {
+					t.Fatalf("%s render failed: %v", tc.name, err)
+				}
+				envs := envByContainer(t, tc.specs(t, manifest))
+				if len(job.Env) == 0 {
+					for k, m := range envs {
+						if _, ok := m["NCCL_DEBUG"]; !ok {
+							t.Fatalf("baseline %s %s missing NCCL_DEBUG verbose default: %+v", tc.name, k, m)
+						}
+					}
+				}
+				return envs
+			}, workloadEnvList)
 		})
 	}
 }
@@ -4996,6 +5459,29 @@ func TestSubmitWorkloadTemplate_DispatchesByJobKind(t *testing.T) {
 	err := orc.submitWorkloadTemplate("pathways-jobset.tmpl", pwJob, "img:v1", profile, false, false)
 	if err == nil || !strings.Contains(err.Error(), `no manifest generator is wired for workload template "pathways-jobset.tmpl"`) {
 		t.Errorf("unknown template name: error = %v, want internal error naming the template", err)
+	}
+}
+
+func TestGenerateAndSubmitManifests_Tier3JobTemplateDispatch(t *testing.T) {
+	tier3Orc := newCustomTemplateTestOrc(t, "")
+	tier3Orc.submissionSession = submissionSession{addons: addonPlan{resolved: true, jobSetEnabled: false}}
+	_, profile := newCustomTemplateBaseOpts()
+	job := newCPUPathwaysJob("dispatch-tier3")
+	job.IsPathwaysJob = false
+	job.DryRunManifest = filepath.Join(t.TempDir(), "tier3-manifest.yaml")
+	if err := tier3Orc.generateAndSubmitManifests(job, "img:v1", profile, false, false); err != nil {
+		t.Fatalf("generateAndSubmitManifests(Tier-3) failed: %v", err)
+	}
+	content, err := os.ReadFile(job.DryRunManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := string(content)
+	if !strings.Contains(rendered, "kind: Service") || !strings.Contains(rendered, "apiVersion: batch/v1") || !strings.Contains(rendered, "kind: Job\n") {
+		t.Errorf("expected standalone Service + batch/v1 Job manifest, got:\n%s", rendered)
+	}
+	if strings.Contains(rendered, "kind: JobSet") {
+		t.Errorf("Tier-3 dispatch must not render JobSet, got:\n%s", rendered)
 	}
 }
 
@@ -5870,6 +6356,58 @@ func TestGeneratePathwaysManifest_HostNetworkAndCredentials(t *testing.T) {
 	}
 }
 
+// TestWarnPathwaysWorkerRestartPolicy renders a default (non-elastic) Pathways job with the embedded template and
+// with a pathways_jobset.tmpl extracted before workers always restarted in place; only the stale template, whose
+// workers use restartPolicy Never, triggers the warning.
+func TestWarnPathwaysWorkerRestartPolicy(t *testing.T) {
+	legacyDir := writeLegacyPathwaysTemplate(t)
+	const warnPrefix = "The rendered Pathways worker pods use restartPolicy"
+	for _, tc := range []struct {
+		name          string
+		templatesPath string
+		wantPolicy    corev1.RestartPolicy
+		wantWarn      bool
+	}{
+		{name: "embedded template", wantPolicy: corev1.RestartPolicyOnFailure},
+		{name: "stale custom template", templatesPath: legacyDir, wantPolicy: corev1.RestartPolicyNever, wantWarn: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot, restore := logging.CaptureForTesting(t)
+			manifest, err := generatePathwaysTestManifest(t, tc.templatesPath, false, "", "", nil)
+			restore()
+			if err != nil {
+				t.Fatalf("GeneratePathwaysManifest failed: %v", err)
+			}
+			if got := pathwaysPodSpecs(t, manifest)["worker"].RestartPolicy; got != tc.wantPolicy {
+				t.Fatalf("worker restartPolicy = %q, want %q", got, tc.wantPolicy)
+			}
+			_, errOut := snapshot()
+			if got := strings.Contains(errOut, warnPrefix); got != tc.wantWarn {
+				t.Errorf("GeneratePathwaysManifest restartPolicy warning = %v, want %v (log: %q)", got, tc.wantWarn, errOut)
+			}
+			if tc.wantWarn && (!strings.Contains(errOut, fmt.Sprintf("restartPolicy %q", tc.wantPolicy)) || !strings.Contains(errOut, pathwaysTemplateExtractHint)) {
+				t.Errorf("warning does not name restartPolicy %q or the re-extract hint: %q", tc.wantPolicy, errOut)
+			}
+		})
+	}
+
+	const jobSetHeader = "apiVersion: jobset.x-k8s.io/v1alpha2\nkind: JobSet\nspec:\n  replicatedJobs:\n"
+	for _, tc := range []struct {
+		name     string
+		manifest string
+	}{
+		{name: "JobSet without workers", manifest: jobSetHeader + "  - name: pathways-head\n"},
+		// The JobSet webhook defaults an omitted restartPolicy to OnFailure.
+		{name: "worker without restartPolicy", manifest: jobSetHeader + "  - name: worker\n    template:\n      spec:\n        template:\n          spec:\n            containers:\n            - name: pathways-worker\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if warnPathwaysWorkerRestartPolicy(tc.manifest) {
+				t.Error("warnPathwaysWorkerRestartPolicy() = true, want false")
+			}
+		})
+	}
+}
+
 func TestWarnPathwaysHostNetworkManifest(t *testing.T) {
 	withJob := func(jobName string, hostNetwork bool) string {
 		hn := ""
@@ -5896,5 +6434,74 @@ func TestWarnPathwaysHostNetworkManifest(t *testing.T) {
 				t.Errorf("warnPathwaysHostNetworkManifest() = %v, want %v", got, tc.wantWarn)
 			}
 		})
+	}
+}
+
+func TestGenerateJobManifest_TypedServiceAndIndexedJobYAML(t *testing.T) {
+	g := newGPUDerivationTestOrc(t)
+	g.namespace = "ml-ns"
+
+	opts := ManifestOptions{
+		WorkloadName:                  "tier3-job",
+		FullImageName:                 "registry.local/train:v1",
+		CommandToRun:                  "python train.py",
+		ComputeType:                   "g2-standard-48",
+		MachineType:                   "g2-standard-48",
+		ClusterLocation:               "us-central1-a",
+		NumSlices:                     1,
+		NodesPerSlice:                 2,
+		ParallelContainers:            1,
+		TtlSecondsAfterFinished:       3600,
+		TerminationGracePeriodSeconds: 30,
+	}
+	profile := JobProfile{IsCPUMachine: false, CapacityCount: 4}
+
+	manifest, err := g.GenerateJobManifest(opts, profile)
+	if err != nil {
+		t.Fatalf("GenerateJobManifest() err = %v", err)
+	}
+	if err := ValidateJobSetManifest(manifest); err != nil {
+		t.Fatalf("ValidateJobSetManifest(Service+Job) err = %v", err)
+	}
+	if err := ValidateJobSetManifest("apiVersion: v1\nkind: Service\nspec:\n  ports: \"not-a-list\"\n"); err == nil {
+		t.Fatalf("ValidateJobSetManifest(malformed Service) = nil, want parse error")
+	}
+	docs, err := splitYAMLDocuments(manifest)
+	if err != nil || len(docs) != 2 {
+		t.Fatalf("splitYAMLDocuments() len=%d err=%v, want 2 (Service + Job)", len(docs), err)
+	}
+	assertHeadlessServiceYAML(t, docs[0], "tier3-job")
+	assertIndexedJobYAML(t, docs[1], "tier3-job")
+}
+
+func assertHeadlessServiceYAML(t *testing.T, doc, name string) {
+	t.Helper()
+	var svc corev1.Service
+	if err := k8syaml.Unmarshal([]byte(doc), &svc); err != nil {
+		t.Fatalf("unmarshal Service failed: %v", err)
+	}
+	if svc.Kind != "Service" || svc.Name != name || svc.Spec.ClusterIP != corev1.ClusterIPNone {
+		t.Errorf("unexpected headless Service header: %+v", svc)
+	}
+	if svc.Labels[workloadLabel] != name || svc.Spec.Selector["batch.kubernetes.io/job-name"] != name {
+		t.Errorf("unexpected headless Service labels/selector: labels=%v selector=%v", svc.Labels, svc.Spec.Selector)
+	}
+}
+
+func assertIndexedJobYAML(t *testing.T, doc, name string) {
+	t.Helper()
+	var job batchv1.Job
+	if err := k8syaml.Unmarshal([]byte(doc), &job); err != nil {
+		t.Fatalf("unmarshal Job failed: %v", err)
+	}
+	if job.Kind != "Job" || job.Name != name || job.Spec.Template.Spec.Subdomain != name {
+		t.Errorf("unexpected batch/v1 Job header: %+v", job)
+	}
+	if job.Spec.CompletionMode == nil || *job.Spec.CompletionMode != batchv1.IndexedCompletion {
+		t.Errorf("expected Indexed completionMode, got %v", job.Spec.CompletionMode)
+	}
+	limits := job.Spec.Template.Spec.Containers[0].Resources.Limits
+	if qty, ok := limits[corev1.ResourceName("nvidia.com/gpu")]; !ok || qty.String() != "4" {
+		t.Errorf("GPU limits = %v, want nvidia.com/gpu=4", limits)
 	}
 }

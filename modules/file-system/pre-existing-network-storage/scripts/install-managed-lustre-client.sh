@@ -16,7 +16,7 @@
 # Install Managed Lustre client modules
 # Based on these instructions: https://cloud.google.com/managed-lustre/docs/connect-from-compute-engine
 
-# The client modules currently only support Rocky 8, and Ubuntu 22.04
+# The client modules currently only support Rocky 8, Rocky 9, Ubuntu 22.04, and Ubuntu 24.04
 
 set -e
 
@@ -31,6 +31,7 @@ if [[ $GKE_ENABLED == "1" ]]; then
 	fi
 fi
 
+modprobe lustre 2>/dev/null || true
 if grep -q lustre /proc/filesystems; then
 	echo "Skipping managed lustre client install as it is already supported"
 	exit 0
@@ -40,11 +41,11 @@ fi
 . /etc/os-release
 DIST="NA"
 if [[ $NAME == *"Ubuntu"* ]]; then
-	if [[ $VERSION_ID == "22.04" ]]; then
+	if [[ $VERSION_ID == "22.04" || $VERSION_ID == "24.04" ]]; then
 		DIST="Ubuntu"
 	fi
 elif [[ $NAME == *"Rocky"* ]]; then
-	if [[ $VERSION_ID == "8"* ]]; then
+	if [[ $VERSION_ID == "8"* || $VERSION_ID == "9"* ]]; then
 		DIST="Rocky"
 	fi
 fi
@@ -62,6 +63,10 @@ if [[ ${DIST} == "Ubuntu" ]]; then
 	# Install modules
 	apt update
 	if ! apt install -y "lustre-client-modules-$(uname -r)" lustre-client-utils; then
+		if [[ "$(dpkg --print-architecture)" != "amd64" ]]; then
+			echo "Error: Pre-compiled lustre-client-modules-$(uname -r) not found, and lustre-client-modules-dkms is unavailable for $(dpkg --print-architecture)." >&2
+			exit 1
+		fi
 		echo "Pre-compiled package lustre-client-modules-$(uname -r) not found. Attempting install via lustre-client-modules-dkms..."
 		if ! apt install -y dkms "linux-headers-$(uname -r)" lustre-client-modules-dkms lustre-client-utils; then
 			echo "Error finding Lustre module packages, Lustre package may not exist for this kernel version" >&2
@@ -69,22 +74,28 @@ if [[ ${DIST} == "Ubuntu" ]]; then
 		fi
 	fi
 elif [[ ${DIST} == "Rocky" ]]; then
+	ROCKY_MAJOR="${VERSION_ID%%.*}"
 	# Set up yum repo
 	touch /etc/yum.repos.d/artifact-registry.repo
-	tee -a /etc/yum.repos.d/artifact-registry.repo <<-EOF
-		[lustre-client-rocky-8]
-		name=lustre-client-rocky-8
-		baseurl=https://us-yum.pkg.dev/projects/lustre-client-binaries/lustre-client-rocky-8
-		enabled=1
-		repo_gpgcheck=0
-		gpgcheck=0
-	EOF
+	if ! grep -Fq "[lustre-client-rocky-${ROCKY_MAJOR}]" /etc/yum.repos.d/artifact-registry.repo 2>/dev/null; then
+		tee -a /etc/yum.repos.d/artifact-registry.repo <<-EOF
+			[lustre-client-rocky-${ROCKY_MAJOR}]
+			name=lustre-client-rocky-${ROCKY_MAJOR}
+			baseurl=https://us-yum.pkg.dev/projects/lustre-client-binaries/lustre-client-rocky-${ROCKY_MAJOR}
+			enabled=1
+			repo_gpgcheck=0
+			gpgcheck=0
+		EOF
+	fi
 	# Install modules
 	yum makecache
-	yum --enablerepo=lustre-client-rocky-8 install -y kmod-lustre-client lustre-client
+	yum --enablerepo="lustre-client-rocky-${ROCKY_MAJOR}" install -y kmod-lustre-client lustre-client
 fi
 
-if [[ $DIST != "NA" ]]; then
-	# Load the new lustre client module
-	modprobe lustre
+if [[ $DIST == "NA" ]]; then
+	echo "Error: Unsupported OS '${NAME:-unknown} ${VERSION_ID:-}' for Managed Lustre client install. Supported OSes: Ubuntu 22.04, Ubuntu 24.04, Rocky Linux 8, Rocky Linux 9." >&2
+	exit 1
 fi
+
+# Load the new lustre client module
+modprobe lustre

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pathlib import Path
 import pytest
 import mock
 from common import TstNodeset, TstCfg, TstMachineConf, TstTemplateInfo, Placeholder, TstPartition
@@ -19,21 +20,6 @@ from common import TstNodeset, TstCfg, TstMachineConf, TstTemplateInfo, Placehol
 from util import NSDict
 import conf
 import util
-
-
-def test_nodeset_tpu_lines():
-    nodeset = TstNodeset(
-        "turbo",
-        node_count_static=2,
-        node_count_dynamic_max=3,
-        node_conf={"red": "velvet"},
-    )
-    assert conf.nodeset_tpu_lines(nodeset, util.Lookup(TstCfg())) == "\n".join(
-        [
-            "NodeName=m22-turbo-[0-4] State=CLOUD red=velvet",
-            "NodeSet=turbo Nodes=m22-turbo-[0-4]",
-        ]
-    )
 
 
 @pytest.mark.parametrize("skip", [False, True])
@@ -67,8 +53,8 @@ def test_nodeset_lines(skip):
 @pytest.mark.parametrize(
     "skip,partition_nodeset,expected",
     [
-        (False, ["turbo", "empty"], "Nodes=turbo,empty,dyno,bolt "),
-        (True, ["turbo", "empty"], "Nodes=m22-turbo-[0-4],dyno,bolt "),
+        (False, ["turbo", "empty"], "Nodes=turbo,empty,dyno "),
+        (True, ["turbo", "empty"], "Nodes=m22-turbo-[0-4],dyno "),
     ],
 )
 def test_partitionlines_nodes(skip, partition_nodeset, expected):
@@ -84,7 +70,6 @@ def test_partitionlines_nodes(skip, partition_nodeset, expected):
     ))
     part = TstPartition(
         partition_nodeset=partition_nodeset,
-        partition_nodeset_tpu=["bolt"],
         partition_nodeset_dyn=["dyno"],
     )
     assert expected in conf.SlurmConfigGenerator(lkp).partitionlines(part)
