@@ -13,7 +13,7 @@ Each blueprint deploys a Slurm cluster with one or both desktop types:
 - **Login desktop**: `novnc-runtime` layered onto the Slurm login node, using
   TigerVNC. Suited to 2D and general interactive use.
 - **Visualization desktop**: `novnc-desktop` on a dedicated VM, using TurboVNC.
-  Suited to 3D, and the only backend supporting GPU acceleration on GCE.
+  Suited to 3D. TurboVNC is the recommended backend for GPU acceleration.
 
 Both hosts run a per-user broker that listens only on a unix socket,
 `/run/ghpc-remote-desktop/broker.sock`, with no TCP port. You reach it by
@@ -56,11 +56,12 @@ is needed. The Ubuntu `aci-gpu-u2404-*` images carry a compute-only driver: it
 ships no `libEGL_nvidia` and cannot render until the matching
 `libnvidia-gl-<branch>-server` package is added to the image.
 
-`vnc_backend: turbovnc` is required and is already the visualization desktop's
-setting. TurboVNC reaches the GPU through VirtualGL's EGL back end; TigerVNC
-offloads GL only through `-rendernode`. Without a usable GPU the session falls
-back to software rendering rather than failing, and the broker logs why at
-startup.
+`vnc_backend: turbovnc` is recommended and is already the visualization
+desktop's setting. TurboVNC reaches the GPU through VirtualGL's EGL back end,
+which works whether or not the driver exposes a DRM render node. TigerVNC
+offloads GL only through `-rendernode`, so it needs a render node as well as a
+driver with graphics support. Without a usable GPU the session falls back to
+software rendering rather than failing, and the broker logs why at startup.
 
 ## Getting Started
 
