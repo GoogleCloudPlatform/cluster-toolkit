@@ -417,3 +417,159 @@ def test_gen_topology_region_switches(by_region):
     summary.dump(lkp)
     upd, _ = conf.gen_topology_yaml(lkp)
     assert not upd
+
+
+def test_gen_topology_yaml_mig_slice_blocks_and_block_sizes(tmp_path):
+    """Unreserved static A4X MIG slices enable topology/block, shard cold-start down nodes
+    per slice MIG, and size blocks from nodeset_slice_size() (both conf and conf_v2605)."""
+    from common import TstPartition
+    import conf_v2605
+
+    # 1. 36-node unreserved static MIG A4X (1x72 -> slice_size=18 -> 2 shards) at cold start
+    out_18 = tmp_path / "c18"
+    out_18.mkdir()
+    cfg_1x72 = TstCfg(
+        slurm_cluster_name="cl",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                node_count_static=36,
+                node_count_dynamic_max=0,
+                provisioning_engine="MIG",
+                accelerator_topology="1x72",
+                slice_size=18,
+                reservation_name="",
+            ),
+        },
+        partitions={
+            "gpu": TstPartition(partition_name="gpu", partition_nodeset=["a4x"]),
+        },
+        output_dir=str(out_18),
+    )
+    lkp_18 = util.Lookup(cfg_1x72)
+    with (
+        mock.patch.object(lkp_18, "instances", return_value={}),
+        mock.patch.object(lkp_18, "is_tpu_nodeset", return_value=False),
+    ):
+        conf.gen_topology_yaml(lkp_18)
+    parsed_18 = yaml.safe_load((out_18 / "cloud_topology.yaml").read_text())
+    by_topo = {entry["topology"]: entry for entry in parsed_18}
+    assert by_topo["topology/tree"]["cluster_default"] is False
+    assert by_topo["topology/block"]["cluster_default"] is True
+    assert by_topo["topology/block"]["block"]["block_sizes"] == [18, 18 * BLOCK_SIZE]
+    actual_nodes = sorted(
+        b["nodes"] for b in by_topo["topology/block"]["block"]["blocks"] if b["nodes"]
+    )
+    assert actual_nodes == ["cl-a4x-[0-9,10-17]", "cl-a4x-[18-35]"]
+
+    # 2. Non-18 slice_size (1x36 on 4-GPU hosts -> slice_size=9) drives block_sizes in both
+    #    conf.py and conf_v2605.py (even when a TPU nodeset is also present in the cluster)
+    out_9 = tmp_path / "c9"
+    out_9.mkdir()
+    cfg_9 = TstCfg(
+        slurm_cluster_name="cl",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                node_count_static=18,
+                node_count_dynamic_max=0,
+                provisioning_engine="MIG",
+                accelerator_topology="1x36",
+                slice_size=9,
+                reservation_name="",
+            ),
+            "tpu": TstNodeset(
+                nodeset_name="tpu",
+                node_count_static=2,
+                node_count_dynamic_max=0,
+                accelerator_topology="2x4",
+            ),
+        },
+        partitions={
+            "gpu": TstPartition(partition_name="gpu", partition_nodeset=["a4x"]),
+            "tpu": TstPartition(partition_name="tpu", partition_nodeset=["tpu"]),
+        },
+        output_dir=str(out_9),
+    )
+    lkp_9 = util.Lookup(cfg_9)
+    with (
+        mock.patch.object(lkp_9, "instances", return_value={}),
+        mock.patch.object(lkp_9, "is_tpu_nodeset", side_effect=lambda name: name == "tpu"),
+        mock.patch.object(lkp_9, "has_tpu_nodesets", return_value=True),
+        mock.patch.object(lkp_9, "is_tpu_static_nodeset", side_effect=lambda name: name == "tpu"),
+        mock.patch.object(lkp_9, "get_tpu_chunk_size", return_value=2),
+    ):
+        assert conf.block_base_size_for_cluster(lkp_9) == 9
+        gen = conf_v2605.SlurmConfigGeneratorV2605(lkp_9)
+        gen.generate_topology_data()
+    parsed_9 = yaml.safe_load((out_9 / "cloud_topology.yaml").read_text())
+    by_topo_9 = {entry["topology"]: entry for entry in parsed_9}
+    assert by_topo_9["topology/block"]["cluster_default"] is True
+    assert by_topo_9["topology/block"]["block"]["block_sizes"] == [9, 9 * BLOCK_SIZE]
+    assert by_topo_9[conf_v2605.TOPOLOGY_TPU_BLOCK]["block"]["block_sizes"] == [1]
+
+    # 3. Booting A4X MIG nodes without physicalHost yet stay isolated per slice MIG (not lumped
+    #    into slurm-root), alongside remaining down nodes
+    out_boot = tmp_path / "cboot"
+    out_boot.mkdir()
+    cfg_boot = TstCfg(
+        slurm_cluster_name="cl",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                node_count_static=36,
+                node_count_dynamic_max=0,
+                provisioning_engine="MIG",
+                accelerator_topology="1x72",
+                slice_size=18,
+                reservation_name="",
+            ),
+        },
+        partitions={"gpu": TstPartition(partition_name="gpu", partition_nodeset=["a4x"])},
+        output_dir=str(out_boot),
+    )
+    lkp_boot = util.Lookup(cfg_boot)
+    booting_insts = {
+        "cl-a4x-0": tstInstance("cl-a4x-0", physical_host=""),
+        "cl-a4x-18": tstInstance("cl-a4x-18", physical_host=""),
+    }
+    with (
+        mock.patch.object(lkp_boot, "instances", return_value=booting_insts),
+        mock.patch.object(lkp_boot, "is_tpu_nodeset", return_value=False),
+    ):
+        conf.gen_topology_yaml(lkp_boot)
+    parsed_boot = yaml.safe_load((out_boot / "cloud_topology.yaml").read_text())
+    by_topo_boot = {entry["topology"]: entry for entry in parsed_boot}
+    boot_blocks = sorted(
+        b["nodes"] for b in by_topo_boot["topology/block"]["block"]["blocks"] if b["nodes"]
+    )
+    assert boot_blocks == ["cl-a4x-[0-9,10-17]", "cl-a4x-[18-35]"]
+
+    # 4. Mixed cluster (reserved BULK_INSERT 1x72=18 + MIG slice_size=36) uses smallest (18)
+    cfg_mixed = TstCfg(
+        slurm_cluster_name="cl",
+        nodeset={
+            "res_a4x": TstNodeset(
+                nodeset_name="res_a4x",
+                node_count_static=18,
+                provisioning_engine="BULK_INSERT",
+                accelerator_topology="1x72",
+                reservation_name="projects/p/reservations/r1",
+            ),
+            "mig_a4x": TstNodeset(
+                nodeset_name="mig_a4x",
+                node_count_static=36,
+                provisioning_engine="MIG",
+                accelerator_topology="1x144",
+                slice_size=36,
+                reservation_name="",
+            ),
+        },
+        partitions={
+            "p_res": TstPartition(partition_name="p_res", partition_nodeset=["res_a4x"]),
+            "p_mig": TstPartition(partition_name="p_mig", partition_nodeset=["mig_a4x"]),
+        },
+    )
+    lkp_mixed = util.Lookup(cfg_mixed)
+    with mock.patch.object(lkp_mixed, "is_tpu_nodeset", return_value=False):
+        assert conf.block_base_size_for_cluster(lkp_mixed) == 18

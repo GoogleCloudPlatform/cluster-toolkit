@@ -727,7 +727,11 @@ class TopologyBuilder:
                 })
         return blocks
 
-    def render_yaml(self, block_is_default: bool=False) -> List[Any]:
+    def render_yaml(
+        self,
+        block_is_default: bool = False,
+        block_base_size: int = NVLINK_VM_COUNT,
+    ) -> List[Any]:
         rendered_blocks = self.render_blocks()
 
         sections = [
@@ -744,7 +748,7 @@ class TopologyBuilder:
                 "topology": TOPOLOGY_BLOCK,
                 "cluster_default": block_is_default,
                 "block": {
-                    "block_sizes": [NVLINK_VM_COUNT, NVLINK_VM_COUNT*BLOCK_SIZE],
+                    "block_sizes": [block_base_size, block_base_size * BLOCK_SIZE],
                     "blocks": rendered_blocks,
                 }
             })
@@ -798,6 +802,11 @@ def add_nodeset_topology(
 ) -> None:
     up_nodes = set()
     default_path = [_SLURM_TOPO_ROOT, _default_switch(nodeset, lkp)]
+    is_mig_gpu_slice = (
+        lkp.is_nodeset_mig(nodeset.nodeset_name)
+        and not lkp.is_tpu_nodeset(nodeset.nodeset_name)
+        and bool(nodeset.accelerator_topology)
+    )
 
     for inst in lkp.instances().values():
         try:
@@ -812,6 +821,8 @@ def add_nodeset_topology(
 
         if phys_host:
             bldr.add(_make_physical_path(phys_host), [inst.name])
+        elif is_mig_gpu_slice:
+            bldr.add([*default_path, lkp.node_mig_name(inst.name)], [inst.name])
         else:
             bldr.add(default_path, [inst.name])
 
@@ -820,8 +831,39 @@ def add_nodeset_topology(
         if node not in up_nodes:
             down_nodes.append(node)
     if down_nodes:
-        bldr.add(default_path, down_nodes)
+        if is_mig_gpu_slice:
+            by_mig: Dict[str, List[str]] = defaultdict(list)
+            for node in down_nodes:
+                by_mig[lkp.node_mig_name(node)].append(node)
+            for mig_name, mig_nodes in by_mig.items():
+                bldr.add([*default_path, mig_name], mig_nodes)
+        else:
+            bldr.add(default_path, down_nodes)
         bldr.summary.down_nodes.update(down_nodes)
+
+def block_base_size_for_cluster(lkp: util.Lookup) -> int:
+    """Return the base block size (VMs per block) for Slurm topology/block.
+
+    Uses ``nodeset_slice_size()`` for static MIG nodesets and ``NVLINK_VM_COUNT``
+    for non-MIG nodesets in block-topology partitions so Slurm blocks stay aligned
+    with the smallest block boundary across all block-topology partitions.
+    """
+    slice_sizes = sorted({
+        lkp.nodeset_slice_size(ns_name)
+        if (lkp.is_nodeset_mig(ns_name) and not lkp.is_tpu_nodeset(ns_name))
+        else NVLINK_VM_COUNT
+        for p in lkp.cfg.partitions.values()
+        if lkp.has_block_topology(p)
+        for ns_name in p.partition_nodeset
+    })
+    if not slice_sizes:
+        return NVLINK_VM_COUNT
+    if len(slice_sizes) > 1:
+        log.warning(
+            f"Multiple block sizes detected across block-topology partitions "
+            f"({slice_sizes}); using smallest ({slice_sizes[0]}) as base block size."
+        )
+    return slice_sizes[0]
 
 def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
     bldr = TopologyBuilder()
@@ -844,11 +886,19 @@ def gen_topology_yaml(lkp: util.Lookup) -> Tuple[bool, TopologySummary]:
     topo = gen_topology(lkp).compress()
     yaml_file = lkp.etc_dir / "cloud_topology.yaml"
     block_is_default = any(lkp.has_block_topology(p) for p in lkp.cfg.partitions.values())
+    block_base_size = block_base_size_for_cluster(lkp)
 
     with open(yaml_file, "w") as f:
         f.write(FILE_PREAMBLE)
         f.write("---\n\n")
-        yaml.dump(topo.render_yaml(block_is_default=block_is_default), f, sort_keys=False)
+        yaml.dump(
+            topo.render_yaml(
+                block_is_default=block_is_default,
+                block_base_size=block_base_size,
+            ),
+            f,
+            sort_keys=False,
+        )
 
     if yaml_file.stat().st_size % 4096 == 0:
         with yaml_file.open("a") as f:
