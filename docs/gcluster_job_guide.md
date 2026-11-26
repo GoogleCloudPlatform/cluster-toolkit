@@ -226,10 +226,10 @@ If you want to run a job across multiple groups of GPU nodes (e.g., 2 groups of 
 You can mount Cloud Storage buckets, Filestore instances, NFS servers, existing PVCs (e.g., for Lustre), or host paths using the `--mount` flag.
 
 Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]"`
-* `mode` is optional and defaults to `ro` (read-only). To allow writes, append `;rw`.
-* `options` is optional and allows passing custom mount options (currently only supported for GCS fuse volumes).
+* `mode` is optional, defaults to `ro` (read-only), and may be specified once (`ro` or `rw`; mounting with `profile=checkpointing` without `;rw` logs a warning).
+* `options` is optional and allows passing custom mount options (currently only supported for GCS fuse volumes; options are deduplicated and sorted so option ordering does not create duplicate storage gateways, and access modes `ro`/`rw` must be passed via the `--mount` mode segment instead of `options=`).
 * `profile` is optional, GCS-only, and selects a [GKE Cloud Storage FUSE storage profile](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles) (see below).
-* `attributes` is optional, GCS-only and sets key-value pairs for CSI volume settings (`key=val,...`).
+* `attributes` is optional, GCS-only and sets non-empty key-value pairs for CSI volume settings (`key=val,...`).
   * **Without `profile=`**: Applies standard [GCSFuse CSI volume attributes](https://docs.cloud.google.com/kubernetes-engine/docs/reference/cloud-storage-fuse-csi-driver/volume-attr) directly to the inline mount.
   * **With `profile=`**: Overrides default [storage profile StorageClass parameters](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles#storageclass_configuration_reference) on the generated PVs.
 
