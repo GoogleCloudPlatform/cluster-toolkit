@@ -21,7 +21,6 @@ locals {
   token                  = var.access_token != null ? var.access_token : data.google_client_config.default.access_token
   is_dns_endpoint        = strcontains(local.host, ".gke.goog")
   cluster_ca_certificate = local.is_dns_endpoint ? null : (var.cluster_ca_certificate != null ? (try(base64decode(var.cluster_ca_certificate), var.cluster_ca_certificate)) : base64decode(data.google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate))
-  insecure               = local.is_dns_endpoint
 }
 
 provider "helm" {
@@ -29,7 +28,6 @@ provider "helm" {
     host                   = local.host
     token                  = local.token
     cluster_ca_certificate = local.cluster_ca_certificate
-    insecure               = local.insecure
   }
 }
 
@@ -37,5 +35,4 @@ provider "kubernetes" {
   host                   = local.host
   token                  = local.token
   cluster_ca_certificate = local.cluster_ca_certificate
-  insecure               = local.insecure
 }

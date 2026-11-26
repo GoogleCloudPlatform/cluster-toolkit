@@ -100,4 +100,3 @@ variable "module_id" {
   type        = string
   default     = "custom-compute-class"
 }
-

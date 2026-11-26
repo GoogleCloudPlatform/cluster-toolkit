@@ -6,12 +6,13 @@ Classes (`ComputeClass` CRDs)** using the
 `community/modules/management/custom-compute-class` module.
 
 It illustrates two complementary patterns for defining compute classes:
+
 1. **Inline-defined Compute Class**: Fully declared within the blueprint settings using structured HCL/YAML parameters (demonstrating priority lists with Spot instance fallback, taints, and labels).
 2. **Template-defined Compute Class**: Parameterized through an external Terraform template (`.tftpl`) file via `custom_manifest_path` and `custom_template_vars`.
 
 ## Architecture Overview
 
-```
+```text
                         +------------------------------------------+
                         |               GKE Cluster                |
                         |      (Node Auto-Provisioning Enabled)    |
