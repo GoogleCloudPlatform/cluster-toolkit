@@ -206,6 +206,17 @@ resource "google_compute_instance" "server_vm" {
     }
   }
 
+  # The boot disk holds the portal database (db.sqlite3) and the per-resource
+  # run-time directories. A change to the image or disk size would replace an
+  # existing server together with that disk, so it applies to new deployments
+  # only.
+  lifecycle {
+    ignore_changes = [
+      boot_disk[0].initialize_params[0].image,
+      boot_disk[0].initialize_params[0].size,
+    ]
+  }
+
 }
 
 
