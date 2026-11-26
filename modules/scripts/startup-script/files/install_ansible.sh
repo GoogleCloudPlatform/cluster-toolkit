@@ -221,7 +221,7 @@ main() {
 	fi
 	if [ "${recreate_venv}" = true ]; then
 		case "${venv_path%/}" in
-		''|/bin|/boot|/dev|/etc|/home|/lib|/lib64|/opt|/proc|/root|/sbin|/sys|/tmp|/usr|/usr/local|/var)
+		''|/|/bin|/boot|/dev|/etc|/home|/lib|/lib64|/opt|/proc|/root|/sbin|/sys|/tmp|/usr|/usr/local|/var)
 			echo "Error: Refusing to delete dangerous virtual environment path: ${venv_path}" >&2
 			return 1
 			;;
