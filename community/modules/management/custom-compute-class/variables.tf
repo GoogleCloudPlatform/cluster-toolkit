@@ -23,6 +23,11 @@ variable "project_id" {
 variable "cluster_id" {
   description = "The GKE cluster ID (e.g. projects/PROJECT_ID/locations/LOCATION/clusters/CLUSTER_NAME)."
   type        = string
+
+  validation {
+    condition     = can(regex("^projects/[^/]+/locations/[^/]+/clusters/[^/]+$", var.cluster_id))
+    error_message = "The cluster_id must be in the format projects/PROJECT_ID/locations/LOCATION/clusters/CLUSTER_NAME."
+  }
 }
 
 variable "cluster_endpoint" {

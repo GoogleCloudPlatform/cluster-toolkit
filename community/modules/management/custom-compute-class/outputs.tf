@@ -16,5 +16,5 @@
 
 output "compute_class_names" {
   description = "List of applied ComputeClass CRD names."
-  value       = [for doc in local.parsed_manifests : doc.metadata.name if try(doc.kind, "") == "ComputeClass"]
+  value       = [for doc in local.parsed_manifests : doc.metadata.name if try(doc.kind, "") == "ComputeClass" && can(doc.metadata.name)]
 }

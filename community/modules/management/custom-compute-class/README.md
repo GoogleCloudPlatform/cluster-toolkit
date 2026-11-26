@@ -34,13 +34,10 @@ limitations under the License.
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 7.2 |
 
 ## Providers
 
-| Name | Version |
-| ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | >= 7.2 |
+No providers.
 
 ## Modules
 
@@ -50,9 +47,7 @@ limitations under the License.
 
 ## Resources
 
-| Name | Type |
-| ---- | ---- |
-| [google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
+No resources.
 
 ## Inputs
 
