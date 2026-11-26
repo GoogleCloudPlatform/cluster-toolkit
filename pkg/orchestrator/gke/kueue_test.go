@@ -1768,6 +1768,44 @@ func TestGetKueueVersion_SidecarInKueueRepoBeforeManager(t *testing.T) {
 	}
 }
 
+func TestGetKueueVersion_ImageRefFormats(t *testing.T) {
+	t.Parallel()
+	orc := &GKEOrchestrator{}
+	for _, tc := range []struct {
+		name    string
+		image   string
+		want    string
+		wantErr string
+	}{
+		{name: "registry with port, tag, and digest", image: "localhost:5000/kueue/kueue:v0.16.1@sha256:abcdef", want: "v0.16.1"},
+		{name: "registry with port and no tag", image: "localhost:5000/kueue/kueue", wantErr: "no tag found in Kueue image"},
+		{name: "trailing colon empty tag", image: "registry.k8s.io/kueue/kueue:", wantErr: "no tag found in Kueue image"},
+		{name: "digest only", image: "registry.k8s.io/kueue/kueue@sha256:abcdef", wantErr: "no tag found in Kueue image"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dep := kueueDeployment{}
+			dep.Spec.Template.Spec.Containers = []struct {
+				Name  string `json:"name"`
+				Image string `json:"image"`
+			}{{Name: "manager", Image: tc.image}}
+			got, err := orc.getKueueVersion(&dep)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("getKueueVersion(%q) err = %v, want substring %q", tc.image, err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("getKueueVersion(%q) unexpected err: %v", tc.image, err)
+			}
+			if got != tc.want {
+				t.Errorf("getKueueVersion(%q) = %q, want %q", tc.image, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCheckAndInstallKueue_SharedClusterForbidden(t *testing.T) {
 	getDepCalls := 0
 	rolloutCalls := 0

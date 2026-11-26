@@ -118,6 +118,9 @@ and workload scheduling configurations like workload name, queue, nodes, and res
 		if err := validateWorkloadNameLength(workloadName, isPathwaysJob); err != nil {
 			return err
 		}
+		if err := validateNonNegativeInt32("--restarts", restarts); err != nil {
+			return err
+		}
 		computeType = strings.TrimSpace(computeType)
 		if cmd.Flags().Changed("compute-type") && computeType == "" {
 			return fmt.Errorf("flag \"compute-type\" cannot be empty")
@@ -128,10 +131,6 @@ and workload scheduling configurations like workload name, queue, nodes, and res
 
 		if !pathways.Headless && !pathways.DeploySPS && commandToRun == "" {
 			return fmt.Errorf("required flag \"command\" not set")
-		}
-
-		if err := validateImageFlags(cmd.Context(), projectID, location); err != nil {
-			return err
 		}
 
 		if err := validatePathwaysFlags(cmd); err != nil {
@@ -153,6 +152,10 @@ and workload scheduling configurations like workload name, queue, nodes, and res
 		}
 
 		if err := validateMLDiagnosticsFlags(cmd); err != nil {
+			return err
+		}
+
+		if err := validateImageFlags(cmd.Context(), projectID, location); err != nil {
 			return err
 		}
 
@@ -185,7 +188,7 @@ func init() {
 	SubmitCmd.Flags().StringVarP(&kueueQueueName, "queue", "q", "", "Name of the Kueue LocalQueue to submit the workload to. If empty, it will be auto-discovered.")
 	SubmitCmd.Flags().IntVar(&numNodes, "num-nodes", 1, "The number of nodes to use per group/slice. Defaults to 1 for CPU/GPU, or auto-calculated for TPUs.")
 	SubmitCmd.Flags().IntVar(&numSlices, "num-slices", 1, "The number of independent groups/slices to use.")
-	SubmitCmd.Flags().IntVar(&restarts, "restarts", 1, "Maximum number of restarts for the JobSet before failing.")
+	SubmitCmd.Flags().IntVar(&restarts, "restarts", 1, "Max JobSet restarts (0..2147483647; 30 with --pathways-deploy-sps, 0 with --pathways-run-sps-workload, otherwise 1).")
 	SubmitCmd.Flags().StringVar(&ttlAfterFinished, "gke-ttl-after-finished", "1h", "Time to retain the JobSet after it finishes (e.g. 5m, 1h).")
 	SubmitCmd.Flags().StringVar(&gracePeriodStr, "grace-period", "30s", "Pod termination grace period (e.g. 30s, 2m). On Pathways jobs, applies only to worker pods (pathways-head keeps 30s; ignored by --pathways-run-sps-workload).")
 	SubmitCmd.Flags().BoolVar(&gkeDisableParallelContainers, "gke-disable-parallel-containers", false, "Disable parallel containers for TPU7x on GKE.")
@@ -436,16 +439,25 @@ func validatePathwaysFlags(cmd *cobra.Command) error {
 		if pathways.ElasticSlices < 0 {
 			return fmt.Errorf("--pathways-elastic-slices must be non-negative")
 		}
-		if pathways.MaxSliceRestarts < 0 {
-			return fmt.Errorf("--pathways-max-slice-restarts must be non-negative")
-		}
-		if pathways.MaxSliceRestarts > math.MaxInt32 {
-			return fmt.Errorf("--pathways-max-slice-restarts must be at most %d", math.MaxInt32)
+		if err := validateNonNegativeInt32("--pathways-max-slice-restarts", pathways.MaxSliceRestarts); err != nil {
+			return err
 		}
 		return nil
 	}
 	if !reflect.DeepEqual(pathways, orchestrator.PathwaysJobDefinition{}) || len(pathwaysProxyEnv) > 0 || len(pathwaysServerEnv) > 0 || len(pathwaysWorkerEnv) > 0 || hasChangedPathwaysFlags(cmd) {
 		return fmt.Errorf("pathways flags specified but --pathways flag is missing")
+	}
+	return nil
+}
+
+// validateNonNegativeInt32 checks that a flag backed by a Kubernetes int32
+// field falls within 0..math.MaxInt32.
+func validateNonNegativeInt32(flagName string, value int) error {
+	if value < 0 {
+		return fmt.Errorf("%s must be non-negative (got %d)", flagName, value)
+	}
+	if int64(value) > math.MaxInt32 {
+		return fmt.Errorf("%s must be at most %d (got %d)", flagName, math.MaxInt32, value)
 	}
 	return nil
 }

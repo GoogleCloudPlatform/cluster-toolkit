@@ -113,6 +113,16 @@ type dockerConfigJSON struct {
 	Auths map[string]authn.AuthConfig `json:"auths"`
 }
 
+// ImageRef holds the parsed components of an OCI image reference ([registry/]repository[:tag][@digest]).
+type ImageRef struct {
+	RawName   string // Reference with tag and digest stripped, preserving original registry/repo prefix.
+	Host      string // Registry host preserving case ("docker.io" for Docker Hub shorthand or exact "index.docker.io").
+	Repo      string // Repository path (bare Docker Hub names become "library/<name>").
+	Tag       string // Explicit tag without leading ":", or empty if absent.
+	HasTag    bool   // True when a ":" tag separator appeared in the final path segment (Tag is "" for a trailing ":").
+	HasDigest bool   // True when an "@" digest separator was present.
+}
+
 // LabelScheme identifies which Kubernetes node label convention a cluster uses for TPU/accelerator scheduling.
 type LabelScheme string
 

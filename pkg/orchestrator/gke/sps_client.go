@@ -244,7 +244,7 @@ func resolveSPSClientPathways(p orchestrator.PathwaysJobDefinition, inst spsInst
 	if p.ProxyServerImage == "" {
 		p.ProxyServerImage = inst.ProxyImage
 	}
-	if p.ProxyServerImage == "" && strings.Contains(inst.ServerImage, "@") {
+	if parsed, ok := k8s.ParseImageRef(inst.ServerImage); p.ProxyServerImage == "" && ok && parsed.HasDigest {
 		return p, fmt.Errorf("could not derive the proxy image from SPS server image %q: it is pinned by digest, and Pathways server and proxy images have different digests; pass --pathways-proxy-server-image with the proxy image of the same Pathways release", inst.ServerImage)
 	}
 	if p.ProxyServerImage == "" {

@@ -159,11 +159,11 @@ func compareImageRefs(a, b string) int {
 }
 
 func semverTag(ref string) string {
-	ref, _, _ = strings.Cut(ref, "@")
-	_, tag, ok := strings.Cut(ref[strings.LastIndex(ref, "/")+1:], ":")
-	if !ok || tag == "" {
+	parsed, ok := ParseImageRef(ref)
+	if !ok || parsed.Tag == "" {
 		return ""
 	}
+	tag := parsed.Tag
 	if !strings.HasPrefix(tag, "v") {
 		if !strings.Contains(tag, ".") {
 			return ""
@@ -209,19 +209,18 @@ func nodeHasTPUAllocatable(node unstructured.Unstructured) bool {
 }
 
 func classifyCollectorImageBucket(ref string) int {
-	_, repo, ok := splitImageRef(ref)
+	parsed, ok := ParseImageRef(ref)
 	if !ok {
 		return -1
 	}
-	isDigest := strings.Contains(ref, "@")
-	switch path.Base(repo) {
+	switch path.Base(parsed.Repo) {
 	case "ai-telemetry-collector":
-		if !isDigest {
+		if !parsed.HasDigest {
 			return 0
 		}
 		return 1
 	case "workload-observability-agent":
-		if !isDigest {
+		if !parsed.HasDigest {
 			return 2
 		}
 		return 3

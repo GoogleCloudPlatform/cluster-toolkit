@@ -501,7 +501,7 @@ func indentYaml(s string, indent int) string {
 func (d jobSetTemplateData) RenderBlock(name string, indent int) (string, error) {
 	bt, ok := d.baseBlocks[name]
 	if !ok {
-		return "", fmt.Errorf("unknown base.tmpl block %q (available blocks: %v); check the block name or extract fresh defaults with 'gcluster job gke-template-extract --output-dir=<new-dir>' to diff and merge", name, slices.Sorted(maps.Keys(d.baseBlocks)))
+		return "", fmt.Errorf("unknown base.tmpl block %q (available blocks: %v); check the block name or extract fresh defaults with '%s' to diff and merge", name, slices.Sorted(maps.Keys(d.baseBlocks)), templateExtractCmd)
 	}
 	if bt == nil {
 		return "", fmt.Errorf("base.tmpl block %q renders itself via .RenderBlock; an override cannot call the block it replaces", name)
@@ -558,6 +558,26 @@ func validatePodSpecVolumes(contextPrefix string, podSpec *corev1.PodSpec) error
 				}
 				seenMountPaths[cleanPath] = true
 			}
+		}
+	}
+	return nil
+}
+
+// validatePodSpecEnv mirrors the JobSet CRD (v0.6.0+) map-list check on env.name (which rejects
+// duplicate env var names, including value and valueFrom collisions, at apply time) so
+// conflicts fail earlier with a clearer error. Skips empty names for API-server validation.
+// Scoped to JobSet because the core batch/v1 Job API accepts duplicate env entries.
+func validatePodSpecEnv(contextPrefix string, podSpec *corev1.PodSpec) error {
+	for _, c := range slices.Concat(podSpec.InitContainers, podSpec.Containers) {
+		seenEnv := make(map[string]bool, len(c.Env))
+		for _, e := range c.Env {
+			if e.Name == "" {
+				continue
+			}
+			if seenEnv[e.Name] {
+				return fmt.Errorf("%s container %q defines duplicate environment variable %q. If you use --gke-custom-templates-path, remove or guard the duplicate in your template (or re-extract fresh defaults with '%s' and merge your customizations)", contextPrefix, c.Name, e.Name, templateExtractCmd)
+			}
+			seenEnv[e.Name] = true
 		}
 	}
 	return nil
@@ -652,14 +672,20 @@ func ValidateJobSetManifest(manifestContent string) error {
 		if err := validatePodFailurePolicy(prefix, pfp, &tmpl.Spec); err != nil {
 			return err
 		}
+		if kind == "JobSet" {
+			if err := validatePodSpecEnv(prefix, &tmpl.Spec); err != nil {
+				return err
+			}
+		}
 		return validatePodSpecVolumes(prefix, &tmpl.Spec)
 	})
 }
 
 const (
-	pathwaysTemplateExtractHint = "If you use --gke-custom-templates-path, re-extract pathways_jobset.tmpl and base.tmpl with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations"
+	templateExtractCmd          = "gcluster job gke-template-extract --output-dir=<new-dir>"
+	pathwaysTemplateExtractHint = "If you use --gke-custom-templates-path, re-extract pathways_jobset.tmpl and base.tmpl with '" + templateExtractCmd + "' and merge your customizations"
 	// workloadTemplateExtractHintFmt takes the workload template name (jobset.tmpl or job.tmpl).
-	workloadTemplateExtractHintFmt = "If you use --gke-custom-templates-path, re-extract %s and base.tmpl with 'gcluster job gke-template-extract --output-dir=<new-dir>' and merge your customizations"
+	workloadTemplateExtractHintFmt = "If you use --gke-custom-templates-path, re-extract %s and base.tmpl with '" + templateExtractCmd + "' and merge your customizations"
 	// minPathwaysWorkerRestartsPerVM is the per-VM floor of the worker Job backoffLimit; see pathwaysWorkerBackoffLimit.
 	minPathwaysWorkerRestartsPerVM = 4
 )

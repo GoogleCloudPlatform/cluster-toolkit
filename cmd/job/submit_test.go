@@ -19,6 +19,7 @@ import (
 	"context"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1666,6 +1667,170 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
 			}
 			if got := mockOrc.SubmittedJob.Pathways.MaxSliceRestarts; got != tc.wantMaxSliceRestarts {
 				t.Errorf("MaxSliceRestarts = %d, want %d", got, tc.wantMaxSliceRestarts)
+			}
+		})
+	}
+}
+
+func TestSubmitCmd_RestartsBounds(t *testing.T) {
+	t.Run("rejects out-of-range --restarts before image checks", func(t *testing.T) {
+		cases := []struct {
+			name    string
+			val     string
+			wantErr string
+		}{
+			{name: "negative", val: "-1", wantErr: "--restarts must be non-negative"},
+		}
+		if math.MaxInt > math.MaxInt32 {
+			cases = append(cases, struct {
+				name    string
+				val     string
+				wantErr string
+			}{name: "above int32 max", val: "2147483648", wantErr: "--restarts must be at most 2147483647"})
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				setupSubmitTestEnv(t)
+				t.Setenv("GCLUSTER_IMAGE_REPO", "")
+				oldLookup := lookupArtifactRegistryRepos
+				t.Cleanup(func() { lookupArtifactRegistryRepos = oldLookup })
+				lookupArtifactRegistryRepos = func(context.Context, string, string) ([]string, bool) {
+					t.Errorf("lookupArtifactRegistryRepos must not run on invalid --restarts")
+					return nil, false
+				}
+				_, err := executeCommand(JobCmd,
+					"submit",
+					"--name", "bad-restarts",
+					"--base-image", "python:3.12-slim",
+					"--build-context", t.TempDir(),
+					"--command", "echo hello",
+					"--compute-type", "n2d-standard-64",
+					"--restarts", tc.val,
+					"--skip-prereqs",
+					"--cluster", "test-cluster",
+					"--location", "us-central1-a",
+					"--project", "test-project",
+				)
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("got err = %v, want substring %q", err, tc.wantErr)
+				}
+			})
+		}
+	})
+
+	t.Run("accepts --restarts at 0 and int32 max", func(t *testing.T) {
+		for _, tc := range []struct {
+			val  string
+			want int
+		}{
+			{val: "0", want: 0},
+			{val: "2147483647", want: 2147483647},
+		} {
+			t.Run(tc.val, func(t *testing.T) {
+				setupSubmitTestEnv(t)
+				mockOrc := &mockOrchestrator{}
+				gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+				_, err := executeCommand(JobCmd,
+					"submit",
+					"--name", "ok-restarts",
+					"--image", "us-docker.pkg.dev/p/r/img:v1",
+					"--command", "echo hello",
+					"--compute-type", "n2d-standard-64",
+					"--restarts", tc.val,
+					"--skip-prereqs",
+					"--cluster", "test-cluster",
+					"--location", "us-central1-a",
+					"--project", "test-project",
+				)
+				if err != nil {
+					t.Fatalf("--restarts %s failed unexpectedly: %v", tc.val, err)
+				}
+				if got := mockOrc.SubmittedJob.WorkloadName; got != "ok-restarts" {
+					t.Errorf("SubmittedJob.WorkloadName = %q, want %q", got, "ok-restarts")
+				}
+				if got := mockOrc.SubmittedJob.MaxRestarts; got != tc.want {
+					t.Errorf("SubmittedJob.MaxRestarts = %d, want %d", got, tc.want)
+				}
+			})
+		}
+	})
+}
+
+func TestSubmitCmd_LocalValidationRunsBeforeImageLookup(t *testing.T) {
+	setupSubmitTestEnv(t)
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
+	arCalled := false
+	oldLookup := lookupArtifactRegistryRepos
+	t.Cleanup(func() { lookupArtifactRegistryRepos = oldLookup })
+	lookupArtifactRegistryRepos = func(context.Context, string, string) ([]string, bool) {
+		arCalled = true
+		return nil, false
+	}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "bad-env-before-ar",
+		"--base-image", "python:3.12-slim",
+		"--build-context", t.TempDir(),
+		"--command", "echo hello",
+		"--compute-type", "n2d-standard-64",
+		"--env", "123BAD=val",
+		"--skip-prereqs",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+	)
+	if err == nil || !strings.Contains(err.Error(), "invalid environment variable name") {
+		t.Fatalf("got err = %v, want invalid environment variable name error", err)
+	}
+	if arCalled {
+		t.Errorf("lookupArtifactRegistryRepos was called despite invalid local --env flag")
+	}
+}
+
+func TestValidateNonNegativeInt32(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		flag    string
+		in      int
+		wantErr string
+	}{
+		{name: "zero allowed", flag: "--restarts", in: 0},
+		{name: "positive allowed", flag: "--restarts", in: 5},
+		{name: "int32 max allowed", flag: "--restarts", in: math.MaxInt32},
+		{name: "negative rejected", flag: "--restarts", in: -1, wantErr: "--restarts must be non-negative (got -1)"},
+		{name: "custom flag name formatted", flag: "--pathways-max-slice-restarts", in: -1, wantErr: "--pathways-max-slice-restarts must be non-negative (got -1)"},
+	}
+	if math.MaxInt > math.MaxInt32 {
+		aboveInt32 := int64(math.MaxInt32) + 1
+		cases = append(cases,
+			struct {
+				name    string
+				flag    string
+				in      int
+				wantErr string
+			}{name: "above int32 max rejected", flag: "--restarts", in: int(aboveInt32), wantErr: "--restarts must be at most 2147483647 (got 2147483648)"},
+			struct {
+				name    string
+				flag    string
+				in      int
+				wantErr string
+			}{name: "custom flag name above int32 max", flag: "--pathways-max-slice-restarts", in: int(aboveInt32), wantErr: "--pathways-max-slice-restarts must be at most 2147483647 (got 2147483648)"},
+		)
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateNonNegativeInt32(tc.flag, tc.in)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("validateNonNegativeInt32(%q, %d) err = %v, want substring %q", tc.flag, tc.in, err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("validateNonNegativeInt32(%q, %d) unexpected err: %v", tc.flag, tc.in, err)
 			}
 		})
 	}
