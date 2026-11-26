@@ -15,9 +15,13 @@
 package cmd
 
 import (
+	"fmt"
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -35,8 +39,12 @@ func realExecutable() string {
 	return exe
 }
 
+// gclusterExecutable returns the running gcluster binary. It is a variable so
+// tests can replace it.
+var gclusterExecutable = realExecutable
+
 // shareDirFor returns the folder where the examples were installed with the
-// gcluster binary at exe, or "" if there is none:
+// gcluster binary at exe on the given OS (runtime.GOOS), or "" if there is none:
 //   - <prefix>/share/cluster-toolkit for <prefix>/bin/gcluster or
 //     <prefix>\Scripts\gcluster.exe: pip into a venv or a Python install, and
 //     pip --user, uv and pipx on Linux and macOS;
@@ -46,9 +54,14 @@ func realExecutable() string {
 // uv and pipx on Windows copy gcluster.exe out of the environment they
 // installed it in, so its examples can't be found from the binary. That isn't
 // supported yet.
-func shareDirFor(exe string) string {
+func shareDirFor(exe, goos string) string {
 	bin := filepath.Dir(exe)
-	for _, up := range []string{"..", filepath.Join("..", "..")} {
+	ups := []string{".."}
+	if goos == "windows" && strings.EqualFold(filepath.Base(bin), "Scripts") &&
+		strings.HasPrefix(strings.ToLower(filepath.Base(filepath.Dir(bin))), "python3") {
+		ups = append(ups, filepath.Join("..", ".."))
+	}
+	for _, up := range ups {
 		dir := filepath.Clean(filepath.Join(bin, up, "share", "cluster-toolkit"))
 		if looksLikeToolkitRoot(dir) {
 			return dir
@@ -61,50 +74,108 @@ func shareDirFor(exe string) string {
 // were installed (see shareDirFor), or "". It is a variable so tests can
 // replace it.
 var installedShareDir = func() string {
-	exe := realExecutable()
+	exe := gclusterExecutable()
 	if exe == "" {
 		return ""
 	}
-	return shareDirFor(exe)
+	return shareDirFor(exe, runtime.GOOS)
 }
 
-// installedExamplePath returns the installed copy of an example blueprint (or
-// deployment file) named like examples/... or community/examples/..., if
-// gcluster was installed with its examples and the file exists there.
-func installedExamplePath(p string) (string, bool) {
+// exampleRoots returns the folders that example blueprints are read from, in
+// order, without duplicates:
+//  1. the repo checkout or release bundle that contains the current folder;
+//  2. the release bundle that contains the gcluster binary;
+//  3. the folder the examples were installed in with pip, uv or pipx.
+//
+// explain and create/deploy/expand use the same list, so they always pick the
+// same file for a path like examples/hpc-slurm.yaml.
+func exampleRoots() []string {
+	var roots []string
+	add := func(root string) {
+		if root != "" && !slices.Contains(roots, root) {
+			roots = append(roots, root)
+		}
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		add(walkUpForExplainRoot(cwd))
+	}
+	if exe := gclusterExecutable(); exe != "" {
+		add(walkUpForExplainRoot(filepath.Dir(exe)))
+	}
+	add(installedShareDir())
+	return roots
+}
+
+// isExamplePath reports whether p is a relative path under examples/ or
+// community/examples/ that doesn't point outside them.
+func isExamplePath(p string) bool {
 	if p == "" || filepath.IsAbs(p) {
-		return "", false
+		return false
 	}
 	rel := filepath.ToSlash(filepath.Clean(p))
-	if !strings.HasPrefix(rel, "examples/") && !strings.HasPrefix(rel, "community/examples/") {
+	return strings.HasPrefix(rel, "examples/") || strings.HasPrefix(rel, "community/examples/")
+}
+
+// findExample returns the file that an example path like
+// examples/hpc-slurm.yaml names in the first of exampleRoots that has it.
+func findExample(p string) (string, bool) {
+	if !isExamplePath(p) {
 		return "", false
 	}
-	share := installedShareDir()
-	if share == "" {
-		return "", false
+	rel := filepath.FromSlash(filepath.ToSlash(filepath.Clean(p)))
+	for _, root := range exampleRoots() {
+		candidate := filepath.Join(root, rel)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, true
+		}
 	}
-	candidate := filepath.Join(share, filepath.FromSlash(rel))
-	if info, err := os.Stat(candidate); err != nil || info.IsDir() {
-		return "", false
-	}
-	return candidate, true
+	return "", false
 }
 
 // resolveBlueprintPath lets `gcluster deploy examples/hpc-slurm.yaml` work from
-// any folder after a pip, uv or pipx install. A path that exists locally always
-// wins, even a broken symlink (like checkExists, it uses Lstat). Otherwise, if p
-// names an example installed with gcluster, the installed file is used.
-// Anything else is returned unchanged, so the usual "does not exist" error
-// follows.
+// any folder. A path that exists in the current folder always wins, even a
+// broken symlink (like checkExists, it uses Lstat). Otherwise, an example path
+// is looked up in exampleRoots. Anything else is returned unchanged, so the
+// usual "does not exist" error follows.
 func resolveBlueprintPath(p string) string {
 	if _, err := os.Lstat(p); err == nil {
 		return p
 	}
-	if installed, ok := installedExamplePath(p); ok {
-		logging.Info("Using %s installed with gcluster: %s", p, installed)
-		return installed
+	found, ok := findExample(p)
+	if !ok {
+		return p
 	}
-	return p
+	if isInstalledFile(found) {
+		logging.Info("Using %s installed with gcluster: %s. It is replaced when gcluster is "+
+			"upgraded; copy it to your own folder before editing it.", p, found)
+	} else {
+		logging.Info("Using %s from %s", p, found)
+	}
+	return found
+}
+
+// checkDeploymentFile returns an error for a deployment file (--deployment-file)
+// that isn't in the current folder but is one of the examples. Example
+// deployment files have empty values (project_id, zone, ...) that must be
+// filled in, so they are never read from an examples folder.
+func checkDeploymentFile(p string) error {
+	if _, err := os.Lstat(p); err == nil {
+		return nil
+	}
+	found, ok := findExample(p)
+	if !ok {
+		return nil // the usual read error follows
+	}
+	return fmt.Errorf("deployment file %q is not in the current folder. Example deployment files must be "+
+		"filled in before use: copy %s to your folder and edit the copy, or set the values with --vars instead", p, found)
+}
+
+// readDeploymentFile reads a --deployment-file after checkDeploymentFile.
+func readDeploymentFile(p string) (config.DeploymentSettings, config.YamlCtx, error) {
+	if err := checkDeploymentFile(p); err != nil {
+		return config.DeploymentSettings{}, config.YamlCtx{}, err
+	}
+	return config.NewDeploymentSettings(p)
 }
 
 // isInstalledFile reports whether path is inside the folder where gcluster's

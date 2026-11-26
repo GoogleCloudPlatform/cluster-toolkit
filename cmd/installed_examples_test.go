@@ -20,6 +20,7 @@ import (
 	"hpc-toolkit/pkg/catalog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -67,7 +68,7 @@ func fakeInstall(c *C) (string, func()) {
 	}
 }
 
-func (s *MySuite) TestInstalledExamplePath(c *C) {
+func (s *MySuite) TestFindExampleInInstall(c *C) {
 	share, restore := fakeInstall(c)
 	defer restore()
 
@@ -88,18 +89,18 @@ func (s *MySuite) TestInstalledExamplePath(c *C) {
 		{"", "", false},
 	}
 	for _, tc := range cases {
-		got, ok := installedExamplePath(tc.in)
+		got, ok := findExample(tc.in)
 		c.Check(ok, Equals, tc.ok, Commentf("input %q", tc.in))
 		c.Check(got, Equals, tc.want, Commentf("input %q", tc.in))
 	}
 }
 
-func (s *MySuite) TestInstalledExamplePathWithoutInstall(c *C) {
-	orig := installedShareDir
-	defer func() { installedShareDir = orig }()
+func (s *MySuite) TestFindExampleWithoutInstall(c *C) {
+	_, restore := fakeInstall(c)
+	defer restore()
 	installedShareDir = func() string { return "" }
 
-	_, ok := installedExamplePath("examples/hpc-slurm.yaml")
+	_, ok := findExample("examples/hpc-test.yaml")
 	c.Check(ok, Equals, false)
 }
 
@@ -126,7 +127,15 @@ func (s *MySuite) TestCheckExistsAcceptsInstalledExample(c *C) {
 	c.Check(checkExists(&cobra.Command{}, []string{"examples/hpc-test.yaml"}), IsNil)
 	err := checkExists(&cobra.Command{}, []string{"examples/missing.yaml"})
 	c.Assert(err, NotNil)
-	c.Check(err.Error(), Equals, `"examples/missing.yaml" does not exist`)
+	c.Check(err.Error(), Matches, `"examples/missing.yaml" does not exist; run '.*explain' to list the available blueprints`)
+	// Other paths keep the plain message.
+	err = checkExists(&cobra.Command{}, []string{"missing.yaml"})
+	c.Assert(err, NotNil)
+	c.Check(err.Error(), Equals, `"missing.yaml" does not exist`)
+
+	// expand checks the path the same way as create and deploy.
+	c.Check(expandCmd.Args(expandCmd, []string{"examples/hpc-test.yaml"}), IsNil)
+	c.Check(expandCmd.Args(expandCmd, []string{"examples/missing.yaml"}), NotNil)
 }
 
 func (s *MySuite) TestIsInstalledFile(c *C) {
@@ -192,13 +201,22 @@ func (s *MySuite) TestShareDirFor(c *C) {
 		for _, d := range tc.shares(root) {
 			makeShare(c, d)
 		}
-		c.Check(shareDirFor(tc.exe(root)), Equals, tc.want(root), Commentf(tc.name))
+		c.Check(shareDirFor(tc.exe(root), "windows"), Equals, tc.want(root), Commentf(tc.name))
 	}
 
 	// A share folder without the example folders doesn't count.
 	root := c.MkDir()
 	c.Assert(os.MkdirAll(share(root), 0o755), IsNil)
-	c.Check(shareDirFor(filepath.Join(root, "bin", "gcluster")), Equals, "")
+	c.Check(shareDirFor(filepath.Join(root, "bin", "gcluster"), "linux"), Equals, "")
+
+	// Two folders up is only for pip --user on Windows (Python3XX\Scripts).
+	root = c.MkDir()
+	makeShare(c, share(root))
+	userExe := filepath.Join(root, "Python311", "Scripts", "gcluster.exe")
+	c.Check(shareDirFor(userExe, "windows"), Equals, share(root))
+	c.Check(shareDirFor(userExe, "linux"), Equals, "")
+	c.Check(shareDirFor(filepath.Join(root, "x", "bin", "gcluster"), "linux"), Equals, "")
+	c.Check(shareDirFor(filepath.Join(root, "x", "Scripts", "gcluster.exe"), "windows"), Equals, "")
 }
 
 func (s *MySuite) TestResolveBlueprintPathKeepsBrokenLocalSymlink(c *C) {
@@ -276,3 +294,66 @@ func (s *MySuite) TestSubblockMapIsNotSavedToInstalledFiles(c *C) {
 	c.Assert(err, IsNil)
 	c.Check(string(data), Equals, installedTestBlueprint)
 }
+
+// fakeCheckout creates a repo checkout with one example and returns its root.
+func fakeCheckout(c *C) string {
+	root := c.MkDir()
+	c.Assert(os.MkdirAll(filepath.Join(root, "modules"), 0o755), IsNil)
+	c.Assert(os.MkdirAll(filepath.Join(root, "examples", "sub"), 0o755), IsNil)
+	c.Assert(os.WriteFile(filepath.Join(root, "examples", "hpc-test.yaml"), []byte(installedTestBlueprint), 0o644), IsNil)
+	return root
+}
+
+func (s *MySuite) TestCheckoutWinsFromSubfolderForExplainAndExpand(c *C) {
+	_, restore := fakeInstall(c)
+	defer restore()
+	checkout := fakeCheckout(c)
+	c.Assert(os.Chdir(filepath.Join(checkout, "examples", "sub")), IsNil)
+
+	want, err := filepath.EvalSymlinks(filepath.Join(checkout, "examples", "hpc-test.yaml"))
+	c.Assert(err, IsNil)
+	got, err := filepath.EvalSymlinks(resolveBlueprintPath("examples/hpc-test.yaml"))
+	c.Assert(err, IsNil)
+	c.Check(got, Equals, want) // not the installed copy
+
+	gotRoot, err := filepath.EvalSymlinks(findExplainRepoRoot())
+	c.Assert(err, IsNil)
+	wantRoot, err := filepath.EvalSymlinks(checkout)
+	c.Assert(err, IsNil)
+	c.Check(gotRoot, Equals, wantRoot)
+}
+
+func (s *MySuite) TestReleaseBundleNextToBinary(c *C) {
+	_, restore := fakeInstall(c)
+	defer restore()
+	installedShareDir = func() string { return "" }
+	bundle := c.MkDir()
+	c.Assert(os.MkdirAll(filepath.Join(bundle, "examples"), 0o755), IsNil)
+	c.Assert(os.WriteFile(filepath.Join(bundle, "examples", "hpc-test.yaml"), []byte(installedTestBlueprint), 0o644), IsNil)
+	c.Assert(os.WriteFile(filepath.Join(bundle, "gcluster"), []byte("#!/bin/sh\n"), 0o755), IsNil)
+	origExe := gclusterExecutable
+	defer func() { gclusterExecutable = origExe }()
+	gclusterExecutable = func() string { return filepath.Join(bundle, "gcluster") }
+
+	// From another folder, explain and expand both use the bundle.
+	c.Check(resolveBlueprintPath("examples/hpc-test.yaml"), Equals, filepath.Join(bundle, "examples", "hpc-test.yaml"))
+	c.Check(findExplainRepoRoot(), Equals, bundle)
+	c.Check(checkExists(&cobra.Command{}, []string{"examples/hpc-test.yaml"}), IsNil)
+}
+
+func (s *MySuite) TestExampleDeploymentFileIsNotReadFromExamplesFolder(c *C) {
+	share, restore := fakeInstall(c)
+	defer restore()
+
+	_, _, err := readDeploymentFile("examples/test-deployment.yaml")
+	c.Assert(err, NotNil)
+	c.Check(err.Error(), Matches, ".*not in the current folder.*"+regexpQuote(filepath.Join(share, "examples", "test-deployment.yaml"))+".*--vars.*")
+
+	// A local file, or a path that isn't an example, is left to the normal reader.
+	c.Assert(os.MkdirAll("examples", 0o755), IsNil)
+	c.Assert(os.WriteFile(filepath.Join("examples", "test-deployment.yaml"), []byte("vars: {}\n"), 0o644), IsNil)
+	c.Check(checkDeploymentFile("examples/test-deployment.yaml"), IsNil)
+	c.Check(checkDeploymentFile("my-deployment.yaml"), IsNil)
+}
+
+func regexpQuote(s string) string { return regexp.QuoteMeta(s) }

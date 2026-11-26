@@ -72,8 +72,11 @@ func validateParallelismFlag() error {
 func checkExists(cmd *cobra.Command, args []string) error {
 	path := args[0]
 	if _, err := os.Lstat(path); err != nil {
-		if _, ok := installedExamplePath(path); ok {
-			return nil // an example installed with gcluster; see resolveBlueprintPath
+		if _, ok := findExample(path); ok {
+			return nil // found in a checkout, bundle or install; see resolveBlueprintPath
+		}
+		if isExamplePath(path) {
+			return fmt.Errorf("%q does not exist; run '%s explain' to list the available blueprints", path, execPath())
 		}
 		return fmt.Errorf("%q does not exist", path)
 	}

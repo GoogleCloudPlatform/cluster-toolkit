@@ -331,23 +331,13 @@ func renderExplainOutput(w io.Writer, format string, data interface{}, textPrint
 }
 
 func findExplainRepoRoot() string {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "."
+	if roots := exampleRoots(); len(roots) > 0 {
+		return roots[0]
 	}
-	if root := walkUpForExplainRoot(cwd); root != "" {
-		return root
+	if cwd, err := os.Getwd(); err == nil {
+		return cwd
 	}
-	if exe := realExecutable(); exe != "" {
-		if root := walkUpForExplainRoot(filepath.Dir(exe)); root != "" {
-			return root
-		}
-	}
-	// gcluster installed with pip, uv or pipx: examples are in <prefix>/share.
-	if share := installedShareDir(); share != "" {
-		return share
-	}
-	return cwd
+	return "."
 }
 
 func walkUpForExplainRoot(startDir string) string {
