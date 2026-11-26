@@ -80,21 +80,54 @@ EOL
 
 dnf install -y grafana
 
-# Build and install latest SQLite for Django 5 compatibility
-# dnf/yum only has 3.26.0 which causes error:
-# "django.db.utils.NotSupportedError: SQLite 3.31 or later is required (found 3.26.0)."
+# Build and install a newer SQLite for Django. Django 6.1 needs SQLite 3.37 or
+# later; the OS packages are older (3.34.1 on Rocky Linux 9) and fail with:
+# "django.db.utils.NotSupportedError: SQLite 3.37 or later is required".
+
+# Download the SQLite source tarball into the current directory and verify it.
+# www2 and www3 are sqlite.org's own mirror hosts and serve the same file, so a
+# single unreachable host does not end the whole startup. IPv4 only: these VMs
+# have no IPv6 route, and wget gives up without retrying when the last address
+# it tries is unreachable.
+download_sqlite() {
+	local tarball="$1"
+	local sha256="$2"
+	local hosts=(www.sqlite.org www2.sqlite.org www3.sqlite.org)
+	local attempt host
+
+	for attempt in 1 2 3; do
+		for host in "${hosts[@]}"; do
+			if wget --inet4-only --tries=1 --connect-timeout=20 --read-timeout=60 \
+				--output-document="$tarball" "https://${host}/2025/${tarball}" &&
+				echo "${sha256}  ${tarball}" | sha256sum --check --status; then
+				return 0
+			fi
+			echo "WARNING: No valid ${tarball} from ${host} (attempt ${attempt} of 3)"
+			rm -f "$tarball"
+		done
+		if [ "$attempt" -lt 3 ]; then
+			sleep $((attempt * 10))
+		fi
+	done
+	return 1
+}
+
 install_sqlite() {
 	local src_dir="/usr/local/src"
 	local tarball="sqlite-autoconf-3490100.tar.gz"
-	local url="https://www.sqlite.org/2025/${tarball}"
+	# When changing the version, also update the year in the download URL in
+	# download_sqlite and this checksum. sqlite.org publishes SHA3-256 only; for
+	# this file it is
+	# 6cc831c9f588b637e5bd48d9fbf28e58737e08daf825c81085fb8e0a0b8ad14c.
+	local sha256="106642d8ccb36c5f7323b64e4152e9b719f7c0215acf5bfeac3d5e7f97b59254"
 
 	cd "$src_dir" || {
 		echo "ERROR: Could not change directory to $src_dir"
 		exit 1
 	}
 
-	if ! wget "$url"; then
-		echo "ERROR: Failed to download SQLite from $url"
+	if ! download_sqlite "$tarball" "$sha256"; then
+		echo "ERROR: Failed to download SQLite (${tarball}) from sqlite.org and its mirrors"
 		exit 1
 	fi
 
