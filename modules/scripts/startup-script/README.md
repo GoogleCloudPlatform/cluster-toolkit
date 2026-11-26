@@ -51,24 +51,24 @@ Each runner receives the following attributes:
 
 `ansible-local` runners require Ansible to be installed in the VM before
 running. To support other playbook runners in the Cluster Toolkit, we install
-`ansible-core` (2.15.x) as well as the larger package of collections
-found in `ansible` version 8.7.0.
+`ansible-core` (2.21.6) as well as the larger package of collections
+found in `ansible` version 14.6.0.
 
 If an `ansible-local` runner is found in the list supplied to this module,
 a script to install Ansible will be prepended to the list of runners. This
 behavior can be disabled by setting `install_ansible` to `false`.
 This script will do the following at VM startup:
 
-- Install system-wide python3 if not already installed using system package
-  managers (yum, apt-get, etc)
+- Install system-wide python3 (minimum Python 3.12) if not already installed
+  using system package managers (yum, apt-get, etc)
 - Install `python3-distutils` system-wide in debian and ubuntu based
   environments. This can be a missing dependency on system installations of
   python3 for installing and upgrading pip.
 - Install system-wide pip3 if not already installed and upgrade pip3 if the
   version is not at least 18.0.
 - Install and create a virtual environment located at `/usr/local/ghpc-venv`.
-- Install ansible into this virtual environment if the current version of
-  ansible is not version 2.11 or higher.
+- Install ansible 14.6.0 (`ansible-core` 2.21.6) into this virtual environment
+  on Python 3.12 or higher.
 
 To use the virtual environment created by this script, you can activate it by
 running the following command on the VM:

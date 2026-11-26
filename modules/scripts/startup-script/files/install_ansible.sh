@@ -14,7 +14,7 @@
 # limitations under the License.
 
 set -ex
-REQ_PYTHON3_VERSION=9
+REQ_PYTHON3_VERSION=12
 
 # Path to hashed requirements file
 BUILD_TOOLS_REQ_FILE="$(dirname "$0")/build-tools.txt"
@@ -158,16 +158,28 @@ main() {
 
 	# Get the python3 executable, or install it if not found
 	get_python_path
-	get_python_major_version "${python_path}"
-	get_python_minor_version "${python_path}"
-	if [ "${python_path}" = "" ] || [ "${python_major_version}" = "2" ] || [ "${python_minor_version}" -lt "${REQ_PYTHON3_VERSION}" ]; then
-		if ! install_python3; then
-			return 1
-		fi
+	if [ -n "${python_path}" ]; then
 		get_python_major_version "${python_path}"
 		get_python_minor_version "${python_path}"
 	else
+		python_major_version=0
+		python_minor_version=0
+	fi
+	if [ "${python_path}" = "" ] || [ "${python_major_version}" -lt 3 ] || { [ "${python_major_version}" -eq 3 ] && [ "${python_minor_version}" -lt "${REQ_PYTHON3_VERSION}" ]; }; then
+		if ! install_python3; then
+			return 1
+		fi
+		if [ -n "${python_path}" ]; then
+			get_python_major_version "${python_path}"
+			get_python_minor_version "${python_path}"
+		fi
+	else
 		install_python_deps
+	fi
+
+	if [ -z "${python_path}" ] || [ "${python_major_version}" -lt 3 ] || { [ "${python_major_version}" -eq 3 ] && [ "${python_minor_version}" -lt "${REQ_PYTHON3_VERSION}" ]; }; then
+		echo "Error: Python 3.${REQ_PYTHON3_VERSION} or later is required, but no compatible Python installation is available." >&2
+		return 1
 	fi
 
 	# Install OS-packaged pip
@@ -177,8 +189,27 @@ main() {
 		fi
 	fi
 
-	# Create pip virtual environment for Cluster Toolkit
-	${python_path} -m venv "${venv_path}" --copies
+	# Create pip virtual environment for Cluster Toolkit.
+	# Recreate if an existing venv was built with Python older than 3.12.
+	recreate_venv=false
+	if [ -d "${venv_path}" ]; then
+		existing_venv_python="${venv_path}/bin/python3"
+		if [ ! -x "${existing_venv_python}" ]; then
+			recreate_venv=true
+		else
+			existing_venv_major=$(${existing_venv_python} -c "import sys; print(sys.version_info.major)" 2>/dev/null || echo 0)
+			existing_venv_minor=$(${existing_venv_python} -c "import sys; print(sys.version_info.minor)" 2>/dev/null || echo 0)
+			if [ "${existing_venv_major}" -lt 3 ] || { [ "${existing_venv_major}" -eq 3 ] && [ "${existing_venv_minor}" -lt "${REQ_PYTHON3_VERSION}" ]; }; then
+				recreate_venv=true
+			fi
+		fi
+	fi
+	if [ "${recreate_venv}" = true ]; then
+		rm -rf "${venv_path}"
+		${python_path} -m venv "${venv_path}" --copies --clear
+	else
+		${python_path} -m venv "${venv_path}" --copies
+	fi
 	venv_python_path=${venv_path}/bin/python3
 
 	# Install build tools first
