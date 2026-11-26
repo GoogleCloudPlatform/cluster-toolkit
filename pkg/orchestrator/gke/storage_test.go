@@ -40,6 +40,7 @@ import (
 	iamapi "google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
 	gcs "google.golang.org/api/storage/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8syaml "sigs.k8s.io/yaml"
@@ -229,7 +230,43 @@ func TestParseSingleVolume(t *testing.T) {
 			wantSrc:  "gs://my-bucket",
 			wantDest: "/data",
 			wantRO:   true,
-			wantOpts: "logging:severity:info,enable-atomic-rename-object:true",
+			wantOpts: "enable-atomic-rename-object:true,logging:severity:info",
+		},
+		{
+			name:     "gcsfuse options are trimmed deduplicated and sorted",
+			input:    "gs://my-bucket;/data;options= uid=1000 , implicit-dirs , , uid=1000 , metadata-cache:ttl-secs:-1 ",
+			wantSrc:  "gs://my-bucket",
+			wantDest: "/data",
+			wantRO:   true,
+			wantOpts: "implicit-dirs,metadata-cache:ttl-secs:-1,uid=1000",
+		},
+		{
+			name:     "gcsfuse config-file options in same section with distinct keys",
+			input:    "gs://my-bucket;/data;options=metadata-cache:ttl-secs:60,metadata-cache:negative-ttl-secs:0",
+			wantSrc:  "gs://my-bucket",
+			wantDest: "/data",
+			wantRO:   true,
+			wantOpts: "metadata-cache:negative-ttl-secs:0,metadata-cache:ttl-secs:60",
+		},
+		{
+			name:     "gcsfuse repeatable kernel o= mount options are accepted and sorted",
+			input:    "gs://my-bucket;/data;options=o=noexec,o=noatime",
+			wantSrc:  "gs://my-bucket",
+			wantDest: "/data",
+			wantRO:   true,
+			wantOpts: "o=noatime,o=noexec",
+		},
+		{
+			name:       "ro inside options= is rejected in favor of --mount mode segment",
+			input:      "gs://my-bucket;/data;rw;options=implicit-dirs,ro",
+			wantErr:    true,
+			wantErrSub: "specify the access mode as a ';ro' --mount segment",
+		},
+		{
+			name:       "rw inside options= is rejected in favor of --mount mode segment",
+			input:      "gs://my-bucket;/data;options=rw",
+			wantErr:    true,
+			wantErrSub: "specify the access mode as a ';rw' --mount segment",
 		},
 		{
 			name:        "profile alias training",
@@ -381,6 +418,24 @@ func TestParseSingleVolume(t *testing.T) {
 			wantErrSub: "invalid volume attribute",
 		},
 		{
+			name:       "attribute with empty value is rejected",
+			input:      "gs://my-bucket;/data;profile=training;attributes=fileCacheCapacity=",
+			wantErr:    true,
+			wantErrSub: "value must not be empty",
+		},
+		{
+			name:       "attribute with whitespace-only value is rejected",
+			input:      "gs://my-bucket;/data;profile=training;attributes=fileCacheCapacity=  ,bucketScanTimeout=5m",
+			wantErr:    true,
+			wantErrSub: "value must not be empty",
+		},
+		{
+			name:       "empty anywhereCacheZones suggests none",
+			input:      "gs://my-bucket;/data;profile=serving;attributes=anywhereCacheZones=",
+			wantErr:    true,
+			wantErrSub: "anywhereCacheZones=none",
+		},
+		{
 			name:       "empty attributes are rejected",
 			input:      "gs://my-bucket;/data;profile=training;attributes=",
 			wantErr:    true,
@@ -480,6 +535,18 @@ func TestParseSingleVolume(t *testing.T) {
 			input:      "gs://my-bucket;/data;profile=training;profile=serving",
 			wantErr:    true,
 			wantErrSub: "profile= may only be specified once per --mount",
+		},
+		{
+			name:       "conflicting ro and rw mode segments are rejected",
+			input:      "gs://my-bucket;/data;ro;rw",
+			wantErr:    true,
+			wantErrSub: "ro/rw mode may only be specified once per --mount",
+		},
+		{
+			name:       "repeated rw mode segments are rejected",
+			input:      "gs://my-bucket;/data;rw;options=implicit-dirs;rw",
+			wantErr:    true,
+			wantErrSub: "ro/rw mode may only be specified once per --mount",
 		},
 		{
 			name:        "valid pvc with subpath",
@@ -2234,7 +2301,7 @@ func TestGCSFuseProfile_OptionsAndAttributes(t *testing.T) {
 	if !ok || len(mountOptions) != 2 {
 		t.Fatalf("PV mountOptions = %v, want 2 entries", mountOptions)
 	}
-	if mountOptions[0] != "implicit-dirs" || mountOptions[1] != "file-cache:max-size-mb:2000" {
+	if mountOptions[0] != "file-cache:max-size-mb:2000" || mountOptions[1] != "implicit-dirs" {
 		t.Errorf("PV mountOptions = %v", mountOptions)
 	}
 	if got := nestedString(t, pv, "spec", "csi", "volumeAttributes", "anywhereCacheZones"); got != "us-central1-a" {
@@ -3240,7 +3307,8 @@ func TestGCSFuseGatewayPVCName_PinnedNames(t *testing.T) {
 		want  string
 	}{
 		{"canonical", "gs://imagenet-dataset;/data;profile=training", "gcluster-gcsfuse-imagenet-dataset-training-c8a67a"},
-		{"options", "gs://imagenet-dataset;/data;profile=training;options=implicit-dirs,file-cache:max-size-mb:-1", "gcluster-gcsfuse-imagenet-dataset-training-bf793e"},
+		{"options", "gs://imagenet-dataset;/data;profile=training;options=implicit-dirs,file-cache:max-size-mb:-1", "gcluster-gcsfuse-imagenet-dataset-training-942248"},
+		{"options reordered", "gs://imagenet-dataset;/data;profile=training;options=file-cache:max-size-mb:-1,implicit-dirs", "gcluster-gcsfuse-imagenet-dataset-training-942248"},
 		{"attributes", "gs://imagenet-dataset;/data;profile=training;attributes=fileCacheCapacity=50Gi", "gcluster-gcsfuse-imagenet-dataset-training-38b020"},
 		{"dotted bucket", "gs://my.dotted.bucket;/data;profile=serving", "gcluster-gcsfuse-my-dotted-bucket-0561d95913-serving-d7aead"},
 	}
@@ -5613,8 +5681,8 @@ func TestParseSingleVolumeRejectsInvalidGCSFuseOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseSingleVolume() unexpected error: %v", err)
 	}
-	if pm.Options != "only-dir=sub,implicit-dirs,uid=1000" {
-		t.Errorf("pm.Options = %q, want whitespace-trimmed canonical options", pm.Options)
+	if pm.Options != "implicit-dirs,only-dir=sub,uid=1000" {
+		t.Errorf("pm.Options = %q, want whitespace-trimmed sorted canonical options", pm.Options)
 	}
 }
 
@@ -6063,6 +6131,7 @@ func TestValidateMountsCanonicalInlineOnlyDirDuplicates(t *testing.T) {
 		{name: "only-dir= vs only-dir:", mounts: []string{"gs://shared;/d1;options=only-dir=train", "gs://shared;/d2;options=only-dir:train"}},
 		{name: "only-dir= vs slash-padded only-dir", mounts: []string{"gs://shared;/d1;options=only-dir=train", "gs://shared;/d2;options=only-dir=/train/"}},
 		{name: "matching extra options", mounts: []string{"gs://shared/train;/d1;options=implicit-dirs", "gs://shared;/d2;options=implicit-dirs,only-dir=train"}},
+		{name: "reordered options", mounts: []string{"gs://shared/train;/d1;options=implicit-dirs,uid=1000", "gs://shared/train;/d2;options=uid=1000, implicit-dirs"}},
 	}
 	for _, tc := range dupCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -6087,4 +6156,202 @@ func TestValidateMountsCanonicalInlineOnlyDirDuplicates(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGCSFuseProfile_OptionOrderIndependentGatewayAndDuplicateCheck(t *testing.T) {
+	sm := &StorageManager{}
+	if err := sm.ValidateMounts([]string{
+		"gs://shared;/d1;profile=training;options=implicit-dirs,uid=1000",
+		"gs://shared;/d2;profile=training;options=uid=1000, implicit-dirs",
+	}); err == nil || !strings.Contains(err.Error(), "duplicate volume source: gs://shared") {
+		t.Errorf("ValidateMounts(reordered profile options) = %v, want duplicate volume source: gs://shared", err)
+	}
+
+	infos, manifests, err := sm.ProcessMounts([]string{
+		"gs://shared/a;/d1;ro;profile=training;options=uid=1000,implicit-dirs,uid=1000",
+		"gs://shared/b;/d2;rw;profile=training;options=implicit-dirs, uid=1000",
+	}, orchestrator.JobDefinition{})
+	if err != nil {
+		t.Fatalf("ProcessMounts() unexpected error: %v", err)
+	}
+	if len(manifests) != 1 || infos[0].Name != infos[1].Name || infos[0].Source != infos[1].Source {
+		t.Fatalf("reordered options= must share one gateway: got %d manifests, volumes %q/%q, claims %q/%q",
+			len(manifests), infos[0].Name, infos[1].Name, infos[0].Source, infos[1].Source)
+	}
+	docs := splitManifestDocs(t, manifests[0])
+	pv := findDoc(t, docs, "PersistentVolume")
+	pvc := findDoc(t, docs, "PersistentVolumeClaim")
+	mountOptions, _ := nested(t, pv, "spec", "mountOptions").([]interface{})
+	if !reflect.DeepEqual(mountOptions, []interface{}{"implicit-dirs", "uid=1000"}) {
+		t.Errorf("PV spec.mountOptions = %v, want [implicit-dirs uid=1000]", mountOptions)
+	}
+	if gotClaim := nestedString(t, pv, "spec", "claimRef", "name"); gotClaim != infos[0].Source || nestedString(t, pvc, "metadata", "name") != infos[0].Source {
+		t.Errorf("PV claimRef.name=%q PVC name=%q, want %q", gotClaim, nestedString(t, pvc, "metadata", "name"), infos[0].Source)
+	}
+}
+
+func TestGCSFuseProfile_CheckpointingReadOnlyWarns(t *testing.T) {
+	sm := &StorageManager{}
+
+	t.Run("checkpointing ro warns once on ProcessMounts for subpath and bare bucket", func(t *testing.T) {
+		snap, restore := logging.CaptureForTesting(t)
+		defer restore()
+		mounts := []string{
+			"gs://ckpt-bucket/run1;/ckpt;profile=checkpointing",
+			"gs://bare-ckpt;/ckpt2;ro;profile=checkpointing",
+		}
+		if err := sm.ValidateMounts(mounts); err != nil {
+			t.Fatalf("ValidateMounts() unexpected error: %v", err)
+		}
+		if _, warnOut := snap(); warnOut != "" {
+			t.Errorf("ValidateMounts must not warn (would duplicate ProcessMounts warning), got: %q", warnOut)
+		}
+		if _, _, err := sm.ProcessMounts(mounts, orchestrator.JobDefinition{}); err != nil {
+			t.Fatalf("ProcessMounts() unexpected error: %v", err)
+		}
+		_, warnOut := snap()
+		for _, want := range []string{`"gs://ckpt-bucket/run1"`, `"/ckpt"`, `"gs://bare-ckpt"`, `"/ckpt2"`, "replacing ';ro' if present"} {
+			if !strings.Contains(warnOut, want) {
+				t.Errorf("expected %s in checkpointing warning, got: %q", want, warnOut)
+			}
+		}
+	})
+
+	t.Run("checkpointing rw and training ro do not warn", func(t *testing.T) {
+		snap, restore := logging.CaptureForTesting(t)
+		defer restore()
+		mounts := []string{
+			"gs://ckpt-bucket/run1;/ckpt;rw;profile=checkpointing",
+			"gs://data-bucket;/data;ro;profile=training",
+		}
+		if _, _, err := sm.ProcessMounts(mounts, orchestrator.JobDefinition{}); err != nil {
+			t.Fatalf("ProcessMounts() unexpected error: %v", err)
+		}
+		if _, warnOut := snap(); warnOut != "" {
+			t.Errorf("expected no warnings, got: %q", warnOut)
+		}
+	})
+}
+
+func assertSharedInlineCSIVolume(t *testing.T, manifest string, wantAttrs map[string]string, wantROByPath map[string]bool) {
+	t.Helper()
+	if err := ValidateJobSetManifest(manifest); err != nil {
+		t.Fatalf("ValidateJobSetManifest() failed: %v\n%s", err, manifest)
+	}
+	_, templates := parseStrictJobSetTemplates(t, manifest)
+	if len(templates) == 0 {
+		t.Fatal("expected at least one decoded JobTemplateSpec")
+	}
+	for _, tmpl := range templates {
+		assertPodSpecSharedInlineCSI(t, tmpl.Spec.Template.Spec, wantAttrs, wantROByPath)
+	}
+}
+
+func assertPodSpecSharedInlineCSI(t *testing.T, podSpec corev1.PodSpec, wantAttrs map[string]string, wantROByPath map[string]bool) {
+	t.Helper()
+	if len(podSpec.Volumes) != 2 { // vol-0 + dshm
+		t.Fatalf("expected 1 GCS volume (+ dshm), got %d: %+v", len(podSpec.Volumes), podSpec.Volumes)
+	}
+	var csiRO *bool
+	for _, v := range podSpec.Volumes {
+		if v.Name == "vol-0" && v.CSI != nil {
+			csiRO = v.CSI.ReadOnly
+			if !reflect.DeepEqual(v.CSI.VolumeAttributes, wantAttrs) {
+				t.Errorf("CSI volumeAttributes = %v, want %v", v.CSI.VolumeAttributes, wantAttrs)
+			}
+		}
+	}
+	if csiRO == nil || *csiRO {
+		t.Errorf("shared CSI volume readOnly = %v, want false when any mount is rw", csiRO)
+	}
+	roByPath := map[string]bool{}
+	for _, vm := range podSpec.Containers[0].VolumeMounts {
+		if vm.Name == "vol-0" {
+			roByPath[vm.MountPath] = vm.ReadOnly
+		}
+	}
+	if !reflect.DeepEqual(roByPath, wantROByPath) {
+		t.Errorf("volumeMount readOnly by path = %v, want %v", roByPath, wantROByPath)
+	}
+}
+
+func TestInlineGCSMount_ReadOnlyAndReadWriteShareOneCSIVolume(t *testing.T) {
+	sm := &StorageManager{}
+
+	t.Run("ro then rw shares one rw CSI volume with sorted options and single warning", func(t *testing.T) {
+		snap, restore := logging.CaptureForTesting(t)
+		defer restore()
+		mounts := []string{
+			"gs://shared/ckpt;/mnt/ckpt-ro;ro;options=uid=1000,implicit-dirs;attributes=anywhereCacheTTL=1h,a=1",
+			"gs://shared;/mnt/ckpt-rw;rw;options=only-dir=ckpt,uid=1000,implicit-dirs;attributes=a=1,anywhereCacheTTL=1h",
+		}
+		if err := sm.ValidateMounts(mounts); err != nil {
+			t.Fatalf("ValidateMounts() unexpected error: %v", err)
+		}
+		infos, manifests, err := sm.ProcessMounts(mounts, orchestrator.JobDefinition{})
+		if err != nil {
+			t.Fatalf("ProcessMounts() unexpected error: %v", err)
+		}
+		if len(manifests) != 0 || infos[0].Name != "vol-0" || infos[1].Name != "vol-0" {
+			t.Fatalf("expected 0 manifests and shared vol-0, got %d manifests and %q/%q", len(manifests), infos[0].Name, infos[1].Name)
+		}
+		if _, warnOut := snap(); strings.Count(warnOut, "anywhereCacheTTL") != 1 {
+			t.Errorf("expected profile-only attribute warning once for shared inline volume, got: %q", warnOut)
+		}
+
+		opts := &ManifestOptions{}
+		sm.AddVolumeOptions(opts, infos)
+		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{}))
+		manifest, err := orc.GenerateGKEManifest(ManifestOptions{
+			WorkloadName:     "shared-inline-gcs",
+			FullImageName:    "busybox:latest",
+			CommandToRun:     "true",
+			NumSlices:        1,
+			NodesPerSlice:    1,
+			ComputeType:      "n2-standard-4",
+			MachineType:      "n2-standard-4",
+			ClusterLocation:  "us-central1-a",
+			GCSFuseEnabled:   opts.GCSFuseEnabled,
+			VolumesYAML:      opts.VolumesYAML,
+			VolumeMountsYAML: opts.VolumeMountsYAML,
+		}, JobProfile{IsCPUMachine: true, CapacityCount: 4})
+		if err != nil {
+			t.Fatalf("GenerateGKEManifest() unexpected error: %v", err)
+		}
+		assertSharedInlineCSIVolume(t, manifest, map[string]string{
+			"bucketName":       "shared",
+			"mountOptions":     "implicit-dirs,only-dir=ckpt,uid=1000",
+			"a":                "1",
+			"anywhereCacheTTL": "1h",
+		}, map[string]bool{
+			"/mnt/ckpt-ro": true,
+			"/mnt/ckpt-rw": false,
+		})
+	})
+
+	t.Run("pure ro mount keeps CSI readOnly true and divergent bucket options or attributes stay separate", func(t *testing.T) {
+		infos, _, err := sm.ProcessMounts([]string{
+			"gs://shared/a;/mnt/a;ro;options=implicit-dirs;attributes=k=1",
+			"gs://shared/a;/mnt/b;ro;attributes=k=1",
+			"gs://other/a;/mnt/c;ro;attributes=k=1",
+			"gs://shared/a;/mnt/d;ro;attributes=k=2",
+			"gs://shared/a;/mnt/e;ro;attributes=a=1 b:2",
+			"gs://shared/a;/mnt/f;rw;attributes=a=1,b=2",
+		}, orchestrator.JobDefinition{})
+		if err != nil {
+			t.Fatalf("ProcessMounts() unexpected error: %v", err)
+		}
+		seenNames := map[string]bool{}
+		for _, info := range infos {
+			if seenNames[info.Name] {
+				t.Fatalf("divergent inline mounts unexpectedly shared volume %q: %+v", info.Name, infos)
+			}
+			seenNames[info.Name] = true
+		}
+		opts := &ManifestOptions{}
+		sm.AddVolumeOptions(opts, infos[:1])
+		if !strings.Contains(opts.VolumesYAML, "readOnly: true") {
+			t.Errorf("pure ro inline CSI volume must keep readOnly: true, got:\n%s", opts.VolumesYAML)
+		}
+	})
 }
