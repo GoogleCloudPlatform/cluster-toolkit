@@ -1,76 +1,76 @@
-%{ for cc in compute_classes }
+%{ for cc in compute_classes ~}
 apiVersion: cloud.google.com/v1
 kind: ComputeClass
 metadata:
   name: ${cc.name}
 spec:
-%{ if cc.node_pool_auto_creation != null }
+%{ if cc.node_pool_auto_creation != null ~}
   nodePoolAutoCreation:
     enabled: ${cc.node_pool_auto_creation}
-%{ endif }
-%{ if cc.autopilot }
+%{ endif ~}
+%{ if cc.autopilot ~}
   autopilot:
     enabled: true
-%{ endif }
-%{ if cc.description != "" }
+%{ endif ~}
+%{ if cc.description != "" ~}
   description: "${cc.description}"
-%{ endif }
+%{ endif ~}
   priorities:
-%{ for p in cc.priorities }
+%{ for p in cc.priorities ~}
     - machineFamily: ${p.machine_family}
-%{ if p.spot }
+%{ if p.spot ~}
       spot: true
-%{ endif }
-%{ if p.min_cores != null }
+%{ endif ~}
+%{ if p.min_cores != null ~}
       minCores: ${p.min_cores}
-%{ endif }
-%{ if p.min_memory_gb != null }
+%{ endif ~}
+%{ if p.min_memory_gb != null ~}
       minMemoryGb: ${p.min_memory_gb}
-%{ endif }
-%{ if p.min_cpu_platform != null }
+%{ endif ~}
+%{ if p.min_cpu_platform != null ~}
       minCpuPlatform: "${p.min_cpu_platform}"
-%{ endif }
-%{ if p.placement_policy_name != null }
+%{ endif ~}
+%{ if p.placement_policy_name != null ~}
       placement:
         policyName: "${p.placement_policy_name}"
-%{ endif }
-%{ if length(p.zones) > 0 }
+%{ endif ~}
+%{ if length(p.zones) > 0 ~}
       location:
         zones:
-%{ for z in p.zones }
+%{ for z in p.zones ~}
           - "${z}"
-%{ endfor }
-%{ endif }
-%{ endfor }
-%{ if cc.node_pool_config != null }
+%{ endfor ~}
+%{ endif ~}
+%{ endfor ~}
+%{ if cc.node_pool_config != null ~}
   nodePoolConfig:
     imageType: ${lower(cc.node_pool_config.image_type)}
-%{ if cc.node_pool_config.service_account != null }
+%{ if cc.node_pool_config.service_account != null ~}
     serviceAccount: "${cc.node_pool_config.service_account}"
-%{ endif }
+%{ endif ~}
     gvnic:
       enabled: ${cc.node_pool_config.gvnic_enabled}
     imageStreaming:
       enabled: ${cc.node_pool_config.image_streaming}
-%{ if length(cc.node_pool_config.node_labels) > 0 }
+%{ if length(cc.node_pool_config.node_labels) > 0 ~}
     nodeLabels:
-%{ for k, v in cc.node_pool_config.node_labels }
+%{ for k, v in cc.node_pool_config.node_labels ~}
       ${k}: "${v}"
-%{ endfor }
-%{ endif }
-%{ if length(cc.node_pool_config.taints) > 0 }
+%{ endfor ~}
+%{ endif ~}
+%{ if length(cc.node_pool_config.taints) > 0 ~}
     taints:
-%{ for t in cc.node_pool_config.taints }
+%{ for t in cc.node_pool_config.taints ~}
       - key: "${t.key}"
         value: "${t.value}"
         effect: "${t.effect}"
-%{ endfor }
-%{ endif }
-%{ endif }
-%{ if cc.autoscaling_policy != null }
+%{ endfor ~}
+%{ endif ~}
+%{ endif ~}
+%{ if cc.autoscaling_policy != null ~}
   autoscalingPolicy:
     consolidationDelayMinutes: ${cc.autoscaling_policy.consolidation_delay_minutes}
     consolidationThreshold: ${cc.autoscaling_policy.consolidation_threshold}
-%{ endif }
+%{ endif ~}
 ---
-%{ endfor }
+%{ endfor ~}
