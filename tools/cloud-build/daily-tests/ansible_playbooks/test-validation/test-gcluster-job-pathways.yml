@@ -76,7 +76,7 @@
 
 - name: Create ML Diagnostics GCS bucket
   delegate_to: localhost
-  ansible.builtin.command: gcloud storage buckets create gs://{{ custom_vars.gcs_bucket }} --project {{ custom_vars.project }} --location {{ region | default('us-central1') }}
+  ansible.builtin.command: gcloud storage buckets create gs://{{ custom_vars.gcs_bucket }} --project {{ custom_vars.project }} --location {{ region | default('us-central1') }} --public-access-prevention
   when: bucket_check.rc != 0
 
 # ==========================================
@@ -162,6 +162,8 @@
       | selectattr('name', 'equalto', 'pathways-worker') | map(attribute='env') | flatten
       | selectattr('name', 'equalto', 'TEST_WORKER_VAR') | selectattr('value', 'equalto', 'worker_val') | list | length > 0
     # 4. Assert worker backoffLimitPerIndex and backoffLimit match --pathways-max-slice-restarts
+    #    (backoffLimit is max(N, 4) * nodesPerSlice, so N=5 gives 5 * parallelism) and that workers
+    #    use restartPolicy: OnFailure. The default N=0 policy is tested by the live run below and Go unit tests.
     - >
       (dry_run_yaml.spec.replicatedJobs
       | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec') | first).backoffLimitPerIndex == 5
@@ -170,6 +172,9 @@
       | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec') | first).backoffLimit
       == 5 * (dry_run_yaml.spec.replicatedJobs
       | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec') | first).parallelism
+    - >
+      (dry_run_yaml.spec.replicatedJobs
+      | selectattr('name', 'equalto', 'worker') | map(attribute='template.spec.template.spec') | first).restartPolicy == 'OnFailure'
     # 5. Assert serviceAccountName on pathways-head and worker pod specs matches --service-account
     - >
       (dry_run_yaml.spec.replicatedJobs
@@ -383,6 +388,38 @@
       until: signal_mtc_verified.rc == 0
       changed_when: false
       ignore_errors: true
+
+  - name: Wait for the Pathways JobSet to reach a terminal state
+    delegate_to: localhost
+    ansible.builtin.command:
+      argv:
+      - kubectl
+      - get
+      - jobset
+      - "{{ job_name }}"
+      - --request-timeout=15s
+      - -o
+      - jsonpath={.status.terminalState}|{.status.restarts}
+    register: jobset_status
+    until: jobset_status.rc == 0 and (jobset_status.stdout.split('|')[0] | length > 0)
+    retries: 60
+    delay: 10
+    changed_when: false
+
+  - name: Print Pathways JobSet terminal status and restart count
+    ansible.builtin.debug:
+      msg: >-
+        Pathways JobSet {{ job_name }} reached terminalState={{ jobset_status.stdout.split('|')[0] }}
+        with restarts={{ jobset_status.stdout.split('|')[1] | default('0', true) }}.
+
+  - name: Assert the Pathways JobSet completed
+    ansible.builtin.assert:
+      that:
+      - jobset_status.stdout.split('|')[0] == 'Completed'
+      fail_msg: >-
+        The Pathways JobSet ended {{ jobset_status.stdout.split('|')[0] }} after
+        {{ jobset_status.stdout.split('|')[1] | default('0', true) }} restarts; a workload that exits 0 must complete
+        the JobSet.
 
   rescue:
   - name: "FAILURE: Job failed execution. Gathering GCluster diagnostic inspection."

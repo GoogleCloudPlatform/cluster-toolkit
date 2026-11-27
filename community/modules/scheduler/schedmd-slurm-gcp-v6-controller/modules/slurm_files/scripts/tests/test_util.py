@@ -153,11 +153,6 @@ def test_to_hostlist(names, expected):
             "beta",
             ClientOptions(api_endpoint="https://storage.googleapis.com/beta/"),
         ),
-        (
-            util.ApiEndpoint.TPU,
-            "alpha",
-            ClientOptions(api_endpoint="https://tpu.googleapis.com/alpha/"),
-        ),
     ],
 )
 def test_create_client_options(
@@ -394,9 +389,7 @@ def test_get_jobs(mocker, stdout, expected_jobs):
         ("c-d-vodoo", None, None), # dynamic nodeset
         ("c-x-44", None, None), # unknown(removed) nodeset
         ("c-n-7", None, None), # Out of bounds: c-n-[0-4] - downsized nodeset
-        ("c-t-7", None, None), # Out of bounds: c-t-[0-4] - downsized nodeset TPU
         ("c-n-2", None, RuntimeError), # something is wrong
-        ("c-t-2", None, RuntimeError), # something is wrong, but TPU
         
         # Check boundaries match [0-5)
         ("c-n-5", None, None), # out of boundaries
@@ -407,8 +400,6 @@ def test_node_state(node: str, state: Optional[NodeState], want: NodeState | Non
         slurm_cluster_name="c",
         nodeset={
             "n": TstNodeset(nodeset_name="n", node_count_static=2, node_count_dynamic_max=3)},
-        nodeset_tpu={
-            "t": TstNodeset(nodeset_name="t", node_count_static=2, node_count_dynamic_max=3)},
         nodeset_dyn={
             "d": TstNodeset(nodeset_name="d")},
     )
@@ -2228,7 +2219,6 @@ def test_fetch_config_downloads_keep_order():
         partition=[],
         nodeset=[blob(f"nodeset_name: ns{i}") for i in range(200)],
         nodeset_dyn=[],
-        nodeset_tpu=[],
         login_group=[],
     )
     with patch.object(util, "_list_config_blobs", return_value=blobs), \
@@ -2251,7 +2241,6 @@ def test_fetch_config_download_error_propagates():
         partition=[],
         nodeset=[bad],
         nodeset_dyn=[],
-        nodeset_tpu=[],
         login_group=[],
     )
     with patch.object(util, "_list_config_blobs", return_value=blobs), \
@@ -2262,3 +2251,70 @@ def test_fetch_config_download_error_propagates():
 def test_yaml_load_reads_dumped_config():
     cfg = util.NSDict({"nodeset": {"a": {"node_conf": {"Weight": 1}, "zones": ["us-east1-b"]}}, "x": None})
     assert util._yaml_load(util.yaml.dump(cfg, Dumper=util.Dumper)) == cfg
+
+
+def test_has_block_topology_for_unreserved_static_mig_slices():
+    part = NSDict(partition_name="p", partition_nodeset=["a4x"])
+
+    # Unreserved static MIG with normalized 2D GPU topology -> block topology enabled
+    for topo in ("1x72", "2x36", "1x36"):
+        cfg = TstCfg(
+            slurm_cluster_name="c",
+            nodeset={
+                "a4x": TstNodeset(
+                    nodeset_name="a4x",
+                    provisioning_engine="MIG",
+                    accelerator_topology=topo,
+                    reservation_name="",
+                ),
+            },
+            partitions={"p": TstPartition(partition_name="p", partition_nodeset=["a4x"])},
+        )
+        assert util.Lookup(cfg).has_block_topology(part) is True, topo
+
+    # Un-normalized topology strings remain rejected even on MIG
+    for bad in ("1X72", "1x72 ", " 1x72", "1x72\n", "2x2x4", ""):
+        cfg = TstCfg(
+            slurm_cluster_name="c",
+            nodeset={
+                "a4x": TstNodeset(
+                    nodeset_name="a4x",
+                    provisioning_engine="MIG",
+                    accelerator_topology=bad,
+                    reservation_name="",
+                ),
+            },
+        )
+        assert util.Lookup(cfg).has_block_topology(part) is False, bad
+
+    # DWS Flex and TPU nodesets are excluded from A4X block topology
+    flex_cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                provisioning_engine="MIG",
+                accelerator_topology="1x72",
+                dws_flex=NSDict(enabled=True),
+            ),
+        },
+    )
+    assert util.Lookup(flex_cfg).has_block_topology(part) is False
+
+    tpu_cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                provisioning_engine="MIG",
+                accelerator_topology="2x4",
+                instance_template="tpu-tpl",
+            ),
+        },
+    )
+    lkp_tpu = util.Lookup(tpu_cfg)
+    lkp_tpu.is_tpu_nodeset = Mock(return_value=True)  # type: ignore[method-assign]
+    assert lkp_tpu.has_block_topology(part) is False
+
+    # Empty partition_nodeset never enables block topology
+    assert util.Lookup(tpu_cfg).has_block_topology(NSDict(partition_name="empty", partition_nodeset=[])) is False

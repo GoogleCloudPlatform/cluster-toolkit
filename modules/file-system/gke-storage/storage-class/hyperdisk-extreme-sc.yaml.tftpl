@@ -4,11 +4,11 @@ metadata:
   name: ${name}
   labels:
   %{~ for key, val in labels ~}
-    ${key}: ${val}
+    ${jsonencode(key)}: ${jsonencode(val)}
+  %{~ endfor ~}
 provisioner: pd.csi.storage.gke.io
 allowVolumeExpansion: true
 parameters:
-  %{~ endfor ~}
   type: hyperdisk-extreme
   provisioned-iops-on-create: "50000"
 volumeBindingMode: ${volume_binding_mode}

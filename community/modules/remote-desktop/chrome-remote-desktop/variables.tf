@@ -58,10 +58,9 @@ variable "network_storage" {
 variable "instance_image" {
   description = <<-EOD
     Image used to build chrome remote desktop node. The default image is
-    name="debian-12-bookworm-v20250610" and project="debian-cloud".
-    NOTE: uses fixed version of image to avoid NVIDIA driver compatibility issues.
+    family="ubuntu-2404-lts-amd64" and project="ubuntu-os-cloud".
 
-    An alternative image is from name="ubuntu-2204-jammy-v20240126" and project="ubuntu-os-cloud".
+    An alternative image is family="debian-12" and project="debian-cloud".
 
     Expected Fields:
     name: The name of the image. Mutually exclusive with family.
@@ -70,8 +69,8 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    project = "debian-cloud"
-    name    = "debian-12-bookworm-v20250610"
+    project = "ubuntu-os-cloud"
+    family  = "ubuntu-2404-lts-amd64"
   }
 }
 
@@ -217,7 +216,7 @@ variable "startup_script" {
 }
 
 variable "guest_accelerator" {
-  description = "List of the type and count of accelerator cards attached to the instance. Requires virtual workstation accelerator if Nvidia Grid Drivers are required"
+  description = "List of the type and count of accelerator cards attached to the instance. Requires virtual workstation accelerator if Nvidia Grid Drivers are required. On the default Ubuntu 24.04 image (GRID R595), only nvidia-tesla-t4-vws on N1 is supported; R595 dropped Pascal/Volta GPU support. For Pascal vWS GPUs (P4/P100), set instance_image to a Debian 12 image."
   type = list(object({
     type  = string,
     count = number

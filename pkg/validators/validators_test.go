@@ -721,3 +721,68 @@ func (s *MySuite) TestReservationExistsValidatorWithSharedReservation_UnknownAnd
 	c.Assert(err, IsNil)
 	c.Check(apiCalled, Equals, true)
 }
+
+func (s *MySuite) TestReservationExistsValidatorWithReservationBlocksAndSubBlocks(c *C) {
+	var capturedProject string
+	var capturedZone string
+	var capturedName string
+
+	oldCreator := newComputeService
+	defer func() { newComputeService = oldCreator }()
+	newComputeService = func(ctx context.Context) (*compute.Service, error) {
+		return mockComputeService(func(w http.ResponseWriter, r *http.Request) {
+			parts := strings.Split(r.URL.Path, "/")
+			if len(parts) == 7 && parts[1] == "projects" && parts[3] == "zones" && parts[5] == "reservations" {
+				capturedProject = parts[2]
+				capturedZone = parts[4]
+				capturedName = parts[6]
+			} else {
+				http.Error(w, "invalid reservation URL path", http.StatusNotFound)
+				return
+			}
+			_, _ = w.Write([]byte(`{"name": "` + capturedName + `", "status": "READY"}`))
+		}), nil
+	}
+
+	testCases := []struct {
+		resInput    string
+		wantProject string
+		wantName    string
+	}{
+		{
+			resInput:    "reservation-20261008-231448/reservationBlocks/reservation-20261008-231448-block-0001",
+			wantProject: "consumer-proj",
+			wantName:    "reservation-20261008-231448",
+		},
+		{
+			resInput:    "reservation-20261008-231448/reservationBlocks/reservation-20261008-231448-block-0001/reservationSubBlocks/subblock-0001",
+			wantProject: "consumer-proj",
+			wantName:    "reservation-20261008-231448",
+		},
+		{
+			resInput:    "projects/shared-host-proj/reservations/reservation-20261008-231448/reservationBlocks/reservation-20261008-231448-block-0001",
+			wantProject: "shared-host-proj",
+			wantName:    "reservation-20261008-231448",
+		},
+		{
+			resInput:    "projects/shared-host-proj/reservations/reservation-20261008-231448/reservationBlocks/reservation-20261008-231448-block-0001/reservationSubBlocks/subblock-0001",
+			wantProject: "shared-host-proj",
+			wantName:    "reservation-20261008-231448",
+		},
+	}
+
+	for _, tc := range testCases {
+		capturedProject, capturedZone, capturedName = "", "", ""
+		bp := config.Blueprint{}
+		inputs := config.NewDict(map[string]cty.Value{
+			"project_id":       cty.StringVal("consumer-proj"),
+			"zone":             cty.StringVal("us-central1-b"),
+			"reservation_name": cty.StringVal(tc.resInput),
+		})
+		err := testReservationExists(bp, inputs)
+		c.Assert(err, IsNil)
+		c.Check(capturedProject, Equals, tc.wantProject)
+		c.Check(capturedZone, Equals, "us-central1-b")
+		c.Check(capturedName, Equals, tc.wantName)
+	}
+}

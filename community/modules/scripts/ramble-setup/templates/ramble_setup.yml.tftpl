@@ -36,7 +36,7 @@
       dest: "{{ profile_script_path }}"
       mode: '0644'
       content: "{{ profile_script }}"
-    when: profile_script
+    when: profile_script | default('', true) | length > 0
 
   - name: Look up user to use for install
     block:
@@ -114,7 +114,7 @@
 
   - name: Finalize setup
     ansible.builtin.shell: "{{ finalize_setup_script }}"
-    when: lock_out.rc == 0 and finalize_setup_script
+    when: lock_out.rc == 0 and finalize_setup_script | default('', true) | length > 0
     become: true
     become_user: "{{ system_user.name }}"
 
@@ -138,7 +138,7 @@
       ansible.builtin.wait_for:
         path: "{{ lock_dir }}/done"
         state: present
-        timeout: 600
+        timeout: 1800
         sleep: 10
       when: lock_out.rc != 0
 

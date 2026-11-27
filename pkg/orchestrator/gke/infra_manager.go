@@ -23,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -41,6 +42,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -60,6 +62,14 @@ const (
 	jobSetWaitLogInterval = 30 * time.Second
 	// kubectlReadTimeout bounds one kubectl read made while waiting for, or diagnosing, a webhook.
 	kubectlReadTimeout = "--request-timeout=10s"
+
+	// disableKueueEnvVar pins Kueue off for the current submission.
+	disableKueueEnvVar = "GCLUSTER_DISABLE_KUEUE"
+	// disableJobSetEnvVar pins JobSet off for the current submission (forces Tier-3 batch/v1 Job).
+	disableJobSetEnvVar = "GCLUSTER_DISABLE_JOBSET"
+	// githubConnectivityProbeURL is probed lazily via HTTP HEAD when considering an add-on install.
+	githubConnectivityProbeURL = "https://github.com"
+	connectivityProbeTimeout   = 1500 * time.Millisecond
 )
 
 var (
@@ -73,8 +83,8 @@ var (
 // errEndpointsUnreadable marks a failed endpoint read that callers may retry.
 var errEndpointsUnreadable = errors.New("endpoints could not be read")
 
-// jobSetInstallPermissionChecks are the cluster-scoped permissions needed to install JobSet.
-var jobSetInstallPermissionChecks = []permissionCheck{
+// addonInstallPermissionChecks are the cluster-scoped RBAC permissions required to install JobSet or Kueue.
+var addonInstallPermissionChecks = []permissionCheck{
 	{"create", "namespaces"},
 	{"create", "customresourcedefinitions.apiextensions.k8s.io"},
 	{"create", "clusterroles.rbac.authorization.k8s.io"},
@@ -96,65 +106,6 @@ var jobSetObjectsWithSelectors = []struct {
 	{"Service", serviceGVR, jobSetMetricsServiceName},
 }
 
-// checkAndInstallJobSetCRD installs JobSet only when neither its CRD nor its webhook Service exists.
-// When both exist it waits for the webhook to become ready. It never modifies an existing or partial
-// installation: re-applying manifests over one can leave the webhook without endpoints, which blocks
-// every JobSet in the cluster.
-func (g *GKEOrchestrator) checkAndInstallJobSetCRD() error {
-	crdExists, crdForbidden, err := g.checkResourceExists("crd", jobSetCRDName, "")
-	if err != nil {
-		return fmt.Errorf("failed to check for the JobSet CRD: %w", err)
-	}
-	if crdExists && !crdForbidden {
-		return g.verifyOrWaitForJobSetWithCRD()
-	}
-	serviceExists, _, err := g.checkResourceExists("service", jobSetWebhookServiceName, jobSetNamespace)
-	if err != nil {
-		return fmt.Errorf("failed to check for the JobSet webhook Service: %w", err)
-	}
-	switch {
-	case crdExists && serviceExists:
-		if err := g.waitForJobSetWebhookEndpoints(); err != nil {
-			return fmt.Errorf("JobSet is installed but its webhook is not ready, and gcluster did not modify the existing JobSet installation: %w", err)
-		}
-		return nil
-	case !crdExists && !serviceExists:
-		return g.installJobSetOnFreshCluster()
-	default:
-		return g.partialJobSetInstallError(crdExists)
-	}
-}
-
-// verifyOrWaitForJobSetWithCRD handles the common case where the JobSet CRD is confirmed present.
-// It checks the webhook EndpointSlice first so a healthy cluster requires only two kubectl reads
-// (CRD + EndpointSlice) and skips the separate Service existence read.
-func (g *GKEOrchestrator) verifyOrWaitForJobSetWithCRD() error {
-	start := time.Now()
-	ready, epForbidden, epErr := g.checkServiceEndpointsReady(jobSetNamespace, jobSetWebhookServiceName)
-	if epErr != nil && !errors.Is(epErr, errEndpointsUnreadable) {
-		return epErr
-	}
-	if ready && !epForbidden {
-		return nil
-	}
-	serviceExists, _, err := g.checkResourceExists("service", jobSetWebhookServiceName, jobSetNamespace)
-	if err != nil {
-		return fmt.Errorf("failed to check for the JobSet webhook Service: %w", err)
-	}
-	if !serviceExists {
-		return g.partialJobSetInstallError(true)
-	}
-	if ready {
-		return nil
-	}
-	logging.Info("Service %s/%s has no ready endpoint yet; the JobSet controller may be starting or restarting. Waiting up to %s...",
-		jobSetNamespace, jobSetWebhookServiceName, jobSetWebhookWaitTimeout)
-	if err := g.pollJobSetWebhookEndpoints(1, start, epErr == nil, epErr); err != nil {
-		return fmt.Errorf("JobSet is installed but its webhook is not ready, and gcluster did not modify the existing JobSet installation: %w", err)
-	}
-	return nil
-}
-
 // checkResourceExists reports whether a Kubernetes object exists. A Forbidden read counts as existing, so a
 // user who cannot read the object never triggers an installation.
 func (g *GKEOrchestrator) checkResourceExists(kind, name, namespace string) (exists, forbidden bool, err error) {
@@ -166,19 +117,25 @@ func (g *GKEOrchestrator) checkResourceExists(kind, name, namespace string) (exi
 	if res.ExitCode == 0 {
 		return strings.TrimSpace(res.Stdout) != "", false, nil
 	}
-	err = fmt.Errorf("kubectl get %s %s failed: %s", kind, name, strings.TrimSpace(res.Stderr+"\n"+res.Stdout))
-	if k8s.IsForbiddenError(err) {
+	if rawErr := kubectlOutputError(res); rawErr != nil && k8s.IsForbiddenError(rawErr) {
 		logging.Warn("Insufficient RBAC permissions to read %s %s (403 Forbidden). Assuming it exists.", kind, name)
 		return true, true, nil
 	}
-	return false, false, err
+	return false, false, kubectlCommandError(fmt.Sprintf("kubectl get %s %s failed", kind, name), res)
+}
+
+func (g *GKEOrchestrator) checkJobSetInstallPermissions() error {
+	if missing := g.missingPermissions(addonInstallPermissionChecks); len(missing) > 0 {
+		return fmt.Errorf("JobSet is not installed, and your account cannot install it: missing RBAC permissions [%s]. gcluster made no changes. "+
+			"Ask your cluster administrator to install JobSet (for example with jobset.install: true in the kubectl-apply module) or to run this command once, "+
+			"or set %s=1 to submit single-slice, non-Pathways workloads using a standalone batch/v1 Indexed Job", strings.Join(missing, ", "), disableJobSetEnvVar)
+	}
+	return nil
 }
 
 func (g *GKEOrchestrator) installJobSetOnFreshCluster() error {
-	logging.Info("JobSet CRD %s and Service %s/%s not found. Checking the permissions needed to install JobSet...", jobSetCRDName, jobSetNamespace, jobSetWebhookServiceName)
-	if missing := g.missingPermissions(jobSetInstallPermissionChecks); len(missing) > 0 {
-		return fmt.Errorf("JobSet is not installed, and your account cannot install it: missing RBAC permissions [%s]. gcluster made no changes. "+
-			"Ask your cluster administrator to install JobSet (for example with jobset.install: true in the kubectl-apply module) or to run this command once", strings.Join(missing, ", "))
+	if g.isOfflineForAddons() {
+		return fmt.Errorf("JobSet is not installed and cannot be downloaded %s; pre-install JobSet %s on the cluster first", g.airGapReason(), defaultJobSetVersion)
 	}
 	logging.Info("Installing JobSet %s cluster-wide in namespace %s...", defaultJobSetVersion, jobSetNamespace)
 	if err := g.installJobSetCRD(fmt.Sprintf("https://github.com/kubernetes-sigs/jobset/releases/download/%s/manifests.yaml", defaultJobSetVersion)); err != nil {
@@ -197,8 +154,8 @@ func (g *GKEOrchestrator) partialJobSetInstallError(crdExists bool) error {
 		return fmt.Errorf("JobSet is only partly installed: Service %s/%s exists (or could not be read; see the warning above), but CRD %s was not found. gcluster made no changes.\n"+
 			"No JobSet can exist without its CRD, so reinstalling JobSet loses nothing: remove what is left with '%s' (or uninstall its Helm release), "+
 			"then re-run this command, or re-run gcluster deploy if JobSet is installed with jobset.install: true in the kubectl-apply module.\n"+
-			"If the warning above says your account cannot read the Service, ask your cluster administrator to check the JobSet installation",
-			jobSetNamespace, jobSetWebhookServiceName, jobSetCRDName, kubectl("delete", "namespace", jobSetNamespace))
+			"If the warning above says your account cannot read the Service, ask your cluster administrator to check the JobSet installation, or set %s=1 to submit using a standalone batch/v1 Indexed Job",
+			jobSetNamespace, jobSetWebhookServiceName, jobSetCRDName, kubectl("delete", "namespace", jobSetNamespace), disableJobSetEnvVar)
 	}
 	return fmt.Errorf("JobSet is only partly installed: CRD %[1]s exists (or could not be read; see the warning above), but Service %[2]s/%[3]s was not found. gcluster made no changes.\n"+
 		"While that Service is missing, any remaining JobSet webhook configurations reject every JobSet create in the cluster. Find the case that applies:\n"+
@@ -210,14 +167,16 @@ func (g *GKEOrchestrator) partialJobSetInstallError(crdExists bool) error {
 		"    If Deployment jobset-controller-manager still exists, use the version of its image (%[5]s); otherwise use the installed version or a newer one (this gcluster installs %[6]s), never an older one.\n"+
 		"  - If a gcluster run was interrupted while installing JobSet, run the command it printed to finish. If that output is lost and '%[7]s' lists no JobSets, "+
 		"run '%[8]s' and '%[9]s' and re-run this command to install JobSet from scratch. Never delete the CRD while JobSets exist: that deletes them.\n"+
-		"  - If JobSet runs in another namespace: gcluster job submit currently requires JobSet in namespace %[2]s",
+		"  - If JobSet runs in another namespace: gcluster job submit currently requires JobSet in namespace %[2]s.\n"+
+		"  - To bypass JobSet and submit a standalone batch/v1 Indexed Job, set %[10]s=1",
 		jobSetCRDName, jobSetNamespace, jobSetWebhookServiceName,
 		kubectl("apply", "--server-side", "--force-conflicts", "-f", "https://github.com/kubernetes-sigs/jobset/releases/download/<version>/manifests.yaml"),
 		kubectl("-n", jobSetNamespace, "get", "deployments", "-o", "wide"),
 		defaultJobSetVersion,
 		kubectl("get", "jobsets", "-A"),
 		kubectl("delete", "crd", jobSetCRDName),
-		kubectl("delete", "namespace", jobSetNamespace))
+		kubectl("delete", "namespace", jobSetNamespace),
+		disableJobSetEnvVar)
 }
 
 func (g *GKEOrchestrator) installJobSetCRD(jobSetManifestsURL string) error {
@@ -277,18 +236,22 @@ func (g *GKEOrchestrator) checkNoLiveJobSetObjects() error {
 	return nil
 }
 
-// jobSetManifestFile names the generated JobSet manifest after the kube context, so an install on another
+// scopedManifestFile names a generated add-on manifest after the kube context, so an install on another
 // cluster cannot overwrite the file that the recovery command of a failed install applies.
-func jobSetManifestFile(kubeContext string) string {
+func scopedManifestFile(prefix, kubeContext string) string {
 	if kubeContext == "" {
-		return "jobset.yaml"
+		return prefix + ".yaml"
 	}
-	return "jobset-" + strings.Map(func(r rune) rune {
+	return prefix + "-" + strings.Map(func(r rune) rune {
 		if r == '.' || r == '-' || r == '_' || ('a' <= r && r <= 'z') || ('A' <= r && r <= 'Z') || ('0' <= r && r <= '9') {
 			return r
 		}
 		return '_'
 	}, kubeContext) + ".yaml"
+}
+
+func jobSetManifestFile(kubeContext string) string {
+	return scopedManifestFile("jobset", kubeContext)
 }
 
 // waitForJobSetWebhook waits for the controller that installJobSetCRD applied, then for a ready webhook endpoint.
@@ -365,12 +328,16 @@ func lastReadFailure(err error) string {
 func (g *GKEOrchestrator) checkServiceEndpointsReady(namespace, service string) (ready, forbidden bool, err error) {
 	res := g.kubectl("get", "endpointslice", "-l", "kubernetes.io/service-name="+service, "-n", namespace, "-o", "json", kubectlReadTimeout)
 	if res.ExitCode != 0 {
-		err = fmt.Errorf("%w: %s", errEndpointsUnreadable, strings.TrimSpace(res.Stderr+"\n"+res.Stdout))
-		if k8s.IsForbiddenError(err) {
+		cmdErr := kubectlCommandError("kubectl get endpointslice failed", res)
+		rawErr := kubectlOutputError(res)
+		if rawErr == nil {
+			return false, false, cmdErr
+		}
+		if k8s.IsForbiddenError(rawErr) {
 			logging.Warn("Insufficient RBAC permissions to read %s endpoints in %s (403 Forbidden). Skipping endpoint readiness check.", service, namespace)
 			return true, true, nil
 		}
-		return false, false, err
+		return false, false, fmt.Errorf("%w: %w", errEndpointsUnreadable, cmdErr)
 	}
 	var eps k8sEndpointSliceList
 	if err := json.Unmarshal([]byte(res.Stdout), &eps); err != nil {
@@ -498,6 +465,9 @@ func (g *GKEOrchestrator) getHTTPClient() HTTPClient {
 }
 
 func (g *GKEOrchestrator) downloadManifests(url string) ([]byte, error) {
+	if g.isOfflineForAddons() {
+		return nil, fmt.Errorf("cannot download %s %s; pre-install the controller manifests on the cluster first", url, g.airGapReason())
+	}
 	logging.Info("Downloading manifests from %s", url)
 	resp, err := g.getHTTPClient().Get(url)
 	if err != nil {
@@ -523,6 +493,16 @@ func (g *GKEOrchestrator) cleanJobSetManifests(manifestBytes []byte) ([]byte, er
 	})
 }
 
+func isManifestObject(doc interface{}) (map[interface{}]interface{}, bool) {
+	data, ok := doc.(map[interface{}]interface{})
+	if !ok {
+		return nil, false
+	}
+	apiVer, _ := data["apiVersion"].(string)
+	kind, _ := data["kind"].(string)
+	return data, strings.TrimSpace(apiVer) != "" && strings.TrimSpace(kind) != ""
+}
+
 func (g *GKEOrchestrator) cleanAndProcessManifests(manifestBytes []byte, processFn func(map[interface{}]interface{})) ([]byte, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(manifestBytes))
 	var cleanedManifests bytes.Buffer
@@ -535,80 +515,36 @@ func (g *GKEOrchestrator) cleanAndProcessManifests(manifestBytes []byte, process
 			}
 			return nil, fmt.Errorf("failed to decode YAML document: %w", err)
 		}
-
 		if doc == nil {
 			continue
 		}
-
-		if data, ok := doc.(map[interface{}]interface{}); ok {
-			g.removeDescriptionFields(data)
-			if processFn != nil {
-				processFn(data)
-			}
-			cleanedBytes, err := yaml.Marshal(data)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal cleaned YAML: %w", err)
-			}
-			cleanedManifests.Write(cleanedBytes)
-			cleanedManifests.WriteString("---\n")
-		} else {
-			cleanedBytes, err := yaml.Marshal(doc)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal YAML document: %w", err)
-			}
-			cleanedManifests.Write(cleanedBytes)
-			cleanedManifests.WriteString("---\n")
+		data, ok := isManifestObject(doc)
+		if !ok {
+			return nil, fmt.Errorf("failed to decode YAML document: expected Kubernetes manifest object with apiVersion and kind")
 		}
+		g.removeDescriptionFields(data)
+		if processFn != nil {
+			processFn(data)
+		}
+		cleanedBytes, err := yaml.Marshal(data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal cleaned YAML: %w", err)
+		}
+		cleanedManifests.Write(cleanedBytes)
+		cleanedManifests.WriteString("---\n")
+	}
+	if cleanedManifests.Len() == 0 {
+		return nil, fmt.Errorf("failed to decode YAML document: manifest stream is empty")
 	}
 	return cleanedManifests.Bytes(), nil
 }
 
 func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interface{}) {
-	kind, ok := data["kind"].(string)
-	if !ok || kind != "Deployment" {
-		return
-	}
-
-	meta, ok := data["metadata"].(map[interface{}]interface{})
+	podSpec, template, ok := matchDeploymentPodSpec(data, jobSetControllerManagerName, jobSetHelmControllerName)
 	if !ok {
 		return
 	}
-	name, ok := meta["name"].(string)
-	if !ok || (name != jobSetControllerManagerName && name != jobSetHelmControllerName) {
-		return
-	}
-
-	spec, ok := data["spec"].(map[interface{}]interface{})
-	if !ok {
-		return
-	}
-	template, ok := spec["template"].(map[interface{}]interface{})
-	if !ok {
-		return
-	}
-	podSpec, ok := template["spec"].(map[interface{}]interface{})
-	if !ok {
-		return
-	}
-
-	tolerations := []interface{}{
-		map[interface{}]interface{}{
-			"key":      "nvidia.com/gpu",
-			"operator": "Exists",
-			"effect":   "NoSchedule",
-		},
-		map[interface{}]interface{}{
-			"key":      "components.gke.io/gke-managed-components",
-			"operator": "Exists",
-			"effect":   "NoSchedule",
-		},
-	}
-
-	if existingTolerations, ok := podSpec["tolerations"].([]interface{}); ok {
-		podSpec["tolerations"] = append(existingTolerations, tolerations...)
-	} else {
-		podSpec["tolerations"] = tolerations
-	}
+	appendControllerTolerations(podSpec)
 
 	if podMeta, ok := template["metadata"].(map[interface{}]interface{}); ok {
 		labels, ok := podMeta["labels"].(map[interface{}]interface{})
@@ -620,6 +556,52 @@ func (g *GKEOrchestrator) injectTolerationsAndLabels(data map[interface{}]interf
 		labels["app.kubernetes.io/name"] = "jobset"
 		labels["control-plane"] = "controller-manager"
 		labels["app.kubernetes.io/component"] = "controller-manager"
+	}
+}
+
+func matchDeploymentPodSpec(data map[interface{}]interface{}, deployNames ...string) (podSpec, template map[interface{}]interface{}, ok bool) {
+	kind, ok := data["kind"].(string)
+	if !ok || kind != "Deployment" {
+		return nil, nil, false
+	}
+	meta, ok := data["metadata"].(map[interface{}]interface{})
+	if !ok {
+		return nil, nil, false
+	}
+	name, ok := meta["name"].(string)
+	if !ok || !slices.Contains(deployNames, name) {
+		return nil, nil, false
+	}
+	spec, ok := data["spec"].(map[interface{}]interface{})
+	if !ok {
+		return nil, nil, false
+	}
+	template, ok = spec["template"].(map[interface{}]interface{})
+	if !ok {
+		return nil, nil, false
+	}
+	podSpec, ok = template["spec"].(map[interface{}]interface{})
+	return podSpec, template, ok
+}
+
+func appendControllerTolerations(podSpec map[interface{}]interface{}) {
+	tolerations := []interface{}{
+		map[interface{}]interface{}{
+			"key":      "nvidia.com/gpu",
+			"operator": "Exists",
+			"effect":   "NoSchedule",
+		},
+		map[interface{}]interface{}{
+			"key":      k8s.GKESystemTaintKey,
+			"operator": "Exists",
+			"effect":   "NoSchedule",
+		},
+	}
+
+	if existingTolerations, ok := podSpec["tolerations"].([]interface{}); ok {
+		podSpec["tolerations"] = append(existingTolerations, tolerations...)
+	} else {
+		podSpec["tolerations"] = tolerations
 	}
 }
 
@@ -696,13 +678,14 @@ func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) 
 		func() error {
 			return g.validateTargetNamespaceExists(job.ClusterName, job.ClusterLocation, job.ProjectID)
 		},
-		func() error { return g.CheckAndInstallKueue("", job.ClusterName, job.ClusterLocation) },
-		g.checkAndInstallJobSetCRD,
+		func() error {
+			return g.resolveClusterAddons(job, false)
+		},
 	}
 
 	if job.PriorityClassName != "" {
 		validators = append(validators, func() error {
-			return g.ensureAndValidatePriorityClass(job.PriorityClassName)
+			return g.validatePriorityClassForMode(job.PriorityClassName)
 		})
 	}
 
@@ -710,6 +693,614 @@ func (g *GKEOrchestrator) ValidateClusterState(job *orchestrator.JobDefinition) 
 		if err := validate(); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) getenv() func(string) string {
+	if g.connectivity != nil && g.connectivity.getenv != nil {
+		return g.connectivity.getenv
+	}
+	return os.Getenv
+}
+
+func (g *GKEOrchestrator) isEnvTruthy(key string) bool {
+	v, _ := shell.ParseBoolEnv(g.getenv()(key))
+	return v
+}
+
+func (g *GKEOrchestrator) labelScheme() k8s.LabelScheme {
+	if g.inventory != nil {
+		return g.inventory.LabelScheme
+	}
+	return k8s.SchemeAuto
+}
+
+func (g *GKEOrchestrator) hasGKENodePoolLabel(machineType string, pool *k8s.PoolCapacity) bool {
+	if g.mode != orchestrator.TypeK8s {
+		return true
+	}
+	if g.labelScheme() != k8s.SchemeGKE {
+		return false
+	}
+	if g.inventory == nil || g.inventory.ExplicitMode || len(g.inventory.Pools) == 0 {
+		return true
+	}
+	if pool != nil {
+		return pool.NodePoolName != ""
+	}
+	if matched, ok := g.findK8sPoolForRequest("", machineType); ok {
+		return matched.NodePoolName != ""
+	}
+	for _, p := range g.inventory.Pools {
+		if p.NodePoolName != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *GKEOrchestrator) jobSetEnabled() bool {
+	if !g.addons.resolved {
+		return !g.isEnvTruthy(disableJobSetEnvVar)
+	}
+	return g.addons.jobSetEnabled
+}
+
+func (g *GKEOrchestrator) kueueEnabled() bool {
+	if !g.addons.resolved {
+		return !g.isEnvTruthy(disableKueueEnvVar)
+	}
+	return g.addons.kueueEnabled
+}
+
+func (g *GKEOrchestrator) isInteractive() bool {
+	if g.isInteractiveFunc != nil {
+		return g.isInteractiveFunc()
+	}
+	return shell.IsInteractive()
+}
+
+func (g *GKEOrchestrator) readPromptLine(prompt string) (string, bool) {
+	if g.promptLineFunc != nil {
+		return g.promptLineFunc(prompt)
+	}
+	return shell.PromptLine(prompt)
+}
+
+func (g *GKEOrchestrator) isAirGapped() bool {
+	return shell.IsAirGappedEnv(g.getenv())
+}
+
+func (g *GKEOrchestrator) airGapReason() string {
+	if g.isEnvTruthy(shell.AirGappedEnvVar) {
+		return fmt.Sprintf("when %s is enabled", shell.AirGappedEnvVar)
+	}
+	return "in an air-gapped or offline environment"
+}
+
+func (g *GKEOrchestrator) isOfflineForAddons() bool {
+	return g.isAirGapped() || (g.githubProbed && !g.githubOnline)
+}
+
+func (g *GKEOrchestrator) isConnected() bool {
+	if g.isAirGapped() {
+		return false
+	}
+	if g.githubProbed {
+		return g.githubOnline
+	}
+	logging.Info("Checking outbound connectivity to %s...", githubConnectivityProbeURL)
+	probe := defaultGitHubConnectivityProbe
+	if g.connectivity != nil && g.connectivity.probe != nil {
+		probe = g.connectivity.probe
+	}
+	g.githubOnline = probe(context.Background())
+	g.githubProbed = true
+	return g.githubOnline
+}
+
+const defaultConnectivityProbeRetryDelay = 200 * time.Millisecond
+
+func defaultGitHubConnectivityProbe(ctx context.Context) bool {
+	return probeURLConnectivity(ctx, githubConnectivityProbeURL, connectivityProbeTimeout, defaultConnectivityProbeRetryDelay)
+}
+
+func isAllowedConnectivityProbeHost(host, initialHost string) bool {
+	h := strings.ToLower(strings.TrimSpace(host))
+	init := strings.ToLower(strings.TrimSpace(initialHost))
+	if h == "" {
+		return false
+	}
+	return (init != "" && h == init) ||
+		h == "github.com" || strings.HasSuffix(h, ".github.com") ||
+		h == "githubusercontent.com" || strings.HasSuffix(h, ".githubusercontent.com")
+}
+
+func probeURLConnectivity(ctx context.Context, rawURL string, timeout, retryDelay time.Duration) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	initialHost := parsed.Hostname()
+	probeCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 && retryDelay > 0 {
+			timer := time.NewTimer(retryDelay)
+			select {
+			case <-probeCtx.Done():
+				timer.Stop()
+				return false
+			case <-timer.C:
+			}
+		}
+		online, retryable := probeURLConnectivityOnce(probeCtx, rawURL, initialHost)
+		if online {
+			return true
+		}
+		if !retryable {
+			return false
+		}
+	}
+	return false
+}
+
+func probeURLConnectivityOnce(ctx context.Context, rawURL, initialHost string) (online, retryable bool) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, rawURL, nil)
+	if err != nil {
+		return false, false
+	}
+	tr := &http.Transport{Proxy: http.ProxyFromEnvironment}
+	defer tr.CloseIdleConnections()
+	client := &http.Client{
+		Transport: tr,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return checkConnectivityProbeRedirect(req, via, initialHost)
+		},
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, false
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusBadRequest {
+		return true, false
+	}
+	return false, resp.StatusCode >= http.StatusInternalServerError
+}
+
+func checkConnectivityProbeRedirect(req *http.Request, via []*http.Request, initialHost string) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	if len(via) > 0 && strings.EqualFold(via[len(via)-1].URL.Scheme, "https") && !strings.EqualFold(req.URL.Scheme, "https") {
+		return fmt.Errorf("refusing redirect scheme downgrade from https to %q", req.URL.Scheme)
+	}
+	if !isAllowedConnectivityProbeHost(req.URL.Hostname(), initialHost) {
+		return fmt.Errorf("redirect to untrusted host %q", req.URL.Hostname())
+	}
+	return nil
+}
+
+// probeAPIGroupOnForbidden checks /apis/<group> when a privileged CRD/namespace GET returns 403 Forbidden.
+// Returns (present, checked). When kubeContext is unset or discovery fails, checked is false so callers
+// retain their conservative 403 assumption.
+func (g *GKEOrchestrator) probeAPIGroupOnForbidden(group string) (present, checked bool) {
+	if strings.TrimSpace(g.kubeContext) == "" {
+		return false, false
+	}
+	ok, err := g.HasAPIGroupVersion(group)
+	if err != nil {
+		return false, false
+	}
+	return ok, true
+}
+
+// isJobSetAPIAbsent reports whether err indicates the JobSet API/object is absent, including
+// namespace-scoped 403 Forbidden responses confirmed absent via non-privileged /apis/jobset.x-k8s.io discovery.
+func (g *GKEOrchestrator) isJobSetAPIAbsent(err error) bool {
+	if k8s.IsNotFoundOrNoMatchError(err) {
+		return true
+	}
+	if !k8s.IsForbiddenError(err) {
+		return false
+	}
+	if g.jobSetAPIProbed && g.jobSetAPIContext == g.kubeContext {
+		return !g.jobSetAPIPresent
+	}
+	present, checked := g.probeAPIGroupOnForbidden("jobset.x-k8s.io")
+	if !checked {
+		return false
+	}
+	g.jobSetAPIProbed = true
+	g.jobSetAPIPresent = present
+	g.jobSetAPIContext = g.kubeContext
+	return !present
+}
+
+func resolveForbiddenAddonPresence(present, crdPresent, crdForbidden, compPresent, compForbidden bool) (bool, bool) {
+	if !present {
+		return crdPresent && !crdForbidden, compPresent && !compForbidden
+	}
+	return crdPresent || crdForbidden, compPresent || compForbidden
+}
+
+func (g *GKEOrchestrator) classifyJobSetAddon() (jobSetAddonProbe, error) {
+	if g.isEnvTruthy(disableJobSetEnvVar) {
+		logging.Info("%s is set; disabling JobSet and using standalone batch/v1 Indexed Job.", disableJobSetEnvVar)
+		return jobSetAddonProbe{state: addonStateDisabled}, nil
+	}
+	crdExists, crdForbidden, err := g.checkResourceExists("crd", jobSetCRDName, "")
+	if err != nil {
+		return jobSetAddonProbe{}, fmt.Errorf("failed to check for the JobSet CRD: %w", err)
+	}
+	if crdExists && !crdForbidden {
+		return g.classifyJobSetWithCRD()
+	}
+	serviceExists, svcForbidden, err := g.checkResourceExists("service", jobSetWebhookServiceName, jobSetNamespace)
+	if err != nil {
+		return jobSetAddonProbe{}, fmt.Errorf("failed to check for the JobSet webhook Service: %w", err)
+	}
+	if crdForbidden || svcForbidden {
+		if present, checked := g.probeAPIGroupOnForbidden("jobset.x-k8s.io"); checked {
+			crdExists, serviceExists = resolveForbiddenAddonPresence(present, crdExists, crdForbidden, serviceExists, svcForbidden)
+		}
+	}
+	return classifyJobSetPresence(crdExists, serviceExists), nil
+}
+
+func (g *GKEOrchestrator) classifyJobSetWithCRD() (jobSetAddonProbe, error) {
+	ready, epForbidden, epErr := g.checkServiceEndpointsReady(jobSetNamespace, jobSetWebhookServiceName)
+	if epErr != nil && !errors.Is(epErr, errEndpointsUnreadable) {
+		return jobSetAddonProbe{}, epErr
+	}
+	if ready && !epForbidden {
+		return jobSetAddonProbe{
+			state:     addonStateInstalled,
+			crdExists: true,
+			epReady:   true,
+			checkedEP: true,
+		}, nil
+	}
+	serviceExists, _, err := g.checkResourceExists("service", jobSetWebhookServiceName, jobSetNamespace)
+	if err != nil {
+		return jobSetAddonProbe{}, fmt.Errorf("failed to check for the JobSet webhook Service: %w", err)
+	}
+	if !serviceExists {
+		return jobSetAddonProbe{state: addonStatePartial, crdExists: true}, nil
+	}
+	return jobSetAddonProbe{
+		state:     addonStateInstalled,
+		crdExists: true,
+		epReady:   ready,
+		epErr:     epErr,
+		checkedEP: true,
+	}, nil
+}
+
+func classifyJobSetPresence(crdExists, serviceExists bool) jobSetAddonProbe {
+	switch {
+	case crdExists && serviceExists:
+		return jobSetAddonProbe{state: addonStateInstalled, crdExists: true}
+	case !crdExists && !serviceExists:
+		return jobSetAddonProbe{state: addonStateMissing}
+	default:
+		return jobSetAddonProbe{state: addonStatePartial, crdExists: crdExists}
+	}
+}
+
+func (g *GKEOrchestrator) ensureJobSetProbeReady(probe jobSetAddonProbe) error {
+	if probe.checkedEP && probe.epReady {
+		return nil
+	}
+	if probe.checkedEP {
+		logging.Info("Service %s/%s has no ready endpoint yet; the JobSet controller may be starting or restarting. Waiting up to %s...",
+			jobSetNamespace, jobSetWebhookServiceName, jobSetWebhookWaitTimeout)
+		if err := g.pollJobSetWebhookEndpoints(1, time.Now(), probe.epErr == nil, probe.epErr); err != nil {
+			return fmt.Errorf("JobSet is installed but its webhook is not ready, and gcluster did not modify the existing JobSet installation: %w", err)
+		}
+		return nil
+	}
+	if err := g.waitForJobSetWebhookEndpoints(); err != nil {
+		return fmt.Errorf("JobSet is installed but its webhook is not ready, and gcluster did not modify the existing JobSet installation: %w", err)
+	}
+	return nil
+}
+
+// resolveClusterAddons classifies JobSet and Kueue once per submission into {Installed, Partial, Missing, Disabled},
+// fails fast on Partial installations without mutating cluster state, verifies read-only health of installed add-ons
+// before prompting/installing missing ones, and applies the interactive/non-interactive add-on policy.
+func (g *GKEOrchestrator) resolveClusterAddons(job *orchestrator.JobDefinition, dryRun bool) error {
+	if g.addons.resolved {
+		return nil
+	}
+	jsProbe, kueueProbe, err := g.classifyBothAddons()
+	if err != nil {
+		return err
+	}
+	if err := g.verifyInstalledAddonsReadOnly(jsProbe, kueueProbe, dryRun); err != nil {
+		return err
+	}
+
+	actions, err := g.decideAddonActions(job, jsProbe, kueueProbe, dryRun)
+	if err != nil {
+		return err
+	}
+	plan := addonPlan{
+		resolved:      true,
+		jobSetEnabled: jsProbe.state == addonStateInstalled,
+		kueueEnabled:  kueueProbe.state == addonStateInstalled,
+	}
+	if err := g.executeAddonActions(job.ClusterName, kueueProbe, actions, dryRun, &plan); err != nil {
+		return err
+	}
+	g.addons = plan
+	return nil
+}
+
+func (g *GKEOrchestrator) classifyBothAddons() (jobSetAddonProbe, kueueAddonProbe, error) {
+	jsProbe, err := g.classifyJobSetAddon()
+	if err != nil {
+		return jobSetAddonProbe{}, kueueAddonProbe{}, err
+	}
+	kueueProbe, err := g.classifyKueueAddon()
+	if err != nil {
+		return jobSetAddonProbe{}, kueueAddonProbe{}, err
+	}
+	if jsProbe.state == addonStatePartial {
+		return jobSetAddonProbe{}, kueueAddonProbe{}, g.partialJobSetInstallError(jsProbe.crdExists)
+	}
+	if kueueProbe.state == addonStatePartial {
+		return jobSetAddonProbe{}, kueueAddonProbe{}, g.partialKueueInstallError(kueueProbe.crdExists)
+	}
+	return jsProbe, kueueProbe, nil
+}
+
+func (g *GKEOrchestrator) verifyInstalledAddonsReadOnly(jsProbe jobSetAddonProbe, kueueProbe kueueAddonProbe, dryRun bool) error {
+	if dryRun {
+		return nil
+	}
+	if jsProbe.state == addonStateInstalled {
+		if err := g.ensureJobSetProbeReady(jsProbe); err != nil {
+			return err
+		}
+	}
+	if kueueProbe.state == addonStateInstalled && !g.needsKueueUpgrade(kueueProbe) {
+		return g.verifyKueueWebhookReady(kueueProbe.dep)
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) isTPUSliceManagedWorkload(job *orchestrator.JobDefinition) bool {
+	if job == nil {
+		return false
+	}
+	if strings.TrimSpace(job.NodeConstraint[k8s.TPUSliceNameLabel]) != "" {
+		return true
+	}
+	ct := strings.TrimSpace(job.ComputeType)
+	mt := strings.TrimSpace(job.MachineType)
+	if ct == "" && mt == "" {
+		return g.inventory != nil && g.inventory.TPU != nil
+	}
+	if g.isK8sTPURequest(ct, mt) {
+		return true
+	}
+	return false
+}
+
+func (g *GKEOrchestrator) shouldBypassMissingKueue(job *orchestrator.JobDefinition, kueueProbe kueueAddonProbe) bool {
+	if kueueProbe.state != addonStateMissing {
+		return false
+	}
+	return g.labelScheme() == k8s.SchemeTPUSlice && g.isTPUSliceManagedWorkload(job)
+}
+
+func (g *GKEOrchestrator) decideAddonActions(job *orchestrator.JobDefinition, jsProbe jobSetAddonProbe, kueueProbe kueueAddonProbe, dryRun bool) (addonActions, error) {
+	missingJobSet := jsProbe.state == addonStateMissing
+	missingKueue := kueueProbe.state == addonStateMissing
+	if g.shouldBypassMissingKueue(job, kueueProbe) {
+		logging.Info("Kueue is not installed; continuing without Kueue (native slice scheduler handles queueing for TPU workloads on tpu-slice clusters).")
+		missingKueue = false
+	}
+	outdatedKueue := kueueProbe.state == addonStateInstalled && g.needsKueueUpgrade(kueueProbe)
+	if !missingJobSet && !missingKueue && !outdatedKueue {
+		return addonActions{}, nil
+	}
+	if dryRun {
+		if missingJobSet || missingKueue {
+			logging.Info("Dry-run mode: %s not installed; continuing with installed Kubernetes APIs without modifying cluster add-ons.", formatMissingAddonsList(missingJobSet, missingKueue))
+		}
+		return addonActions{}, nil
+	}
+	if !missingJobSet && !missingKueue {
+		if !g.isConnected() {
+			logging.Warn("Installed Kueue version %s is below recommended %s, but cannot re-install Kueue %s; continuing with installed Kueue.", kueueProbe.currentVersion, defaultKueueVersion, g.airGapReason())
+			return addonActions{}, nil
+		}
+		return addonActions{upgradeKueue: true}, nil
+	}
+	return g.decideMissingAddonActions(missingJobSet, missingKueue, outdatedKueue, kueueProbe.currentVersion, jsProbe.state == addonStateInstalled, kueueProbe.state == addonStateInstalled)
+}
+
+func (g *GKEOrchestrator) decideMissingAddonActions(missingJobSet, missingKueue, outdatedKueue bool, currentKueueVer string, jobSetInstalled, kueueInstalled bool) (addonActions, error) {
+	if !g.isInteractive() && g.mode == orchestrator.TypeK8s {
+		logging.Info("Non-interactive Kubernetes mode: %s not installed; continuing with installed Kubernetes APIs without mutating cluster add-ons.", formatMissingAddonsList(missingJobSet, missingKueue))
+		return addonActions{}, nil
+	}
+	wasAirGapped := g.isAirGapped()
+	if !g.isConnected() {
+		if wasAirGapped {
+			logging.Info("Air-gapped environment: %s not installed; continuing with installed Kubernetes APIs.", formatMissingAddonsList(missingJobSet, missingKueue))
+		} else {
+			logging.Warn("Outbound connectivity check to %s failed; continuing with installed Kubernetes APIs (%s) without installing %s.",
+				githubConnectivityProbeURL, fallbackModeSummary(jobSetInstalled, kueueInstalled), formatMissingAddonsList(missingJobSet, missingKueue))
+		}
+		if outdatedKueue {
+			logging.Warn("Installed Kueue version %s is below recommended %s, but cannot re-install Kueue %s; continuing with installed Kueue.", currentKueueVer, defaultKueueVersion, g.airGapReason())
+		}
+		return addonActions{}, nil
+	}
+	planned := addonActions{installJobSet: missingJobSet, installKueue: missingKueue, upgradeKueue: outdatedKueue}
+	if !g.isInteractive() {
+		return planned, nil
+	}
+	switch g.promptMissingAddons(missingJobSet, missingKueue, outdatedKueue, currentKueueVer, jobSetInstalled, kueueInstalled) {
+	case "install":
+		return planned, nil
+	case "continue":
+		logging.Info("Continuing with installed Kubernetes APIs without installing %s.", formatMissingAddonsList(missingJobSet, missingKueue))
+		if outdatedKueue {
+			logging.Warn("Installed Kueue version %s is below recommended %s; skipping Kueue re-installation and continuing with installed APIs.", currentKueueVer, defaultKueueVersion)
+		}
+		return addonActions{}, nil
+	default:
+		return addonActions{}, fmt.Errorf("job submission canceled by user")
+	}
+}
+
+func (g *GKEOrchestrator) preflightAddonMutations(clusterName string, actions addonActions) error {
+	// JobSet and Kueue share addonInstallPermissionChecks, so checking once covers both add-ons
+	// without running duplicate kubectl auth can-i subprocesses.
+	if actions.installKueue || actions.upgradeKueue {
+		if err := g.checkDynamicSlicingBlocksKueue(clusterName); err != nil {
+			return err
+		}
+		verb := "install"
+		if actions.upgradeKueue {
+			verb = "re-install"
+		}
+		if err := g.checkKueuePermissions(verb, defaultKueueVersion); err != nil {
+			return err
+		}
+	} else if actions.installJobSet {
+		if err := g.checkJobSetInstallPermissions(); err != nil {
+			return err
+		}
+	}
+	if actions.installJobSet {
+		if err := g.checkNoLiveJobSetObjects(); err != nil {
+			return fmt.Errorf("failed to install JobSet: %w", err)
+		}
+	}
+	return nil
+}
+
+func (a addonActions) any() bool {
+	return a.installJobSet || a.installKueue || a.upgradeKueue
+}
+
+func (g *GKEOrchestrator) executeAddonActions(clusterName string, kueueProbe kueueAddonProbe, actions addonActions, dryRun bool, plan *addonPlan) error {
+	if !actions.any() {
+		if !dryRun && kueueProbe.state == addonStateInstalled && g.needsKueueUpgrade(kueueProbe) {
+			return g.verifyKueueWebhookReady(kueueProbe.dep)
+		}
+		return nil
+	}
+	if err := g.preflightAddonMutations(clusterName, actions); err != nil {
+		return err
+	}
+	if actions.upgradeKueue {
+		reason := fmt.Sprintf("Current Kueue version %s is below target %s.", kueueProbe.currentVersion, defaultKueueVersion)
+		if err := g.handleKueueReinstallation(defaultKueueVersion, reason, kueueProbe.isPresent()); err != nil {
+			return err
+		}
+	}
+	if actions.installKueue {
+		if err := g.installKueueOnFreshCluster(defaultKueueVersion, clusterName); err != nil {
+			return err
+		}
+		plan.kueueEnabled = true
+	}
+	if actions.installJobSet {
+		if err := g.installJobSetOnFreshCluster(); err != nil {
+			return err
+		}
+		plan.jobSetEnabled = true
+	}
+	return nil
+}
+
+func formatMissingAddonsList(missingJobSet, missingKueue bool) string {
+	switch {
+	case missingJobSet && missingKueue:
+		return "JobSet and Kueue"
+	case missingJobSet:
+		return "JobSet"
+	default:
+		return "Kueue"
+	}
+}
+
+func fallbackModeSummary(jobSetEnabled, kueueEnabled bool) string {
+	switch {
+	case jobSetEnabled && !kueueEnabled:
+		return "JobSet without Kueue"
+	case !jobSetEnabled && kueueEnabled:
+		return "batch/v1 Indexed Job with Kueue"
+	default:
+		return "batch/v1 Indexed Job without Kueue"
+	}
+}
+
+func (g *GKEOrchestrator) promptMissingAddons(missingJobSet, missingKueue, outdatedKueue bool, currentKueueVer string, jobSetEnabled, kueueEnabled bool) string {
+	missingList := formatMissingAddonsList(missingJobSet, missingKueue)
+	installLabel := fmt.Sprintf("Install %s from GitHub", missingList)
+	continueLabel := fmt.Sprintf("Continue with installed Kubernetes APIs (%s)", fallbackModeSummary(jobSetEnabled, kueueEnabled))
+	if outdatedKueue {
+		installLabel = fmt.Sprintf("Install %s from GitHub and upgrade Kueue (%s -> %s)", missingList, currentKueueVer, defaultKueueVersion)
+		continueLabel = fmt.Sprintf("Continue with installed Kubernetes APIs (%s, keeping Kueue %s)", fallbackModeSummary(jobSetEnabled, kueueEnabled), currentKueueVer)
+	}
+	prompt := fmt.Sprintf(
+		"%s not installed on this cluster.\n"+
+			"  [1] %s\n"+
+			"  [2] %s\n"+
+			"  [3] Cancel submission\n"+
+			"Select an option [1/2/3]: ",
+		missingList, installLabel, continueLabel,
+	)
+	for {
+		answer, ok := g.readPromptLine(prompt)
+		if !ok {
+			return "cancel"
+		}
+		switch strings.ToLower(strings.TrimSpace(answer)) {
+		case "1", "install":
+			return "install"
+		case "2", "continue":
+			return "continue"
+		case "3", "cancel":
+			return "cancel"
+		default:
+			fmt.Println("Invalid selection. Please enter 1, 2, or 3.")
+		}
+	}
+}
+
+func (g *GKEOrchestrator) validatePriorityClassForMode(requested string) error {
+	if requested == "" {
+		return nil
+	}
+	if g.mode == orchestrator.TypeK8s {
+		return g.validateK8sPriorityClass(requested)
+	}
+	return g.ensureAndValidatePriorityClass(requested)
+}
+
+// validateK8sPriorityClass validates --priority in TypeK8s mode using a read-only check
+// without installing default PriorityClasses. 403 Forbidden warns and proceeds; missing fails fast.
+func (g *GKEOrchestrator) validateK8sPriorityClass(requested string) error {
+	if errs := validation.IsDNS1123Subdomain(requested); len(errs) > 0 {
+		return fmt.Errorf("invalid priority class name %q: %s", requested, strings.Join(errs, "; "))
+	}
+	exists, _, err := g.checkResourceExists("priorityclass", requested, "")
+	if err != nil {
+		return fmt.Errorf("failed to verify PriorityClass %q: %w", requested, err)
+	}
+	if !exists {
+		return fmt.Errorf("priority class %q does not exist in the cluster; run '%s' to view available priority classes", requested, kubectlCommandLine(g.kubeContext, "get", "priorityclasses"))
 	}
 	return nil
 }
@@ -746,17 +1337,14 @@ func (g *GKEOrchestrator) pinnedContextNamespace() (string, bool) {
 		return "", false
 	}
 	cfg, err := g.loadKubeconfig()
-	if err != nil {
+	if err != nil || cfg == nil {
 		return "", false
 	}
 	kubeCtx := cfg.Contexts[g.kubeContext]
 	if kubeCtx == nil {
 		return "", false
 	}
-	if kubeCtx.Namespace == "" {
-		return "default", true
-	}
-	return kubeCtx.Namespace, true
+	return k8s.ContextNamespace(kubeCtx), true
 }
 
 func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, projectID string) error {
@@ -765,8 +1353,12 @@ func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, p
 		return err
 	}
 
+	clusterKind := "GKE cluster"
+	if g.mode == orchestrator.TypeK8s {
+		clusterKind = "Kubernetes cluster"
+	}
 	if ns == "" {
-		return fmt.Errorf("target namespace cannot be empty for GKE cluster %q. Please pass --gke-namespace, or set a default namespace in your kubeconfig context (e.g., 'kubectl config set-context --current --namespace=<namespace>')", clusterName)
+		return fmt.Errorf("target namespace cannot be empty for %s %q. Please pass --gke-namespace, or set a default namespace in your kubeconfig context (e.g., 'kubectl config set-context --current --namespace=<namespace>')", clusterKind, clusterName)
 	}
 
 	client, err := g.getDynamicClient()
@@ -782,7 +1374,7 @@ func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, p
 	case err == nil:
 		return nil
 	case apierrors.IsNotFound(err):
-		return fmt.Errorf("target namespace %q does not exist on GKE cluster %q. Please create the namespace first (e.g., 'kubectl create namespace %s')", ns, clusterName, ns)
+		return fmt.Errorf("target namespace %q does not exist on %s %q. Please create the namespace first (e.g., 'kubectl create namespace %s')", ns, clusterKind, clusterName, ns)
 	case k8s.IsForbiddenError(err):
 		logging.Warn("Insufficient RBAC permissions to verify existence of namespace %q on cluster %q (403 Forbidden). Proceeding with job submission...", ns, clusterName)
 		return nil
@@ -791,10 +1383,54 @@ func (g *GKEOrchestrator) validateTargetNamespaceExists(clusterName, location, p
 	}
 }
 
+// validateTier3Flags rejects workload shapes that cannot run as a standalone batch/v1 Indexed Job when JobSet is absent/disabled.
+func (g *GKEOrchestrator) validateTier3Flags(job *orchestrator.JobDefinition) error {
+	return g.validateTier3FlagsWithWarn(job, true)
+}
+
+func (g *GKEOrchestrator) validateTier3FlagsWithWarn(job *orchestrator.JobDefinition, warnRestarts bool) error {
+	if g.jobSetEnabled() {
+		return nil
+	}
+	if job.IsPathwaysJob || strings.TrimSpace(job.Pathways.RunSPSWorkload) != "" {
+		return fmt.Errorf("Pathways workloads (--pathways / --pathways-run-sps-workload) require JobSet, which is not installed or is disabled on this cluster; ask your cluster administrator to install JobSet (or unset %s if set)", disableJobSetEnvVar)
+	}
+	if job.NumSlices > 1 {
+		return fmt.Errorf("multi-slice workloads (--num-slices=%d) require JobSet, which is not installed or is disabled on this cluster; ask your cluster administrator to install JobSet (or reduce --num-slices to 1 for standalone batch/v1 Job execution)", job.NumSlices)
+	}
+	if warnRestarts && job.MaxRestarts > 1 {
+		logging.Warn("Standalone batch/v1 Indexed Job uses backoffLimit=0; --restarts=%d has no effect without JobSet.", job.MaxRestarts)
+	}
+	return nil
+}
+
+// validateTier3Workload enforces Tier-3 flag compatibility and the GKE multi-host co-scheduling guard
+// when JobSet is absent/disabled. SchemeTPUSlice static slice validation runs earlier inside
+// resolveK8sTPURequirements so missing or unready slices report before topology checks.
+func (g *GKEOrchestrator) validateTier3Workload(job *orchestrator.JobDefinition, isTPU bool) error {
+	if err := g.validateTier3FlagsWithWarn(job, false); err != nil {
+		return err
+	}
+	if g.jobSetEnabled() || !isTPU {
+		return nil
+	}
+	if g.mode != orchestrator.TypeK8s || g.labelScheme() == k8s.SchemeGKE {
+		pinnedPool := strings.TrimSpace(job.NodeConstraint[k8s.GKENodePoolLabel])
+		if job.NodesPerSlice > 1 && (pinnedPool == "" || strings.Contains(pinnedPool, "|")) {
+			return fmt.Errorf("multi-host TPU workloads (nodes_per_slice=%d) without JobSet on GKE cannot guarantee intra-node-pool pod co-scheduling and may split pods across TPU node pools; install/enable JobSet (or unset %s if set), or pin a single TPU node pool via --node-constraint %s=<node-pool>",
+				job.NodesPerSlice, disableJobSetEnvVar, k8s.GKENodePoolLabel)
+		}
+	}
+	return nil
+}
+
 // Initialize fetches GKE cluster metadata and resolves the cluster location,
 // handling regional fallback if necessary.
 func (g *GKEOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
 	g.projectID = projectID
+	if g.mode == orchestrator.TypeK8s {
+		return location, nil
+	}
 
 	logging.Info("Fetching GKE cluster metadata for '%s'...", clusterName)
 	res := g.executor.ExecuteCommandWithTimeout(shell.DefaultCloudAPITimeout, "gcloud", "container", "clusters", "describe", clusterName,
@@ -860,6 +1496,18 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 		return err
 	}
 
+	if !g.kueueEnabled() {
+		if job.KueueQueueName != "" {
+			logging.Warn("--queue %q was specified, but Kueue is not installed or is disabled; omitting kueue.x-k8s.io/queue-name.", job.KueueQueueName)
+			job.KueueQueueName = ""
+		}
+		return nil
+	}
+
+	if g.mode == orchestrator.TypeK8s {
+		return g.configureK8sKueueEnvironment(job, ns)
+	}
+
 	explicitQueue := job.KueueQueueName != ""
 	localQueue, discovered, err := g.resolveKueueQueue(job.KueueQueueName, ns)
 	if err != nil {
@@ -874,12 +1522,75 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 	if job.DryRunManifest != "" {
 		return nil
 	}
-	if err := g.ensureLocalQueueExists(localQueue, ns, discovered, explicitQueue); err != nil {
+	return g.ensureLocalQueueExists(localQueue, ns, discovered, explicitQueue)
+}
+
+// configureK8sKueueEnvironment resolves Kueue queueing on TypeK8s clusters where Kueue is installed,
+// without creating or mutating ClusterQueues/LocalQueues (ensureJobQueueCoverage later performs
+// read-only coverage checks for queued CPU jobs).
+func (g *GKEOrchestrator) configureK8sKueueEnvironment(job *orchestrator.JobDefinition, ns string) error {
+	if job.KueueQueueName != "" {
+		return g.resolveExplicitK8sLocalQueue(job, ns)
+	}
+
+	res := g.kubectl("get", "localqueue", "-n", ns, "-o", "jsonpath={.items[*].metadata.name}", kubectlReadTimeout)
+	if res.ExitCode != 0 {
+		cmdErr := kubectlCommandError(fmt.Sprintf("failed to query LocalQueues in namespace %s", ns), res)
+		if rawErr := kubectlOutputError(res); rawErr != nil && k8s.IsNotFoundOrNoMatchError(rawErr) {
+			logging.Info("Kueue LocalQueue API is not available in namespace %q; omitting kueue.x-k8s.io/queue-name and submitting unqueued.", ns)
+			job.KueueQueueName = ""
+			return nil
+		}
+		if rawErr := kubectlOutputError(res); (rawErr != nil && k8s.IsForbiddenError(rawErr)) || job.DryRunManifest != "" {
+			logging.Warn("Unable to list Kueue LocalQueues in namespace %q (%s); omitting kueue.x-k8s.io/queue-name.", ns, firstLine(cmdErr.Error()))
+			job.KueueQueueName = ""
+			return nil
+		}
+		return cmdErr
+	}
+
+	queues := strings.Fields(strings.TrimSpace(res.Stdout))
+	if len(queues) == 0 {
+		logging.Info("No Kueue LocalQueues found in namespace %q; omitting kueue.x-k8s.io/queue-name and submitting unqueued.", ns)
+		job.KueueQueueName = ""
+		return nil
+	}
+	selected, err := selectDiscoveredLocalQueue(queues)
+	if err != nil {
 		return err
 	}
-	if job.IsPathwaysJob {
-		return g.ensureClusterQueueCoverage(localQueue, ns)
+	job.KueueQueueName = selected
+	return nil
+}
+
+func (g *GKEOrchestrator) listK8sLocalQueues(ns string) []string {
+	res := g.kubectl("get", "localqueue", "-n", ns, "-o", "jsonpath={.items[*].metadata.name}", kubectlReadTimeout)
+	if res.ExitCode != 0 || strings.TrimSpace(res.Stdout) == "" {
+		return nil
 	}
+	return strings.Fields(strings.TrimSpace(res.Stdout))
+}
+
+func (g *GKEOrchestrator) resolveExplicitK8sLocalQueue(job *orchestrator.JobDefinition, ns string) error {
+	cleanName, err := parseKueueQueueName(job.KueueQueueName)
+	if err != nil {
+		return err
+	}
+	if job.DryRunManifest == "" {
+		exists, _, err := g.checkResourceExists("localqueue", cleanName, ns)
+		if err != nil {
+			return fmt.Errorf("failed to check if LocalQueue %q exists in namespace %q: %w", cleanName, ns, err)
+		}
+		if !exists {
+			available := g.listK8sLocalQueues(ns)
+			if len(available) > 0 {
+				return fmt.Errorf("LocalQueue %q does not exist in namespace %q (available: %s); specify an existing LocalQueue with --queue or ask your cluster administrator to create it", cleanName, ns, strings.Join(available, ", "))
+			}
+			return fmt.Errorf("LocalQueue %q does not exist in namespace %q; ask your cluster administrator to create it or omit --queue to submit unqueued", cleanName, ns)
+		}
+	}
+	logging.Info("Using provided Kueue LocalQueue: %s", cleanName)
+	job.KueueQueueName = cleanName
 	return nil
 }
 

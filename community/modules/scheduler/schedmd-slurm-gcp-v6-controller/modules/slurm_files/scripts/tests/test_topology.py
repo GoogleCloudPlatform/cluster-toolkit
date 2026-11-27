@@ -17,7 +17,7 @@ import json
 import yaml
 import mock
 from pytest_unordered import unordered
-from common import TstCfg, TstNodeset, TstTPU, tstInstance
+from common import TstCfg, TstNodeset, tstInstance
 import sort_nodes
 
 import util
@@ -49,18 +49,13 @@ def test_gen_topology_conf_empty():
 """
 
 
-@mock.patch("tpu.TPU.make")
 @mock.patch('uuid.uuid4')
-def test_gen_topology_conf(mock_uuid, tpu_mock):
+def test_gen_topology_conf(mock_uuid):
     mock_uuid.side_effect = [
         mock.MagicMock(hex=f'{i:05d}' + '0' * 27) for i in range(15)
     ]
     output_dir = tempfile.mkdtemp()
     cfg = TstCfg(
-        nodeset_tpu={
-            "a": TstNodeset("bold", node_count_static=4, node_count_dynamic_max=5),
-            "b": TstNodeset("slim", node_count_dynamic_max=3),
-        },
         nodeset={
             "c": TstNodeset("green", node_count_static=2, node_count_dynamic_max=3),
             "d": TstNodeset("blue", node_count_static=7),
@@ -68,15 +63,6 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
         },
         output_dir=output_dir,
     )
-
-    def tpu_se(ns: str, lkp) -> TstTPU:
-        if ns == "bold":
-            return TstTPU(vmcount=3)
-        if ns == "slim":
-            return TstTPU(vmcount=1)
-        raise AssertionError(f"unexpected TPU name: '{ns}'")
-
-    tpu_mock.side_effect = tpu_se
 
     lkp = util.Lookup(cfg)
     lkp.instances = lambda: { n.name: n for n in [ # type: ignore[assignment]
@@ -130,20 +116,6 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
       nodes: m22-green-[0-2,4]
     - switch: s0_4
       nodes: m22-pink-[0-3]
-    - switch: s1
-      children: s1_[0-1]
-    - switch: s1_0
-      children: s1_0_[0-3]
-    - switch: s1_0_0
-      nodes: m22-bold-[0-2]
-    - switch: s1_0_1
-      nodes: m22-bold-3
-    - switch: s1_0_2
-      nodes: m22-bold-[4-6]
-    - switch: s1_0_3
-      nodes: m22-bold-[7-8]
-    - switch: s1_1
-      nodes: m22-slim-[0-2]
 """
     expected_parsed_tree = yaml.safe_load(expected_tree_yaml)[0]
     assert tree_topology == expected_parsed_tree
@@ -157,16 +129,14 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
     blocks_list = block_topology['block']['blocks']
     
     # Assert total count of blocks
-    # 5 block groups: 'a', 'b', 'slurm-root', 'ns_bold', 'ns_slim'
+    # 3 block groups: 'a', 'b', 'slurm-root'
     # 'a': 2 actual blocks, (32-2)=30 phantom blocks
     # 'b': 1 actual block, (32-1)=31 phantom blocks
     # 'slurm-root': 1 actual block, (32-1)=31 phantom blocks
-    # 'ns_bold': 4 actual blocks, (32-4)=28 phantom blocks
-    # 'ns_slim': 0 actual blocks, 0 phantom blocks (no blocks generated for 'ns_slim')
-    # Total actual: 2+1+1+4+0 = 8
-    # Total phantom: 30+31+31+28+0 = 120
-    # Sum: 8 + 120 = 128.
-    assert len(blocks_list) == 128
+    # Total actual: 2+1+1 = 4
+    # Total phantom: 30+31+31 = 92
+    # Sum: 4 + 92 = 96.
+    assert len(blocks_list) == 96
     # Assert actual blocks and their names/UUID format
     extracted_actual_blocks_data = []
     for block_entry in blocks_list:
@@ -184,13 +154,9 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
                 'name_part': name_part,
                 'nodes': nodes,
             })
-    # Expected name_part and nodes for actual blocks (based on detailed tracing and EXTRACTED ACTUAL BLOCKS DATA)
+    # Expected name_part and nodes for actual blocks
     expected_actual_blocks_data = [
-        {'name_part': 'bold-0', 'nodes': 'm22-bold-[0-2]'},
-        {'name_part': 'bold-1', 'nodes': 'm22-bold-3'},
-        {'name_part': 'bold-2', 'nodes': 'm22-bold-[4-6]'},
-        {'name_part': 'bold-3', 'nodes': 'm22-bold-[7-8]'},
-        {'name_part': 'slurm-root', 'nodes': 'm22-blue-[4-6],m22-green-[0-2,4],m22-pink-[0-3],m22-slim-[0-2]'},
+        {'name_part': 'slurm-root', 'nodes': 'm22-blue-[4-6],m22-green-[0-2,4],m22-pink-[0-3]'},
         {'name_part': 'a', 'nodes': 'm22-blue-[0-1],m22-green-3'},
         {'name_part': 'b', 'nodes': 'm22-blue-2'},
         {'name_part': 'a', 'nodes': 'm22-blue-3'}
@@ -202,7 +168,6 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
         'a': 0,
         'b': 0,
         'slurm-root': 0,
-        'ns_bold': 0,
     }
     for block_entry in blocks_list:
         nodes = block_entry['nodes']
@@ -212,10 +177,9 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
             prefix = parts[0] if len(parts) == 2 else block_entry['block']
             assert prefix in phantom_counts, f"Unexpected phantom block prefix: {prefix}"
             phantom_counts[prefix] += 1
-    assert phantom_counts['a'] == (BLOCK_SIZE - 2) # Found 30 phantom blocks, so 2 actual blocks.
-    assert phantom_counts['b'] == (BLOCK_SIZE - 1) # Found 31 phantom blocks, so 1 actual block.
-    assert phantom_counts['slurm-root'] == (BLOCK_SIZE - 1) # Found 31 phantom blocks, so 1 actual block.
-    assert phantom_counts['ns_bold'] == (BLOCK_SIZE - 4) # Found 28 phantom blocks, so 4 actual blocks.
+    assert phantom_counts['a'] == (BLOCK_SIZE - 2)
+    assert phantom_counts['b'] == (BLOCK_SIZE - 1)
+    assert phantom_counts['slurm-root'] == (BLOCK_SIZE - 1)
 
     summary.dump(lkp)
     summary_got = json.loads(open(output_dir + "/cloud_topology.summary.json").read())
@@ -225,9 +189,7 @@ def test_gen_topology_conf(mock_uuid, tpu_mock):
             [f"m22-blue-{i}" for i in (4,5,6)] +
             [f"m22-green-{i}" for i in (0,1,2,4)] +
             [f"m22-pink-{i}" for i in range(4)]),
-        "tpu_nodes": unordered(
-            [f"m22-bold-{i}" for i in range(9)] +
-            [f"m22-slim-{i}" for i in range(3)]),
+        "tpu_nodes": [],
         'physical_host': {
             'm22-blue-0': '/a/a/a',
             'm22-blue-1': '/a/a/b',
@@ -455,3 +417,207 @@ def test_gen_topology_region_switches(by_region):
     summary.dump(lkp)
     upd, _ = conf.gen_topology_yaml(lkp)
     assert not upd
+
+
+def test_gen_topology_yaml_mig_slice_blocks_and_block_sizes(tmp_path):
+    """Unreserved static A4X MIG slices enable topology/block, shard cold-start down nodes
+    per slice MIG, and size blocks from nodeset_slice_size() (both conf and conf_v2605)."""
+    from common import TstPartition
+    import conf_v2605
+
+    # 1. 36-node unreserved static MIG A4X (1x72 -> slice_size=18 -> 2 shards) at cold start
+    out_18 = tmp_path / "c18"
+    out_18.mkdir()
+    cfg_1x72 = TstCfg(
+        slurm_cluster_name="cl",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                node_count_static=36,
+                node_count_dynamic_max=0,
+                provisioning_engine="MIG",
+                accelerator_topology="1x72",
+                slice_size=18,
+                reservation_name="",
+            ),
+        },
+        partitions={
+            "gpu": TstPartition(partition_name="gpu", partition_nodeset=["a4x"]),
+        },
+        output_dir=str(out_18),
+    )
+    lkp_18 = util.Lookup(cfg_1x72)
+    with (
+        mock.patch.object(lkp_18, "instances", return_value={}),
+        mock.patch.object(lkp_18, "is_tpu_nodeset", return_value=False),
+    ):
+        conf.gen_topology_yaml(lkp_18)
+    parsed_18 = yaml.safe_load((out_18 / "cloud_topology.yaml").read_text())
+    by_topo = {entry["topology"]: entry for entry in parsed_18}
+    assert by_topo["topology/tree"]["cluster_default"] is False
+    assert by_topo["topology/block"]["cluster_default"] is True
+    assert by_topo["topology/block"]["block"]["block_sizes"] == [18, 18 * BLOCK_SIZE]
+    actual_nodes = sorted(
+        b["nodes"] for b in by_topo["topology/block"]["block"]["blocks"] if b["nodes"]
+    )
+    assert actual_nodes == ["cl-a4x-[0-9,10-17]", "cl-a4x-[18-35]"]
+
+    # 2. Non-18 slice_size (1x36 on 4-GPU hosts -> slice_size=9) drives block_sizes in both
+    #    conf.py and conf_v2605.py (even when a TPU nodeset is also present in the cluster)
+    out_9 = tmp_path / "c9"
+    out_9.mkdir()
+    cfg_9 = TstCfg(
+        slurm_cluster_name="cl",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                node_count_static=18,
+                node_count_dynamic_max=0,
+                provisioning_engine="MIG",
+                accelerator_topology="1x36",
+                slice_size=9,
+                reservation_name="",
+            ),
+            "tpu": TstNodeset(
+                nodeset_name="tpu",
+                node_count_static=2,
+                node_count_dynamic_max=0,
+                accelerator_topology="2x4",
+            ),
+        },
+        partitions={
+            "gpu": TstPartition(partition_name="gpu", partition_nodeset=["a4x"]),
+            "tpu": TstPartition(partition_name="tpu", partition_nodeset=["tpu"]),
+        },
+        output_dir=str(out_9),
+    )
+    lkp_9 = util.Lookup(cfg_9)
+    with (
+        mock.patch.object(lkp_9, "instances", return_value={}),
+        mock.patch.object(lkp_9, "is_tpu_nodeset", side_effect=lambda name: name == "tpu"),
+        mock.patch.object(lkp_9, "has_tpu_nodesets", return_value=True),
+        mock.patch.object(lkp_9, "is_tpu_static_nodeset", side_effect=lambda name: name == "tpu"),
+        mock.patch.object(lkp_9, "get_tpu_chunk_size", return_value=2),
+    ):
+        assert conf.block_base_size_for_cluster(lkp_9) == 9
+        gen = conf_v2605.SlurmConfigGeneratorV2605(lkp_9)
+        gen.generate_topology_data()
+    parsed_9 = yaml.safe_load((out_9 / "cloud_topology.yaml").read_text())
+    by_topo_9 = {entry["topology"]: entry for entry in parsed_9}
+    assert by_topo_9["topology/block"]["cluster_default"] is True
+    assert by_topo_9["topology/block"]["block"]["block_sizes"] == [9, 9 * BLOCK_SIZE]
+    assert by_topo_9[conf_v2605.TOPOLOGY_TPU_BLOCK]["block"]["block_sizes"] == [1]
+
+    # 3. Booting A4X MIG nodes without physicalHost yet stay isolated per slice MIG (not lumped
+    #    into slurm-root), alongside remaining down nodes
+    out_boot = tmp_path / "cboot"
+    out_boot.mkdir()
+    cfg_boot = TstCfg(
+        slurm_cluster_name="cl",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                node_count_static=36,
+                node_count_dynamic_max=0,
+                provisioning_engine="MIG",
+                accelerator_topology="1x72",
+                slice_size=18,
+                reservation_name="",
+            ),
+        },
+        partitions={"gpu": TstPartition(partition_name="gpu", partition_nodeset=["a4x"])},
+        output_dir=str(out_boot),
+    )
+    lkp_boot = util.Lookup(cfg_boot)
+    booting_insts = {
+        "cl-a4x-0": tstInstance("cl-a4x-0", physical_host=""),
+        "cl-a4x-18": tstInstance("cl-a4x-18", physical_host=""),
+    }
+    with (
+        mock.patch.object(lkp_boot, "instances", return_value=booting_insts),
+        mock.patch.object(lkp_boot, "is_tpu_nodeset", return_value=False),
+    ):
+        conf.gen_topology_yaml(lkp_boot)
+    parsed_boot = yaml.safe_load((out_boot / "cloud_topology.yaml").read_text())
+    by_topo_boot = {entry["topology"]: entry for entry in parsed_boot}
+    boot_blocks = sorted(
+        b["nodes"] for b in by_topo_boot["topology/block"]["block"]["blocks"] if b["nodes"]
+    )
+    assert boot_blocks == ["cl-a4x-[0-9,10-17]", "cl-a4x-[18-35]"]
+
+    # 4. Mixed cluster (reserved BULK_INSERT 1x72=18 + MIG slice_size=36) uses smallest (18)
+    cfg_mixed = TstCfg(
+        slurm_cluster_name="cl",
+        nodeset={
+            "res_a4x": TstNodeset(
+                nodeset_name="res_a4x",
+                node_count_static=18,
+                provisioning_engine="BULK_INSERT",
+                accelerator_topology="1x72",
+                reservation_name="projects/p/reservations/r1",
+            ),
+            "mig_a4x": TstNodeset(
+                nodeset_name="mig_a4x",
+                node_count_static=36,
+                provisioning_engine="MIG",
+                accelerator_topology="1x144",
+                slice_size=36,
+                reservation_name="",
+            ),
+        },
+        partitions={
+            "p_res": TstPartition(partition_name="p_res", partition_nodeset=["res_a4x"]),
+            "p_mig": TstPartition(partition_name="p_mig", partition_nodeset=["mig_a4x"]),
+        },
+    )
+    lkp_mixed = util.Lookup(cfg_mixed)
+    with mock.patch.object(lkp_mixed, "is_tpu_nodeset", return_value=False):
+        assert conf.block_base_size_for_cluster(lkp_mixed) == 18
+
+    # 5. Colliding 7-char nodeset prefixes + >32 slices produce unique phantom block names
+    #    and pad each block group to a multiple of BLOCK_SIZE (32).
+    out_large = tmp_path / "clarge"
+    out_large.mkdir()
+    cfg_large = TstCfg(
+        slurm_cluster_name="cl",
+        nodeset={
+            "a4x_slice_a": TstNodeset(
+                nodeset_name="a4x_slice_a",
+                node_count_static=33 * 18,
+                node_count_dynamic_max=0,
+                provisioning_engine="MIG",
+                accelerator_topology="1x72",
+                slice_size=18,
+                reservation_name="",
+            ),
+            "a4x_slice_b": TstNodeset(
+                nodeset_name="a4x_slice_b",
+                node_count_static=18,
+                node_count_dynamic_max=0,
+                provisioning_engine="MIG",
+                accelerator_topology="1x72",
+                slice_size=18,
+                reservation_name="",
+            ),
+        },
+        partitions={
+            "gpu": TstPartition(
+                partition_name="gpu",
+                partition_nodeset=["a4x_slice_a", "a4x_slice_b"],
+            ),
+        },
+        output_dir=str(out_large),
+    )
+    lkp_large = util.Lookup(cfg_large)
+    with (
+        mock.patch.object(lkp_large, "instances", return_value={}),
+        mock.patch.object(lkp_large, "is_tpu_nodeset", return_value=False),
+    ):
+        conf.gen_topology_yaml(lkp_large)
+    parsed_large = yaml.safe_load((out_large / "cloud_topology.yaml").read_text())
+    by_topo_large = {entry["topology"]: entry for entry in parsed_large}
+    large_blocks = by_topo_large["topology/block"]["block"]["blocks"]
+    block_names = [b["block"] for b in large_blocks]
+    # 33 slices padded to 64 + 1 slice padded to 32 = 96 total blocks, all unique names
+    assert len(large_blocks) == 96
+    assert len(set(block_names)) == len(block_names)

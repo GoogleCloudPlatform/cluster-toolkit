@@ -14,14 +14,12 @@
 
 # VirtualGL provides hardware OpenGL for backends that cannot offload it
 # themselves (TurboVNC has no "-rendernode" equivalent). Its EGL back end
-# renders against a DRM render node directly, so no second X server bound to the
+# renders on the GPU through its EGL device, so no second X server bound to the
 # GPU is needed.
 #
-# No NVIDIA driver is installed here. Note that the Rocky slurm-gcp images ship
-# NVIDIA userspace libraries without a driver or device, which is not enough for
-# hardware GL - the published family carrying a driver is
-# slurm-gcp-6-12-ubuntu-2204-lts-nvidia-570. Without a render node the desktop
-# falls back to software rendering.
+# No NVIDIA driver is installed here: use an image that already carries one with
+# graphics support, such as aci-cpu-rocky-linux-9-slurm-2605-amd64. Without a
+# usable driver the desktop falls back to software rendering.
 #
 # NOTE: this file is read with file(), not templatefile(), so shell variables use
 # a single "$" - "$${...}" would survive into the rendered script and bash would
@@ -44,7 +42,7 @@ install_virtualgl() {
 
 # Deliberately non-fatal - see the apt installer for why.
 if install_virtualgl; then
-	echo "VirtualGL installed; hardware OpenGL available if a render node exists."
+	echo "VirtualGL installed; hardware OpenGL available on an NVIDIA GPU whose driver has graphics (EGL) support."
 else
 	echo "WARNING: VirtualGL install failed; desktop sessions will use software rendering." >&2
 fi

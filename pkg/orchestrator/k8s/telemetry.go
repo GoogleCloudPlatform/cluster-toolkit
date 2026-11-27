@@ -15,7 +15,6 @@
 package k8s
 
 import (
-	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
@@ -27,7 +26,6 @@ import (
 
 	"golang.org/x/mod/semver"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -118,7 +116,7 @@ func newestCollectorImage(nodes []unstructured.Unstructured, machineType string)
 		}
 		tpuNodes++
 		appendBuckets(&all, nodeBuckets)
-		if targetMT != "" && strings.EqualFold(nodes[i].GetLabels()["node.kubernetes.io/instance-type"], targetMT) {
+		if targetMT != "" && strings.EqualFold(nodes[i].GetLabels()[InstanceTypeLabel], targetMT) {
 			appendBuckets(&preferred, nodeBuckets)
 		}
 	}
@@ -161,11 +159,11 @@ func compareImageRefs(a, b string) int {
 }
 
 func semverTag(ref string) string {
-	ref, _, _ = strings.Cut(ref, "@")
-	_, tag, ok := strings.Cut(ref[strings.LastIndex(ref, "/")+1:], ":")
-	if !ok || tag == "" {
+	parsed, ok := ParseImageRef(ref)
+	if !ok || parsed.Tag == "" {
 		return ""
 	}
+	tag := parsed.Tag
 	if !strings.HasPrefix(tag, "v") {
 		if !strings.Contains(tag, ".") {
 			return ""
@@ -202,37 +200,27 @@ func collectTPUNodeCollectorImages(node unstructured.Unstructured) ([4][]string,
 }
 
 func nodeHasTPUAllocatable(node unstructured.Unstructured) bool {
-	rawTPU, found, err := unstructured.NestedFieldNoCopy(node.Object, "status", "allocatable", "google.com/tpu")
-	if err != nil || !found || rawTPU == nil {
+	alloc, ok := nodeAllocatableMap(node)
+	if !ok {
 		return false
 	}
-	var tpuStr string
-	switch v := rawTPU.(type) {
-	case string:
-		tpuStr = strings.TrimSpace(v)
-	case int64, int, float64, json.Number:
-		tpuStr = fmt.Sprint(v)
-	default:
-		return false
-	}
-	qty, err := resource.ParseQuantity(tpuStr)
-	return err == nil && !qty.IsZero()
+	qty, ok := parseQuantityField(alloc, "google.com/tpu")
+	return ok && !qty.IsZero()
 }
 
 func classifyCollectorImageBucket(ref string) int {
-	_, repo, ok := splitImageRef(ref)
+	parsed, ok := ParseImageRef(ref)
 	if !ok {
 		return -1
 	}
-	isDigest := strings.Contains(ref, "@")
-	switch path.Base(repo) {
+	switch path.Base(parsed.Repo) {
 	case "ai-telemetry-collector":
-		if !isDigest {
+		if !parsed.HasDigest {
 			return 0
 		}
 		return 1
 	case "workload-observability-agent":
-		if !isDigest {
+		if !parsed.HasDigest {
 			return 2
 		}
 		return 3

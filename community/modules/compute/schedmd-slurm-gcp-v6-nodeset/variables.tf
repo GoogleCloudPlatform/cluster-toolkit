@@ -587,6 +587,7 @@ variable "reservation_name" {
     - SUBBLOCK_ID (Optional): The identifier for a specific reservation subblock within a block.
 
     Note: Using a shared reservation ideally requires the 'compute.reservations.get' permission for the node service account in the host project; without it, full details cannot be fetched, but deployment will still proceed with defaults.
+    Note: With provisioning_engine = 'AUTO', reserved NodeSets use 'BULK_INSERT' so dense/calendar reservations receive RESERVATION_BOUND automatically. Explicit provisioning_engine = 'MIG' currently supports standard reservations only.
   EOD
   type        = string
   default     = ""
@@ -726,7 +727,27 @@ variable "machine_configs" {
 }
 
 variable "provisioning_engine" {
-  description = "Compute node provisioning engine: 'AUTO', 'MIG', or 'BULK_INSERT'. Note: When using 'MIG', 'node_count_dynamic_max' must be explicitly set to 0, and 'enable_placement' is only supported when 'accelerator_topology' is specified. (Note: DWS Flex NodeSets should leave 'provisioning_engine' as 'AUTO')."
+  description = <<-EOD
+    Compute node provisioning engine: 'AUTO' (default), 'MIG', or 'BULK_INSERT'.
+    - 'AUTO': Routes DWS Flex (unless use_bulk_insert = true) and eligible pure-static NodeSets
+      (node_count_static > 0, node_count_dynamic_max = 0, non-TPU, no reservation_name/future_reservation,
+      no instance_properties, and either enable_placement = false (default: true)
+      or an A4X / A4X Max slice-aligned accelerator_topology with zone_target_shape = 'ANY_SINGLE_ZONE')
+      to 'MIG'. Dynamic, hybrid (static + dynamic), TPU, reserved, and non-topology compact-placement
+      NodeSets stay on 'BULK_INSERT'.
+      Warning: on a deployed nodeset where 'AUTO' resolved to 'MIG', changing any eligibility input
+      (e.g. node_count_dynamic_max > 0, adding reservation_name, enabling enable_placement, or resizing
+      an A4X / A4X Max nodeset off a slice multiple) flips it back to 'BULK_INSERT' and terraform apply
+      destroys the managed instance group and its running VMs. Drain the nodeset first, or pin
+      provisioning_engine.
+    - 'MIG': Forces Managed Instance Group provisioning. Requires node_count_dynamic_max = 0;
+      enable_placement is only supported with an A4X / A4X Max accelerator_topology; future_reservation
+      and instance_properties are not supported; and reservation_name currently
+      supports standard reservations only (DENSE/CALENDAR reservations requiring RESERVATION_BOUND
+      should use 'BULK_INSERT' or 'AUTO'). DWS Flex NodeSets should leave provisioning_engine as 'AUTO'.
+    - 'BULK_INSERT': Forces legacy instances.bulkInsert provisioning (not valid with DWS Flex unless
+      use_bulk_insert = true).
+  EOD
   type        = string
   default     = "AUTO"
   validation {
@@ -739,7 +760,8 @@ variable "instance_flexibility_policy" {
   description = <<-EOD
     Opt-in machine-type fallback for MIG NodeSets. The MIG tries the lowest `rank` first and falls
     back to the next rank when capacity is unavailable. Only honored by static MIG NodeSets
-    (`provisioning_engine = "MIG"`, `node_count_dynamic_max = 0`, no DWS Flex, no accelerator_topology).
+    (`provisioning_engine = "AUTO"` resolving to MIG or `provisioning_engine = "MIG"`,
+    `node_count_dynamic_max = 0`, `enable_placement = false`, no DWS Flex, no accelerator_topology).
 
     Every fallback machine type must expose the same GPU model and count as `machine_type`, because
     Slurm's node definition is generated once per NodeSet. Slurm sizes nodes to the smallest shape

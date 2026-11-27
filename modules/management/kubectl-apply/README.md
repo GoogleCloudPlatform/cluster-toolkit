@@ -113,7 +113,55 @@ You can explicitly configure `timeout`, `recovery_timeout`, and `block_admission
           block_admission: false
 ```
 
-You can specify a particular kueue version that you would like to use using the `version` flag. By default, we recommend customers to [use v0.19.6](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L126). You can find the list of supported kueue versions [here](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L24).
+### Custom Kueue Helm Values & Manager Configuration
+
+To customize Kueue controller-manager settings (`managerConfig.controllerManagerConfigYaml`), `controllerManager.featureGates`, metrics, or other [Kueue Helm chart values](https://kueue.sigs.k8s.io/docs/installation/#install-by-helm) during installation—while using `config_path` for post-install `ClusterQueue`, `LocalQueue`, and `ResourceFlavor` manifests—set `kueue.helm_values_path` (and optional `kueue.helm_values_template_vars` when pointing to a `.tftpl` template):
+
+```yaml
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      kueue:
+        install: true
+        helm_values_path: $(ghpc_stage("manifests/kueue-helm-values.yaml"))
+        config_path: $(ghpc_stage("manifests/user-provided-kueue-config.yaml"))
+```
+
+Example `manifests/kueue-helm-values.yaml`:
+
+```yaml
+controllerManager:
+  featureGates:
+    - name: VisibilityOnDemand
+      enabled: true
+managerConfig:
+  controllerManagerConfigYaml: |
+    apiVersion: config.kueue.x-k8s.io/v1beta2
+    kind: Configuration
+    metrics:
+      enableClusterQueueResources: true
+    manageJobsWithoutQueueName: true
+    managedJobsNamespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            - default
+    resources:
+      excludeResourcePrefixes:
+        - networking.gke.io.networks/
+```
+
+When `helm_values_path` is provided:
+* `controllerManager.featureGates` entries are merged by `name` onto the module's base feature gates (`TopologyAwareScheduling: true`, plus disabled DRA feature gates on Kueue `>= 0.18.0`), with user entries taking precedence on matching gate names. Always place feature gates under `controllerManager.featureGates` (not inside `managerConfig.controllerManagerConfigYaml`), and leave `fullnameOverride` / `nameOverride` unset or `"kueue"`.
+* `controllerManager.tolerations` preserves the GKE `components.gke.io/gke-managed-components` toleration unless explicitly overridden.
+* `managerConfig.controllerManagerConfigYaml` (`apiVersion: config.kueue.x-k8s.io/v1beta2`, `kind: Configuration`) is merged onto the module's base `Configuration` (and any Pathways / `wait_for_pods_ready` defaults): nested maps such as `metrics`, `controller.groupKindConcurrency`, and `waitForPodsReady` merge keys (with `null` omitting keys), while list fields such as `integrations.frameworks` replace the base list when specified. When using a `NotIn` `managedJobsNamespaceSelector`, always exclude `kube-system` and `kueue-system`. On Kueue `>= 0.19.0`, setting `waitForPodsReady: null` omits the module override and reverts to Kueue's defaults (`30m` / `30m`); disabling `waitForPodsReady` completely requires setting `{name: DisableWaitForPodsReady, enabled: true}` in `controllerManager.featureGates`.
+* Pass only the chart keys you want to override (not a full `helm show values` export): chart fields like `controllerManager.replicas` and `controllerManager.manager.resources` override `kueue.controller_*` (including `enable_dynamic_slicing_for_tpus` defaults of `16` CPU / `64Gi` memory—when overriding `controllerManager.manager.resources`, set both `requests` and `limits` so `requests` never exceed `limits`), and `waitForPodsReady` fields in `controllerManagerConfigYaml` override `kueue.wait_for_pods_ready`.
+* Setting `enableCertManager: true` requires `cert-manager` CRDs to be pre-installed in an earlier module or deployment group (it cannot be combined with `cert_manager.install: true` in the same `kubectl-apply` module because Kueue is installed before `cert-manager`).
+* After editing a staged values file (`ghpc_stage(...)`), re-run `gcluster deploy <blueprint.yaml> -w` to re-stage the updated file and apply the Helm upgrade (Helm automatically restarts `kueue-controller-manager` when `kueue-manager-config` changes).
+
+You can specify a particular kueue version that you would like to use using the `version` flag. By default, we recommend customers to [use v0.19.6](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L162). You can find the list of supported kueue versions [here](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L24).
 
 ```yaml
   - id: workload_component_install
@@ -126,6 +174,17 @@ You can specify a particular kueue version that you would like to use using the 
         config_path: $(ghpc_stage("manifests/user-provided-kueue-config.yaml.tftpl"))
         config_template_vars: {name: "dev-config", public: "false"}
       jobset:
+        install: true
+```
+
+You can also install [k8s-aibom](https://github.com/GoogleCloudPlatform/k8s-aibom) by setting the `k8s_aibom` input variable. It records an AI bill of materials (a CycloneDX document per inference or training workload: models, runtime, images, signatures) for namespaces that carry the `aibom.k8saibom.dev/enabled=true` label. The module installs the controller only; opt namespaces in afterwards with `kubectl label namespace <name> aibom.k8saibom.dev/enabled=true`, and read the inventory with `kubectl get aibom -A`. The controller is unprivileged and reads the Kubernetes API only. You can pick a specific chart release with the `version` field under `k8s_aibom` (the default tracks the current k8s-aibom release; the chart pins its controller image by digest).
+
+```yaml
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      k8s_aibom:
         install: true
 ```
 
@@ -299,6 +358,8 @@ limitations under the License.
 | <a name="module_install_gib"></a> [install\_gib](#module\_install\_gib) | ./helm_install | n/a |
 | <a name="module_install_gpu_operator"></a> [install\_gpu\_operator](#module\_install\_gpu\_operator) | ./helm_install | n/a |
 | <a name="module_install_jobset"></a> [install\_jobset](#module\_install\_jobset) | ./helm_install | n/a |
+| <a name="module_install_k8s_aibom"></a> [install\_k8s\_aibom](#module\_install\_k8s\_aibom) | ./helm_install | n/a |
+| <a name="module_install_k8s_aibom_crds"></a> [install\_k8s\_aibom\_crds](#module\_install\_k8s\_aibom\_crds) | ./helm_install | n/a |
 | <a name="module_install_kueue"></a> [install\_kueue](#module\_install\_kueue) | ./helm_install | n/a |
 | <a name="module_install_nvidia_dra_driver"></a> [install\_nvidia\_dra\_driver](#module\_install\_nvidia\_dra\_driver) | ./helm_install | n/a |
 | <a name="module_install_slice_controller"></a> [install\_slice\_controller](#module\_install\_slice\_controller) | ./helm_install | n/a |
@@ -338,7 +399,8 @@ limitations under the License.
 | <a name="input_gke_cluster_exists"></a> [gke\_cluster\_exists](#input\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. | `bool` | `false` | no |
 | <a name="input_gpu_operator"></a> [gpu\_operator](#input\_gpu\_operator) | Install [GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) which uses the [Kubernetes operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) to automate the management of all NVIDIA software components needed to provision GPU. | <pre>object({<br/>    install = optional(bool, false)<br/>    version = optional(string, "v25.3.0")<br/>  })</pre> | `{}` | no |
 | <a name="input_jobset"></a> [jobset](#input\_jobset) | Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit. | <pre>object({<br/>    install           = optional(bool, false)<br/>    version           = optional(string, "0.12.0")<br/>    controller_cpu    = optional(string, null)<br/>    controller_memory = optional(string, null)<br/>  })</pre> | `{}` | no |
-| <a name="input_kueue"></a> [kueue](#input\_kueue) | Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config\_path to be applied right after kueue installation. If a template file provided, its variables can be set to config\_template\_vars. | <pre>object({<br/>    # ATTENTION: If you update the KUEUE's default version below, please also update the corresponding<br/>    # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go (note the 'v' prefix there)<br/>    # and keep kueue/kueue-manager-config.yaml in sync with the chart's default managerConfig.controllerManagerConfigYaml.<br/>    version                         = optional(string, "0.19.6")<br/>    install                         = optional(bool, false)<br/>    config_path                     = optional(string, null)<br/>    config_template_vars            = optional(map(any), null)<br/>    enable_pathways_for_tpus        = optional(bool, false)<br/>    enable_dynamic_slicing_for_tpus = optional(bool, false)<br/>    accelerator_topology_mode       = optional(string, null)<br/>    machine_type                    = optional(string, null)<br/>    controller_cpu                  = optional(string, null)<br/>    controller_memory               = optional(string, null)<br/>    controller_replicas             = optional(number, null)<br/>    slice_controller_cpu_request    = optional(string, "8000m")<br/>    slice_controller_memory_request = optional(string, "16Gi")<br/>    slice_controller_cpu_limit      = optional(string, "12000m")<br/>    slice_controller_memory_limit   = optional(string, "32Gi")<br/>    # Optional Kueue waitForPodsReady settings. On Kueue >= 0.19.0 with Pathways<br/>    # enabled, defaults to timeout = "30m" and recovery_timeout = "0s".<br/>    wait_for_pods_ready = optional(object({<br/>      timeout          = optional(string)<br/>      recovery_timeout = optional(string)<br/>      block_admission  = optional(bool)<br/>    }), null)<br/>  })</pre> | `{}` | no |
+| <a name="input_k8s_aibom"></a> [k8s\_aibom](#input\_k8s\_aibom) | Install [k8s-aibom](https://github.com/GoogleCloudPlatform/k8s-aibom), which records an AI bill of materials (CycloneDX) for inference and training workloads in namespaces labeled `aibom.k8saibom.dev/enabled=true`. Unprivileged; reads the Kubernetes API only. | <pre>object({<br/>    install           = optional(bool, false)<br/>    version           = optional(string, "1.6.2")<br/>    controller_cpu    = optional(string, null)<br/>    controller_memory = optional(string, null)<br/>  })</pre> | `{}` | no |
+| <a name="input_kueue"></a> [kueue](#input\_kueue) | Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. Custom Helm chart values (such as managerConfig.controllerManagerConfigYaml and controllerManager.featureGates) can be provided with helm\_values\_path (and helm\_values\_template\_vars for template files). A post-install configuration yaml/template file (for example ClusterQueue, LocalQueue, and ResourceFlavor manifests) can be provided with config\_path (and config\_template\_vars). | <pre>object({<br/>    # ATTENTION: If you update the KUEUE's default version below, please also update the corresponding<br/>    # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go (note the 'v' prefix there)<br/>    # and keep kueue/kueue-manager-config.yaml in sync with the chart's default managerConfig.controllerManagerConfigYaml.<br/>    version                         = optional(string, "0.19.6")<br/>    install                         = optional(bool, false)<br/>    config_path                     = optional(string, null)<br/>    config_template_vars            = optional(map(any), null)<br/>    helm_values_path                = optional(string, null)<br/>    helm_values_template_vars       = optional(any, null)<br/>    enable_pathways_for_tpus        = optional(bool, false)<br/>    enable_dynamic_slicing_for_tpus = optional(bool, false)<br/>    accelerator_topology_mode       = optional(string, null)<br/>    machine_type                    = optional(string, null)<br/>    controller_cpu                  = optional(string, null)<br/>    controller_memory               = optional(string, null)<br/>    controller_replicas             = optional(number, null)<br/>    slice_controller_cpu_request    = optional(string, "8000m")<br/>    slice_controller_memory_request = optional(string, "16Gi")<br/>    slice_controller_cpu_limit      = optional(string, "12000m")<br/>    slice_controller_memory_limit   = optional(string, "32Gi")<br/>    # Optional Kueue waitForPodsReady settings. On Kueue >= 0.19.0 with Pathways<br/>    # enabled, defaults to timeout = "30m" and recovery_timeout = "0s".<br/>    wait_for_pods_ready = optional(object({<br/>      timeout          = optional(string)<br/>      recovery_timeout = optional(string)<br/>      block_admission  = optional(bool)<br/>    }), null)<br/>  })</pre> | `{}` | no |
 | <a name="input_module_id"></a> [module\_id](#input\_module\_id) | The ID of the module as defined in the blueprint. Injected by ghpc. | `string` | `"kubectl-apply"` | no |
 | <a name="input_nvidia_dra_driver"></a> [nvidia\_dra\_driver](#input\_nvidia\_dra\_driver) | Installs [Nvidia DRA driver](https://github.com/NVIDIA/k8s-dra-driver-gpu) which supports Dynamic Resource Allocation for NVIDIA GPUs in Kubernetes | <pre>object({<br/>    install          = optional(bool, false)<br/>    version          = optional(string, "v25.3.0")<br/>    accelerator_type = optional(string, "nvidia-gb200")<br/>  })</pre> | `{}` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID that hosts the gke cluster. | `string` | n/a | yes |

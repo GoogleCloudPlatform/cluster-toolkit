@@ -259,6 +259,7 @@ resource "google_compute_instance_template" "tpl" {
     automatic_restart           = local.automatic_restart
     on_host_maintenance         = local.effective_on_host_maintenance
     instance_termination_action = var.instance_termination_action
+    maintenance_interval        = var.maintenance_interval != null && trimspace(var.maintenance_interval) != "" ? trimspace(var.maintenance_interval) : null
 
     dynamic "max_run_duration" {
       for_each = var.max_run_duration != null ? [var.max_run_duration] : []

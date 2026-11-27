@@ -58,7 +58,6 @@ class TstNodeset:
 class TstPartition:
     partition_name: str = "euler"
     partition_nodeset: list[str] = field(default_factory=list)
-    partition_nodeset_tpu: list[str] = field(default_factory=list)
     partition_nodeset_dyn: list[str] = field(default_factory=list)
     partition_conf: dict[str, Any] = field(default_factory=dict)
     enable_job_exclusive: bool = False
@@ -77,7 +76,6 @@ class TstCfg:
 
     partitions: dict[str, TstPartition] = field(default_factory=dict)
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)
-    nodeset_tpu: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_dyn: dict[str, TstNodeset] = field(default_factory=dict)
     hybrid: Optional[bool] = False
 
@@ -106,10 +104,6 @@ class TstCfg:
     task_prolog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
     task_epilog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
     
-
-@dataclass
-class TstTPU:  # to prevent client initialization durint "TPU.__init__"
-    vmcount: int
 
 @dataclass
 class TstMachineConf:

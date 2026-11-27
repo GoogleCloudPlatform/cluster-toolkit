@@ -17,6 +17,7 @@ package config
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/zclconf/go-cty/cty"
@@ -387,6 +388,70 @@ func TestResolveTopologyForChips(t *testing.T) {
 	}
 }
 
+func TestCT5LAndUppercaseTPUNormalization(t *testing.T) {
+	for _, tc := range []struct {
+		shorthand, machine, want string
+	}{
+		{"v5e-8", "ct5l-hightpu-8t", "2x4"},
+		{"v5e-8", "CT5L-HIGHTPU-8T", "2x4"},
+		{" V4-8 ", "CT4P-HIGHTPU-4T", "2x2x1"},
+		{"V5P-8", "CT5P-HIGHTPU-4T", "2x2x1"},
+	} {
+		if got, err := ResolveTopologyForChips(tc.shorthand, tc.machine); err != nil || got != tc.want {
+			t.Errorf("ResolveTopologyForChips(%q, %q) = (%q, %v), want (%q, nil)", tc.shorthand, tc.machine, got, err, tc.want)
+		}
+	}
+	if _, err := ResolveTopologyForChips("TPU7X-16", "TPU7X-STANDARD-4T"); err == nil || !strings.Contains(err.Error(), "--topology") {
+		t.Errorf("ResolveTopologyForChips(TPU7X-16) err = %v, want --topology error", err)
+	}
+	if _, err := ResolveTopologyForChips("v5e-2X4", "ct5l-hightpu-8t"); err == nil || !strings.Contains(err.Error(), "Use --topology flag") {
+		t.Errorf("ResolveTopologyForChips(v5e-2X4) err = %v, want --topology hint", err)
+	}
+	if err := ValidateHardwareRequest("ct5l-hightpu-8t", "2x4"); err != nil {
+		t.Errorf("ValidateHardwareRequest(ct5l-hightpu-8t, 2x4) = %v, want nil", err)
+	}
+	if err := ValidateHardwareRequest("CT5L-HIGHTPU-8T", "2x4"); err != nil {
+		t.Errorf("ValidateHardwareRequest(CT5L-HIGHTPU-8T, 2x4) = %v, want nil", err)
+	}
+	if err := ValidateHardwareRequest(" ct6e-standard-4t ", "3x3"); err == nil {
+		t.Errorf("ValidateHardwareRequest(whitespace TPU, 3x3) = nil, want invalid topology error")
+	}
+	if got, ok := DefaultTopologyForChips("CT5L-HIGHTPU-8T", 8); !ok || got != "2x4" {
+		t.Errorf("DefaultTopologyForChips(CT5L-HIGHTPU-8T, 8) = (%q, %v), want (2x4, true)", got, ok)
+	}
+}
+
+func TestCT5LAndUppercaseMaxCubesAndAcceleratorsPerVM(t *testing.T) {
+	// 4x4x12 is outside valid3DShapes so ValidateHardwareRequest must reach getMaxCubes("TPU7X-STANDARD-4T") == 144.
+	if err := ValidateHardwareRequest("TPU7X-STANDARD-4T", "4x4x12"); err != nil {
+		t.Errorf("ValidateHardwareRequest(TPU7X-STANDARD-4T, 4x4x12) = %v, want nil", err)
+	}
+	if err := Validate3DTopology("4x4x8", "TPU7X-STANDARD-4T", true); err != nil {
+		t.Errorf("Validate3DTopology(4x4x8, TPU7X-STANDARD-4T, dyn=true) = %v, want nil", err)
+	}
+	if err := ValidateHardwareRequest("CT4P-HIGHTPU-4T", "16x16x20"); err == nil {
+		t.Errorf("ValidateHardwareRequest(CT4P-HIGHTPU-4T, 16x16x20) = nil, want max-cubes error")
+	}
+	for _, tc := range []struct {
+		machine string
+		want    int
+	}{
+		{"CT5L-HIGHTPU-8T", 8},
+		{"CT5L-HIGHTPU-4T", 4},
+		{"CT5L", 8},
+	} {
+		if got := AcceleratorsPerVM(tc.machine); got != tc.want {
+			t.Errorf("AcceleratorsPerVM(%q) = %d, want %d", tc.machine, got, tc.want)
+		}
+	}
+	if nodes, err := CalculateAcceleratorNodes("CT5L-HIGHTPU-8T", "2x4", 0); err != nil || nodes != 1 {
+		t.Errorf("CalculateAcceleratorNodes(CT5L-HIGHTPU-8T, 2x4) = (%d, %v), want (1, nil)", nodes, err)
+	}
+	if !IsTPU(" ct6e-standard-4t ") || !IsTPU(" v6e-8 ") || !IsTPU(" ct5l ") {
+		t.Errorf("IsTPU must trim whitespace for TPU names and shorthands")
+	}
+}
+
 func TestIsTPU(t *testing.T) {
 	tests := []struct {
 		accelType string
@@ -662,5 +727,96 @@ func TestIs3DTorusTPU(t *testing.T) {
 				t.Errorf("Is3DTorusTPU(%q) = %v, want %v", tt.machineType, got, tt.wantResult)
 			}
 		})
+	}
+}
+
+func TestDefaultTopologyForChips(t *testing.T) {
+	tests := []struct {
+		mt    string
+		chips int
+		want  string
+		ok    bool
+	}{
+		{"tpu7x-standard-1t", 1, "1x1x1", true},
+		{"tpu7x-standard-4t", 4, "2x2x1", true},
+		{"tpu7x-standard-4t", 8, "2x2x2", true},
+		{"ct5p-hightpu-4t", 8, "2x2x2", true},
+		{"ct4p-hightpu-4t", 4, "2x2x1", true},
+		{"ct6e-standard-4t", 8, "2x4", true},
+		{"ct5lp-hightpu-8t", 8, "2x4", true},
+		{"ct5l-hightpu-8t", 8, "2x4", true},
+		{"ct6e-standard-1t", 1, "1x1", true},
+		{"n2-standard-8", 4, "", false},
+		{"tpu7x-standard-4t", 3, "", false},
+	}
+	for _, tc := range tests {
+		got, ok := DefaultTopologyForChips(tc.mt, tc.chips)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("DefaultTopologyForChips(%q, %d) = (%q, %v), want (%q, %v)", tc.mt, tc.chips, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+func TestIsKnownAccelerator(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		in   string
+		want bool
+	}{
+		{"", false},
+		{"n2d-standard-64", false},
+		{"n1-standard-8", false},
+		{"e2-medium", false},
+		{"f1-micro", false},
+		{"g1-small", false},
+		{"h3-standard-88", false},
+		{"t2d-standard-4", false},
+		{"c3-highmem-88", false},
+		{"c4a-standard-8", false},
+		{"v6e-8", true},
+		{"tpu7x", true},
+		{"v7x", true},
+		{"v7x-8", true},
+		{"ironwood", true},
+		{"ironwood-8", true},
+		{"trillium", true},
+		{"trillium-8", true},
+		{"v5-lite", true},
+		{"v5-lite-8", true},
+		{"v5_lite", true},
+		{"v5_lite-8", true},
+		{"v5lite", true},
+		{"v5lite-8", true},
+		{"ct6e-standard-4t", true},
+		{"l4", true},
+		{"l4-1", true},
+		{"h100", true},
+		{"h100-16", true},
+		{"h200-4", true},
+		{"a100-4", true},
+		{"b200", true},
+		{"b200-16", true},
+		{"gb200", true},
+		{"gb200-8", true},
+		{"rtx", true},
+		{"rtx-6000-1/4", true},
+		{"g4-standard-12", true},
+		{"g2-standard-4", true},
+		{"a2-custom-1g", true},
+		{"a3-highgpu-8g", true},
+		{"a3-edgegpu-8g", true},
+		{"a4-ultragpu-8g", true},
+		{"a4x-maxgpu-4g", true},
+		{"a5-highgpu-8g", true},
+		{"a5x-highgpu-4g-metal", true},
+		{"nvidia-l4", true},
+		{"nvidia-tesla-t4", true},
+		{"nvidia-tesla-v100", true},
+		{"nvidia-rtx-pro-6000", true},
+		{"NVIDIA-H100-80GB", true},
+	} {
+		if got := IsKnownAccelerator(tc.in); got != tc.want {
+			t.Errorf("IsKnownAccelerator(%q) = %v, want %v", tc.in, got, tc.want)
+		}
 	}
 }

@@ -25,5 +25,7 @@ output "k8s_prerequisites_ready" {
     module.install_asapd_lite,
     module.kubectl_apply_manifests,
     module.install_cert_manager,
+    module.install_k8s_aibom_crds,
+    module.install_k8s_aibom,
   ]
 }

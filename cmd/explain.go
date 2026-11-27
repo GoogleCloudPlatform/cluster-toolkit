@@ -151,6 +151,10 @@ type ExplainModuleInput struct {
 	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
 	Validations []string `json:"validations,omitempty" yaml:"validations,omitempty"`
 	textType    string
+
+	// Constraints holds machine-readable limits the module states for this
+	// input (allowed values, min/max, pattern). Only shown in JSON and YAML.
+	Constraints *modulereader.InputConstraints `json:"constraints,omitempty" yaml:"constraints,omitempty"`
 }
 
 func (in ExplainModuleInput) displayType() string {
@@ -1242,6 +1246,7 @@ func partitionModuleInputs(mi modulereader.ModuleInfo, useProvidedInputs map[str
 			Default:     formatInterfaceDefault(in.Default),
 			Description: strings.Join(strings.Fields(in.Description), " "),
 			Validations: in.Validations,
+			Constraints: in.Constraints,
 		}
 		if in.Required {
 			reqInputs = append(reqInputs, entry)

@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"hpc-toolkit/cmd/cluster"
+	"hpc-toolkit/cmd/job"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/telemetry"
@@ -677,4 +679,43 @@ func TestExecute_PreRunTelemetryGuards(t *testing.T) {
 			t.Errorf("Expected __complete command error to skip fallback telemetry")
 		}
 	})
+}
+
+func TestSetTelemetryProjectID_Wiring(t *testing.T) {
+	origCollector := telemetryCollector
+	t.Cleanup(func() { telemetryCollector = origCollector })
+
+	if job.OnTelemetryProjectResolved == nil {
+		t.Fatal("expected job.OnTelemetryProjectResolved to be wired by cmd init()")
+	}
+	if cluster.OnTelemetryProjectResolved == nil {
+		t.Fatal("expected cluster.OnTelemetryProjectResolved to be wired by cmd init()")
+	}
+
+	// Must not panic when telemetryCollector is nil.
+	telemetryCollector = nil
+	job.OnTelemetryProjectResolved("ignored-when-nil")
+	cluster.OnTelemetryProjectResolved("ignored-when-nil")
+
+	cmd := &cobra.Command{Use: "submit"}
+	telemetryCollector = telemetry.NewCollector(cmd, nil, telemetry.SOURCE)
+
+	if got, set := telemetryCollector.GetProjectID(); got != "" || set {
+		t.Errorf("before hooks, telemetryCollector.GetProjectID() = (%q, %v), want ('', false)", got, set)
+	}
+
+	job.OnTelemetryProjectResolved("wired-job-proj")
+	if got, set := telemetryCollector.GetProjectID(); got != "wired-job-proj" || !set {
+		t.Errorf("after job hook, telemetryCollector.GetProjectID() = (%q, %v), want (%q, true)", got, set, "wired-job-proj")
+	}
+
+	job.OnTelemetryProjectResolved("")
+	if got, set := telemetryCollector.GetProjectID(); got != "" || !set {
+		t.Errorf("after suppression hook, telemetryCollector.GetProjectID() = (%q, %v), want ('', true)", got, set)
+	}
+
+	cluster.OnTelemetryProjectResolved("wired-cluster-proj")
+	if got, set := telemetryCollector.GetProjectID(); got != "wired-cluster-proj" || !set {
+		t.Errorf("after cluster hook, telemetryCollector.GetProjectID() = (%q, %v), want (%q, true)", got, set, "wired-cluster-proj")
+	}
 }

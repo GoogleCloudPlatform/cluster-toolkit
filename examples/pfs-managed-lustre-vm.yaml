@@ -70,4 +70,4 @@ deployment_groups:
       machine_type: $(vars.client_machine_type)
       instance_image:
         project: ubuntu-os-cloud
-        name: ubuntu-2204-jammy-v20250128
+        family: ubuntu-2404-lts-amd64

@@ -78,15 +78,18 @@ locals {
   # Check if a GCS Fuse storage profile is active
   has_gcsfuse_storage_profile = var.gcsfuse_storage_class_name != "" && var.gcsfuse_storage_class_name != null
 
-  # Extract mount options as a list (fallback to empty list if not GCS)
-  gcs_mount_opts_raw = var.gcs_bucket_name != null ? split(",", var.network_storage.mount_options) : []
+  # Extract mount options as a list (fallback to empty list if not GCS or null)
+  gcs_mount_opts_raw = var.gcs_bucket_name != null && try(var.network_storage.mount_options, null) != null ? split(",", var.network_storage.mount_options) : []
 
-  # Apply filters to clean up the options
-  gcs_mount_options = [
-    for opt in local.gcs_mount_opts_raw : opt
-    if !contains(["defaults", "_netdev"], opt) &&                  # Filter out defaults
-    !(opt == "implicit_dirs" && local.has_gcsfuse_storage_profile) # Filter implicit_dirs if profile is active
-  ]
+  # Filter out fstab-only options and normalize fstab-style implicit_dirs to CSI implicit-dirs
+  # for non-profile PVs (gcsfusecsi-* profiles manage implicit-dirs automatically).
+  gcs_mount_options = distinct([
+    for opt in local.gcs_mount_opts_raw :
+    replace(trimspace(opt), "/^implicit_dirs([=:].*)?$/", "implicit-dirs$1")
+    if trimspace(opt) != "" &&
+    !contains(["defaults", "_netdev"], trimspace(opt)) &&
+    !(trimspace(opt) == "implicit_dirs" && local.has_gcsfuse_storage_profile)
+  ])
 
   # Variables for PV templates, merging common vars with type-specific ones.
   pv_template_vars = {

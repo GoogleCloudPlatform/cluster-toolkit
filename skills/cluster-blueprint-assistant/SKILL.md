@@ -296,16 +296,16 @@ machine type and disk size but never Spot: those modules do not accept it.
 | `login_` / `controller_` | the Slurm login / controller VM |
 | `system_node_pool_` | the GKE system node pool (literal `gke-cluster` input) |
 | `client_` | a plain VM that mounts storage (e.g. `pfs-managed-lustre-vm`) |
-| `image_build_` | the temporary Packer VM that builds a custom image (`ml-slurm`, `ml-slurm-g4`) |
+| `image_build_` | the temporary Packer VM that builds a custom image (`ml-slurm-g4`, `a3mega-slurm-blueprint`) |
 | `<partition>_` / `<pool>_` (`debug_`, `hp_pool_`, `local_ssd_pool_`, `n2_`, `h3_`, `a2_8_`) | one of several worker pools; the prefix is the partition / pool name the user already addresses |
 | `homefs_`, `appsfs_`, `scratchfs_`, `sharefs_`, `lustre_`, `hyperdisk_<type>_`, `data_disk_` | storage, by mount role |
 
 Rules the agent must respect:
 
 - **Hardware-named partitions expose node counts and Spot, never
-  `machine_type`** (`h3`, `a2`, `g2`, `n2`, `c2`, `c2d`, `c3`, `a2_8`,
-  `a2_16`). The hardware name *is* the partition's identity; "run the `g2`
-  partition on g4" is "add a partition" → Pattern 2/3 (copy the blueprint), not a
+  `machine_type`** (`h3`, `n2`, `c2`, `c2d`, `c3`, `a2_8`, `a2_16`). The
+  hardware name *is* the partition's identity; "run the `h3` partition on c3"
+  is "add a partition" → Pattern 2/3 (copy the blueprint), not a
   `deployment.yaml` override. Functionally named pools (`compute`, `debug`,
   `hp_pool`, …) do expose `<role>_machine_type`.
 - **Hardware-locked blueprints hardcode `machine_type` in the module.** The

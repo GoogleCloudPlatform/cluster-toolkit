@@ -25,7 +25,6 @@ from pathlib import Path
 import uuid
 import util
 from util import dirs, slurmdirs
-import tpu
 from util import NSDict
 import yaml
 import socket
@@ -121,12 +120,6 @@ class SlurmConfigGenerator:
             for nodeset in self.lkp.cfg.nodeset.values()
         )
 
-        any_tpu = any(
-            tpu_nodeset is not None
-            for part in self.lkp.cfg.partitions.values()
-            for tpu_nodeset in part.partition_nodeset_tpu
-        )
-
         any_gke = any(
             self.lkp.nodeset_is_gke(nodeset)
             for nodeset in self.lkp.cfg.nodeset.values()
@@ -139,7 +132,7 @@ class SlurmConfigGenerator:
                 "use_interactive_step",
             ],
             "SlurmctldParameters": [
-                "cloud_dns" if not(any_dynamic or any_tpu or any_gke or self.lkp.cfg.hybrid) else None,
+                "cloud_dns" if not(any_dynamic or any_gke or self.lkp.cfg.hybrid) else None,
                 "enable_configless",
                 "idle_on_node_suspend",
             ],
@@ -179,7 +172,6 @@ class SlurmConfigGenerator:
             "SlurmdTimeout": get("slurmd_timeout", 300),
             "UnkillableStepTimeout": get("unkillable_step_timeout", 300),
             "TreeWidth": get("tree_width", default_tree_width),
-            "JobSubmitPlugins": "lua" if any_tpu else None,
             "TopologyPlugin": topology_plugin(self.lkp) if self.lkp.cfg.nodeset else None,
             "TopologyParam": get("topology_param", "SwitchAsNodeRank"),
         }
@@ -195,7 +187,6 @@ class SlurmConfigGenerator:
             self.conflines(),
             *(nodeset_lines(n, self.lkp) for n in self.lkp.cfg.nodeset.values()),
             *(nodeset_dyn_lines(n) for n in self.lkp.cfg.nodeset_dyn.values()),
-            *(nodeset_tpu_lines(n, self.lkp) for n in self.lkp.cfg.nodeset_tpu.values()),
             *(self.partitionlines(p) for p in self.lkp.cfg.partitions.values()),
             *(suspend_exc_lines(self.lkp)),
         ]
@@ -215,9 +206,6 @@ class SlurmConfigGenerator:
             _, summary = self.generate_topology_data()
             summary.dump(self.lkp)
             install_topology_yaml(self.lkp)
-
-    def install_jobsubmit_lua(self) -> None:
-        install_jobsubmit_lua(self.lkp)
 
     def install_slurm_conf(self) -> None:
         install_slurm_conf(self.lkp)
@@ -264,14 +252,12 @@ class SlurmConfigGenerator:
             chain(
                 regular,
                 partition.partition_nodeset_dyn,
-                partition.partition_nodeset_tpu,
             )
         )
 
-        is_tpu = len(partition.partition_nodeset_tpu) > 0
         is_dyn = len(partition.partition_nodeset_dyn) > 0
 
-        oversub_exlusive = partition.enable_job_exclusive or is_tpu
+        oversub_exlusive = partition.enable_job_exclusive
         power_down_on_idle = partition.enable_job_exclusive and not is_dyn
 
         line_elements = {
@@ -344,7 +330,6 @@ class SlurmConfigGenerator:
         self.gen_cloud_gres_conf()
         self.install_gres_conf()
         self.install_cgroup_conf()
-        self.install_jobsubmit_lua()
         self.generate_topology()
 
 def get_generator(lkp: util.Lookup) -> SlurmConfigGenerator:
@@ -400,19 +385,6 @@ def nodeset_lines(nodeset, lkp: util.Lookup) -> str:
     if not cloud_param(lkp, "skip_nodeset_lines", False):
         lines.append({"NodeSet": nodeset.nodeset_name, "Nodes": nodelist})
     return "\n".join(map(dict_to_conf, lines))
-
-
-def nodeset_tpu_lines(nodeset, lkp: util.Lookup) -> str:
-    nodelist = lkp.nodelist(nodeset)
-    return "\n".join(
-        map(
-            dict_to_conf,
-            [
-                {"NodeName": nodelist, "State": "CLOUD", **nodeset.node_conf},
-                {"NodeSet": nodeset.nodeset_name, "Nodes": nodelist},
-            ],
-        )
-    )
 
 
 def nodeset_dyn_lines(nodeset):
@@ -588,26 +560,6 @@ def install_cgroup_conf(lkp: util.Lookup) -> None:
     util.chown_slurm(conf_file, mode=0o600)
 
 
-def install_jobsubmit_lua(lkp: util.Lookup) -> None:
-    """install job_submit.lua if there are tpu nodes in the cluster"""
-    if not any(
-        tpu_nodeset is not None
-        for part in lkp.cfg.partitions.values()
-        for tpu_nodeset in part.partition_nodeset_tpu
-    ):
-        return # No TPU partitions, no need for job_submit.lua
-
-    scripts_dir = lkp.cfg.slurm_scripts_dir or dirs.scripts
-    tpl = (scripts_dir / "job_submit.lua.tpl").read_text()
-    conf = tpl.format(scripts_dir=scripts_dir)
-
-    conf_file = lkp.etc_dir / "job_submit.lua"
-    conf_file.write_text(conf)
-    util.chown_slurm(conf_file, 0o600)
-
-
-
-
 def install_gres_conf(lkp: util.Lookup) -> None:
     conf_file = lkp.etc_dir / "cloud_gres.conf"
     gres_conf = lkp.etc_dir / "gres.conf"
@@ -762,20 +714,32 @@ class TopologyBuilder:
         """Renders the blocks/phantom block in yaml format."""
 
         blocks = []
-        for block_group_name, nvld_blocks in self._b.items():
+        used_prefixes: Set[str] = set()
+        for idx, (block_group_name, nvld_blocks) in enumerate(self._b.items()):
             num_blocks = len(nvld_blocks.values())
             for nvld in nvld_blocks.values():
                 blocks.append(nvld.render_yaml_block())
-            
-            if len(self._b) > 1:  # Only create phantom blocks for multi-block_group clusters
-                for phantom in range(num_blocks, BLOCK_SIZE):
+
+            if len(self._b) > 1 and num_blocks > 0:  # Only create phantom blocks for multi-block_group clusters
+                prefix = block_group_name[:10]
+                salt = idx
+                while prefix in used_prefixes:
+                    prefix = f"{block_group_name[:7]}-{salt}"
+                    salt += 1
+                used_prefixes.add(prefix)
+                target_blocks = ((num_blocks + BLOCK_SIZE - 1) // BLOCK_SIZE) * BLOCK_SIZE
+                for phantom in range(num_blocks, target_blocks):
                     blocks.append({
-                        "block": f"{block_group_name[:10]}-p{phantom}",
+                        "block": f"{prefix}-p{phantom}",
                         "nodes": ""
-                })
+                    })
         return blocks
 
-    def render_yaml(self, block_is_default: bool=False) -> List[Any]:
+    def render_yaml(
+        self,
+        block_is_default: bool = False,
+        block_base_size: int = NVLINK_VM_COUNT,
+    ) -> List[Any]:
         rendered_blocks = self.render_blocks()
 
         sections = [
@@ -792,7 +756,7 @@ class TopologyBuilder:
                 "topology": TOPOLOGY_BLOCK,
                 "cluster_default": block_is_default,
                 "block": {
-                    "block_sizes": [NVLINK_VM_COUNT, NVLINK_VM_COUNT*BLOCK_SIZE],
+                    "block_sizes": [block_base_size, block_base_size * BLOCK_SIZE],
                     "blocks": rendered_blocks,
                 }
             })
@@ -823,26 +787,6 @@ class TopologyBuilder:
         return compressed
 
 
-def add_tpu_nodeset_topology(nodeset: NSDict, bldr: TopologyBuilder|Any, lkp: util.Lookup):
-    tpuobj = tpu.TPU.make(nodeset.nodeset_name, lkp)
-    static, dynamic = lkp.nodenames(nodeset)
-
-    pref = ["tpu-root",  f"ns_{nodeset.nodeset_name}"]
-    if tpuobj.vmcount == 1:  # Put all nodes in one switch
-        all_nodes = list(chain(static, dynamic))
-        bldr.add(pref, all_nodes)
-        bldr.summary.tpu_nodes.update(all_nodes)
-        return
-
-    # Chunk nodes into sub-switches of size `vmcount`
-    chunk_num = 0
-    for nodenames in (static, dynamic):
-        for nodeschunk in util.chunked(nodenames, n=tpuobj.vmcount):
-            chunk_name = f"{nodeset.nodeset_name}-{chunk_num}"
-            chunk_num += 1
-            bldr.add([*pref, chunk_name], nodeschunk)
-            bldr.summary.tpu_nodes.update(nodeschunk)
-
 def _make_physical_path(physical_host: str) -> List[str]:
     assert physical_host.startswith("/"), f"Unexpected physicalHost: {physical_host}"
     parts = physical_host[1:].split("/")
@@ -866,6 +810,12 @@ def add_nodeset_topology(
 ) -> None:
     up_nodes = set()
     default_path = [_SLURM_TOPO_ROOT, _default_switch(nodeset, lkp)]
+    is_mig_gpu_slice = (
+        lkp.is_nodeset_mig(nodeset.nodeset_name)
+        and not lkp.is_tpu_nodeset(nodeset.nodeset_name)
+        and isinstance(nodeset.accelerator_topology, str)
+        and bool(lkp._GPU_TOPOLOGY_NORMALIZED_RE.match(nodeset.accelerator_topology))
+    )
 
     for inst in lkp.instances().values():
         try:
@@ -880,6 +830,8 @@ def add_nodeset_topology(
 
         if phys_host:
             bldr.add(_make_physical_path(phys_host), [inst.name])
+        elif is_mig_gpu_slice:
+            bldr.add([*default_path, lkp.node_mig_name(inst.name)], [inst.name])
         else:
             bldr.add(default_path, [inst.name])
 
@@ -888,13 +840,42 @@ def add_nodeset_topology(
         if node not in up_nodes:
             down_nodes.append(node)
     if down_nodes:
-        bldr.add(default_path, down_nodes)
+        if is_mig_gpu_slice:
+            by_mig: Dict[str, List[str]] = defaultdict(list)
+            for node in down_nodes:
+                by_mig[lkp.node_mig_name(node)].append(node)
+            for mig_name, mig_nodes in by_mig.items():
+                bldr.add([*default_path, mig_name], mig_nodes)
+        else:
+            bldr.add(default_path, down_nodes)
         bldr.summary.down_nodes.update(down_nodes)
+
+def block_base_size_for_cluster(lkp: util.Lookup) -> int:
+    """Return the base block size (VMs per block) for Slurm topology/block.
+
+    Uses ``nodeset_slice_size()`` for static MIG nodesets and ``NVLINK_VM_COUNT``
+    for non-MIG nodesets in block-topology partitions so Slurm blocks stay aligned
+    with the smallest block boundary across all block-topology partitions.
+    """
+    slice_sizes = sorted({
+        lkp.nodeset_slice_size(ns_name)
+        if (lkp.is_nodeset_mig(ns_name) and not lkp.is_tpu_nodeset(ns_name))
+        else NVLINK_VM_COUNT
+        for p in lkp.cfg.partitions.values()
+        if lkp.has_block_topology(p)
+        for ns_name in p.partition_nodeset
+    })
+    if not slice_sizes:
+        return NVLINK_VM_COUNT
+    if len(slice_sizes) > 1:
+        log.warning(
+            f"Multiple block sizes detected across block-topology partitions "
+            f"({slice_sizes}); using smallest ({slice_sizes[0]}) as base block size."
+        )
+    return slice_sizes[0]
 
 def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
     bldr = TopologyBuilder()
-    for ns in lkp.cfg.nodeset_tpu.values():
-        add_tpu_nodeset_topology(ns, bldr, lkp)
     for ns in lkp.cfg.nodeset.values():
         add_nodeset_topology(ns, bldr, lkp)
     return bldr
@@ -914,11 +895,19 @@ def gen_topology_yaml(lkp: util.Lookup) -> Tuple[bool, TopologySummary]:
     topo = gen_topology(lkp).compress()
     yaml_file = lkp.etc_dir / "cloud_topology.yaml"
     block_is_default = any(lkp.has_block_topology(p) for p in lkp.cfg.partitions.values())
+    block_base_size = block_base_size_for_cluster(lkp)
 
     with open(yaml_file, "w") as f:
         f.write(FILE_PREAMBLE)
         f.write("---\n\n")
-        yaml.dump(topo.render_yaml(block_is_default=block_is_default), f, sort_keys=False)
+        yaml.dump(
+            topo.render_yaml(
+                block_is_default=block_is_default,
+                block_base_size=block_base_size,
+            ),
+            f,
+            sort_keys=False,
+        )
 
     if yaml_file.stat().st_size % 4096 == 0:
         with yaml_file.open("a") as f:

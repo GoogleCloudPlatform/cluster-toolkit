@@ -80,9 +80,14 @@ variable "enable_private_ipv6_google_access" {
 }
 
 variable "release_channel" {
-  description = "The release channel of this cluster. Accepted values are `UNSPECIFIED`, `RAPID`, `REGULAR`, `STABLE` and `EXTENDED`. Refer this documentation for more details: https://docs.cloud.google.com/kubernetes-engine/docs/concepts/release-channels#channels"
+  description = "The release channel of this cluster. Accepted values are `RAPID`, `REGULAR`, `STABLE` and `EXTENDED`. `UNSPECIFIED` (no release channel) is still accepted but is deprecated by GKE and is rejected when creating clusters for customers that do not already use it. To hold a cluster on its version while it is enrolled in a channel, use `maintenance_exclusions`. Refer this documentation for more details: https://docs.cloud.google.com/kubernetes-engine/docs/concepts/release-channels#channels"
   type        = string
-  default     = "UNSPECIFIED"
+  default     = "REGULAR"
+
+  validation {
+    condition     = contains(["RAPID", "REGULAR", "STABLE", "EXTENDED", "UNSPECIFIED"], var.release_channel)
+    error_message = "`release_channel` must be one of {RAPID, REGULAR, STABLE, EXTENDED, UNSPECIFIED}. UNSPECIFIED is deprecated by GKE."
+  }
 }
 
 variable "min_master_version" {
@@ -343,7 +348,7 @@ variable "system_node_pool_enable_secure_boot" {
 }
 
 variable "system_node_pool_zones" {
-  description = "The zones to use for the system node pool. If not specified, the cluster default node zone(s) will be used."
+  description = "The zones to use for the system node pool (and candidate zones for cpu-np when enable_pathways_for_tpus is true, filtered by n4-standard-64 availability). If not specified, the cluster default node zone(s) will be used."
   type        = list(string)
   default     = null
 }
@@ -654,7 +659,7 @@ variable "auto_monitoring_scope" {
 }
 
 variable "enable_pathways_for_tpus" {
-  description = "If true, conditionally deploys a dedicated CPU node pool (cpu-np) using n4-standard-64 instances."
+  description = "If true, deploys a dedicated CPU node pool (cpu-np) using n4-standard-64 instances across target zones where n4-standard-64 is available (fails if no target zone supports it or if enable_confidential_nodes is true)."
   type        = bool
   default     = false
 }
