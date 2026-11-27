@@ -106,7 +106,7 @@
     - name: "Run CHS suite"
       ansible.builtin.shell: |
         set -e -u
-        chs run -y --suite {{ chs_suites | default(['standard']) | first }} {{ chs_target }}
+        chs run -y --experimental --suite {{ chs_suites | default(['standard']) | first }} {{ chs_target }}
       register: chs_run
       async: 4500
       poll: 10
