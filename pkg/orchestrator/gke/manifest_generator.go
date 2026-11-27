@@ -730,6 +730,7 @@ func forEachWorkloadObject(manifestContent string, visit func(workloadManifestOb
 					kind:           "JobSet",
 					jobName:        rj.Name,
 					objectMeta:     jsDoc.ObjectMeta,
+					jobLabels:      rj.Template.Labels,
 					jobAnnotations: rj.Template.Annotations,
 					pfp:            rj.Template.Spec.PodFailurePolicy,
 					tmpl:           &rj.Template.Spec.Template,

@@ -528,6 +528,9 @@ func TestTPUSlice_MultiSliceGangAnnotations(t *testing.T) {
 	if js.Labels[k8s.TPUSlicePrefixLabel] != "gang-train" {
 		t.Errorf("multi-slice JobSet label %s = %q, want gang-train", k8s.TPUSlicePrefixLabel, js.Labels[k8s.TPUSlicePrefixLabel])
 	}
+	if jobLabels := js.Spec.ReplicatedJobs[0].Template.Labels; jobLabels[k8s.TPUSliceTypeLabel] != "tpu7x" || jobLabels[k8s.TPUSliceTopologyLabel] != "2x2x1" {
+		t.Errorf("multi-slice replicatedJob template.metadata.labels = %v, want type=tpu7x topology=2x2x1", jobLabels)
+	}
 	podTmpl := js.Spec.ReplicatedJobs[0].Template.Spec.Template
 	if _, hasName := podTmpl.Labels[k8s.TPUSliceNameLabel]; hasName {
 		t.Errorf("multi-slice pod must never emit slice-name: %v", podTmpl.Labels)
@@ -774,6 +777,57 @@ spec:
 {{(StructuralData (.RenderBlock "pod_template" 12))}}`,
 			numSlice: 1,
 			wantSub:  "template.metadata.annotations must not set alpha.jobset.sigs.k8s.io/exclusive-topology",
+		},
+		{
+			name:     "missing_replicated_job_template_labels_on_dynamic_jobset",
+			fileName: "jobset.tmpl",
+			content: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: {{.WorkloadName}}
+  labels:
+{{(StructuralData (.RenderBlock "workload_labels" 4))}}
+spec:
+  replicatedJobs:
+    - name: main-job
+      replicas: {{.NumSlices}}
+      template:
+        spec:
+          completionMode: Indexed
+          parallelism: {{.NodesPerSlice}}
+          completions: {{.NodesPerSlice}}
+          template:
+{{(StructuralData (.RenderBlock "pod_template" 12))}}`,
+			numSlice: 1,
+			wantSub:  "template.metadata.labels is missing required TPU slice label",
+		},
+		{
+			name:     "forbidden_slice_name_on_replicated_job_template_labels",
+			fileName: "jobset.tmpl",
+			content: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: {{.WorkloadName}}
+  labels:
+{{(StructuralData (.RenderBlock "workload_labels" 4))}}
+spec:
+  replicatedJobs:
+    - name: main-job
+      replicas: {{.NumSlices}}
+      template:
+        metadata:
+          labels:
+            tpu.google.com/type: tpu7x
+            tpu.google.com/topology: 2x2x2
+            slice-scheduler.tpu.google.com/slice-name: stolen-slice
+        spec:
+          completionMode: Indexed
+          parallelism: {{.NodesPerSlice}}
+          completions: {{.NodesPerSlice}}
+          template:
+{{(StructuralData (.RenderBlock "pod_template" 12))}}`,
+			numSlice: 1,
+			wantSub:  "template.metadata.labels must not set " + k8s.TPUSliceSchedulerNameLabel,
 		},
 	}
 
@@ -1986,6 +2040,10 @@ spec:
   replicatedJobs:
   - name: main-job
     template:
+      metadata:
+        labels:
+          tpu.google.com/type: tpu7x
+          tpu.google.com/topology: 2x2x1
       spec:
         template:
           metadata:
@@ -2024,8 +2082,8 @@ func TestTPUSlice_MissingTopologyErrorGatingAndMultiSliceHint(t *testing.T) {
 
 	multiOrc, _ := makeTPUSlicePipelineOrchestrator("tpu7x", "tpu7x-standard-4t")
 	multiOrc.inventory.Slices = []k8s.SliceInfo{
-		{Name: "slice-a", TPUType: "tpu7x", ChipsPerNode: 4, Ready: true},
-		{Name: "slice-b", TPUType: "tpu7x", ChipsPerNode: 4, Ready: true},
+		{Name: "slice-a", TPUType: "tpu7x", ChipsPerNode: 4, Topology: "2x2x1", NodesPerSlice: 1, Ready: true},
+		{Name: "slice-b", TPUType: "tpu7x", ChipsPerNode: 4, Topology: "2x2x1", NodesPerSlice: 1, Ready: true},
 	}
 	errMulti := multiOrc.missingTPUSliceTopologyError(&orchestrator.JobDefinition{ComputeType: "tpu7x", NumSlices: 2})
 	if !strings.Contains(errMulti.Error(), k8s.TPUSliceNameLabel+"=slice-a|slice-b") {
@@ -2179,5 +2237,102 @@ func TestTPUSlice_MissingTopologyErrorChipMismatchAndShapeGrouping(t *testing.T)
 	errIncompat := mixedShapes.missingTPUSliceTopologyError(&orchestrator.JobDefinition{ComputeType: "tpu7x", NumSlices: 2})
 	if !strings.Contains(errIncompat.Error(), k8s.TPUSliceNameLabel+"=<slice-1>|<slice-2>") {
 		t.Errorf("incompatible-shape 2-slice err = %q, want placeholder <slice-1>|<slice-2>", errIncompat)
+	}
+
+	mixedShapes.inventory.Slices = []k8s.SliceInfo{
+		{Name: "s-unknown-1", TPUType: "tpu7x", ChipsPerNode: 4, Ready: true},
+		{Name: "s-unknown-2", TPUType: "tpu7x", ChipsPerNode: 4, Ready: true},
+	}
+	errUnknown := mixedShapes.missingTPUSliceTopologyError(&orchestrator.JobDefinition{ComputeType: "tpu7x", NumSlices: 2})
+	if !strings.Contains(errUnknown.Error(), k8s.TPUSliceNameLabel+"=<slice-1>|<slice-2>") {
+		t.Errorf("unknown-shape 2-slice err = %q, want placeholder <slice-1>|<slice-2>", errUnknown)
+	}
+}
+
+func TestTPUSlice_ShorthandPreserves8tWhenInventoryHasUnknownChips(t *testing.T) {
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.mode = orchestrator.TypeK8s
+	orc.addons = addonPlan{resolved: true, jobSetEnabled: true}
+	orc.inventory = &k8s.Inventory{
+		LabelScheme:        k8s.SchemeTPUSlice,
+		TPUSliceAPIPresent: true,
+		TPU:                &k8s.TPUInventory{TPUType: "v6e", MachineType: "", ChipsPerNode: 0},
+	}
+	if got := orc.resolveK8sTPUShorthandFromPools("v6e-8", "ct6e-standard-8t"); got != "ct6e-standard-8t" {
+		t.Errorf("resolveK8sTPUShorthandFromPools(v6e-8, unknown inv chips) = %q, want ct6e-standard-8t", got)
+	}
+}
+
+func TestTPUSlice_RejectsEmptyStringForbiddenLabelsAndAnnotations(t *testing.T) {
+	contract := tpuSliceManifestContract{
+		workloadLabelsYAML: k8s.TPUSlicePrefixLabel + ": dyn-job",
+		podLabelsYAML:      k8s.TPUSliceTypeLabel + ": tpu7x\n" + k8s.TPUSliceTopologyLabel + ": 2x2x1",
+		commPortEnabled:    true,
+		dynamicTPUSlice:    true,
+		schedulerName:      k8s.TPUSliceSchedulerName,
+	}
+	emptySliceNameLabel := `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: dyn-job
+  labels:
+    tpu.google.com/slice-prefix: dyn-job
+    tpu.google.com/slice-name: ""
+spec:
+  replicatedJobs:
+  - name: main-job
+    template:
+      metadata:
+        labels:
+          tpu.google.com/type: tpu7x
+          tpu.google.com/topology: 2x2x1
+      spec:
+        template:
+          metadata:
+            labels:
+              tpu.google.com/type: tpu7x
+              tpu.google.com/topology: 2x2x1
+          spec:
+            schedulerName: slice-scheduler
+            containers:
+            - name: workload-container
+              ports:
+              - containerPort: 8471
+`
+	if err := validateTPUSliceManifest(emptySliceNameLabel, contract, "hint"); err == nil || !strings.Contains(err.Error(), k8s.TPUSliceNameLabel) {
+		t.Errorf("empty-value slice-name label err = %v, want rejection", err)
+	}
+
+	emptyExclusiveAnnot := `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: dyn-job
+  labels:
+    tpu.google.com/slice-prefix: dyn-job
+  annotations:
+    alpha.jobset.sigs.k8s.io/exclusive-topology: ""
+spec:
+  replicatedJobs:
+  - name: main-job
+    template:
+      metadata:
+        labels:
+          tpu.google.com/type: tpu7x
+          tpu.google.com/topology: 2x2x1
+      spec:
+        template:
+          metadata:
+            labels:
+              tpu.google.com/type: tpu7x
+              tpu.google.com/topology: 2x2x1
+          spec:
+            schedulerName: slice-scheduler
+            containers:
+            - name: workload-container
+              ports:
+              - containerPort: 8471
+`
+	if err := validateTPUSliceManifest(emptyExclusiveAnnot, contract, "hint"); err == nil || !strings.Contains(err.Error(), "exclusive-topology") {
+		t.Errorf("empty-value exclusive-topology annotation err = %v, want rejection", err)
 	}
 }

@@ -494,20 +494,47 @@ func validateTPUSliceManifest(manifestContent string, contract tpuSliceManifestC
 		}
 	}
 	return forEachWorkloadObject(manifestContent, func(obj workloadManifestObject) error {
-		prefix := "Job pod template"
-		if obj.kind == "JobSet" {
-			prefix = fmt.Sprintf("replicatedJob %q", obj.jobName)
-		}
-		if err := validateWorkloadTPUSliceLabels(obj.kind, hint, obj.objectMeta.Labels, expectedWorkloadLabels, contract.dynamicTPUSlice); err != nil {
+		return validateTPUSliceWorkloadObject(obj, contract, hint, expectedWorkloadLabels, expectedPodLabels, expectedAnnots)
+	})
+}
+
+func validateTPUSliceWorkloadObject(obj workloadManifestObject, contract tpuSliceManifestContract, hint string, expectedWorkloadLabels, expectedPodLabels, expectedAnnots map[string]string) error {
+	prefix := "Job pod template"
+	if obj.kind == "JobSet" {
+		prefix = fmt.Sprintf("replicatedJob %q", obj.jobName)
+	}
+	if err := validateWorkloadTPUSliceLabels(obj.kind, hint, obj.objectMeta.Labels, expectedWorkloadLabels, contract.dynamicTPUSlice); err != nil {
+		return err
+	}
+	if contract.dynamicTPUSlice {
+		if err := validateDynamicTPUSliceContract(obj, prefix, hint, contract.schedulerName, expectedAnnots); err != nil {
 			return err
 		}
-		if contract.dynamicTPUSlice {
-			if err := validateDynamicTPUSliceContract(obj, prefix, hint, contract.schedulerName, expectedAnnots); err != nil {
-				return err
-			}
+	}
+	if err := validateJobTemplateTPUSliceLabels(obj, prefix, hint, expectedPodLabels, contract.dynamicTPUSlice); err != nil {
+		return err
+	}
+	return validatePodTPUSliceContract(prefix, hint, expectedPodLabels, contract.commPortEnabled, obj.tmpl)
+}
+
+func validateJobTemplateTPUSliceLabels(obj workloadManifestObject, prefix, hint string, expectedLabels map[string]string, dynamicTPUSlice bool) error {
+	if obj.kind != "JobSet" {
+		return nil
+	}
+	for _, forbiddenKey := range []string{k8s.TPUSliceNameLabel, k8s.TPUSliceSchedulerNameLabel, k8s.TPUSlicePrefixLabel, k8s.TPUSliceSchedulerPrefixLabel} {
+		if val, exists := obj.jobLabels[forbiddenKey]; exists {
+			return fmt.Errorf("%s", k8s.AppendHint(fmt.Sprintf("%s template.metadata.labels must not set %s (%q) on tpu-slice workloads", prefix, forbiddenKey, val), hint))
 		}
-		return validatePodTPUSliceContract(prefix, hint, expectedPodLabels, contract.commPortEnabled, obj.tmpl)
-	})
+	}
+	if !dynamicTPUSlice {
+		return nil
+	}
+	for _, k := range slices.Sorted(maps.Keys(expectedLabels)) {
+		if want := expectedLabels[k]; obj.jobLabels[k] != want {
+			return fmt.Errorf("%s", k8s.AppendHint(fmt.Sprintf("%s template.metadata.labels is missing required TPU slice label %s=%q", prefix, k, want), hint))
+		}
+	}
+	return nil
 }
 
 func validateWorkloadTPUSliceLabels(kind, hint string, objectLabels, expected map[string]string, dynamicTPUSlice bool) error {
@@ -517,13 +544,13 @@ func validateWorkloadTPUSliceLabels(kind, hint string, objectLabels, expected ma
 		}
 	}
 	for _, forbiddenKey := range []string{k8s.TPUSliceNameLabel, k8s.TPUSliceSchedulerNameLabel} {
-		if val := strings.TrimSpace(objectLabels[forbiddenKey]); val != "" {
+		if val, exists := objectLabels[forbiddenKey]; exists {
 			return fmt.Errorf("%s", k8s.AppendHint(fmt.Sprintf("%s metadata.labels must not set %s (%q) on tpu-slice workloads", kind, forbiddenKey, val), hint))
 		}
 	}
 	if !dynamicTPUSlice {
 		for _, forbiddenKey := range []string{k8s.TPUSlicePrefixLabel, k8s.TPUSliceSchedulerPrefixLabel} {
-			if val := strings.TrimSpace(objectLabels[forbiddenKey]); val != "" {
+			if val, exists := objectLabels[forbiddenKey]; exists {
 				return fmt.Errorf("%s", k8s.AppendHint(fmt.Sprintf("%s metadata.labels must not set %s (%q) when reusing a static TPU slice", kind, forbiddenKey, val), hint))
 			}
 		}
@@ -554,10 +581,10 @@ func validateNoDynamicExclusiveTopology(kind, prefix, hint string, objectAnnots,
 		return nil
 	}
 	const key = "alpha.jobset.sigs.k8s.io/exclusive-topology"
-	if val := strings.TrimSpace(objectAnnots[key]); val != "" {
+	if val, exists := objectAnnots[key]; exists {
 		return fmt.Errorf("%s", k8s.AppendHint(fmt.Sprintf("JobSet metadata.annotations must not set %s (%q) on dynamically provisioned TPU workloads", key, val), hint))
 	}
-	if val := strings.TrimSpace(jobAnnots[key]); val != "" {
+	if val, exists := jobAnnots[key]; exists {
 		return fmt.Errorf("%s", k8s.AppendHint(fmt.Sprintf("%s template.metadata.annotations must not set %s (%q) on dynamically provisioned TPU workloads", prefix, key, val), hint))
 	}
 	return nil
@@ -582,7 +609,7 @@ func hasPodSliceNameSelector(spec corev1.PodSpec) bool {
 
 func validatePodTPUSliceContract(prefix, hint string, expectedLabels map[string]string, commPortEnabled bool, tmpl *corev1.PodTemplateSpec) error {
 	for _, forbiddenKey := range []string{k8s.TPUSliceNameLabel, k8s.TPUSliceSchedulerNameLabel, k8s.TPUSlicePrefixLabel, k8s.TPUSliceSchedulerPrefixLabel} {
-		if val := strings.TrimSpace(tmpl.Labels[forbiddenKey]); val != "" {
+		if val, exists := tmpl.Labels[forbiddenKey]; exists {
 			return fmt.Errorf("%s", k8s.AppendHint(fmt.Sprintf("%s must not set pod label %s (%q) on tpu-slice workloads", prefix, forbiddenKey, val), hint))
 		}
 	}
@@ -714,61 +741,55 @@ func (g *GKEOrchestrator) waitForOwnedSlicesTeardown(ns, workloadName string) {
 	timeout, interval, sleepFn := g.sliceTeardownConfig()
 	start := time.Now()
 	deadline := start.Add(timeout)
-	var simulatedElapsed, lastLogElapsed time.Duration
-	var lastNamesKey string
-	sawSlices, transientWarned := false, false
+	var simulatedElapsed time.Duration
+	var state sliceTeardownState
 	for {
 		sliceList, err := k8s.ListTPUSlicesByOwner(g.kubeClient, ns, workloadName, defaultTPUHardwareResolver)
 		if err != nil && isFatalSliceTeardownError(workloadName, err) {
 			return
 		}
 		if err == nil && len(sliceList) == 0 {
-			if sawSlices {
+			if state.sawSlices {
 				logging.Info("TPU Slice(s) for job '%s' released successfully.", workloadName)
 			}
 			return
 		}
 		remaining := g.teardownRemaining(deadline, timeout, simulatedElapsed)
-		if err != nil {
-			if !handleTransientSliceTeardownError(workloadName, timeout, remaining, err, &transientWarned) {
-				return
-			}
-		} else {
-			if !logSliceTeardownProgress(sliceList, timeout, remaining, g.teardownElapsed(start, simulatedElapsed), &sawSlices, &lastNamesKey, &lastLogElapsed) {
-				return
-			}
+		if remaining <= 0 {
+			logSliceTeardownTimeout(workloadName, sliceList, timeout, err)
+			return
 		}
+		state.logProgress(workloadName, sliceList, g.teardownElapsed(start, simulatedElapsed), err)
 		step := min(interval, remaining)
 		simulatedElapsed += step
 		sleepFn(step)
 	}
 }
 
-func handleTransientSliceTeardownError(workloadName string, timeout, remaining time.Duration, err error, transientWarned *bool) bool {
-	if remaining <= 0 {
+func logSliceTeardownTimeout(workloadName string, sliceList []k8s.SliceInfo, timeout time.Duration, err error) {
+	if err != nil {
 		logging.Warn("Timed out after %s polling TPU Slice teardown for '%s' (latest error: %v); re-submitting with the same workload name before teardown completes may conflict.", timeout, workloadName, err)
-		return false
+		return
 	}
-	if !*transientWarned {
-		logging.Warn("Transient error polling TPU Slice teardown for '%s' (%v); retrying until timeout.", workloadName, err)
-		*transientWarned = true
-	}
-	return true
+	names := strings.Join(sliceNames(sliceList), ", ")
+	logging.Warn("Timed out after %s waiting for TPU Slice(s) (%s) to be deleted; re-submitting with the same workload name before teardown completes may conflict.", timeout, names)
 }
 
-func logSliceTeardownProgress(sliceList []k8s.SliceInfo, timeout, remaining, elapsed time.Duration, sawSlices *bool, lastNamesKey *string, lastLogElapsed *time.Duration) bool {
+func (s *sliceTeardownState) logProgress(workloadName string, sliceList []k8s.SliceInfo, elapsed time.Duration, err error) {
+	if err != nil {
+		if !s.transientWarned {
+			logging.Warn("Transient error polling TPU Slice teardown for '%s' (%v); retrying until timeout.", workloadName, err)
+			s.transientWarned = true
+		}
+		return
+	}
 	names := strings.Join(sliceNames(sliceList), ", ")
-	if remaining <= 0 {
-		logging.Warn("Timed out after %s waiting for TPU Slice(s) (%s) to be deleted; re-submitting with the same workload name before teardown completes may conflict.", timeout, names)
-		return false
-	}
-	if !*sawSlices || names != *lastNamesKey || elapsed-*lastLogElapsed >= sliceTeardownLogInterval {
+	if !s.sawSlices || names != s.lastNamesKey || elapsed-s.lastLogElapsed >= sliceTeardownLogInterval {
 		logging.Info("Waiting for TPU slice controller to release optical links... (%d slice(s) remaining: %s)", len(sliceList), names)
-		*lastNamesKey = names
-		*lastLogElapsed = elapsed
+		s.lastNamesKey = names
+		s.lastLogElapsed = elapsed
 	}
-	*sawSlices = true
-	return true
+	s.sawSlices = true
 }
 
 func isFatalSliceTeardownError(workloadName string, err error) bool {

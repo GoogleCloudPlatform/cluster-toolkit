@@ -978,7 +978,10 @@ func (g *GKEOrchestrator) resolveTPUShorthandFromInventoryTPU(wantType, normaliz
 	if wantType != "" && !strings.EqualFold(invTPU.TPUType, wantType) {
 		return ""
 	}
-	candidate := cmp.Or(strings.TrimSpace(invTPU.MachineType), defaultTPUHardwareResolver.InferTPUMachine(invTPU.TPUType, "", invTPU.ChipsPerNode))
+	candidate := strings.TrimSpace(invTPU.MachineType)
+	if candidate == "" && invTPU.ChipsPerNode > 0 {
+		candidate = defaultTPUHardwareResolver.InferTPUMachine(invTPU.TPUType, "", invTPU.ChipsPerNode)
+	}
 	if candidate != "" && isCandidateCompatibleForComputeType(normalizedShorthand, candidate) {
 		return candidate
 	}
@@ -1496,7 +1499,7 @@ func (g *GKEOrchestrator) readySliceHintNames(tpuType string, chipsPerNode, limi
 	}
 	groups := make(map[string][]string)
 	for _, s := range g.inventory.Slices {
-		if !sliceMatchesHintCandidate(s, tpuType, chipsPerNode) {
+		if !sliceMatchesHintCandidate(s, tpuType, chipsPerNode) || (s.Topology == "" && s.NodesPerSlice == 0) {
 			continue
 		}
 		key := fmt.Sprintf("%s|%d", strings.ToLower(s.Topology), s.NodesPerSlice)

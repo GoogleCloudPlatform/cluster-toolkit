@@ -874,6 +874,7 @@ type workloadManifestObject struct {
 	kind           string
 	jobName        string
 	objectMeta     metav1.ObjectMeta
+	jobLabels      map[string]string
 	jobAnnotations map[string]string
 	pfp            *batchv1.PodFailurePolicy
 	tmpl           *corev1.PodTemplateSpec
@@ -886,6 +887,13 @@ type tpuSliceManifestContract struct {
 	schedulerName      string
 	dynamicTPUSlice    bool
 	commPortEnabled    bool
+}
+
+type sliceTeardownState struct {
+	sawSlices       bool
+	transientWarned bool
+	lastNamesKey    string
+	lastLogElapsed  time.Duration
 }
 
 // Types for parsing kubectl get nodes -o json
