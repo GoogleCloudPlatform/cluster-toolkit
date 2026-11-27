@@ -35,8 +35,8 @@ locals {
 
   nfs_ports           = ["111", "2049", "20048"]
   create_nfs_firewall = var.create_nfs_firewall_rules && !var.enable_hybrid
-  controller_net_proj = try(data.google_compute_subnetwork.nfs_clients[0].project, null)
-  controller_net_link = try(data.google_compute_subnetwork.nfs_clients[0].network, null)
+  controller_net_proj = length(data.google_compute_subnetwork.nfs_clients) > 0 ? data.google_compute_subnetwork.nfs_clients[0].project : null
+  controller_net_link = length(data.google_compute_subnetwork.nfs_clients) > 0 ? data.google_compute_subnetwork.nfs_clients[0].network : null
   controller_net_tag  = "${local.slurm_cluster_name}-controller"
 }
 
