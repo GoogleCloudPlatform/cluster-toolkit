@@ -746,12 +746,34 @@ func (c *ConditionalValidator) Validate(
 		return config.BpError{Err: fmt.Errorf("validation rule for module %q is missing 'dependent'", mod.ID), Path: modPath}
 	}
 
+	depExpectedRawVal, isDepExpectedGiven := rule.Inputs["dependent_value"]
+	dependentExpectedVal := convertToCty(depExpectedRawVal)
+
 	dependentVal, _, err := getModuleSettingValues(bp, group, modIdx, mod, dependentName)
 	if err != nil {
 		dependentVal = []cty.Value{cty.NilVal}
+		if isDepExpectedGiven {
+			if info, infoErr := mod.Info(); infoErr == nil {
+				parts := strings.Split(dependentName, ".")
+				for _, input := range info.Inputs {
+					if input.Name == parts[0] && input.Default != nil {
+						defVal := convertToCty(input.Default)
+						for _, p := range parts[1:] {
+							if defVal == cty.NilVal || !defVal.IsKnown() || defVal.IsNull() || !defVal.Type().IsObjectType() || !defVal.Type().HasAttribute(p) {
+								defVal = cty.NilVal
+								break
+							}
+							defVal = defVal.GetAttr(p)
+						}
+						if defVal != cty.NilVal {
+							dependentVal = evaluateAndFlatten(defVal)
+						}
+						break
+					}
+				}
+			}
+		}
 	}
-	depExpectedRawVal, isDepExpectedGiven := rule.Inputs["dependent_value"]
-	dependentExpectedVal := convertToCty(depExpectedRawVal)
 
 	depPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Settings.Dot(dependentName)
 

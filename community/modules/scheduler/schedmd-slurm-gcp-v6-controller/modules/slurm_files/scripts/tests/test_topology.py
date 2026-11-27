@@ -573,3 +573,51 @@ def test_gen_topology_yaml_mig_slice_blocks_and_block_sizes(tmp_path):
     lkp_mixed = util.Lookup(cfg_mixed)
     with mock.patch.object(lkp_mixed, "is_tpu_nodeset", return_value=False):
         assert conf.block_base_size_for_cluster(lkp_mixed) == 18
+
+    # 5. Colliding 7-char nodeset prefixes + >32 slices produce unique phantom block names
+    #    and pad each block group to a multiple of BLOCK_SIZE (32).
+    out_large = tmp_path / "clarge"
+    out_large.mkdir()
+    cfg_large = TstCfg(
+        slurm_cluster_name="cl",
+        nodeset={
+            "a4x_slice_a": TstNodeset(
+                nodeset_name="a4x_slice_a",
+                node_count_static=33 * 18,
+                node_count_dynamic_max=0,
+                provisioning_engine="MIG",
+                accelerator_topology="1x72",
+                slice_size=18,
+                reservation_name="",
+            ),
+            "a4x_slice_b": TstNodeset(
+                nodeset_name="a4x_slice_b",
+                node_count_static=18,
+                node_count_dynamic_max=0,
+                provisioning_engine="MIG",
+                accelerator_topology="1x72",
+                slice_size=18,
+                reservation_name="",
+            ),
+        },
+        partitions={
+            "gpu": TstPartition(
+                partition_name="gpu",
+                partition_nodeset=["a4x_slice_a", "a4x_slice_b"],
+            ),
+        },
+        output_dir=str(out_large),
+    )
+    lkp_large = util.Lookup(cfg_large)
+    with (
+        mock.patch.object(lkp_large, "instances", return_value={}),
+        mock.patch.object(lkp_large, "is_tpu_nodeset", return_value=False),
+    ):
+        conf.gen_topology_yaml(lkp_large)
+    parsed_large = yaml.safe_load((out_large / "cloud_topology.yaml").read_text())
+    by_topo_large = {entry["topology"]: entry for entry in parsed_large}
+    large_blocks = by_topo_large["topology/block"]["block"]["blocks"]
+    block_names = [b["block"] for b in large_blocks]
+    # 33 slices padded to 64 + 1 slice padded to 32 = 96 total blocks, all unique names
+    assert len(large_blocks) == 96
+    assert len(set(block_names)) == len(block_names)

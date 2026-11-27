@@ -714,17 +714,25 @@ class TopologyBuilder:
         """Renders the blocks/phantom block in yaml format."""
 
         blocks = []
-        for block_group_name, nvld_blocks in self._b.items():
+        used_prefixes: Set[str] = set()
+        for idx, (block_group_name, nvld_blocks) in enumerate(self._b.items()):
             num_blocks = len(nvld_blocks.values())
             for nvld in nvld_blocks.values():
                 blocks.append(nvld.render_yaml_block())
-            
-            if len(self._b) > 1:  # Only create phantom blocks for multi-block_group clusters
-                for phantom in range(num_blocks, BLOCK_SIZE):
+
+            if len(self._b) > 1 and num_blocks > 0:  # Only create phantom blocks for multi-block_group clusters
+                prefix = block_group_name[:10]
+                salt = idx
+                while prefix in used_prefixes:
+                    prefix = f"{block_group_name[:7]}-{salt}"
+                    salt += 1
+                used_prefixes.add(prefix)
+                target_blocks = ((num_blocks + BLOCK_SIZE - 1) // BLOCK_SIZE) * BLOCK_SIZE
+                for phantom in range(num_blocks, target_blocks):
                     blocks.append({
-                        "block": f"{block_group_name[:10]}-p{phantom}",
+                        "block": f"{prefix}-p{phantom}",
                         "nodes": ""
-                })
+                    })
         return blocks
 
     def render_yaml(
@@ -805,7 +813,8 @@ def add_nodeset_topology(
     is_mig_gpu_slice = (
         lkp.is_nodeset_mig(nodeset.nodeset_name)
         and not lkp.is_tpu_nodeset(nodeset.nodeset_name)
-        and bool(nodeset.accelerator_topology)
+        and isinstance(nodeset.accelerator_topology, str)
+        and bool(lkp._GPU_TOPOLOGY_NORMALIZED_RE.match(nodeset.accelerator_topology))
     )
 
     for inst in lkp.instances().values():

@@ -1554,6 +1554,24 @@ func TestInstanceFlexibilityPolicy_AutoAndMigValidators(t *testing.T) {
 	if err := condVal.Validate(bpPlace, bpPlace.Groups[0].Modules[0], placementRule, bpPlace.Groups[0], 0); err == nil {
 		t.Fatalf("expected error for instance_flexibility_policy with enable_placement=true, got nil")
 	}
+
+	// Omitted node_count_dynamic_max (defaults to 10 in module inputs) -> rejected
+	bpOmitDyn := mkBP(map[string]cty.Value{
+		"instance_flexibility_policy": flexVal,
+		"enable_placement":            cty.False,
+	})
+	if err := condVal.Validate(bpOmitDyn, bpOmitDyn.Groups[0].Modules[0], dynRule, bpOmitDyn.Groups[0], 0); err == nil {
+		t.Fatalf("expected error for instance_flexibility_policy with omitted node_count_dynamic_max (default 10), got nil")
+	}
+
+	// Omitted enable_placement (defaults to true in module inputs) -> rejected
+	bpOmitPlace := mkBP(map[string]cty.Value{
+		"instance_flexibility_policy": flexVal,
+		"node_count_dynamic_max":      cty.NumberIntVal(0),
+	})
+	if err := condVal.Validate(bpOmitPlace, bpOmitPlace.Groups[0].Modules[0], placementRule, bpOmitPlace.Groups[0], 0); err == nil {
+		t.Fatalf("expected error for instance_flexibility_policy with omitted enable_placement (default true), got nil")
+	}
 }
 
 func TestModuleMetadataRules_SlurmNodeset(t *testing.T) {
@@ -1587,6 +1605,36 @@ func TestModuleMetadataRules_SlurmNodeset(t *testing.T) {
 				"instance_flexibility_policy": flexVal,
 			},
 			wantErr: false,
+		},
+		{
+			name: "omitted node_count_dynamic_max with instance_flexibility_policy fails via module default",
+			settings: map[string]cty.Value{
+				"machine_type":                cty.StringVal("n2-standard-4"),
+				"node_count_static":           cty.NumberIntVal(2),
+				"enable_placement":            cty.False,
+				"instance_flexibility_policy": flexVal,
+			},
+			wantErr: true,
+		},
+		{
+			name: "omitted enable_placement with instance_flexibility_policy fails via module default",
+			settings: map[string]cty.Value{
+				"machine_type":                cty.StringVal("n2-standard-4"),
+				"node_count_static":           cty.NumberIntVal(2),
+				"node_count_dynamic_max":      cty.NumberIntVal(0),
+				"instance_flexibility_policy": flexVal,
+			},
+			wantErr: true,
+		},
+		{
+			name: "explicit MIG with omitted node_count_dynamic_max fails via module default",
+			settings: map[string]cty.Value{
+				"machine_type":        cty.StringVal("n2-standard-4"),
+				"provisioning_engine": cty.StringVal("MIG"),
+				"node_count_static":   cty.NumberIntVal(2),
+				"enable_placement":    cty.False,
+			},
+			wantErr: true,
 		},
 		{
 			name: "explicit MIG with instance_flexibility_policy passes",
