@@ -181,6 +181,33 @@ ghpc:
   - validator: conditional_regex
     inputs:
       triggers:
+        future_reservation: null
+        dws_flex.enabled: false
+      dependent: provisioning_engine
+      pattern: "^MIG$"
+      match_expected: false
+    error_message: "future_reservation is not supported with provisioning_engine = 'MIG'. Use 'BULK_INSERT' or 'AUTO'."
+  - validator: conditional_regex
+    inputs:
+      triggers:
+        maintenance_interval: null
+        dws_flex.enabled: false
+      dependent: provisioning_engine
+      pattern: "^MIG$"
+      match_expected: false
+    error_message: "maintenance_interval is not supported with provisioning_engine = 'MIG'. Use 'BULK_INSERT' or 'AUTO'."
+  - validator: conditional_regex
+    inputs:
+      triggers:
+        instance_properties: null
+        dws_flex.enabled: false
+      dependent: provisioning_engine
+      pattern: "^MIG$"
+      match_expected: false
+    error_message: "instance_properties is not supported with provisioning_engine = 'MIG'. Use 'BULK_INSERT' or 'AUTO'."
+  - validator: conditional_regex
+    inputs:
+      triggers:
         enable_multinic: true
       dependent: machine_type
       pattern: "^a3-(high|mega)gpu-"

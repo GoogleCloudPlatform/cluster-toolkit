@@ -43,7 +43,7 @@ No providers.
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../../../modules/management/kubectl-apply | n/a |
+| <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../kubectl-apply | n/a |
 
 ## Resources
 

@@ -58,7 +58,7 @@ locals {
 }
 
 module "kubectl_apply" {
-  source = "../../../../modules/management/kubectl-apply"
+  source = "../kubectl-apply"
 
   module_id              = var.module_id
   cluster_id             = var.cluster_id

@@ -821,3 +821,209 @@ def test_slurmsync_verifying_refreshing_and_live_standalone_creating_collision(m
             assert isinstance(
                 slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionUnchanged
             )
+
+
+@mock.patch("slurmsync.lookup")
+def test_slurmsync_creating_standalone_collision_allows_orphan_cleanup(mock_lookup):
+    """Orphan CREATING* standalone collisions must still reach NodeActionDelete() when
+    state is None or POWERED_DOWN, while POWERING_DOWN/POWER_DOWN remain safe no-ops."""
+    from datetime import timedelta
+
+    lkp, mock_compute = _make_lookup([
+        {
+            "name": "testcl-ns-0",
+            "currentAction": "CREATING",
+            "lastAttempt": {
+                "errors": {"errors": [{"code": "RESOURCE_ALREADY_EXISTS", "message": "exists"}]}
+            },
+        },
+        {
+            "name": "testcl-ns-1",
+            "currentAction": "CREATING_WITHOUT_RETRIES",
+            "lastAttempt": {
+                "errors": {"errors": [{"code": "RESOURCE_ALREADY_EXISTS", "message": "exists"}]}
+            },
+        },
+    ])
+    mock_lookup.return_value = lkp
+    old_ts = util.now() - timedelta(minutes=10)
+    fresh_ts = util.now() - timedelta(seconds=10)
+    old_standalone_0 = _make_instance("testcl-ns-0", status="RUNNING", metadata={})
+    old_standalone_0 = util.Instance(
+        name=old_standalone_0.name, zone=old_standalone_0.zone, status="RUNNING",
+        creation_timestamp=old_ts, role="compute",
+        resource_status=old_standalone_0.resource_status, metadata={},
+        scheduling=old_standalone_0.scheduling,
+    )
+    old_standalone_1 = util.Instance(
+        name="testcl-ns-1", zone=old_standalone_0.zone, status="RUNNING",
+        creation_timestamp=old_ts, role="compute",
+        resource_status=old_standalone_0.resource_status, metadata={},
+        scheduling=old_standalone_0.scheduling,
+    )
+    fresh_standalone_0 = util.Instance(
+        name="testcl-ns-0", zone=old_standalone_0.zone, status="RUNNING",
+        creation_timestamp=fresh_ts, role="compute",
+        resource_status=old_standalone_0.resource_status, metadata={},
+        scheduling=old_standalone_0.scheduling,
+    )
+
+    # Removed from Slurm (state=None) and POWERED_DOWN (idle~/down~) -> orphan cleanup NodeActionDelete
+    for node_state in (
+        None,
+        slurmsync.NodeState(base="IDLE", flags=frozenset(("POWERED_DOWN",))),
+        slurmsync.NodeState(base="DOWN", flags=frozenset(("POWERED_DOWN",))),
+    ):
+        with (
+            mock.patch.object(
+                util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mock_compute
+            ),
+            mock.patch.object(
+                util.Lookup,
+                "instances",
+                return_value={"testcl-ns-0": old_standalone_0, "testcl-ns-1": old_standalone_1},
+            ),
+            mock.patch.object(util.Lookup, "node_state", return_value=node_state),
+        ):
+            assert isinstance(slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionDelete)
+            assert isinstance(slurmsync.get_node_action("testcl-ns-1"), slurmsync.NodeActionDelete)
+
+    # POWERING_DOWN / POWER_DOWN -> safe no-op (suspend already in progress)
+    for node_state in (
+        slurmsync.NodeState(base="IDLE", flags=frozenset(("POWERING_DOWN",))),
+        slurmsync.NodeState(base="IDLE", flags=frozenset(("POWER_DOWN",))),
+    ):
+        with (
+            mock.patch.object(
+                util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mock_compute
+            ),
+            mock.patch.object(
+                util.Lookup, "instances", return_value={"testcl-ns-0": old_standalone_0}
+            ),
+            mock.patch.object(util.Lookup, "node_state", return_value=node_state),
+        ):
+            assert isinstance(slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionUnchanged)
+
+    # Fresh standalone VM (<90s) with state=None still respects orphan age threshold
+    with (
+        mock.patch.object(
+            util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mock_compute
+        ),
+        mock.patch.object(
+            util.Lookup, "instances", return_value={"testcl-ns-0": fresh_standalone_0}
+        ),
+        mock.patch.object(util.Lookup, "node_state", return_value=None),
+    ):
+        assert isinstance(slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionUnchanged)
+
+
+@mock.patch("slurmsync.get_node_reason")
+@mock.patch("slurmsync.lookup")
+def test_slurmsync_preserves_mig_unsupported_reservation_down_reason(
+    mock_lookup, mock_get_reason
+):
+    """Static MIG nodes marked DOWN for an unsupported reservation must not be
+    power-cycled by slurmsync, but should auto-recover once reconfigured away
+    from MIG or without reservation_name."""
+    down_state = slurmsync.NodeState(base="DOWN", flags=frozenset())
+    down_nr_state = slurmsync.NodeState(base="DOWN", flags=frozenset(("NOT_RESPONDING",)))
+    unsupported_reason = (
+        f"{util.MIG_UNSUPPORTED_RESERVATION_PREFIX} my-dense-res "
+        "(DENSE deployment requires RESERVATION_BOUND); use provisioning_engine = BULK_INSERT or AUTO"
+    )
+
+    def _make_res_lookup(engine: str = "MIG", reservation_name: str = "my-dense-res"):
+        cfg = TstCfg(
+            slurm_cluster_name="testcl",
+            project="testproj",
+            nodeset={
+                "ns": TstNodeset(
+                    nodeset_name="ns",
+                    region="us-central1",
+                    provisioning_engine=engine,
+                    node_count_static=4,
+                    node_count_dynamic_max=0,
+                    reservation_name=reservation_name,
+                ),
+            },
+        )
+        lkp = util.Lookup(cfg)
+        mc = mock.MagicMock()
+        mc.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+            "managedInstances": [],
+        }
+        return lkp, mc
+
+    # 1. MIG + reservation_name + unsupported reason -> stays DOWN (no power_down loop)
+    lkp_mig, mc_mig = _make_res_lookup(engine="MIG", reservation_name="my-dense-res")
+    mock_lookup.return_value = lkp_mig
+    mock_get_reason.return_value = unsupported_reason
+    for state in (down_state, down_nr_state):
+        with (
+            mock.patch.object(
+                util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mc_mig
+            ),
+            mock.patch.object(util.Lookup, "instances", return_value={}),
+            mock.patch.object(util.Lookup, "node_state", return_value=state),
+        ):
+            assert isinstance(
+                slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionUnchanged
+            )
+
+    # 2. Same MIG + reservation_name, but transient/other DOWN reason -> normal power_down
+    mock_get_reason.return_value = "Unbacked instance"
+    with (
+        mock.patch.object(
+            util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mc_mig
+        ),
+        mock.patch.object(util.Lookup, "instances", return_value={}),
+        mock.patch.object(util.Lookup, "node_state", return_value=down_state),
+    ):
+        assert isinstance(
+            slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionPowerDown
+        )
+
+    # 3. Reconfigured to BULK_INSERT -> auto-recovers via NodeActionPowerDown (no get_node_reason call)
+    lkp_bi, _ = _make_res_lookup(engine="BULK_INSERT", reservation_name="my-dense-res")
+    mock_lookup.return_value = lkp_bi
+    mock_get_reason.reset_mock()
+    mock_get_reason.return_value = unsupported_reason
+    with (
+        mock.patch.object(util.Lookup, "instances", return_value={}),
+        mock.patch.object(util.Lookup, "node_state", return_value=down_state),
+    ):
+        assert isinstance(
+            slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionPowerDown
+        )
+    mock_get_reason.assert_not_called()
+
+    # 4. Reconfigured on MIG with reservation_name cleared -> auto-recovers (no get_node_reason call)
+    lkp_nores, mc_nores = _make_res_lookup(engine="MIG", reservation_name="")
+    mock_lookup.return_value = lkp_nores
+    mock_get_reason.reset_mock()
+    mock_get_reason.return_value = unsupported_reason
+    with (
+        mock.patch.object(
+            util.Lookup, "compute", new_callable=mock.PropertyMock, return_value=mc_nores
+        ),
+        mock.patch.object(util.Lookup, "instances", return_value={}),
+        mock.patch.object(util.Lookup, "node_state", return_value=down_state),
+    ):
+        assert isinstance(
+            slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionPowerDown
+        )
+    mock_get_reason.assert_not_called()
+
+    # 5. TPU node -> not blocked by static-MIG guard (no get_node_reason call)
+    mock_lookup.return_value = lkp_mig
+    mock_get_reason.reset_mock()
+    mock_get_reason.return_value = unsupported_reason
+    with (
+        mock.patch.object(util.Lookup, "is_tpu_node", return_value=True),
+        mock.patch.object(util.Lookup, "instances", return_value={}),
+        mock.patch.object(util.Lookup, "node_state", return_value=down_state),
+    ):
+        assert isinstance(
+            slurmsync.get_node_action("testcl-ns-0"), slurmsync.NodeActionPowerDown
+        )
+    mock_get_reason.assert_not_called()

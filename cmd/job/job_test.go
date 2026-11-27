@@ -15,7 +15,6 @@
 package job
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
@@ -23,7 +22,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -145,10 +146,14 @@ func assertTypeK8sDispatchedTargets(t *testing.T, mockOrc *mockOrchestrator, got
 func TestJobCmd_RealRegistryWiringOnList(t *testing.T) {
 	setupSubmitTestEnv(t)
 	var apiHits atomic.Int32
-	var gotPath, gotAuth atomic.Value
+	var pathsMu sync.Mutex
+	var gotPaths []string
+	var gotAuth atomic.Value
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		apiHits.Add(1)
-		gotPath.Store(r.URL.Path)
+		pathsMu.Lock()
+		gotPaths = append(gotPaths, r.URL.Path)
+		pathsMu.Unlock()
 		gotAuth.Store(r.Header.Get("Authorization"))
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"apiVersion":"jobset.x-k8s.io/v1alpha2","kind":"JobSetList","items":[]}`))
@@ -172,109 +177,98 @@ func TestJobCmd_RealRegistryWiringOnList(t *testing.T) {
 	if _, err := executeCommand(JobCmd, "list", "--cluster", "onprem-k8s"); err != nil {
 		t.Fatalf("executeCommand(list --cluster onprem-k8s) via real provider registry error = %v, want nil", err)
 	}
-	if got := apiHits.Load(); got != 1 {
-		t.Errorf("JobSet API list hits = %d, want 1", got)
+	if got := apiHits.Load(); got != 2 {
+		t.Errorf("API list hits = %d, want 2 (JobSets + standalone batch/v1 Jobs)", got)
 	}
-	if p, _ := gotPath.Load().(string); p != "/apis/jobset.x-k8s.io/v1alpha2/namespaces/ml-team/jobsets" {
-		t.Errorf("request path = %q, want /apis/jobset.x-k8s.io/v1alpha2/namespaces/ml-team/jobsets", p)
+	wantPaths := []string{
+		"/apis/jobset.x-k8s.io/v1alpha2/namespaces/ml-team/jobsets",
+		"/apis/batch/v1/namespaces/ml-team/jobs",
+	}
+	pathsMu.Lock()
+	gotPathsCopy := slices.Clone(gotPaths)
+	pathsMu.Unlock()
+	if !slices.Equal(gotPathsCopy, wantPaths) {
+		t.Errorf("request paths = %v, want %v", gotPathsCopy, wantPaths)
 	}
 	if a, _ := gotAuth.Load().(string); a != "Bearer sa-jwt" {
 		t.Errorf("Authorization header = %q, want \"Bearer sa-jwt\"", a)
 	}
 }
 
-func TestJobCmd_TypeK8sSubmitFastFailsBeforePrereqsAndLookup(t *testing.T) {
-	tests := []struct {
-		name        string
-		emptyConfig bool
-		envOverride string
-		args        func(t *testing.T) []string
-	}{
-		{
-			name: "prebuilt_image_submit_rejected_in_k8s_mode",
-			args: func(*testing.T) []string {
-				return []string{
-					"submit",
-					"--name", "k8s-prebuilt",
-					"--image", "10.128.0.68:5000/jax:v5p",
-					"--command", "python3 train.py",
-					"--compute-type", "v5p-8",
-				}
-			},
-		},
-		{
-			name: "build_context_submit_rejected_before_submit_prerun",
-			args: func(t *testing.T) []string {
-				return []string{
-					"submit",
-					"--cluster", "k8s-local",
-					"--name", "k8s-build",
-					"--base-image", "python:3.11-slim",
-					"--build-context", t.TempDir(),
-					"--command", "python3 train.py",
-					"--compute-type", "n2-standard-4",
-				}
-			},
-		},
-		{
-			name:        "forced_k8s_build_context_with_project_and_location_rejected_before_submit_prerun",
-			envOverride: "k8s",
-			args: func(t *testing.T) []string {
-				return []string{
-					"submit",
-					"--cluster", "k8s-local",
-					"--project", "ar-proj",
-					"--location", "us-central1",
-					"--name", "k8s-build",
-					"--base-image", "python:3.11-slim",
-					"--build-context", t.TempDir(),
-					"--command", "python3 train.py",
-					"--compute-type", "n2-standard-4",
-				}
-			},
-		},
-		{
-			name:        "forced_k8s_env_on_empty_kubeconfig_rejects_submit",
-			emptyConfig: true,
-			envOverride: "k8s",
-			args: func(*testing.T) []string {
-				return []string{
-					"submit",
-					"--name", "k8s-forced",
-					"--image", "busybox",
-					"--command", "echo hi",
-					"--compute-type", "n2-standard-4",
-				}
-			},
-		},
+func TestJobCmd_TypeK8sSubmitDispatchesAndValidatesFlags(t *testing.T) {
+	t.Run("prebuilt_image_submit_dispatches_in_k8s_mode_without_gcloud", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		t.Setenv("KUBECONFIG", writeTestKubeconfigFile(t, "admin@k8s-local", "k8s-local", "https://10.128.0.68:6443"))
+		useFileStore(t)
+		executed := stubUnexpectedSubprocesses(t, true)
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--name", "k8s-prebuilt",
+			"--image", "10.128.0.68:5000/jax:v5p",
+			"--command", "python3 train.py",
+		)
+		if err != nil {
+			t.Fatalf("executeCommand(TypeK8s submit) err = %v, want nil", err)
+		}
+		gotJob := mockOrc.SubmittedJob
+		wantSummary := "k8s-local|k8s-prebuilt|"
+		gotSummary := strings.Join([]string{gotJob.ClusterName, gotJob.WorkloadName, gotJob.ComputeType}, "|")
+		if gotSummary != wantSummary {
+			t.Errorf("SubmitJob received %q, want %q", gotSummary, wantSummary)
+		}
+		if len(*executed) != 1 || !strings.HasPrefix((*executed)[0], "kubectl version") {
+			t.Errorf("executed subprocesses = %v, want only kubectl version prereq check", *executed)
+		}
+	})
+
+	t.Run("gke_submit_still_requires_compute_type_after_k8s_submit", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		useFileStore(t)
+		stubUnexpectedSubprocesses(t, false)
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+
+		_, err := executeCommand(JobCmd,
+			"submit",
+			"--cluster", "gke-clus",
+			"--location", "us-central1",
+			"--project", "my-proj",
+			"--skip-prereqs",
+			"--name", "gke-no-compute",
+			"--image", "busybox",
+			"--command", "echo hi",
+		)
+		if err == nil || !strings.Contains(err.Error(), `required flag(s) "compute-type" not set`) {
+			t.Fatalf("executeCommand(TypeGKE submit without --compute-type) err = %v, want missing compute-type error", err)
+		}
+		if mockOrc.SubmittedJob.WorkloadName != "" {
+			t.Errorf("SubmitJob must not run when --compute-type is omitted in TypeGKE mode")
+		}
+	})
+}
+
+func TestJobCmd_ForcedK8sEnvOnEmptyKubeconfigReportsMissingContext(t *testing.T) {
+	setupSubmitTestEnv(t)
+	t.Setenv(orchestrator.EnvVar, "k8s")
+	useFileStore(t)
+	executed := stubUnexpectedSubprocesses(t, false)
+	gkeOrchestratorFactory = nil
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "k8s-forced",
+		"--image", "busybox",
+		"--command", "echo hi",
+		"--compute-type", "n2-standard-4",
+	)
+	if err == nil || !strings.Contains(err.Error(), "no current-context set in kubeconfig") {
+		t.Fatalf("executeCommand(forced k8s submit on empty kubeconfig) err = %v, want missing current-context error", err)
 	}
-
-	wantErr := orchestrator.UnsupportedK8sSubmitError().Error()
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			setupSubmitTestEnv(t)
-			if !tc.emptyConfig {
-				t.Setenv("KUBECONFIG", writeTestKubeconfigFile(t, "admin@k8s-local", "k8s-local", "https://10.128.0.68:6443"))
-			}
-			if tc.envOverride != "" {
-				t.Setenv(orchestrator.EnvVar, tc.envOverride)
-			}
-			useFileStore(t)
-			executed := stubUnexpectedSubprocesses(t, false)
-			lookupArtifactRegistryRepos = func(context.Context, string, string) ([]string, bool) {
-				t.Errorf("lookupArtifactRegistryRepos must not run when submit is rejected in TypeK8s mode")
-				return nil, false
-			}
-			gkeOrchestratorFactory = nil
-
-			_, err := executeCommand(JobCmd, tc.args(t)...)
-			if err == nil || err.Error() != wantErr {
-				t.Fatalf("executeCommand(submit) err = %v, want %q", err, wantErr)
-			}
-			if len(*executed) != 0 {
-				t.Errorf("executed subprocesses = %v, want 0", *executed)
-			}
-		})
+	if len(*executed) != 0 {
+		t.Errorf("executed subprocesses = %v, want 0", *executed)
 	}
 }
 
@@ -322,13 +316,12 @@ func TestJobCmd_MissingContextAndRequiredGKEFlags(t *testing.T) {
 			wantSubstr: []string{`"unknown-ctx"`, "--location and --project"},
 		},
 		{
-			name:       "fresh_workstation_submit_missing_flags_reports_gke_required_flags",
+			name:       "fresh_workstation_submit_missing_flags_reports_missing_context_or_gke_flags",
 			args:       []string{"submit", "--name", "j1", "--image", "busybox", "--command", "echo hi", "--compute-type", "n2-standard-4"},
-			wantSubstr: []string{"cluster name is required"},
-			forbid:     "not yet supported",
+			wantSubstr: []string{"no kubeconfig context found and no GKE flags provided"},
 		},
 		{
-			name: "gke_context_missing_flags_on_submit_omits_k8s_override_hint",
+			name: "gke_context_missing_flags_on_submit_mentions_k8s_override_hint",
 			cfg: func() *clientcmdapi.Config {
 				c := clientcmdapi.NewConfig()
 				c.Clusters["gke_my-proj_us-central1_existing"] = &clientcmdapi.Cluster{Server: "https://34.118.224.10"}
@@ -341,8 +334,7 @@ func TestJobCmd_MissingContextAndRequiredGKEFlags(t *testing.T) {
 				return c
 			},
 			args:       []string{"submit", "--cluster", "gke_my-proj_us-central1_existing", "--name", "j1", "--image", "busybox", "--command", "echo hi", "--compute-type", "n2-standard-4"},
-			wantSubstr: []string{"location is required"},
-			forbid:     "GCLUSTER_ORCHESTRATOR=k8s",
+			wantSubstr: []string{"location is required", "GCLUSTER_ORCHESTRATOR=k8s"},
 		},
 		{
 			name:        "forced_gke_mode_missing_flags_omits_k8s_override_hint",
@@ -486,8 +478,8 @@ func assertNonGKECurrentContextDoesNotMaskMissingCluster(t *testing.T) {
 
 	setupSubmitTestEnv(t)
 	t.Setenv("KUBECONFIG", writeTestKubeconfigFile(t, "kind-kind", "kind-kind", "https://127.0.0.1:6443"))
-	if _, err := executeCommand(JobCmd, "submit", "--project", "my-proj", "--location", "us-central1", "--name", "j1", "--image", "busybox", "--command", "echo hi", "--compute-type", "n2-standard-4"); err == nil || !strings.Contains(err.Error(), "cluster name is required") || strings.Contains(err.Error(), "not yet supported") {
-		t.Fatalf("executeCommand(submit -p -l with non-GKE current-context) err = %v, want 'cluster name is required' (not UnsupportedK8sSubmitError)", err)
+	if _, err := executeCommand(JobCmd, "submit", "--project", "my-proj", "--location", "us-central1", "--name", "j1", "--image", "busybox", "--command", "echo hi", "--compute-type", "n2-standard-4"); err == nil || !strings.Contains(err.Error(), "cluster name is required") {
+		t.Fatalf("executeCommand(submit -p -l with non-GKE current-context) err = %v, want 'cluster name is required'", err)
 	}
 
 	// Forced GCLUSTER_ORCHESTRATOR=k8s with --project and no --cluster uses current-context without requiring --cluster.
@@ -867,16 +859,14 @@ func TestJobCmd_ExplicitEmptyClusterFlagRejected(t *testing.T) {
 			name:       "empty_cluster_on_submit",
 			cfg:        k8sCfg,
 			args:       []string{"submit", "--cluster", "", "--name", "j1", "--image", "busybox", "--command", "echo hi", "--compute-type", "n2-standard-4"},
-			wantSubstr: []string{"cluster name is required"},
-			forbid:     "omit --cluster to use kubeconfig current-context",
+			wantSubstr: []string{"cluster name is required when --cluster is set", "omit --cluster to use kubeconfig current-context"},
 		},
 		{
 			name:        "empty_cluster_on_forced_k8s_submit",
 			envOverride: "k8s",
 			cfg:         k8sCfg,
 			args:        []string{"submit", "--cluster", "", "--name", "j1", "--image", "busybox", "--command", "echo hi", "--compute-type", "n2-standard-4"},
-			wantSubstr:  []string{"not yet supported in Kubernetes (k8s) mode"},
-			forbid:      "omit --cluster to use kubeconfig current-context",
+			wantSubstr:  []string{"cluster name is required when --cluster is set", "omit --cluster to use kubeconfig current-context"},
 		},
 	}
 
@@ -1026,7 +1016,7 @@ func assertBareOnPremProdRoutesToGKE(t *testing.T) {
 	}
 
 	assertExplicitSavedClusterFlagRoutesToGKE(t, onPremSrv.URL, gkeSrv.URL, caPEM, caB64, onPremHits, gkeDeletes)
-	assertSubmitWithCollidingBareProdRoutesToGKE(t, onPremSrv.URL, onPremHits)
+	assertSubmitWithCollidingBareProdRouting(t, onPremSrv.URL, onPremHits)
 	assertExplicitGKEContextAndLoadErrWithSavedGKE(t)
 }
 
@@ -1058,7 +1048,7 @@ func assertExplicitSavedClusterFlagRoutesToGKE(t *testing.T, onPremURL, gkeURL s
 	t.Setenv("GCLUSTER_REFRESH_CREDENTIALS", "")
 }
 
-func assertSubmitWithCollidingBareProdRoutesToGKE(t *testing.T, onPremURL string, onPremHits *atomic.Int32) {
+func assertSubmitWithCollidingBareProdRouting(t *testing.T, onPremURL string, onPremHits *atomic.Int32) {
 	t.Helper()
 	for _, tc := range []struct {
 		workload   string
@@ -1066,24 +1056,34 @@ func assertSubmitWithCollidingBareProdRoutesToGKE(t *testing.T, onPremURL string
 		refreshEnv string
 		savedCtx   Context
 		args       []string
+		wantLoc    string
+		wantProj   string
+		wantType   orchestrator.Type
 	}{
 		{
 			workload: "j1",
 			ctxName:  "prod",
 			savedCtx: Context{ProjectID: "my-proj", Location: "us-central1", ClusterName: "prod"},
 			args:     []string{"submit", "-c", "prod", "-l", "us-central1", "-p", "my-proj", "--skip-prereqs", "--name", "j1", "--image", "busybox", "--command", "echo hi", "--compute-type", "a3-highgpu-8g"},
+			wantLoc:  "us-central1",
+			wantProj: "my-proj",
+			wantType: orchestrator.TypeGKE,
 		},
 		{
 			workload: "j2",
 			ctxName:  "prod",
 			savedCtx: Context{ProjectID: "my-proj", Location: "us-central1", ClusterName: "prod"},
 			args:     []string{"submit", "--skip-prereqs", "--name", "j2", "--image", "busybox", "--command", "echo hi", "--compute-type", "a3-highgpu-8g"},
+			wantLoc:  "us-central1",
+			wantProj: "my-proj",
+			wantType: orchestrator.TypeGKE,
 		},
 		{
 			workload: "j3",
 			ctxName:  "prod",
 			savedCtx: Context{ProjectID: "my-proj", Location: "us-central1"},
 			args:     []string{"submit", "-c", "prod", "--skip-prereqs", "--name", "j3", "--image", "busybox", "--command", "echo hi", "--compute-type", "a3-highgpu-8g"},
+			wantType: orchestrator.TypeK8s,
 		},
 		{
 			workload:   "j4",
@@ -1091,6 +1091,7 @@ func assertSubmitWithCollidingBareProdRoutesToGKE(t *testing.T, onPremURL string
 			refreshEnv: "1",
 			savedCtx:   Context{ProjectID: "my-proj", Location: "us-central1", ClusterName: "other-saved-gke"},
 			args:       []string{"submit", "-c", "prod", "--skip-prereqs", "--name", "j4", "--image", "busybox", "--command", "echo hi", "--compute-type", "a3-highgpu-8g"},
+			wantType:   orchestrator.TypeK8s,
 		},
 	} {
 		resetJobFlags()
@@ -1104,9 +1105,12 @@ func assertSubmitWithCollidingBareProdRoutesToGKE(t *testing.T, onPremURL string
 		if _, err := executeCommand(JobCmd, tc.args...); err != nil {
 			t.Fatalf("executeCommand(%v) with colliding %q context err = %v, want nil", tc.args, tc.ctxName, err)
 		}
-		if submitMock.SubmittedJob.WorkloadName != tc.workload || submitMock.InitClusterName != "prod" || submitMock.InitLocation != "us-central1" || submitMock.InitProjectID != "my-proj" {
-			t.Fatalf("submit dispatch = (workload=%q, init=%q/%q/%q), want (%s, prod/us-central1/my-proj)",
-				submitMock.SubmittedJob.WorkloadName, submitMock.InitClusterName, submitMock.InitLocation, submitMock.InitProjectID, tc.workload)
+		if detectedOrchestratorType != tc.wantType {
+			t.Fatalf("detectedOrchestratorType for %s = %q, want %q", tc.workload, detectedOrchestratorType, tc.wantType)
+		}
+		if submitMock.SubmittedJob.WorkloadName != tc.workload || submitMock.InitClusterName != "prod" || submitMock.InitLocation != tc.wantLoc || submitMock.InitProjectID != tc.wantProj {
+			t.Fatalf("submit dispatch = (workload=%q, init=%q/%q/%q), want (%s, prod/%s/%s)",
+				submitMock.SubmittedJob.WorkloadName, submitMock.InitClusterName, submitMock.InitLocation, submitMock.InitProjectID, tc.workload, tc.wantLoc, tc.wantProj)
 		}
 	}
 	t.Setenv("GCLUSTER_REFRESH_CREDENTIALS", "")
@@ -1179,5 +1183,415 @@ func assertBothGKEAndBareProdPrefersGKEContext(t *testing.T) {
 	}
 	if gkeDeletes.Load() != 2 || onPremHits.Load() != 0 {
 		t.Fatalf("both-contexts hits: gkeDeletes=%d onPremHits=%d, want (2, 0)", gkeDeletes.Load(), onPremHits.Load())
+	}
+}
+
+func TestResolveTelemetryProjectID(t *testing.T) {
+	tests := []struct {
+		name               string
+		proj               string
+		projectFlagChanged bool
+		det                orchestrator.Detection
+		want               string
+	}{
+		{
+			name:               "explicit project wins over kubeconfig context on GKE",
+			proj:               "explicit-proj",
+			projectFlagChanged: true,
+			det:                orchestrator.Detection{Type: orchestrator.TypeGKE, KubeContext: "gke_other-proj_us-central1_c1"},
+			want:               "explicit-proj",
+		},
+		{
+			name: "extracts project from canonical GKE kubeconfig context when project empty",
+			proj: "",
+			det:  orchestrator.Detection{Type: orchestrator.TypeGKE, KubeContext: "gke_ctx-proj_us-central1_c1"},
+			want: "ctx-proj",
+		},
+		{
+			name: "extracts project from canonical GKE cluster name for renamed context alias",
+			proj: "",
+			det:  orchestrator.Detection{Type: orchestrator.TypeGKE, KubeContext: "prod-gpu", ClusterName: "gke_alias-proj_us-central1_c1"},
+			want: "alias-proj",
+		},
+		{
+			name:               "returns empty for TypeK8s even when --project was passed",
+			proj:               "ar-proj",
+			projectFlagChanged: true,
+			det:                orchestrator.Detection{Type: orchestrator.TypeK8s, KubeContext: "admin@onprem-k8s"},
+			want:               "",
+		},
+		{
+			name: "returns empty for TypeK8s even if context name looks GKE-like",
+			proj: "",
+			det:  orchestrator.Detection{Type: orchestrator.TypeK8s, KubeContext: "gke_ctx-proj_us-central1_c1"},
+			want: "",
+		},
+		{
+			name:               "detection failure does not leak stale saved project when --project was not passed",
+			proj:               "stale-saved-proj",
+			projectFlagChanged: false,
+			det:                orchestrator.Detection{},
+			want:               "",
+		},
+		{
+			name:               "detection failure still reports explicit --project flag",
+			proj:               "explicit-proj",
+			projectFlagChanged: true,
+			det:                orchestrator.Detection{},
+			want:               "explicit-proj",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resolveTelemetryProjectID(tc.proj, tc.projectFlagChanged, tc.det); got != tc.want {
+				t.Errorf("resolveTelemetryProjectID(%q, %v, %+v) = %q, want %q", tc.proj, tc.projectFlagChanged, tc.det, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestJobCmd_ReportsTelemetryProjectID_GKE(t *testing.T) {
+	origHook := OnTelemetryProjectResolved
+	t.Cleanup(func() { OnTelemetryProjectResolved = origHook })
+
+	var reported string
+	OnTelemetryProjectResolved = func(p string) {
+		reported = p
+	}
+
+	t.Run("reports saved context project on GKE command", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "nonexistent"))
+		if err := saveContext(Context{ProjectID: "saved-proj", Location: "us-central1", ClusterName: "my-cluster"}); err != nil {
+			t.Fatalf("saveContext: %v", err)
+		}
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+
+		reported = ""
+		if _, err := executeCommand(JobCmd, "list", "--skip-prereqs"); err != nil {
+			t.Fatalf("list err = %v", err)
+		}
+		if reported != "saved-proj" {
+			t.Errorf("reported telemetry project = %q, want %q", reported, "saved-proj")
+		}
+	})
+
+	t.Run("reports project even when GKE flag validation fails", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "nonexistent"))
+
+		reported = ""
+		if _, err := executeCommand(JobCmd, "list", "-p", "flag-only-proj", "--skip-prereqs"); err == nil {
+			t.Fatalf("expected validation error when --cluster is missing")
+		}
+		if reported != "flag-only-proj" {
+			t.Errorf("reported telemetry project = %q, want %q", reported, "flag-only-proj")
+		}
+	})
+
+	t.Run("extracts project from canonical GKE kubeconfig context when project flag is omitted", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		const gkeCtx = "gke_kc-gke-proj_us-central1_my-cluster"
+		kcPath := writeTestKubeconfigFile(t, gkeCtx, gkeCtx, "https://10.0.0.1:443")
+		t.Setenv("KUBECONFIG", kcPath)
+
+		reported = ""
+		// Without --project/--location, GKE flag validation returns an error, yet telemetry still extracts project from the canonical GKE kubeconfig context.
+		if _, err := executeCommand(JobCmd, "list", "-c", gkeCtx, "--skip-prereqs"); err == nil {
+			t.Fatalf("expected GKE flag validation error when --location and --project are omitted")
+		}
+		if reported != "kc-gke-proj" {
+			t.Errorf("reported telemetry project = %q, want %q", reported, "kc-gke-proj")
+		}
+	})
+}
+
+func TestJobCmd_ReportsTelemetryProjectID_Suppression(t *testing.T) {
+	origHook := OnTelemetryProjectResolved
+	t.Cleanup(func() { OnTelemetryProjectResolved = origHook })
+
+	var reported string
+	OnTelemetryProjectResolved = func(p string) {
+		reported = p
+	}
+
+	t.Run("clears stale saved project on TypeK8s command", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		kcPath := writeTestKubeconfigFile(t, "admin@onprem-k8s", "onprem-k8s", "https://10.128.0.68:6443")
+		t.Setenv("KUBECONFIG", kcPath)
+		if err := saveContext(Context{ProjectID: "stale-gke-proj", Location: "us-central1", ClusterName: "old-gke"}); err != nil {
+			t.Fatalf("saveContext: %v", err)
+		}
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+
+		reported = "sentinel"
+		if _, err := executeCommand(JobCmd, "list", "-c", "onprem-k8s", "--skip-prereqs"); err != nil {
+			t.Fatalf("list err = %v", err)
+		}
+		if reported != "" {
+			t.Errorf("reported telemetry project on TypeK8s = %q, want empty", reported)
+		}
+	})
+
+	t.Run("forced TypeK8s suppresses --project flag attribution", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		kcPath := writeTestKubeconfigFile(t, "admin@onprem-k8s", "onprem-k8s", "https://10.128.0.68:6443")
+		t.Setenv("KUBECONFIG", kcPath)
+		t.Setenv(orchestrator.EnvVar, string(orchestrator.TypeK8s))
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+
+		reported = "sentinel"
+		if _, err := executeCommand(JobCmd, "list", "-c", "onprem-k8s", "-p", "ar-only-proj", "--skip-prereqs"); err != nil {
+			t.Fatalf("list err = %v", err)
+		}
+		if reported != "" {
+			t.Errorf("reported telemetry project on forced TypeK8s = %q, want empty", reported)
+		}
+	})
+
+	t.Run("corrupt kubeconfig does not leak stale saved GKE project", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		corruptKC := filepath.Join(t.TempDir(), "corrupt-kubeconfig")
+		if err := os.WriteFile(corruptKC, []byte("clusters: [unclosed\n"), 0600); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		t.Setenv("KUBECONFIG", corruptKC)
+		if err := saveContext(Context{ProjectID: "stale-gke-proj", Location: "us-central1", ClusterName: "old-gke"}); err != nil {
+			t.Fatalf("saveContext: %v", err)
+		}
+
+		reported = "sentinel"
+		if _, err := executeCommand(JobCmd, "list", "-c", "onprem-only", "--skip-prereqs"); err == nil {
+			t.Fatalf("expected corrupt kubeconfig error")
+		}
+		if reported != "" {
+			t.Errorf("reported telemetry project on corrupt kubeconfig = %q, want empty", reported)
+		}
+	})
+
+	t.Run("gke-template-extract explicitly suppresses project attribution", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		outDir := filepath.Join(t.TempDir(), "templates")
+		reported = "sentinel"
+		if _, err := executeCommand(JobCmd, "gke-template-extract", "-p", "ignored-proj", "--output-dir", outDir); err != nil {
+			t.Fatalf("gke-template-extract err = %v", err)
+		}
+		if reported != "" {
+			t.Errorf("reported telemetry project on gke-template-extract = %q, want empty", reported)
+		}
+	})
+}
+
+func newK8sTPUDryRunServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/nodes":
+			_, _ = w.Write([]byte(`{"apiVersion":"v1","kind":"NodeList","items":[
+				{"metadata":{"name":"tpu-1t-0","labels":{"node.kubernetes.io/instance-type":"tpu7x-standard-1t","tpu.google.com/type":"tpu7x","tpu.google.com/topology":"1x1x1","tpu.google.com/slice-name":"slice-1t"}},"status":{"allocatable":{"cpu":"60","memory":"256Gi","google.com/tpu":"1"},"conditions":[{"type":"Ready","status":"True"}]}},
+				{"metadata":{"name":"tpu-4t-0","labels":{"node.kubernetes.io/instance-type":"tpu7x-standard-4t","tpu.google.com/type":"tpu7x","tpu.google.com/topology":"2x2x1","tpu.google.com/slice-name":"slice-4t"}},"status":{"allocatable":{"cpu":"240","memory":"1024Gi","google.com/tpu":"4"},"conditions":[{"type":"Ready","status":"True"}]}},
+				{"metadata":{"name":"cpu-0","labels":{"node.kubernetes.io/instance-type":"output-worker"}},"status":{"allocatable":{"cpu":"16","memory":"64Gi"},"conditions":[{"type":"Ready","status":"True"}]}}
+			]}`))
+		case "/apis/slice.tpu.google.com/v1alpha1/slices":
+			_, _ = w.Write([]byte(`{"apiVersion":"slice.tpu.google.com/v1alpha1","kind":"SliceList","items":[
+				{"metadata":{"name":"slice-1t"},"spec":{"type":"tpu7x","topology":"1x1x1"},"status":{"conditions":[{"type":"Ready","status":"True","reason":"SliceReady"}]}},
+				{"metadata":{"name":"slice-4t"},"spec":{"type":"tpu7x","topology":"2x2x1"},"status":{"conditions":[{"type":"Ready","status":"True","reason":"SliceReady"}]}}
+			]}`))
+		default:
+			_, _ = w.Write([]byte(`{"apiVersion":"v1","kind":"List","items":[]}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func stubK8sDryRunSubprocess(t *testing.T) *[]string {
+	t.Helper()
+	origExec := shell.ExecuteCommand
+	origExecTimeout := shell.ExecuteCommandWithTimeout
+	t.Cleanup(func() {
+		shell.ExecuteCommand = origExec
+		shell.ExecuteCommandWithTimeout = origExecTimeout
+	})
+	var recorded []string
+	handle := func(name string, args ...string) shell.CommandResult {
+		joined := strings.Join(args, " ")
+		recorded = append(recorded, name+" "+joined)
+		if name != "kubectl" {
+			t.Errorf("unexpected non-kubectl subprocess in TypeK8s dry-run: %s %s", name, joined)
+			return shell.CommandResult{ExitCode: 1, Stderr: "unexpected subprocess in TypeK8s dry-run"}
+		}
+		if strings.Contains(joined, "get deployment kueue-controller-manager") || strings.Contains(joined, "get crd clusterqueues.kueue.x-k8s.io") {
+			return shell.CommandResult{ExitCode: 1, Stderr: `Error from server (NotFound): resource not found`}
+		}
+		for prefix, out := range map[string]string{
+			"get --raw /apis/slice.tpu.google.com":                           "{}",
+			"get crd jobsets.jobset.x-k8s.io":                                "customresourcedefinition.apiextensions.k8s.io/jobsets.jobset.x-k8s.io",
+			"get deployment jobset-controller-manager":                       `{"status":{"availableReplicas":1}}`,
+			"get service jobset-webhook-service":                             `{"metadata":{"name":"jobset-webhook-service"}}`,
+			"get endpointslice -l kubernetes.io/service-name=jobset-webhook": `{"items":[{"endpoints":[{"addresses":["10.0.0.2"],"conditions":{"ready":true}}]}]}`,
+			"get serviceaccount":                                             `{"metadata":{"name":"default"}}`,
+			"get secrets":                                                    `{"items":[]}`,
+		} {
+			if strings.Contains(joined, prefix) {
+				return shell.CommandResult{ExitCode: 0, Stdout: out}
+			}
+		}
+		t.Errorf("unexpected kubectl command outside dry-run allowlist: kubectl %s", joined)
+		return shell.CommandResult{ExitCode: 1, Stderr: "unexpected kubectl command: " + joined}
+	}
+	shell.ExecuteCommand = handle
+	shell.ExecuteCommandWithTimeout = func(_ time.Duration, name string, args ...string) shell.CommandResult {
+		return handle(name, args...)
+	}
+	return &recorded
+}
+
+func assertNoForbiddenDryRunSubprocessCalls(t *testing.T, calls []string) {
+	t.Helper()
+	forbidden := []string{" pvc", " pv", " storageclass", " priorityclass", " apply"}
+	for _, call := range calls {
+		lower := strings.ToLower(call)
+		for _, tok := range forbidden {
+			if strings.Contains(lower, tok) {
+				t.Errorf("forbidden subprocess call during TypeK8s dry-run (%q): %s", strings.TrimSpace(tok), call)
+			}
+		}
+	}
+}
+
+func TestSubmitCmd_TypeK8sPreRunRejections(t *testing.T) {
+	setupSubmitTestEnv(t)
+	t.Setenv(shell.AirGappedEnvVar, "true")
+	k8sSrv := newK8sTPUDryRunServer(t)
+	t.Setenv("KUBECONFIG", writeOnPremProdContextKubeconfig(t, "k8s-tpu", k8sSrv.URL))
+
+	for _, tc := range []struct {
+		name    string
+		jobName string
+		flagArg []string
+		wantErr string
+	}{
+		{"gke_disable_parallel_containers", "k8s-reject", []string{"--gke-disable-parallel-containers"}, "--gke-disable-parallel-containers"},
+		{"gke_scheduler", "k8s-reject", []string{"--gke-scheduler", "gke.io/topology-aware-auto"}, "--gke-scheduler"},
+		{"pathways", "k8s-reject", []string{"--pathways"}, "Pathways"},
+		{"pathways_long_name_still_reports_k8s_error", "my-k8s-workload-25-chars", []string{"--pathways"}, "Pathways workloads (--pathways) require GKE mode"},
+		{"pathways_zero_valued_flag", "k8s-reject", []string{"--pathways-max-slice-restarts=0"}, "Pathways workloads (--pathways) require GKE mode"},
+		{"pathways_proxy_env", "k8s-reject", []string{"--pathways-proxy-env", "A=1"}, "Pathways"},
+		{"pathways_server_env", "k8s-reject", []string{"--pathways-server-env", "A=1"}, "Pathways"},
+		{"pathways_worker_env", "k8s-reject", []string{"--pathways-worker-env", "A=1"}, "Pathways"},
+		{"placement_policy", "k8s-reject", []string{"--placement-policy", "compact"}, "--placement-policy"},
+		{"mtc_enabled", "k8s-reject", []string{"--gke-mtc-enabled"}, "--gke-mtc-enabled"},
+		{"nap_provisioning", "k8s-reject", []string{"--gke-nap-provisioning", "spot"}, "--gke-nap-provisioning"},
+		{"gcs_mount", "k8s-reject", []string{"--mount", "gs://bucket;/data"}, "GCS mounts"},
+	} {
+		t.Run("prerun_rejects_"+tc.name, func(t *testing.T) {
+			resetJobFlags()
+			mockOrc := &mockOrchestrator{}
+			gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+			args := append([]string{
+				"submit", "--skip-prereqs",
+				"--name", tc.jobName,
+				"--image", "registry.local/app:v1",
+				"--command", "echo hi",
+			}, tc.flagArg...)
+			if _, err := executeCommand(JobCmd, args...); err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("executeCommand(%v) err = %v, want substring %q", args, err, tc.wantErr)
+			}
+			if mockOrc.SubmittedJob.WorkloadName != "" {
+				t.Errorf("SubmitJob must not be invoked when PreRunE rejects %s", tc.name)
+			}
+		})
+	}
+	t.Run("num_nodes_omitted_sets_NumNodesSpecified_false", func(t *testing.T) {
+		resetJobFlags()
+		mockOrc := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+		if _, err := executeCommand(JobCmd, "submit", "--skip-prereqs", "--name", "k8s-default-nodes", "--image", "registry.local/app:v1", "--command", "echo hi"); err != nil {
+			t.Fatalf("executeCommand(default num-nodes) err = %v", err)
+		}
+		if mockOrc.SubmittedJob.NumNodesSpecified {
+			t.Errorf("expected NumNodesSpecified=false when --num-nodes is omitted")
+		}
+	})
+}
+
+func TestSubmitCmd_TypeK8sRealOrchestratorDryRun(t *testing.T) {
+	setupSubmitTestEnv(t)
+	t.Setenv(shell.AirGappedEnvVar, "true")
+	k8sSrv := newK8sTPUDryRunServer(t)
+	t.Setenv("KUBECONFIG", writeOnPremProdContextKubeconfig(t, "k8s-tpu", k8sSrv.URL))
+
+	for _, tc := range []struct {
+		name        string
+		computeType string
+		extraArgs   []string
+		wantSubstr  []string
+		forbid      []string
+	}{
+		{
+			name:        "tpu7x_1t_single_container_and_1_chip",
+			computeType: "tpu7x-standard-1t",
+			extraArgs:   []string{"--node-constraint", "tpu.google.com/slice-name=slice-1t", "--priority", "high", "--mount", "my-pvc;/data"},
+			wantSubstr:  []string{"name: workload-container", `google.com/tpu: "1"`, "tpu.google.com/slice-name: slice-1t", "priorityClassName: high", "claimName: my-pvc"},
+			forbid:      []string{"workload-container-0", "workload-container-1", `google.com/tpu: "0"`, "gke-gcsfuse/volumes"},
+		},
+		{
+			name:        "tpu7x_4t_single_container_and_4_chips_no_gke_parallel_split",
+			computeType: "tpu7x-standard-4t",
+			extraArgs:   []string{"--node-constraint", "tpu.google.com/slice-name=slice-4t"},
+			wantSubstr:  []string{"name: workload-container", `google.com/tpu: "4"`, "tpu.google.com/slice-name: slice-4t"},
+			forbid:      []string{"workload-container-0", "workload-container-1"},
+		},
+		{
+			name:        "output_worker_cpu_allows_num_nodes",
+			computeType: "output-worker",
+			extraArgs:   []string{"--num-nodes", "2"},
+			wantSubstr:  []string{"parallelism: 2", "completions: 2", "node.kubernetes.io/instance-type: output-worker"},
+			forbid:      []string{"google.com/tpu"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetJobFlags()
+			calls := stubK8sDryRunSubprocess(t)
+			gkeOrchestratorFactory = nil
+			outPath := filepath.Join(t.TempDir(), tc.name+".yaml")
+			args := append([]string{
+				"submit", "--skip-prereqs",
+				"--name", "k8s-e2e",
+				"--image", "registry.local/app:v1",
+				"--command", "python3 train.py",
+				"--compute-type", tc.computeType,
+				"--dry-run-out", outPath,
+			}, tc.extraArgs...)
+			if _, err := executeCommand(JobCmd, args...); err != nil {
+				t.Fatalf("executeCommand(%v) err = %v", args, err)
+			}
+			assertNoForbiddenDryRunSubprocessCalls(t, *calls)
+			raw, err := os.ReadFile(outPath)
+			if err != nil {
+				t.Fatalf("ReadFile(%s): %v", outPath, err)
+			}
+			assertManifestStrings(t, string(raw), tc.wantSubstr, tc.forbid)
+		})
+	}
+}
+
+func assertManifestStrings(t *testing.T, manifest string, wantSubstr, forbid []string) {
+	t.Helper()
+	for _, w := range wantSubstr {
+		if !strings.Contains(manifest, w) {
+			t.Errorf("manifest missing %q:\n%s", w, manifest)
+		}
+	}
+	for _, f := range forbid {
+		if strings.Contains(manifest, f) {
+			t.Errorf("manifest must not contain %q:\n%s", f, manifest)
+		}
 	}
 }

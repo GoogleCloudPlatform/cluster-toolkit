@@ -45,7 +45,7 @@ steps:
     bash tools/get_binary.sh "${_TEST_PREFIX}"
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    EXAMPLE_BP=community/examples/gke-custom-compute-class/gke-custom-compute-class.yaml
+    EXAMPLE_BP=examples/gke-custom-compute-class/gke-custom-compute-class.yaml
 
     # Adding vm to act as remote node for base-integration-test.yml
     echo '  - id: remote-node'                           >> $${EXAMPLE_BP}

@@ -15,17 +15,21 @@
 package gke
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 	"path"
 	"slices"
 	"strconv"
 	"strings"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 type MachineTypeCap struct {
@@ -54,32 +58,61 @@ func (g *GKEOrchestrator) FetchMachineCapacity(machineType, zone string) (int, e
 
 // getZonesForMachineType finds all candidate zones hosting the specified machineType in the cluster's node pools.
 func (g *GKEOrchestrator) getZonesForMachineType(machineType string) []string {
+	if strings.TrimSpace(machineType) == "" {
+		return nil
+	}
 	seen := make(map[string]struct{})
 	for _, np := range g.clusterDesc.NodePools {
-		// Filter node pools that match the target machine type.
-		if np.Config.MachineType != machineType {
+		if !strings.EqualFold(np.Config.MachineType, machineType) {
 			continue
 		}
-		// If the node pool doesn't define custom locations, it inherits cluster-wide locations.
 		locs := np.Locations
 		if len(locs) == 0 {
 			locs = g.clusterZones
 		}
 		for _, loc := range locs {
-			seen[loc] = struct{}{}
+			if trimmed := strings.TrimSpace(loc); trimmed != "" {
+				seen[trimmed] = struct{}{}
+			}
 		}
 	}
 
-	// Return a deduplicated slice of all matched zones.
-	var zones []string
+	zones := make([]string, 0, len(seen))
 	for loc := range seen {
 		zones = append(zones, loc)
+	}
+	slices.Sort(zones)
+	return zones
+}
+
+func (g *GKEOrchestrator) napCandidateZones() []string {
+	var zones []string
+	for _, loc := range slices.Concat(g.clusterZones, g.clusterDesc.Autoscaling.AutoprovisioningLocations) {
+		if trimmed := strings.TrimSpace(loc); trimmed != "" && !slices.Contains(zones, trimmed) {
+			zones = append(zones, trimmed)
+		}
 	}
 	return zones
 }
 
-func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (MachineTypeCap, error) {
+func (g *GKEOrchestrator) resolveCandidateZonesForMachineType(machineType, zone string) ([]string, bool, error) {
+	isRegion := len(strings.Split(zone, "-")) < 3
+	if !isRegion {
+		return []string{zone}, false, nil
+	}
+	if npZones := g.getZonesForMachineType(machineType); len(npZones) > 0 {
+		return npZones, true, nil
+	}
+	if !g.napEnabled && !g.clusterDesc.Autoscaling.EnableNodeAutoprovisioning {
+		return nil, true, fmt.Errorf("failed to fetch machine capabilities for %s: no node pool matching machine type found and GKE Node Auto-Provisioning is disabled", machineType)
+	}
+	if candidates := g.napCandidateZones(); len(candidates) > 0 {
+		return candidates, true, nil
+	}
+	return nil, true, fmt.Errorf("failed to fetch machine capabilities for %s: regional cluster %q reported no candidate zones", machineType, zone)
+}
 
+func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (MachineTypeCap, error) {
 	cacheKey := machineType + ":" + zone
 	if g.machineCapCache != nil {
 		if cap, ok := g.machineCapCache[cacheKey]; ok {
@@ -87,21 +120,13 @@ func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (Ma
 		}
 	}
 
-	isRegion := len(strings.Split(zone, "-")) < 3
-	zonesToTry := []string{zone}
+	zonesToTry, isRegion, err := g.resolveCandidateZonesForMachineType(machineType, zone)
+	if err != nil {
+		return MachineTypeCap{}, err
+	}
 
-	if isRegion {
-		npZones := g.getZonesForMachineType(machineType)
-		if len(npZones) > 0 {
-			zonesToTry = npZones
-		} else {
-			if !g.clusterDesc.Autoscaling.EnableNodeAutoprovisioning {
-				return MachineTypeCap{}, fmt.Errorf("failed to fetch machine capabilities for %s: no node pool matching machine type found and GKE Node Auto-Provisioning is disabled", machineType)
-			}
-			if len(g.clusterZones) > 0 {
-				zonesToTry = g.clusterZones
-			}
-		}
+	if g.machineTypeClient == nil {
+		return MachineTypeCap{}, fmt.Errorf("failed to fetch machine capabilities for %s: machine type client is not initialized", machineType)
 	}
 
 	var lastErr error
@@ -110,6 +135,10 @@ func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (Ma
 		mt, err := g.machineTypeClient.GetMachineType(g.projectID, z, machineType)
 		if err != nil {
 			lastErr = err
+			continue
+		}
+		if mt == nil {
+			lastErr = fmt.Errorf("empty machine type response in zone %s", z)
 			continue
 		}
 
@@ -143,12 +172,15 @@ func (g *GKEOrchestrator) FetchMachineCapabilities(machineType, zone string) (Ma
 	}
 
 	if isRegion {
-		return MachineTypeCap{}, fmt.Errorf("failed to fetch machine capabilities for %s: tried in all candidate zones %v but did not find machine type in any of them", machineType, zonesToTry)
+		return MachineTypeCap{}, fmt.Errorf("failed to fetch machine capabilities for %s: tried in all candidate zones %v but did not find machine type in any of them: %w", machineType, zonesToTry, lastErr)
 	}
 	return MachineTypeCap{}, fmt.Errorf("failed to fetch machine capabilities for %s in zone %s: %w", machineType, zone, lastErr)
 }
 
 func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool, error) {
+	if g.mode == orchestrator.TypeK8s {
+		return false, nil
+	}
 	// Return false immediately if not using TPUs.
 	if !config.IsTPU(opts.ComputeType) {
 		return false, nil
@@ -188,6 +220,9 @@ func (g *GKEOrchestrator) verifyDynamicSlicingActive(opts ManifestOptions) (bool
 }
 
 func (g *GKEOrchestrator) verifyStaticSlicingActive(machineType, topology string) (bool, error) {
+	if g.mode == orchestrator.TypeK8s {
+		return false, nil
+	}
 	if !config.IsTPU(machineType) {
 		return false, nil
 	}
@@ -344,6 +379,9 @@ func validateTPU7xTopology(topology string, machineType string) error {
 }
 
 func (g *GKEOrchestrator) hasSliceAdmissionCheck() bool {
+	if !g.kueueEnabled() {
+		return false
+	}
 	acResult := g.kubectl("get", "admissioncheck", "-o", "json")
 	if acResult.ExitCode != 0 {
 		logging.Warn("Failed to query AdmissionChecks. Assuming dynamic-slicing not active.")
@@ -374,6 +412,9 @@ func (g *GKEOrchestrator) hasSliceAdmissionCheck() bool {
 }
 
 func (g *GKEOrchestrator) hasSlicingTopologies() bool {
+	if !g.kueueEnabled() {
+		return false
+	}
 	if g.slicingTopologiesChecked {
 		return g.slicingTopologiesDetected
 	}
@@ -423,6 +464,9 @@ func (g *GKEOrchestrator) hasSlicingTopologies() bool {
 
 func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile JobProfile) (cpu, mem, gpu, tpu string, err error) {
 	if profile.IsCPUMachine {
+		if g.mode == orchestrator.TypeK8s {
+			return calculateK8sCPUResourceLimit(profile, opts.GCSFuseEnabled), "", "", "", nil
+		}
 		machineType := opts.MachineType
 		if machineType == "" {
 			machineType = opts.ComputeType
@@ -433,9 +477,13 @@ func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile 
 		return fmt.Sprintf("%dm", cpuMilli), "", "", "", nil
 	}
 
-	mapped := g.GenerateGKENodeSelectorLabel(opts.ComputeType)
-
-	cpuLim, memLim, gpuLim, tpuLim, err := g.calculateGCPMachineResourceLimits(opts, mapped)
+	var cpuLim, memLim, gpuLim, tpuLim string
+	if g.mode == orchestrator.TypeK8s {
+		cpuLim, memLim, gpuLim, tpuLim, err = g.calculateK8sMachineResourceLimits(opts, profile)
+	} else {
+		mapped := g.GenerateGKENodeSelectorLabel(opts.ComputeType)
+		cpuLim, memLim, gpuLim, tpuLim, err = g.calculateGCPMachineResourceLimits(opts, mapped)
+	}
 	if err != nil {
 		return "", "", "", "", fmt.Errorf("cluster resolution failed for %s: %w", opts.ComputeType, err)
 	}
@@ -443,6 +491,9 @@ func (g *GKEOrchestrator) calculateResourceLimits(opts ManifestOptions, profile 
 		tpuInt, err := strconv.Atoi(tpuLim)
 		if err != nil {
 			return "", "", "", "", fmt.Errorf("failed to parse tpu limit %q: %w", tpuLim, err)
+		}
+		if tpuInt < opts.ParallelContainers || tpuInt%opts.ParallelContainers != 0 {
+			return "", "", "", "", fmt.Errorf("TPU chip count %d cannot be evenly split across %d parallel containers", tpuInt, opts.ParallelContainers)
 		}
 		tpuLim = strconv.Itoa(tpuInt / opts.ParallelContainers)
 	}
@@ -479,7 +530,7 @@ func (g *GKEOrchestrator) resolveMachineName(acceleratorType string) (string, er
 	// Check if the passed value is a full machine type (value) in the static map
 	for _, v := range config.AcceleratorShorthandMap {
 		if strings.EqualFold(v, acceleratorType) {
-			return acceleratorType, nil
+			return v, nil
 		}
 	}
 
@@ -492,16 +543,29 @@ func (g *GKEOrchestrator) resolveMachineName(acceleratorType string) (string, er
 
 	// Check if the input is a full machine type and present in the cluster (required for CPUs).
 	clusterMachineTypes, err := g.queryAllMachineTypes()
-	if err == nil && slices.ContainsFunc(clusterMachineTypes, func(cmt string) bool { return strings.EqualFold(acceleratorType, cmt) }) {
-		return acceleratorType, nil
+	if err == nil {
+		if idx := slices.IndexFunc(clusterMachineTypes, func(cmt string) bool { return strings.EqualFold(acceleratorType, cmt) }); idx >= 0 {
+			return clusterMachineTypes[idx], nil
+		}
 	}
 
 	// 3. Fail fast
 	return "", fmt.Errorf("machine type %q could not be resolved from static maps or cluster state", acceleratorType)
 }
 
+func isNAPUnsupportedMachineType(lower string, hasComputeClass bool) bool {
+	if lower == "f1-micro" || lower == "g1-small" {
+		return true
+	}
+	return !hasComputeClass && isCustomMachineType(lower)
+}
+
+func napUnsupportedMachineTypeError(computeType string) error {
+	return fmt.Errorf("machine type %q is not present in any eligible static node pool and cannot be auto-provisioned directly by GKE Node Auto-Provisioning; specify a predefined non-legacy GCE machine type with --compute-type (for example, n2-standard-32) or create a static node pool for %s", computeType, computeType)
+}
+
 // resolveJobMachineType maps --compute-type to a machine type, preferring the host shape used by the cluster's node pools for TPU shorthands.
-func (g *GKEOrchestrator) resolveJobMachineType(computeType string) (string, error) {
+func (g *GKEOrchestrator) resolveJobMachineType(computeType, napProvisioning, napReservation string, hasComputeClass bool) (string, error) {
 	if mapped, isShorthand := config.AcceleratorShorthandMap[strings.ToLower(computeType)]; isShorthand {
 		if config.IsTPU(mapped) {
 			return g.resolveShorthandFromCluster(computeType, mapped)
@@ -511,7 +575,20 @@ func (g *GKEOrchestrator) resolveJobMachineType(computeType string) (string, err
 
 	machineName, err := g.resolveMachineName(computeType)
 	if err != nil {
-		return g.resolveShorthandFromCluster(computeType, "")
+		resolved, shortErr := g.resolveShorthandFromCluster(computeType, "")
+		if shortErr != nil && g.napEnabled && !config.IsKnownAccelerator(computeType) && strings.Contains(computeType, "-") {
+			lower := strings.ToLower(strings.TrimSpace(computeType))
+			if isNAPUnsupportedMachineType(lower, hasComputeClass) {
+				return "", napUnsupportedMachineTypeError(computeType)
+			}
+			return lower, nil
+		}
+		return resolved, shortErr
+	}
+	if g.napEnabled && !config.IsKnownAccelerator(computeType) &&
+		isNAPUnsupportedMachineType(strings.ToLower(strings.TrimSpace(machineName)), hasComputeClass) &&
+		!g.hasStaticNodePoolForMachineType(machineName, napProvisioning, napReservation) {
+		return "", napUnsupportedMachineTypeError(computeType)
 	}
 	return machineName, nil
 }
@@ -684,65 +761,223 @@ func (g *GKEOrchestrator) validateWorkloadPlacementPolicy(name, region, projectI
 	return nil
 }
 
+func (g *GKEOrchestrator) resolveK8sHardwareWithCPUValidation(job *orchestrator.JobDefinition) (JobProfile, bool, bool, error) {
+	profile, isDynamicSlicing, isStaticSlicing, err := g.resolveK8sHardwareRequirements(job)
+	if err != nil {
+		return JobProfile{}, false, false, err
+	}
+	if err := validateK8sCPUJobResources(cmp.Or(job.MachineType, job.ComputeType), job.CPURequest, job.MemoryRequest, profile); err != nil {
+		return JobProfile{}, false, false, err
+	}
+	return profile, isDynamicSlicing, isStaticSlicing, nil
+}
+
 func (g *GKEOrchestrator) resolveHardwareRequirements(job *orchestrator.JobDefinition) (profile JobProfile, isDynamicSlicing bool, isStaticSlicing bool, err error) {
+	if g.mode == orchestrator.TypeK8s {
+		return g.resolveK8sHardwareWithCPUValidation(job)
+	}
 	if job.ComputeType == "" {
 		return JobProfile{}, false, false, nil
 	}
 
-	machineName, err := g.resolveJobMachineType(job.ComputeType)
+	hasComputeClass := strings.TrimSpace(job.NodeConstraint[computeClassLabel]) != ""
+	machineName, err := g.resolveJobMachineType(job.ComputeType, job.GKENAPProvisioning, job.GKENAPReservation, hasComputeClass)
 	if err != nil {
 		return JobProfile{}, false, false, err
 	}
 	job.MachineType = machineName
 	if config.IsTPU(machineName) {
-		isDynamicSlicing, isStaticSlicing, err = g.resolveTPURequirements(job)
+		isDynamicSlicing, isStaticSlicing, err = g.resolveGKETPUHardware(job)
 		if err != nil {
 			return JobProfile{}, false, false, err
-		}
-		if job.GKENAPProvisioning != "" {
-			if isDynamicSlicing {
-				return JobProfile{}, false, false, fmt.Errorf("TPU Dynamic Slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads")
-			}
-			if isStaticSlicing {
-				return JobProfile{}, false, false, fmt.Errorf("TPU Static Sub-slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads")
-			}
-			if job.GKEScheduler == "gke.io/tpu-provisioning-request" {
-				return JobProfile{}, false, false, fmt.Errorf("TPU ProvisioningRequest (DWS Flex) is not supported on GKE Node Auto-Provisioning (NAP) workloads")
-			}
 		}
 	} else {
 		if err := g.resolveGPUPlacementPolicy(job); err != nil {
 			return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
 		}
 	}
-	isCPUMachine, capacity, err := g.determineIfCPUMachine(job)
+	profile, err = g.determineIfCPUMachine(job.ComputeType, job.MachineType, job.ClusterLocation)
 	if err != nil {
 		return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
+	}
+	profile.IsTPU = !profile.IsCPUMachine && config.IsTPU(machineName)
+	if err := validateCPUJobResources(job.MachineType, job.CPURequest, job.MemoryRequest, profile); err != nil {
+		return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
+	}
+	if !profile.IsCPUMachine {
+		if err := g.checkStaticAttachedGPUMachineError(job.ComputeType, job.MachineType); err != nil {
+			return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
+		}
 	}
 
 	if err := g.validateConsumptionForStaticCluster(job); err != nil {
 		return JobProfile{}, isDynamicSlicing, isStaticSlicing, err
 	}
 
+	return profile, isDynamicSlicing, isStaticSlicing, nil
+}
+
+// isSharedCoreMachineType returns true for GCE shared-core shapes (e.g., e2-micro, f1-micro)
+// that expose 1 allocatable vCPU in GKE even when guestCpus is 2.
+func isSharedCoreMachineType(machineType string) bool {
+	trimmed := strings.TrimSpace(machineType)
+	return trimmed != "" && strings.Count(trimmed, "-") <= 1
+}
+
+func (g *GKEOrchestrator) getThreadsPerCore(machineType string) string {
+	if tpc, ok := g.machineTypeToThreadsPerCore[machineType]; ok {
+		return tpc
+	}
+	for _, np := range g.clusterDesc.NodePools {
+		if g.isSystemPool(np) {
+			continue
+		}
+		if strings.EqualFold(np.Config.MachineType, machineType) && np.Config.AdvancedMachineFeatures != nil {
+			return np.Config.AdvancedMachineFeatures.ThreadsPerCore
+		}
+	}
+	return ""
+}
+
+func (g *GKEOrchestrator) getEffectiveCPUs(machineType string, guestCpus int) int {
+	if guestCpus <= 0 {
+		return 0
+	}
+	if isSharedCoreMachineType(machineType) {
+		return 1
+	}
+	if g.getThreadsPerCore(machineType) == "1" && !strings.HasPrefix(machineType, "t2a") && !strings.HasPrefix(machineType, "t2d") {
+		for k, cap := range g.machineCapCache {
+			if strings.HasPrefix(k, machineType+":") && cap.GuestCpus > 0 && guestCpus == cap.GuestCpus/2 && cap.GuestCpus != guestCpus {
+				return guestCpus
+			}
+		}
+		return guestCpus / 2
+	}
+	return guestCpus
+}
+
+func appendPoolAcceleratorTypes(accels []string, poolAccels []gkeAccelerator) []string {
+	for _, a := range poolAccels {
+		if t := strings.TrimSpace(a.AcceleratorType); t != "" && !slices.Contains(accels, t) {
+			accels = append(accels, t)
+		}
+	}
+	return accels
+}
+
+// staticAttachedGPUAccelerators returns the unique attached GPU types when static non-system pools
+// for machineType only provide attached GPUs (no active CPU-only pool exists).
+func (g *GKEOrchestrator) staticAttachedGPUAccelerators(machineType string) []string {
+	if g.napEnabled || strings.TrimSpace(machineType) == "" {
+		return nil
+	}
+	var accels []string
+	for _, np := range g.clusterDesc.NodePools {
+		if np.Name == "default-pool" || g.isSystemPool(np) || !strings.EqualFold(np.Config.MachineType, machineType) {
+			continue
+		}
+		if len(np.Config.Accelerators) == 0 {
+			if g.getNodeCount(np) > 0 {
+				return nil
+			}
+			continue
+		}
+		accels = appendPoolAcceleratorTypes(accels, np.Config.Accelerators)
+	}
+	slices.Sort(accels)
+	return accels
+}
+
+func (g *GKEOrchestrator) checkStaticAttachedGPUMachineError(computeType, machineType string) error {
+	if config.IsKnownAccelerator(computeType) {
+		return nil
+	}
+	if _, isAttachedAccel := g.acceleratorToMachineType[strings.ToLower(strings.TrimSpace(computeType))]; isAttachedAccel {
+		return nil
+	}
+	if accels := g.staticAttachedGPUAccelerators(machineType); len(accels) > 0 {
+		return fmt.Errorf("static node pools for machine type %s only provide attached GPUs (%s); pass the accelerator label (e.g., --compute-type %s) or add a CPU-only node pool", machineType, strings.Join(accels, ", "), accels[0])
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) determineIfCPUMachine(computeType, machineType, clusterLocation string) (JobProfile, error) {
+	if config.IsKnownAccelerator(computeType) || config.IsKnownAccelerator(machineType) {
+		return JobProfile{}, nil
+	}
+	if _, isAttachedAccel := g.acceleratorToMachineType[strings.ToLower(strings.TrimSpace(computeType))]; isAttachedAccel {
+		return JobProfile{}, nil
+	}
+	if len(g.staticAttachedGPUAccelerators(machineType)) > 0 {
+		return JobProfile{}, nil
+	}
+
+	cap, err := g.FetchMachineCapabilities(machineType, clusterLocation)
+	if err != nil {
+		return JobProfile{}, fmt.Errorf("failed to fetch machine capabilities for %s: %w", machineType, err)
+	}
+
+	if len(cap.Accelerators) > 0 {
+		return JobProfile{}, nil
+	}
+
+	logging.Info("Dynamically determined %s is a CPU-only machine during manifest preparation", machineType)
 	return JobProfile{
-		IsCPUMachine:  isCPUMachine,
-		CapacityCount: capacity,
-	}, isDynamicSlicing, isStaticSlicing, nil
+		IsCPUMachine:  true,
+		CapacityCount: g.getEffectiveCPUs(machineType, cap.GuestCpus),
+		MemoryMb:      cap.MemoryMb,
+	}, nil
+}
+
+// errTPUNumNodes is shared by the GKE preflight and the k8s post-discovery TPU --num-nodes checks.
+var errTPUNumNodes = errors.New("--num-nodes cannot be used with TPU jobs (it is calculated automatically from topology)")
+
+// validateGKETPUNumNodes rejects --num-nodes on GKE TPU jobs before any cluster access or add-on prompts. In k8s
+// mode the equivalent check runs after node discovery, since custom TPU pools are only identifiable from inventory.
+func validateGKETPUNumNodes(job orchestrator.JobDefinition) error {
+	if !job.NumNodesSpecified {
+		return nil
+	}
+	if config.IsTPU(job.ComputeType) {
+		return errTPUNumNodes
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) resolveGKETPUHardware(job *orchestrator.JobDefinition) (isDynamicSlicing, isStaticSlicing bool, err error) {
+	isDynamicSlicing, isStaticSlicing, err = g.resolveTPURequirements(job)
+	if err != nil {
+		return false, false, err
+	}
+	if job.GKENAPProvisioning != "" {
+		if isDynamicSlicing {
+			return false, false, fmt.Errorf("TPU Dynamic Slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads")
+		}
+		if isStaticSlicing {
+			return false, false, fmt.Errorf("TPU Static Sub-slicing is not supported on GKE Node Auto-Provisioning (NAP) workloads")
+		}
+		if job.GKEScheduler == "gke.io/tpu-provisioning-request" {
+			return false, false, fmt.Errorf("TPU ProvisioningRequest (DWS Flex) is not supported on GKE Node Auto-Provisioning (NAP) workloads")
+		}
+	}
+	return isDynamicSlicing, isStaticSlicing, nil
 }
 
 func isCandidateCompatibleForComputeType(computeType, candidate string) bool {
 	if !config.IsTPU(candidate) {
 		return true
 	}
-	topo, err := config.ResolveTopologyForChips(strings.ToLower(computeType), candidate)
+	normCandidate := normalizeConfigTPUMachine(candidate)
+	topo, err := config.ResolveTopologyForChips(strings.ToLower(computeType), normCandidate)
 	if err != nil {
 		return true
 	}
-	nodes, err := config.CalculateAcceleratorNodes(candidate, topo, 0)
+	nodes, err := config.CalculateAcceleratorNodes(normCandidate, topo, 0)
 	if err != nil {
 		return false
 	}
-	hostChips := config.AcceleratorsPerVM(candidate)
+	hostChips := config.AcceleratorsPerVM(normCandidate)
 	return nodes == 1 || hostChips == 4
 }
 
@@ -814,6 +1049,9 @@ func (g *GKEOrchestrator) dynamicallyCalculateNodesPerSlice(job *orchestrator.Jo
 }
 
 func (g *GKEOrchestrator) fetchClusterState(job *orchestrator.JobDefinition) error {
+	if g.mode == orchestrator.TypeK8s {
+		return nil
+	}
 	logging.Info("Eagerly fetching and caching machine capabilities...")
 	machineTypes, err := g.queryAllMachineTypes()
 	if err != nil {
@@ -829,39 +1067,282 @@ func (g *GKEOrchestrator) fetchClusterState(job *orchestrator.JobDefinition) err
 	return nil
 }
 
-func (g *GKEOrchestrator) resolveResourcesAndGates(opts *ManifestOptions, isCPUMachine bool, capacity int, job orchestrator.JobDefinition) (JobProfile, error) {
-	isGPU := !isCPUMachine && !config.IsTPU(job.MachineType)
-	if isGPU && job.GKEScheduler == "gke.io/topology-aware-auto" {
-		opts.SchedulingGates = indentYaml("schedulingGates:\n  - name: \"gke.io/topology-aware-auto-"+job.WorkloadName+"\"", 14)
-		opts.SchedulerName = ""
-	}
+const (
+	mibBytes             int64 = 1024 * 1024
+	gkeEvictionMemoryMiB int64 = 100
+	gcsFuseCPUMilli      int64 = 250
+	gcsFuseMemoryMiB     int64 = 256
+	gcsFuseMemoryBytes   int64 = gcsFuseMemoryMiB * mibBytes
+)
 
-	profile := JobProfile{
-		IsCPUMachine:  isCPUMachine,
-		CapacityCount: capacity,
+// formatAllocatableMemory floors bytes to MiB (~GiB when >= 1 GiB) so remediation hints never exceed allocatable.
+func formatAllocatableMemory(bytes int64) string {
+	if bytes < mibBytes {
+		return fmt.Sprintf("%d bytes", bytes)
 	}
-
-	opts.ParallelContainers = 1
-	if job.UseParallelContainers && !job.IsPathwaysJob && strings.Contains(job.MachineType, "tpu7x") {
-		opts.ParallelContainers = 2
+	mib := bytes / mibBytes
+	if mib >= 1024 {
+		return fmt.Sprintf("%dMi (~%dGi)", mib, mib/1024)
 	}
+	return fmt.Sprintf("%dMi", mib)
+}
 
-	cpuLimit, memoryLimit, gpuLimit, tpuLimit, err := g.calculateResourceLimits(*opts, profile)
+func warnFractionalCPUOptions(machineType, cpuReq, memReq string, gcsFuseEnabled bool, effectiveCPUs, memoryMb int) {
+	if cpuReq == "" {
+		logging.Warn("--memory is set without --cpu; pods on shared CPU nodes receive minimal CPU share when sibling pods are busy; consider setting --cpu as well")
+	} else if memReq == "" {
+		logging.Warn("--cpu is set without --memory; pods on shared CPU nodes have no memory reservation and are prioritized for OOM eviction; consider setting --memory as well")
+	}
+	if !gcsFuseEnabled {
+		return
+	}
+	warnGCSFuseCPUHeadroom(machineType, cpuReq, effectiveCPUs)
+	warnGCSFuseMemoryHeadroom(machineType, memReq, memoryMb)
+}
+
+func warnGCSFuseCPUHeadroom(machineType, cpuReq string, effectiveCPUs int) {
+	if cpuReq == "" || effectiveCPUs <= 0 {
+		return
+	}
+	qty, err := k8s.ParseCPURequest(cpuReq)
 	if err != nil {
-		logging.Warn("Warning: failed to calculate resource limits: %v", err)
-	} else {
-		if opts.ComputeType != "" && gpuLimit == "" && tpuLimit == "" {
-			logging.Info("Suppressing nodeSelector label for deduced CPU machine %s", opts.ComputeType)
-			opts.ComputeType = ""
-		}
-		resStr, err := g.buildResourcesString(cpuLimit, memoryLimit, gpuLimit, tpuLimit, 16)
-		if err != nil {
-			return profile, err
-		}
-		opts.ResourcesString = resStr
+		return
 	}
+	allocMilli := calculateAllocatableCPUMilli(effectiveCPUs)
+	allocQty := resource.NewMilliQuantity(allocMilli, resource.DecimalSI)
+	headroomMilli := max(0, allocMilli-gcsFuseCPUMilli)
+	headroomQty := resource.NewMilliQuantity(headroomMilli, resource.DecimalSI)
+	if qty.Cmp(*headroomQty) > 0 {
+		logging.Warn("--cpu %s leaves less than %dm headroom on machine type %s for the GKE GCS FUSE CSI sidecar (pre-GKE 1.37.2 tiered allocatable CPU estimate: %s); pods may stay Pending unless you lower --cpu to at most %s or add the gke-gcsfuse/cpu-request pod annotation under pod_template in a custom base.tmpl (--gke-custom-templates-path)", cpuReq, gcsFuseCPUMilli, machineType, allocQty.String(), headroomQty.String())
+	}
+}
 
-	return profile, nil
+func warnGCSFuseMemoryHeadroom(machineType, memReq string, memoryMb int) {
+	if memReq == "" || memoryMb <= 0 {
+		return
+	}
+	qty, err := k8s.ParseMemoryRequest(memReq)
+	if err != nil {
+		return
+	}
+	allocBytes := calculateAllocatableMemoryBytes(memoryMb)
+	if allocBytes <= gcsFuseMemoryBytes {
+		logging.Warn("--memory %s on machine type %s (pre-GKE 1.37.2 tiered allocatable memory estimate %s) leaves less than %dMi for the GKE GCS FUSE CSI sidecar; pods may stay Pending unless you use a larger --compute-type or add the gke-gcsfuse/memory-request pod annotation under pod_template in a custom base.tmpl (--gke-custom-templates-path)", memReq, machineType, formatAllocatableMemory(allocBytes), gcsFuseMemoryMiB)
+		return
+	}
+	headroomBytes := allocBytes - gcsFuseMemoryBytes
+	headroomQty := resource.NewQuantity(headroomBytes, resource.BinarySI)
+	if qty.Cmp(*headroomQty) > 0 {
+		logging.Warn("--memory %s leaves less than %dMi headroom on machine type %s for the GKE GCS FUSE CSI sidecar (pre-GKE 1.37.2 tiered allocatable memory estimate: %s); pods may stay Pending on clusters older than GKE 1.37.2 unless you lower --memory to at most %s or add the gke-gcsfuse/memory-request pod annotation under pod_template in a custom base.tmpl (--gke-custom-templates-path)", memReq, gcsFuseMemoryMiB, machineType, formatAllocatableMemory(allocBytes), formatAllocatableMemory(headroomBytes))
+	}
+}
+
+// calculateAllocatableMemoryBytes estimates GKE allocatable memory using tiered system reservations plus 100 MiB eviction headroom.
+func calculateAllocatableMemoryBytes(memoryMb int) int64 {
+	if memoryMb <= 0 {
+		return 0
+	}
+	totalBytes := int64(memoryMb) * mibBytes
+	evictionBytes := gkeEvictionMemoryMiB * mibBytes
+	if memoryMb < 1024 {
+		return max(0, totalBytes-255*mibBytes-evictionBytes)
+	}
+	var reserveBytes int64
+	tiers := []struct {
+		spanMiB int64
+		pct     int64
+	}{
+		{4096, 25},   // first 4 GiB: 25%
+		{4096, 20},   // next 4 GiB (4..8 GiB): 20%
+		{8192, 10},   // next 8 GiB (8..16 GiB): 10%
+		{114688, 6},  // next 112 GiB (16..128 GiB): 6%
+		{1 << 60, 2}, // above 128 GiB: 2%
+	}
+	remaining := int64(memoryMb)
+	for _, tier := range tiers {
+		if remaining <= 0 {
+			break
+		}
+		chunk := min(remaining, tier.spanMiB)
+		reserveBytes += (chunk * mibBytes * tier.pct) / 100
+		remaining -= chunk
+	}
+	return max(0, totalBytes-reserveBytes-evictionBytes)
+}
+
+// calculateMaxAllocatableMemoryBytes returns the GKE 1.37.2+ upper-bound allocatable memory.
+func calculateMaxAllocatableMemoryBytes(memoryMb int) int64 {
+	legacy := calculateAllocatableMemoryBytes(memoryMb)
+	if memoryMb < 1024 {
+		return legacy
+	}
+	// Min GKE 1.37.2+ reserve: 15Mi*8 (min max-pods) + 500Mi (COS) + 100Mi eviction.
+	const minGKE137ReserveMiB = 15*8 + 500 + gkeEvictionMemoryMiB
+	totalBytes := int64(memoryMb) * mibBytes
+	return max(legacy, totalBytes-minGKE137ReserveMiB*mibBytes)
+}
+
+// calculateMaxAllocatableCPUMilli returns the GKE 1.37.2+ upper-bound allocatable CPU (1000m reserve cap).
+func calculateMaxAllocatableCPUMilli(vCPUs int) int64 {
+	if vCPUs <= 0 {
+		return 0
+	}
+	legacy := calculateAllocatableCPUMilli(vCPUs)
+	if vCPUs <= 1 {
+		return legacy
+	}
+	return max(legacy, int64(vCPUs)*1000-1000)
+}
+
+func validateCPUJobResources(machineType, cpuReq, memReq string, profile JobProfile) error {
+	cpuReq = strings.TrimSpace(cpuReq)
+	memReq = strings.TrimSpace(memReq)
+	if cpuReq == "" && memReq == "" {
+		return nil
+	}
+	if !profile.IsCPUMachine {
+		return fmt.Errorf("--cpu and --memory are only supported for CPU workloads, not accelerator machine type %q", machineType)
+	}
+	if err := validateCPURequestBound(machineType, cpuReq, profile.CapacityCount); err != nil {
+		return err
+	}
+	return validateMemoryRequestBound(machineType, memReq, profile.MemoryMb)
+}
+
+func validateK8sCPUJobResources(machineType, cpuReq, memReq string, profile JobProfile) error {
+	cpuReq = strings.TrimSpace(cpuReq)
+	memReq = strings.TrimSpace(memReq)
+	if cpuReq == "" && memReq == "" {
+		return nil
+	}
+	if !profile.IsCPUMachine {
+		return fmt.Errorf("--cpu and --memory are only supported for CPU workloads, not accelerator machine type %q", machineType)
+	}
+	target := cmp.Or(machineType, "discovered CPU node pool")
+	if err := validateK8sCPURequestBound(target, cpuReq, profile.AllocatableCPUMilli); err != nil {
+		return err
+	}
+	memMiB := 0
+	if profile.K8sPool != nil {
+		memMiB = profile.K8sPool.MemMiBPerNode
+	}
+	return validateK8sMemoryRequestBound(target, memReq, memMiB)
+}
+
+func validateK8sCPURequestBound(target, cpuReq string, allocatableMilli int64) error {
+	if cpuReq == "" {
+		return nil
+	}
+	qty, err := k8s.ParseCPURequest(cpuReq)
+	if err != nil {
+		return err
+	}
+	if allocatableMilli <= 0 {
+		return nil
+	}
+	allocQty := resource.NewMilliQuantity(allocatableMilli, resource.DecimalSI)
+	if qty.Cmp(*allocQty) > 0 {
+		return fmt.Errorf("requested --cpu %s exceeds node allocatable CPU (%s) for %s; lower --cpu to at most %s, choose a larger --compute-type, or omit --cpu/--memory for full-node sizing", cpuReq, allocQty.String(), target, allocQty.String())
+	}
+	return nil
+}
+
+func validateK8sMemoryRequestBound(target, memReq string, memMiB int) error {
+	if memReq == "" {
+		return nil
+	}
+	qty, err := k8s.ParseMemoryRequest(memReq)
+	if err != nil {
+		return err
+	}
+	if memMiB <= 0 {
+		return nil
+	}
+	allocBytes := int64(memMiB) * mibBytes
+	allocQty := resource.NewQuantity(allocBytes, resource.BinarySI)
+	if qty.Cmp(*allocQty) > 0 {
+		allocDesc := formatAllocatableMemory(allocBytes)
+		return fmt.Errorf("requested --memory %s exceeds node allocatable memory (%s) for %s; lower --memory to at most %s, choose a larger --compute-type, or omit --cpu/--memory for full-node sizing", memReq, allocDesc, target, allocDesc)
+	}
+	return nil
+}
+
+func validateCPURequestBound(machineType, cpuReq string, effectiveCPUs int) error {
+	if cpuReq == "" {
+		return nil
+	}
+	qty, err := k8s.ParseCPURequest(cpuReq)
+	if err != nil {
+		return err
+	}
+	if effectiveCPUs <= 0 {
+		return nil
+	}
+	legacyMilli := calculateAllocatableCPUMilli(effectiveCPUs)
+	maxMilli := calculateMaxAllocatableCPUMilli(effectiveCPUs)
+	maxQty := resource.NewMilliQuantity(maxMilli, resource.DecimalSI)
+	unit := "effective vCPUs"
+	if effectiveCPUs == 1 {
+		unit = "effective vCPU"
+	}
+	if qty.Cmp(*maxQty) > 0 {
+		boundLabel := "estimated allocatable CPU"
+		if maxMilli > legacyMilli {
+			boundLabel = "estimated GKE 1.37.2+ upper-bound allocatable CPU"
+		}
+		return fmt.Errorf("requested --cpu %s exceeds %s (%s from %d %s) for machine type %s; lower --cpu to at most %s, choose a larger --compute-type, or omit --cpu/--memory for full-node sizing", cpuReq, boundLabel, maxQty.String(), effectiveCPUs, unit, machineType, maxQty.String())
+	}
+	legacyQty := resource.NewMilliQuantity(legacyMilli, resource.DecimalSI)
+	if qty.Cmp(*legacyQty) > 0 {
+		logging.Warn("Requested --cpu %s exceeds the pre-GKE 1.37.2 tiered allocatable estimate (%s from %d %s) for %s; pods may remain Pending on clusters older than GKE 1.37.2.", cpuReq, legacyQty.String(), effectiveCPUs, unit, machineType)
+	}
+	return nil
+}
+
+func validateMemoryRequestBound(machineType, memReq string, memoryMb int) error {
+	if memReq == "" {
+		return nil
+	}
+	qty, err := k8s.ParseMemoryRequest(memReq)
+	if err != nil {
+		return err
+	}
+	if memoryMb <= 0 {
+		return nil
+	}
+	legacyBytes := calculateAllocatableMemoryBytes(memoryMb)
+	maxBytes := calculateMaxAllocatableMemoryBytes(memoryMb)
+	maxQty := resource.NewQuantity(maxBytes, resource.BinarySI)
+	if qty.Cmp(*maxQty) > 0 {
+		allocDesc := formatAllocatableMemory(maxBytes)
+		boundLabel := "estimated allocatable memory"
+		if maxBytes > legacyBytes {
+			boundLabel = "estimated GKE 1.37.2+ upper-bound allocatable memory"
+		}
+		return fmt.Errorf("requested --memory %s exceeds %s (%s) for machine type %s; lower --memory to at most %s, choose a larger --compute-type, or omit --cpu/--memory for full-node sizing", memReq, boundLabel, allocDesc, machineType, allocDesc)
+	}
+	legacyQty := resource.NewQuantity(legacyBytes, resource.BinarySI)
+	if qty.Cmp(*legacyQty) > 0 {
+		const defaultMaxPodsReserveMiB = 15*110 + 500 + gkeEvictionMemoryMiB
+		defaultPodsBytes := max(legacyBytes, int64(memoryMb)*mibBytes-defaultMaxPodsReserveMiB*mibBytes)
+		podDensityHint := "higher max-pods-per-node"
+		if qty.Cmp(*resource.NewQuantity(defaultPodsBytes, resource.BinarySI)) > 0 {
+			podDensityHint = "default or higher max-pods-per-node"
+		}
+		logging.Warn("Requested --memory %s exceeds the pre-GKE 1.37.2 tiered allocatable estimate (%s) for %s; pods may remain Pending on clusters older than GKE 1.37.2 or with %s.", memReq, formatAllocatableMemory(legacyBytes), machineType, podDensityHint)
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) resolveParallelContainerCount(job orchestrator.JobDefinition) int {
+	mt := strings.ToLower(strings.TrimSpace(job.MachineType))
+	if g.mode == orchestrator.TypeK8s || !job.UseParallelContainers || job.IsPathwaysJob || !strings.Contains(mt, "tpu7x") {
+		return 1
+	}
+	if chips := config.AcceleratorsPerVM(mt); chips >= 2 && chips%2 == 0 {
+		return 2
+	}
+	return 1
 }
 
 // calculateAllocatableCPUMilli mirrors modules/compute/gke-node-pool/outputs.tf
@@ -884,9 +1365,17 @@ func calculateAllocatableCPUMilli(vCPUs int) int64 {
 	return int64(vCPUs)*1000 - reserveMilli
 }
 
-// calculateFullNodeCPURequestMilli mirrors modules/compute/gke-job-template/main.tf
-func calculateFullNodeCPURequestMilli(vCPUs int, hasGCSFuse bool) int64 {
-	allocatable := calculateAllocatableCPUMilli(vCPUs)
+func calculateK8sCPUResourceLimit(profile JobProfile, hasGCSFuse bool) string {
+	if profile.AllocatableCPUMilli > 0 {
+		return fmt.Sprintf("%dm", calculateFullNodeCPURequestFromAllocatableMilli(profile.AllocatableCPUMilli, hasGCSFuse))
+	}
+	if profile.CapacityCount <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%dm", calculateFullNodeCPURequestMilli(profile.CapacityCount, hasGCSFuse))
+}
+
+func calculateFullNodeCPURequestFromAllocatableMilli(allocatable int64, hasGCSFuse bool) int64 {
 	var request int64
 	if allocatable > 2000 {
 		// Leave headroom for 1 CPU of system DaemonSets
@@ -896,221 +1385,12 @@ func calculateFullNodeCPURequestMilli(vCPUs int, hasGCSFuse bool) int64 {
 		request = allocatable/2 + 100
 	}
 	if hasGCSFuse {
-		request -= 250 // gcsfuse sidecar
+		request -= gcsFuseCPUMilli
 	}
 	return max(100, request)
 }
 
-// gceTPUFamilies centralizes GCE/GKE/TPU-slice family tokens and observed cluster-label shorthands
-// (such as ironwood, v7x, tpu7x-podslice, v5lite-*, and tpu-v*-slice) locally to gceTPUHardwareResolver
-// without expanding user-facing config.AcceleratorShorthandMap.
-var gceTPUFamilies = []gceTPUFamilySpec{
-	{
-		canonical:      "tpu7x",
-		normTokens:     []string{"tpu7x", "tpu-v7x", "tpu-7x", "ironwood"},
-		shorthandBases: []string{"tpu7", "tpu7x", "tpu-7x", "tpu-v7x", "v7x", "ironwood"},
-		tpu7xChipRules: true,
-	},
-	{
-		canonical:      "v6e",
-		normTokens:     []string{"ct6e", "v6e", "trillium"},
-		shorthandBases: []string{"v6e", "tpu-v6e"},
-	},
-	{
-		canonical:      "v5p",
-		normTokens:     []string{"ct5p", "v5p"},
-		shorthandBases: []string{"v5p", "tpu-v5p"},
-	},
-	{
-		canonical:      "v5e",
-		normTokens:     []string{"ct5lp", "ct5l", "v5e", "v5lite", "v5-lite"},
-		shorthandBases: []string{"v5e", "v5lite", "v5-lite", "v5litepod", "tpu-v5e", "tpu-v5-lite", "tpu-v5-lite-podslice", "tpu-v5-lite-device"},
-	},
-	{
-		canonical:      "v4",
-		normTokens:     []string{"ct4p", "tpu-v4"},
-		shorthandBases: []string{"v4", "tpu-v4"},
-	},
-}
-
-func (gceTPUHardwareResolver) IsTPUMachine(machineType string) bool {
-	s := strings.ToLower(strings.TrimSpace(machineType))
-	if s == "" {
-		return false
-	}
-	return isKnownGCETPUMachine(s) || isGCEAcceleratorShorthand(s)
-}
-
-func (gceTPUHardwareResolver) NormalizeTPUType(raw string) string {
-	s := strings.ToLower(strings.TrimSpace(raw))
-	if s == "" {
-		return ""
-	}
-	norm := strings.ReplaceAll(s, "_", "-")
-	for _, fam := range gceTPUFamilies {
-		if matchesNormalizedTPUFamily(norm, fam) {
-			return fam.canonical
-		}
-	}
-	return s
-}
-
-func (r gceTPUHardwareResolver) InferTPUMachine(tpuType, rawMachine string, chipsPerNode int) string {
-	trimmedMachine := strings.TrimSpace(rawMachine)
-	if trimmedMachine != "" && !isGCEAcceleratorShorthand(trimmedMachine) {
-		return trimmedMachine
-	}
-	chips := chipsPerNode
-	if chips <= 0 && trimmedMachine != "" {
-		chips = r.ChipsPerNode(trimmedMachine)
-	}
-	normType := r.NormalizeTPUType(tpuType)
-	if normType == "" && trimmedMachine != "" {
-		normType = r.NormalizeTPUType(trimmedMachine)
-	}
-	return defaultGCETPUMachineType(normType, chips)
-}
-
-func (r gceTPUHardwareResolver) ChipsPerNode(machineType string) int {
-	trimmed := strings.TrimSpace(machineType)
-	if trimmed == "" || !r.IsTPUMachine(trimmed) {
-		return 0
-	}
-	lower := strings.ToLower(trimmed)
-	resolved := resolveGCETPUShorthand(lower)
-	if isKnownGCETPUMachine(resolved) {
-		if n, ok := parseStrictChipSuffix(resolved); ok {
-			return n
-		}
-		return config.AcceleratorsPerVM(resolved)
-	}
-	return extraTPUShorthandChips(lower)
-}
-
-func matchesNormalizedTPUFamily(norm string, fam gceTPUFamilySpec) bool {
-	for _, tok := range fam.normTokens {
-		if strings.Contains(norm, tok) {
-			return true
-		}
-	}
-	for _, base := range fam.shorthandBases {
-		if norm == base || strings.HasPrefix(norm, base+"-") {
-			return true
-		}
-	}
-	return false
-}
-
-// resolveGCETPUShorthand delegates official shorthands to config.ResolveMachineType
-// and normalizes cluster-label family aliases (e.g. v5lite-*, tpu-v6e-*, tpu-v5-lite-*)
-// via gceTPUFamilies before lookup.
-func resolveGCETPUShorthand(lower string) string {
-	candidate := lower
-	if fam, rest, ok := matchGCEFamilyShorthand(lower); ok && rest != "" && isAllDigits(rest) {
-		candidate = fam.canonical + "-" + rest
-	}
-	if resolved := config.ResolveMachineType(candidate); resolved != candidate && config.IsTPU(resolved) {
-		return strings.ToLower(resolved)
-	}
-	return lower
-}
-
-func parseStrictChipSuffix(machineType string) (int, bool) {
-	lower := strings.ToLower(strings.TrimSpace(machineType))
-	idx := strings.LastIndex(lower, "-")
-	if idx < 0 || !strings.HasSuffix(lower, "t") {
-		return 0, false
-	}
-	digits := lower[idx+1 : len(lower)-1]
-	if digits == "" || !isAllDigits(digits) {
-		return 0, false
-	}
-	n, err := strconv.Atoi(digits)
-	return n, err == nil && n > 0
-}
-
-func extraTPUShorthandChips(lower string) int {
-	fam, rest, ok := matchGCEFamilyShorthand(lower)
-	if !ok || !fam.tpu7xChipRules {
-		return 0
-	}
-	if rest == "1" {
-		return 1
-	}
-	return 4
-}
-
-func isKnownGCETPUMachine(lower string) bool {
-	switch lower {
-	case "tpu7x-standard", "ct6e-standard", "ct5p-hightpu", "ct5lp-hightpu", "ct5l-hightpu", "ct4p-hightpu":
-		return true
-	}
-	if _, hasChipSuffix := parseStrictChipSuffix(lower); !hasChipSuffix {
-		return false
-	}
-	for _, prefix := range []string{"tpu7x-", "ct6e-", "ct5p-", "ct5lp-", "ct5l-", "ct4p-"} {
-		if strings.HasPrefix(lower, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-func isGCEAcceleratorShorthand(raw string) bool {
-	s := strings.ToLower(strings.TrimSpace(raw))
-	if s == "" || isKnownGCETPUMachine(s) {
-		return false
-	}
-	if resolved := resolveGCETPUShorthand(s); resolved != s {
-		return true
-	}
-	_, _, ok := matchGCEFamilyShorthand(s)
-	return ok
-}
-
-func matchGCEFamilyShorthand(s string) (gceTPUFamilySpec, string, bool) {
-	for _, fam := range gceTPUFamilies {
-		for _, base := range fam.shorthandBases {
-			if s == base {
-				return fam, "", true
-			}
-			if rest, hasPrefix := strings.CutPrefix(s, base+"-"); hasPrefix && isValidShorthandSuffix(rest) {
-				return fam, rest, true
-			}
-		}
-	}
-	return gceTPUFamilySpec{}, "", false
-}
-
-func isValidShorthandSuffix(rest string) bool {
-	return (rest != "" && isAllDigits(rest)) || rest == "slice" || rest == "podslice"
-}
-
-func defaultGCETPUMachineType(tpuType string, chipsPerNode int) string {
-	switch tpuType {
-	case "tpu7x":
-		if chipsPerNode == 1 {
-			return "tpu7x-standard-1t"
-		}
-		return config.ResolveMachineType("tpu7x")
-	case "v6e":
-		return config.ResolveMachineType(fmt.Sprintf("v6e-%d", normalizeGCEChipCount(chipsPerNode)))
-	case "v5p":
-		return config.ResolveMachineType("v5p-8")
-	case "v5e":
-		return config.ResolveMachineType(fmt.Sprintf("v5e-%d", normalizeGCEChipCount(chipsPerNode)))
-	case "v4":
-		return config.ResolveMachineType("v4-8")
-	default:
-		return ""
-	}
-}
-
-func normalizeGCEChipCount(chips int) int {
-	switch chips {
-	case 1, 4, 8:
-		return chips
-	default:
-		return 4
-	}
+// calculateFullNodeCPURequestMilli mirrors modules/compute/gke-job-template/main.tf
+func calculateFullNodeCPURequestMilli(vCPUs int, hasGCSFuse bool) int64 {
+	return calculateFullNodeCPURequestFromAllocatableMilli(calculateAllocatableCPUMilli(vCPUs), hasGCSFuse)
 }

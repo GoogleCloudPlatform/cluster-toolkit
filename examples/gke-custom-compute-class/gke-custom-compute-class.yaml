@@ -57,7 +57,7 @@ deployment_groups:
 
   # Example 1: Inline-defined Custom Compute Class (prioritizing Spot C3 with on-demand N2 fallback)
   - id: ccc_inline
-    source: community/modules/management/custom-compute-class
+    source: modules/management/custom-compute-class
     use: [gke_cluster]
     settings:
       compute_classes:
@@ -85,7 +85,7 @@ deployment_groups:
 
   # Example 2: Template-defined Custom Compute Class (parameterized via custom templatefile)
   - id: ccc_template
-    source: community/modules/management/custom-compute-class
+    source: modules/management/custom-compute-class
     use: [gke_cluster]
     settings:
       custom_manifest_path: $(ghpc_stage("./templates/custom-compute-class.yaml.tftpl"))

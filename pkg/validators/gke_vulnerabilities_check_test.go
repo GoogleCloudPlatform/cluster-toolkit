@@ -208,6 +208,30 @@ func TestResolveGKEVersions(t *testing.T) {
 			expected: []string{"1.35.2-gke.200"},
 		},
 		{
+			name: "version_prefix without release_channel uses module default",
+			blueprint: config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("test-project"),
+					"region":     cty.StringVal("us-central1"),
+				}),
+				Groups: []config.Group{
+					{
+						Name: "primary",
+						Modules: []config.Module{
+							{
+								ID:     "gke",
+								Source: "modules/scheduler/gke-cluster",
+								Settings: config.NewDict(map[string]cty.Value{
+									"version_prefix": cty.StringVal("1.35."),
+								}),
+							},
+						},
+					},
+				},
+			},
+			expected: []string{"1.35.2-gke.200"}, // Same as an explicit REGULAR channel
+		},
+		{
 			name: "version_prefix fallback",
 			blueprint: config.Blueprint{
 				Vars: config.NewDict(map[string]cty.Value{
@@ -260,6 +284,7 @@ func TestFetchLatestGKEVersionForPrefix(t *testing.T) {
 		// Provide a mock JSON response matching container.ServerConfig
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintln(w, `{
+			"validMasterVersions": ["1.36.0-gke.1555000", "1.35.3-gke.1943000"],
 			"channels": [
 				{
 					"channel": "RAPID",
@@ -295,6 +320,12 @@ func TestFetchLatestGKEVersionForPrefix(t *testing.T) {
 			prefix:      "1.34.",
 			channel:     "REGULAR",
 			wantVersion: "1.34.7-gke.1292000",
+		},
+		{
+			name:        "Fallback to no-channel versions if the channel has no matching prefix",
+			prefix:      "1.36.",
+			channel:     "REGULAR",
+			wantVersion: "1.36.0-gke.1555000", // REGULAR has no 1.36 version yet
 		},
 		{
 			name:        "Fallback to empty if no matching prefix is found",

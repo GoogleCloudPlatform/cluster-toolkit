@@ -81,7 +81,7 @@ deployment_groups:
     settings:
       machine_type: n2d-standard-4
       instance_image:
-        family: ubuntu-2204-lts
+        family: ubuntu-2404-lts-amd64
         project: ubuntu-os-cloud
 
   - id: wait

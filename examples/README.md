@@ -101,7 +101,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [sycomp](#sycomp--) ![community-badge] ![experimental-badge]
   * [alphaevolve](#alphaevolve-) ![community-badge]
   * [gke-large-scale](#gke-large-scale-) ![core-badge]
-  * [gke-custom-compute-class.yaml](#gke-custom-compute-classyaml--) ![community-badge] ![experimental-badge]
+  * [gke-custom-compute-class.yaml](#gke-custom-compute-classyaml-) ![core-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -222,6 +222,7 @@ the experimental badge (![experimental-badge]).
 | [examples/gke-consumption-options/dws-flex-start/gke-a3-ultragpu.yaml](./gke-consumption-options/dws-flex-start/gke-a3-ultragpu.yaml) | gke | a3-ultragpu-8g | Dynamic Workload Scheduler (DWS) is a resource management and job scheduling platform designed for AI Hypercomputer. Dynamic Workload Scheduler improves your access to AI/ML resources, helps you optimize your spend, and can improve the... |
 | [examples/gke-consumption-options/dws-flex-start/gke-tpu-7x/gke-tpu-7x.yaml](./gke-consumption-options/dws-flex-start/gke-tpu-7x/gke-tpu-7x.yaml) | gke | tpu7x-standard-4t | These steps guide you through the cluster creation process for TPUs using DWS Flex Start. |
 | [examples/gke-consumption-options/dws-flex-start/gke-tpu-v6e/gke-tpu-v6e.yaml](./gke-consumption-options/dws-flex-start/gke-tpu-v6e/gke-tpu-v6e.yaml) | gke | ct6e-standard-4t | These steps guide you through the cluster creation process for TPUs using DWS Flex Start. |
+| [examples/gke-custom-compute-class/gke-custom-compute-class.yaml](./gke-custom-compute-class/gke-custom-compute-class.yaml) | gke | - | Demonstrates how to deploy a GKE Standard cluster with Node Auto-Provisioning (NAP) and configure GKE Custom Compute Classes (ComputeClass CRDs) using the custom-compute-class module in both structured inline and custom .tftpl template... |
 | [examples/gke-g4-confidential/gke-g4-confidential.yaml](./gke-g4-confidential/gke-g4-confidential.yaml) | gke | g4-standard-48 | This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure boot-disk... |
 | [examples/gke-g4/gke-g4.yaml](./gke-g4/gke-g4.yaml) | gke | g4-standard-48 | This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found here. The deployment instructions can be found in the README. |
 | [examples/gke-h4d/gke-h4d.yaml](./gke-h4d/gke-h4d.yaml) | gke | h4d-highmem-192-lssd | This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found here. The deployment instructions can be found in the README. |
@@ -246,7 +247,6 @@ the experimental badge (![experimental-badge]).
 | [examples/image-builder.yaml](./image-builder.yaml) | slurm | c2-standard-60 | This blueprint uses the Packer template module to create a custom VM image and uses it to provision an HPC cluster using the Slurm scheduler. By using a custom image, the cluster is able to begin running jobs sooner and more reliably... |
 | [examples/machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml](./machine-learning/a3-highgpu-8g/a3high-slurm-blueprint.yaml) | slurm | a3-highgpu-8g | This document will guide you to successfully provisioning a Slurm cluster with a3-highgpu-8g compute nodes running NVIDIA H100 GPUs. |
 | [examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml](./machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml) | slurm | n2-standard-2, a3-megagpu-8g | This directory provides a Cluster Toolkit blueprint (a3mega-slurm-blueprint.yaml) and deployment configuration (a3mega-slurm-deployment.yaml) for provisioning a Slurm cluster with a3-megagpu-8g (8x NVIDIA H100) compute nodes... |
-| [examples/machine-learning/a3-megagpu-8g/a3mega-slurm-gcsfuse-lssd-blueprint.yaml](./machine-learning/a3-megagpu-8g/a3mega-slurm-gcsfuse-lssd-blueprint.yaml) | slurm | n2-standard-2, a3-megagpu-8g | GCSFuse with Local SSD Cache (a3mega-slurm-gcsfuse-lssd-blueprint.yaml): Reflects best practices for using GCSFuse for ML workloads. It is configured to mount GCS buckets on two mountpoints on a3-mega nodes. Use the gcs_bucket variable... |
 | [examples/machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml](./machine-learning/a3-ultragpu-8g/a3ultra-slurm-blueprint.yaml) | slurm | a3-ultragpu-8g | This blueprint provisions an A3 Ultra (a3-ultragpu-8g, 8x NVIDIA H200) Slurm cluster with multi-NIC RoCE GPUDirect RDMA networking (gpu-rdma-vpc), a 36 TiB Google Cloud Managed Lustre filesystem (modules/file-system/managed-lustre)... |
 | [examples/machine-learning/a3-ultragpu-8g/a3ultra-vm.yaml](./machine-learning/a3-ultragpu-8g/a3ultra-vm.yaml) | none | a3-ultragpu-8g | The standalone VM blueprint (a3ultra-vm.yaml) uses a Filestore Zonal instance (2.5 TiB / 2560 GiB default, requiring gcloud services enable file.googleapis.com --project=<PROJECT_ID>), which may require a quota increase request. See... |
 | [examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml](./machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml) | slurm | a4-highgpu-8g | This blueprint provisions an A4 High (a4-highgpu-8g, 8x NVIDIA B200) Slurm cluster with multi-NIC RoCE GPUDirect RDMA networking (gpu-rdma-vpc), a 36 TiB Google Cloud Managed Lustre filesystem (modules/file-system/managed-lustre)... |
@@ -284,7 +284,6 @@ the experimental badge (![experimental-badge]).
 | [community/examples/fsi/ibm-symphony-on-gce/symphony.yaml](../community/examples/fsi/ibm-symphony-on-gce/symphony.yaml) | none | c2-standard-30, c2-standard-4 | This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit. The blueprint automates infrastructure provisioning, custom base image creation via... |
 | [community/examples/fsi/ibm-symphony-on-gke/symphony.yaml](../community/examples/fsi/ibm-symphony-on-gke/symphony.yaml) | gke | c2-standard-16, c2-standard-4 | This project provides a blueprint for deploying an IBM Spectrum Symphony cluster on Google Cloud Platform using the Google Cloud Cluster Toolkit and Google Kubernetes Engine (GKE). The blueprint automates infrastructure provisioning... |
 | [community/examples/gcloud-example.yaml](../community/examples/gcloud-example.yaml) | none | - | This blueprint demonstrates how to use the gcloud community module to run arbitrary gcloud commands during deployment and destroy. It shows an example of creating and deleting a network, subnet, and VM instance. |
-| [community/examples/gke-custom-compute-class/gke-custom-compute-class.yaml](../community/examples/gke-custom-compute-class/gke-custom-compute-class.yaml) | gke | - | Demonstrates how to deploy a GKE Standard cluster with Node Auto-Provisioning (NAP) and configure GKE Custom Compute Classes (ComputeClass CRDs) using the custom-compute-class community module in both structured inline and custom .tftpl... |
 | [community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml](../community/examples/gke-inference-benchmarks/g4-diffusiongemma-26b-a4b/blueprint.yaml) | gke | g4-standard-48 | This benchmark provisions a GKE cluster with a single-zone Spot G4 node pool (g4-standard-48, 1x NVIDIA RTX PRO 6000), serves google/diffusiongemma-26B-A4B-it with vLLM and runs a vllm bench serve throughput and latency benchmark... |
 | [community/examples/hpc-build-slurm-image.yaml](../community/examples/hpc-build-slurm-image.yaml) | slurm | n2d-standard-2 | This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top of an existing image, aci-cpu-rocky-linux-9-amd64 in the case of this example. |
 | [community/examples/hpc-slinky/hpc-slinky.yaml](../community/examples/hpc-slinky/hpc-slinky.yaml) | slurm-on-gke (slinky) | n2d-standard-8, h3-standard-88 | The SchedMD Slinky Project deploys Slurm on Kubernetes. Slinky is particularly useful for: 1. Those with a prefer a Slurm workload management paradigm, but a cloud-native operational experience 2. Those who want the flexibility of... |
@@ -2150,13 +2149,13 @@ The deployment, scaling, and teardown instructions can be found in the [README](
 
 [gke-large-scale]: ./gke-large-scale
 
-### [gke-custom-compute-class.yaml] ![community-badge] ![experimental-badge]
+### [gke-custom-compute-class.yaml] ![core-badge]
 
-Demonstrates how to deploy a GKE Standard cluster with Node Auto-Provisioning (NAP) and configure GKE Custom Compute Classes (`ComputeClass` CRDs) using the `custom-compute-class` community module in both structured inline and custom `.tftpl` template modes.
+Demonstrates how to deploy a GKE Standard cluster with Node Auto-Provisioning (NAP) and configure GKE Custom Compute Classes (`ComputeClass` CRDs) using the `custom-compute-class` module in both structured inline and custom `.tftpl` template modes.
 
-The deployment instructions can be found in the [README](../community/examples/gke-custom-compute-class/README.md).
+The deployment instructions can be found in the [README](./gke-custom-compute-class/README.md).
 
-[gke-custom-compute-class.yaml]: ../community/examples/gke-custom-compute-class/gke-custom-compute-class.yaml
+[gke-custom-compute-class.yaml]: ./gke-custom-compute-class/gke-custom-compute-class.yaml
 
 ## Blueprint Schema
 

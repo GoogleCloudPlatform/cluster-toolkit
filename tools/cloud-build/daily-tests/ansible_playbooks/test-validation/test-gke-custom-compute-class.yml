@@ -49,7 +49,7 @@
   - name: Deploy sample ComputeClass workloads
     delegate_to: localhost
     ansible.builtin.shell: |
-      kubectl apply -f {{ workspace }}/community/examples/gke-custom-compute-class/sample-workloads.yaml
+      kubectl apply -f {{ workspace }}/examples/gke-custom-compute-class/sample-workloads.yaml
     args:
       executable: /bin/bash
 
@@ -102,7 +102,7 @@
   - name: Clean up sample workloads
     delegate_to: localhost
     ansible.builtin.shell: |
-      kubectl delete -f {{ workspace }}/community/examples/gke-custom-compute-class/sample-workloads.yaml --ignore-not-found=true
+      kubectl delete -f {{ workspace }}/examples/gke-custom-compute-class/sample-workloads.yaml --ignore-not-found=true
     args:
       executable: /bin/bash
     changed_when: false

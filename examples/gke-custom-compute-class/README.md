@@ -3,7 +3,7 @@
 This blueprint demonstrates how to deploy a Google Kubernetes Engine (GKE)
 cluster with Node Auto-Provisioning (NAP) and configure **GKE Custom Compute
 Classes (`ComputeClass` CRDs)** using the
-`community/modules/management/custom-compute-class` module.
+`modules/management/custom-compute-class` module.
 
 It illustrates two complementary patterns for defining compute classes:
 
@@ -42,11 +42,11 @@ It illustrates two complementary patterns for defining compute classes:
 
 * **`network`** (`modules/network/vpc`): Creates a VPC and subnet with secondary ranges for GKE pods and services.
 * **`gke_cluster`** (`modules/scheduler/gke-cluster`): Creates a GKE cluster with `cluster_autoscaling` enabled for Node Auto-Provisioning.
-* **`ccc_inline`** (`community/modules/management/custom-compute-class`):
+* **`ccc_inline`** (`modules/management/custom-compute-class`):
   Applies `spot-priority-compute-class` defining prioritized machine
   families (`c3` Spot with `n2` on-demand fallback) and custom node
   labels/taints.
-* **`ccc_template`** (`community/modules/management/custom-compute-class`):
+* **`ccc_template`** (`modules/management/custom-compute-class`):
   Applies `template-defined-compute-class` rendered from
   `./templates/custom-compute-class.yaml.tftpl`.
 

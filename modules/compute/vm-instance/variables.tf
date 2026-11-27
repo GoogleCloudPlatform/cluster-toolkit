@@ -29,8 +29,8 @@ variable "instance_image" {
   description = "Instance Image"
   type        = map(string)
   default = {
-    project = "cloud-hpc-image-public"
-    family  = "hpc-rocky-linux-9"
+    project = "advanced-compute-images"
+    family  = "aci-cpu-rocky-linux-9-amd64"
   }
 
   validation {

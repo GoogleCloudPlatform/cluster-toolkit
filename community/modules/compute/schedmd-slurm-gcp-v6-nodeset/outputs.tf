@@ -160,6 +160,21 @@ output "nodeset" {
   }
 
   precondition {
+    condition     = !(var.provisioning_engine == "MIG" && !var.dws_flex.enabled && var.future_reservation != "")
+    error_message = "future_reservation is not supported with provisioning_engine = 'MIG'. Use provisioning_engine = 'BULK_INSERT' or 'AUTO'."
+  }
+
+  precondition {
+    condition     = !(var.provisioning_engine == "MIG" && !var.dws_flex.enabled && local.has_maintenance_interval)
+    error_message = "maintenance_interval is not supported with provisioning_engine = 'MIG'. Use provisioning_engine = 'BULK_INSERT' or 'AUTO'."
+  }
+
+  precondition {
+    condition     = !(var.provisioning_engine == "MIG" && !var.dws_flex.enabled && local.has_instance_properties)
+    error_message = "instance_properties is not supported with provisioning_engine = 'MIG'. Use provisioning_engine = 'BULK_INSERT' or 'AUTO'."
+  }
+
+  precondition {
     condition     = !local.is_tpu || endswith(var.machine_type, "-4t")
     error_message = "TPU nodesets currently only support 4-chip machine types ending in '-4t' (e.g. ct6e-standard-4t, tpu7x-standard-4t, ct5p-hightpu-4t)."
   }

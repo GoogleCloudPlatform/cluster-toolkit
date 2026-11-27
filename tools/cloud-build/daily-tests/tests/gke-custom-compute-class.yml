@@ -16,7 +16,7 @@
 test_name: gke-custom-compute-class
 deployment_name: gke-ccc-{{ build }}
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/gke-custom-compute-class/gke-custom-compute-class.yaml"
+blueprint_yaml: "{{ workspace }}/examples/gke-custom-compute-class/gke-custom-compute-class.yaml"
 region: europe-west4
 zone: europe-west4-a
 network: "{{ deployment_name }}-net"

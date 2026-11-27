@@ -399,6 +399,31 @@ func ResolveTopologyForChips(computeType string, machineType string) (string, er
 	return "", fmt.Errorf("could not find a valid topology shape for %d chips with accelerator %s", totalChips, computeType)
 }
 
+// DefaultTopologyForChips returns the default 2D or 3D topology shape for a known TPU family
+// and total chip count (not TensorCores). Returns ("", false) when the family or chip count has
+// no standard default shape.
+func DefaultTopologyForChips(machineType string, totalChips int) (string, bool) {
+	mt := strings.ToLower(strings.TrimSpace(machineType))
+	if strings.HasPrefix(mt, "ct5l-") {
+		mt = "ct5lp-" + strings.TrimPrefix(mt, "ct5l-")
+	}
+	if totalChips <= 0 || mt == "" {
+		return "", false
+	}
+	if matchesTPUFamily(mt, valid2DTPUFamilies) {
+		shape, ok := allowed2DTopologies[totalChips]
+		return shape, ok
+	}
+	if matchesTPUFamily(mt, valid3DTPUFamilies) {
+		if totalChips == 1 && strings.Contains(mt, "tpu7") {
+			return "1x1x1", true
+		}
+		shape, ok := common3DTopologies[totalChips]
+		return shape, ok
+	}
+	return "", false
+}
+
 // ValidateHardwareRequest validates hardware requests for TPUs.
 func ValidateHardwareRequest(machineType, topology string) error {
 	if !IsTPU(machineType) {
@@ -547,4 +572,67 @@ func Is3DTorusTPU(machineType string) bool {
 		}
 	}
 	return false
+}
+
+var (
+	// unmappedGPUMachinePrefixes lists GCE GPU series absent from machine_mappings.json.
+	unmappedGPUMachinePrefixes = []string{"a5-", "a5x-"}
+	// tpuAliasTokens mirrors extra TPU shorthand aliases recognized by pkg/orchestrator/gke's gceTPUFamilies.
+	tpuAliasTokens = []string{"v5-lite", "v5lite", "v7x", "ironwood", "trillium"}
+)
+
+// IsKnownAccelerator reports whether computeType is a statically recognized TPU or GPU shorthand,
+// accelerator label, or accelerator machine type.
+func IsKnownAccelerator(computeType string) bool {
+	lower := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(computeType)), "_", "-")
+	if lower == "" {
+		return false
+	}
+	return isDirectAcceleratorToken(lower) || isMappedAccelerator(lower)
+}
+
+func isDirectAcceleratorToken(lower string) bool {
+	if IsTPU(lower) || strings.HasPrefix(lower, "nvidia-") {
+		return true
+	}
+	for _, alias := range tpuAliasTokens {
+		if lower == alias || strings.HasPrefix(lower, alias+"-") {
+			return true
+		}
+	}
+	for _, prefix := range unmappedGPUMachinePrefixes {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func isMappedAccelerator(lower string) bool {
+	mappings := GetMachineMappings()
+	if _, ok := mappings.AcceleratorShorthandMap[lower]; ok {
+		return true
+	}
+	base, _, hasDash := strings.Cut(lower, "-")
+	basePrefix := base + "-"
+	for k, mt := range mappings.AcceleratorShorthandMap {
+		if strings.EqualFold(mt, lower) || strings.HasPrefix(strings.ToLower(k), basePrefix) {
+			return true
+		}
+	}
+	for family, label := range mappings.MachineFamilyToLabelMap {
+		if matchesMappedFamily(lower, base, hasDash, family, label) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchesMappedFamily(lower, base string, hasDash bool, family, label string) bool {
+	familyLower := strings.ToLower(family)
+	if lower == familyLower || strings.HasPrefix(lower, familyLower+"-") || strings.EqualFold(label, lower) {
+		return true
+	}
+	familySeries, _, familyHasDash := strings.Cut(familyLower, "-")
+	return hasDash && familyHasDash && base == familySeries
 }
