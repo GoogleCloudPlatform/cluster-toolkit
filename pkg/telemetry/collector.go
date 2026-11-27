@@ -141,6 +141,7 @@ func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
 	c.metadata[INSTALLATION_MODE] = c.installationMode
 	c.metadata[IS_AI_ASSISTED] = strconv.FormatBool(isAIAssisted(c.blueprint, c.eventCmd, c.eventArgs))
+	c.metadata[EXPORT_TO_CLUSTER_DIRECTOR] = strconv.FormatBool(isExportToClusterDirector(c.blueprint, c.eventCmd))
 	if _, exists := c.metadata[EXPLAIN_TARGET]; !exists {
 		c.metadata[EXPLAIN_TARGET] = ""
 	}

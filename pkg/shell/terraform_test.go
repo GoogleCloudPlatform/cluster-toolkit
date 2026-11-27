@@ -18,9 +18,11 @@ package shell
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -28,6 +30,29 @@ import (
 	tfjson "github.com/hashicorp/terraform-json"
 	. "gopkg.in/check.v1"
 )
+
+func init() {
+	if os.Getenv("GHPC_FAKE_TERRAFORM") == "1" {
+		runFakeTerraformProcess()
+	}
+}
+
+func runFakeTerraformProcess() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "version":
+			fmt.Println(`{"terraform_version":"1.12.2"}`)
+			os.Exit(0)
+		case "init":
+			code, _ := strconv.Atoi(os.Getenv("FAKE_TF_INIT_EXIT"))
+			os.Exit(code)
+		case "plan":
+			code, _ := strconv.Atoi(os.Getenv("FAKE_TF_PLAN_EXIT"))
+			os.Exit(code)
+		}
+	}
+	os.Exit(0)
+}
 
 // Setup GoCheck
 type MySuite struct{}
@@ -250,4 +275,44 @@ func (s *MySuite) TestTerraformParallelism(c *C) {
 		}()
 	}
 	wg.Wait()
+}
+
+func (s *MySuite) TestErrDestroySkippedAndInitModule(c *C) {
+	exe, err := os.Executable()
+	c.Assert(err, IsNil)
+	c.Assert(os.Setenv("GHPC_FAKE_TERRAFORM", "1"), IsNil)
+	defer func() { _ = os.Unsetenv("GHPC_FAKE_TERRAFORM") }()
+
+	tf, err := tfexec.NewTerraform(c.MkDir(), exe)
+	c.Assert(err, IsNil)
+
+	origPlanExit, hadPlanExit := os.LookupEnv("FAKE_TF_PLAN_EXIT")
+	origInitExit, hadInitExit := os.LookupEnv("FAKE_TF_INIT_EXIT")
+	defer func() {
+		if hadPlanExit {
+			_ = os.Setenv("FAKE_TF_PLAN_EXIT", origPlanExit)
+		} else {
+			_ = os.Unsetenv("FAKE_TF_PLAN_EXIT")
+		}
+		if hadInitExit {
+			_ = os.Setenv("FAKE_TF_INIT_EXIT", origInitExit)
+		} else {
+			_ = os.Unsetenv("FAKE_TF_INIT_EXIT")
+		}
+	}()
+
+	// Destroy with pending changes (exit code 2) when unapplied returns ErrDestroySkipped.
+	c.Assert(os.Setenv("FAKE_TF_PLAN_EXIT", "2"), IsNil)
+	c.Check(errors.Is(Destroy(tf, NeverApply, TextOutput), ErrDestroySkipped), Equals, true)
+
+	// Non-destroy apply with pending changes when unapplied returns nil, not ErrDestroySkipped.
+	c.Check(applyOrDestroy(tf, NeverApply, TextOutput, false), IsNil)
+
+	// Destroy with no pending changes (exit code 0) returns nil, not ErrDestroySkipped.
+	c.Assert(os.Setenv("FAKE_TF_PLAN_EXIT", "0"), IsNil)
+	c.Check(Destroy(tf, NeverApply, TextOutput), IsNil)
+
+	// InitModule returns a HintError when terraform init fails.
+	c.Assert(os.Setenv("FAKE_TF_INIT_EXIT", "1"), IsNil)
+	c.Check(InitModule(context.Background(), tf), NotNil)
 }

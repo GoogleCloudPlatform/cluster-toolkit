@@ -31,6 +31,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -157,6 +158,19 @@ func isAIAssisted(bp config.Blueprint, cmd *cobra.Command, args []string) bool {
 	return bp.AIAssisted || IsAgentEnv() || hasRawAIAssistedInFiles(cmd, args)
 }
 
+// isExportToClusterDirector reports whether exporting to Cluster Director was
+// enabled: the --export-to-cluster-director flag when it was set, otherwise the
+// blueprint's export_to_cluster_director setting (false when unset).
+func isExportToClusterDirector(bp config.Blueprint, cmd *cobra.Command) bool {
+	if cmd != nil {
+		if flag := cmd.Flag("export-to-cluster-director"); flag != nil && flag.Changed {
+			v, err := strconv.ParseBool(flag.Value.String())
+			return err == nil && v
+		}
+	}
+	return bp.ExportToClusterDirectorEnabled()
+}
+
 func hasRawAIAssistedInFiles(cmd *cobra.Command, args []string) bool {
 	if len(args) > 0 && strings.TrimSpace(args[0]) != "" {
 		if hasRawAIAssistedTrue(resolveBlueprintPath(args[0])) {
@@ -241,6 +255,9 @@ func mergeDeploymentFileVars(cmd *cobra.Command, bp *config.Blueprint) {
 		return
 	}
 
+	if ds.ExportToClusterDirector != nil {
+		bp.SetExportToClusterDirector(*ds.ExportToClusterDirector)
+	}
 	if ds.AIAssisted {
 		bp.AIAssisted = true
 	}
