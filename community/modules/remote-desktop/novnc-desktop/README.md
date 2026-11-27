@@ -23,7 +23,7 @@ existing host such as a Slurm login node.
 - `network_storage`
 - `slurm_auth_mode`
 - `vnc_backend`
-- `enable_gpu_acceleration` (hardware OpenGL; needs `turbovnc` - see [internal/desktop-broker](../../internal/desktop-broker/README.md))
+- `enable_gpu_acceleration` (hardware OpenGL; `turbovnc` recommended - see [internal/desktop-broker](../../internal/desktop-broker/README.md))
 
 ## Outputs
 
