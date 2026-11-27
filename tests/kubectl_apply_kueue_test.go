@@ -571,12 +571,21 @@ func TestKueueHelmValuesDefaultBackwardCompat(t *testing.T) {
 		wantLayerKeys  [][]string
 		wantReplicas   float64
 		wantCPU        string
+		wantMemory     string
 		wantHasManager bool
 	}{
 		{
 			name:          "0.17.1_default",
 			in:            kueueEvalInput{install: true, version: "0.17.1"},
 			wantLayerKeys: [][]string{{"controllerManager"}},
+		},
+		{
+			name:          "0.17.1_controller_sizing",
+			in:            kueueEvalInput{install: true, version: "0.17.1", controllerCPU: &cpu, controllerMemory: &mem, controllerReplicas: &replicas},
+			wantLayerKeys: [][]string{{"controllerManager"}, {"controllerManager"}},
+			wantReplicas:  2,
+			wantCPU:       "4",
+			wantMemory:    "8Gi",
 		},
 		{
 			name:          "0.18.2_default",
@@ -589,6 +598,7 @@ func TestKueueHelmValuesDefaultBackwardCompat(t *testing.T) {
 			wantLayerKeys: [][]string{{"controllerManager"}, {"controllerManager"}},
 			wantReplicas:  2,
 			wantCPU:       "4",
+			wantMemory:    "8Gi",
 		},
 		{
 			name:          "0.19.6_default",
@@ -613,6 +623,7 @@ func TestKueueHelmValuesDefaultBackwardCompat(t *testing.T) {
 			wantLayerKeys: [][]string{{"controllerManager"}, {"controllerManager"}},
 			wantReplicas:  3,
 			wantCPU:       "16",
+			wantMemory:    "64Gi",
 		},
 		{
 			name:           "0.19.6_dynamic_slicing_and_pathways",
@@ -620,6 +631,7 @@ func TestKueueHelmValuesDefaultBackwardCompat(t *testing.T) {
 			wantLayerKeys:  [][]string{{"controllerManager"}, {"managerConfig"}, {"controllerManager"}},
 			wantReplicas:   3,
 			wantCPU:        "16",
+			wantMemory:     "64Gi",
 			wantHasManager: true,
 		},
 		{
@@ -628,12 +640,13 @@ func TestKueueHelmValuesDefaultBackwardCompat(t *testing.T) {
 			wantLayerKeys: [][]string{{"controllerManager"}, {"controllerManager"}},
 			wantReplicas:  2,
 			wantCPU:       "4",
+			wantMemory:    "8Gi",
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertDefaultBackwardCompatCase(t, parsed, tc.in, tc.wantLayerKeys, tc.wantReplicas, tc.wantCPU, tc.wantHasManager)
+			assertDefaultBackwardCompatCase(t, parsed, tc.in, tc.wantLayerKeys, tc.wantReplicas, tc.wantCPU, tc.wantMemory, tc.wantHasManager)
 		})
 	}
 }
@@ -645,6 +658,7 @@ func assertDefaultBackwardCompatCase(
 	wantLayerKeys [][]string,
 	wantReplicas float64,
 	wantCPU string,
+	wantMemory string,
 	wantHasManager bool,
 ) {
 	t.Helper()
@@ -668,15 +682,23 @@ func assertDefaultBackwardCompatCase(
 	if !gates["TopologyAwareScheduling"] {
 		t.Fatalf("expected TopologyAwareScheduling=true, got %#v", gates)
 	}
-	if semverAtLeast(in.version, 18) && gates["KueueDRAIntegration"] {
-		t.Fatalf("expected KueueDRAIntegration=false on %s, got %#v", in.version, gates)
+	draEnabled, hasDRA := gates["KueueDRAIntegration"]
+	if wantDRA := semverAtLeast(in.version, 18); hasDRA != wantDRA || draEnabled {
+		t.Fatalf("KueueDRAIntegration on %s: present=%t enabled=%t, want present=%t enabled=false", in.version, hasDRA, draEnabled, wantDRA)
 	}
 	if wantReplicas > 0 {
-		cm := merged["controllerManager"].(map[string]any)
-		reqs := cm["manager"].(map[string]any)["resources"].(map[string]any)["requests"].(map[string]any)
-		if cm["replicas"] != wantReplicas || reqs["cpu"] != wantCPU {
-			t.Fatalf("unexpected sizing in single controllerManager layer: cm=%#v", cm)
-		}
+		assertControllerSizing(t, merged, wantReplicas, wantCPU, wantMemory)
+	}
+}
+
+func assertControllerSizing(t *testing.T, helmValues map[string]any, wantReplicas float64, wantCPU, wantMemory string) {
+	t.Helper()
+	cm := helmValues["controllerManager"].(map[string]any)
+	res := cm["manager"].(map[string]any)["resources"].(map[string]any)
+	reqs := res["requests"].(map[string]any)
+	lims := res["limits"].(map[string]any)
+	if cm["replicas"] != wantReplicas || reqs["cpu"] != wantCPU || reqs["memory"] != wantMemory || lims["cpu"] != wantCPU || lims["memory"] != wantMemory {
+		t.Fatalf("unexpected controller sizing (want replicas=%v cpu=%s memory=%s): cm=%#v", wantReplicas, wantCPU, wantMemory, cm)
 	}
 }
 
@@ -987,47 +1009,88 @@ func TestKueueHelmValuesOlderVersionCompatAndInstallFalse(t *testing.T) {
 	}
 
 	partialPath := writeTempValuesFile(t, "partial.yaml", `
+controllerManager:
+  featureGates:
+    - name: VisibilityOnDemand
+      enabled: true
 managerConfig:
   controllerManagerConfigYaml: |
     manageJobsWithoutQueueName: true
 `)
-	assertOlderVersionDefaults(t, parsed, partialPath, "0.15.2", false, false)
-	assertOlderVersionDefaults(t, parsed, partialPath, "0.16.0", true, false)
-	assertOlderVersionDefaults(t, parsed, partialPath, "0.17.1", true, true)
+	versionCases := []versionBoundaryExpectation{
+		{ver: "0.15.2", wantDRA: false, wantCohort: false, wantPod: false, wantRayService: false, wantKubeflowV1: true},
+		{ver: "0.16.0", wantDRA: false, wantCohort: false, wantPod: true, wantRayService: false, wantKubeflowV1: true},
+		{ver: "0.17.1", wantDRA: false, wantCohort: false, wantPod: true, wantRayService: true, wantKubeflowV1: true},
+		{ver: "0.18.2", wantDRA: true, wantCohort: false, wantPod: true, wantRayService: true, wantKubeflowV1: true},
+		{ver: "0.19.6", wantDRA: true, wantCohort: true, wantPod: true, wantRayService: true, wantKubeflowV1: false},
+	}
+	for _, tc := range versionCases {
+		t.Run(tc.ver, func(t *testing.T) {
+			assertVersionBoundaryDefaults(t, parsed, partialPath, tc)
+		})
+	}
 }
 
-func assertOlderVersionDefaults(t *testing.T, parsed kueueParsedHCL, path *string, ver string, wantPodIntegration, wantRayService bool) {
+type versionBoundaryExpectation struct {
+	ver            string
+	wantDRA        bool
+	wantCohort     bool
+	wantPod        bool
+	wantRayService bool
+	wantKubeflowV1 bool
+}
+
+func assertVersionBoundaryDefaults(t *testing.T, parsed kueueParsedHCL, path *string, want versionBoundaryExpectation) {
 	t.Helper()
 	layers, errs := evalKueueHCL(t, parsed, kueueEvalInput{
 		install:        true,
-		version:        ver,
+		version:        want.ver,
 		helmValuesPath: path,
 	})
 	if len(errs) > 0 {
-		t.Fatalf("unexpected validation errors on %s: %v", ver, errs)
+		t.Fatalf("unexpected validation errors on %s: %v", want.ver, errs)
 	}
 	merged := simulateHelmValuesMerge(t, layers)
-	gates := extractFeatureGateMap(t, merged)
-	if len(gates) != 1 || !gates["TopologyAwareScheduling"] {
-		t.Fatalf("expected only TopologyAwareScheduling on %s, got %#v", ver, gates)
-	}
+	assertVersionBoundaryGates(t, want.ver, extractFeatureGateMap(t, merged), want.wantDRA)
+
 	cfg := decodeControllerManagerConfig(t, merged)
 	gkc := cfg["controller"].(map[string]any)["groupKindConcurrency"].(map[string]any)
-	if _, hasCohort := gkc["Cohort.kueue.x-k8s.io"]; hasCohort {
-		t.Fatalf("%s base config must not inject Cohort.kueue.x-k8s.io: %#v", ver, gkc)
+	cohortVal, hasCohort := gkc["Cohort.kueue.x-k8s.io"]
+	if hasCohort != want.wantCohort || (want.wantCohort && cohortVal != float64(1)) {
+		t.Fatalf("%s Cohort.kueue.x-k8s.io: present=%t val=%v, want present=%t val=1", want.ver, hasCohort, cohortVal, want.wantCohort)
 	}
+	assertVersionBoundaryFrameworks(t, cfg, want)
+}
+
+func assertVersionBoundaryGates(t *testing.T, ver string, gates map[string]bool, wantDRA bool) {
+	t.Helper()
+	if !gates["TopologyAwareScheduling"] || !gates["VisibilityOnDemand"] {
+		t.Fatalf("expected TopologyAwareScheduling=true and VisibilityOnDemand=true on %s, got %#v", ver, gates)
+	}
+	draEnabled, hasDRA := gates["KueueDRAIntegration"]
+	wantLen := 2
+	if wantDRA {
+		wantLen = 6
+	}
+	if len(gates) != wantLen || hasDRA != wantDRA || draEnabled {
+		t.Fatalf("unexpected feature gates on %s (want len=%d hasDRA=%t): %#v", ver, wantLen, wantDRA, gates)
+	}
+}
+
+func assertVersionBoundaryFrameworks(t *testing.T, cfg map[string]any, want versionBoundaryExpectation) {
+	t.Helper()
 	var fws []string
 	for _, f := range cfg["integrations"].(map[string]any)["frameworks"].([]any) {
 		fws = append(fws, f.(string))
 	}
-	if slices.Contains(fws, "pod") != wantPodIntegration {
-		t.Fatalf("%s pod integration = %t, want %t (%v)", ver, !wantPodIntegration, wantPodIntegration, fws)
+	if slices.Contains(fws, "pod") != want.wantPod {
+		t.Fatalf("%s pod integration = %t, want %t (%v)", want.ver, !want.wantPod, want.wantPod, fws)
 	}
-	if slices.Contains(fws, "ray.io/rayservice") != wantRayService {
-		t.Fatalf("%s rayservice = %t, want %t (%v)", ver, !wantRayService, wantRayService, fws)
+	if slices.Contains(fws, "ray.io/rayservice") != want.wantRayService {
+		t.Fatalf("%s rayservice = %t, want %t (%v)", want.ver, !want.wantRayService, want.wantRayService, fws)
 	}
-	if !slices.Contains(fws, "kubeflow.org/pytorchjob") {
-		t.Fatalf("%s must retain Kubeflow Training v1 pytorchjob default (%v)", ver, fws)
+	if slices.Contains(fws, "kubeflow.org/pytorchjob") != want.wantKubeflowV1 {
+		t.Fatalf("%s kubeflow.org/pytorchjob = %t, want %t (%v)", want.ver, !want.wantKubeflowV1, want.wantKubeflowV1, fws)
 	}
 }
 
@@ -1068,7 +1131,7 @@ func TestKueueHelmValuesValidationGuardrails(t *testing.T) {
 		{name: "manager_config_null", content: "managerConfig: null\n", wantSubstr: "managerConfig in kueue.helm_values_path must be a YAML mapping"},
 		{name: "manager_config_yaml_null", content: "managerConfig:\n  controllerManagerConfigYaml: null\n", wantSubstr: "must be a YAML string"},
 		{name: "manager_config_as_nested_map_not_string", content: "managerConfig:\n  controllerManagerConfigYaml:\n    manageJobsWithoutQueueName: true\n", wantSubstr: "must be a YAML string"},
-		{name: "manager_config_wrong_kind", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    apiVersion: v1\n    kind: ConfigMap\n", wantSubstr: "kind 'Configuration'"},
+		{name: "manager_config_wrong_kind", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    apiVersion: config.kueue.x-k8s.io/v1beta2\n    kind: ConfigMap\n", wantSubstr: "kind 'Configuration'"},
 		{name: "manager_config_queue_apiversion", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    apiVersion: kueue.x-k8s.io/v1beta2\n    kind: Configuration\n", wantSubstr: "apiVersion 'config.kueue.x-k8s.io/v1beta2'"},
 		{name: "manager_config_v1beta1_apiversion", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    apiVersion: config.kueue.x-k8s.io/v1beta1\n    kind: Configuration\n", wantSubstr: "apiVersion 'config.kueue.x-k8s.io/v1beta2'"},
 		{name: "manager_config_feature_gates_conflict", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    featureGates:\n      VisibilityOnDemand: true\n", wantSubstr: "featureGates cannot be set inside managerConfig.controllerManagerConfigYaml"},
