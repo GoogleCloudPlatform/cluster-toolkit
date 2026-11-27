@@ -2607,3 +2607,87 @@ def test_resume_mig_nodes_reservation_type_fail_fast(
   assert mock_handle_failure.call_args.args[0] == ["c-n-0"]
   assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
   assert "CALENDAR mode requires RESERVATION_BOUND" in mock_handle_failure.call_args.args[1]
+
+
+@unittest.mock.patch("resume.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_skips_template_patch_when_proactive(
+    mock_compute_prop, mock_execute, caplog
+):
+  """Refuse drift template patch if a live MIG's updatePolicy.type was mutated to PROACTIVE,
+  while continuing to patch normally when updatePolicy.type is OPPORTUNISTIC."""
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      project="p",
+      provisioning_engine="MIG",
+      nodeset={
+          "n": TstNodeset(
+              nodeset_name="n",
+              region="us-central1",
+              node_count_static=2,
+              provisioning_engine="MIG",
+              instance_template="projects/p/global/instanceTemplates/tpl-new",
+          )
+      },
+  )
+
+  # 1. PROACTIVE updatePolicy -> log error and skip patch(), still createInstances
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
+      "updatePolicy": {"type": "PROACTIVE"},
+      "versions": [{"instanceTemplate": "projects/p/global/instanceTemplates/tpl-old"}],
+  }
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  mock_execute.return_value = {"status": "DONE"}
+
+  with caplog.at_level("ERROR"), unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=util.Lookup(cfg))
+
+  mock_compute.regionInstanceGroupManagers().patch.assert_not_called()
+  mock_compute.regionInstanceGroupManagers().createInstances.assert_called_once()
+  assert any("PROACTIVE" in rec.message and "skipping template patch" in rec.message for rec in caplog.records)
+
+  # 1b. PROACTIVE updatePolicy with NO drift -> logs misconfiguration without claiming skipped patch
+  caplog.clear()
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
+      "updatePolicy": {"type": "PROACTIVE"},
+      "versions": [{"instanceTemplate": "projects/p/global/instanceTemplates/tpl-new"}],
+  }
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  mock_execute.return_value = {"status": "DONE"}
+
+  with caplog.at_level("ERROR"), unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=util.Lookup(cfg))
+
+  mock_compute.regionInstanceGroupManagers().patch.assert_not_called()
+  mock_compute.regionInstanceGroupManagers().createInstances.assert_called_once()
+  assert any(
+      "PROACTIVE" in rec.message and "set updatePolicy.type back to 'OPPORTUNISTIC'" in rec.message
+      for rec in caplog.records
+  )
+
+  # 2. OPPORTUNISTIC updatePolicy -> template drift patch() executes normally
+  caplog.clear()
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
+      "updatePolicy": {"type": "OPPORTUNISTIC"},
+      "versions": [{"instanceTemplate": "projects/p/global/instanceTemplates/tpl-old"}],
+  }
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  mock_execute.return_value = {"status": "DONE"}
+
+  with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=util.Lookup(cfg))
+
+  mock_compute.regionInstanceGroupManagers().patch.assert_called_once()
+  mock_compute.regionInstanceGroupManagers().createInstances.assert_called_once()

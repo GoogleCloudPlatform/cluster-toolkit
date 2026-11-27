@@ -76,8 +76,9 @@ module "slurm_nodeset_template" {
   access_config                       = each.value.access_config
   tags                                = concat([local.slurm_cluster_name], each.value.tags)
 
-  max_run_duration   = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? each.value.dws_flex.max_run_duration : null
-  provisioning_model = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? "FLEX_START" : null
+  max_run_duration     = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? each.value.dws_flex.max_run_duration : null
+  provisioning_model   = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? "FLEX_START" : null
+  maintenance_interval = (local.nodeset_resolved_engine[each.value.nodeset_name] == "MIG" && !each.value.dws_flex.enabled && each.value.maintenance_interval != null && trimspace(each.value.maintenance_interval) != "") ? trimspace(each.value.maintenance_interval) : null
   reservation_affinity = (
     each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert ? local.no_reservation_affinity : (
       local.nodeset_resolved_engine[each.value.nodeset_name] == "MIG" && each.value.reservation_name != "" && each.value.reservation_name != null ? {
@@ -136,7 +137,6 @@ locals {
       ns.node_count_dynamic_max == 0 &&
       (ns.reservation_name == null || ns.reservation_name == "") &&
       (ns.future_reservation == null || ns.future_reservation == "") &&
-      (ns.maintenance_interval == null || trimspace(ns.maintenance_interval) == "") &&
       !try(
         jsondecode(ns.instance_properties_json) != null && try(length(jsondecode(ns.instance_properties_json)) > 0, true),
         ns.instance_properties_json != null &&
@@ -367,6 +367,11 @@ resource "google_compute_region_instance_group_manager" "nodeset_mig" {
     ignore_changes = [
       target_size,
     ]
+
+    postcondition {
+      condition     = try(self.update_policy[0].type, null) == "OPPORTUNISTIC"
+      error_message = "Proactive Lockout Guardrail: Compute NodeSet MIGs must use OPPORTUNISTIC update policies to prevent uncoordinated restarts of active batch jobs."
+    }
   }
 }
 

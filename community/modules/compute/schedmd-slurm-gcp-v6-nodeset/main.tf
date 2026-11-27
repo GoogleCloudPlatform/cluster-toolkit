@@ -230,7 +230,6 @@ locals {
   zones                    = setunion(var.zones, [var.zone])
   zone_target_shape        = coalesce(var.zone_target_shape, "ANY_SINGLE_ZONE")
   has_accelerator_topology = var.accelerator_topology != null && trimspace(var.accelerator_topology) != ""
-  has_maintenance_interval = var.maintenance_interval != null && trimspace(var.maintenance_interval) != ""
   has_instance_properties  = var.instance_properties != null && try(length(var.instance_properties) > 0, true)
 
   a4x_topo_slice_aligned = (
@@ -257,7 +256,6 @@ locals {
     var.node_count_dynamic_max == 0 &&
     var.reservation_name == "" &&
     var.future_reservation == "" &&
-    !local.has_maintenance_interval &&
     !local.has_instance_properties &&
     (
       (!var.enable_placement && !local.has_accelerator_topology) ||

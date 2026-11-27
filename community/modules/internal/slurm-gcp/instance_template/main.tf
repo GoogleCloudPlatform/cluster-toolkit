@@ -177,6 +177,7 @@ module "instance_template" {
   max_run_duration     = var.max_run_duration
   provisioning_model   = var.provisioning_model
   reservation_affinity = var.reservation_affinity
+  maintenance_interval = var.maintenance_interval
 
   disk_encryption_key                 = var.disk_encryption_key
   disk_encryption_key_service_account = var.disk_encryption_key_service_account

@@ -1350,7 +1350,6 @@ func TestConditionalRegexValidator_MIGUnsupportedFields(t *testing.T) {
 			{Name: "provisioning_engine", Default: "AUTO"},
 			{Name: "dws_flex", Default: map[string]interface{}{"enabled": false}},
 			{Name: "future_reservation", Default: ""},
-			{Name: "maintenance_interval", Default: nil},
 			{Name: "instance_properties", Default: nil},
 		},
 	}
@@ -1368,7 +1367,6 @@ func TestConditionalRegexValidator_MIGUnsupportedFields(t *testing.T) {
 		empty cty.Value
 	}{
 		{"future_reservation", cty.StringVal("fr-1"), cty.StringVal("")},
-		{"maintenance_interval", cty.StringVal("PERIODIC"), cty.StringVal("")},
 		{"instance_properties", cty.ObjectVal(map[string]cty.Value{"scheduling": cty.StringVal("x")}), cty.EmptyObjectVal},
 	} {
 		rule := modulereader.ValidationRule{
@@ -1428,6 +1426,322 @@ func TestConditionalRegexValidator_MIGUnsupportedFields(t *testing.T) {
 		if err := validator.Validate(bpEmpty, bpEmpty.Groups[0].Modules[0], rule, bpEmpty.Groups[0], 0); err != nil {
 			t.Fatalf("%s (empty): expected pass with MIG, got: %v", tc.field, err)
 		}
+	}
+}
+
+func TestInstanceFlexibilityPolicy_AutoAndMigValidators(t *testing.T) {
+	testSource := "test/flex-policy-auto"
+	info := modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{
+			{Name: "provisioning_engine", Default: "AUTO"},
+			{Name: "node_count_dynamic_max", Default: 10},
+			{Name: "enable_placement", Default: true},
+			{Name: "instance_flexibility_policy", Default: nil},
+			{Name: "instance_properties", Default: nil},
+		},
+	}
+	modulereader.SetModuleInfo(testSource, "terraform", info)
+	modulereader.SetModuleInfo(testSource, "", info)
+	t.Cleanup(func() {
+		modulereader.SetModuleInfo(testSource, "terraform", modulereader.ModuleInfo{})
+		modulereader.SetModuleInfo(testSource, "", modulereader.ModuleInfo{})
+	})
+
+	flexVal := cty.ObjectVal(map[string]cty.Value{
+		"instance_selections": cty.TupleVal([]cty.Value{
+			cty.ObjectVal(map[string]cty.Value{
+				"rank":          cty.NumberIntVal(1),
+				"machine_types": cty.TupleVal([]cty.Value{cty.StringVal("n2d-standard-4")}),
+			}),
+		}),
+	})
+
+	engineRule := modulereader.ValidationRule{
+		Validator:    "conditional_regex",
+		ErrorMessage: "instance_flexibility_policy is not supported with provisioning_engine = 'BULK_INSERT'. Use 'AUTO' (default) or 'MIG'.",
+		Inputs: map[string]interface{}{
+			"triggers":       map[string]interface{}{"instance_flexibility_policy": nil},
+			"dependent":      "provisioning_engine",
+			"pattern":        "^BULK_INSERT$",
+			"match_expected": false,
+		},
+	}
+	dynRule := modulereader.ValidationRule{
+		Validator:    "conditional",
+		ErrorMessage: "instance_flexibility_policy is only supported on static MIG NodeSets; 'node_count_dynamic_max' must be explicitly set to 0.",
+		Inputs: map[string]interface{}{
+			"triggers":        map[string]interface{}{"instance_flexibility_policy": nil},
+			"dependent":       "node_count_dynamic_max",
+			"dependent_value": 0,
+		},
+	}
+	placementRule := modulereader.ValidationRule{
+		Validator:    "conditional",
+		ErrorMessage: "instance_flexibility_policy is only supported on static MIG NodeSets with 'enable_placement' set to false.",
+		Inputs: map[string]interface{}{
+			"triggers":        map[string]interface{}{"instance_flexibility_policy": nil},
+			"dependent":       "enable_placement",
+			"dependent_value": false,
+		},
+	}
+
+	mkBP := func(settings map[string]cty.Value) config.Blueprint {
+		return config.Blueprint{
+			BlueprintName: "test-bp",
+			Groups: []config.Group{{
+				Name: "primary",
+				Modules: []config.Module{{
+					ID:       "test-ns",
+					Source:   testSource,
+					Settings: config.NewDict(settings),
+				}},
+			}},
+		}
+	}
+
+	regexVal := ConditionalRegexValidator{}
+	condVal := ConditionalValidator{}
+
+	// AUTO (omitted), explicit AUTO, and explicit MIG with static + enable_placement=false -> pass
+	for _, eng := range []string{"", "AUTO", "MIG"} {
+		settings := map[string]cty.Value{
+			"instance_flexibility_policy": flexVal,
+			"node_count_dynamic_max":      cty.NumberIntVal(0),
+			"enable_placement":            cty.False,
+		}
+		if eng != "" {
+			settings["provisioning_engine"] = cty.StringVal(eng)
+		}
+		bp := mkBP(settings)
+		if err := regexVal.Validate(bp, bp.Groups[0].Modules[0], engineRule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("engine=%q: expected engineRule pass, got %v", eng, err)
+		}
+		if err := condVal.Validate(bp, bp.Groups[0].Modules[0], dynRule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("engine=%q: expected dynRule pass, got %v", eng, err)
+		}
+		if err := condVal.Validate(bp, bp.Groups[0].Modules[0], placementRule, bp.Groups[0], 0); err != nil {
+			t.Fatalf("engine=%q: expected placementRule pass, got %v", eng, err)
+		}
+	}
+
+	// BULK_INSERT -> rejected
+	bpBulk := mkBP(map[string]cty.Value{
+		"instance_flexibility_policy": flexVal,
+		"provisioning_engine":         cty.StringVal("BULK_INSERT"),
+		"node_count_dynamic_max":      cty.NumberIntVal(0),
+		"enable_placement":            cty.False,
+	})
+	if err := regexVal.Validate(bpBulk, bpBulk.Groups[0].Modules[0], engineRule, bpBulk.Groups[0], 0); err == nil {
+		t.Fatalf("expected error for instance_flexibility_policy with BULK_INSERT, got nil")
+	}
+
+	// Dynamic max > 0 -> rejected
+	bpDyn := mkBP(map[string]cty.Value{
+		"instance_flexibility_policy": flexVal,
+		"node_count_dynamic_max":      cty.NumberIntVal(2),
+		"enable_placement":            cty.False,
+	})
+	if err := condVal.Validate(bpDyn, bpDyn.Groups[0].Modules[0], dynRule, bpDyn.Groups[0], 0); err == nil {
+		t.Fatalf("expected error for instance_flexibility_policy with node_count_dynamic_max=2, got nil")
+	}
+
+	// enable_placement=true -> rejected
+	bpPlace := mkBP(map[string]cty.Value{
+		"instance_flexibility_policy": flexVal,
+		"node_count_dynamic_max":      cty.NumberIntVal(0),
+		"enable_placement":            cty.True,
+	})
+	if err := condVal.Validate(bpPlace, bpPlace.Groups[0].Modules[0], placementRule, bpPlace.Groups[0], 0); err == nil {
+		t.Fatalf("expected error for instance_flexibility_policy with enable_placement=true, got nil")
+	}
+
+	// Omitted node_count_dynamic_max (defaults to 10 in module inputs) -> rejected
+	bpOmitDyn := mkBP(map[string]cty.Value{
+		"instance_flexibility_policy": flexVal,
+		"enable_placement":            cty.False,
+	})
+	if err := condVal.Validate(bpOmitDyn, bpOmitDyn.Groups[0].Modules[0], dynRule, bpOmitDyn.Groups[0], 0); err == nil {
+		t.Fatalf("expected error for instance_flexibility_policy with omitted node_count_dynamic_max (default 10), got nil")
+	}
+
+	// Omitted enable_placement (defaults to true in module inputs) -> rejected
+	bpOmitPlace := mkBP(map[string]cty.Value{
+		"instance_flexibility_policy": flexVal,
+		"node_count_dynamic_max":      cty.NumberIntVal(0),
+	})
+	if err := condVal.Validate(bpOmitPlace, bpOmitPlace.Groups[0].Modules[0], placementRule, bpOmitPlace.Groups[0], 0); err == nil {
+		t.Fatalf("expected error for instance_flexibility_policy with omitted enable_placement (default true), got nil")
+	}
+}
+
+func TestModuleMetadataRules_SlurmNodeset(t *testing.T) {
+	const nodesetMod = "../../community/modules/compute/schedmd-slurm-gcp-v6-nodeset"
+	info, err := modulereader.GetModuleInfo(nodesetMod, "terraform")
+	if err != nil {
+		t.Fatalf("failed to read module info for %s: %v", nodesetMod, err)
+	}
+
+	flexVal := cty.ObjectVal(map[string]cty.Value{
+		"instance_selections": cty.TupleVal([]cty.Value{
+			cty.ObjectVal(map[string]cty.Value{
+				"rank":          cty.NumberIntVal(1),
+				"machine_types": cty.TupleVal([]cty.Value{cty.StringVal("n2d-standard-4")}),
+			}),
+		}),
+	})
+
+	cases := []struct {
+		name     string
+		settings map[string]cty.Value
+		wantErr  bool
+	}{
+		{
+			name: "auto static with instance_flexibility_policy passes",
+			settings: map[string]cty.Value{
+				"machine_type":                cty.StringVal("n2-standard-4"),
+				"node_count_static":           cty.NumberIntVal(2),
+				"node_count_dynamic_max":      cty.NumberIntVal(0),
+				"enable_placement":            cty.False,
+				"instance_flexibility_policy": flexVal,
+			},
+			wantErr: false,
+		},
+		{
+			name: "omitted node_count_dynamic_max with instance_flexibility_policy fails via module default",
+			settings: map[string]cty.Value{
+				"machine_type":                cty.StringVal("n2-standard-4"),
+				"node_count_static":           cty.NumberIntVal(2),
+				"enable_placement":            cty.False,
+				"instance_flexibility_policy": flexVal,
+			},
+			wantErr: true,
+		},
+		{
+			name: "omitted enable_placement with instance_flexibility_policy fails via module default",
+			settings: map[string]cty.Value{
+				"machine_type":                cty.StringVal("n2-standard-4"),
+				"node_count_static":           cty.NumberIntVal(2),
+				"node_count_dynamic_max":      cty.NumberIntVal(0),
+				"instance_flexibility_policy": flexVal,
+			},
+			wantErr: true,
+		},
+		{
+			name: "explicit MIG with omitted node_count_dynamic_max fails via module default",
+			settings: map[string]cty.Value{
+				"machine_type":        cty.StringVal("n2-standard-4"),
+				"provisioning_engine": cty.StringVal("MIG"),
+				"node_count_static":   cty.NumberIntVal(2),
+				"enable_placement":    cty.False,
+			},
+			wantErr: true,
+		},
+		{
+			name: "explicit MIG with instance_flexibility_policy passes",
+			settings: map[string]cty.Value{
+				"machine_type":                cty.StringVal("n2-standard-4"),
+				"provisioning_engine":         cty.StringVal("MIG"),
+				"node_count_static":           cty.NumberIntVal(2),
+				"node_count_dynamic_max":      cty.NumberIntVal(0),
+				"enable_placement":            cty.False,
+				"instance_flexibility_policy": flexVal,
+			},
+			wantErr: false,
+		},
+		{
+			name: "BULK_INSERT with instance_flexibility_policy fails",
+			settings: map[string]cty.Value{
+				"machine_type":                cty.StringVal("n2-standard-4"),
+				"provisioning_engine":         cty.StringVal("BULK_INSERT"),
+				"node_count_static":           cty.NumberIntVal(2),
+				"node_count_dynamic_max":      cty.NumberIntVal(0),
+				"enable_placement":            cty.False,
+				"instance_flexibility_policy": flexVal,
+			},
+			wantErr: true,
+		},
+		{
+			name: "dynamic AUTO with instance_flexibility_policy fails",
+			settings: map[string]cty.Value{
+				"machine_type":                cty.StringVal("n2-standard-4"),
+				"node_count_static":           cty.NumberIntVal(2),
+				"node_count_dynamic_max":      cty.NumberIntVal(4),
+				"enable_placement":            cty.False,
+				"instance_flexibility_policy": flexVal,
+			},
+			wantErr: true,
+		},
+		{
+			name: "enable_placement=true AUTO with instance_flexibility_policy fails",
+			settings: map[string]cty.Value{
+				"machine_type":                cty.StringVal("n2-standard-4"),
+				"node_count_static":           cty.NumberIntVal(2),
+				"node_count_dynamic_max":      cty.NumberIntVal(0),
+				"enable_placement":            cty.True,
+				"instance_flexibility_policy": flexVal,
+			},
+			wantErr: true,
+		},
+		{
+			name: "instance_properties with instance_flexibility_policy fails",
+			settings: map[string]cty.Value{
+				"machine_type":                cty.StringVal("n2-standard-4"),
+				"node_count_static":           cty.NumberIntVal(2),
+				"node_count_dynamic_max":      cty.NumberIntVal(0),
+				"enable_placement":            cty.False,
+				"instance_properties":         cty.ObjectVal(map[string]cty.Value{"scheduling": cty.StringVal("x")}),
+				"instance_flexibility_policy": flexVal,
+			},
+			wantErr: true,
+		},
+		{
+			name: "explicit MIG with maintenance_interval passes",
+			settings: map[string]cty.Value{
+				"machine_type":           cty.StringVal("n2-standard-4"),
+				"provisioning_engine":    cty.StringVal("MIG"),
+				"node_count_static":      cty.NumberIntVal(2),
+				"node_count_dynamic_max": cty.NumberIntVal(0),
+				"enable_placement":       cty.False,
+				"maintenance_interval":   cty.StringVal("PERIODIC"),
+			},
+			wantErr: false,
+		},
+		{
+			name: "explicit MIG with future_reservation fails",
+			settings: map[string]cty.Value{
+				"machine_type":           cty.StringVal("n2-standard-4"),
+				"provisioning_engine":    cty.StringVal("MIG"),
+				"node_count_static":      cty.NumberIntVal(2),
+				"node_count_dynamic_max": cty.NumberIntVal(0),
+				"enable_placement":       cty.False,
+				"future_reservation":     cty.StringVal("fr-1"),
+			},
+			wantErr: true,
+		},
+		{
+			name: "explicit MIG with instance_properties fails",
+			settings: map[string]cty.Value{
+				"machine_type":           cty.StringVal("n2-standard-4"),
+				"provisioning_engine":    cty.StringVal("MIG"),
+				"node_count_static":      cty.NumberIntVal(2),
+				"node_count_dynamic_max": cty.NumberIntVal(0),
+				"enable_placement":       cty.False,
+				"instance_properties":    cty.ObjectVal(map[string]cty.Value{"scheduling": cty.StringVal("x")}),
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bp := createBaseTestBlueprint()
+			bp.Groups[0].Modules[0].Source = nodesetMod
+			bp.Groups[0].Modules[0].Kind = config.TerraformKind
+			bp.Groups[0].Modules[0].Settings = config.NewDict(tc.settings)
+			if err := runModuleRules(bp, info.Metadata.Ghpc.Validators); (err != nil) != tc.wantErr {
+				t.Fatalf("runModuleRules() error = %v, wantErr = %v", err, tc.wantErr)
+			}
+		})
 	}
 }
 

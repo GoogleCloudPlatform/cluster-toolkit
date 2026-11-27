@@ -503,11 +503,27 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
             try:
                 mig = lkp.get_mig(lkp.project, region, mig_name)
                 if mig:
+                    update_policy = mig.get("updatePolicy")
+                    update_type = update_policy.get("type") if isinstance(update_policy, dict) else None
                     current_template = (
                         mig.get("instanceTemplate")
                         or (mig.get("versions", [{}])[0].get("instanceTemplate") if mig.get("versions") else None)
                     )
-                    if current_template and current_template.split("/")[-1] != template_link.split("/")[-1]:
+                    has_drift = bool(
+                        current_template
+                        and current_template.split("/")[-1] != template_link.split("/")[-1]
+                    )
+                    if update_type and update_type != "OPPORTUNISTIC":
+                        action_note = (
+                            "skipping template patch to prevent proactive replacement of running compute nodes."
+                            if has_drift
+                            else "set updatePolicy.type back to 'OPPORTUNISTIC' to prevent uncoordinated node restarts."
+                        )
+                        log.error(
+                            f"MIG {mig_name} has updatePolicy.type={update_type!r} (expected 'OPPORTUNISTIC'); "
+                            f"{action_note}"
+                        )
+                    elif has_drift:
                         log.info(f"Updating MIG {mig_name} template: {current_template} -> {template_link}")
                         ver_payload: Dict[str, Any] = {"instanceTemplate": template_link}
                         if mig.get("versions") and mig["versions"][0].get("name"):
