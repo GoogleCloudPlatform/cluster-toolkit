@@ -129,8 +129,9 @@ variable "sql_username" {
 
 variable "sql_password" {
   description = "Password for the SQL database."
-  type        = any
+  type        = string
   default     = null
+  sensitive   = true
 }
 
 variable "network_id" {
