@@ -224,9 +224,9 @@ For official documentation see troubleshooting docs:
 ### ML Diagnostics Daemon Installation
 
 Set `enable_ml_diagnostics_daemon` to `true` to install and start the Google
-Cloud ML Diagnostics daemon (`diagon-daemon.service`) on Ubuntu/Debian `x86_64`
-VMs. Other images (such as the default Rocky Linux images) log a warning and
-skip installation safely.
+Cloud ML Diagnostics daemon (`diagon-daemon.service`) on Ubuntu `x86_64` VMs
+(tested on Ubuntu 22.04 and 24.04). Other images (such as the default Rocky
+Linux images) log a warning and skip installation safely.
 
 ```yaml
 - id: startup
@@ -244,7 +244,9 @@ skip installation safely.
   (`apt-mark hold`) so automatic OS updates do not change it.
 - **What your VMs need:** Access to Google Cloud APIs (`cloud-platform` scope),
   the ML Diagnostics APIs enabled in your project (`metadata.yaml` does not
-  enforce them for blueprints that leave this disabled), and outbound HTTPS
+  enforce them for blueprints that leave this disabled), the required ML
+  Diagnostics IAM roles on the VM's service account to record runs and profiles
+  (see the [ML Diagnostics docs][ml-diagnostics-docs]), and outbound HTTPS
   access to `us-central1-apt.pkg.dev` and `packages.cloud.google.com`. Do not
   enable this if OS Config is already managing ML Diagnostics on the same VMs.
 - **Boot order and safety:** Runs after custom `runners`. If installation fails,
@@ -257,6 +259,8 @@ sudo systemctl status diagon-daemon.service
 sudo journalctl -u diagon-daemon.service
 sudo journalctl -t install_ml_diagnostics_agent
 ```
+
+[ml-diagnostics-docs]: https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview
 
 ### Example
 
@@ -361,7 +365,7 @@ No modules.
 | <a name="input_docker"></a> [docker](#input\_docker) | Install and configure Docker | <pre>object({<br/>    enabled        = optional(bool, false)<br/>    world_writable = optional(bool, false)<br/>    daemon_config  = optional(string, "")<br/>  })</pre> | <pre>{<br/>  "enabled": false<br/>}</pre> | no |
 | <a name="input_enable_docker_world_writable"></a> [enable\_docker\_world\_writable](#input\_enable\_docker\_world\_writable) | DEPRECATED: use var.docker | `bool` | `null` | no |
 | <a name="input_enable_gpu_network_wait_online"></a> [enable\_gpu\_network\_wait\_online](#input\_enable\_gpu\_network\_wait\_online) | Enable a SystemD unit that blocks execution of startup-scripts until after all network interfaces are online. (Works on reboots or boots of an image built using this solution) | `bool` | `false` | no |
-| <a name="input_enable_ml_diagnostics_daemon"></a> [enable\_ml\_diagnostics\_daemon](#input\_enable\_ml\_diagnostics\_daemon) | Install and start the Google Cloud ML Diagnostics daemon (diagon-daemon.service) on Ubuntu/Debian x86\_64 VMs. Errors log a warning and let VM boot continue. | `bool` | `false` | no |
+| <a name="input_enable_ml_diagnostics_daemon"></a> [enable\_ml\_diagnostics\_daemon](#input\_enable\_ml\_diagnostics\_daemon) | Install and start the Google Cloud ML Diagnostics daemon (diagon-daemon.service) on Ubuntu x86\_64 VMs (tested on Ubuntu 22.04 and 24.04). Errors log a warning and let VM boot continue. | `bool` | `false` | no |
 | <a name="input_gcloud_path_override"></a> [gcloud\_path\_override](#input\_gcloud\_path\_override) | Path to the directory containing the gcloud binary to use as an override for local execution. | `string` | `""` | no |
 | <a name="input_gcs_bucket_path"></a> [gcs\_bucket\_path](#input\_gcs\_bucket\_path) | The GCS path for storage bucket and the object, starting with `gs://`. | `string` | `null` | no |
 | <a name="input_http_no_proxy"></a> [http\_no\_proxy](#input\_http\_no\_proxy) | Domains for which to disable http\_proxy behavior. Honored only if var.http\_proxy is set | `string` | `".google.com,.googleapis.com,metadata.google.internal,localhost,127.0.0.1"` | no |

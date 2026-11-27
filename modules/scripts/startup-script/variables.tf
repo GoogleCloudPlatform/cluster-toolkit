@@ -225,7 +225,7 @@ variable "install_stackdriver_agent" {
 }
 
 variable "enable_ml_diagnostics_daemon" {
-  description = "Install and start the Google Cloud ML Diagnostics daemon (diagon-daemon.service) on Ubuntu/Debian x86_64 VMs. Errors log a warning and let VM boot continue."
+  description = "Install and start the Google Cloud ML Diagnostics daemon (diagon-daemon.service) on Ubuntu x86_64 VMs (tested on Ubuntu 22.04 and 24.04). Errors log a warning and let VM boot continue."
   type        = bool
   default     = false
   nullable    = false

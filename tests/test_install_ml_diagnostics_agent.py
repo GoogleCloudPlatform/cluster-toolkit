@@ -526,9 +526,10 @@ esac
         unit = (
             self.root / "etc/systemd/system/diagon-daemon.service"
         ).read_text(encoding="utf-8")
-        self.assertIn("StartLimitIntervalSec=300", unit)
-        self.assertIn("StartLimitBurst=5", unit)
+        self.assertIn("StartLimitIntervalSec=0", unit)
+        self.assertNotIn("StartLimitBurst=", unit)
         self.assertIn("Restart=on-failure", unit)
+        self.assertIn("RestartSec=15", unit)
         self.assertIn("OOMScoreAdjust=500", unit)
         calls = self.log_file.read_text(encoding="utf-8")
         self.assertIn("DPkg::Lock::Timeout=30", calls)

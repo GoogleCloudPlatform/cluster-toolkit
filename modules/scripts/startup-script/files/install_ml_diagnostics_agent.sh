@@ -71,7 +71,7 @@ usage() {
 	cat <<EOF
 Usage: ${SCRIPT_NAME}.sh [--version=VERSION] [-h|--help]
 Install and start Google Cloud ML Diagnostics (${PACKAGE_NAME} / ${SERVICE_NAME})
-on Ubuntu/Debian x86_64 VMs. Fail-open: errors log a warning and exit 0.
+on Ubuntu x86_64 VMs (tested on Ubuntu 22.04 and 24.04). Fail-open: errors log a warning and exit 0.
   --version=VERSION  Exact Debian version to install and lock (apt-mark hold).
                      Empty installs the latest release on new VMs.
   -h, --help         Display this help message and exit.
@@ -482,14 +482,13 @@ configure_and_start_service() {
 Description=Google Cloud ML Diagnostics Daemon
 After=network-online.target
 Wants=network-online.target
-StartLimitIntervalSec=300
-StartLimitBurst=5
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 ExecStart=${BINARY_PATH} -standalone=true -channel=${CHANNEL} -alsologtostderr=true
 Restart=on-failure
-RestartSec=5
+RestartSec=15
 OOMScoreAdjust=500
 
 [Install]
