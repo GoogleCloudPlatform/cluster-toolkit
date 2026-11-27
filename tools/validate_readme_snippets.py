@@ -297,6 +297,8 @@ NESTED_OBJECT_KEYS: dict[tuple[str, str], set[str]] = {
         "controller_replicas",
         "enable_dynamic_slicing_for_tpus",
         "enable_pathways_for_tpus",
+        "helm_values_path",
+        "helm_values_template_vars",
         "install",
         "machine_type",
         "slice_controller_cpu_limit",
