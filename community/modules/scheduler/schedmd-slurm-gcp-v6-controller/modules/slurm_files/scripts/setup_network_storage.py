@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Optional, Set, Union
+from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import ipaddress
 import os
@@ -589,13 +589,49 @@ def _existing_fsid(path) -> Optional[str]:
     return None
 
 
+def _compute_nfs_exports() -> Tuple[List[str], Dict[str, str], str]:
+    """Compute the allowed NFS client CIDRs, exported path options, and exports file content."""
+    lkp = util.lookup()
+    assert lkp.is_controller
+
+    clients = nfs_export_clients()
+
+    # The controller only needs to set up exports for cluster-internal mounts
+    exported_mounts = [m for m in resolve_network_storage() if is_controller_mount(m)]
+
+    squash = "root_squash" if lkp.cfg.nfs_export_root_squash is True else "no_root_squash"
+    # key by remote mount path since that is what needs exporting
+    to_export: Dict[str, str] = {
+        m.remote_mount: f"rw,no_subtree_check,{squash}" for m in exported_mounts
+    }
+
+    key_mount = lkp.slurm_key_mount if lkp.cfg.enable_slurm_auth else lkp.munge_mount
+    if is_controller_mount(key_mount):
+        # Export key mount as read-only
+        to_export[key_mount.remote_mount] = "ro,no_subtree_check,no_root_squash"
+
+    if util.should_mount_slurm_bucket():
+        mnt = get_slurm_bucket_mount()
+        # FSID is required for virtual filesystem that is not based on a device
+        # Also export it as read-only. Reuse an existing FSID so re-exporting
+        # (e.g. on reconfigure) does not leave clients with stale file handles.
+        fsid = _existing_fsid(mnt.local_mount) or str(uuid.uuid4())
+        to_export[mnt.local_mount] = f"ro,no_subtree_check,no_root_squash,fsid={fsid}"
+
+    lines = [_export_line(path, clients, options) for path, options in to_export.items()]
+    content = "\n" + "\n".join(lines)
+    return clients, to_export, content
+
+
 def setup_nfs_exports(prepare_paths: bool = True):
     """nfs export all needed directories
 
-    `prepare_paths` creates the exported directories, sets them to 0755 and
-    removes matching lines from /etc/exports. It runs at first boot. A manual
-    refresh (--refresh-exports) skips it so it does not undo permissions an
-    admin has changed since, and only re-exports if the exports file changes.
+    Exported directories are always created with `mkdirp` (without changing
+    existing permissions). When `prepare_paths` is True (first boot), each path
+    is also set to 0755 and removed from `/etc/exports`. A manual refresh
+    (`--refresh-exports`, `prepare_paths=False`) skips the `chmod` and
+    `/etc/exports` edit so it does not undo permissions an admin has changed
+    since, and only re-exports if `/etc/exports.d/slurm.exports` changes.
 
     Exports are limited to the cluster's subnetwork ranges (see
     nfs_export_clients) instead of any host ('*'):
@@ -607,45 +643,19 @@ def setup_nfs_exports(prepare_paths: bool = True):
       nodes copy the root-owned 0400 key as root.
     - the Slurm bucket mount is read-only.
     """
-    lkp = util.lookup()
-    assert lkp.is_controller
-
-    clients = nfs_export_clients()
+    clients, to_export, content = _compute_nfs_exports()
     log.info(f"Limiting controller NFS exports to: {', '.join(clients)}")
 
-    # The controller only needs to set up exports for cluster-internal mounts
-    exported_mounts = [m for m in resolve_network_storage() if is_controller_mount(m)]
-
-    squash = "root_squash" if lkp.cfg.nfs_export_root_squash is True else "no_root_squash"
-    # key by remote mount path since that is what needs exporting
-    to_export = {m.remote_mount: f"rw,no_subtree_check,{squash}" for m in exported_mounts}
-
-    key_mount = lkp.slurm_key_mount if lkp.cfg.enable_slurm_auth else lkp.munge_mount
-    if is_controller_mount(key_mount):
-        # Export key mount as read-only
-        to_export[key_mount.remote_mount] = "ro,no_subtree_check,no_root_squash"
-    
-    if util.should_mount_slurm_bucket():
-        mnt = get_slurm_bucket_mount()
-        # FSID is required for virtual filesystem that is not based on a device
-        # Also export it as read-only. Reuse an existing FSID so re-exporting
-        # (e.g. on reconfigure) does not leave clients with stale file handles.
-        fsid = _existing_fsid(mnt.local_mount) or str(uuid.uuid4())
-        to_export[mnt.local_mount] = f"ro,no_subtree_check,no_root_squash,fsid={fsid}"
-
     # export path if corresponding selector boolean is True
-    lines = []
-    for path, options in to_export.items():
+    for path in to_export:
+        util.mkdirp(Path(path))
         if prepare_paths:
-            util.mkdirp(Path(path))
             try:
                 os.chmod(Path(path), 0o755)
             except OSError as e:
                 log.warning(f"Failed to set permissions for {path}: {e}")
             run(rf"sed -i '\#{path}#d' /etc/exports", timeout=30)
-        lines.append(_export_line(path, clients, options))
 
-    content = "\n" + "\n".join(lines)
     if not prepare_paths:
         try:
             if SLURM_EXPORTS_FILE.read_text() == content:
@@ -657,6 +667,73 @@ def setup_nfs_exports(prepare_paths: bool = True):
     with SLURM_EXPORTS_FILE.open("w") as f:
         f.write(content)
     run("exportfs -ra", timeout=30)
+
+
+def _connected_nfs_clients() -> List[str]:
+    """Return unique peer IP addresses with established TCP connections to local port 2049."""
+    try:
+        res = run("ss -Htn state established '( sport = :2049 )'", check=False, timeout=10)
+    except Exception as e:
+        log.warning(f"Unable to inspect active NFS connections via ss: {e}")
+        return []
+    if not res or res.returncode != 0 or not res.stdout:
+        return []
+
+    peers: List[str] = []
+    for line in res.stdout.splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        host, sep, _ = parts[-1].rpartition(":")
+        if not sep:
+            continue
+        host = host.strip("[]").split("%", 1)[0]
+        try:
+            addr = ipaddress.ip_address(host)
+        except ValueError:
+            continue
+        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+            addr = addr.ipv4_mapped
+        ip_str = str(addr)
+        if ip_str not in peers:
+            peers.append(ip_str)
+    return peers
+
+
+def _ip_in_any_network(
+    ip_str: str, networks: List[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]]
+) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False
+    return any(addr.version == net.version and addr in net for net in networks)
+
+
+def refresh_exports(dry_run: bool = False) -> None:
+    """Re-apply (or preview when dry_run=True) controller NFS exports from the latest config in GCS."""
+    if os.geteuid() != 0:
+        sys.exit("--refresh-exports must be run as root")
+    # Read the latest config from the bucket so the refresh does not depend
+    # on slurmsync having fetched it yet. Do not write the local config or
+    # its hash, so slurmsync still detects and applies the change itself.
+    fetched = util._fetch_config(old_hash=None)
+    if fetched:
+        util.update_config(fetched[0])
+    if dry_run:
+        clients, _, content = _compute_nfs_exports()
+        print(content.lstrip("\n"))
+        networks = [ipaddress.ip_network(c, strict=False) for c in clients]
+        uncovered = [
+            ip for ip in _connected_nfs_clients() if not _ip_in_any_network(ip, networks)
+        ]
+        if uncovered:
+            log.warning(
+                "Connected NFS clients not covered by new exports (will lose access): "
+                f"{', '.join(uncovered)}"
+            )
+        return
+    setup_nfs_exports(prepare_paths=False)
 
 
 if __name__ == "__main__":
@@ -671,14 +748,13 @@ if __name__ == "__main__":
         action="store_true",
         help="Recompute and apply controller NFS exports from the cluster config",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="With --refresh-exports, print proposed exports and warn about uncovered active NFS clients without applying changes",
+    )
     args = util.init_log_and_parse(parser)
+    if args.dry_run and not args.refresh_exports:
+        parser.error("--dry-run requires --refresh-exports")
     if args.refresh_exports:
-        if os.geteuid() != 0:
-            sys.exit("--refresh-exports must be run as root")
-        # Read the latest config from the bucket so the refresh does not depend
-        # on slurmsync having fetched it yet. Do not write the local config or
-        # its hash, so slurmsync still detects and applies the change itself.
-        fetched = util._fetch_config(old_hash=None)
-        if fetched:
-            util.update_config(fetched[0])
-        setup_nfs_exports(prepare_paths=False)
+        refresh_exports(dry_run=args.dry_run)

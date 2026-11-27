@@ -15,9 +15,10 @@
 # GKE nodes mount the Slurm key directory from the controller over NFS (see
 # persistent_volumes.tf). The controller module denies NFS to the controller
 # from all sources except instances tagged with the cluster name, and GKE nodes
-# do not carry that tag, so allow NFS from this nodeset's GKE subnetwork.
-# This rule uses the same priority as the controller's allow rules (998), which
-# takes precedence over its deny rule (999).
+# carry GKE node tags rather than the Slurm cluster tag, so allow NFS from this
+# nodeset's GKE node network tags. This rule uses the same priority as the
+# controller's allow rules (998), which takes precedence over its deny rule
+# (999).
 locals {
   nfs_firewall_name = trimsuffix(substr("${var.slurm_cluster_name}-${var.nodeset_name}-nfs", 0, 63), "-")
   nfs_ports         = ["111", "2049", "20048"]
@@ -38,12 +39,12 @@ resource "google_compute_firewall" "controller_nfs_allow_gke" {
   name        = local.nfs_firewall_name
   description = "Allow NFS traffic to the Slurm controller from GKE nodeset ${var.nodeset_name}"
   project     = var.subnetwork.project
-  network     = var.slurm_controller_instance.network_interface[0].network
+  network     = try(var.slurm_controller_instance.network_interface[0].network, var.subnetwork.network)
 
-  direction     = "INGRESS"
-  priority      = 998
-  source_ranges = [var.subnetwork.ip_cidr_range]
-  target_tags   = [local.controller_nfs_target_tag]
+  direction   = "INGRESS"
+  priority    = 998
+  source_tags = var.node_network_tags
+  target_tags = [local.controller_nfs_target_tag]
 
   allow {
     protocol = "tcp"
@@ -52,5 +53,12 @@ resource "google_compute_firewall" "controller_nfs_allow_gke" {
   allow {
     protocol = "udp"
     ports    = local.nfs_ports
+  }
+
+  lifecycle {
+    precondition {
+      condition     = length(var.node_network_tags) > 0
+      error_message = "No GKE node network tags found; not creating an NFS allow rule without a source."
+    }
   }
 }

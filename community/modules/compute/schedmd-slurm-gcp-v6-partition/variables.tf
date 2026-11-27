@@ -236,8 +236,9 @@ variable "nodeset" {
 variable "nodeset_dyn" {
   description = "Defines dynamic nodesets, as a list."
   type = list(object({
-    nodeset_name    = string
-    nodeset_feature = string
+    nodeset_name         = string
+    nodeset_feature      = string
+    subnetwork_self_link = optional(string)
   }))
   default = []
 

@@ -283,11 +283,12 @@ def _run_setup_nfs_exports(lkp, mounts, tmp_path, existing=None, prepare_paths=T
          patch("setup_network_storage.is_controller_mount", side_effect=is_ctrl), \
          patch("setup_network_storage.util.should_mount_slurm_bucket", return_value=(existing is not None) if bucket is None else bucket), \
          patch("setup_network_storage.get_slurm_bucket_mount", return_value=_mnt(server=None, path="/slurm/bucket", fs_type="gcsfuse")), \
-         patch("setup_network_storage.util.mkdirp"), \
+         patch("setup_network_storage.util.mkdirp") as mock_mkdirp, \
          patch("setup_network_storage.os.chmod") as mock_chmod, \
          patch("setup_network_storage.run") as mock_run:
         setup_network_storage.setup_nfs_exports(prepare_paths=prepare_paths)
     mock_run.chmod = mock_chmod
+    mock_run.mkdirp = mock_mkdirp
     return exports_file.read_text(), mock_run
 
 
@@ -325,11 +326,15 @@ def test_setup_nfs_exports_reuses_bucket_fsid(tmp_path):
 def test_refresh_does_not_touch_permissions_or_etc_exports(tmp_path):
     lkp = _controller_lkp(nfs_export_clients=["10.0.0.0/24", "10.99.0.0/24"])
     old = "\n/home  10.0.0.0/24(rw,no_subtree_check,no_root_squash)"
+    mounts = [_mnt(server=None, path="/home"), _mnt(server=None, path="/scratch")]
     text, mock_run = _run_setup_nfs_exports(
-        lkp, [_mnt(server=None, path="/home")], tmp_path, existing=old, prepare_paths=False, bucket=False)
+        lkp, mounts, tmp_path, existing=old, prepare_paths=False, bucket=False)
+    mock_run.mkdirp.assert_any_call(Path("/home"))
+    mock_run.mkdirp.assert_any_call(Path("/scratch"))
     mock_run.chmod.assert_not_called()
     assert not any("sed" in str(c) for c in mock_run.call_args_list)
     assert "10.99.0.0/24(rw" in text
+    assert "/scratch  10.0.0.0/24(rw,no_subtree_check,no_root_squash)" in text
     mock_run.assert_any_call("exportfs -ra", timeout=30)
 
 
@@ -339,3 +344,65 @@ def test_refresh_skips_exportfs_when_unchanged(tmp_path):
     first, _ = _run_setup_nfs_exports(lkp, mounts, tmp_path, bucket=False)
     _, mock_run = _run_setup_nfs_exports(lkp, mounts, tmp_path, existing=first, prepare_paths=False, bucket=False)
     mock_run.assert_not_called()
+
+
+def test_refresh_exports_requires_root():
+    with patch("setup_network_storage.os.geteuid", return_value=1000), \
+         patch("setup_network_storage.util._fetch_config") as mock_fetch, \
+         patch("setup_network_storage.setup_nfs_exports") as mock_setup:
+        with pytest.raises(SystemExit, match="must be run as root"):
+            setup_network_storage.refresh_exports()
+        mock_fetch.assert_not_called()
+        mock_setup.assert_not_called()
+
+
+def test_refresh_exports_fetches_from_gcs_without_writing_local_config(tmp_path):
+    cfg_file = tmp_path / "config.yaml"
+    hash_file = tmp_path / ".config.hash"
+    cfg_file.write_text("nfs_export_clients: ['10.0.0.0/24']\n")
+    hash_file.write_text("old-hash")
+    new_cfg = NSDict(nfs_export_clients=["10.0.0.0/24", "10.8.0.0/24"])
+
+    with patch("setup_network_storage.os.geteuid", return_value=0), \
+         patch("setup_network_storage.util.CONFIG_FILE", cfg_file), \
+         patch("setup_network_storage.util._fetch_config", return_value=(new_cfg, "new-hash")) as mock_fetch, \
+         patch("setup_network_storage.util.update_config") as mock_update, \
+         patch("setup_network_storage.setup_nfs_exports") as mock_setup:
+        setup_network_storage.refresh_exports()
+
+    mock_fetch.assert_called_once_with(old_hash=None)
+    mock_update.assert_called_once_with(new_cfg)
+    mock_setup.assert_called_once_with(prepare_paths=False)
+    assert cfg_file.read_text() == "nfs_export_clients: ['10.0.0.0/24']\n"
+    assert hash_file.read_text() == "old-hash"
+
+
+def test_refresh_exports_dry_run_previews_and_warns_uncovered_clients(tmp_path, capsys, caplog):
+    lkp = _controller_lkp(nfs_export_clients=["10.0.0.0/24"])
+    exports_file = tmp_path / "exports.d" / "slurm.exports"
+    ss_out = (
+        "0  0  10.0.0.2:2049  10.0.0.4:751\n"
+        "0  0  [::ffff:10.0.0.2]:2049  [::ffff:10.9.0.5]:832\n"
+        "0  0  [::ffff:10.0.0.2]:2049  [::ffff:10.9.0.5]:833\n"
+    )
+    ss_res = MagicMock(returncode=0, stdout=ss_out)
+
+    def is_ctrl(m):
+        return bool(m) and not m.server_ip
+
+    with patch("setup_network_storage.os.geteuid", return_value=0), \
+         patch("setup_network_storage.util._fetch_config", return_value=None), \
+         patch("util.lookup", return_value=lkp), \
+         patch("setup_network_storage.SLURM_EXPORTS_FILE", exports_file), \
+         patch("setup_network_storage.resolve_network_storage", return_value=[_mnt(server=None, path="/home")]), \
+         patch("setup_network_storage.is_controller_mount", side_effect=is_ctrl), \
+         patch("setup_network_storage.util.should_mount_slurm_bucket", return_value=False), \
+         patch("setup_network_storage.run", return_value=ss_res) as mock_run:
+        setup_network_storage.refresh_exports(dry_run=True)
+
+    out = capsys.readouterr().out
+    assert "/home  10.0.0.0/24(rw,no_subtree_check,no_root_squash)" in out
+    assert not exports_file.exists()
+    mock_run.assert_called_once_with("ss -Htn state established '( sport = :2049 )'", check=False, timeout=10)
+    assert "10.9.0.5" in caplog.text
+    assert "10.0.0.4" not in caplog.text

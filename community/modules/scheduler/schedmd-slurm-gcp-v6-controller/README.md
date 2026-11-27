@@ -187,19 +187,20 @@ the default `/home` and `/opt/apps` mounts (unless `enable_default_mounts` is
 To limit access to these shares to cluster instances, the module:
 
 * Limits NFS exports to the primary subnetwork CIDR ranges of the controller,
-  login nodes and nodesets, plus any ranges in `extra_nfs_client_cidrs`.
-  Exports are never made to all hosts (`*`), and ranges broader than /8 (IPv4)
-  or /32 (IPv6) are rejected.
+  login nodes, nodesets and dynamic nodesets (`nodeset_dyn`), plus any ranges in
+  `extra_nfs_client_cidrs`. Exports are never made to all hosts (`*`), and
+  `extra_nfs_client_cidrs` accepts IPv4 ranges of `/8` or narrower only.
 * Exports the key directory read-only.
 * Creates VPC firewall rules (when `create_nfs_firewall_rules` is `true`, the
   default) that deny NFS traffic (TCP/UDP ports 111, 2049 and 20048) to the
   controller from all sources at priority 999, and allow it at priority 998
   from instances tagged with the Slurm cluster name and, through a separate rule
   that exists only when the variable is set, from `extra_nfs_client_cidrs`.
-  The deny rule is needed because the default "allow internal traffic" rule
-  created by the `vpc` module (priority 1000) admits all internal traffic.
-  Nodesets created by the `gke-nodeset` module add their own allow rule for
-  their GKE subnetwork.
+  The deny rule depends on the allow rules so upgrades never create the deny
+  rule before the allow rules, and is needed because the default "allow internal
+  traffic" rule created by the `vpc` module (priority 1000) admits all internal
+  traffic. Nodesets created by the `gke-nodeset` module add their own priority
+  998 allow rule matching their GKE node network tags (`node_network_tags`).
 
 The controller sets its exports during first-boot setup. After changing the
 cluster's subnetworks (for example, adding a nodeset in a new subnetwork) or
@@ -207,37 +208,64 @@ cluster's subnetworks (for example, adding a nodeset in a new subnetwork) or
 root on the controller to update the exports:
 
 ```shell
+# Optional: check active NFS client connections and preview the new export list
+# (warns if any currently connected client IP would lose access).
+ss -Htn state established '( sport = :2049 )'
+sudo /slurm/scripts/setup_network_storage.py --refresh-exports --dry-run
+
+# Apply the updated exports.
 sudo /slurm/scripts/setup_network_storage.py --refresh-exports
 ```
 
-The refresh only rewrites `/etc/exports.d/slurm.exports` and re-exports if the
-list changed; it does not change directory permissions.
+The refresh creates any newly added export directories, rewrites
+`/etc/exports.d/slurm.exports` and re-exports only if the list changed; it does
+not change permissions on existing directories.
 
 Things to check:
 
 * **Existing clusters**: first-boot setup does not run again on an existing
   controller. After re-deploying with this version, either recreate the
   controller, or reboot it (which loads the new scripts) and then run the
-  refresh command above once.
-* **Dynamic nodesets (`nodeset_dyn`)** and any other hosts that mount controller
-  storage must use one of the cluster's subnetworks or be listed in
-  `extra_nfs_client_cidrs`. They must also carry the Slurm cluster name as a
-  network tag, or be inside `extra_nfs_client_cidrs`, to pass the firewall.
-* **GKE nodesets**: if the GKE subnetwork is not one of the controller's
-  subnetworks, add its range to `extra_nfs_client_cidrs`.
+  refresh command above once. Because `exportfs -ra` immediately cuts off
+  mounted clients outside the new export list, run `--refresh-exports --dry-run`
+  (or inspect `ss -Htn state established '( sport = :2049 )'`) first to verify
+  active clients are covered.
+* **Dynamic nodesets**: `schedmd-slurm-gcp-v6-nodeset-dynamic` passes its
+  subnetwork to the controller and tags its instances with the Slurm cluster
+  name automatically. Dynamic nodes managed outside that module must use one of
+  the cluster's subnetworks or be listed in `extra_nfs_client_cidrs`, and must
+  carry the Slurm cluster name as a network tag (or be in
+  `extra_nfs_client_cidrs`) to pass the firewall.
+* **GKE nodesets**: `gke-nodeset` allows NFS from its GKE node network tags
+  (`node_network_tags`, wired from `gke-node-pool`). If the GKE subnetwork is
+  not one of the controller's subnetworks, also add its range to
+  `extra_nfs_client_cidrs` so the controller exports to it.
 * **Existing firewall rules**: the deny rule (priority 999) overrides any of
   your own rules that allow NFS to the controller with a priority number of 999
   or more (at equal priority, deny wins). Give such rules a priority number of
   998 or less, or list their sources in `extra_nfs_client_cidrs`.
 * **Shared VPC**: creating the firewall rules requires permission to create
   firewall rules in the host project. If you manage firewall rules yourself, set
-  `create_nfs_firewall_rules: false` and make sure controller NFS ports are only
-  reachable from cluster instances.
+  `create_nfs_firewall_rules: false`, create equivalent rules in the host
+  project (and consider `nfs_export_root_squash: true` if root writes are not
+  needed):
+
+  ```shell
+  gcloud compute firewall-rules create CLUSTER-controller-nfs-allow --project=HOST_PROJECT --network=NETWORK \
+    --direction=INGRESS --priority=998 --action=ALLOW \
+    --rules=tcp:111,tcp:2049,tcp:20048,udp:111,udp:2049,udp:20048 \
+    --source-tags=CLUSTER --target-tags=CLUSTER-controller
+  gcloud compute firewall-rules create CLUSTER-controller-nfs-deny --project=HOST_PROJECT --network=NETWORK \
+    --direction=INGRESS --priority=999 --action=DENY \
+    --rules=tcp:111,tcp:2049,tcp:20048,udp:111,udp:2049,udp:20048 \
+    --source-ranges=0.0.0.0/0 --target-tags=CLUSTER-controller
+  ```
+
 * **Scope**: the tag-based allow rule only matches instances in the
   controller's VPC network; nodes in a peered VPC need `extra_nfs_client_cidrs`.
-  The rules and the export list cover IPv4 only. Network tags can be added by
-  anyone allowed to set tags on instances in the network, so restrict that
-  permission (`compute.instances.setTags`) accordingly.
+  The rules and `extra_nfs_client_cidrs` cover IPv4 only. Network tags can be
+  added by anyone allowed to set tags on instances in the network, so restrict
+  that permission (`compute.instances.setTags`) accordingly.
 * **Root squashing**: `/home`, `/opt/apps` and other controller-hosted storage
   are exported with `no_root_squash` by default, because login and compute nodes
   write to them as root (for example, to create a user's home directory on first
@@ -607,7 +635,7 @@ limitations under the License.
 | <a name="input_epilog_scripts"></a> [epilog\_scripts](#input\_epilog\_scripts) | List of scripts to be used for Epilog. Programs for the slurmd to execute<br/>on every node when a user's job completes.<br/>See https://slurm.schedmd.com/slurm.conf.html#OPT_Epilog. | <pre>list(object({<br/>    filename = string<br/>    content  = optional(string)<br/>    source   = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_experimental"></a> [experimental](#input\_experimental) | Experimental Slurm settings. These features are subject to change and may be modified in future releases. | <pre>object({<br/>    enable_async_reply = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | <a name="input_extra_logging_flags"></a> [extra\_logging\_flags](#input\_extra\_logging\_flags) | The only available flag is `trace_api` | `map(bool)` | `{}` | no |
-| <a name="input_extra_nfs_client_cidrs"></a> [extra\_nfs\_client\_cidrs](#input\_extra\_nfs\_client\_cidrs) | Additional CIDR ranges allowed to mount NFS exports from the controller<br/>(/home, /opt/apps, the Slurm key directory and other controller-hosted<br/>network storage). By default exports are limited to the primary subnetwork<br/>ranges of the controller, login nodes and nodesets. Add ranges here for<br/>clients in other subnetworks, such as instances in dynamic nodesets<br/>(nodeset\_dyn), GKE nodesets outside the controller's subnetworks, or other<br/>hosts that must mount controller storage. Ranges broader than /8 (IPv4) or<br/>/32 (IPv6) are rejected. After changing this on a running cluster, run<br/>`sudo /slurm/scripts/setup_network_storage.py --refresh-exports` on the<br/>controller to update its exports. | `list(string)` | `[]` | no |
+| <a name="input_extra_nfs_client_cidrs"></a> [extra\_nfs\_client\_cidrs](#input\_extra\_nfs\_client\_cidrs) | Additional IPv4 CIDR ranges allowed to mount NFS exports from the controller<br/>(/home, /opt/apps, the Slurm key directory and other controller-hosted<br/>network storage). By default exports are limited to the primary subnetwork<br/>ranges of the controller, login nodes, nodesets and dynamic nodesets<br/>(nodeset\_dyn). Add ranges here for clients in other subnetworks, such as GKE<br/>nodesets outside the controller's subnetworks, externally managed dynamic<br/>nodes, or hosts in peered VPCs that must mount controller storage. Only IPv4<br/>ranges of /8 or narrower are accepted. After changing this on a running<br/>cluster, run `sudo /slurm/scripts/setup_network_storage.py --refresh-exports`<br/>on the controller to update its exports. | `list(string)` | `[]` | no |
 | <a name="input_gcloud_path_override"></a> [gcloud\_path\_override](#input\_gcloud\_path\_override) | Directory of the gcloud executable to be used during cleanup | `string` | `""` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = string,<br/>    count = number<br/>  }))</pre> | `[]` | no |
 | <a name="input_health_check"></a> [health\_check](#input\_health\_check) | Health check and autohealing configuration for controller HA instance groups. | <pre>object({<br/>    type                 = optional(string, "tcp")<br/>    port                 = optional(number, 6818)<br/>    initial_delay_sec    = optional(number, 900)<br/>    check_interval_sec   = optional(number, 60)<br/>    timeout_sec          = optional(number, 10)<br/>    healthy_threshold    = optional(number, 2)<br/>    unhealthy_threshold  = optional(number, 5)<br/>    enable_logging       = optional(bool, true)<br/>    request_path         = optional(string, "/healthz")<br/>    create_firewall_rule = optional(bool, true)<br/>    port_name            = optional(string, "slurmctld")<br/>  })</pre> | `{}` | no |
@@ -629,7 +657,7 @@ limitations under the License.
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured on all instances. | <pre>list(object({<br/>    server_ip               = string,<br/>    remote_mount            = string,<br/>    local_mount             = string,<br/>    local_mount_owner       = optional(string)<br/>    local_mount_permissions = optional(string)<br/>    fs_type                 = string,<br/>    mount_options           = string,<br/>    client_install_runner   = optional(map(string))<br/>    mount_runner            = optional(map(string))<br/>  }))</pre> | `[]` | no |
 | <a name="input_nfs_export_root_squash"></a> [nfs\_export\_root\_squash](#input\_nfs\_export\_root\_squash) | If true, export cluster-internal controller mounts (/home, /opt/apps and<br/>other controller-hosted network storage) with root\_squash instead of<br/>no\_root\_squash. Root on login and compute nodes then cannot write to these<br/>mounts as root, which breaks tasks such as creating home directories on first<br/>login or installing software into /opt/apps as root. The Slurm key directory<br/>is always exported read-only. | `bool` | `false` | no |
 | <a name="input_nodeset"></a> [nodeset](#input\_nodeset) | Define nodesets, as a list. | <pre>list(object({<br/>    node_count_static      = optional(number, 0)<br/>    node_count_dynamic_max = optional(number, 1)<br/>    node_conf              = optional(map(string), {})<br/>    nodeset_name           = string<br/>    additional_disks = optional(list(object({<br/>      disk_name                   = optional(string)<br/>      device_name                 = optional(string)<br/>      disk_size_gb                = optional(number)<br/>      disk_type                   = optional(string)<br/>      disk_storage_pool           = optional(string)<br/>      disk_provisioned_iops       = optional(number)<br/>      disk_provisioned_throughput = optional(number)<br/>      disk_labels                 = optional(map(string), {})<br/>      auto_delete                 = optional(bool, true)<br/>      boot                        = optional(bool, false)<br/>      disk_resource_manager_tags  = optional(map(string), {})<br/>    })), [])<br/>    bandwidth_tier                      = optional(string, "platform_default")<br/>    can_ip_forward                      = optional(bool, false)<br/>    disk_auto_delete                    = optional(bool, true)<br/>    disk_labels                         = optional(map(string), {})<br/>    disk_resource_manager_tags          = optional(map(string), {})<br/>    disk_size_gb                        = optional(number)<br/>    disk_type                           = optional(string)<br/>    disk_storage_pool                   = optional(string)<br/>    disk_provisioned_iops               = optional(number)<br/>    disk_provisioned_throughput         = optional(number)<br/>    disk_encryption_key                 = optional(string)<br/>    disk_encryption_key_service_account = optional(string)<br/>    enable_confidential_vm              = optional(bool, false)<br/>    confidential_instance_type          = optional(string)<br/>    enable_placement                    = optional(bool, false)<br/>    placement_max_distance              = optional(number, null)<br/>    enable_oslogin                      = optional(bool, true)<br/>    enable_shielded_vm                  = optional(bool, false)<br/>    enable_maintenance_reservation      = optional(bool, false)<br/>    enable_opportunistic_maintenance    = optional(bool, false)<br/>    gpu = optional(object({<br/>      count = number<br/>      type  = string<br/>    }))<br/>    # Resolved GPU count per VM, used to derive accelerator topology slice sizes.<br/>    # Declared explicitly so it is not dropped during object type conversion.<br/>    gpu_count            = optional(number)<br/>    accelerator_topology = optional(string, null)<br/>    dws_flex = object({<br/>      enabled          = bool<br/>      max_run_duration = number<br/>      use_job_duration = bool<br/>      use_bulk_insert  = bool<br/>    })<br/>    provisioning_engine = optional(string, "AUTO")<br/>    labels              = optional(map(string), {})<br/>    machine_type        = optional(string)<br/>    advanced_machine_features = object({<br/>      enable_nested_virtualization = optional(bool)<br/>      threads_per_core             = optional(number)<br/>      turbo_mode                   = optional(string)<br/>      visible_core_count           = optional(number)<br/>      performance_monitoring_unit  = optional(string)<br/>      enable_uefi_networking       = optional(bool)<br/>    })<br/>    maintenance_interval     = optional(string)<br/>    instance_properties_json = string<br/>    metadata                 = optional(map(string), {})<br/>    min_cpu_platform         = optional(string)<br/>    network_tier             = optional(string, "STANDARD")<br/>    network_storage = optional(list(object({<br/>      server_ip               = string<br/>      remote_mount            = string<br/>      local_mount             = string<br/>      local_mount_owner       = optional(string)<br/>      local_mount_permissions = optional(string)<br/>      fs_type                 = string<br/>      mount_options           = string<br/>      client_install_runner   = optional(map(string))<br/>      mount_runner            = optional(map(string))<br/>    })), [])<br/>    on_host_maintenance   = optional(string)<br/>    preemptible           = optional(bool, false)<br/>    region                = optional(string)<br/>    resource_manager_tags = optional(map(string), {})<br/>    service_account = optional(object({<br/>      email  = optional(string)<br/>      scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])<br/>    }))<br/>    shielded_instance_config = optional(object({<br/>      enable_integrity_monitoring = optional(bool, true)<br/>      enable_secure_boot          = optional(bool, true)<br/>      enable_vtpm                 = optional(bool, true)<br/>    }))<br/>    source_image_family  = optional(string)<br/>    source_image_project = optional(string)<br/>    source_image         = optional(string)<br/>    subnetwork_self_link = string<br/>    additional_networks = optional(list(object({<br/>      network            = optional(string)<br/>      subnetwork         = optional(string)<br/>      subnetwork_project = optional(string)<br/>      network_attachment = optional(string)<br/>      network_ip         = optional(string, "")<br/>      nic_type           = optional(string)<br/>      stack_type         = optional(string)<br/>      queue_count        = optional(number)<br/>      access_config = optional(list(object({<br/>        nat_ip       = string<br/>        network_tier = string<br/>      })), [])<br/>      ipv6_access_config = optional(list(object({<br/>        network_tier = string<br/>      })), [])<br/>      alias_ip_range = optional(list(object({<br/>        ip_cidr_range         = string<br/>        subnetwork_range_name = string<br/>      })), [])<br/>    })), [])<br/>    access_config = optional(list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    })))<br/>    spot               = optional(bool, false)<br/>    tags               = optional(list(string), [])<br/>    termination_action = optional(string)<br/>    reservation_name   = optional(string)<br/>    future_reservation = string<br/>    startup_script = optional(list(object({<br/>      filename = string<br/>    content = string })), [])<br/><br/>    zone_target_shape = string<br/>    zone_policy_allow = set(string)<br/>    zone_policy_deny  = set(string)<br/><br/>    instance_flexibility_policy = optional(object({<br/>      instance_selections = list(object({<br/>        name          = optional(string)<br/>        rank          = optional(number, 1)<br/>        machine_types = set(string)<br/>      }))<br/>    }))<br/>  }))</pre> | `[]` | no |
-| <a name="input_nodeset_dyn"></a> [nodeset\_dyn](#input\_nodeset\_dyn) | Defines dynamic nodesets, as a list. | <pre>list(object({<br/>    nodeset_name    = string<br/>    nodeset_feature = string<br/>  }))</pre> | `[]` | no |
+| <a name="input_nodeset_dyn"></a> [nodeset\_dyn](#input\_nodeset\_dyn) | Defines dynamic nodesets, as a list. | <pre>list(object({<br/>    nodeset_name         = string<br/>    nodeset_feature      = string<br/>    subnetwork_self_link = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Instance availability Policy. | `string` | `"MIGRATE"` | no |
 | <a name="input_output_dir"></a> [output\_dir](#input\_output\_dir) | Directory where this module will write its files to. These files include:<br/>cloud.conf; cloud\_gres.conf; config.yaml; resume.py; suspend.py; and util.py. | `string` | `null` | no |
 | <a name="input_partitions"></a> [partitions](#input\_partitions) | Cluster partitions as a list. See module slurm\_partition. | <pre>list(object({<br/>    partition_name        = string<br/>    partition_conf        = optional(map(string), {})<br/>    partition_nodeset     = optional(list(string), [])<br/>    partition_nodeset_dyn = optional(list(string), [])<br/>    enable_job_exclusive  = optional(bool, false)<br/>  }))</pre> | `[]` | no |

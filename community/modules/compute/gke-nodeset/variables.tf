@@ -89,6 +89,13 @@ variable "instance_templates" {
   nullable    = false
 }
 
+variable "node_network_tags" {
+  description = "Network tags on the GKE node VMs, used as source_tags for the controller NFS allow firewall rule."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured on nodes."
   type = list(object({
@@ -131,12 +138,12 @@ variable "slurm_control_host_port" {
 variable "create_nfs_firewall_rule" {
   description = <<-EOD
     If true, create a VPC firewall rule that allows NFS traffic (TCP/UDP ports
-    111, 2049 and 20048) from this nodeset's GKE subnetwork to the Slurm
-    controller, so GKE nodes can mount the Slurm key directory. The controller
-    module denies controller NFS traffic from untagged sources by default. Set
-    to false if you manage firewall rules yourself. If the GKE subnetwork is not
-    one of the controller's subnetworks, also add its range to the controller's
-    extra_nfs_client_cidrs.
+    111, 2049 and 20048) from this nodeset's GKE node VMs (matched via
+    node_network_tags) to the Slurm controller, so GKE nodes can mount the Slurm
+    key directory without opening controller NFS ports to untagged VMs in a
+    shared subnetwork. Set to false if you manage firewall rules yourself. If the
+    GKE subnetwork is not one of the controller's subnetworks, also add its range
+    to the controller's extra_nfs_client_cidrs.
     EOD
   type        = bool
   default     = true

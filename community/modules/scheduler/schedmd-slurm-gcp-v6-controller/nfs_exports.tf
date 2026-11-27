@@ -26,6 +26,8 @@ locals {
     [var.subnetwork_self_link],
     [for x in var.login_nodes : x.subnetwork],
     [for ns in var.nodeset : ns.subnetwork_self_link],
+    # coalesce keeps the list length known at plan time
+    [for ns in var.nodeset_dyn : coalesce(ns.subnetwork_self_link, var.subnetwork_self_link)],
   )
 
   nfs_export_clients = distinct(concat(
@@ -68,6 +70,11 @@ resource "google_compute_firewall" "controller_nfs_deny" {
     protocol = "udp"
     ports    = local.nfs_ports
   }
+
+  depends_on = [
+    google_compute_firewall.controller_nfs_allow,
+    google_compute_firewall.controller_nfs_allow_extra,
+  ]
 }
 
 # Allow NFS from cluster instances (all carry the cluster name tag).

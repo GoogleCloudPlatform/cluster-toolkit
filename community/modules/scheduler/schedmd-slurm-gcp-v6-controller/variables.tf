@@ -462,8 +462,9 @@ variable "nodeset" {
 variable "nodeset_dyn" {
   description = "Defines dynamic nodesets, as a list."
   type = list(object({
-    nodeset_name    = string
-    nodeset_feature = string
+    nodeset_name         = string
+    nodeset_feature      = string
+    subnetwork_self_link = optional(string)
   }))
   default = []
 }
@@ -651,16 +652,16 @@ variable "enable_default_mounts" {
 
 variable "extra_nfs_client_cidrs" {
   description = <<-EOD
-    Additional CIDR ranges allowed to mount NFS exports from the controller
+    Additional IPv4 CIDR ranges allowed to mount NFS exports from the controller
     (/home, /opt/apps, the Slurm key directory and other controller-hosted
     network storage). By default exports are limited to the primary subnetwork
-    ranges of the controller, login nodes and nodesets. Add ranges here for
-    clients in other subnetworks, such as instances in dynamic nodesets
-    (nodeset_dyn), GKE nodesets outside the controller's subnetworks, or other
-    hosts that must mount controller storage. Ranges broader than /8 (IPv4) or
-    /32 (IPv6) are rejected. After changing this on a running cluster, run
-    `sudo /slurm/scripts/setup_network_storage.py --refresh-exports` on the
-    controller to update its exports.
+    ranges of the controller, login nodes, nodesets and dynamic nodesets
+    (nodeset_dyn). Add ranges here for clients in other subnetworks, such as GKE
+    nodesets outside the controller's subnetworks, externally managed dynamic
+    nodes, or hosts in peered VPCs that must mount controller storage. Only IPv4
+    ranges of /8 or narrower are accepted. After changing this on a running
+    cluster, run `sudo /slurm/scripts/setup_network_storage.py --refresh-exports`
+    on the controller to update its exports.
     EOD
   type        = list(string)
   default     = []
@@ -672,11 +673,16 @@ variable "extra_nfs_client_cidrs" {
   }
 
   validation {
+    condition     = alltrue([for c in var.extra_nfs_client_cidrs : !can(regex(":", c))])
+    error_message = "extra_nfs_client_cidrs supports IPv4 ranges only."
+  }
+
+  validation {
     condition = alltrue([
       for c in var.extra_nfs_client_cidrs :
-      try(tonumber(split("/", c)[1]), 0) >= (can(regex(":", c)) ? 32 : 8)
+      can(regex(":", c)) || try(tonumber(split("/", c)[1]), 0) >= 8
     ])
-    error_message = "extra_nfs_client_cidrs must not contain ranges broader than /8 (IPv4) or /32 (IPv6); such ranges would export controller storage to (nearly) every host."
+    error_message = "extra_nfs_client_cidrs must not contain ranges broader than /8; such ranges would export controller storage to (nearly) every host."
   }
 }
 

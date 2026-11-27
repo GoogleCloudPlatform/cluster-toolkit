@@ -49,10 +49,11 @@ locals {
   )
 
   nodeset = {
-    nodeset_name = local.nodeset_name
-    nodeset_feature : local.feature
-    startup_script  = local.ghpc_startup_script
-    network_storage = var.network_storage
+    nodeset_name         = local.nodeset_name
+    nodeset_feature      = local.feature
+    startup_script       = local.ghpc_startup_script
+    network_storage      = var.network_storage
+    subnetwork_self_link = var.subnetwork_self_link
   }
 
   additional_disks = [
