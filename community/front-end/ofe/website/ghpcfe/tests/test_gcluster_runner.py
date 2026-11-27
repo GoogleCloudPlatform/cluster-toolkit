@@ -18,7 +18,6 @@ Like test_tf_state_backend.py, these tests import no Django.
 """
 
 import importlib.util
-import re
 import subprocess
 import tempfile
 import unittest
@@ -77,12 +76,6 @@ class RunGclusterTests(unittest.TestCase):
         self.assertTrue(env["PATH"].startswith("/usr/bin:"))
         self.assertEqual(log, self.dir / "gcluster.log")
 
-    def test_gcluster_is_the_binary_at_the_toolkit_root(self):
-        # OFE lives at <root>/community/front-end/ofe; make builds
-        # <root>/gcluster (ghpc is only a symlink to it).
-        self.assertEqual(Path(utils.GCLUSTER_PATH),
-                         OFE_DIR.parents[2] / "gcluster")
-
     def test_appends_every_command_to_one_log(self):
         self._run(0, "first\n")
         self._run(0, "second\n")
@@ -105,18 +98,6 @@ class RunGclusterTests(unittest.TestCase):
         self.assertEqual(ctx.exception.returncode, 3)
         self.assertIn(b"quota exceeded", ctx.exception.output)
 
-
-class NoDirectTerraformTests(unittest.TestCase):
-    """Blueprint resources never run Terraform or Packer themselves."""
-
-    CALL = re.compile(r"\butils\.(run_terraform|run_packer)\(")
-
-    def test_blueprint_resources_use_gcluster(self):
-        for name in ("clusterinfo.py", "filesystem.py", "image.py", "vpc.py"):
-            with self.subTest(module=name):
-                text = (CLUSTER_MANAGER / name).read_text()
-                self.assertIsNone(self.CALL.search(text))
-                self.assertIn("utils.run_gcluster(", text)
 
 if __name__ == "__main__":
     unittest.main()

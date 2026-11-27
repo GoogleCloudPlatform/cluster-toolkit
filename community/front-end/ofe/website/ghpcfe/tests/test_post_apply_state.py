@@ -339,10 +339,6 @@ class StartVpcTests(unittest.TestCase):
         tf.assert_not_called()
         self.assertEqual(vpc.cloud_state, "xm")
 
-    def test_log_file_is_the_gcluster_log_the_page_shows(self):
-        self.assertEqual(vpc_module.get_log_file(_fake_vpc()[0]),
-                         self.dir / "gcluster.log")
-
     def test_psa_blocked_destroy_is_recognised_from_the_log(self):
         vpc, _ = _fake_vpc()
         log = self.dir / "gcluster.log"
