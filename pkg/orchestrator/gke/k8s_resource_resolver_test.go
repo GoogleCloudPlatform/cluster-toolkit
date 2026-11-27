@@ -46,20 +46,18 @@ func TestResolveK8sHardwareRequirements_TPUSlicePreflightOrderingWithoutTopology
 		forbidErr     string
 	}{
 		{
-			name:          "jobset_unnamed_tpu_without_topology_reports_slice_requirement",
+			name:          "jobset_unnamed_tpu_without_topology_reports_topology_requirement",
 			inv:           baseInv,
 			jobSetEnabled: true,
 			job:           orchestrator.JobDefinition{ComputeType: "tpu7x", NumSlices: 1},
-			wantErr:       k8s.TPUSliceNameLabel,
-			forbidErr:     "--topology is required",
+			wantErr:       "--topology is required to provision a new slice",
 		},
 		{
-			name:          "jobset_autodiscovered_tpu_without_topology_reports_slice_requirement",
+			name:          "jobset_autodiscovered_tpu_without_topology_reports_topology_requirement",
 			inv:           baseInv,
 			jobSetEnabled: true,
 			job:           orchestrator.JobDefinition{NumSlices: 1},
-			wantErr:       k8s.TPUSliceNameLabel,
-			forbidErr:     "--topology is required",
+			wantErr:       "--topology is required to provision a new slice",
 		},
 		{
 			name:          "tier3_unnamed_tpu_without_topology_reports_slice_requirement",
@@ -70,12 +68,11 @@ func TestResolveK8sHardwareRequirements_TPUSlicePreflightOrderingWithoutTopology
 			forbidErr:     "--topology is required",
 		},
 		{
-			name:          "explicit_mode_jobset_unnamed_tpu_without_topology_reports_slice_requirement",
+			name:          "explicit_mode_jobset_unnamed_tpu_without_topology_reports_topology_requirement",
 			inv:           explicitInv,
 			jobSetEnabled: true,
 			job:           orchestrator.JobDefinition{ComputeType: "tpu7x", NumSlices: 1},
-			wantErr:       k8s.TPUSliceNameLabel,
-			forbidErr:     "--topology is required",
+			wantErr:       "--topology is required for TPU workloads because listing cluster nodes was denied",
 		},
 		{
 			name:          "explicit_mode_tier3_unnamed_tpu_without_topology_reports_slice_requirement",
@@ -585,29 +582,29 @@ func TestResolveK8sHardwareRequirements_NamedSliceTopologyDivisibility(t *testin
 func TestResolveK8sHardwareRequirements_CustomTPUTypePools(t *testing.T) {
 	customTPU := &k8s.Inventory{
 		LabelScheme: k8s.SchemeGeneric,
-		PoolNames:   []string{"tpu8i"},
-		Pools:       map[string]k8s.PoolCapacity{"tpu8i": {MachineType: "tpu8i-node", IsTPU: true, TPUType: "tpu8i", TPUsPerNode: 4, ReadyNodes: 1}},
+		PoolNames:   []string{"tpu-custom-a"},
+		Pools:       map[string]k8s.PoolCapacity{"tpu-custom-a": {MachineType: "tpu-custom-a-node", IsTPU: true, TPUType: "tpu-custom-a", TPUsPerNode: 4, ReadyNodes: 1}},
 	}
 	unlabeledTPU := &k8s.Inventory{
 		LabelScheme: k8s.SchemeGeneric,
 		PoolNames:   []string{"tpu"},
-		Pools:       map[string]k8s.PoolCapacity{"tpu": {IsTPU: true, TPUType: "v8", TPUsPerNode: 4, ReadyNodes: 1}},
+		Pools:       map[string]k8s.PoolCapacity{"tpu": {IsTPU: true, TPUType: "custom-tpu", TPUsPerNode: 4, ReadyNodes: 1}},
 	}
 	customTPUAndCPU := &k8s.Inventory{
 		LabelScheme: k8s.SchemeGeneric,
-		PoolNames:   []string{"cpu", "tpu8i"},
+		PoolNames:   []string{"cpu", "tpu-custom-a"},
 		Pools: map[string]k8s.PoolCapacity{
-			"cpu":   {MachineType: "output-worker", AllocatableCPUMilli: 15000, ReadyNodes: 1},
-			"tpu8i": {MachineType: "tpu8i-node", IsTPU: true, TPUType: "tpu8i", TPUsPerNode: 4, ReadyNodes: 1},
+			"cpu":          {MachineType: "output-worker", AllocatableCPUMilli: 15000, ReadyNodes: 1},
+			"tpu-custom-a": {MachineType: "tpu-custom-a-node", IsTPU: true, TPUType: "tpu-custom-a", TPUsPerNode: 4, ReadyNodes: 1},
 		},
 	}
 	for _, tc := range []k8sPoolResolutionCase{
-		{name: "autodiscovered_custom_tpu_type", inv: customTPU, job: orchestrator.JobDefinition{Topology: "2x2", NumSlices: 1}, wantTPU: true, wantCap: 4, wantTPUType: "tpu8i"},
-		{name: "explicit_custom_tpu_type", inv: customTPU, job: orchestrator.JobDefinition{ComputeType: "tpu8i", Topology: "2x2", NumSlices: 1}, wantTPU: true, wantCap: 4, wantTPUType: "tpu8i"},
-		{name: "explicit_custom_tpu_type_rejects_num_nodes", inv: customTPU, job: orchestrator.JobDefinition{ComputeType: "tpu8i", NumNodesSpecified: true, NumSlices: 1}, wantErr: "--num-nodes cannot be used with TPU jobs"},
-		{name: "autodiscovered_unlabeled_tpu_type", inv: unlabeledTPU, job: orchestrator.JobDefinition{Topology: "2x2", NumSlices: 1}, wantTPU: true, wantCap: 4, wantTPUType: "v8"},
+		{name: "autodiscovered_custom_tpu_type", inv: customTPU, job: orchestrator.JobDefinition{Topology: "2x2", NumSlices: 1}, wantTPU: true, wantCap: 4, wantTPUType: "tpu-custom-a"},
+		{name: "explicit_custom_tpu_type", inv: customTPU, job: orchestrator.JobDefinition{ComputeType: "tpu-custom-a", Topology: "2x2", NumSlices: 1}, wantTPU: true, wantCap: 4, wantTPUType: "tpu-custom-a"},
+		{name: "explicit_custom_tpu_type_rejects_num_nodes", inv: customTPU, job: orchestrator.JobDefinition{ComputeType: "tpu-custom-a", NumNodesSpecified: true, NumSlices: 1}, wantErr: "--num-nodes cannot be used with TPU jobs"},
+		{name: "autodiscovered_unlabeled_tpu_type", inv: unlabeledTPU, job: orchestrator.JobDefinition{Topology: "2x2", NumSlices: 1}, wantTPU: true, wantCap: 4, wantTPUType: "custom-tpu"},
 		{name: "output-worker_stays_cpu", inv: customTPUAndCPU, job: orchestrator.JobDefinition{ComputeType: "output-worker", NumSlices: 1}, wantCPU: true},
-		{name: "unknown_name_does_not_match_tpu_pool", inv: customTPUAndCPU, job: orchestrator.JobDefinition{ComputeType: "tpu8", NumSlices: 1}, wantCPU: true},
+		{name: "unknown_name_does_not_match_tpu_pool", inv: customTPUAndCPU, job: orchestrator.JobDefinition{ComputeType: "tpu-custom", NumSlices: 1}, wantCPU: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) { runK8sPoolResolutionCase(t, tc) })
 	}

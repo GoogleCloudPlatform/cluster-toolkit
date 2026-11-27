@@ -17,6 +17,7 @@ package config
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/zclconf/go-cty/cty"
@@ -384,6 +385,70 @@ func TestResolveTopologyForChips(t *testing.T) {
 				t.Errorf("ResolveTopologyForChips() got = %v, want %v", got, tt.wantShape)
 			}
 		})
+	}
+}
+
+func TestCT5LAndUppercaseTPUNormalization(t *testing.T) {
+	for _, tc := range []struct {
+		shorthand, machine, want string
+	}{
+		{"v5e-8", "ct5l-hightpu-8t", "2x4"},
+		{"v5e-8", "CT5L-HIGHTPU-8T", "2x4"},
+		{" V4-8 ", "CT4P-HIGHTPU-4T", "2x2x1"},
+		{"V5P-8", "CT5P-HIGHTPU-4T", "2x2x1"},
+	} {
+		if got, err := ResolveTopologyForChips(tc.shorthand, tc.machine); err != nil || got != tc.want {
+			t.Errorf("ResolveTopologyForChips(%q, %q) = (%q, %v), want (%q, nil)", tc.shorthand, tc.machine, got, err, tc.want)
+		}
+	}
+	if _, err := ResolveTopologyForChips("TPU7X-16", "TPU7X-STANDARD-4T"); err == nil || !strings.Contains(err.Error(), "--topology") {
+		t.Errorf("ResolveTopologyForChips(TPU7X-16) err = %v, want --topology error", err)
+	}
+	if _, err := ResolveTopologyForChips("v5e-2X4", "ct5l-hightpu-8t"); err == nil || !strings.Contains(err.Error(), "Use --topology flag") {
+		t.Errorf("ResolveTopologyForChips(v5e-2X4) err = %v, want --topology hint", err)
+	}
+	if err := ValidateHardwareRequest("ct5l-hightpu-8t", "2x4"); err != nil {
+		t.Errorf("ValidateHardwareRequest(ct5l-hightpu-8t, 2x4) = %v, want nil", err)
+	}
+	if err := ValidateHardwareRequest("CT5L-HIGHTPU-8T", "2x4"); err != nil {
+		t.Errorf("ValidateHardwareRequest(CT5L-HIGHTPU-8T, 2x4) = %v, want nil", err)
+	}
+	if err := ValidateHardwareRequest(" ct6e-standard-4t ", "3x3"); err == nil {
+		t.Errorf("ValidateHardwareRequest(whitespace TPU, 3x3) = nil, want invalid topology error")
+	}
+	if got, ok := DefaultTopologyForChips("CT5L-HIGHTPU-8T", 8); !ok || got != "2x4" {
+		t.Errorf("DefaultTopologyForChips(CT5L-HIGHTPU-8T, 8) = (%q, %v), want (2x4, true)", got, ok)
+	}
+}
+
+func TestCT5LAndUppercaseMaxCubesAndAcceleratorsPerVM(t *testing.T) {
+	// 4x4x12 is outside valid3DShapes so ValidateHardwareRequest must reach getMaxCubes("TPU7X-STANDARD-4T") == 144.
+	if err := ValidateHardwareRequest("TPU7X-STANDARD-4T", "4x4x12"); err != nil {
+		t.Errorf("ValidateHardwareRequest(TPU7X-STANDARD-4T, 4x4x12) = %v, want nil", err)
+	}
+	if err := Validate3DTopology("4x4x8", "TPU7X-STANDARD-4T", true); err != nil {
+		t.Errorf("Validate3DTopology(4x4x8, TPU7X-STANDARD-4T, dyn=true) = %v, want nil", err)
+	}
+	if err := ValidateHardwareRequest("CT4P-HIGHTPU-4T", "16x16x20"); err == nil {
+		t.Errorf("ValidateHardwareRequest(CT4P-HIGHTPU-4T, 16x16x20) = nil, want max-cubes error")
+	}
+	for _, tc := range []struct {
+		machine string
+		want    int
+	}{
+		{"CT5L-HIGHTPU-8T", 8},
+		{"CT5L-HIGHTPU-4T", 4},
+		{"CT5L", 8},
+	} {
+		if got := AcceleratorsPerVM(tc.machine); got != tc.want {
+			t.Errorf("AcceleratorsPerVM(%q) = %d, want %d", tc.machine, got, tc.want)
+		}
+	}
+	if nodes, err := CalculateAcceleratorNodes("CT5L-HIGHTPU-8T", "2x4", 0); err != nil || nodes != 1 {
+		t.Errorf("CalculateAcceleratorNodes(CT5L-HIGHTPU-8T, 2x4) = (%d, %v), want (1, nil)", nodes, err)
+	}
+	if !IsTPU(" ct6e-standard-4t ") || !IsTPU(" v6e-8 ") || !IsTPU(" ct5l ") {
+		t.Errorf("IsTPU must trim whitespace for TPU names and shorthands")
 	}
 }
 

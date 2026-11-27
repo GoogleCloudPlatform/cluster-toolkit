@@ -4143,7 +4143,7 @@ func TestJobSetProbeAndInstallRBACEdgeCases(t *testing.T) {
 	})
 }
 
-func TestValidateTPUSliceScheduling_ExplicitSliceRequired(t *testing.T) {
+func TestValidateTPUSliceScheduling_DynamicAndStaticRules(t *testing.T) {
 	readyInv := &k8s.Inventory{
 		LabelScheme: k8s.SchemeTPUSlice,
 		Slices: []k8s.SliceInfo{
@@ -4152,32 +4152,43 @@ func TestValidateTPUSliceScheduling_ExplicitSliceRequired(t *testing.T) {
 		},
 	}
 	tests := []struct {
-		name    string
-		inv     *k8s.Inventory
-		job     orchestrator.JobDefinition
-		wantErr string
+		name          string
+		inv           *k8s.Inventory
+		jobSetEnabled bool
+		job           orchestrator.JobDefinition
+		wantErr       string
 	}{
 		{
-			name:    "unnamed_tpu_job_on_tpu_slice_rejected",
-			inv:     readyInv,
-			job:     orchestrator.JobDefinition{ComputeType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
-			wantErr: k8s.TPUSliceNameLabel,
+			name:          "unnamed_tpu_job_on_tpu_slice_allowed_for_jobset",
+			inv:           readyInv,
+			jobSetEnabled: true,
+			job:           orchestrator.JobDefinition{ComputeType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
 		},
 		{
-			name: "named_ready_slice_passes",
-			inv:  readyInv,
-			job:  orchestrator.JobDefinition{ComputeType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "ready-slice"}},
+			name:          "unnamed_tpu_job_on_tpu_slice_rejected_for_tier3",
+			inv:           readyInv,
+			jobSetEnabled: false,
+			job:           orchestrator.JobDefinition{ComputeType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1},
+			wantErr:       k8s.TPUSliceNameLabel,
 		},
 		{
-			name:    "named_pending_slice_rejected",
-			inv:     readyInv,
-			job:     orchestrator.JobDefinition{ComputeType: "tpu7x-standard-4t", Topology: "2x2x2", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "pending-slice"}},
-			wantErr: "is not READY",
+			name:          "named_ready_slice_passes",
+			inv:           readyInv,
+			jobSetEnabled: true,
+			job:           orchestrator.JobDefinition{ComputeType: "tpu7x-standard-4t", Topology: "2x2x1", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "ready-slice"}},
 		},
 		{
-			name: "cpu_job_on_tpu_slice_passes_without_slice_name",
-			inv:  readyInv,
-			job:  orchestrator.JobDefinition{ComputeType: "n2-standard-8", NumSlices: 1, NodesPerSlice: 1},
+			name:          "named_pending_slice_rejected",
+			inv:           readyInv,
+			jobSetEnabled: true,
+			job:           orchestrator.JobDefinition{ComputeType: "tpu7x-standard-4t", Topology: "2x2x2", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "pending-slice"}},
+			wantErr:       "is not READY",
+		},
+		{
+			name:          "cpu_job_on_tpu_slice_passes_without_slice_name",
+			inv:           readyInv,
+			jobSetEnabled: true,
+			job:           orchestrator.JobDefinition{ComputeType: "n2-standard-8", NumSlices: 1, NodesPerSlice: 1},
 		},
 	}
 	for _, tc := range tests {
@@ -4186,7 +4197,7 @@ func TestValidateTPUSliceScheduling_ExplicitSliceRequired(t *testing.T) {
 				mode: orchestrator.TypeK8s,
 				submissionSession: submissionSession{
 					inventory: tc.inv,
-					addons:    addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false},
+					addons:    addonPlan{resolved: true, jobSetEnabled: tc.jobSetEnabled, kueueEnabled: false},
 				},
 			}
 			job := tc.job

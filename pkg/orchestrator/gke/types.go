@@ -212,6 +212,10 @@ type submissionSession struct {
 	jobSetAPIProbed  bool
 	jobSetAPIPresent bool
 	jobSetAPIContext string
+	// tpuSliceAPI* caches the lightweight /apis/slice.tpu.google.com probe per kubeContext when inventory is nil.
+	tpuSliceAPIChecked bool
+	tpuSliceAPIPresent bool
+	tpuSliceAPIContext string
 }
 
 func newSubmissionSession() submissionSession {
@@ -258,6 +262,10 @@ type GKEOrchestrator struct {
 	// isInteractiveFunc and promptLineFunc allow race-free test injection of TTY detection and 3-way prompt reads.
 	isInteractiveFunc func() bool
 	promptLineFunc    func(string) (string, bool)
+	// sliceTeardownTimeout, sliceTeardownInterval, and sleepFunc allow hermetic testing of CancelJob slice teardown wait.
+	sliceTeardownTimeout  time.Duration
+	sliceTeardownInterval time.Duration
+	sleepFunc             func(time.Duration)
 }
 
 // gceTPUHardwareResolver implements k8s.TPUHardwareResolver using GCE machine-type conventions.
@@ -381,6 +389,8 @@ type ManifestOptions struct {
 	PodFailurePolicy              string
 	ImagePullSecrets              string
 	ServiceAccountName            string
+	WorkloadLabels                string
+	PodLabels                     string
 	TopologyAnnotation            string
 	Topology                      string
 	PathwaysInstanceType          string
@@ -394,6 +404,7 @@ type ManifestOptions struct {
 	GCSFuseEnabled                bool
 	IsDynamicSlicing              bool
 	IsStaticSlicing               bool
+	DynamicTPUSlice               bool
 	IsCPUMachine                  bool
 	OmitGKENodePool               bool
 	K8sPool                       *k8s.PoolCapacity
@@ -813,6 +824,8 @@ type jobSetTemplateData struct {
 	PodFailurePolicy              string
 	ImagePullSecrets              string
 	ServiceAccountName            string
+	WorkloadLabels                string
+	PodLabels                     string
 	TopologyAnnotation            string
 	SchedulerName                 string
 	SchedulingGates               string
@@ -835,6 +848,7 @@ type jobSetTemplateData struct {
 	PathwaysServerEnv             EnvVars
 	PathwaysWorkerEnv             EnvVars
 	IsTPU                         bool
+	TPUCommPortEnabled            bool
 	IsGPU                         bool
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
@@ -854,6 +868,24 @@ type jobSetValidationSpec struct {
 			Template batchv1.JobTemplateSpec `json:"template"`
 		} `json:"replicatedJobs"`
 	} `json:"spec"`
+}
+
+type workloadManifestObject struct {
+	kind           string
+	jobName        string
+	objectMeta     metav1.ObjectMeta
+	jobAnnotations map[string]string
+	pfp            *batchv1.PodFailurePolicy
+	tmpl           *corev1.PodTemplateSpec
+}
+
+type tpuSliceManifestContract struct {
+	workloadLabelsYAML string
+	podLabelsYAML      string
+	topologyAnnotYAML  string
+	schedulerName      string
+	dynamicTPUSlice    bool
+	commPortEnabled    bool
 }
 
 // Types for parsing kubectl get nodes -o json

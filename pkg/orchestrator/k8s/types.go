@@ -167,16 +167,24 @@ type PoolCapacity struct {
 
 // SliceInfo describes a discovered slice.tpu.google.com Slice resource or node-derived slice.
 type SliceInfo struct {
-	Name          string
-	Namespace     string
-	TPUType       string
-	MachineType   string
-	Topology      string
-	State         string
-	Ready         bool
-	NodesPerSlice int
-	ChipsPerNode  int
-	PartitionIDs  []string
+	Name               string
+	Namespace          string
+	TPUType            string
+	MachineType        string
+	Topology           string
+	State              string
+	Ready              bool
+	Terminating        bool
+	ReadyMessage       string
+	NodesLabeled       bool
+	NodesLabeledKnown  bool
+	NodesLabeledReason string
+	OwnerName          string
+	OwnerNamespace     string
+	OwnerKind          string
+	NodesPerSlice      int
+	ChipsPerNode       int
+	PartitionIDs       []string
 }
 
 // PartitionTreeInfo describes a discovered partition.tpu.google.com PartitionTree resource.
@@ -238,7 +246,6 @@ type nodeSignals struct {
 	hasTPUSliceLabels  bool
 	hasGKELabels       bool
 	hasPartitionLabels bool
-	poolControlPlane   map[string]bool
 	nodeSlices         map[string]*nodeSliceAgg
 }
 

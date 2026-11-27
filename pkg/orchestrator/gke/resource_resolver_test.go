@@ -2446,11 +2446,11 @@ func TestK8sResourceResolution_NonTPUSubstringAndCustomTPUTypes(t *testing.T) {
 		submissionSession: submissionSession{
 			inventory: &k8s.Inventory{
 				LabelScheme: k8s.SchemeGeneric,
-				PoolNames:   []string{"cpu-output", "bm-tpu", "tpu8i-pool"},
+				PoolNames:   []string{"cpu-output", "bm-tpu", "custom-tpu-pool"},
 				Pools: map[string]k8s.PoolCapacity{
-					"cpu-output": {MachineType: "output-worker", IsTPU: false, IsGPU: false, ReadyNodes: 2, AllocatableCPUMilli: 16000},
-					"bm-tpu":     {MachineType: "bm-host", IsTPU: true, TPUType: "tpu7x", TPUsPerNode: 4, ReadyNodes: 2},
-					"tpu8i-pool": {MachineType: "tpu8i-node", IsTPU: true, TPUType: "tpu8i", TPUsPerNode: 4, ReadyNodes: 2},
+					"cpu-output":      {MachineType: "output-worker", IsTPU: false, IsGPU: false, ReadyNodes: 2, AllocatableCPUMilli: 16000},
+					"bm-tpu":          {MachineType: "bm-host", IsTPU: true, TPUType: "tpu7x", TPUsPerNode: 4, ReadyNodes: 2},
+					"custom-tpu-pool": {MachineType: "custom-tpu-node", IsTPU: true, TPUType: "tpu-custom-a", TPUsPerNode: 4, ReadyNodes: 2},
 				},
 			},
 		},
@@ -2477,13 +2477,13 @@ func TestK8sResourceResolution_NonTPUSubstringAndCustomTPUTypes(t *testing.T) {
 		t.Errorf("bm-host profile = %+v nodes=%d, want TPU 4 chips/node, 2 nodes", bmProf, bmJob.NodesPerSlice)
 	}
 
-	tpu8iJob := orchestrator.JobDefinition{ComputeType: "tpu8i-node", Topology: "2x2x2", NumSlices: 1}
-	tpu8iProf, _, _, err := orc.resolveK8sHardwareRequirements(&tpu8iJob)
+	customTPUJob := orchestrator.JobDefinition{ComputeType: "custom-tpu-node", Topology: "2x2x2", NumSlices: 1}
+	customTPUProf, _, _, err := orc.resolveK8sHardwareRequirements(&customTPUJob)
 	if err != nil {
-		t.Fatalf("tpu8i-node custom TPU pool err = %v", err)
+		t.Fatalf("custom-tpu-node custom TPU pool err = %v", err)
 	}
-	if !tpu8iProf.IsTPU || tpu8iJob.NodesPerSlice != 2 {
-		t.Errorf("tpu8i-node profile = %+v nodes=%d, want TPU with 2 nodes", tpu8iProf, tpu8iJob.NodesPerSlice)
+	if !customTPUProf.IsTPU || customTPUJob.NodesPerSlice != 2 {
+		t.Errorf("custom-tpu-node profile = %+v nodes=%d, want TPU with 2 nodes", customTPUProf, customTPUJob.NodesPerSlice)
 	}
 }
 
@@ -2669,7 +2669,7 @@ func TestK8sRebuttalFixes_V4V5pTopoCustomSliceZeroGPUPoolAndCaseValidation(t *te
 				Slices: []k8s.SliceInfo{
 					{Name: "s-bm", TPUType: "tpu7x", MachineType: "bm-host", Topology: "2x2x2", ChipsPerNode: 4, NodesPerSlice: 2, Ready: true},
 					{Name: "s-no-topo", TPUType: "v6e", MachineType: "ct6e-standard-4t", ChipsPerNode: 4, NodesPerSlice: 2, Ready: true},
-					{Name: "s-explicit-8", TPUType: "tpu8i", MachineType: "custom-8", Topology: "2x2x2", ChipsPerNode: 8, NodesPerSlice: 1, Ready: true},
+					{Name: "s-explicit-8", TPUType: "tpu-custom-a", MachineType: "custom-8", Topology: "2x2x2", ChipsPerNode: 8, NodesPerSlice: 1, Ready: true},
 				},
 			},
 		},

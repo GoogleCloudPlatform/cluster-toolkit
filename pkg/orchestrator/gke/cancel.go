@@ -60,8 +60,8 @@ func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions
 	}
 	foundNamespace := ns
 
-	// Read before the delete so this job's gateways skip the grace period.
-	actionVerb, ownClaims := g.resolveCancelActionVerb(foundNamespace, name)
+	// Read before the delete so this job's gateways skip the grace period and slice teardown polling only runs for dynamic TPU JobSets.
+	actionVerb, ownClaims, mayOwnTPUSlices := g.resolveCancelActionVerb(foundNamespace, name)
 	if actionVerb == "Cleanup" {
 		logging.Info("Cleaning up resources for finished job '%s' in cluster '%s'...", name, opts.ClusterName)
 	} else {
@@ -77,13 +77,17 @@ func (g *GKEOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions
 		return g.handleDeleteJobSetError(foundNamespace, name, actionVerb, ownClaims, err)
 	}
 	logging.Info("%s operation on Job '%s' completed successfully.", actionVerb, name)
+	if mayOwnTPUSlices {
+		g.waitForOwnedSlicesTeardown(foundNamespace, name)
+	}
 	g.reclaimStorageGateways(foundNamespace, name, ownClaims)
 	return nil
 }
 
-func (g *GKEOrchestrator) resolveCancelActionVerb(namespace, name string) (string, []string) {
+func (g *GKEOrchestrator) resolveCancelActionVerb(namespace, name string) (string, []string, bool) {
 	if !g.jobSetEnabled() {
-		return g.peekBatchJobActionVerb(namespace, name)
+		verb, claims := g.peekBatchJobActionVerb(namespace, name)
+		return verb, claims, false
 	}
 	js, err := g.kubeClient.GetResource(jobSetGVR, namespace, name)
 	if err == nil && js != nil {
@@ -91,12 +95,13 @@ func (g *GKEOrchestrator) resolveCancelActionVerb(namespace, name string) (strin
 		if isFinished(js) {
 			verb = "Cleanup"
 		}
-		return verb, collectClaimNames(js.Object)
+		return verb, collectClaimNames(js.Object), jobSetMayOwnTPUSlices(js)
 	}
 	if g.isJobSetAPIAbsent(err) {
-		return g.peekBatchJobActionVerb(namespace, name)
+		verb, claims := g.peekBatchJobActionVerb(namespace, name)
+		return verb, claims, false
 	}
-	return "Cancel", nil
+	return "Cancel", nil, true
 }
 
 func (g *GKEOrchestrator) handleDeleteJobSetError(namespace, name, actionVerb string, ownClaims []string, err error) error {

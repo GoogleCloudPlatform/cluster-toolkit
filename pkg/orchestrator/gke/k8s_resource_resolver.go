@@ -16,17 +16,23 @@ package gke
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/k8s"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 )
 
 var defaultTPUHardwareResolver = gceTPUHardwareResolver{}
+
+// tpuSliceUnmatchedTypeRegex matches custom or future non-GCE TPU slice family names (such as tpu-custom-a,
+// tpu-custom-b, ct0x-standard-4t) under ExplicitMode without matching unrelated substrings like "output-worker" or "ct-worker".
+var tpuSliceUnmatchedTypeRegex = regexp.MustCompile(`^(?:tpu(?:[0-9]|-|$)|ct[0-9][a-z]+(?:-|$))`)
 
 // gceTPUFamilies centralizes GCE/GKE/TPU-slice family tokens and observed cluster-label shorthands
 // (such as ironwood, v7x, tpu7x-podslice, v5lite-*, and tpu-v*-slice) locally to gceTPUHardwareResolver
@@ -442,7 +448,7 @@ func (g *GKEOrchestrator) findK8sPoolForRequest(computeType, machineType string)
 	return k8s.PoolCapacity{}, false
 }
 
-// findK8sTPUPoolByCustomType matches non-GCE TPU types (e.g. "tpu8i", "v8") discovered from node labels by exact
+// findK8sTPUPoolByCustomType matches non-GCE TPU types (e.g. "custom-tpu", "tpu-custom-a") discovered from node labels by exact
 // pool TPUType, so auto-discovered custom TPU pools resolve back to themselves instead of a BestEffort CPU job.
 func (g *GKEOrchestrator) findK8sTPUPoolByCustomType(tpuType string) (k8s.PoolCapacity, bool) {
 	var matches []k8s.PoolCapacity
@@ -691,18 +697,42 @@ func parsePositiveInt(s string) int {
 	return 0
 }
 
+func isTPUSliceFamilyName(raw string) bool {
+	norm := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(raw)), "_", "-")
+	return norm != "" && tpuSliceUnmatchedTypeRegex.MatchString(norm)
+}
+
+func (g *GKEOrchestrator) isUnmatchedK8sTPU(computeType, machineType string) bool {
+	if g.mode != orchestrator.TypeK8s {
+		return config.IsTPU(machineType) || config.IsTPU(computeType)
+	}
+	if defaultTPUHardwareResolver.IsTPUMachine(machineType) || defaultTPUHardwareResolver.IsTPUMachine(computeType) {
+		return true
+	}
+	return g.labelScheme() == k8s.SchemeTPUSlice && (isTPUSliceFamilyName(machineType) || isTPUSliceFamilyName(computeType))
+}
+
 func (g *GKEOrchestrator) isK8sTPURequest(computeType, machineType string) bool {
 	if pool, ok := g.findK8sPoolForRequest(computeType, machineType); ok {
 		return pool.IsTPU
 	}
-	if g.mode != orchestrator.TypeK8s {
-		return config.IsTPU(machineType) || config.IsTPU(computeType)
+	return g.isUnmatchedK8sTPU(computeType, machineType)
+}
+
+func (g *GKEOrchestrator) isK8sResolvedTPU(computeType, machineType string, nodeConstraint map[string]string, matchedPool k8s.PoolCapacity, hasPool bool) bool {
+	if hasPool {
+		return matchedPool.IsTPU
 	}
-	resolver := defaultTPUHardwareResolver
-	return resolver.IsTPUMachine(machineType) || resolver.IsTPUMachine(computeType)
+	if hasSliceNameConstraintKey(nodeConstraint) {
+		return true
+	}
+	return g.isUnmatchedK8sTPU(computeType, machineType)
 }
 
 func (g *GKEOrchestrator) resolveK8sHardwareRequirements(job *orchestrator.JobDefinition) (JobProfile, bool, bool, error) {
+	if err := validateSliceNameConstraintNotEmpty(job.NodeConstraint); err != nil {
+		return JobProfile{}, false, false, err
+	}
 	unlabeledCPU, err := g.resolveK8sComputeType(job)
 	if err != nil {
 		return JobProfile{}, false, false, err
@@ -716,7 +746,7 @@ func (g *GKEOrchestrator) resolveK8sHardwareRequirements(job *orchestrator.JobDe
 		return JobProfile{}, false, false, err
 	}
 	matchedPool, hasPool := g.findK8sPoolForRequest(job.ComputeType, job.MachineType)
-	isTPU := (hasPool && matchedPool.IsTPU) || (!hasPool && (defaultTPUHardwareResolver.IsTPUMachine(job.MachineType) || defaultTPUHardwareResolver.IsTPUMachine(job.ComputeType)))
+	isTPU := g.isK8sResolvedTPU(job.ComputeType, job.MachineType, job.NodeConstraint, matchedPool, hasPool)
 	if isTPU {
 		if job.NumNodesSpecified {
 			return JobProfile{}, false, false, errTPUNumNodes
@@ -830,22 +860,18 @@ func (g *GKEOrchestrator) candidateAutoDiscoverPools() []k8s.PoolCapacity {
 func filterUsableAutoDiscoverPools(pools []k8s.PoolCapacity) []k8s.PoolCapacity {
 	usableClasses := make(map[string]struct{}, len(pools))
 	for _, p := range pools {
-		if isUsableAutoDiscoverPool(p) {
+		if p.HasUsableCapacity() {
 			usableClasses[k8sPoolHardwareClassKey(p)] = struct{}{}
 		}
 	}
 	var kept []k8s.PoolCapacity
 	for _, p := range pools {
-		if _, shadowed := usableClasses[k8sPoolHardwareClassKey(p)]; shadowed && !isUsableAutoDiscoverPool(p) {
+		if _, shadowed := usableClasses[k8sPoolHardwareClassKey(p)]; shadowed && !p.HasUsableCapacity() {
 			continue
 		}
 		kept = append(kept, p)
 	}
 	return kept
-}
-
-func isUsableAutoDiscoverPool(p k8s.PoolCapacity) bool {
-	return (!p.IsGPU || p.GPUsPerNode > 0) && (!p.IsTPU || p.TPUsPerNode > 0)
 }
 
 func k8sPoolComputeTarget(pool k8s.PoolCapacity) (computeType, source string, unlabeledCPU bool) {
@@ -1040,6 +1066,9 @@ func (g *GKEOrchestrator) resolveK8sFamilyShorthand(computeType, lower string, n
 }
 
 func (g *GKEOrchestrator) resolveK8sTPURequirements(job *orchestrator.JobDefinition, matchedPool k8s.PoolCapacity, hasPool bool) error {
+	if err := g.validateDynamicTPUSliceWorkloadName(*job, true); err != nil {
+		return err
+	}
 	if done, err := g.resolveAndValidateTPUSlices(job); err != nil || done {
 		return err
 	}
@@ -1070,19 +1099,11 @@ func (g *GKEOrchestrator) resolveTargetSliceChips(nodeConstraint map[string]stri
 	return 0
 }
 
-func normalizeConfigTPUMachine(machineType string) string {
-	mt := strings.ToLower(strings.TrimSpace(machineType))
-	if strings.HasPrefix(mt, "ct5l-") {
-		return "ct5lp-" + strings.TrimPrefix(mt, "ct5l-")
-	}
-	return mt
-}
-
 func validateK8sTPUTopology(machineType, topology string) error {
 	if !config.TopologyRegex.MatchString(topology) {
 		return fmt.Errorf("provided topology has invalid format %q", topology)
 	}
-	mt := normalizeConfigTPUMachine(machineType)
+	mt := strings.ToLower(strings.TrimSpace(machineType))
 	if topology == "1x1x1" && strings.HasPrefix(mt, "tpu7x") && defaultTPUHardwareResolver.ChipsPerNode(mt) == 1 {
 		return nil
 	}
@@ -1183,9 +1204,9 @@ func deriveSliceTopologyFromNodes(job *orchestrator.JobDefinition, s k8s.SliceIn
 	if chips <= 0 {
 		return ""
 	}
-	familyTarget := normalizeConfigTPUMachine(cmp.Or(strings.TrimSpace(s.TPUType), resolver.NormalizeTPUType(cmp.Or(job.MachineType, job.ComputeType))))
+	familyTarget := cmp.Or(strings.TrimSpace(s.TPUType), resolver.NormalizeTPUType(cmp.Or(job.MachineType, job.ComputeType)))
 	if resolver.IsTPUMachine(job.MachineType) {
-		familyTarget = normalizeConfigTPUMachine(job.MachineType)
+		familyTarget = job.MachineType
 	}
 	topo, ok := config.DefaultTopologyForChips(familyTarget, s.NodesPerSlice*chips)
 	if !ok {
@@ -1195,10 +1216,13 @@ func deriveSliceTopologyFromNodes(job *orchestrator.JobDefinition, s k8s.SliceIn
 }
 
 // resolveAndValidateTPUSlices validates target TPU slice constraints and populates topology/nodes from
-// matching slices. On SchemeTPUSlice, it enforces explicit READY slice targeting (for both JobSet and
-// standalone batch/v1 Indexed Job) before topology resolution so missing or unready slices report the
-// slice requirement instead of "--topology is required".
+// matching slices. On SchemeTPUSlice, standalone batch/v1 Indexed Jobs require an explicit READY slice
+// (they cannot dynamically provision new slices), whereas JobSet workloads without a slice constraint
+// provision fresh slices dynamically via JobSet slice-prefix and pod-template labels.
 func (g *GKEOrchestrator) resolveAndValidateTPUSlices(job *orchestrator.JobDefinition) (bool, error) {
+	if err := validateSliceNameConstraintNotEmpty(job.NodeConstraint); err != nil {
+		return false, err
+	}
 	isSliceScheme := g.labelScheme() == k8s.SchemeTPUSlice
 	hasSlices := g.inventory != nil && len(g.inventory.Slices) > 0
 	if !isSliceScheme && !hasSlices {
@@ -1225,21 +1249,18 @@ func (g *GKEOrchestrator) resolveAndValidateTPUSlices(job *orchestrator.JobDefin
 func (g *GKEOrchestrator) validateTPUSliceTargetCount(job *orchestrator.JobDefinition, rawSlice string, names []string, isSliceScheme bool) error {
 	tier3 := !g.jobSetEnabled()
 	if len(names) == 0 {
-		if !isSliceScheme {
-			return nil
-		}
-		if tier3 {
+		if isSliceScheme && tier3 {
 			return fmt.Errorf("standalone batch/v1 Indexed Job without JobSet cannot dynamically provision a new TPU slice; target an existing READY slice via --node-constraint %s=<ready-slice-name>", k8s.TPUSliceNameLabel)
 		}
-		return fmt.Errorf("TPU workloads on tpu-slice clusters currently require targeting an existing READY slice via --node-constraint %s=<ready-slice-name>", k8s.TPUSliceNameLabel)
+		return nil
 	}
 	if tier3 && len(names) > 1 {
 		return fmt.Errorf("standalone batch/v1 Indexed Job without JobSet cannot target multiple TPU slices (%q); specify a single existing READY slice via --node-constraint %s=<ready-slice-name>", rawSlice, k8s.TPUSliceNameLabel)
 	}
 	if isSliceScheme && !tier3 {
 		if need := max(1, job.NumSlices); len(names) < need {
-			return fmt.Errorf("--num-slices=%d requires at least %d distinct READY slices in --node-constraint %s (got %d: %s)",
-				need, need, k8s.TPUSliceNameLabel, len(names), strings.Join(names, ", "))
+			return fmt.Errorf("--num-slices=%d requires at least %d distinct READY slices in --node-constraint %s (got %d: %s); omit --node-constraint %s to provision fresh slices dynamically",
+				need, need, k8s.TPUSliceNameLabel, len(names), strings.Join(names, ", "), k8s.TPUSliceNameLabel)
 		}
 	}
 	return nil
@@ -1259,12 +1280,30 @@ func (g *GKEOrchestrator) resolveNamedTPUSlices(names []string, isSliceScheme bo
 			}
 			continue
 		}
-		if isSliceScheme && !s.Ready {
-			return nil, notReadyTPUSliceError(name, s.State, tier3)
+		if err := validateNamedTPUSliceReady(name, s, isSliceScheme, tier3); err != nil {
+			return nil, err
 		}
 		resolved = append(resolved, s)
 	}
 	return resolved, nil
+}
+
+func validateNamedTPUSliceReady(name string, s k8s.SliceInfo, isSliceScheme, tier3 bool) error {
+	if s.Terminating {
+		if tier3 {
+			return notReadyTPUSliceError(name, "Terminating", true)
+		}
+		return fmt.Errorf("TPU slice %q is terminating and cannot accept new workloads; omit --node-constraint %s to provision a fresh slice or target a READY slice",
+			name, k8s.TPUSliceNameLabel)
+	}
+	if isSliceScheme && !s.IsSchedulable() {
+		state := s.State
+		if s.Ready && s.NodesLabeledKnown && !s.NodesLabeled {
+			state = cmp.Or(s.NodesLabeledReason, "SliceNodesLabeled=False")
+		}
+		return notReadyTPUSliceError(name, state, tier3)
+	}
+	return nil
 }
 
 func missingTPUSliceError(sliceName string, tier3, sliceAPIDenied bool) error {
@@ -1343,7 +1382,7 @@ func resolveShorthandTopologyIfPresent(computeType, machineType string) (string,
 	if !isChip {
 		return "", nil
 	}
-	return config.ResolveTopologyForChips(fam.canonical+"-"+chips, normalizeConfigTPUMachine(machineType))
+	return config.ResolveTopologyForChips(fam.canonical+"-"+chips, machineType)
 }
 
 func normalizeTPUShorthandForTopology(computeType string) string {
@@ -1365,11 +1404,118 @@ func (g *GKEOrchestrator) resolveK8sTPUTopology(job *orchestrator.JobDefinition)
 	if g.inventory != nil && g.inventory.ExplicitMode {
 		return "", fmt.Errorf("--topology is required for TPU workloads because listing cluster nodes was denied (403 Forbidden; explicit mode)")
 	}
+	if g.labelScheme() == k8s.SchemeTPUSlice && g.jobSetEnabled() && !hasSliceNameConstraint(job.NodeConstraint) {
+		return "", g.missingTPUSliceTopologyError(job)
+	}
 	if g.labelScheme() != k8s.SchemeTPUSlice && g.inventory != nil && g.inventory.TPU != nil && g.inventory.TPU.Topology != "" {
 		logging.Info("Auto-discovered topology %q from Kubernetes inventory.", g.inventory.TPU.Topology)
 		return g.inventory.TPU.Topology, nil
 	}
 	return "", fmt.Errorf("--topology is required for TPU machine type %s", job.MachineType)
+}
+
+func (g *GKEOrchestrator) missingTPUSliceTopologyError(job *orchestrator.JobDefinition) error {
+	tpuType, clusterChips, hintChips, shapes, hasClusterInfo := g.resolveMissingTPUSliceContext(job)
+	exampleSlice := g.readySliceConstraintHint(tpuType, hintChips, job.NumSlices)
+
+	var b strings.Builder
+	b.WriteString("--topology is required to provision a new slice.")
+	if hasClusterInfo {
+		if clusterChips > 0 {
+			fmt.Fprintf(&b, " Cluster has %s nodes with %d chips each", tpuType, clusterChips)
+		} else {
+			fmt.Fprintf(&b, " Cluster has %s nodes", tpuType)
+		}
+		if len(shapes) > 0 {
+			fmt.Fprintf(&b, "; shapes present: %s", strings.Join(shapes, ", "))
+		}
+		b.WriteByte('.')
+	}
+	reuseTarget := "an existing slice"
+	if job.NumSlices > 1 {
+		reuseTarget = "existing slices"
+	}
+	fmt.Fprintf(&b, " To reuse %s, pass --node-constraint %s=%s.", reuseTarget, k8s.TPUSliceNameLabel, exampleSlice)
+	return errors.New(b.String())
+}
+
+func (g *GKEOrchestrator) resolveMissingTPUSliceContext(job *orchestrator.JobDefinition) (tpuType string, clusterChips, hintChips int, shapes []string, hasClusterInfo bool) {
+	rawReq := cmp.Or(strings.TrimSpace(job.MachineType), strings.TrimSpace(job.ComputeType))
+	tpuType = defaultTPUHardwareResolver.NormalizeTPUType(rawReq)
+	reqChips := defaultTPUHardwareResolver.ChipsPerNode(job.MachineType)
+	var poolMachine string
+	if pool, ok := g.findK8sPoolForRequest(job.ComputeType, job.MachineType); ok && pool.IsTPU {
+		hasClusterInfo = true
+		tpuType = cmp.Or(strings.TrimSpace(pool.TPUType), tpuType)
+		poolMachine = strings.TrimSpace(pool.MachineType)
+		clusterChips = cmp.Or(pool.TPUsPerNode, defaultTPUHardwareResolver.ChipsPerNode(poolMachine))
+		shapes = pool.Topologies
+	}
+	wantChips := cmp.Or(clusterChips, reqChips)
+	if g.matchesPrimaryInventoryTPU(tpuType, cmp.Or(poolMachine, job.MachineType, job.ComputeType)) &&
+		(wantChips == 0 || g.inventory.TPU.ChipsPerNode == 0 || wantChips == g.inventory.TPU.ChipsPerNode) {
+		hasClusterInfo = true
+		inv := g.inventory.TPU
+		tpuType = cmp.Or(strings.TrimSpace(inv.TPUType), tpuType)
+		if clusterChips == 0 && inv.ChipsPerNode > 0 {
+			clusterChips = inv.ChipsPerNode
+		}
+		if len(shapes) == 0 && (poolMachine == "" || inv.MachineType == "" || strings.EqualFold(poolMachine, inv.MachineType)) {
+			shapes = inv.Topologies
+		}
+	}
+	return cmp.Or(tpuType, "TPU"), clusterChips, cmp.Or(clusterChips, reqChips), shapes, hasClusterInfo
+}
+
+func (g *GKEOrchestrator) readySliceConstraintHint(tpuType string, chipsPerNode, numSlices int) string {
+	needed := max(numSlices, 1)
+	matched := g.readySliceHintNames(tpuType, chipsPerNode, needed)
+	if len(matched) == needed {
+		return strings.Join(matched, "|")
+	}
+	if needed == 1 {
+		return "<slice-name>"
+	}
+	if needed > 2 {
+		return fmt.Sprintf("<slice-1>|...|<slice-%d>", needed)
+	}
+	return "<slice-1>|<slice-2>"
+}
+
+func (g *GKEOrchestrator) readySliceHintNames(tpuType string, chipsPerNode, limit int) []string {
+	if g.inventory == nil || limit <= 0 {
+		return nil
+	}
+	if limit == 1 {
+		for _, s := range g.inventory.Slices {
+			if sliceMatchesHintCandidate(s, tpuType, chipsPerNode) {
+				return []string{s.Name}
+			}
+		}
+		return nil
+	}
+	groups := make(map[string][]string)
+	for _, s := range g.inventory.Slices {
+		if !sliceMatchesHintCandidate(s, tpuType, chipsPerNode) {
+			continue
+		}
+		key := fmt.Sprintf("%s|%d", strings.ToLower(s.Topology), s.NodesPerSlice)
+		groups[key] = append(groups[key], s.Name)
+		if len(groups[key]) == limit {
+			return groups[key]
+		}
+	}
+	return nil
+}
+
+func sliceMatchesHintCandidate(s k8s.SliceInfo, tpuType string, chipsPerNode int) bool {
+	if !s.IsSchedulable() || s.Name == "" {
+		return false
+	}
+	if chipsPerNode > 0 && s.ChipsPerNode > 0 && s.ChipsPerNode != chipsPerNode {
+		return false
+	}
+	return tpuType == "" || tpuType == "TPU" || s.TPUType == "" || strings.EqualFold(s.TPUType, tpuType)
 }
 
 func (g *GKEOrchestrator) buildK8sJobProfile(job *orchestrator.JobDefinition, matchedPool k8s.PoolCapacity, hasPool, isTPU bool) (JobProfile, error) {
