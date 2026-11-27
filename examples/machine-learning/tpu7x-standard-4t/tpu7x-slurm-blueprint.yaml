@@ -15,7 +15,7 @@
 blueprint_name: tpu7x-slurm
 vars:
   project_id: # supply existing GCP project ID
-  deployment_name: # supply unique deployment name (e.g. tpu7x-slurm)
+  deployment_name: # supply unique deployment name, <= 25 chars (e.g. tpu7x-slurm)
   region: # supply region (e.g. us-central1)
   zone: # supply zone (e.g. us-central1-c)
   tpu_static_nodes: # supply total static tpu7x-standard-4t VM nodes (4 TPU chips/node; multiple of slice VMs, e.g. 8 for one 2x4x4 slice or two 2x2x4 slices)
@@ -49,6 +49,14 @@ vars:
   login_machine_type: n2d-standard-4
   # Machine type for the controller node.
   controller_machine_type: n2d-standard-4
+  # Off by default; set to true to install and start diagon-daemon.service at
+  # boot on TPU compute nodes and grant Google Cloud ML Diagnostics permissions.
+  # TPU compute nodes and the Slurm controller always use dedicated service
+  # accounts instead of the default Compute Engine service account; workloads
+  # relying on extra default service account permissions need those roles added.
+  # Redeploying under the exact same deployment_name 7-44 days after destroy
+  # requires setting role_id_suffix on controller_profile.
+  enable_ml_diagnostics_daemon: false
 
 deployment_groups:
 - group: cluster-env
@@ -91,9 +99,62 @@ deployment_groups:
 
 - group: cluster
   modules:
+  - id: project
+    source: community/modules/project/pre-existing-project
+
+  - id: tpu_sa
+    source: modules/project/service-account
+    settings:
+      name: tpu
+      project_roles: >-
+        $(vars.enable_ml_diagnostics_daemon ? ["hypercomputecluster.editor"] : [])
+      conditional_project_roles: >-
+        $(vars.enable_ml_diagnostics_daemon ? [
+        {role = "storage.objectUser",
+        title = "ml-diagnostics-default-bucket",
+        description = "Read and write objects in default regional ML Diagnostics buckets.",
+        expression = "resource.name.startsWith(\"projects/_/buckets/diagon-${project.project_number}-${vars.region}-\")"},
+        {role = "storage.bucketViewer",
+        title = "ml-diagnostics-default-bucket",
+        description = "Inspect default regional ML Diagnostics buckets.",
+        expression = "resource.name.startsWith(\"projects/_/buckets/diagon-${project.project_number}-${vars.region}-\")"}
+        ] : [])
+
+  - id: tpu_profile
+    source: community/modules/iam/service-account-profiles
+    use: [tpu_sa]
+    settings:
+      name: tpu
+      profile: slurm-compute
+
+  - id: controller_sa
+    source: modules/project/service-account
+    settings:
+      name: ctrl
+      project_roles: []
+
+  - id: controller_profile
+    source: community/modules/iam/service-account-profiles
+    use: [controller_sa]
+    settings:
+      name: ctrl
+      profile: slurm-controller
+      enable_tpu_gce: true
+      enable_public_ips: true
+      enable_placement_policies: true
+      act_as_service_accounts:
+      - $(tpu_profile.service_account_email)
+
+  - id: tpu_startup
+    source: modules/scripts/startup-script
+    settings:
+      enable_ml_diagnostics_daemon: $(vars.enable_ml_diagnostics_daemon)
+      bucket_viewers:
+      - $(tpu_sa.service_account_iam_email)
+
   - id: tpu_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [slurm-network]
+    use: [slurm-network, tpu_profile, tpu_startup]
     settings:
       machine_type: tpu7x-standard-4t
       accelerator_topology: $(vars.tpu_accelerator_topology)
@@ -118,7 +179,7 @@ deployment_groups:
 
   - id: tpu_dyn_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [slurm-network]
+    use: [slurm-network, tpu_profile, tpu_startup]
     settings:
       machine_type: tpu7x-standard-4t
       enable_public_ips: true
@@ -155,6 +216,7 @@ deployment_groups:
     - slurm_login
     - slurm-network
     - homefs
+    - controller_profile
     settings:
       machine_type: $(vars.controller_machine_type)
       enable_controller_public_ips: true

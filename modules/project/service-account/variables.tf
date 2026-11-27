@@ -20,6 +20,58 @@ variable "billing_account_id" {
   default     = ""
 }
 
+variable "conditional_project_roles" {
+  description = "List of IAM roles to grant to the service account with IAM conditions (use role names without the \"roles/\" prefix, e.g. \"storage.objectUser\")."
+  type = list(object({
+    role        = string
+    title       = string
+    description = optional(string, "")
+    expression  = string
+  }))
+  default  = []
+  nullable = false
+
+  validation {
+    condition = alltrue([
+      for r in var.conditional_project_roles :
+      r != null ? (r.role != null ? (!startswith(r.role, "roles/") && !contains(["owner", "editor", "viewer"], r.role) && can(regex("^[A-Za-z0-9._-]+$", r.role))) : false) : false
+    ])
+    error_message = "Each conditional_project_roles entry must specify a non-empty role without a leading \"roles/\" prefix (matching ^[A-Za-z0-9._-]+$, e.g. \"storage.objectUser\"); basic roles (owner, editor, viewer) do not support IAM conditions."
+  }
+
+  validation {
+    condition = alltrue([
+      for r in var.conditional_project_roles :
+      r != null ? (r.title != null ? length(trimspace(r.title)) > 0 && length(r.title) <= 100 : false) : false
+    ])
+    error_message = "Each conditional_project_roles entry must have a non-empty title of at most 100 characters."
+  }
+
+  validation {
+    condition = alltrue([
+      for r in var.conditional_project_roles :
+      r != null ? (r.description != null ? length(r.description) <= 300 : true) : false
+    ])
+    error_message = "Each conditional_project_roles entry description must be at most 300 characters."
+  }
+
+  validation {
+    condition = alltrue([
+      for r in var.conditional_project_roles :
+      r != null ? (r.expression != null ? length(trimspace(r.expression)) > 0 : false) : false
+    ])
+    error_message = "Each conditional_project_roles entry must have a non-empty CEL expression."
+  }
+
+  validation {
+    condition = length(distinct([
+      for idx, r in var.conditional_project_roles :
+      r == null ? "null::${idx}" : "${r.role == null ? "" : r.role}::${r.title == null ? "" : r.title}"
+    ])) == length(var.conditional_project_roles)
+    error_message = "Each conditional_project_roles entry must have a unique (role, title) combination."
+  }
+}
+
 variable "deployment_name" {
   description = "Name of the deployment (will be prepended to service account name)"
   type        = string

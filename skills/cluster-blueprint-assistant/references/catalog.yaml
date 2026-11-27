@@ -3482,11 +3482,12 @@ blueprints:
   machine_types: [tpu7x-standard-4t]
   accelerators: [tpu-7x]
   workloads: [ml-training, ml-inference]
-  required_services: [compute.googleapis.com, iam.googleapis.com, lustre.googleapis.com, servicenetworking.googleapis.com, storage.googleapis.com]
+  required_services: [cloudresourcemanager.googleapis.com, compute.googleapis.com, iam.googleapis.com, lustre.googleapis.com, servicenetworking.googleapis.com, storage.googleapis.com]
   vars:
     controller_machine_type: n2d-standard-4
     deployment_name: null
     disk_size_gb: 100
+    enable_ml_diagnostics_daemon: false
     instance_image:
       family: aci-tpu-tpu7x-u2404-slurm-2605-amd64
       project: advanced-compute-images
@@ -3514,9 +3515,28 @@ blueprints:
     source: modules/file-system/managed-lustre
     use: [slurm-network, private_service_access]
     settings: [local_mount, name, per_unit_storage_throughput, remote_mount, size_gib]
+  - id: project
+    source: community/modules/project/pre-existing-project
+  - id: tpu_sa
+    source: modules/project/service-account
+    settings: [conditional_project_roles, name, project_roles]
+  - id: tpu_profile
+    source: community/modules/iam/service-account-profiles
+    use: [tpu_sa]
+    settings: [name, profile]
+  - id: controller_sa
+    source: modules/project/service-account
+    settings: [name, project_roles]
+  - id: controller_profile
+    source: community/modules/iam/service-account-profiles
+    use: [controller_sa]
+    settings: [act_as_service_accounts, enable_placement_policies, enable_public_ips, enable_tpu_gce, name, profile]
+  - id: tpu_startup
+    source: modules/scripts/startup-script
+    settings: [bucket_viewers, enable_ml_diagnostics_daemon]
   - id: tpu_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [slurm-network]
+    use: [slurm-network, tpu_profile, tpu_startup]
     settings: [accelerator_topology, disk_type, dws_flex, enable_public_ips, enable_spot_vm, machine_type, node_count_dynamic_max, node_count_static, reservation_name]
   - id: tpu_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -3524,7 +3544,7 @@ blueprints:
     settings: [exclusive, is_default, partition_name, resume_timeout, suspend_timeout]
   - id: tpu_dyn_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [slurm-network]
+    use: [slurm-network, tpu_profile, tpu_startup]
     settings: [disk_type, dws_flex, enable_public_ips, enable_spot_vm, machine_type, node_count_dynamic_max, node_count_static, reservation_name]
   - id: tpu_dyn_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -3536,7 +3556,7 @@ blueprints:
     settings: [enable_login_public_ips, machine_type]
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [tpu_partition, tpu_dyn_partition, slurm_login, slurm-network, homefs]
+    use: [tpu_partition, tpu_dyn_partition, slurm_login, slurm-network, homefs, controller_profile]
     settings: [enable_controller_public_ips, machine_type]
 - path: examples/ml-gke.yaml
   blueprint_name: ml-gke

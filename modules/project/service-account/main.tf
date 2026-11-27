@@ -36,10 +36,25 @@ module "service_account" {
   project_roles      = [for role in var.project_roles : "${var.project_id}=>roles/${role}"]
 }
 
+resource "google_project_iam_member" "conditional_project_roles" {
+  for_each = { for r in var.conditional_project_roles : "${r.role}::${r.title}" => r }
+
+  project = var.project_id
+  role    = "roles/${each.value.role}"
+  member  = module.service_account.iam_email
+
+  condition {
+    title       = each.value.title
+    description = each.value.description == "" ? null : each.value.description
+    expression  = each.value.expression
+  }
+}
+
 resource "time_sleep" "wait_for_service_account" {
   create_duration = "30s"
 
   depends_on = [
-    module.service_account
+    module.service_account,
+    google_project_iam_member.conditional_project_roles,
   ]
 }
