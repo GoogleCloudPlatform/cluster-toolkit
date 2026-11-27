@@ -184,6 +184,7 @@ Modules that are still in development and less stable are labeled with the
 
 * **[kubectl-apply]** ![core-badge] : Simplifies applying Kubernetes manifests to GKE clusters and deploying common infrastructure like Kueue, Jobset or NCCL gIB plugin.
 * **[kubernetes-namespace]** ![core-badge] : Creates a Kubernetes namespace.
+* **[custom-compute-class]** ![core-badge] : Templates and applies GKE Custom Compute Class (`ComputeClass`) CRDs to a GKE cluster by wrapping `modules/management/kubectl-apply`.
 * **[direct-helm-install]** ![community-badge] ![experimental-badge] : Provides a standardized way to deploy Helm charts directly to a GKE cluster.
 * **[helm-upgrade]** ![community-badge] ![experimental-badge] : Manages Helm chart deployment lifecycles inside a GKE cluster.
 * **[dependencies-installer]** ![community-badge] ![experimental-badge] :
@@ -192,6 +193,7 @@ Modules that are still in development and less stable are labeled with the
 
 [kubectl-apply]: management/kubectl-apply/README.md
 [kubernetes-namespace]: management/kubernetes-namespace/README.md
+[custom-compute-class]: management/custom-compute-class/README.md
 [direct-helm-install]: ../community/modules/management/direct-helm-install/README.md
 [helm-upgrade]: ../community/modules/management/helm-upgrade/README.md
 [dependencies-installer]: ../community/modules/management/dependencies-installer/README.md

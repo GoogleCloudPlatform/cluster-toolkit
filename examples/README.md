@@ -101,6 +101,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [sycomp](#sycomp--) ![community-badge] ![experimental-badge]
   * [alphaevolve](#alphaevolve-) ![community-badge]
   * [gke-large-scale](#gke-large-scale-) ![core-badge]
+  * [gke-custom-compute-class.yaml](#gke-custom-compute-classyaml-) ![core-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -221,6 +222,7 @@ the experimental badge (![experimental-badge]).
 | [examples/gke-consumption-options/dws-flex-start/gke-a3-ultragpu.yaml](./gke-consumption-options/dws-flex-start/gke-a3-ultragpu.yaml) | gke | a3-ultragpu-8g | Dynamic Workload Scheduler (DWS) is a resource management and job scheduling platform designed for AI Hypercomputer. Dynamic Workload Scheduler improves your access to AI/ML resources, helps you optimize your spend, and can improve the... |
 | [examples/gke-consumption-options/dws-flex-start/gke-tpu-7x/gke-tpu-7x.yaml](./gke-consumption-options/dws-flex-start/gke-tpu-7x/gke-tpu-7x.yaml) | gke | tpu7x-standard-4t | These steps guide you through the cluster creation process for TPUs using DWS Flex Start. |
 | [examples/gke-consumption-options/dws-flex-start/gke-tpu-v6e/gke-tpu-v6e.yaml](./gke-consumption-options/dws-flex-start/gke-tpu-v6e/gke-tpu-v6e.yaml) | gke | ct6e-standard-4t | These steps guide you through the cluster creation process for TPUs using DWS Flex Start. |
+| [examples/gke-custom-compute-class/gke-custom-compute-class.yaml](./gke-custom-compute-class/gke-custom-compute-class.yaml) | gke | - | Demonstrates how to deploy a GKE Standard cluster with Node Auto-Provisioning (NAP) and configure GKE Custom Compute Classes (ComputeClass CRDs) using the custom-compute-class module in both structured inline and custom .tftpl template... |
 | [examples/gke-g4-confidential/gke-g4-confidential.yaml](./gke-g4-confidential/gke-g4-confidential.yaml) | gke | g4-standard-48 | This blueprint provisions a GKE cluster running on Confidential VMs (G4 instances powered by AMD SEV) and NVIDIA Blackwell GPUs in hardware-enforced Confidential GPU mode (PCIe Secure Passthrough). It also configures secure boot-disk... |
 | [examples/gke-g4/gke-g4.yaml](./gke-g4/gke-g4.yaml) | gke | g4-standard-48 | This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found here. The deployment instructions can be found in the README. |
 | [examples/gke-h4d/gke-h4d.yaml](./gke-h4d/gke-h4d.yaml) | gke | h4d-highmem-192-lssd | This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found here. The deployment instructions can be found in the README. |
@@ -2146,6 +2148,14 @@ This directory includes the following blueprints:
 The deployment, scaling, and teardown instructions can be found in the [README](./gke-large-scale/README.md).
 
 [gke-large-scale]: ./gke-large-scale
+
+### [gke-custom-compute-class.yaml] ![core-badge]
+
+Demonstrates how to deploy a GKE Standard cluster with Node Auto-Provisioning (NAP) and configure GKE Custom Compute Classes (`ComputeClass` CRDs) using the `custom-compute-class` module in both structured inline and custom `.tftpl` template modes.
+
+The deployment instructions can be found in the [README](./gke-custom-compute-class/README.md).
+
+[gke-custom-compute-class.yaml]: ./gke-custom-compute-class/gke-custom-compute-class.yaml
 
 ## Blueprint Schema
 

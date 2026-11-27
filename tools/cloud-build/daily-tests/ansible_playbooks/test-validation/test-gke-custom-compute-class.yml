@@ -1,0 +1,108 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - region is defined
+    - custom_vars.project is defined
+
+- name: Get cluster credentials for kubectl
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    gcloud container clusters get-credentials {{ deployment_name }} \
+      --region {{ region }} --project {{ custom_vars.project }} --dns-endpoint \
+      || gcloud container clusters get-credentials {{ deployment_name }} \
+      --zone {{ zone }} --project {{ custom_vars.project }} --dns-endpoint
+  changed_when: false
+
+- name: Verify inline and template-defined ComputeClass CRDs exist
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    set -e
+    kubectl get computeclasses.cloud.google.com
+    kubectl get computeclass spot-priority-compute-class
+    kubectl get computeclass template-defined-compute-class
+  args:
+    executable: /bin/bash
+  register: computeclass_status
+  changed_when: false
+
+- name: Print ComputeClass status
+  ansible.builtin.debug:
+    msg: "{{ computeclass_status.stdout_lines }}"
+
+- name: Validate GKE NAP node provisioning with sample Custom Compute Class workloads
+  block:
+  - name: Deploy sample ComputeClass workloads
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl apply -f {{ workspace }}/examples/gke-custom-compute-class/sample-workloads.yaml
+    args:
+      executable: /bin/bash
+
+  - name: Wait for ComputeClass pods to be scheduled and Ready on NAP nodes
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl wait --for=condition=Ready pod/batch-workload-spot pod/batch-workload-template --timeout=10m
+      kubectl get pods -o wide
+    args:
+      executable: /bin/bash
+    register: workload_ready
+    changed_when: false
+
+  - name: Print scheduled pod details
+    ansible.builtin.debug:
+      msg: "{{ workload_ready.stdout_lines }}"
+
+  rescue:
+  - name: "FAILURE: ComputeClass workloads did not become Ready in time. Capturing debug info."
+    ansible.builtin.debug:
+      msg: "ComputeClass sample workloads failed to become Ready. See debug output below."
+
+  - name: Get all pods status on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl get pods -o wide
+    register: pods_on_failure
+    changed_when: false
+
+  - name: Print all pods status on failure
+    ansible.builtin.debug:
+      msg: "{{ pods_on_failure.stdout_lines }}"
+
+  - name: Describe ComputeClass pods on failure
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl describe pod batch-workload-spot batch-workload-template
+    register: pods_describe_on_failure
+    changed_when: false
+
+  - name: Print pod descriptions on failure
+    ansible.builtin.debug:
+      msg: "{{ pods_describe_on_failure.stdout_lines }}"
+
+  - name: Fail the playbook
+    ansible.builtin.fail:
+      msg: "Custom Compute Class sample workloads did not complete readiness verification."
+
+  always:
+  - name: Clean up sample workloads
+    delegate_to: localhost
+    ansible.builtin.shell: |
+      kubectl delete -f {{ workspace }}/examples/gke-custom-compute-class/sample-workloads.yaml --ignore-not-found=true
+    args:
+      executable: /bin/bash
+    changed_when: false

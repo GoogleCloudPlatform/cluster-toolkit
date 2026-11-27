@@ -1142,6 +1142,32 @@ blueprints:
     source: modules/compute/gke-job-template
     use: [checkpointing-pv, training-pv, gke-tpu-v6-pool]
     settings: [command, image, k8s_service_account_name, node_count, requested_cpu_per_pod, security_context]
+- path: examples/gke-custom-compute-class/gke-custom-compute-class.yaml
+  blueprint_name: gke-custom-compute-class
+  scheduler: gke
+  description: "Demonstrates how to deploy a GKE Standard cluster with Node Auto-Provisioning (NAP) and configure GKE Custom Compute Classes (ComputeClass CRDs) using the custom-compute-class module in both structured inline and custom .tftpl template..."
+  required_services: [compute.googleapis.com, container.googleapis.com]
+  vars:
+    deployment_name: ccc-demo
+    project_id: null
+    region: us-central1
+    zone: us-central1-a
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings: [secondary_ranges_list, subnetwork_name]
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network]
+    settings: [cluster_autoscaling, enable_external_dns_endpoint, system_node_pool_machine_type]
+  - id: ccc_inline
+    source: modules/management/custom-compute-class
+    use: [gke_cluster]
+    settings: [compute_classes]
+  - id: ccc_template
+    source: modules/management/custom-compute-class
+    use: [gke_cluster]
+    settings: [custom_manifest_path, custom_template_vars]
 - path: examples/gke-g4-confidential/gke-g4-confidential.yaml
   deployment_path: examples/gke-g4-confidential/gke-g4-confidential-deployment.yaml
   blueprint_name: gke-g4-confidential
@@ -7168,6 +7194,12 @@ module_wiring:
     required_inputs: [backend_service_id]
     recommended_use:
     - community/modules/scripts/gke-backend-fetcher
+  modules/management/custom-compute-class:
+    required_services: [container.googleapis.com]
+    required_inputs: [cluster_id]
+    recommended_use:
+    - modules/scheduler/gke-cluster
+    - modules/scheduler/pre-existing-gke-cluster
   modules/management/kubectl-apply:
     required_services: [container.googleapis.com]
     required_inputs: [cluster_id]
@@ -7332,6 +7364,7 @@ module_wiring:
     - modules/compute/gke-node-pool
     - modules/file-system/gke-persistent-volume
     - modules/file-system/gke-storage
+    - modules/management/custom-compute-class
     - modules/management/kubectl-apply
     - modules/management/kubernetes-namespace
     - modules/security/kubernetes-secret
@@ -7346,6 +7379,7 @@ module_wiring:
     - modules/compute/gke-node-pool
     - modules/file-system/gke-persistent-volume
     - modules/file-system/gke-storage
+    - modules/management/custom-compute-class
     - modules/management/kubectl-apply
     - modules/management/kubernetes-namespace
     - modules/security/kubernetes-secret
