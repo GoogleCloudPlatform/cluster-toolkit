@@ -91,6 +91,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [eda-hybrid-cloud.yaml](#eda-hybrid-cloudyaml-) ![community-badge]
   * [hpc-slurm-google-cloud-dedicated.yaml](#hpc-slurm-google-cloud-dedicatedyaml-) ![community-badge]
   * [cloud-build-remote.yaml](#cloud-build-remoteyaml--) ![community-badge] ![experimental-badge]
+  * [instructions-demo.yaml](#instructions-demoyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-scale.yaml](#hpc-slurm-scaleyaml-) ![community-badge]
   * [hpc-slurm-multiregion-scale.yaml](#hpc-slurm-multiregion-scaleyaml-) ![community-badge]
   * [hybrid-slurm-cluster (GCD)](#hybrid-slurm-cluster-gcd-) ![community-badge]
@@ -301,6 +302,7 @@ the experimental badge (![experimental-badge]).
 | [community/examples/hpc-slurm6-hybrid.yaml](../community/examples/hpc-slurm6-hybrid.yaml) | slurm | - | This blueprint extends an on-premise Slurm cluster with cloud nodes. It builds a compute image matching the on-premise Slurm installation and generates the configuration the on-premise controller needs to burst into GCP. See the hybrid... |
 | [community/examples/htc-htcondor.yaml](../community/examples/htc-htcondor.yaml) | htcondor | - | This blueprint provisions an auto-scaling HTCondor pool based upon the Rocky Linux 9 image from Advanced Compute Images. |
 | [community/examples/htc-slurm.yaml](../community/examples/htc-slurm.yaml) | slurm | c2-standard-30, n2-standard-2, n2-standard-4 | This blueprint provisions a cluster using the Slurm scheduler in a configuration tuned for the execution of many short-duration, loosely-coupled (non-MPI) jobs. |
+| [community/examples/instructions/instructions-demo.yaml](../community/examples/instructions/instructions-demo.yaml) | none | - | Demonstrates how to use the instructions community module to render dynamic post-deployment instructions from a template, wrap next steps in a terminal banner, and persist reference files to disk. |
 | [community/examples/kms-key-per-service.yaml](../community/examples/kms-key-per-service.yaml) | slurm | n2-standard-2 | The same CMEK Slurm cluster as kms-key.yaml, but with one key per class of resource instead of one shared key, each granted only to the service agent that uses it: the Compute Engine agent can decrypt the disks and nothing else, the... |
 | [community/examples/kms-key.yaml](../community/examples/kms-key.yaml) | slurm | n2-standard-2 | An end-to-end CMEK Slurm cluster. The kms-key module creates one Cloud KMS key ring and symmetric CryptoKey, kms-key-iam grants the service agents that encrypt with it, and every encrypted resource picks the key up through use... |
 | [community/examples/remote-desktop/hpc-slurm-remote-desktop.yaml](../community/examples/remote-desktop/hpc-slurm-remote-desktop.yaml) | slurm | n2-standard-4, n2-standard-8 | These blueprints deploy browser-based Linux desktops alongside a Slurm cluster, using the novnc-runtime and novnc-desktop modules. Users reach an XFCE session over noVNC in a browser, with sessions created per user from their OS Login... |
@@ -2064,6 +2066,14 @@ Demonstrates how to use the `artifact-registry` and `cloud-build` community modu
 The deployment instructions can be found in the [README](../community/examples/cloud-build/README.md).
 
 [cloud-build-remote.yaml]: ../community/examples/cloud-build/cloud-build-remote.yaml
+
+### [instructions-demo.yaml] ![community-badge] ![experimental-badge]
+
+Demonstrates how to use the `instructions` community module to render dynamic post-deployment instructions from a template, wrap next steps in a terminal banner, and persist reference files to disk.
+
+The deployment instructions can be found in the [README](../community/examples/instructions/README.md).
+
+[instructions-demo.yaml]: ../community/examples/instructions/instructions-demo.yaml
 ### [hpc-slurm-scale.yaml] ![community-badge]
 
 Creates a high-performance, single-region auto-scaling Slurm cluster scaled up to 800 dynamic Spot or On-Demand compute nodes (102,400 vCPUs) across 4 zones with multi-zonal dynamic failover and Cloud NAT.
