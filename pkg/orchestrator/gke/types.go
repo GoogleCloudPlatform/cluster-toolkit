@@ -719,7 +719,18 @@ type kubernetesNodeList struct {
 
 type kubernetesNode struct {
 	Metadata kubernetesNodeMetadata `json:"metadata"`
+	Spec     kubernetesNodeSpec     `json:"spec"`
 	Status   kubernetesNodeStatus   `json:"status"`
+}
+
+type kubernetesNodeSpec struct {
+	Taints []kubernetesNodeTaint `json:"taints,omitempty"`
+}
+
+type kubernetesNodeTaint struct {
+	Key    string `json:"key"`
+	Value  string `json:"value,omitempty"`
+	Effect string `json:"effect,omitempty"`
 }
 
 type kubernetesNodeMetadata struct {

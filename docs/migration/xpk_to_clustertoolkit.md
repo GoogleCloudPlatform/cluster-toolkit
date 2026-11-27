@@ -359,7 +359,7 @@ gcluster job submit \
 | `xpk storage attach` | Inline `--mount` flag with `gcluster job submit` | Supports `gs://`, `filestore://`, and PVC claim names. `options=` is GCS `gs://` exclusive |
 | `xpk workload list` | `gcluster job list` | List active workloads |
 | `xpk workload delete` | `gcluster job cancel <workload_name>` | Cancel running workload |
-| `xpk inspector` | `gcluster job logs <workload_name>` | View workload logs |
+| `xpk inspector` | `gcluster job inspect` | Inspect cluster health and workload status |
 | `xpk info` | `gcluster cluster info` | View cluster details |
 | `xpk config set` | `gcluster job config set` | Update local CLI config (specifically project, cluster and location) |
 | `xpk storage list` | `gcluster cluster volume` | View mounted volumes |
