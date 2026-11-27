@@ -67,12 +67,14 @@ limitations under the License.
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 | <a name="requirement_time"></a> [time](#requirement\_time) | >= 0.9 |
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
 | <a name="provider_time"></a> [time](#provider\_time) | >= 0.9 |
 
 ## Modules
@@ -85,6 +87,7 @@ limitations under the License.
 
 | Name | Type |
 | ---- | ---- |
+| [google_project_iam_member.conditional_project_roles](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
 | [time_sleep.wait_for_service_account](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
 
 ## Inputs
@@ -92,6 +95,7 @@ limitations under the License.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_billing_account_id"></a> [billing\_account\_id](#input\_billing\_account\_id) | If assigning billing role, specify a billing account (default is to assign at the organizational level). | `string` | `""` | no |
+| <a name="input_conditional_project_roles"></a> [conditional\_project\_roles](#input\_conditional\_project\_roles) | List of IAM roles to grant to the service account with IAM conditions (use role names without the "roles/" prefix, e.g. "storage.objectUser"). | <pre>list(object({<br/>    role        = string<br/>    title       = string<br/>    description = optional(string, "")<br/>    expression  = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment (will be prepended to service account name) | `string` | n/a | yes |
 | <a name="input_description"></a> [description](#input\_description) | Description of the created service account. | `string` | `"Service Account"` | no |
 | <a name="input_descriptions"></a> [descriptions](#input\_descriptions) | Deprecated; create single service accounts using var.description. | `list(string)` | `null` | no |

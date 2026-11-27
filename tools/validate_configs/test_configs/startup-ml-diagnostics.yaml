@@ -1,0 +1,50 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: startup_ml_diagnostics
+
+vars:
+  project_id:  # Set GCP Project ID Here
+  deployment_name: startup-ml-diagnostics
+  region: us-central1
+  zone: us-central1-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/pre-existing-vpc
+
+  - id: startup
+    source: modules/scripts/startup-script
+    settings:
+      enable_ml_diagnostics_daemon: true
+      ml_diagnostics_daemon_version: "1.0.1"
+      runners:
+      # Verify the automatic ML Diagnostics runner destination does not collide
+      # with a custom runner named install_ml_diagnostics_agent.sh in runners_map.
+      - type: shell
+        destination: "install_ml_diagnostics_agent.sh"
+        content: |
+          #!/bin/bash
+          echo "custom user runner"
+
+  - id: instance-use-startup
+    source: modules/compute/vm-instance
+    use: [network1, startup]
+    settings:
+      name_prefix: ml-diag
+      machine_type: n2d-standard-4

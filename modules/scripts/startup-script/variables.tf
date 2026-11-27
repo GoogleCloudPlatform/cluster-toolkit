@@ -224,6 +224,25 @@ variable "install_stackdriver_agent" {
   default     = false
 }
 
+variable "enable_ml_diagnostics_daemon" {
+  description = "Install and start the Google Cloud ML Diagnostics daemon (diagon-daemon.service) on Ubuntu x86_64 VMs (tested on Ubuntu 22.04 and 24.04). Errors log a warning and let VM boot continue."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "ml_diagnostics_daemon_version" {
+  description = "Optional Debian package version to lock when enable_ml_diagnostics_daemon is true (for example, \"1.0.1\"). Leave empty to install the latest available release on new VMs and keep existing installs across reboots."
+  type        = string
+  default     = ""
+  nullable    = false
+
+  validation {
+    condition     = var.ml_diagnostics_daemon_version == "" || can(regex("^[0-9][0-9A-Za-z.+~:-]*$", var.ml_diagnostics_daemon_version))
+    error_message = "var.ml_diagnostics_daemon_version must be a valid Debian package version matching ^[0-9][0-9A-Za-z.+~:-]*$ with no whitespace or shell metacharacters."
+  }
+}
+
 variable "install_ansible" {
   description = "Run Ansible installation script if either set to true or unset and runner of type 'ansible-local' are used."
   type        = bool

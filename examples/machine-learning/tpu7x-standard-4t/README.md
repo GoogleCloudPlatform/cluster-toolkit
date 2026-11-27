@@ -12,6 +12,7 @@ Follow the instructions [here](https://cloud.google.com/cluster-toolkit/docs/set
 
 ```bash
 gcloud services enable \
+  cloudresourcemanager.googleapis.com \
   compute.googleapis.com \
   iam.googleapis.com \
   lustre.googleapis.com \
@@ -108,6 +109,69 @@ srun -N 8 -p tpu --layout=tpu7x=2x4x4 ~/jax-env/bin/python -c \
 srun -N 2 -p tpu-dyn --layout=tpu7x=2x2x2 ~/jax-env/bin/python -c \
   "import jax; jax.distributed.initialize(); print(f'Host {jax.process_index()}: total={jax.device_count()}, local={jax.local_device_count()}')"
 ```
+
+### Google Cloud ML Diagnostics (Optional)
+
+Set `enable_ml_diagnostics_daemon: true` in `tpu7x-slurm-deployment.yaml` to
+install and start `diagon-daemon.service` on TPU compute nodes at boot and
+grant the IAM permissions used by Google Cloud ML Diagnostics:
+
+- `roles/hypercomputecluster.editor` on the project.
+- `roles/storage.objectUser` and `roles/storage.bucketViewer` scoped to the
+  default regional bucket prefix `diagon-<project_number>-<region>-`.
+
+#### Prerequisites
+
+Enable the Google Cloud ML Diagnostics, Logging, and Monitoring APIs in
+addition to the APIs listed above:
+
+```bash
+gcloud services enable \
+  hypercomputecluster.googleapis.com \
+  logging.googleapis.com \
+  monitoring.googleapis.com \
+  --project=<PROJECT_ID>
+```
+
+Perform the one-time setup to enable Log Analytics on the project's `_Default`
+Cloud Logging bucket before running diagnostics jobs:
+
+```bash
+gcloud logging buckets update _Default \
+  --location=global \
+  --enable-analytics \
+  --project=<PROJECT_ID>
+```
+
+TPU compute nodes also require outbound HTTPS access to
+`us-central1-apt.pkg.dev` and `packages.cloud.google.com` to install the daemon
+package during startup.
+
+#### Notes
+
+- **Dedicated service accounts:** TPU compute nodes (`<deployment_name>-tpu`)
+  and the Slurm controller (`<deployment_name>-ctrl`) always use dedicated
+  service accounts instead of the default Compute Engine service account, even
+  when `enable_ml_diagnostics_daemon` is `false`. Keep `deployment_name` at
+  most 25 characters so `<deployment_name>-ctrl` stays within Google Cloud's
+  30-character service account ID limit. If your workloads rely on extra
+  default service account permissions, add those roles to `tpu_sa` (or grant
+  bucket access with `bucket_bindings` on `tpu_profile`).
+- **Redeploying with the same `deployment_name`:** Because `controller_profile`
+  creates custom IAM roles, redeploying under the exact same `deployment_name`
+  7 to 44 days after destroy requires setting `role_id_suffix` on
+  `controller_profile`.
+- **Enabling on an existing cluster:** Dynamic nodes (`tpu-dyn`) pick up the
+  updated startup script automatically on their next scale-up. Existing static
+  TPU nodes (`tpu`) do not re-run startup scripts on a simple VM reboot
+  (`gcloud compute instances reset`) because `schedmd-slurm-gcp-v6` skips setup
+  on previously configured VMs. Drain or wait for active jobs to finish, then
+  replace them with `scontrol update nodename=<nodelist> state=power_down`
+  (include all nodes of a multi-node slice) so Slurm provisions fresh VMs from
+  the updated template.
+- **Workload scope:** Host-based Slurm jobs (for example, Python virtual
+  environments) are supported. Containerized workload profiling is not yet
+  configured by this blueprint.
 
 ## Clean Up
 

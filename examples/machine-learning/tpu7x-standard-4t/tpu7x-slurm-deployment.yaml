@@ -19,7 +19,7 @@ terraform_backend_defaults:
     bucket: # supply bucket name to store Terraform state (created automatically by gcluster if missing)
 
 vars:
-  deployment_name: # supply unique deployment name (e.g. tpu7x-slurm)
+  deployment_name: # supply unique deployment name, <= 25 chars (e.g. tpu7x-slurm)
   project_id: # supply existing GCP project ID
   region: # supply region (e.g. us-central1)
   zone: # supply zone (e.g. us-central1-c)
@@ -42,3 +42,4 @@ vars:
 ## --- Optional overrides (defaults shown) ---
   # login_machine_type: n2d-standard-4
   # controller_machine_type: n2d-standard-4
+  # enable_ml_diagnostics_daemon: false
