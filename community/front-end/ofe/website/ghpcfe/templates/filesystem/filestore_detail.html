@@ -61,7 +61,15 @@ window.onload=function(event) {
       {{ object.get_cloud_state_display }}
     </p>
 
+    {% if object.status_message %}
+    <div class="alert alert-warning" role="alert">
+      <b>Details:</b> {{ object.status_message }}
+    </div>
+    {% endif %}
+
     <hr>
+    {% include "cmek/_detail.html" %}
+
     <p style="text-decoration: underline; font-size: large;">Exports</p>
     <div class="table-responsive">
     <table class="table align-middle">
@@ -78,18 +86,37 @@ window.onload=function(event) {
     </table>
     </div>
 
-    {% if "d" in object.cloud_state or "x" in object.cloud_state %}
+    {% comment %}
+      "dm" is a destroy that is running or was left unfinished, not a
+      destroyed Filestore, so it gets no "destroyed" notice and no Edit.
+    {% endcomment %}
+    {% if "dm" == object.cloud_state %}
+    {% elif "d" in object.cloud_state or "x" in object.cloud_state %}
     <div class="alert alert-info">This Filestore is destroyed and its settings archived. No further change is possible.</div>
     {% else %}
     <a href="{% url 'filestore-update' object.id %}" class="btn btn-primary">Edit</a>
     {% endif %}
-    {% if "n" in object.cloud_state %}
+    {% comment %}
+      Once an apply has been started (cmek_applied), the Filestore may hold
+      cloud resources, so it is destroyed, never just deleted from OFE. "um"
+      is a destroy that failed part way: it is destroyed again to finish.
+      "dm" is offered too: a destroy that failed before failures were
+      recorded is left there. A second destroy while one is running is
+      refused, so it neither waits behind the first nor overwrites its
+      log: it is refused while the Filestore's Terraform state lock is
+      held, and while a destroy started from this server runs, any other
+      is refused until it ends, even before it takes that lock (the
+      server keeps this in memory, so a restart clears it). A "dm" left
+      with no running destroy, as after a restart, holds neither and can
+      be destroyed again.
+    {% endcomment %}
+    {% if "nm" == object.cloud_state and not object.cmek_applied %}
     <a href="{% url 'fs-delete' object.id %}" class="btn btn-primary">Delete</a>
     {% endif %}
     {% if "nm" == object.cloud_state %}
     <a href="{% url 'backend-filesystem-start' object.id %}" class="btn btn-primary">Start Filestore</a>
     {% endif %}
-    {% if "m" == object.cloud_state %}
+    {% if "m" == object.cloud_state or "um" == object.cloud_state or "dm" == object.cloud_state or "nm" == object.cloud_state and object.cmek_applied %}
     <a href="{% url 'fs-destroy' object.id %}" class="btn btn-primary">Destroy Filestore</a>
     {% endif %}
 

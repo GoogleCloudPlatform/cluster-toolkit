@@ -14,11 +14,13 @@
 """ gcpfilestore.py """
 
 from django.shortcuts import get_object_or_404
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.views import generic
 from django.views.generic.edit import UpdateView
+from .view_utils import cmek_detail_context
+from ..permissions import SuperUserRequiredMixin
+from ..cluster_manager import cmek
 from ..models import (
     Credential,
     GCPFilestoreFilesystem,
@@ -29,7 +31,8 @@ from ..forms import FilestoreForm
 
 
 # detail views
-class GCPFilestoreFilesystemDetailView(LoginRequiredMixin, generic.DetailView):
+class GCPFilestoreFilesystemDetailView(SuperUserRequiredMixin,
+                                       generic.DetailView):
     """Custom DetailView for Filestore  model"""
 
     model = GCPFilestoreFilesystem
@@ -39,13 +42,14 @@ class GCPFilestoreFilesystemDetailView(LoginRequiredMixin, generic.DetailView):
         """Perform extra query to populate instance types data"""
         context = super().get_context_data(**kwargs)
         context["navtab"] = "fs"
+        context["cmek_detail"] = cmek_detail_context(self.object)
         context["exports"] = FilesystemExport.objects.filter(
             filesystem=self.kwargs["pk"]
         )
         return context
 
 
-class GCPFilestoreFilesystemUpdateView(UpdateView):
+class GCPFilestoreFilesystemUpdateView(SuperUserRequiredMixin, UpdateView):
     """Custom UpdateView for Filestore model"""
 
     model = GCPFilestoreFilesystem
@@ -61,13 +65,23 @@ class GCPFilestoreFilesystemUpdateView(UpdateView):
         return {"share_name": self.get_object().exports.first().export_name}
 
     def form_valid(self, form):
+        # A revoked key is final: nothing about the Filestore is saved, so
+        # the record keeps describing what was deployed.
+        try:
+            cmek.assert_not_revoked(form.instance)
+        except cmek.CmekConfigError as err:
+            form.add_error(None, str(err))
+            return self.form_invalid(form)
+
         self.object = form.save(commit=False)
         self.object.cloud_region = self.object.cloud_zone.rsplit("-", 1)[0]
         self.object.impl_type = FilesystemImpl.GCPFILESTORE
         self.object.save()
 
+        # The form disables share_name once the Filestore is deployed, so take
+        # it from cleaned_data: that holds the stored name, not the POST.
         export = self.object.exports.first()
-        export.export_name = form.data["share_name"]
+        export.export_name = form.cleaned_data["share_name"]
         export.save()
 
         return HttpResponseRedirect(self.get_success_url())
@@ -78,7 +92,8 @@ class GCPFilestoreFilesystemUpdateView(UpdateView):
         return context
 
 
-class GCPFilestoreFilesystemCreateView(LoginRequiredMixin, generic.CreateView):
+class GCPFilestoreFilesystemCreateView(SuperUserRequiredMixin,
+                                       generic.CreateView):
     """Custom view for Filestore creation"""
 
     template_name = "filesystem/filestore_create_form.html"

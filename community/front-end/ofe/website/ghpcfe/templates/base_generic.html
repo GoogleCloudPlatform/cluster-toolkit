@@ -82,7 +82,10 @@
             <div class="dropdown-menu dropdown-menu-right" aria-labelledby="navbarDropdownMenuLink">
 
               <a class="dropdown-item" href="{% url 'account' %}">Edit Account</a>
-              <a class="dropdown-item" href="{% url 'logout' %}?next={% url 'index' %}">Log Out</a>
+              <form method="post" action="{% url 'logout' %}?next={% url 'index' %}" class="m-0">
+                {% csrf_token %}
+                <button type="submit" class="dropdown-item">Log Out</button>
+              </form>
               {% if user.is_superuser %}
               <div class="dropdown-divider"></div>
               <a class="dropdown-item" href="{% url 'admin:index' %}" target="_blank">Admin</a>
@@ -164,12 +167,15 @@
   </div>
 
   <script language="javascript">
+{% if navtab %}
 $(document).ready(function(){
     activaTab("navtab-{{ navtab }}");
 });
+{% endif %}
 
 function activaTab(tab){
-    document.getElementById(tab).className += ' active';
+    const el = document.getElementById(tab);
+    if (el) el.className += ' active';
 };
   </script>
 

@@ -26,6 +26,7 @@
     {% csrf_token %}
   
   {% for field in form.visible_fields %}
+    {% if field.name|slice:":5" != "cmek_" %}
     <div class="form-group">
       {{ field.label_tag }}
       {{ field.errors }}
@@ -34,10 +35,13 @@
         <small class="form-text text-muted">{{ field.help_text }}</small>
       {% endif %}
     </div>
+    {% endif %}
   {% endfor %}
-  
+
 
     <br/>  
+    {% include "cmek/_panel.html" %}
+
     <input type="submit" value="Save" class="btn btn-primary"/>
   </form>
 
@@ -107,4 +111,7 @@
   </script>
   
   
+
+  {% include "cmek/_panel_script.html" %}
+
 {% endblock %}

@@ -18,11 +18,16 @@
 import json
 import logging
 import os
+import secrets
+import shlex
+import socket
 import subprocess
+import time
 from pathlib import Path
 
 from ..models import GCPFilestoreFilesystem, Filesystem, FilesystemImpl
 
+from . import cmek
 from . import utils
 
 from website.settings import SITE_NAME
@@ -31,10 +36,57 @@ logger = logging.getLogger(__name__)
 
 
 def write_filestore_yaml(fs: GCPFilestoreFilesystem, target_dir: Path) -> None:
+    # A revoked key is final: the blueprint is not regenerated.
+    cmek.assert_not_revoked(fs)
     yaml_file = target_dir / "filesystem.yaml"
     project_id = json.loads(fs.cloud_credential.detail)["project_id"]
     # Get first (only) export
     export_name = fs.exports.first().export_name
+
+    tier = fs.get_performance_tier_display()
+
+    # kms-key / kms-key-iam for this filestore, then `use: [cmek_key_iam]` on the
+    # instance. The IAM module exports the key id as kms_key_name, which is the
+    # filestore module's own input, so nothing is wired by hand here.
+    settings = cmek.CmekSettings.from_config(utils.load_config())
+    chosen = cmek.resource_settings(fs, settings)
+    key_modules = ""
+    key_use = ""
+    # Store the effective choice, not the box as typed: enforcement may have
+    # overridden it, and once deployed the stored value is what stands
+    # (is_frozen), and what the keys page lists.
+    if not chosen and fs.cmek_enabled:
+        fs.cmek_enabled = False
+        fs.save(update_fields=["cmek_enabled"])
+    if chosen:
+        if not chosen["key_name"]:
+            # Cloud KMS never frees a key name, so a Filestore recreated under
+            # the same name must not derive the same key name. The suffix
+            # makes it unique; storing it below makes retries reuse it.
+            chosen["key_name"] = cmek.derive_key_name(
+                "filestore", f"{fs.name}-{secrets.token_hex(4)}")
+        # Record what was deployed, so the detail page reports this key
+        # rather than recomputing it from settings that may since have
+        # changed. The derived name is not otherwise stored anywhere.
+        deployed = cmek.resolve_created_key(chosen, settings, project_id)
+        fs.cmek_enabled = True
+        fs.cmek_key_name = deployed["key_name"]
+        fs.cmek_key_ring_name = deployed["key_ring_name"]
+        fs.cmek_key_project_id = deployed["key_project_id"]
+        fs.save(update_fields=[
+            "cmek_enabled", "cmek_key_name", "cmek_key_ring_name",
+            "cmek_key_project_id"])
+        ring_exists = cmek.ring_already_exists(
+            fs.cloud_credential.detail, deployed, fs.cloud_zone)
+        key_modules = cmek.key_modules_yaml(
+            service="filestore",
+            project_id=project_id,
+            location=fs.cloud_zone,
+            settings=settings,
+            ring_exists=ring_exists,
+            **chosen,
+        ) + "\n"
+        key_use = f"\n    use: [{cmek.KEY_IAM_MODULE_ID}]"
 
     with yaml_file.open("w") as f:
         f.write(
@@ -58,15 +110,15 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/file-system/filestore
+{key_modules}  - source: modules/file-system/filestore
     kind: terraform
-    id: {fs.name}
+    id: {fs.name}{key_use}
     settings:
       filestore_share_name: {export_name[1:]}
       network_id: projects/{project_id}/global/networks/{fs.vpc.cloud_id}
       zone: {fs.cloud_zone}
       size_gb: {fs.capacity}
-      filestore_tier: {fs.get_performance_tier_display()}
+      filestore_tier: {tier}
     outputs:
     - network_storage
 """
@@ -111,7 +163,13 @@ def _run_ghpc(target_dir: Path, cred_env: dict) -> None:
         with log_out_fn.open("wb") as log_out:
             with log_err_fn.open("wb") as log_err:
                 subprocess.run(
-                    [ghpc_path, "create", "filesystem.yaml"],
+                    # -w: overwrite an existing deployment folder from a
+                    # prior attempt (matches clusterinfo.py's ghpc create
+                    # invocation) — without it, any retry after a failed
+                    # create_filesystem()/start_filesystem() permanently
+                    # fails with "deployment folder already exists" until
+                    # an admin manually deletes it.
+                    [ghpc_path, "create", "filesystem.yaml", "-w"],
                     cwd=target_dir,
                     stdout=log_out,
                     stderr=log_err,
@@ -124,9 +182,53 @@ def _run_ghpc(target_dir: Path, cred_env: dict) -> None:
         raise
 
 
+def _filestore(fs: Filesystem):
+    """The row that carries the encryption fields, for a Filestore.
+
+    They live on the GCPFilestoreFilesystem child, not on Filesystem, and a
+    save of the parent does not write them.
+    """
+    if isinstance(fs, GCPFilestoreFilesystem):
+        return fs
+    if FilesystemImpl(fs.impl_type) == FilesystemImpl.GCPFILESTORE:
+        return fs.gcpfilestorefilesystem
+    return None
+
+
 def start_filesystem(fs: Filesystem) -> None:
     """Effectively, just 'terraform apply'"""
+    filestore = _filestore(fs)
+    # The record was loaded when the start was queued: a key revoked since
+    # then is refused here, and not written back by the saves below.
+    cmek.keep_flags_current(filestore)
+    try:
+        cmek.assert_not_revoked(filestore)
+    except cmek.CmekConfigError as err:
+        # Before anything is reset, so the record keeps its cloud_state.
+        fs.status_message = str(err)
+        fs.save(update_fields=["status_message"])
+        raise
+    # Stored now, while the record still says deployed, so a Filestore
+    # deployed before the flag existed stays frozen if this start fails.
+    cmek.record_deployed(filestore)
+    # the blueprint (filesystem.yaml) is produced by create_filesystem(). If
+    # it is absent that step never completed, and running ghpc anyway produces
+    # an opaque 'filesystem.yaml does not exist' that hides the real cause and
+    # leaves the record looking un-started. Fail here instead, keeping the
+    # record retryable.
+    blueprint = _base_dir_for_fs(fs) / "filesystem.yaml"
+    if not blueprint.is_file():
+        msg = (
+            f"Cannot start filesystem {fs.id} ({fs.name}): its blueprint has "
+            f"not been generated ({blueprint} is missing), so the create step "
+            "did not complete. Check the filesystem's log, then recreate it."
+        )
+        fs.cloud_state = "nm"
+        fs.status_message = msg  # surface the reason on the detail page
+        fs.save()
+        raise RuntimeError(msg)
     fs.cloud_state = "cm"
+    fs.status_message = ""  # clear any stale failure reason on a fresh start
     fs.save()
     try:
         extra_env = {
@@ -138,6 +240,13 @@ def start_filesystem(fs: Filesystem) -> None:
         utils.run_terraform(target_dir, "init", extra_env=extra_env)
         utils.run_terraform(target_dir, "plan", extra_env=extra_env)
 
+        # No targeted key apply: consumers `use:` the kms-key-iam module, so
+        # Terraform already creates the key and grants on it before anything
+        # that encrypts with it.
+        # Stored before the apply runs, not after it succeeds: a failed apply
+        # can already have created the key or the share, so the choice stays
+        # fixed whatever state a failed start or create leaves.
+        cmek.record_apply_started(filestore)
         logger.info("Invoking terraform apply for fs %s:%s", fs.id, fs.name)
         utils.run_terraform(target_dir, "apply", extra_env=extra_env)
 
@@ -155,9 +264,16 @@ def start_filesystem(fs: Filesystem) -> None:
             fs.cloud_id = f"network_storage_{fs.name}"
             fs.hostname_or_ip = data["server_ip"]
             fs.cloud_state = "m"
+            cmek.keep_flags_current(filestore)
             fs.save()
     except subprocess.CalledProcessError as cpe:
         fs.cloud_state = "nm"
+        # give the detail page a pointer to the real error.
+        fs.status_message = (
+            "The Terraform apply failed - see the Terraform log below for the "
+            "provider error (for example an invalid capacity or quota issue)."
+        )
+        cmek.keep_flags_current(filestore)
         fs.save()
         logger.error("Terraform apply failed", exc_info=cpe)
         if cpe.stdout:
@@ -165,12 +281,116 @@ def start_filesystem(fs: Filesystem) -> None:
         if cpe.stderr:
             logger.info("TF stderr:\n%s\n", cpe.stderr.decode("utf-8"))
         raise
+    except Exception as err:  # pylint: disable=broad-except
+        # Anything that is not a Terraform failure: a generator defect, an API
+        # error, a missing file. Without this the record keeps cloud_state "cm"
+        # for good, so the page shows "being created" forever and the reason
+        # only ever appears in django.log. Clusters already do this in
+        # clusterinfo.start_cluster(); filesystems were the outlier.
+        fs.cloud_state = "nm"
+        fs.status_message = f"Deployment failed: {err}"
+        cmek.keep_flags_current(filestore)
+        fs.save()
+        logger.error("Filesystem %s:%s failed to start", fs.id, fs.name,
+                     exc_info=err)
+        raise
 
 
 def destroy_filesystem(fs: Filesystem) -> None:
+    """Effectively, just 'terraform destroy'.
+
+    A start that failed before its apply created anything leaves nothing to
+    destroy, so the destroy is skipped then, as for clusters and images. With
+    no group directory, `ghpc create` never wrote one and nothing was applied.
+
+    Otherwise `terraform init` runs first. The state is in the GCS bucket, and
+    whether anything was applied is read from there only once `.terraform`
+    records that backend. A retried start runs `ghpc create -w`, which moves
+    the earlier group directory, `.terraform` with it, into a backup; if the
+    retry then failed before its own `init`, the directory has no record of
+    the backend, and without this `init` the check would wrongly say nothing
+    was applied while the share and its key still exist. A failed `init`
+    raises, so the destroy fails and can be retried.
+    """
     target_dir = _tf_dir_for_fs(fs)
     extra_env = {"GOOGLE_APPLICATION_CREDENTIALS": _get_credentials_file(fs)}
+
+    if not os.path.isdir(target_dir):
+        logger.info("%s does not exist, so nothing was applied and there is "
+                    "nothing for Terraform to destroy", target_dir)
+        return
+    utils.run_terraform(target_dir, "init", extra_env=extra_env)
+    if not utils.terraform_may_have_applied(target_dir, extra_env):
+        logger.info("Nothing was applied from %s, so there is nothing for "
+                    "Terraform to destroy", target_dir)
+        return
     utils.run_terraform(target_dir, "destroy", extra_env=extra_env)
+
+
+def running_state_lock(fs: Filesystem):
+    """Return the lock info if a Terraform run holds a Filestore's state lock.
+
+    Returns None when the lock is free, the filesystem is not a Filestore, or
+    the lock is stale. Raises if the lock cannot be read.
+
+    A second destroy started while one runs would wait up to
+    utils.TERRAFORM_LOCK_TIMEOUT for the lock and meanwhile overwrite the
+    running destroy's log, which the detail page shows, so the destroy view
+    refuses it while this returns a lock.
+
+    The lock is read from the bucket by the Filestore's state prefix, not
+    through the group directory's record of the backend, which a failed
+    start retry can have moved away. A stale lock, left by a Terraform run
+    that was killed, must not block the destroy for good. It is recognised
+    by the rule utils._check_stale_state_lock applies before every Terraform
+    run: taken on this server, no terraform process here runs in the
+    Filestore's directory, and the same lock is still there when read again.
+    The destroy then goes ahead, and that check fails it with the command
+    that clears the lock.
+    """
+    # pylint: disable=protected-access
+    if _filestore(fs) is None:
+        return None
+    location = (utils.get_terraform_state_bucket(),
+                utils.terraform_state_prefix("filesystem", fs.id),
+                _get_credentials_file(fs))
+    info = utils._read_gcs_state_lock(*location)
+    if info is None:
+        return None
+    _, sep, host = str(info.get("Who", "")).rpartition("@")
+    if not sep or (utils._short_hostname(host)
+                   != utils._short_hostname(socket.gethostname())):
+        # Taken on another machine: its process cannot be checked from here.
+        return info
+    if utils._terraform_running_in(_tf_dir_for_fs(fs)):
+        return info
+    # The holder may have finished between the read and the process scan, or
+    # a new run taken the lock; only the same lock still present is stale.
+    again = utils._read_gcs_state_lock(*location)
+    if again is None:
+        return None
+    if again.get("ID") != info.get("ID"):
+        return again
+    logger.warning("The Terraform state lock of filesystem %s:%s was taken "
+                   "on this server and no Terraform process here holds it, "
+                   "so it is stale", fs.id, fs.name)
+    return None
+
+
+def force_unlock_command(fs: Filesystem, lock_id) -> str:
+    """The command that clears a Filestore's state lock.
+
+    It is the command utils._state_lock_message prints when a Terraform run
+    finds a lock, so the destroy view's refusal and the log give the same
+    command, the one the admin guide's "A resource reports a stale state
+    lock" section tells admins to run.
+    """
+    return (
+        f"cd {shlex.quote(str(_tf_dir_for_fs(fs)))} && "
+        "GOOGLE_APPLICATION_CREDENTIALS="
+        f"{shlex.quote(str(_get_credentials_file(fs)))} "
+        f"terraform force-unlock -force {lock_id}"
+    )
 
 
 def get_terraform_dir(fs: Filesystem) -> Path:

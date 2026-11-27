@@ -16,6 +16,8 @@
 
 import copy
 import datetime
+import fcntl
+import glob
 import json
 import logging
 import os
@@ -24,7 +26,9 @@ import re
 import secrets
 import shlex
 import socket
+import stat
 import subprocess
+import tempfile
 from pathlib import Path
 import shutil
 
@@ -69,6 +73,103 @@ def load_config(config_file=g_baseDir / "configuration.yaml", access_key=None):
         return cfg
 
     return g_config
+
+
+def config_file_path():
+    """Path of the server configuration file `load_config` reads."""
+    return g_baseDir / "configuration.yaml"
+
+
+def invalidate_config_cache(config_file=None):
+    """Re-read the server configuration into the cached document.
+
+    Two properties of `load_config` shape this. It returns the module
+    global itself rather than a copy, so anything holding the result --
+    a running `ClusterInfo`, for one -- aliases this dict; and it merges
+    the file in rather than replacing it, so a key that has since been
+    deleted from the file would survive as a stale value.
+
+    The cache is therefore refreshed in place: keys absent from the new
+    document are dropped, then `load_config` repopulates the rest, which
+    also reapplies its own `baseDir` conversion and access-key handling
+    instead of duplicating them here. Emptying the dict outright would be
+    wrong, because every alias would briefly see no configuration at all.
+    A missing file leaves the cache alone and merely marks it unloaded,
+    so a caller cannot destroy a working configuration by pointing this
+    at a path that does not exist.
+    """
+    path = Path(config_file or config_file_path())
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            fresh = (yaml.safe_load(handle) or {}).get("config") or {}
+    except OSError:
+        g_config["loaded"] = False
+        return
+    # baseDir is derived from the source location, never from the file.
+    for stale in set(g_config) - set(fresh) - {"baseDir", "loaded"}:
+        del g_config[stale]
+    g_config["loaded"] = False
+    load_config(config_file=path)
+
+
+def update_config_file(mutate, config_file=None):
+    """Apply `mutate` to the `config` mapping of the server config file.
+
+    `mutate` receives the parsed `config` mapping and edits it in place.
+    The file is rewritten through a temporary file in the same directory
+    and then renamed, so a crash mid-write cannot leave the running
+    server with a truncated configuration it can no longer parse. The
+    memoised copy is dropped afterwards, since a caller that changed the
+    file and kept serving the previous document would be worse than not
+    having written at all.
+
+    Two administrators can save at once, from different server processes.
+    The read, the change and the rename run under an exclusive lock, so the
+    second writer reads the first one's result instead of overwriting it,
+    and each writer has its own uniquely named temporary file, so neither
+    can truncate the other's. The lock is taken on the config file's
+    directory: the file itself is replaced by the rename, so a lock on it
+    would not be shared with the next writer, and the directory needs no
+    lock file of its own left beside the config. The temporary file is
+    removed if anything fails before the rename, and the config file keeps
+    its permissions.
+    """
+    config_file = Path(config_file or config_file_path())
+    directory = os.open(config_file.parent, os.O_RDONLY)
+    try:
+        # released when the descriptor is closed
+        fcntl.flock(directory, fcntl.LOCK_EX)
+        with config_file.open("r", encoding="utf-8") as handle:
+            document = yaml.safe_load(handle) or {}
+        section = document.setdefault("config", {})
+        mutate(section)
+        _replace_config_file(config_file, document)
+    finally:
+        os.close(directory)
+    invalidate_config_cache()
+    return document
+
+
+def _replace_config_file(config_file, document):
+    """Write `document` to a new temporary file and rename it over the
+    config file, keeping the config file's permissions."""
+    mode = stat.S_IMODE(config_file.stat().st_mode)
+    handle = tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=config_file.parent,
+        prefix=f".{config_file.name}.", suffix=".tmp", delete=False)
+    tmp_path = handle.name
+    try:
+        with handle:
+            yaml.safe_dump(document, handle, default_flow_style=False,
+                           sort_keys=False)
+        os.chmod(tmp_path, mode)
+        os.replace(tmp_path, config_file)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 # Terraform state prefixes by resource kind, placed under this database's
@@ -539,15 +640,83 @@ def _raise_if_lock_timeout(err, target_dir, log_err_fn, credentials_file):
     raise TerraformStateLockError(err.cmd, message, err.returncode) from err
 
 
+def _no_state_pulled(err):
+    """Whether get_terraform_state failed only because there was no state.
+
+    `terraform state pull` prints nothing when the backend holds no state
+    for the directory, which get_terraform_state reports as a parse error.
+    """
+    cause = err.__cause__
+    return (isinstance(cause, json.JSONDecodeError)
+            and not cause.doc.strip())
+
+
+def terraform_may_have_applied(terraform_dir, extra_env=None):
+    """Whether Terraform may have created anything from a group directory.
+
+    `ghpc create` writes each group's directory before any `terraform init`,
+    so a run that failed in between leaves a directory nothing was applied
+    from (or no directory at all), and a plain `terraform destroy` there only
+    fails.
+
+    With the GCS backend the state is in the bucket, not in the directory,
+    so it is read back with `terraform state pull`; `extra_env` must carry
+    GOOGLE_APPLICATION_CREDENTIALS, as for any command that contacts the
+    backend. State that records no resource, or no state at all, means
+    nothing was applied. If the state cannot be read, the answer is yes:
+    the destroy then runs and reports its own error, rather than the record
+    being dropped while resources may still exist.
+
+    A directory still on local state (initialised before the state moved to
+    the bucket) keeps the earlier rule: `init` creates `.terraform` and
+    `apply` writes `terraform.tfstate` (and its backup).
+    """
+    if not os.path.isdir(terraform_dir):
+        return False
+    try:
+        gcs_backend = _gcs_backend_config(terraform_dir)
+    except (OSError, ValueError, KeyError) as err:
+        logger.warning("Could not read the Terraform backend of %s, so it "
+                       "may hold resources: %s", terraform_dir, err)
+        return True
+    if gcs_backend is None:
+        return (os.path.isdir(os.path.join(terraform_dir, ".terraform"))
+                or bool(glob.glob(os.path.join(terraform_dir, "*.tfstate*"))))
+    try:
+        state = get_terraform_state(terraform_dir, extra_env)
+    except (subprocess.CalledProcessError, OSError, RuntimeError) as err:
+        if isinstance(err, RuntimeError) and _no_state_pulled(err):
+            return False
+        logger.warning("Could not read the Terraform state of %s, so it may "
+                       "hold resources: %s", terraform_dir, err)
+        return True
+    if not state:
+        return False
+    return not isinstance(state, dict) or bool(state.get("resources"))
+
+
 def run_terraform(target_dir, command, arguments=None, extra_env=None):
 
     arguments = arguments if arguments else []
     extra_env = extra_env if extra_env else {}
 
+    # never let terraform fall back to an interactive prompt for a
+    # missing variable. This helper runs unattended inside a backend async
+    # task with no one to answer stdin, so a missing required variable
+    # (e.g. from an upstream failure that skipped writing tfvars) hangs
+    # the subprocess forever holding the state lock, instead of failing
+    # fast with a normal "no value for required variable" error.
+    #
+    # only the subcommands that actually evaluate variables accept
+    # an `-input` flag. Read-only commands (`validate`, `output`, ...) reject
+    # it outright ("flag provided but not defined: -input") and fail. Use an
+    # allowlist of the variable-evaluating writers rather than a denylist, so
+    # a future read-only subcommand is not silently broken again.
+    #
+    # The same holds for any other prompt (e.g. init asking to migrate state
+    # after a backend change): with -input=false, Terraform fails with its
+    # message instead of blocking forever.
     cmdline = ["terraform", command, "-no-color"]
-    # Never prompt: these run unattended, and a prompt (e.g. init asking to
-    # migrate state after a backend change) would block forever. With
-    # -input=false, Terraform fails with its message instead.
     if command in ("init", "plan", "apply", "destroy", "import", "refresh"):
         cmdline.append("-input=false")
     if command in TERRAFORM_LOCKING_COMMANDS:
@@ -612,6 +781,7 @@ def run_terraform(target_dir, command, arguments=None, extra_env=None):
                     env=new_env,
                     stdout=log_out,
                     stderr=log_err,
+                    stdin=subprocess.DEVNULL,
                     check=True,
                 )
             except subprocess.CalledProcessError as err:

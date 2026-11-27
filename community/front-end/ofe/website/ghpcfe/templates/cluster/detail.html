@@ -125,7 +125,15 @@
   {% if object.grafana_dashboard_url %}
   &nbsp;&nbsp;&nbsp;<a href="{{object.grafana_dashboard_url}}" target="_blank">Grafana Dashboard</a>
   {% endif %}
-  {% if object.status == "e" %}
+  {% if object.status == "e" and object.cloud_state == "dm" %}
+<div class="alert alert-warning">
+  <p><strong>Cluster Teardown Status Update:</strong> A teardown of this cluster was started and did not finish.
+    Some of its resources may already have been removed, so it cannot be started again.</p>
+  <p>To finish the teardown, click the "Delete" button located at the bottom to destroy it again.</p>
+  <p>Before doing so, we strongly recommend examining the logs for more insights; just click "View Logs" for
+    a better understanding of the situation.</p>
+</div>
+  {% elif object.status == "e" %}
 <div class="alert alert-warning">
   <p><strong>Cluster Deployment Status Update:</strong> The cluster deployment encountered some difficulties. It's
     possible that certain resources may have been partially created.</p>
@@ -151,6 +159,19 @@
 </div>
 
 <hr>
+{% if object.status_message %}
+<div class="alert alert-warning" role="alert">
+  <b>Details:</b> {{ object.status_message }}
+</div>
+{% endif %}
+
+{% comment %}
+  Encryption applies to every cluster, so it must not be nested inside the
+  Artifact Registries check below. Block form because Django's short comment
+  syntax does not span lines -- a multi-line {# ... #} renders as page text.
+{% endcomment %}
+{% include "cmek/_detail.html" %}
+
 {% if object.container_registry_relations.exists %}
 <p style="text-decoration: underline; font-size: large;">Artifact Registries</p>
 <div class="table-responsive">
@@ -249,7 +270,7 @@
 {% if object.status == "d" %}
 <div class="alert alert-info">This cluster is destroyed and its settings archived. No further change is possible.</div>
 {% endif %}
-{% if cluster.status == "e" %}
+{% if cluster.status == "e" and cluster.cloud_state != "dm" %}
 <a href="{% url 'backend-start-cluster' object.id %}" class="btn btn-primary">Retry</a>
 {% endif %}
 {% if cluster.status == "r" or cluster.status == "i" or cluster.status == "s" or cluster.status == "e" %}
