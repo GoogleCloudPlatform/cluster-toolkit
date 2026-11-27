@@ -87,4 +87,3 @@ vars:
 
 ## --- Optional overrides (defaults shown) ---
   # system_node_pool_machine_type: n2d-standard-8
-  # enable_ml_diagnostics_daemon: false  # set to true to deploy the Diagon 2.0 ML Diagnostics daemon (see README)
