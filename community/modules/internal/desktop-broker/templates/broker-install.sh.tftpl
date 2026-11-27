@@ -14,6 +14,9 @@ broker_venv_dir=${jsonencode(broker_venv_dir)}
 broker_python_path=${jsonencode(broker_python_path)}
 broker_pip_path=${jsonencode(broker_pip_path)}
 broker_socket_path=${jsonencode(broker_socket_path)}
+# Single-quoted, not jsonencoded: jsonencode writes < and > as < and >,
+# which bash passes to pip literally. The specifiers are fixed in main.tf.
+broker_pip_packages=(%{ for package in broker_pip_packages }'${package}' %{ endfor })
 requires_units=${jsonencode(requires_units)}
 
 if command -v dnf >/dev/null 2>&1; then
@@ -43,7 +46,7 @@ find "$broker_app_dir" -type f -name '*.py' -exec chmod 0644 {} +
 
 python3 -m venv "$broker_venv_dir"
 "$broker_pip_path" install --upgrade pip
-"$broker_pip_path" install 'aiohttp~=3.10'
+"$broker_pip_path" install "$${broker_pip_packages[@]}"
 
 
 # Only the broker, which runs as root, reads it.

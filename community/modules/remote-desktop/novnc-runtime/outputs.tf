@@ -22,6 +22,11 @@ output "broker_socket_path" {
   value       = module.desktop_broker.broker_socket_path
 }
 
+output "iap_listen_port" {
+  description = "TCP port the broker serves the load balancer on, or null when it serves only its unix socket."
+  value       = module.desktop_broker.iap_listen_port
+}
+
 output "vnc_backend" {
   description = "VNC backend used by the noVNC desktop runtime."
   value       = module.desktop_broker.vnc_backend

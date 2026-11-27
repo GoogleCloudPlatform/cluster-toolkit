@@ -53,8 +53,20 @@ class Config:
         self.runtime_dir = Path(raw["runtime_dir"])
         self.session_dir = Path(raw["session_dir"])
 
-        # The broker's only listener. See identity.py for why a unix socket.
+        # The broker's main listener. See identity.py for why a unix socket.
         self.socket_path = Path(_require(raw.get("socket_path"), "socket_path"))
+
+        # Optional TCP listener for an HTTPS load balancer behind
+        # Identity-Aware Proxy. Every request on it must carry an IAP
+        # assertion minted for this backend service; see iap.py.
+        self.iap_backend_service = str(raw.get("iap_backend_service") or "").strip()
+        self.iap_listen_port = int(raw.get("iap_listen_port") or 0)
+        if bool(self.iap_backend_service) != bool(self.iap_listen_port):
+            raise ConfigError(
+                "iap_backend_service and iap_listen_port must be set together."
+            )
+        if not 0 <= self.iap_listen_port <= 65535:
+            raise ConfigError("iap_listen_port must be a valid TCP port.")
 
         self.base_display_number = int(raw["base_display_number"])
         if self.base_display_number < 1:
