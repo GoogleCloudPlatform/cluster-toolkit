@@ -126,6 +126,25 @@ steps:
               trap cleanup_pod EXIT SIGTERM SIGINT
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
+
+              # Select the first non-excluded zone supporting NetApp Flex Unified SCALEOUT pools.
+              CANDIDATE_ZONES=("us-central1-b" "us-central1-c" "us-east1-b" "us-central1-a")
+              ZONE=""
+              for CANDIDATE in "\$${CANDIDATE_ZONES[@]}"; do
+                if [[ -n "\$${EXCLUDE_ZONES:-}" && " \$${EXCLUDE_ZONES//,/ } " == *" \$${CANDIDATE} "* ]]; then
+                  echo "INFO: Skipping \$${CANDIDATE} - Zone explicitly excluded via EXCLUDE_ZONES."
+                  continue
+                fi
+                ZONE="\$${CANDIDATE}"
+                break
+              done
+              if [ -z "\$${ZONE}" ]; then
+                echo "ERROR: No available NetApp Flex SCALEOUT zone left after EXCLUDE_ZONES='\$${EXCLUDE_ZONES:-}'." >&2
+                exit 1
+              fi
+              REGION="\$${ZONE%-*}"
+              echo "Deploying in ZONE: \$${ZONE}"
+
               bash tools/add_ttl_label.sh "\$$BLUEPRINT"
               python3 tools/fix_vpc_name.py "\$$BLUEPRINT" "${_TEST_PREFIX}"
 
@@ -134,6 +153,7 @@ steps:
                 --extra-vars="test_prefix=${_TEST_PREFIX}" \
                 --extra-vars="use_fixed_vpc=true" \
                 --extra-vars="@tools/cloud-build/daily-tests/tests/netapp-volumes.yml" \
+                --extra-vars="region=\$${REGION} zone=\$${ZONE}" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
                 --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \

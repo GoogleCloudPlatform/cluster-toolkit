@@ -156,6 +156,209 @@ class TestCloudBuildZoneRetry(unittest.TestCase):
         )
         self.assertEqual(res_non_psa.returncode, 1)
 
+    def test_check_retriable_error_matches_netapp_zone_resource_pool_exhausted(self):
+        """Test check_retriable_error.sh matches NetApp StoragePool zone exhaustion."""
+        cloud_build_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../cloud-build")
+        )
+        check_script = os.path.join(cloud_build_dir, "check_retriable_error.sh")
+        error_msg = (
+            "Error: Error waiting to create StoragePool: Error waiting for "
+            "Creating StoragePool: Error code 14, message: unavailable: "
+            '"The zone\'s resource pool is currently exhausted with specific '
+            'constraints. Please try a different zone or resource configuration."\n'
+        )
+        log_file = os.path.join(self.test_dir, "netapp_pool_exhausted_log.txt")
+        with open(log_file, "w", encoding="utf-8") as f:
+            f.write(error_msg)
+
+        res = subprocess.run(
+            ["bash", check_script, log_file],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(res.returncode, 0)
+
+    def test_submit_script_extracts_zone_on_netapp_pool_exhaustion(self):
+        """Test submit_and_monitor_kueue_job.sh extracts failed zone on NetApp stockout."""
+        repo_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+        submit_script = os.path.join(
+            repo_dir, "tools", "cloud-build", "submit_and_monitor_kueue_job.sh"
+        )
+        with open(submit_script, "r", encoding="utf-8") as f:
+            submit_content = f.read()
+
+        self.assertIn("resource pool is currently exhausted", submit_content)
+
+        log_content = (
+            "+ echo 'Deploying in ZONE: us-central1-b'\n"
+            "Deploying in ZONE: us-central1-b\n"
+            "Error: Error waiting to create StoragePool: Error waiting for "
+            "Creating StoragePool: Error code 14, message: unavailable: "
+            '"The zone\'s resource pool is currently exhausted with specific '
+            'constraints. Please try a different zone or resource configuration."\n'
+        )
+        log_file = os.path.join(self.test_dir, "netapp_job_logs.txt")
+        with open(log_file, "w", encoding="utf-8") as f:
+            f.write(log_content)
+
+        # Extract the exact capacity-check line from submit_and_monitor_kueue_job.sh
+        capacity_grep_line = next(
+            line.strip()
+            for line in submit_content.splitlines()
+            if "ZONE_RESOURCE_POOL_EXHAUSTED" in line and "grep -q -i -E" in line
+        )
+        script = f"""
+        JOB_LOGS="{log_file}"
+        FAILED_ZONE=$(sed -n 's/.*resource exhausted: not enough resources available to fulfill the request in \\([a-z0-9-]*\\).*/\\1/p' "$JOB_LOGS" | tail -n 1 || true)
+        if [ -z "$FAILED_ZONE" ]; then
+            {capacity_grep_line}
+                FAILED_ZONE=$(sed -n 's/.*Deploying in ZONE: \\([a-z0-9-]*\\).*/\\1/p' "$JOB_LOGS" | tail -n 1 || true)
+            fi
+        fi
+        echo "$FAILED_ZONE"
+        """
+        result = subprocess.run(
+            ["bash", "-c", script], capture_output=True, text=True, check=True
+        )
+        self.assertEqual(result.stdout.strip(), "us-central1-b")
+
+    def test_netapp_volumes_build_zone_selection_and_exclude_zones(self):
+        """Test netapp-volumes.yaml candidate zone selection and EXCLUDE_ZONES injection."""
+        repo_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+        build_yaml_path = os.path.join(
+            repo_dir,
+            "tools",
+            "cloud-build",
+            "daily-tests",
+            "builds",
+            "netapp-volumes.yaml",
+        )
+        with open(build_yaml_path, "r", encoding="utf-8") as f:
+            build_cfg = yaml.safe_load(f)
+
+        gen_step = next(
+            s for s in build_cfg["steps"] if s["id"] == "generate-job-manifest"
+        )
+        raw_script = gen_step["args"][1]
+
+        # Simulate Cloud Build substitutions on the generate-job-manifest bash script.
+        rendered_cb = (
+            raw_script.replace("${_TEST_PREFIX}", "daily-")
+            .replace("$PROJECT_ID", "test-project")
+            .replace("$BUILD_ID", "0d6ef498-dd75-46c6-a110-b4acf6eaa84f")
+            .replace("$$", "$")
+        )
+        # Stub out the gcloud SA describe call so we can render job.yaml offline.
+        rendered_cb = rendered_cb.replace(
+            'SA_UNIQUE_ID=$(gcloud iam service-accounts describe "$SA_EMAIL" '
+            '--project="test-project" --format="value(uniqueId)")',
+            'SA_UNIQUE_ID="1234567890"',
+        )
+
+        env = dict(
+            os.environ,
+            SA_EMAIL="sa@test-project.iam.gserviceaccount.com",
+            GCLUSTER_GCS_PATH="gs://bucket/gcluster",
+            TRIAGE_GCS_BUCKET="triage-bucket",
+            TRIAGE_PROJECT_NUMBER="123456",
+            TRIAGE_INVOKER_SA="invoker@test-project.iam.gserviceaccount.com",
+            TRIAGE_CLOUD_RUN_URL="https://example.invalid",
+        )
+        subprocess.run(
+            ["bash", "-c", rendered_cb],
+            cwd=self.test_dir,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        job_file = os.path.join(self.test_dir, "job.yaml")
+        with open(job_file, "r", encoding="utf-8") as f:
+            job_cfg = yaml.safe_load(f)
+
+        runner = next(
+            c
+            for c in job_cfg["spec"]["template"]["spec"]["containers"]
+            if c["name"] == "runner"
+        )
+        runner_script = runner["args"][0]
+        self.assertIn('--extra-vars="region=${REGION} zone=${ZONE}"', runner_script)
+        self.assertIn('echo "Deploying in ZONE: ${ZONE}"', runner_script)
+
+        # Verify update_job_exclude_zones.py cleanly injects EXCLUDE_ZONES into rendered job.yaml
+        subprocess.run(
+            [
+                "python3",
+                UPDATE_SCRIPT,
+                "--inject",
+                "--file",
+                job_file,
+                "--zones",
+                "us-central1-b",
+            ],
+            check=True,
+        )
+        with open(job_file, "r", encoding="utf-8") as f:
+            updated_job = yaml.safe_load(f)
+        updated_runner = next(
+            c
+            for c in updated_job["spec"]["template"]["spec"]["containers"]
+            if c["name"] == "runner"
+        )
+        excl_entry = next(
+            (e for e in updated_runner["env"] if e["name"] == "EXCLUDE_ZONES"),
+            None,
+        )
+        self.assertIsNotNone(excl_entry)
+        self.assertEqual(excl_entry["value"], "us-central1-b")
+
+        # Extract the exact zone-selection block from the rendered runner script and test it.
+        zone_lines = []
+        in_block = False
+        for line in runner_script.splitlines():
+            if "CANDIDATE_ZONES=" in line:
+                in_block = True
+            if in_block:
+                zone_lines.append(line)
+                if 'echo "Deploying in ZONE: ${ZONE}"' in line:
+                    break
+        zone_block = "set -e\n" + "\n".join(zone_lines) + '\necho "RESULT=${REGION}|${ZONE}"\n'
+
+        cases = [
+            ("", "us-central1|us-central1-b"),
+            ("us-central1-b", "us-central1|us-central1-c"),
+            ("us-central1-b us-central1-c", "us-east1|us-east1-b"),
+            ("us-central1-b,us-central1-c", "us-east1|us-east1-b"),
+            ("us-central1-b us-central1-c us-east1-b", "us-central1|us-central1-a"),
+        ]
+        for exclude_val, expected in cases:
+            case_env = dict(os.environ, EXCLUDE_ZONES=exclude_val)
+            res = subprocess.run(
+                ["bash", "-c", zone_block],
+                env=case_env,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertIn(f"RESULT={expected}", res.stdout)
+            self.assertIn(f"Deploying in ZONE: {expected.split('|')[1]}", res.stdout)
+
+        # All candidates excluded should exit non-zero with a clear error.
+        all_excluded_env = dict(
+            os.environ,
+            EXCLUDE_ZONES="us-central1-b us-central1-c us-east1-b us-central1-a",
+        )
+        res_empty = subprocess.run(
+            ["bash", "-c", zone_block],
+            env=all_excluded_env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(res_empty.returncode, 0)
+        self.assertIn("No available NetApp Flex SCALEOUT zone left", res_empty.stderr)
+
     def test_extract_failed_zone_from_spot_stockout_log(self):
         """Test extracting zone from 'Deploying in ZONE:' only on capacity error."""
         log_content = (
