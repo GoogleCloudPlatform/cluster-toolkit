@@ -39,22 +39,12 @@ RUN apt-get -y update && apt-get -y install \
     apt-get -y install kubectl && \
     # following is required to execute kubectl commands
     apt-get -y install google-cloud-cli-gke-gcloud-auth-plugin && \
-    # install Node.js 22.x and Gemini CLI for live skill evaluations
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get -y install nodejs && \
-    npm install -g @google/gemini-cli@0.66.0 && \
-    mkdir -p /root/.gemini/policies && \
-    printf '{\n  "security": {"auth": {"selectedType": "vertex-ai"}},\n  "model": {"name": "gemini-3.1-pro-preview"}\n}\n' > /root/.gemini/settings.json && \
-    printf '{\n  "/tmp": "TRUST_FOLDER",\n  "/workspace": "TRUST_FOLDER"\n}\n' > /root/.gemini/trustedFolders.json && \
-    printf '[[rule]]\ntoolName = "run_shell_command"\nargsPattern = ".*"\ndecision = "allow"\npriority = 999\nmodes = ["yolo"]\nallowRedirection = true\n' > /root/.gemini/policies/allow-yolo-shell.toml && \
-    npm cache clean --force && rm -rf ~/.npm && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     # create virtual environment
     python3 -m venv /opt/venv && \
     # install ansible and python dependencies
     /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
     /opt/venv/bin/pip install --no-cache-dir -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/scripts/requirements.txt && \
-    /opt/venv/bin/pip install --no-cache-dir pyyaml && \
     /opt/venv/bin/pip install --no-cache-dir ansible && \
     /opt/venv/bin/pip install --no-cache-dir paramiko && \
     /opt/venv/bin/pip install --no-cache-dir netaddr && \
@@ -63,5 +53,8 @@ RUN apt-get -y update && apt-get -y install \
     cd /workspace && make gcluster && \
     # remove /workspace to reduce image size
     rm -rf /workspace
+
+COPY tools/cloud-build/images/test-runner/install-skills-deps.sh /tmp/install-skills-deps.sh
+RUN bash /tmp/install-skills-deps.sh && rm -f /tmp/install-skills-deps.sh
 
 ENV PATH="/opt/venv/bin:$PATH"

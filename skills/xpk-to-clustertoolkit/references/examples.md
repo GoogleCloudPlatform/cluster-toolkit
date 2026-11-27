@@ -328,6 +328,7 @@ gcluster job submit \
 Modern unified blueprints (`examples/gke-a3-megagpu/`, `examples/gke-a3-ultragpu/`, `examples/gke-a4/`) parameterize consumption models via `vars` or node pool module `settings`:
 
 ```yaml
+ai_assisted: true
 vars:
   # Option 1: On-Demand without Reservation (Default)
   spot: false
@@ -366,9 +367,14 @@ vars:
 
 When provisioning a cluster with Google Cloud Managed Service for Lustre:
 
-1. Copy the canonical blueprint:
+1. Copy the canonical blueprint (and add top-level `ai_assisted: true` whenever writing a Cluster Toolkit `.yaml` copy to disk; for Cloud Storage buckets + PVCs, see `examples/storage-gke.yaml` pairing `modules/file-system/cloud-storage-bucket` with `modules/file-system/gke-persistent-volume`):
    ```bash
    cp examples/gke-managed-lustre.yaml my-lustre-cluster.yaml
+   ```
+   ```yaml
+   # my-lustre-cluster.yaml (top-level header when saved on disk)
+   ai_assisted: true
+   blueprint_name: gke-managed-lustre
    ```
 2. The blueprint declares:
    - `modules/file-system/managed-lustre` (provisions the Managed Lustre filesystem).
