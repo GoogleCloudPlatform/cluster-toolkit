@@ -30,7 +30,13 @@ import (
 	"time"
 )
 
-const spacer = "========================================================"
+const (
+	spacer = "========================================================"
+
+	// inspectPodsJSONPath prints one tab-separated line per JobSet pod with namespace, jobset name,
+	// replicated job name, phase, and deletionTimestamp (empty if not terminating).
+	inspectPodsJSONPath = `{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.labels.jobset\.sigs\.k8s\.io/jobset-name}{"\t"}{.metadata.labels.jobset\.sigs\.k8s\.io/replicatedjob-name}{"\t"}{.status.phase}{"\t"}{.metadata.deletionTimestamp}{"\n"}{end}`
+)
 
 type inspectWriter struct {
 	writer io.Writer
@@ -320,8 +326,170 @@ func (g *GKEOrchestrator) logWorkloadList(w io.Writer, filterStatus string, filt
 		return
 	}
 
+	g.populateWorkloadPodCounts(wlList.Items, namespace)
+
 	filtered := filterWorkloads(wlList.Items, filterStatus, filterWorkload)
 	renderWorkloadsTable(w, filtered)
+}
+
+func (g *GKEOrchestrator) populateWorkloadPodCounts(items []kueueWorkload, namespace string) {
+	hasJobSetWorkload := false
+	for _, wl := range items {
+		if _, ok := workloadJobSetOwner(wl); ok {
+			hasJobSetWorkload = true
+			break
+		}
+	}
+	if !hasJobSetWorkload {
+		return
+	}
+	args := []string{"get", "pods"}
+	if namespace != "" {
+		args = append(args, "-n", namespace)
+	} else {
+		args = append(args, "-A")
+	}
+	args = append(args, "-l", "jobset.sigs.k8s.io/jobset-name", "-o", "jsonpath="+inspectPodsJSONPath)
+	res := g.kubectl(args...)
+	if res.ExitCode != 0 {
+		logging.Warn("Unable to list JobSet pods for workload status counts (falling back to Kueue condition heuristics): %s", strings.TrimSpace(res.Stderr))
+		return
+	}
+	pods, err := parseInspectPods(res.Stdout)
+	if err != nil {
+		logging.Warn("Unable to parse JobSet pod status output (falling back to Kueue condition heuristics): %v", err)
+		return
+	}
+	applyPodCountsToWorkloads(items, pods)
+}
+
+func parseInspectPods(stdout string) ([]inspectPod, error) {
+	stdout = strings.ReplaceAll(stdout, "\r\n", "\n")
+	if strings.TrimSpace(stdout) == "" {
+		return nil, nil
+	}
+	var pods []inspectPod
+	for _, line := range strings.Split(stdout, "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) < 4 {
+			return nil, fmt.Errorf("unexpected pod jsonpath line %q (expected at least 4 tab-separated fields)", line)
+		}
+		var pod inspectPod
+		pod.Metadata.Namespace = parts[0]
+		pod.Metadata.Labels = map[string]string{
+			"jobset.sigs.k8s.io/jobset-name":        parts[1],
+			"jobset.sigs.k8s.io/replicatedjob-name": parts[2],
+		}
+		pod.Status.Phase = parts[3]
+		if len(parts) >= 5 {
+			pod.Metadata.DeletionTimestamp = parts[4]
+		}
+		pods = append(pods, pod)
+	}
+	return pods, nil
+}
+
+type podCountBucket struct {
+	total           int
+	byReplicatedJob map[string]int
+}
+
+func (b *podCountBucket) add(replicatedJob string) {
+	b.total++
+	if replicatedJob != "" {
+		if b.byReplicatedJob == nil {
+			b.byReplicatedJob = make(map[string]int)
+		}
+		b.byReplicatedJob[replicatedJob]++
+	}
+}
+
+func (b *podCountBucket) countExcluding(excludedNames map[string]bool) int {
+	if b == nil {
+		return 0
+	}
+	count := b.total
+	for name := range excludedNames {
+		count -= b.byReplicatedJob[name]
+	}
+	return count
+}
+
+func applyPodCountsToWorkloads(items []kueueWorkload, pods []inspectPod) {
+	byKey := make(map[podWorkloadKey]*podCountBucket)
+	byJobSet := make(map[string]*podCountBucket)
+
+	for _, pod := range pods {
+		if pod.Metadata.DeletionTimestamp != "" {
+			continue
+		}
+		if pod.Status.Phase != "Running" && pod.Status.Phase != "Succeeded" {
+			continue
+		}
+		jsName := pod.Metadata.Labels["jobset.sigs.k8s.io/jobset-name"]
+		if jsName == "" {
+			jsName = pod.Metadata.Labels["gcluster.google.com/workload"]
+		}
+		if jsName == "" {
+			continue
+		}
+		rj := pod.Metadata.Labels["jobset.sigs.k8s.io/replicatedjob-name"]
+
+		key := podWorkloadKey{namespace: pod.Metadata.Namespace, workload: jsName}
+		bucket := byKey[key]
+		if bucket == nil {
+			bucket = &podCountBucket{}
+			byKey[key] = bucket
+		}
+		bucket.add(rj)
+
+		allNSBucket := byJobSet[jsName]
+		if allNSBucket == nil {
+			allNSBucket = &podCountBucket{}
+			byJobSet[jsName] = allNSBucket
+		}
+		allNSBucket.add(rj)
+	}
+
+	for i := range items {
+		jobsetName, isJobSet := workloadJobSetOwner(items[i])
+		if !isJobSet {
+			continue
+		}
+		excludedNames, _ := nonAcceleratorPodSets(items[i])
+		var count int
+		if items[i].Metadata.Namespace != "" {
+			count = byKey[podWorkloadKey{namespace: items[i].Metadata.Namespace, workload: jobsetName}].countExcluding(excludedNames) +
+				byKey[podWorkloadKey{namespace: "", workload: jobsetName}].countExcluding(excludedNames)
+		} else {
+			count = byJobSet[jobsetName].countExcluding(excludedNames)
+		}
+		items[i].RunningPods = &count
+	}
+}
+
+func workloadJobSetOwner(wl kueueWorkload) (string, bool) {
+	for _, ref := range wl.Metadata.OwnerReferences {
+		if ref.Kind == "JobSet" && ref.Name != "" {
+			return ref.Name, true
+		}
+	}
+	return "", false
+}
+
+func workloadJobSetName(wl kueueWorkload) string {
+	if name, ok := workloadJobSetOwner(wl); ok {
+		return name
+	}
+	for _, ref := range wl.Metadata.OwnerReferences {
+		if ref.Name != "" {
+			return ref.Name
+		}
+	}
+	return wl.Metadata.Name
 }
 
 func filterWorkloads(items []kueueWorkload, filterStatus string, filterWorkload string) []kueueWorkload {
@@ -329,10 +497,7 @@ func filterWorkloads(items []kueueWorkload, filterStatus string, filterWorkload 
 	for _, wl := range items {
 		// Filter by workload name
 		if filterWorkload != "" {
-			jobsetName := wl.Metadata.Name
-			if len(wl.Metadata.OwnerReferences) > 0 {
-				jobsetName = wl.Metadata.OwnerReferences[0].Name
-			}
+			jobsetName := workloadJobSetName(wl)
 			if !strings.Contains(jobsetName, filterWorkload) {
 				continue
 			}
@@ -351,28 +516,343 @@ func filterWorkloads(items []kueueWorkload, filterStatus string, filterWorkload 
 	return filtered
 }
 
+var kueueLifecyclePriority = []string{
+	"Finished",
+	"Evicted",
+	"Admitted",
+	"QuotaReserved",
+}
+
+func isKueueLifecycleCondition(condType string) bool {
+	switch condType {
+	case "Finished", "Evicted", "Admitted", "QuotaReserved":
+		return true
+	default:
+		return false
+	}
+}
+
+func hasConditionTrue(conditions []kueueWorkloadCondition, condType string) bool {
+	for _, c := range conditions {
+		if c.Type == condType && c.Status == "True" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasConditionFalse(conditions []kueueWorkloadCondition, condType string) bool {
+	for _, c := range conditions {
+		if c.Type == condType && c.Status == "False" {
+			return true
+		}
+	}
+	return false
+}
+
+func isWorkloadDeactivated(wl kueueWorkload) bool {
+	if wl.Spec.Active != nil && !*wl.Spec.Active {
+		return true
+	}
+	for i := len(wl.Status.Conditions) - 1; i >= 0; i-- {
+		c := wl.Status.Conditions[i]
+		if c.Type == "Evicted" && c.Status == "True" {
+			return strings.HasPrefix(c.Reason, "Deactivated")
+		}
+	}
+	return false
+}
+
+// resolveWorkloadStatus resolves the workload lifecycle status from known Kueue lifecycle conditions
+// with status=="True" in priority order (Finished > Evicted > Admitted > QuotaReserved), falling back
+// to "Pending" when conditions are empty or no lifecycle condition is True. Auxiliary conditions
+// (e.g. PodsReady, Requeued, Preempted, TPUSliceFailure, TPUSlicesProvisioned) and pending lifecycle
+// reasons are surfaced in the message column.
+func resolveWorkloadStatus(wl kueueWorkload) (status, message, statusTime string) {
+	if len(wl.Status.Conditions) == 0 {
+		return "Pending", "", ""
+	}
+
+	var primary *kueueWorkloadCondition
+	primaryIdx := -1
+	for _, condType := range kueueLifecyclePriority {
+		for i := len(wl.Status.Conditions) - 1; i >= 0; i-- {
+			c := &wl.Status.Conditions[i]
+			if c.Type == condType && c.Status == "True" {
+				primary = c
+				primaryIdx = i
+				break
+			}
+		}
+		if primary != nil {
+			break
+		}
+	}
+
+	if primary != nil {
+		status = primary.Type
+	} else {
+		status = "Pending"
+		for _, condType := range []string{"QuotaReserved", "Admitted", "Evicted", "Finished"} {
+			for i := len(wl.Status.Conditions) - 1; i >= 0; i-- {
+				c := &wl.Status.Conditions[i]
+				if c.Type == condType {
+					primary = c
+					primaryIdx = i
+					break
+				}
+			}
+			if primary != nil {
+				break
+			}
+		}
+		if primary == nil {
+			primaryIdx = len(wl.Status.Conditions) - 1
+			primary = &wl.Status.Conditions[primaryIdx]
+		}
+	}
+
+	statusTime = primary.LastTransitionTime
+	if statusTime == "" {
+		statusTime = wl.Status.Conditions[len(wl.Status.Conditions)-1].LastTransitionTime
+	}
+
+	primaryMsg := primary.Message
+	if primaryMsg == "" {
+		primaryMsg = primary.Reason
+	}
+
+	var auxMessages []string
+	for i, c := range wl.Status.Conditions {
+		if i == primaryIdx {
+			continue
+		}
+		if isKueueLifecycleCondition(c.Type) {
+			if c.Status == "False" && (status == "Pending" || status == "QuotaReserved" || status == "Evicted") {
+				auxMessages = append(auxMessages, formatAuxiliaryCondition(c))
+			}
+			continue
+		}
+		auxMessages = append(auxMessages, formatAuxiliaryCondition(c))
+	}
+
+	if primaryMsg != "" && len(auxMessages) > 0 {
+		message = fmt.Sprintf("%s [%s]", primaryMsg, strings.Join(auxMessages, "; "))
+	} else if len(auxMessages) > 0 {
+		message = strings.Join(auxMessages, "; ")
+	} else {
+		message = primaryMsg
+	}
+
+	return status, message, statusTime
+}
+
+func formatAuxiliaryCondition(c kueueWorkloadCondition) string {
+	statusPart := c.Type
+	if c.Status != "" {
+		statusPart = fmt.Sprintf("%s=%s", c.Type, c.Status)
+	}
+	if c.Reason != "" && c.Message != "" && !strings.Contains(c.Message, c.Reason) {
+		return fmt.Sprintf("%s (%s): %s", statusPart, c.Reason, c.Message)
+	}
+	if c.Message != "" {
+		return fmt.Sprintf("%s: %s", statusPart, c.Message)
+	}
+	if c.Reason != "" {
+		return fmt.Sprintf("%s (%s)", statusPart, c.Reason)
+	}
+	return statusPart
+}
+
+func hasAcceleratorMapKey(m map[string]string) bool {
+	for k := range m {
+		lower := strings.ToLower(k)
+		if strings.Contains(lower, "tpu") || strings.Contains(lower, "gpu") {
+			return true
+		}
+	}
+	return false
+}
+
+func podSetRequestsAccelerator(ps kueueWorkloadPodSet, psa *kueueWorkloadPodSet) bool {
+	if _, ok := ps.Template.Spec.NodeSelector["cloud.google.com/gke-tpu-accelerator"]; ok {
+		return true
+	}
+	if _, ok := ps.Template.Spec.NodeSelector["cloud.google.com/gke-accelerator"]; ok {
+		return true
+	}
+	for _, c := range append(append([]kueueWorkloadContainer{}, ps.Template.Spec.InitContainers...), ps.Template.Spec.Containers...) {
+		if hasAcceleratorMapKey(c.Resources.Requests) || hasAcceleratorMapKey(c.Resources.Limits) {
+			return true
+		}
+	}
+	if hasAcceleratorMapKey(ps.Flavors) || hasAcceleratorMapKey(ps.ResourceUsage) {
+		return true
+	}
+	if psa != nil && (hasAcceleratorMapKey(psa.Flavors) || hasAcceleratorMapKey(psa.ResourceUsage)) {
+		return true
+	}
+	return false
+}
+
+func podSetHasExplicitResources(ps kueueWorkloadPodSet, psa *kueueWorkloadPodSet) bool {
+	for _, c := range append(append([]kueueWorkloadContainer{}, ps.Template.Spec.InitContainers...), ps.Template.Spec.Containers...) {
+		if len(c.Resources.Requests) > 0 || len(c.Resources.Limits) > 0 {
+			return true
+		}
+	}
+	if len(ps.Flavors) > 0 || len(ps.ResourceUsage) > 0 {
+		return true
+	}
+	if psa != nil && (len(psa.Flavors) > 0 || len(psa.ResourceUsage) > 0) {
+		return true
+	}
+	return false
+}
+
+// nonAcceleratorPodSets identifies non-accelerator coordinator PodSets (such as pathways-head
+// or CPU-only PodSets in a multi-PodSet workload that also has accelerator PodSets).
+func nonAcceleratorPodSets(wl kueueWorkload) (map[string]bool, map[int]bool) {
+	excludedNames := make(map[string]bool)
+	excludedIndices := make(map[int]bool)
+
+	var assignments []kueueWorkloadPodSet
+	if wl.Status.Admission != nil {
+		assignments = wl.Status.Admission.PodSetAssignments
+	}
+
+	findAssignment := func(idx int, name string) *kueueWorkloadPodSet {
+		if name != "" {
+			for i := range assignments {
+				if assignments[i].Name == name {
+					return &assignments[i]
+				}
+			}
+		}
+		if idx < len(assignments) && len(assignments) == len(wl.Spec.PodSets) {
+			return &assignments[idx]
+		}
+		return nil
+	}
+
+	if len(wl.Spec.PodSets) <= 1 && len(assignments) <= 1 {
+		return excludedNames, excludedIndices
+	}
+
+	anyAccel := false
+	for i, ps := range wl.Spec.PodSets {
+		if podSetRequestsAccelerator(ps, findAssignment(i, ps.Name)) {
+			anyAccel = true
+			break
+		}
+	}
+	if !anyAccel {
+		for _, psa := range assignments {
+			if podSetRequestsAccelerator(psa, nil) {
+				anyAccel = true
+				break
+			}
+		}
+	}
+
+	for i, ps := range wl.Spec.PodSets {
+		psa := findAssignment(i, ps.Name)
+		if ps.Name == "pathways-head" || (anyAccel && podSetHasExplicitResources(ps, psa) && !podSetRequestsAccelerator(ps, psa)) {
+			if ps.Name != "" {
+				excludedNames[ps.Name] = true
+			}
+			excludedIndices[i] = true
+		}
+	}
+	for i, psa := range assignments {
+		if psa.Name == "pathways-head" || (anyAccel && podSetHasExplicitResources(psa, nil) && !podSetRequestsAccelerator(psa, nil)) {
+			if psa.Name != "" {
+				excludedNames[psa.Name] = true
+			}
+			if len(wl.Spec.PodSets) == 0 {
+				excludedIndices[i] = true
+			}
+		}
+	}
+
+	return excludedNames, excludedIndices
+}
+
+func sumAcceleratorPodSets(podSets []kueueWorkloadPodSet, excludedNames map[string]bool, excludedIndices map[int]bool, totalSpecPodSets int) int {
+	total := 0
+	for i, ps := range podSets {
+		if ps.Name != "" && excludedNames[ps.Name] {
+			continue
+		}
+		if ps.Name == "" && (totalSpecPodSets == 0 || len(podSets) == totalSpecPodSets) && excludedIndices[i] {
+			continue
+		}
+		total += ps.Count
+	}
+	return total
+}
+
+func getWorkloadNeededCount(wl kueueWorkload) int {
+	excludedNames, excludedIndices := nonAcceleratorPodSets(wl)
+	return sumAcceleratorPodSets(wl.Spec.PodSets, excludedNames, excludedIndices, len(wl.Spec.PodSets))
+}
+
+func getWorkloadDoneCount(wl kueueWorkload) int {
+	excludedNames, excludedIndices := nonAcceleratorPodSets(wl)
+	return sumAcceleratorPodSets(wl.Status.ReclaimablePods, excludedNames, excludedIndices, len(wl.Spec.PodSets))
+}
+
+func getWorkloadAdmittedCount(wl kueueWorkload) int {
+	if wl.Status.Admission == nil {
+		return 0
+	}
+	excludedNames, excludedIndices := nonAcceleratorPodSets(wl)
+	return sumAcceleratorPodSets(wl.Status.Admission.PodSetAssignments, excludedNames, excludedIndices, len(wl.Spec.PodSets))
+}
+
+func getWorkloadRunningCount(wl kueueWorkload) int {
+	status, _, _ := resolveWorkloadStatus(wl)
+	if status != "Admitted" && status != "Finished" {
+		return 0
+	}
+	done := getWorkloadDoneCount(wl)
+	if wl.RunningPods != nil {
+		running := max(*wl.RunningPods, done)
+		if status == "Finished" && running == 0 && (hasConditionTrue(wl.Status.Conditions, "Admitted") || wl.Status.Admission != nil) {
+			return getWorkloadAdmittedCount(wl)
+		}
+		return running
+	}
+	if status == "Finished" {
+		if done > 0 {
+			return done
+		}
+		return getWorkloadAdmittedCount(wl)
+	}
+	if hasConditionFalse(wl.Status.Conditions, "PodsReady") || hasConditionFalse(wl.Status.Conditions, "TPUSlicesProvisioned") {
+		return done
+	}
+	return max(getWorkloadAdmittedCount(wl), done)
+}
+
 func getWorkloadStats(wl kueueWorkload) (int, string) {
-	running := 0
-	if wl.Status.Admission != nil && len(wl.Status.Admission.PodSetAssignments) > 0 {
-		running = wl.Status.Admission.PodSetAssignments[len(wl.Status.Admission.PodSetAssignments)-1].Count
-	}
-	status := ""
-	if len(wl.Status.Conditions) > 0 {
-		status = wl.Status.Conditions[len(wl.Status.Conditions)-1].Type
-	}
+	status, _, _ := resolveWorkloadStatus(wl)
+	running := getWorkloadRunningCount(wl)
 	return running, status
 }
 
 func isWorkloadQueued(wl kueueWorkload) bool {
+	if isWorkloadDeactivated(wl) {
+		return false
+	}
 	running, status := getWorkloadStats(wl)
-	statusMatch := strings.Contains(status, "Admitted") || strings.Contains(status, "Evicted") || strings.Contains(status, "QuotaReserved")
+	statusMatch := status == "Pending" || status == "Admitted" || status == "Evicted" || status == "QuotaReserved"
 	return statusMatch && running == 0
 }
 
 func isWorkloadRunning(wl kueueWorkload) bool {
 	running, status := getWorkloadStats(wl)
-	statusMatch := strings.Contains(status, "Admitted") || strings.Contains(status, "Evicted")
-	return statusMatch && running > 0
+	return status == "Admitted" && running > 0
 }
 
 func renderWorkloadsTable(w io.Writer, filtered []kueueWorkload) {
@@ -383,10 +863,7 @@ func renderWorkloadsTable(w io.Writer, filtered []kueueWorkload) {
 	fmt.Fprintln(tw, "Jobset Name\tCreated Time\tPriority\tTPU VMs Needed\tTPU VMs Running/Ran\tTPU VMs Done\tStatus\tStatus Message\tStatus Time")
 
 	for _, wl := range filtered {
-		jobsetName := wl.Metadata.Name
-		if len(wl.Metadata.OwnerReferences) > 0 {
-			jobsetName = wl.Metadata.OwnerReferences[0].Name
-		}
+		jobsetName := workloadJobSetName(wl)
 
 		createdTime := wl.Metadata.CreationTimestamp
 		priority := wl.Spec.PriorityClassName
@@ -394,29 +871,19 @@ func renderWorkloadsTable(w io.Writer, filtered []kueueWorkload) {
 			priority = "<none>"
 		}
 
-		needed := 0
-		if len(wl.Spec.PodSets) > 0 {
-			needed = wl.Spec.PodSets[0].Count
-		}
+		needed := getWorkloadNeededCount(wl)
+		running := getWorkloadRunningCount(wl)
+		done := getWorkloadDoneCount(wl)
 
-		running := 0
-		if wl.Status.Admission != nil && len(wl.Status.Admission.PodSetAssignments) > 0 {
-			running = wl.Status.Admission.PodSetAssignments[len(wl.Status.Admission.PodSetAssignments)-1].Count
+		status, msg, statusTime := resolveWorkloadStatus(wl)
+		if status == "" {
+			status = "<none>"
 		}
-
-		done := 0
-		if len(wl.Status.ReclaimablePods) > 0 {
-			done = wl.Status.ReclaimablePods[0].Count
+		if msg == "" {
+			msg = "<none>"
 		}
-
-		status := "<none>"
-		msg := "<none>"
-		statusTime := "<none>"
-		if len(wl.Status.Conditions) > 0 {
-			cond := wl.Status.Conditions[len(wl.Status.Conditions)-1]
-			status = cond.Type
-			msg = cond.Message
-			statusTime = cond.LastTransitionTime
+		if statusTime == "" {
+			statusTime = "<none>"
 		}
 
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n",

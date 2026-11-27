@@ -3488,8 +3488,11 @@ func TestSubmitJob_PathwaysMountCollisionFailsBeforeClusterCalls(t *testing.T) {
 
 type mockNamespaceableResource struct {
 	dynamic.NamespaceableResourceInterface
-	getFunc  func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
-	listFunc func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
+	resource         schema.GroupVersionResource
+	namespace        string
+	getFunc          func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+	listFunc         func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
+	listResourceFunc func(ctx context.Context, resource schema.GroupVersionResource, ns string, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
 }
 
 func (m *mockNamespaceableResource) Get(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
@@ -3500,10 +3503,15 @@ func (m *mockNamespaceableResource) Get(ctx context.Context, name string, option
 }
 
 func (m *mockNamespaceableResource) Namespace(ns string) dynamic.ResourceInterface {
-	return m
+	cp := *m
+	cp.namespace = ns
+	return &cp
 }
 
 func (m *mockNamespaceableResource) List(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+	if m.listResourceFunc != nil {
+		return m.listResourceFunc(ctx, m.resource, m.namespace, opts)
+	}
 	if m.listFunc != nil {
 		return m.listFunc(ctx, opts)
 	}
@@ -3516,14 +3524,17 @@ func (m *mockNamespaceableResource) Delete(ctx context.Context, name string, opt
 
 type mockDynamicClient struct {
 	dynamic.Interface
-	getFunc  func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
-	listFunc func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
+	getFunc          func(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error)
+	listFunc         func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
+	listResourceFunc func(ctx context.Context, resource schema.GroupVersionResource, ns string, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
 }
 
 func (m *mockDynamicClient) Resource(resource schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
 	return &mockNamespaceableResource{
-		getFunc:  m.getFunc,
-		listFunc: m.listFunc,
+		resource:         resource,
+		getFunc:          m.getFunc,
+		listFunc:         m.listFunc,
+		listResourceFunc: m.listResourceFunc,
 	}
 }
 
@@ -4809,4 +4820,377 @@ func TestSubmitJob_TPUTelemetryNodeCachePinning(t *testing.T) {
 		_, templates := parseStrictJobSetTemplates(t, string(raw))
 		assertTelemetrySidecarSpec(t, "JobSet", templates["main-job"].Spec.Template.Spec.InitContainers, 8889, nil)
 	})
+}
+
+func makeTestJobSetUnstructured(name, ns string, suspend bool, conditions []interface{}) unstructured.Unstructured {
+	obj := map[string]interface{}{
+		"apiVersion": "jobset.x-k8s.io/v1alpha2",
+		"kind":       "JobSet",
+		"metadata": map[string]interface{}{
+			"name":              name,
+			"namespace":         ns,
+			"uid":               "uid-" + name,
+			"creationTimestamp": "2026-07-10T12:00:00Z",
+			"labels": map[string]interface{}{
+				"gcluster.google.com/workload": name,
+			},
+		},
+		"spec": map[string]interface{}{
+			"suspend": suspend,
+		},
+	}
+	if len(conditions) > 0 {
+		obj["status"] = map[string]interface{}{
+			"conditions": conditions,
+		}
+	}
+	return unstructured.Unstructured{Object: obj}
+}
+
+func makeTestPodUnstructured(name, ns, workloadName, phase string, deletionTimestamp string) unstructured.Unstructured {
+	meta := map[string]interface{}{
+		"name":      name,
+		"namespace": ns,
+		"labels": map[string]interface{}{
+			"gcluster.google.com/workload": workloadName,
+		},
+	}
+	if deletionTimestamp != "" {
+		meta["deletionTimestamp"] = deletionTimestamp
+	}
+	obj := map[string]interface{}{
+		"apiVersion": "v1",
+		"kind":       "Pod",
+		"metadata":   meta,
+	}
+	if phase != "" {
+		obj["status"] = map[string]interface{}{
+			"phase": phase,
+		}
+	}
+	return unstructured.Unstructured{Object: obj}
+}
+
+func TestDefaultKubeClient_ListJobSets_PodAggregatedStatus(t *testing.T) {
+	jobSets := []unstructured.Unstructured{
+		makeTestJobSetUnstructured("job-no-pods", "default", false, nil),
+		makeTestJobSetUnstructured("job-all-pending", "default", false, []interface{}{
+			map[string]interface{}{"type": "Active", "status": "True"},
+		}),
+		makeTestJobSetUnstructured("job-one-running", "default", false, []interface{}{
+			map[string]interface{}{"type": "Active", "status": "True"},
+		}),
+		makeTestJobSetUnstructured("job-one-succeeded", "default", false, nil),
+		makeTestJobSetUnstructured("job-terminating-only", "default", false, nil),
+		makeTestJobSetUnstructured("job-failed-only", "default", false, nil),
+		makeTestJobSetUnstructured("job-failed-and-pending", "default", false, nil),
+		makeTestJobSetUnstructured("job-suspended", "default", true, nil),
+		makeTestJobSetUnstructured("job-completed", "default", false, []interface{}{
+			map[string]interface{}{"type": "Completed", "status": "True", "lastTransitionTime": "2026-07-10T12:30:00Z"},
+		}),
+	}
+
+	allPods := []unstructured.Unstructured{
+		makeTestPodUnstructured("pod-p1", "default", "job-all-pending", "Pending", ""),
+		makeTestPodUnstructured("pod-p2", "default", "job-all-pending", "", ""),
+		makeTestPodUnstructured("pod-r1", "default", "job-one-running", "Pending", ""),
+		makeTestPodUnstructured("pod-r2", "default", "job-one-running", "Running", ""),
+		makeTestPodUnstructured("pod-s1", "default", "job-one-succeeded", "Succeeded", ""),
+		makeTestPodUnstructured("pod-s2", "default", "job-one-succeeded", "Pending", ""),
+		makeTestPodUnstructured("pod-term", "default", "job-terminating-only", "Running", "2026-07-10T12:05:00Z"),
+		makeTestPodUnstructured("pod-term-new", "default", "job-terminating-only", "Pending", ""),
+		makeTestPodUnstructured("pod-f1", "default", "job-failed-only", "Failed", ""),
+		makeTestPodUnstructured("pod-fp1", "default", "job-failed-and-pending", "Failed", ""),
+		makeTestPodUnstructured("pod-fp2", "default", "job-failed-and-pending", "Pending", ""),
+		// Pod with same workload name in a different namespace must not leak into default/job-no-pods.
+		makeTestPodUnstructured("pod-other-ns", "other-ns", "job-no-pods", "Running", ""),
+	}
+
+	podListCalls := 0
+	var lastPodSelector string
+	dyn := &mockDynamicClient{
+		listResourceFunc: func(ctx context.Context, gvr schema.GroupVersionResource, ns string, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+			if gvr == jobSetGVR {
+				return &unstructured.UnstructuredList{Items: jobSets}, nil
+			}
+			if gvr == podGVR {
+				podListCalls++
+				lastPodSelector = opts.LabelSelector
+				return &unstructured.UnstructuredList{Items: allPods}, nil
+			}
+			return &unstructured.UnstructuredList{}, nil
+		},
+	}
+
+	client := &DefaultKubeClient{dynClient: dyn}
+	got, err := client.ListJobSets("", "gcluster.google.com/workload")
+	if err != nil {
+		t.Fatalf("ListJobSets() unexpected error: %v", err)
+	}
+	if podListCalls != 1 {
+		t.Errorf("expected exactly 1 batched pod LIST call, got %d", podListCalls)
+	}
+	if lastPodSelector != "gcluster.google.com/workload" {
+		t.Errorf("pod LIST labelSelector = %q, want %q", lastPodSelector, "gcluster.google.com/workload")
+	}
+
+	wantStatuses := map[string]string{
+		"job-no-pods":            "Pending",
+		"job-all-pending":        "Pending",
+		"job-one-running":        "Running",
+		"job-one-succeeded":      "Running",
+		"job-terminating-only":   "Pending",
+		"job-failed-only":        "Pending",
+		"job-failed-and-pending": "Pending",
+		"job-suspended":          "Suspended",
+		"job-completed":          "Succeeded",
+	}
+
+	if len(got) != len(wantStatuses) {
+		t.Fatalf("ListJobSets() returned %d jobs, want %d", len(got), len(wantStatuses))
+	}
+	for _, job := range got {
+		if want, ok := wantStatuses[job.Name]; !ok || job.Status != want {
+			t.Errorf("job %q status = %q, want %q", job.Name, job.Status, want)
+		}
+	}
+
+	// Verify ListJobs filtering with --status Pending and --status Running.
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"gcloud container clusters get-credentials": {{ExitCode: 0}, {ExitCode: 0}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.kubeClient = nil
+	orc.SetDynamicClient(dyn)
+
+	pendingJobs, err := orc.ListJobs(orchestrator.ListOptions{
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "test-project",
+		GKENamespace:    "default",
+		Status:          "Pending",
+	})
+	if err != nil {
+		t.Fatalf("ListJobs(Pending) failed: %v", err)
+	}
+	wantPending := []string{"job-no-pods", "job-all-pending", "job-terminating-only", "job-failed-only", "job-failed-and-pending"}
+	if len(pendingJobs) != len(wantPending) {
+		t.Fatalf("ListJobs(Pending) returned %d jobs (%+v), want %v", len(pendingJobs), pendingJobs, wantPending)
+	}
+	for i, name := range wantPending {
+		if pendingJobs[i].Name != name {
+			t.Errorf("ListJobs(Pending)[%d] = %q, want %q", i, pendingJobs[i].Name, name)
+		}
+	}
+
+	runningJobs, err := orc.ListJobs(orchestrator.ListOptions{
+		ClusterName:     "test-cluster",
+		ClusterLocation: "us-central1-a",
+		ProjectID:       "test-project",
+		GKENamespace:    "default",
+		Status:          "Running",
+		NameContains:    "one-running",
+	})
+	if err != nil {
+		t.Fatalf("ListJobs(Running) failed: %v", err)
+	}
+	if len(runningJobs) != 1 || runningJobs[0].Name != "job-one-running" {
+		t.Errorf("ListJobs(Running, name-contains=one-running) = %+v, want [job-one-running]", runningJobs)
+	}
+}
+
+func TestDefaultKubeClient_ListJobSets_PodListErrorAndSkippedWhenNoRunning(t *testing.T) {
+	t.Run("pod list error falls back to Running for unsuspended non-terminal JobSets", func(t *testing.T) {
+		podListCalls := 0
+		dyn := &mockDynamicClient{
+			listResourceFunc: func(ctx context.Context, gvr schema.GroupVersionResource, ns string, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				if gvr == jobSetGVR {
+					return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{
+						makeTestJobSetUnstructured("job-active", "default", false, nil),
+						makeTestJobSetUnstructured("job-suspended", "default", true, nil),
+					}}, nil
+				}
+				if gvr == podGVR {
+					podListCalls++
+					return nil, fmt.Errorf("pods forbidden")
+				}
+				return &unstructured.UnstructuredList{}, nil
+			},
+		}
+		client := &DefaultKubeClient{dynClient: dyn}
+		got, err := client.ListJobSets("default", "gcluster.google.com/workload")
+		if err != nil {
+			t.Fatalf("ListJobSets() unexpected error: %v", err)
+		}
+		if podListCalls != 1 {
+			t.Errorf("expected 1 pod LIST call, got %d", podListCalls)
+		}
+		if len(got) != 2 || got[0].Status != "Running" || got[1].Status != "Suspended" {
+			t.Errorf("ListJobSets() = %+v, want [Running, Suspended]", got)
+		}
+	})
+
+	t.Run("skips pod LIST when no JobSet is unsuspended and non-terminal", func(t *testing.T) {
+		podListCalls := 0
+		dyn := &mockDynamicClient{
+			listResourceFunc: func(ctx context.Context, gvr schema.GroupVersionResource, ns string, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+				if gvr == jobSetGVR {
+					return &unstructured.UnstructuredList{Items: []unstructured.Unstructured{
+						makeTestJobSetUnstructured("job-suspended", "default", true, nil),
+						makeTestJobSetUnstructured("job-completed", "default", false, []interface{}{
+							map[string]interface{}{"type": "Completed", "status": "True", "lastTransitionTime": "2026-07-10T12:30:00Z"},
+						}),
+					}}, nil
+				}
+				if gvr == podGVR {
+					podListCalls++
+				}
+				return &unstructured.UnstructuredList{}, nil
+			},
+		}
+		client := &DefaultKubeClient{dynClient: dyn}
+		got, err := client.ListJobSets("default", "gcluster.google.com/workload")
+		if err != nil {
+			t.Fatalf("ListJobSets() unexpected error: %v", err)
+		}
+		if podListCalls != 0 {
+			t.Errorf("expected 0 pod LIST calls when no JobSet needs pod status, got %d", podListCalls)
+		}
+		if len(got) != 2 || got[0].Status != "Suspended" || got[1].Status != "Succeeded" {
+			t.Errorf("ListJobSets() = %+v, want [Suspended, Succeeded]", got)
+		}
+	})
+}
+
+func TestGetJobStatus_PodAggregatedStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		jobSets    []unstructured.Unstructured
+		workloads  []unstructured.Unstructured
+		pods       []unstructured.Unstructured
+		podListErr error
+		wantStatus string
+		wantErr    bool
+	}{
+		{
+			name:       "unsuspended JobSet with all pods Pending reports Pending",
+			jobSets:    []unstructured.Unstructured{makeTestJobSetUnstructured("prebind-job", "default", false, nil)},
+			pods:       []unstructured.Unstructured{makeTestPodUnstructured("prebind-job-0", "default", "prebind-job", "Pending", "")},
+			wantStatus: "Pending",
+		},
+		{
+			name:       "unsuspended JobSet with 0 pods reports Pending",
+			jobSets:    []unstructured.Unstructured{makeTestJobSetUnstructured("empty-job", "default", false, nil)},
+			pods:       nil,
+			wantStatus: "Pending",
+		},
+		{
+			name:       "unsuspended JobSet with Running pod reports Running",
+			jobSets:    []unstructured.Unstructured{makeTestJobSetUnstructured("running-job", "default", false, nil)},
+			pods:       []unstructured.Unstructured{makeTestPodUnstructured("running-job-0", "default", "running-job", "Running", "")},
+			wantStatus: "Running",
+		},
+		{
+			name:    "unsuspended JobSet skips terminating Running pod and reports Pending",
+			jobSets: []unstructured.Unstructured{makeTestJobSetUnstructured("restarting-job", "default", false, nil)},
+			pods: []unstructured.Unstructured{
+				makeTestPodUnstructured("restarting-job-old", "default", "restarting-job", "Running", "2026-07-10T12:05:00Z"),
+				makeTestPodUnstructured("restarting-job-new", "default", "restarting-job", "Pending", ""),
+			},
+			wantStatus: "Pending",
+		},
+		{
+			name:       "unsuspended JobSet with Failed-only pod reports Pending",
+			jobSets:    []unstructured.Unstructured{makeTestJobSetUnstructured("failed-only-job", "default", false, nil)},
+			pods:       []unstructured.Unstructured{makeTestPodUnstructured("failed-only-job-0", "default", "failed-only-job", "Failed", "")},
+			wantStatus: "Pending",
+		},
+		{
+			name:    "unsuspended JobSet with Failed and Pending pods reports Pending",
+			jobSets: []unstructured.Unstructured{makeTestJobSetUnstructured("failed-pending-job", "default", false, nil)},
+			pods: []unstructured.Unstructured{
+				makeTestPodUnstructured("failed-pending-job-0", "default", "failed-pending-job", "Failed", ""),
+				makeTestPodUnstructured("failed-pending-job-1", "default", "failed-pending-job", "Pending", ""),
+			},
+			wantStatus: "Pending",
+		},
+		{
+			name:       "unsuspended JobSet falls back to Running on pod list error",
+			jobSets:    []unstructured.Unstructured{makeTestJobSetUnstructured("err-job", "default", false, nil)},
+			podListErr: fmt.Errorf("apiserver error"),
+			wantStatus: "Running",
+		},
+		{
+			name: "Kueue Workload QuotaReserved overrides JobSet status",
+			jobSets: []unstructured.Unstructured{
+				makeTestJobSetUnstructured("queued-job", "default", true, nil),
+			},
+			workloads: []unstructured.Unstructured{
+				{
+					Object: map[string]interface{}{
+						"status": map[string]interface{}{
+							"conditions": []interface{}{
+								map[string]interface{}{
+									"type":               "QuotaReserved",
+									"status":             "True",
+									"lastTransitionTime": "2026-07-10T12:00:00Z",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantStatus: "QuotaReserved",
+		},
+		{
+			name:       "no matching JobSet returns empty status",
+			jobSets:    nil,
+			wantStatus: "",
+		},
+		{
+			name: "multiple JobSets in different namespaces returns error",
+			jobSets: []unstructured.Unstructured{
+				makeTestJobSetUnstructured("dup-job", "ns1", false, nil),
+				makeTestJobSetUnstructured("dup-job", "ns2", false, nil),
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+			orc.SetDynamicClient(&mockDynamicClient{
+				listFunc: func(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+					if strings.HasPrefix(opts.FieldSelector, "metadata.name=") {
+						return &unstructured.UnstructuredList{Items: tc.jobSets}, nil
+					}
+					if strings.HasPrefix(opts.LabelSelector, "kueue.x-k8s.io/job-uid=") {
+						return &unstructured.UnstructuredList{Items: tc.workloads}, nil
+					}
+					if strings.HasPrefix(opts.LabelSelector, "gcluster.google.com/workload=") {
+						if tc.podListErr != nil {
+							return nil, tc.podListErr
+						}
+						return &unstructured.UnstructuredList{Items: tc.pods}, nil
+					}
+					return &unstructured.UnstructuredList{}, nil
+				},
+			})
+
+			got, err := orc.getJobStatus("target-job")
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("getJobStatus() expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("getJobStatus() error = %v", err)
+			}
+			if got != tc.wantStatus {
+				t.Errorf("getJobStatus() = %q, want %q", got, tc.wantStatus)
+			}
+		})
+	}
 }

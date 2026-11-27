@@ -1406,45 +1406,61 @@ func (g *GKEOrchestrator) getKueueWorkloadStatus(client dynamic.Interface, ns st
 }
 
 func (g *GKEOrchestrator) getPodAggregatedStatus(client dynamic.Interface, ns string, workloadName string) (string, error) {
-	gvrPod := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
+	return getPodAggregatedStatus(client, ns, workloadName)
+}
+
+func getPodAggregatedStatus(client dynamic.Interface, ns string, workloadName string) (string, error) {
 	listOpts := metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("gcluster.google.com/workload=%s", workloadName),
 	}
-	podList, err := client.Resource(gvrPod).Namespace(ns).List(context.TODO(), listOpts)
+	podList, err := client.Resource(podGVR).Namespace(ns).List(context.TODO(), listOpts)
 	if err != nil {
 		return "", err
 	}
+	return aggregatePodStatus(podList.Items), nil
+}
 
-	if len(podList.Items) == 0 {
-		return "Pending", nil
-	}
-
-	allPending := true
-	atLeastOneRunning := false
-
-	for _, p := range podList.Items {
+// aggregatePodStatus reports Running when at least one non-terminating pod is Running or Succeeded,
+// and Pending otherwise (including 0 pods, Failed-only, or Failed+Pending during non-terminal
+// JobSet restarts). Deliberately treats any active pod as Running rather than requiring full
+// multi-host gang quorum.
+func aggregatePodStatus(pods []unstructured.Unstructured) string {
+	for _, p := range pods {
+		if p.GetDeletionTimestamp() != nil {
+			continue
+		}
 		podStatus, ok := p.Object["status"].(map[string]interface{})
 		if !ok {
 			continue
 		}
 		phase, _ := podStatus["phase"].(string)
-		if phase == "Running" {
-			atLeastOneRunning = true
-			allPending = false
-			break
-		}
-		if phase != "Pending" {
-			allPending = false
+		if phase == "Running" || phase == "Succeeded" {
+			return "Running"
 		}
 	}
+	return "Pending"
+}
 
-	if allPending {
-		return "Pending", nil
+type podWorkloadKey struct {
+	namespace string
+	workload  string
+}
+
+func groupPodsByWorkload(pods []unstructured.Unstructured, scopedNamespace string) map[podWorkloadKey][]unstructured.Unstructured {
+	grouped := make(map[podWorkloadKey][]unstructured.Unstructured)
+	for _, p := range pods {
+		wlName := p.GetLabels()["gcluster.google.com/workload"]
+		if wlName == "" {
+			continue
+		}
+		ns := p.GetNamespace()
+		if ns == "" {
+			ns = scopedNamespace
+		}
+		key := podWorkloadKey{namespace: ns, workload: wlName}
+		grouped[key] = append(grouped[key], p)
 	}
-	if atLeastOneRunning {
-		return "Running", nil
-	}
-	return "Running", nil
+	return grouped
 }
 
 func (g *GKEOrchestrator) getJobStatus(name string) (string, error) {
@@ -1489,7 +1505,8 @@ func (g *GKEOrchestrator) getJobStatus(name string) (string, error) {
 	if status == "Running" {
 		podStatus, err := g.getPodAggregatedStatus(client, ns, name)
 		if err != nil {
-			return status, nil // Fall back to JobSet status
+			logging.Warn("Unable to list pods for job %q (falling back to JobSet status): %v", name, err)
+			return status, nil
 		}
 		return podStatus, nil
 	}
@@ -2102,8 +2119,7 @@ func (d *DefaultKubeClient) ListJobSets(namespace string, labelSelector string) 
 	if d.dynClient == nil {
 		return nil, fmt.Errorf("kubernetes dynamic client is not initialized")
 	}
-	gvr := schema.GroupVersionResource{Group: "jobset.x-k8s.io", Version: "v1alpha2", Resource: "jobsets"}
-	list, err := d.dynClient.Resource(gvr).Namespace(namespace).List(context.Background(), metav1.ListOptions{
+	list, err := d.dynClient.Resource(jobSetGVR).Namespace(namespace).List(context.Background(), metav1.ListOptions{
 		LabelSelector: labelSelector,
 	})
 
@@ -2111,13 +2127,16 @@ func (d *DefaultKubeClient) ListJobSets(namespace string, labelSelector string) 
 		return nil, err
 	}
 
-	var jobs []orchestrator.JobStatus
+	jobs := make([]orchestrator.JobStatus, 0, len(list.Items))
+	needsPodStatus := false
 	for _, item := range list.Items {
 		name := item.GetName()
-		creationParams := item.GetCreationTimestamp()
-		creationTime := creationParams.Format(time.RFC3339)
+		creationTime := item.GetCreationTimestamp().Format(time.RFC3339)
 
 		statusStr, completionTime := parseJobStatus(item.Object)
+		if statusStr == "Running" {
+			needsPodStatus = true
+		}
 
 		jobs = append(jobs, orchestrator.JobStatus{
 			Name:           name,
@@ -2125,6 +2144,31 @@ func (d *DefaultKubeClient) ListJobSets(namespace string, labelSelector string) 
 			CreationTime:   creationTime,
 			CompletionTime: completionTime,
 		})
+	}
+
+	if needsPodStatus {
+		podList, podErr := d.dynClient.Resource(podGVR).Namespace(namespace).List(context.Background(), metav1.ListOptions{
+			LabelSelector: "gcluster.google.com/workload",
+		})
+		if podErr != nil {
+			logging.Warn("Unable to list pods to refine job statuses (falling back to JobSet status): %v", podErr)
+		} else {
+			podsByWorkload := groupPodsByWorkload(podList.Items, namespace)
+			for i, item := range list.Items {
+				if jobs[i].Status != "Running" {
+					continue
+				}
+				podNs := namespace
+				if podNs == "" {
+					podNs = item.GetNamespace()
+				}
+				wlName := item.GetLabels()["gcluster.google.com/workload"]
+				if wlName == "" {
+					wlName = jobs[i].Name
+				}
+				jobs[i].Status = aggregatePodStatus(podsByWorkload[podWorkloadKey{namespace: podNs, workload: wlName}])
+			}
+		}
 	}
 
 	return jobs, nil
