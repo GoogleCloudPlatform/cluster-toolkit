@@ -268,7 +268,7 @@ func TestInternalModuleBucketsAreSkippedInBuildSpec(t *testing.T) {
 		Modules: []config.Module{
 			{ID: "slurm_controller", Kind: config.TerraformKind, Source: "community/modules/scheduler/schedmd-slurm-gcp-v6-controller"},
 			{ID: "startup", Kind: config.TerraformKind, Source: "modules/scripts/startup-script"},
-			{ID: "vm", Kind: config.TerraformKind, Source: "github.com/GoogleCloudPlatform/cluster-toolkit//modules/compute/vm-instance?ref=v1.109.0"},
+			{ID: "vm", Kind: config.TerraformKind, Source: "github.com/GoogleCloudPlatform/cluster-toolkit//modules/compute/vm-instance?ref=v1.110.0"},
 			{ID: "gcs_data", Kind: config.TerraformKind, Source: "modules/file-system/cloud-storage-bucket"},
 			{ID: "local_user_mod", Kind: config.TerraformKind, Source: "./modules/storage/my-bucket"},
 			{ID: "third_party_mod", Kind: config.TerraformKind, Source: "github.com/acme/infra//modules/gcs/bucket"},
