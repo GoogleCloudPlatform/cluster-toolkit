@@ -24,7 +24,19 @@ resource "random_id" "resource_name_suffix" {
 }
 
 locals {
-  is_high_capacity_tier = contains(["HIGH_SCALE_SSD", "ZONAL", "REGIONAL"], var.filestore_tier) && var.size_gb >= 10240 && var.size_gb <= 102400
+  tier_min_size_gb = {
+    BASIC_HDD      = 1024
+    BASIC_SSD      = 2560
+    ENTERPRISE     = 1024
+    HIGH_SCALE_SSD = 10240
+    ZONAL          = 100
+    REGIONAL       = 100
+  }
+  min_size_gb                 = local.tier_min_size_gb[var.filestore_tier]
+  supports_custom_performance = contains(["ZONAL", "REGIONAL"], var.filestore_tier)
+  fixed_iops_max              = try(var.performance_config.fixed_iops.max_iops, null)
+  iops_per_tb_max             = try(var.performance_config.iops_per_tb.max_iops_per_tb, null)
+  is_high_capacity_tier       = contains(["HIGH_SCALE_SSD", "ZONAL", "REGIONAL"], var.filestore_tier) && var.size_gb >= 10240 && var.size_gb <= 102400
 
   timeouts      = local.is_high_capacity_tier ? [1] : []
   server_ip     = google_filestore_instance.filestore_instance.networks[0].ip_addresses[0]
@@ -86,6 +98,24 @@ resource "google_filestore_instance" "filestore_instance" {
     reserved_ip_range = var.reserved_ip_range
   }
 
+  dynamic "performance_config" {
+    for_each = var.performance_config != null ? [var.performance_config] : []
+    content {
+      dynamic "fixed_iops" {
+        for_each = performance_config.value.fixed_iops != null ? [performance_config.value.fixed_iops] : []
+        content {
+          max_iops = fixed_iops.value.max_iops
+        }
+      }
+      dynamic "iops_per_tb" {
+        for_each = performance_config.value.iops_per_tb != null ? [performance_config.value.iops_per_tb] : []
+        content {
+          max_iops_per_tb = iops_per_tb.value.max_iops_per_tb
+        }
+      }
+    }
+  }
+
   dynamic "timeouts" {
     for_each = local.timeouts
     content {
@@ -96,6 +126,31 @@ resource "google_filestore_instance" "filestore_instance" {
   }
 
   lifecycle {
+    precondition {
+      condition     = var.size_gb >= local.min_size_gb
+      error_message = "Filestore tier ${var.filestore_tier} requires size_gb >= ${local.min_size_gb} GiB."
+    }
+
+    precondition {
+      condition     = var.performance_config == null || local.supports_custom_performance
+      error_message = "performance_config is only supported for the ZONAL and REGIONAL Filestore tiers."
+    }
+
+    precondition {
+      condition     = !local.supports_custom_performance || var.size_gb >= 1024 || var.performance_config != null
+      error_message = "Filestore ZONAL and REGIONAL instances with size_gb < 1024 require performance_config to be set."
+    }
+
+    precondition {
+      condition     = !local.supports_custom_performance || local.iops_per_tb_max == null ? true : (var.size_gb >= 10240 || local.iops_per_tb_max >= 4000)
+      error_message = "Filestore instances with size_gb < 10240 require performance_config.iops_per_tb.max_iops_per_tb >= 4000."
+    }
+
+    precondition {
+      condition     = !local.supports_custom_performance || local.fixed_iops_max == null ? true : (var.size_gb < 10240 || (local.fixed_iops_max >= 30000 && local.fixed_iops_max % 1000 == 0))
+      error_message = "Filestore instances with size_gb >= 10240 require performance_config.fixed_iops.max_iops >= 30000 in multiples of 1000."
+    }
+
     precondition {
       condition = (
         var.reserved_ip_range == null ||

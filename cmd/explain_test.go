@@ -747,8 +747,20 @@ func (s *MySuite) TestExplainModuleInputConstraints(c *C) {
 	size := input("modules/file-system/filestore", "size_gb").Constraints
 	c.Assert(size, NotNil)
 	c.Assert(size.Min, NotNil)
-	c.Check(*size.Min, Equals, 1024.0)
+	c.Check(*size.Min, Equals, 100.0)
 	c.Check(size.MinExclusive, Equals, false)
+	c.Check(size.AllowNull, Equals, false)
+	c.Check(size.Sources, DeepEquals, []string{"metadata", "terraform"})
+
+	perfCfg := input("modules/file-system/filestore", "performance_config")
+	c.Check(perfCfg.Constraints, IsNil)
+	c.Assert(perfCfg.Validations, HasLen, 3)
+	c.Check(strings.Contains(perfCfg.Validations[0], "fixed_iops or iops_per_tb"), Equals, true)
+	c.Check(strings.Contains(perfCfg.Validations[1], "multiples of 100"), Equals, true)
+	c.Check(strings.Contains(perfCfg.Validations[2], "3000"), Equals, true)
+	c.Check(slices.ContainsFunc(results["modules/file-system/filestore"].OptionalInputs, func(in ExplainModuleInput) bool {
+		return in.Name == "performance_config"
+	}), Equals, true)
 
 	uri := input("modules/file-system/managed-lustre", "import_gcs_bucket_uri").Constraints
 	c.Assert(uri, NotNil)
