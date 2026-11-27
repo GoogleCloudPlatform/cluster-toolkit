@@ -29,10 +29,30 @@
       - apptainer-suid
       state: present
 
-  - name: Install latest Nvidia driver
-    ansible.builtin.shell: |
-      #!/bin/bash
-      set -e -o pipefail
-      dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
-      dnf clean all
-      dnf -y module install nvidia-driver:570-open
+  # The advanced-compute-images base image already ships an NVIDIA driver;
+  # installing another one conflicts with it, so only install one if none exists.
+  - name: Check for an existing Nvidia driver
+    ansible.builtin.shell: rpm -q --whatprovides nvidia-kmod || modinfo -F version nvidia  # noqa: command-instead-of-module
+    register: nvidia_driver_check
+    changed_when: false
+    failed_when: false
+
+  - name: Import NVIDIA CUDA repository GPG key
+    ansible.builtin.rpm_key:
+      key: https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/D42D0685.pub
+      state: present
+    when: nvidia_driver_check.rc != 0
+
+  - name: Add NVIDIA CUDA repository
+    ansible.builtin.get_url:
+      url: https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo
+      dest: /etc/yum.repos.d/cuda-rhel9.repo
+      mode: '0644'
+    when: nvidia_driver_check.rc != 0
+
+  - name: Install Nvidia driver if the base image has none
+    ansible.builtin.dnf:
+      name: '@nvidia-driver:595-open'
+      state: present
+      update_cache: true
+    when: nvidia_driver_check.rc != 0
