@@ -346,7 +346,7 @@ deployment_groups:
 	c.Check(strings.Contains(outPackerSpec, "NEW deployment group"), Equals, true)
 
 	// B3: Multi-VPC blueprint prefers cluster VPC ('network') over Packer image-builder VPC ('builder-net')
-	outG4Lustre, err := runExplainForTest("slurm", "g4", "lustre")
+	outG4Lustre, err := runExplainForTest("slurm", "g4", "custom-image", "ml-training", "lustre")
 	c.Assert(err, IsNil)
 	c.Check(strings.Contains(outG4Lustre, "use: [network]"), Equals, true)
 	c.Check(strings.Contains(outG4Lustre, "use: [network, private_service_access]"), Equals, true)
