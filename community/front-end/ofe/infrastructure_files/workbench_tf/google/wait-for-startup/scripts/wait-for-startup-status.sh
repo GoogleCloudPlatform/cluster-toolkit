@@ -33,10 +33,9 @@ if [ -z "${PROJECT_ID}" ]; then
 	exit 1
 fi
 
-CLOUDSDK_CONFIG=$(mktemp -d)
-export CLOUDSDK_CONFIG
-GOOGLE_APPLICATION_CREDENTIALS="../../cloud_credentials"
-gcloud auth activate-service-account --key-file="${GOOGLE_APPLICATION_CREDENTIALS}"
+# gcloud acts as the workbench's credential through the environment the
+# front end gives Terraform: its own gcloud configuration directory, and a
+# key file or an account to impersonate
 
 # TIMEOUT: 0 = ready, 1 = timed out, 2 = instance entered a terminal
 # non-ready state (stopped/suspended/deleted) during bring-up.
@@ -61,8 +60,6 @@ until [ "$tries" -ge "${RETRIES}" ]; do
 	sleep 30
 	((tries++))
 done
-
-rm -r "${CLOUDSDK_CONFIG}"
 
 if [ "${TIMEOUT}" -eq "0" ]; then
 	echo "Workbench instance is ACTIVE"

@@ -90,7 +90,9 @@ variable "service_account_email" {
 
 # Cross-input rules live here. A validation may read other variables and
 # locals, but not a value derived from its own variable (Terraform reports a
-# cycle); such checks are preconditions in main.tf.
+# cycle); such checks are preconditions in main.tf. Everything that reads
+# var.profile, the custom roles included, waits for what these rules read;
+# see act_as_service_accounts.
 variable "profile" {
   description = <<-EOT
     Permission profile for this account, from the module's catalogue: the Slurm controller,
@@ -111,11 +113,6 @@ variable "profile" {
       for capability in local.enabled_capabilities : contains(try(local.profiles[var.profile].accepted_capabilities, []), capability)
     ])
     error_message = "profile = \"${var.profile}\" does not accept one or more of the enabled capability flags. Accepted for this profile: ${length(try(local.profiles[var.profile].accepted_capabilities, [])) == 0 ? "none" : join(", ", try(local.profiles[var.profile].accepted_capabilities, []))}."
-  }
-
-  validation {
-    condition     = try(local.profiles[var.profile].accepts_act_as, true) || length(var.act_as_service_accounts) == 0
-    error_message = "act_as_service_accounts is accepted only with profile ${join(" or ", [for name, profile in local.profiles : "\"${name}\"" if profile.accepts_act_as])}, which attaches compute service accounts to the nodes it creates, not \"${var.profile}\". No other identity may act as another service account."
   }
 
   validation {
@@ -226,15 +223,44 @@ variable "act_as_service_accounts" {
     condition     = length(distinct(var.act_as_service_accounts)) == length(var.act_as_service_accounts)
     error_message = "act_as_service_accounts lists an account more than once: ${join(", ", distinct([for index, account_email in var.act_as_service_accounts : account_email if contains(slice(var.act_as_service_accounts, 0, index), account_email)]))}."
   }
+
+  # Here, not on profile: a rule on profile would make the custom roles wait
+  # for the accounts named here, and be destroyed before them.
+  validation {
+    condition     = try(local.profiles[var.profile].accepts_act_as, true) || length(var.act_as_service_accounts) == 0
+    error_message = "act_as_service_accounts is accepted only with profile ${join(" or ", [for name, profile in local.profiles : "\"${name}\"" if profile.accepts_act_as])}, which attaches compute service accounts to the nodes it creates, not \"${var.profile}\". No other identity may act as another service account."
+  }
 }
 
 variable "bucket_bindings" {
-  description = "Roles to grant on individual Cloud Storage buckets: a map, keyed arbitrarily, of { bucket, role }."
+  description = <<-EOT
+    Roles to grant on individual Cloud Storage buckets: a map, keyed arbitrarily, of
+    { bucket, role, condition }. condition is optional: an IAM condition { title, expression,
+    description } that limits the grant, for example to the objects under one prefix with
+    resource.name.startsWith("projects/_/buckets/<bucket>/objects/<prefix>/"). A conditional
+    grant needs a bucket with uniform bucket-level access.
+  EOT
   type = map(object({
     bucket = string
     role   = string
+    condition = optional(object({
+      title       = string
+      expression  = string
+      description = optional(string)
+    }))
   }))
   default = {}
+
+  # IAM limits a condition title to 100 characters and its description to 256.
+  validation {
+    condition = alltrue([
+      for binding in var.bucket_bindings : binding.condition == null || try(
+        length(trimspace(binding.condition.title)) > 0 && length(binding.condition.title) <= 100 && (binding.condition.description == null ? 0 : length(binding.condition.description)) <= 256 && length(trimspace(binding.condition.expression)) > 0,
+        false,
+      )
+    ])
+    error_message = "Each bucket_bindings condition needs a title of 1 to 100 characters, a description of at most 256 characters (or none) and a non-empty expression. Invalid: ${join(", ", [for key, binding in var.bucket_bindings : key if binding.condition != null && !try(length(trimspace(binding.condition.title)) > 0 && length(binding.condition.title) <= 100 && (binding.condition.description == null ? 0 : length(binding.condition.description)) <= 256 && length(trimspace(binding.condition.expression)) > 0, false)])}."
+  }
 }
 
 variable "secret_bindings" {

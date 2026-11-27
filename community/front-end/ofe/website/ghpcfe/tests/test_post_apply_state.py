@@ -26,6 +26,7 @@ clusterinfo.py are loaded by path with their Django-dependent imports stubbed.
 import importlib.util
 import subprocess
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -75,10 +76,21 @@ utils = _load_utils()
 def _common_stubs(**models):
     manager = _package("ofe_stub.cluster_manager")
     manager.utils = utils
+    # The credentials module needs Django; the steps it serves (permission
+    # checks, refusal logs) are not under test here.
+    credentials = _module(
+        "ofe_stub.cluster_manager.credentials",
+        CredentialError=type("CredentialError", (Exception,), {}),
+        preflight=mock.MagicMock(),
+        permissions_for=mock.MagicMock(),
+        record_refusal=mock.MagicMock(),
+    )
+    manager.credentials = credentials
     stubs = {
         "ofe_stub": _package("ofe_stub"),
         "ofe_stub.cluster_manager": manager,
         "ofe_stub.cluster_manager.utils": utils,
+        "ofe_stub.cluster_manager.credentials": credentials,
         "ofe_stub.models": _module("ofe_stub.models", **models),
     }
     return stubs
@@ -99,6 +111,7 @@ def _load_clusterinfo():
         ApplicationInstallationLocation=mock.MagicMock(),
         ComputeInstance=mock.MagicMock(),
         ContainerRegistry=mock.MagicMock(),
+        MAX_SERVICE_ACCOUNT_SLOTS=2,
     )
     for name in ("c2", "cloud_info"):
         stubs[f"ofe_stub.cluster_manager.{name}"] = mock.MagicMock()
@@ -151,8 +164,14 @@ class StartVpcTests(unittest.TestCase):
     """start_vpc never leaves a network stuck in "Creating"."""
 
     def _start(self, vpc, state=None, state_error=None, apply_error=None):
+        # A scratch directory: start_vpc takes the network's lock, a file
+        # beside its working directory
+        scratch = tempfile.TemporaryDirectory(prefix="ofe-start-vpc-")
+        self.addCleanup(scratch.cleanup)
         with mock.patch.object(
-            vpc_module, "_tf_dir_for_vpc", return_value=Path("/x")
+            vpc_module,
+            "_tf_dir_for_vpc",
+            return_value=Path(scratch.name) / "vpcs" / "vpc_7",
         ), mock.patch.object(
             utils, "run_terraform", side_effect=apply_error
         ), mock.patch.object(
@@ -209,8 +228,10 @@ def _cluster_info(cloud_state):
     info.cluster_dir = Path("/x")
     for step in (
         "_create_cluster_dir",
-        "_set_credentials",
+        "_create_ssh_key",
+        "get_terraform_dir",
         "update",
+        "_preflight",
         "_run_ghpc",
         "_initialize_terraform",
     ):
@@ -225,7 +246,7 @@ class ClusterPostApplyTests(unittest.TestCase):
         with mock.patch.object(utils, "run_terraform"), mock.patch.object(
             utils, "get_terraform_state", side_effect=state_error
         ):
-            info.start_cluster(None)
+            info.start_cluster()
 
     def test_state_read_failure_after_create_keeps_cluster_managed(self):
         for error in (STATE_PULL_FAILED, RuntimeError("bad state")):
@@ -241,7 +262,7 @@ class ClusterPostApplyTests(unittest.TestCase):
         info = _cluster_info("nm")
         info._run_ghpc.side_effect = RuntimeError("gcluster failed")
         with self.assertRaises(RuntimeError):
-            info.start_cluster(None)
+            info.start_cluster()
         self.assertEqual(info.cluster.cloud_state, "nm")
         self.assertEqual(info.cluster.status, "e")
 
@@ -249,7 +270,7 @@ class ClusterPostApplyTests(unittest.TestCase):
         info = _cluster_info("m")
         info._run_ghpc.side_effect = RuntimeError("gcluster failed")
         with self.assertRaises(RuntimeError):
-            info.start_cluster(None)
+            info.start_cluster()
         self.assertEqual(info.cluster.cloud_state, "m")
         self.assertEqual(info.cluster.status, "e")
 

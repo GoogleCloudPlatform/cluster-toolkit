@@ -1,0 +1,203 @@
+{
+  "version": 4,
+  "terraform_version": "1.16.1",
+  "serial": 28,
+  "lineage": "00000000-0000-4000-8000-000000000000",
+  "outputs": {
+    "server_ip": {
+      "value": "203.0.113.10",
+      "type": "string"
+    }
+  },
+  "resources": [
+    {
+      "module": "module.control_bucket",
+      "mode": "managed",
+      "type": "google_storage_bucket",
+      "name": "buckets",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": "storage",
+          "schema_version": 0,
+          "attributes": {
+            "autoclass": [],
+            "cors": [],
+            "custom_placement_config": [],
+            "default_event_based_hold": false,
+            "encryption": [],
+            "force_destroy": true,
+            "id": "testdep-storage-0000",
+            "labels": {
+              "creator": "example-user",
+              "ghpcfe_id": "testdep",
+              "name": "testdep-storage"
+            },
+            "lifecycle_rule": [],
+            "location": "US",
+            "logging": [],
+            "name": "testdep-storage-0000",
+            "project": "example-project",
+            "public_access_prevention": "inherited",
+            "requester_pays": false,
+            "retention_policy": [],
+            "self_link": "https://www.googleapis.com/storage/v1/b/testdep-storage-0000",
+            "soft_delete_policy": [
+              {
+                "effective_time": "2026-11-09T10:33:04.690Z",
+                "retention_duration_seconds": 604800
+              }
+            ],
+            "storage_class": "STANDARD",
+            "timeouts": null,
+            "uniform_bucket_level_access": true,
+            "url": "gs://testdep-storage-0000",
+            "versioning": [
+              {
+                "enabled": false
+              }
+            ],
+            "website": []
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjo2MDAwMDAwMDAwMDAsInJlYWQiOjI0MDAwMDAwMDAwMCwidXBkYXRlIjoyNDAwMDAwMDAwMDB9fQ==",
+          "dependencies": [
+            "module.control_bucket.random_id.bucket_suffix"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "module.control_bucket",
+      "mode": "managed",
+      "type": "random_id",
+      "name": "bucket_suffix",
+      "provider": "provider[\"registry.terraform.io/hashicorp/random\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "b64_std": "AAA=",
+            "b64_url": "AAA",
+            "byte_length": 2,
+            "dec": "0",
+            "hex": "0000",
+            "id": "AAA",
+            "keepers": null,
+            "prefix": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0
+        }
+      ]
+    },
+    {
+      "module": "module.network[0]",
+      "mode": "managed",
+      "type": "google_compute_network",
+      "name": "hosting_vpc",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "auto_create_subnetworks": false,
+            "delete_default_routes_on_create": false,
+            "description": "",
+            "enable_ula_internal_ipv6": false,
+            "gateway_ipv4": "",
+            "id": "projects/example-project/global/networks/testdep-network",
+            "internal_ipv6_range": "",
+            "mtu": 0,
+            "name": "testdep-network",
+            "network_firewall_policy_enforcement_order": "AFTER_CLASSIC_FIREWALL",
+            "project": "example-project",
+            "routing_mode": "REGIONAL",
+            "self_link": "https://www.googleapis.com/compute/v1/projects/example-project/global/networks/testdep-network",
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjoxMjAwMDAwMDAwMDAwLCJkZWxldGUiOjEyMDAwMDAwMDAwMDAsInVwZGF0ZSI6MTIwMDAwMDAwMDAwMH19"
+        }
+      ]
+    },
+    {
+      "module": "module.service_account",
+      "mode": "managed",
+      "type": "google_project_iam_member",
+      "name": "project-roles",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": "fe-sa-example-project=>roles/logging.logWriter",
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwAAAAAAAAA=",
+            "id": "example-project/roles/logging.logWriter/serviceAccount:testdep-fe-sa@example-project.iam.gserviceaccount.com",
+            "member": "serviceAccount:testdep-fe-sa@example-project.iam.gserviceaccount.com",
+            "project": "example-project",
+            "role": "roles/logging.logWriter"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "module.service_account.google_service_account.service_accounts"
+          ]
+        },
+        {
+          "index_key": "fe-sa-example-project=>roles/storage.objectAdmin",
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwAAAAAAAAA=",
+            "id": "example-project/roles/storage.objectAdmin/serviceAccount:testdep-fe-sa@example-project.iam.gserviceaccount.com",
+            "member": "serviceAccount:testdep-fe-sa@example-project.iam.gserviceaccount.com",
+            "project": "example-project",
+            "role": "roles/storage.objectAdmin"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "module.service_account.google_service_account.service_accounts"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "module.service_account",
+      "mode": "managed",
+      "type": "google_service_account",
+      "name": "service_accounts",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": "fe-sa",
+          "schema_version": 0,
+          "attributes": {
+            "account_id": "testdep-fe-sa",
+            "description": "Service Account for GHPC Open Frontend",
+            "disabled": false,
+            "display_name": "Terraform-managed service account",
+            "email": "testdep-fe-sa@example-project.iam.gserviceaccount.com",
+            "id": "projects/example-project/serviceAccounts/testdep-fe-sa@example-project.iam.gserviceaccount.com",
+            "member": "serviceAccount:testdep-fe-sa@example-project.iam.gserviceaccount.com",
+            "name": "projects/example-project/serviceAccounts/testdep-fe-sa@example-project.iam.gserviceaccount.com",
+            "project": "example-project",
+            "timeouts": null,
+            "unique_id": "100000000000000000001"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "eyJlMmJmYjczMC1lY2FhLTExZTYtOGY4OC0zNDM2M2JjN2M0YzAiOnsiY3JlYXRlIjozMDAwMDAwMDAwMDB9fQ=="
+        }
+      ]
+    }
+  ],
+  "check_results": null
+}

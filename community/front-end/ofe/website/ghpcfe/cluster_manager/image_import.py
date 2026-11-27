@@ -18,26 +18,20 @@ This is a backend part needed for importing existing images into
 Frontend views will talk with functions here to perform real actions.
 '''
 
+from . import credentials as credential_store
+
+
 def get_credentials(credential_info):
     '''
     Use the OFE credential info to create an oauth credential object
     '''
-    from google.oauth2 import service_account
-    import json
-    cred_id = credential_info.__dict__["id"]
-    cred_detail = credential_info.__dict__["detail"]
-    cred_detail_json = json.loads(cred_detail)
-    credentials = service_account.Credentials.from_service_account_info(cred_detail_json)
-    return credentials
+    return credential_store.python_credentials(credential_info)
 
 def get_project_from_credentials(credential_info):
     '''
     Return the project name from a credential object
     '''
-    import json
-    cred_detail = credential_info.__dict__["detail"]
-    cred_detail_json = json.loads(cred_detail)
-    return cred_detail_json["project_id"]     
+    return credential_info.project_id
 
 
 def get_images_info(credentials, project,cred_id=False):

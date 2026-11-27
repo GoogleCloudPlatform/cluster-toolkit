@@ -54,8 +54,8 @@ locals {
   # generated role's permissions, the name-scoped role's permissions, the
   # optional inputs each profile accepts, and the capabilities it turns on when
   # their flag is unset. tools/cleanup.sh matches the description strings
-  # below, and the "Custom least-privilege permissions: " prefix in grants, to
-  # find leaked generated roles; keep it in step.
+  # below, and the "Custom least-privilege permissions: " prefix in
+  # role_description, to find leaked generated roles; keep it in step.
   profiles = {
     "slurm-controller" = {
       title         = "Slurm Controller"
@@ -350,12 +350,18 @@ locals {
   role_id        = "${replace(var.deployment_name, "-", "_")}.${replace(var.name, "-", "_")}${var.role_id_suffix == null ? "" : ".${var.role_id_suffix}"}"
   scoped_role_id = "${local.role_id}.scoped"
 
+  role_description = local.profile.custom ? "Custom least-privilege permissions: ${local.title}." : local.profile.description
+
   # Everything this module grants to var.service_account_email, normalised;
-  # every resource and the propagation wait read from it. This module creates no
-  # service account.
+  # the bindings and the propagation wait read from it. The custom roles do
+  # not: a local is one graph node, so reading it would make them wait for
+  # the act_as targets and be destroyed before them. They still wait for the
+  # resources the *_bindings inputs name, and are destroyed before them,
+  # through terraform_data.input_checks, whose preconditions read those
+  # inputs. This module creates no service account.
   grants = {
     name               = var.name
-    description        = local.profile.custom ? "Custom least-privilege permissions: ${local.title}." : local.profile.description
+    description        = local.role_description
     project_roles      = var.grant_baseline_roles ? local.profile.project_roles : []
     permissions        = local.permissions
     scoped_permissions = local.scoped_permissions
@@ -385,6 +391,20 @@ locals {
     { for account_email in local.grants.act_as : account_email => "projects/-/serviceAccounts/${account_email}" },
     local.grants.self_act_as ? { self = "projects/-/serviceAccounts/${local.email}" } : {},
   )
+
+  # What the propagation wait re-runs on. A bucket binding without a condition
+  # is encoded as { bucket, role }, as before conditions were accepted, so the
+  # optional input neither re-runs the wait nor makes service_account_email
+  # unknown in an existing deployment's plan.
+  grants_fingerprint = jsonencode(merge(local.grants, {
+    bindings = merge(local.grants.bindings, {
+      bucket = {
+        for key, binding in local.grants.bindings.bucket : key => {
+          for attribute, value in binding : attribute => value if value != null
+        }
+      }
+    })
+  }))
 }
 
 # Checks whose predicate is built from the inputs it checks cannot be variable
@@ -414,9 +434,9 @@ resource "google_project_iam_custom_role" "this" {
   project         = var.project_id
   role_id         = local.role_id
   title           = local.title
-  description     = local.grants.description
-  permissions     = local.grants.permissions
-  stage           = local.grants.stage
+  description     = local.role_description
+  permissions     = local.permissions
+  stage           = var.custom_role_stage
   deletion_policy = var.custom_role_deletion_policy
 }
 
@@ -430,9 +450,9 @@ resource "google_project_iam_custom_role" "scoped" {
   project         = var.project_id
   role_id         = local.scoped_role_id
   title           = "${local.title} (name-scoped)"
-  description     = "${local.grants.description} ${local.scoped_condition.description}"
-  permissions     = local.grants.scoped_permissions
-  stage           = local.grants.stage
+  description     = "${local.role_description} ${local.scoped_condition.description}"
+  permissions     = local.scoped_permissions
+  stage           = var.custom_role_stage
   deletion_policy = var.custom_role_deletion_policy
 }
 
@@ -482,6 +502,16 @@ resource "google_storage_bucket_iam_member" "this" {
   bucket = each.value.bucket
   role   = each.value.role
   member = local.member
+
+  # Needs uniform bucket-level access on the bucket.
+  dynamic "condition" {
+    for_each = each.value.condition == null ? [] : [each.value.condition]
+    content {
+      title       = condition.value.title
+      description = condition.value.description
+      expression  = condition.value.expression
+    }
+  }
 }
 
 resource "google_secret_manager_secret_iam_member" "this" {
@@ -563,7 +593,7 @@ resource "time_sleep" "wait_for_iam" {
   triggers = {
     member     = local.member
     project_id = var.project_id
-    grants     = jsonencode(local.grants)
+    grants     = local.grants_fingerprint
   }
 
   depends_on = [

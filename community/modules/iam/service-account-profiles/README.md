@@ -303,6 +303,34 @@ resource. `project` defaults to `project_id` (buckets have none). For Shared VPC
         role: roles/compute.networkUser
 ```
 
+A `bucket_bindings` entry may also take a `condition` (`title`, `expression` and an optional
+`description`), an [IAM condition](https://cloud.google.com/storage/docs/access-control/iam#conditions)
+that limits the grant. To let an identity read a whole bucket but write only the objects under
+one prefix, grant `roles/storage.objectViewer` without a condition and
+`roles/storage.objectUser` with one on `resource.name`, which for an object is
+`projects/_/buckets/<bucket>/objects/<object name>`:
+
+```yaml
+    bucket_bindings:
+      shared:
+        bucket: <bucket>
+        role: roles/storage.objectViewer
+      own_prefix:
+        bucket: <bucket>
+        role: roles/storage.objectUser
+        condition:
+          title: own-prefix
+          description: Objects under jobs/ only.
+          expression: resource.name.startsWith("projects/_/buckets/<bucket>/objects/jobs/")
+```
+
+End the prefix with `/`, or `jobs` would also match `jobs-old/`. Listing a bucket is checked on
+the bucket, not on an object, so a prefix-conditioned grant never covers it; the unconditioned
+read grant does. The bucket must have uniform bucket-level access, which Google requires for IAM
+conditions (`modules/file-system/cloud-storage-bucket` turns it on by default). The title can be
+at most 100 characters and the description at most 256. An entry without a condition is granted exactly as before, and adding
+the input changes nothing in an existing deployment.
+
 ### Custom profile
 
 `profile: custom` takes a `custom_profile_name`, which names the generated custom role, and at
@@ -533,7 +561,7 @@ No modules.
 | <a name="input_act_as_service_accounts"></a> [act\_as\_service\_accounts](#input\_act\_as\_service\_accounts) | For the Slurm controller profile: e-mail addresses of compute service accounts in<br/>project\_id (name@<project\_id>.iam.gserviceaccount.com) that the controller attaches to<br/>the nodes it creates. Grants "roles/iam.serviceAccountUser" on each target account<br/>individually, never project-wide. The default Compute Engine, App Engine and Google APIs<br/>accounts, accounts in another project, and Google-managed service agents are all refused:<br/>a designated compute account this controller creates and attaches, and nothing else. | `list(string)` | `[]` | no |
 | <a name="input_artifact_registry_bindings"></a> [artifact\_registry\_bindings](#input\_artifact\_registry\_bindings) | Roles to grant on individual Artifact Registry repositories: a map of { project (default project\_id), location, repository\_id, role }. | <pre>map(object({<br/>    project       = optional(string)<br/>    location      = string<br/>    repository_id = string<br/>    role          = string<br/>  }))</pre> | `{}` | no |
 | <a name="input_bigquery_dataset_bindings"></a> [bigquery\_dataset\_bindings](#input\_bigquery\_dataset\_bindings) | Roles to grant on individual BigQuery datasets: a map of { project (default project\_id), dataset\_id, role }. | <pre>map(object({<br/>    project    = optional(string)<br/>    dataset_id = string<br/>    role       = string<br/>  }))</pre> | `{}` | no |
-| <a name="input_bucket_bindings"></a> [bucket\_bindings](#input\_bucket\_bindings) | Roles to grant on individual Cloud Storage buckets: a map, keyed arbitrarily, of { bucket, role }. | <pre>map(object({<br/>    bucket = string<br/>    role   = string<br/>  }))</pre> | `{}` | no |
+| <a name="input_bucket_bindings"></a> [bucket\_bindings](#input\_bucket\_bindings) | Roles to grant on individual Cloud Storage buckets: a map, keyed arbitrarily, of<br/>{ bucket, role, condition }. condition is optional: an IAM condition { title, expression,<br/>description } that limits the grant, for example to the objects under one prefix with<br/>resource.name.startsWith("projects/\_/buckets/<bucket>/objects/<prefix>/"). A conditional<br/>grant needs a bucket with uniform bucket-level access. | <pre>map(object({<br/>    bucket = string<br/>    role   = string<br/>    condition = optional(object({<br/>      title       = string<br/>      expression  = string<br/>      description = optional(string)<br/>    }))<br/>  }))</pre> | `{}` | no |
 | <a name="input_custom_permissions"></a> [custom\_permissions](#input\_custom\_permissions) | For the custom profile: IAM permissions (e.g. "compute.instances.get") for this account's<br/>generated custom role. | `list(string)` | `[]` | no |
 | <a name="input_custom_profile_name"></a> [custom\_profile\_name](#input\_custom\_profile\_name) | For the custom profile: a short name for what this identity is for, used as the custom role's title. | `string` | `null` | no |
 | <a name="input_custom_role_deletion_policy"></a> [custom\_role\_deletion\_policy](#input\_custom\_role\_deletion\_policy) | Deletion policy for the generated custom role. Unset means the provider default,<br/>"DELETE": destroy soft-deletes the role, a later apply within 7 days undeletes it, and its<br/>id cannot be reused until Google's 44-day deletion process ends. "ABANDON" leaves the role<br/>active, so a later apply fails until the role is imported or removed. "PREVENT" blocks<br/>deletion. | `string` | `null` | no |

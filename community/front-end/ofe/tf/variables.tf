@@ -29,6 +29,17 @@ variable "zone" {
   description = "GCP Zone for HPC Frontend deployment."
 }
 
+variable "control_bucket_location" {
+  type        = string
+  default     = ""
+  description = <<-EOT
+    Location of the control bucket. Empty: the bucket is created in region.
+    deploy.sh sets it to an existing bucket's location when it is run again
+    on a deployment, because Terraform replaces a bucket whose location
+    changes, deleting its files.
+    EOT
+}
+
 variable "subnet" {
   type        = string
   default     = ""
@@ -102,17 +113,33 @@ variable "repo_fork" {
   description = "GitHub repository name in which to find the cluster-toolkit repo"
 }
 
-variable "deployment_key" {
-  default     = ""
-  type        = string
-  description = "Name to identify resources from this deployment"
-}
-
-
 variable "extra_labels" {
   type        = map(any)
   default     = {}
   description = "Extra labels to apply to created GCP resources."
+}
+
+variable "provisioning_service_account" {
+  type        = string
+  default     = ""
+  description = <<-EOT
+    E-mail address of the keyless service account, in project_id, that the web
+    server acts as to create clusters and other resources (deploy.sh creates
+    <deployment_name>-prov-sa). The web server's account is granted the
+    Service Account Token Creator role on this account only, and the server
+    reads the address from its instance metadata. Empty: no account is set and
+    no grant is made.
+  EOT
+
+  validation {
+    condition = (
+      var.provisioning_service_account == "" || (
+        can(regex("^[a-z][-a-z0-9]{4,28}[a-z0-9]@", var.provisioning_service_account)) &&
+        endswith(var.provisioning_service_account, "@${var.project_id}.iam.gserviceaccount.com")
+      )
+    )
+    error_message = "provisioning_service_account must be empty or the e-mail address of a service account in project ${var.project_id}: <name>@${var.project_id}.iam.gserviceaccount.com."
+  }
 }
 
 variable "terraform_state_bucket" {

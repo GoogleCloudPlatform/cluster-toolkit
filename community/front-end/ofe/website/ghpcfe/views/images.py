@@ -231,7 +231,20 @@ class ImageDeleteView(UserPassesTestMixin, generic.View):
             response = {'success': True, 'import': True}
         else:
             img_backend = ImageBackend(image)
-            img_backend.delete_image()
+            try:
+                img_backend.delete_image()
+            except Exception as err:  # pylint: disable=broad-except
+                # The image, or its builder, may still exist in Google
+                # Cloud, so its row is kept and the user is told why. The
+                # image list's script sends X-Requested-With and shows the
+                # error in an alert, so the reason is queued for the next
+                # page only for any other caller; queued for the list too,
+                # it would show a second time on the next page load.
+                reason = str(err) or type(err).__name__
+                message = f"Image {image.name} was not deleted: {reason}"
+                if request.headers.get("x-requested-with") != "XMLHttpRequest":
+                    messages.error(request, message)
+                return JsonResponse({'success': False, 'error': message})
             image.delete()
             response = {'success': True}
         return JsonResponse(response)
@@ -290,7 +303,7 @@ class BackendListRegions(LoginRequiredMixin, generic.View):
 
     def get(self, request, pk, *args, **kwargs):
         credentials = get_object_or_404(Credential, pk=pk)
-        regions = get_region_zone_info("GCP", credentials.detail)
+        regions = get_region_zone_info("GCP", credentials)
         return JsonResponse(regions)
 
 

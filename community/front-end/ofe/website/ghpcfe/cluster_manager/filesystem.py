@@ -17,12 +17,12 @@
 
 import json
 import logging
-import os
 import subprocess
 from pathlib import Path
 
 from ..models import GCPFilestoreFilesystem, Filesystem, FilesystemImpl
 
+from . import credentials
 from . import utils
 
 from website.settings import SITE_NAME
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 def write_filestore_yaml(fs: GCPFilestoreFilesystem, target_dir: Path) -> None:
     yaml_file = target_dir / "filesystem.yaml"
-    project_id = json.loads(fs.cloud_credential.detail)["project_id"]
+    project_id = fs.cloud_credential.project_id
     # Get first (only) export
     export_name = fs.exports.first().export_name
 
@@ -82,11 +82,6 @@ def create_filesystem(fs: Filesystem) -> None:
     if not target_dir.is_dir():
         target_dir.mkdir(parents=True)
 
-    # Create creds file
-    with _get_credentials_file(fs).open("w") as fp:
-        fp.write(fs.cloud_credential.detail)
-        fp.write("\n")
-
     # Convert to our native type
     fs_impl = FilesystemImpl(fs.impl_type)
     if fs_impl == FilesystemImpl.GCPFILESTORE:
@@ -96,28 +91,34 @@ def create_filesystem(fs: Filesystem) -> None:
         raise NotImplementedError("No support yet for this filesystem")
 
 
-def _run_ghpc(target_dir: Path, cred_env: dict) -> None:
+def _run_ghpc(target_dir: Path, credential) -> None:
     ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
-
-    # env= replaces the whole environment, so add the credential to the real
-    # one, as clusterinfo.py's _run_ghpc does; without HOME, ghpc fails.
-    env = os.environ.copy()
-    env.update(cred_env)
 
     try:
         logger.info("Invoking ghpc create")
         log_out_fn = target_dir / "ghpc_create_log.stdout"
         log_err_fn = target_dir / "ghpc_create_log.stderr"
-        with log_out_fn.open("wb") as log_out:
-            with log_err_fn.open("wb") as log_err:
-                subprocess.run(
-                    [ghpc_path, "create", "filesystem.yaml"],
-                    cwd=target_dir,
-                    stdout=log_out,
-                    stderr=log_err,
-                    check=True,
-                    env=env,
-                )
+        # The gcluster validators read only a key file. tool_environment
+        # starts from the server's environment, so ghpc keeps HOME.
+        with credentials.tool_environment(
+            credential, key_file=True
+        ) as cred_env, log_out_fn.open("wb") as log_out, log_err_fn.open(
+            "wb"
+        ) as log_err:
+            subprocess.run(
+                # -w: overwrite an existing deployment folder from a
+                # prior attempt (matches clusterinfo.py's ghpc create
+                # invocation) — without it, any retry after a failed
+                # create_filesystem()/start_filesystem() permanently
+                # fails with "deployment folder already exists" until
+                # an admin manually deletes it.
+                [ghpc_path, "create", "filesystem.yaml", "-w"],
+                cwd=target_dir,
+                stdout=log_out,
+                stderr=log_err,
+                check=True,
+                env=cred_env
+            )
     except subprocess.CalledProcessError as cpe:
         logger.error("ghpc exec failed", exc_info=cpe)
         # No logs from stdout/err - get dumped to files
@@ -129,17 +130,31 @@ def start_filesystem(fs: Filesystem) -> None:
     fs.cloud_state = "cm"
     fs.save()
     try:
-        extra_env = {
-            "GOOGLE_APPLICATION_CREDENTIALS": _get_credentials_file(fs)
-        }
-        _run_ghpc(_base_dir_for_fs(fs), extra_env)
+        credential = fs.cloud_credential
+        operation = f"create filesystem {fs.name}"
+        cloud = {"credential": credential, "operation": operation}
+        try:
+            credentials.preflight(
+                credential,
+                operation,
+                credentials.permissions_for("filesystem_create"),
+            )
+        except credentials.CredentialError as err:
+            fs.cloud_state = "nm"
+            fs.save()
+            # Also on the filesystem's page, in its Terraform log
+            credentials.record_refusal(_tf_dir_for_fs(fs), err, "apply")
+            raise
+        _run_ghpc(_base_dir_for_fs(fs), credential)
 
         target_dir = _tf_dir_for_fs(fs)
-        utils.run_terraform(target_dir, "init", extra_env=extra_env)
-        utils.run_terraform(target_dir, "plan", extra_env=extra_env)
+        # init and output read the state bucket, so they act as the
+        # credential too
+        utils.run_terraform(target_dir, "init", **cloud)
+        utils.run_terraform(target_dir, "plan", **cloud)
 
         logger.info("Invoking terraform apply for fs %s:%s", fs.id, fs.name)
-        utils.run_terraform(target_dir, "apply", extra_env=extra_env)
+        utils.run_terraform(target_dir, "apply", **cloud)
 
         logger.info(
             "terraform apply complete, getting status for fs %s:%s",
@@ -147,7 +162,7 @@ def start_filesystem(fs: Filesystem) -> None:
             fs.name,
         )
         (out_fn, _) = utils.run_terraform(
-            target_dir, "output", arguments=["-json"], extra_env=extra_env
+            target_dir, "output", arguments=["-json"], **cloud
         )
         with out_fn.open("r") as outputfp:
             results = json.load(outputfp)
@@ -169,8 +184,30 @@ def start_filesystem(fs: Filesystem) -> None:
 
 def destroy_filesystem(fs: Filesystem) -> None:
     target_dir = _tf_dir_for_fs(fs)
-    extra_env = {"GOOGLE_APPLICATION_CREDENTIALS": _get_credentials_file(fs)}
-    utils.run_terraform(target_dir, "destroy", extra_env=extra_env)
+    operation = f"destroy filesystem {fs.name}"
+    try:
+        credentials.preflight(
+            fs.cloud_credential,
+            operation,
+            credentials.permissions_for("filesystem_destroy"),
+        )
+    except credentials.CredentialError as err:
+        # Nothing was destroyed: back from "Destroying" to managed, or to
+        # imported for a filesystem OFE did not create (no Terraform dir)
+        managed = target_dir.is_dir()
+        fs.cloud_state = "m" if managed else "i"
+        fs.save()
+        if managed:
+            # Also on the filesystem's page, in its Terraform log. An
+            # imported filesystem's page shows no log.
+            credentials.record_refusal(target_dir, err, "destroy")
+        raise
+    utils.run_terraform(
+        target_dir,
+        "destroy",
+        credential=fs.cloud_credential,
+        operation=operation,
+    )
 
 
 def get_terraform_dir(fs: Filesystem) -> Path:
@@ -185,7 +222,3 @@ def _base_dir_for_fs(fs: Filesystem) -> Path:
 
 def _tf_dir_for_fs(fs: Filesystem) -> Path:
     return _base_dir_for_fs(fs) / f"{fs.name}" / "primary"
-
-
-def _get_credentials_file(fs: Filesystem) -> Path:
-    return _base_dir_for_fs(fs) / "cloud_credentials"

@@ -18,7 +18,6 @@ from cachetools import TTLCache, cached
 from pathlib import Path
 
 from google.cloud import artifactregistry_v1
-from google.oauth2 import service_account
 from google.auth.transport.requests import Request
 from google.api_core import exceptions
 
@@ -28,6 +27,7 @@ from django.contrib import messages
 from django.shortcuts import reverse
 
 from ..cluster_manager import cloud_info
+from ..cluster_manager import credentials as credential_store
 
 import logging
 import json
@@ -69,19 +69,15 @@ class TerraformLogFile(LocalFile):
         self.prefix = Path(prefix)
 
     def get_file(self):
-        for phase in ["destroy", "apply", "plan", "init"]:
-            tf_log = self.prefix / f"terraform_{phase}_log.stderr"
+        # The newest Terraform run's log; before Terraform has run, gcluster's
+        # log, which also holds why OFE refused to start
+        tf_log = credential_store.shown_log_file(self.prefix)
 
-            if (not tf_log.exists()) or tf_log.stat().st_size == 0:
-                tf_log = self.prefix / f"terraform_{phase}_log.stdout"
-
-            if tf_log.exists():
-                break
-
-        if tf_log.exists():
+        if tf_log is not None:
             logger.info("Found terraform log file %s", tf_log.as_posix())
         else:
             logger.warning("Found no terraform log files")
+            tf_log = self.prefix / "terraform_init_log.stdout"
 
         return tf_log
 
@@ -157,10 +153,11 @@ class RegistryDataHelper:
         """
         logger.info("Initiating fetch_container_images for registry ID: %s", registry.id)
         try:
-            # Load credentials from the registry's cloud_credential.
-            credential_info = json.loads(registry.cluster.cloud_credential.detail)
-            credentials = service_account.Credentials.from_service_account_info(credential_info)
-            
+            # Act as the registry's cloud_credential.
+            credentials = credential_store.python_credentials(
+                registry.cluster.cloud_credential
+            )
+
             # Initialise Artifact Registry client.
             client = artifactregistry_v1.ArtifactRegistryClient(credentials=credentials)
             parent = f"projects/{project_id}/locations/{cloud_region}/repositories/{registry.repository_id}"

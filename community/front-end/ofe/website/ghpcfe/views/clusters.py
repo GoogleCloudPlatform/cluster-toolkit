@@ -54,12 +54,14 @@ from ..models import (
     FilesystemExport,
     MountPoint,
     FilesystemImpl,
+    IdentityModel,
     Role,
     ClusterPartition,
     VirtualSubnet,
     Task,
     User,
     ContainerRegistry,
+    slurm_cluster_name_for,
 )
 from ..serializers import ClusterSerializer
 from ..forms import ClusterForm, ClusterMountPointForm, ClusterPartitionForm, ContainerRegistryForm
@@ -157,7 +159,10 @@ class ClusterCreateView(LoginRequiredMixin, CreateView):
                 owner=request.user,
                 status="n",
                 spackdir="/opt/cluster/spack",
-                num_login_nodes=1)
+                num_login_nodes=1,
+                # Separate least-privilege accounts. Clusters from before
+                # service-account profiles stay legacy.
+                identity_model=IdentityModel.PROFILES)
 
             cluster.save()
 
@@ -173,6 +178,12 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
     model = Cluster
     template_name = "cluster/update_form.html"
     form_class = ClusterForm
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        # The form lets only a superuser set the existing service accounts
+        kwargs["user"] = self.request.user
+        return kwargs
 
     def get_mp_formset(self, **kwargs):
         def formfield_cb(model_field, **kwargs):
@@ -299,7 +310,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
     def _get_region_info(self):
         if not hasattr(self, "region_info"):
             self.region_info = cloud_info.get_region_zone_info(
-                "GCP", self.get_object().cloud_credential.detail
+                "GCP", self.get_object().cloud_credential
             )
         return self.region_info
 
@@ -388,12 +399,18 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             self.object.cloud_id = self.object.name + "-" + unique_str
             suffix = self.object.cloud_id.split("-")[-1]
             self.object.cloud_id = self.object.name + "-" + suffix
-        
+            if self.object.uses_service_account_profiles:
+                # Unique per cluster, so the controller's name-scoped grant
+                # covers only this cluster's nodes
+                self.object.slurm_cluster_name = slurm_cluster_name_for(
+                    self.object.name, self.object.cloud_id
+                )
+
         self.object.cloud_region = self.object.subnet.cloud_region
 
         machine_info = cloud_info.get_machine_types(
             "GCP",
-            self.object.cloud_credential.detail,
+            self.object.cloud_credential,
             self.object.cloud_region,
             self.object.cloud_zone,
         )
@@ -401,7 +418,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             x["name"]: x
             for x in cloud_info.get_disk_types(
                 "GCP",
-                self.object.cloud_credential.detail,
+                self.object.cloud_credential,
                 self.object.cloud_region,
                 self.object.cloud_zone,
             )
@@ -546,7 +563,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             try:
                 egress = cloud_info.get_subnet_egress_info(
                     "GCP",
-                    self.object.cloud_credential.detail,
+                    self.object.cloud_credential,
                     subnet.cloud_region,
                     subnet.cloud_id,
                 )
@@ -675,7 +692,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                     for reservation_name, requested_nodes in total_nodes_requested.items():
                         reservation = cloud_info.get_vm_reservations(
                             "GCP",
-                            self.object.cloud_credential.detail,
+                            self.object.cloud_credential,
                             None,
                             self.object.cloud_zone
                         )
@@ -966,7 +983,7 @@ class InstancePricingViewSet(viewsets.ViewSet):
 
         price = cloud_info.get_instance_pricing(
             "GCP",
-            cluster.cloud_credential.detail,
+            cluster.cloud_credential,
             cluster.cloud_region,
             cluster.cloud_zone,
             instance_type,
@@ -995,13 +1012,13 @@ class InstanceAvailabilityViewSet(viewsets.ViewSet):
 
         try:
             region_info = cloud_info.get_region_zone_info(
-                "GCP", cluster.cloud_credential.detail
+                "GCP", cluster.cloud_credential
             )
             if zone not in region_info.get(region, []):
                 return JsonResponse({})
 
             machine_info = cloud_info.get_machine_types(
-                "GCP", cluster.cloud_credential.detail, region, zone
+                "GCP", cluster.cloud_credential, region, zone
             )
             return JsonResponse(machine_info.get(pk, {}))
 
@@ -1020,7 +1037,7 @@ class InstanceAvailabilityViewSet(viewsets.ViewSet):
 
         try:
             region_info = cloud_info.get_region_zone_info(
-                "GCP", cluster.cloud_credential.detail
+                "GCP", cluster.cloud_credential
             )
             if zone not in region_info.get(region, []):
                 logger.info(
@@ -1031,7 +1048,7 @@ class InstanceAvailabilityViewSet(viewsets.ViewSet):
                 return JsonResponse({})
 
             machine_info = cloud_info.get_machine_types(
-                "GCP", cluster.cloud_credential.detail, region, zone
+                "GCP", cluster.cloud_credential, region, zone
             )
             return JsonResponse({"machine_types": list(machine_info.keys())})
 
@@ -1058,7 +1075,7 @@ class DiskAvailabilityViewSet(viewsets.ViewSet):
 
         try:
             region_info = cloud_info.get_region_zone_info(
-                "GCP", cluster.cloud_credential.detail
+                "GCP", cluster.cloud_credential
             )
             if zone not in region_info.get(region, []):
                 logger.info(
@@ -1069,7 +1086,7 @@ class DiskAvailabilityViewSet(viewsets.ViewSet):
                 return JsonResponse({})
 
             info = cloud_info.get_disk_types(
-                "GCP", cluster.cloud_credential.detail, region, zone
+                "GCP", cluster.cloud_credential, region, zone
             )
             return JsonResponse({"disks": info})
 
@@ -1089,12 +1106,11 @@ class BackendCreateCluster(BackendAsyncView):
     @sync_to_async
     def get_orm(self, cluster_id):
         cluster = Cluster.objects.get(pk=cluster_id)
-        creds = cluster.cloud_credential.detail
-        return (cluster, creds)
+        return (cluster,)
 
-    def cmd(self, unused_task_id, unused_token, cluster, creds):
+    def cmd(self, unused_task_id, unused_token, cluster):
         ci = ClusterInfo(cluster)
-        ci.prepare(creds)
+        ci.prepare()
 
     async def get(self, request, pk):
         """this will invoke the background tasks and return immediately"""
@@ -1119,8 +1135,9 @@ class BackendReconfigureCluster(BackendAsyncView):
         return (cluster,)
 
     def cmd(self, unused_task_id, unused_token, cluster):
-        ci = ClusterInfo(cluster)
-        ci.reconfigure_cluster()
+        # reconfigure_cluster() regenerates the blueprint itself, so a
+        # failure to do that also marks the cluster failed
+        ClusterInfo(cluster).reconfigure_cluster()
 
     async def get(self, request, pk):
         """this will invoke the background tasks and return immediately"""
@@ -1142,12 +1159,11 @@ class BackendStartCluster(BackendAsyncView):
     @sync_to_async
     def get_orm(self, cluster_id):
         cluster = Cluster.objects.get(pk=cluster_id)
-        creds = cluster.cloud_credential.detail
-        return (cluster, creds)
+        return (cluster,)
 
-    def cmd(self, unused_task_id, unused_token, cluster, creds):
+    def cmd(self, unused_task_id, unused_token, cluster):
         ci = ClusterInfo(cluster)
-        ci.start_cluster(creds)
+        ci.start_cluster()
 
     async def get(self, request, pk):
         """this will invoke the background tasks and return immediately"""

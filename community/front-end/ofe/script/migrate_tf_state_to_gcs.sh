@@ -33,11 +33,15 @@
 #   - The state is copied to terraform.tfstate.premigration BEFORE migrating,
 #     because 'terraform init -migrate-state' empties the original. The copy
 #     is never deleted or overwritten.
-#   - The copy is kept in the resource's run-time directory, beside its
-#     cloud_credentials (e.g. clusters/cluster_<id>/), not in the Terraform
-#     working directory: for clusters, filesystems and image builders that is
-#     a Cluster Toolkit deployment group, which the Toolkit moves into .ghpc/
-#     and later deletes on every reconfigure.
+#   - The copy is kept in the resource's run-time directory (e.g.
+#     clusters/cluster_<id>/), not in the Terraform working directory: for
+#     clusters, filesystems and image builders that is a Cluster Toolkit
+#     deployment group, which the Toolkit moves into .ghpc/ and later deletes
+#     on every reconfigure.
+#   - Terraform runs as each resource's credential stored in the TKFE
+#     database (manage.py ofe_terraform_as_credential), so no key file on
+#     disk is needed. A resource whose credential cannot be used is reported
+#     and left unchanged.
 #   - Nothing is changed without --yes.
 #   - The bucket is versioned, so a bad upload can be rolled back.
 #   - Success is reported only once 'terraform plan' shows the migrated state
@@ -111,12 +115,11 @@ get_state_namespace() {
 }
 
 #
-# Print the state prefix for working directory ${1}'s resource.
-#  - Only the directory-to-resource-kind mapping lives here; the prefix itself
-#    comes from utils.terraform_state_prefix(), as in the application, so the
-#    two cannot drift apart.
+# Print the resource kind and id of working directory ${1}, as "<kind> <id>".
+#  - The kinds are those manage.py ofe_terraform_as_credential and
+#    utils.terraform_state_prefix() take.
 #
-prefix_for_dir() {
+kind_id_for_dir() {
 
 	local dir=${1}
 	local rel=${dir#"${BASE_DIR}/"}
@@ -132,6 +135,21 @@ prefix_for_dir() {
 	esac
 	id=${id%%/*}
 
+	echo "${kind} ${id}"
+}
+
+#
+# Print the state prefix for working directory ${1}'s resource.
+#  - Only the directory-to-resource-kind mapping lives here; the prefix itself
+#    comes from utils.terraform_state_prefix(), as in the application, so the
+#    two cannot drift apart.
+#
+prefix_for_dir() {
+
+	local kind_id kind id
+	kind_id=$(kind_id_for_dir "${1}") || return 1
+	read -r kind id <<<"${kind_id}"
+
 	PYTHONPATH="${BASE_DIR}/website" "${OFE_PYTHON}" -c '
 import sys
 from ghpcfe.cluster_manager import utils
@@ -140,33 +158,30 @@ print(utils.terraform_state_prefix(sys.argv[1], sys.argv[2], namespace=sys.argv[
 }
 
 #
-# Print the credential Terraform was run with for working directory ${1}.
-#  - It is at the top of the resource's run-time directory, not in the
-#    Terraform working directory, which may be nested below it.
+# Run terraform with arguments ${3}... as the stored credential of resource
+# ${1} (kind) ${2} (id), and return Terraform's exit code.
+#  - manage.py runs in the website directory, so a -chdir argument must be an
+#    absolute path.
+#  - The command refuses with exit code 1, and a message naming the
+#    resource, when the resource or its credential cannot be used.
 #
-credentials_for_dir() {
+terraform_as_credential() {
 
-	local dir=${1}
-	local probe=${dir}
+	local kind=${1} id=${2}
+	shift 2
 
-	while [[ ${probe} != "${BASE_DIR}" && ${probe} != "/" ]]; do
-		if [[ -f ${probe}/cloud_credentials ]]; then
-			echo "${probe}/cloud_credentials"
-			return 0
-		fi
-		probe=$(dirname "${probe}")
-	done
-	return 1
+	(cd "${BASE_DIR}/website" &&
+		"${OFE_PYTHON}" manage.py ofe_terraform_as_credential "${kind}" "${id}" -- "$@")
 }
 
 #
 # Print the path of the pre-migration copy of working directory ${1}'s state.
-#  - It goes in the resource's run-time directory, <kind dir>/<kind>_<id>,
-#    which holds cloud_credentials. For clusters, filesystems and image
-#    builders the working directory is a Cluster Toolkit deployment group
-#    below that; every 'gcluster create -w' moves the groups into .ghpc/ and
-#    deletes the previous set, so a copy kept there would not survive two
-#    reconfigures. For networks the two directories are the same.
+#  - It goes in the resource's run-time directory, <kind dir>/<kind>_<id>.
+#    For clusters, filesystems and image builders the working directory is a
+#    Cluster Toolkit deployment group below that; every 'gcluster create -w'
+#    moves the groups into .ghpc/ and deletes the previous set, so a copy kept
+#    there would not survive two reconfigures. For networks the two
+#    directories are the same.
 #
 backup_for_dir() {
 
@@ -192,7 +207,7 @@ migrate_dir() {
 	local dir=${1}
 	local state="${dir}/terraform.tfstate"
 	local incomplete="${state}.migration-incomplete"
-	local prefix creds bucket backup
+	local prefix kind id bucket backup
 
 	if [[ -f ${incomplete} ]]; then
 		backup=$(backup_for_dir "${dir}") || backup="not known"
@@ -250,17 +265,23 @@ migrate_dir() {
 
 	bucket=${state_bucket}
 
+	# Check, before anything is changed, that Terraform can run as the
+	# resource's stored credential: 'terraform version' needs no cloud
+	# access, so it fails only when the command refuses. It changes
+	# nothing, so a dry run makes it too and reports what a migration would.
+	read -r kind id <<<"$(kind_id_for_dir "${dir}")"
+	if ! terraform_as_credential "${kind}" "${id}" version >/dev/null; then
+		error "  FAIL: ${dir}: Terraform cannot run as the stored credential of"
+		error "        ${kind} ${id} (see the message above); nothing was changed"
+		((failures += 1))
+		return 1
+	fi
+
 	if [[ ${dry_run} -eq 1 ]]; then
 		echo "  would migrate: ${dir}"
 		echo "                 ${nresources} resources -> gs://${bucket}/${prefix}/"
 		echo "                 original to be kept as ${backup}"
 		return 0
-	fi
-
-	if ! creds=$(credentials_for_dir "${dir}"); then
-		error "  FAIL: no cloud_credentials found for ${dir}"
-		((failures += 1))
-		return 1
 	fi
 
 	# Blueprint-generated directories get their backend from the regenerated
@@ -294,8 +315,8 @@ utils.write_backend_tf(sys.argv[1], sys.argv[2])
 		return 1
 	fi
 
-	if ! GOOGLE_APPLICATION_CREDENTIALS="${creds}" \
-		terraform -chdir="${dir}" init -migrate-state -force-copy -no-color; then
+	if ! terraform_as_credential "${kind}" "${id}" \
+		-chdir="${dir}" init -migrate-state -force-copy -no-color; then
 		error "  FAIL: terraform init -migrate-state failed for ${dir}"
 		((failures += 1))
 		return 1
@@ -304,8 +325,8 @@ utils.write_backend_tf(sys.argv[1], sys.argv[2])
 	# Prove the migrated state still matches reality before touching the
 	# local copy. An empty plan is the only acceptable outcome.
 	local rc=0
-	GOOGLE_APPLICATION_CREDENTIALS="${creds}" \
-		terraform -chdir="${dir}" plan -detailed-exitcode -no-color >/dev/null || rc=$?
+	terraform_as_credential "${kind}" "${id}" \
+		-chdir="${dir}" plan -detailed-exitcode -no-color >/dev/null || rc=$?
 	if [[ ${rc} -ne 0 ]]; then
 		# init -migrate-state has already moved the state and emptied the local
 		# file. Rename it so a rerun reports this directory rather than

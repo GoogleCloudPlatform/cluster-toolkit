@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging, json
+import logging
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
@@ -21,9 +21,9 @@ from django.contrib import messages
 from django.urls import reverse
 from google.cloud.devtools import cloudbuild_v1
 from google.cloud import artifactregistry_v1
-from google.oauth2 import service_account
 from google.api_core import exceptions
 from google.protobuf import duration_pb2
+from ..cluster_manager import credentials as credential_store
 from ..models import ContainerRegistry
 from ..forms import PullContainerForm
 from ..permissions import LoginRequiredMixin
@@ -100,14 +100,13 @@ class PullToArtifactRegistryView(LoginRequiredMixin, BackendAsyncView):
 
     def cmd(self, unused_task_id, unused_token, registry, source_uri, tag, registry_username, registry_password):
         try:
-            from google.oauth2 import service_account
-
             dest_image = self.normalize_dest_image_sync(registry, source_uri, tag)
             logger.info(f"Destination image: {dest_image}")
 
-            credential_info = json.loads(registry.cluster.cloud_credential.detail)
-            credentials = service_account.Credentials.from_service_account_info(credential_info)
-            scoped_credentials = credentials.with_scopes(["https://www.googleapis.com/auth/cloud-platform"])
+            # Scoped to cloud-platform
+            scoped_credentials = credential_store.python_credentials(
+                registry.cluster.cloud_credential
+            )
             client = cloudbuild_v1.CloudBuildClient(credentials=scoped_credentials)
             project_id = registry.get_project_id()
 
@@ -267,8 +266,9 @@ class DeleteContainerView(LoginRequiredMixin, View):
 
         # 1) Load credentials
         try:
-            credential_info = json.loads(registry.cluster.cloud_credential.detail)
-            credentials = service_account.Credentials.from_service_account_info(credential_info)
+            credentials = credential_store.python_credentials(
+                registry.cluster.cloud_credential
+            )
             client = artifactregistry_v1.ArtifactRegistryClient(credentials=credentials)
         except Exception as e:
             logger.exception("Failed to load Artifact Registry credentials.")

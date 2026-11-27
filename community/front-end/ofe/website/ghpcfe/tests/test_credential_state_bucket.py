@@ -20,12 +20,13 @@ check_state_bucket_access() asks the bucket which permissions that account
 holds and returns a warning saying how to grant them.
 
 validate_credential.py is loaded by path into a throwaway package, with the
-Google client libraries and `utils` stubbed in sys.modules, so these tests
-need no Django settings, credentials or network.
+Google client libraries, `utils` and `credentials` stubbed in sys.modules, so
+these tests need no Django settings, credentials or network. The check acts
+as the credential, whether it holds a key or impersonates its account,
+through credentials.python_credentials.
 """
 
 import importlib.util
-import json
 import sys
 import types
 import unittest
@@ -35,9 +36,8 @@ from unittest import mock
 CLUSTER_MANAGER = Path(__file__).resolve().parents[1] / "cluster_manager"
 
 EMAIL = "prov@other-project.iam.gserviceaccount.com"
-DETAIL = json.dumps(
-    {"type": "service_account", "project_id": "other-project", "client_email": EMAIL}
-)
+# A registered credential (a Credential row), in another project
+CREDENTIAL = mock.Mock(name="credential", project_id="other-project")
 
 
 # Stand-ins for google.api_core.exceptions, raised by the tests' fake bucket.
@@ -72,16 +72,15 @@ def _load_validate_credential():
     auth_exceptions = types.ModuleType("google.auth.exceptions")
     auth_exceptions.GoogleAuthError = GoogleAuthError
     auth.exceptions = auth_exceptions
-    oauth2 = types.ModuleType("google.oauth2")
-    oauth2.__path__ = []
-    service_account = types.ModuleType("google.oauth2.service_account")
-    service_account.Credentials = mock.MagicMock()
-    oauth2.service_account = service_account
     pkg = types.ModuleType("ofe_cred_stub")
     pkg.__path__ = []
     utils = types.ModuleType("ofe_cred_stub.utils")
     utils.load_config = mock.MagicMock()
     pkg.utils = utils
+    credentials = types.ModuleType("ofe_cred_stub.credentials")
+    credentials.identity_email = mock.MagicMock()
+    credentials.python_credentials = mock.MagicMock()
+    pkg.credentials = credentials
     stubs = {
         "google": google,
         "google.cloud": cloud,
@@ -90,10 +89,9 @@ def _load_validate_credential():
         "google.api_core.exceptions": exceptions,
         "google.auth": auth,
         "google.auth.exceptions": auth_exceptions,
-        "google.oauth2": oauth2,
-        "google.oauth2.service_account": service_account,
         "ofe_cred_stub": pkg,
         "ofe_cred_stub.utils": utils,
+        "ofe_cred_stub.credentials": credentials,
     }
     with mock.patch.dict(sys.modules, stubs):
         spec = importlib.util.spec_from_file_location(
@@ -113,7 +111,9 @@ class CheckStateBucketAccessTests(unittest.TestCase):
 
     BUCKET = "dep1-tfstate-abcd1234"
 
-    def _check(self, granted=None, error=None, server=None):
+    def _check(self, granted=None, error=None, server=None, expect_client=True):
+        """The warning for one case. The check must build its storage client
+        from the registered credential, or (expect_client=False) build none."""
         if server is None:
             server = {"terraform_state_bucket": self.BUCKET, "deployment_name": "dep1"}
         bucket = mock.MagicMock()
@@ -123,16 +123,29 @@ class CheckStateBucketAccessTests(unittest.TestCase):
             bucket.test_iam_permissions.return_value = granted
         client = mock.MagicMock()
         client.bucket.return_value = bucket
+        # What python_credentials returns for the registered credential
+        creds = object()
         with mock.patch.object(
             validate_credential.utils, "load_config", return_value={"server": server}
         ), mock.patch.object(
             validate_credential.storage, "Client", return_value=client
         ) as client_cls, mock.patch.object(
-            validate_credential.service_account.Credentials,
-            "from_service_account_info",
-            return_value="creds-of-the-credential",
+            validate_credential.credentials,
+            "python_credentials",
+            return_value=creds,
+        ) as python_credentials, mock.patch.object(
+            validate_credential.credentials, "identity_email", return_value=EMAIL
         ):
-            warning = validate_credential.check_state_bucket_access(DETAIL)
+            warning = validate_credential.check_state_bucket_access(CREDENTIAL)
+        if expect_client:
+            python_credentials.assert_called_once_with(CREDENTIAL)
+            client_cls.assert_called_once()
+            # The client acts as the credential: built with exactly what
+            # python_credentials returned, never the server's own identity
+            self.assertIs(client_cls.call_args.kwargs.get("credentials"), creds)
+        else:
+            python_credentials.assert_not_called()
+            client_cls.assert_not_called()
         return warning, client_cls, client, bucket
 
     def test_full_access_gives_no_warning(self):
@@ -144,7 +157,7 @@ class CheckStateBucketAccessTests(unittest.TestCase):
             granted=list(validate_credential.STATE_BUCKET_PERMISSIONS)
         )
         client_cls.assert_called_once_with(
-            project="other-project", credentials="creds-of-the-credential"
+            project="other-project", credentials=mock.ANY
         )
         client.bucket.assert_called_once_with(self.BUCKET)
         asked = bucket.test_iam_permissions.call_args.args[0]
@@ -182,7 +195,9 @@ class CheckStateBucketAccessTests(unittest.TestCase):
         self.assertIn("503 backend error", warning)
 
     def test_no_configured_bucket_is_reported_without_calling_the_api(self):
-        warning, client_cls, *_ = self._check(granted=[], server={})
+        warning, client_cls, *_ = self._check(
+            granted=[], server={}, expect_client=False
+        )
         self.assertIn("terraform_state_bucket", warning)
         client_cls.assert_not_called()
 

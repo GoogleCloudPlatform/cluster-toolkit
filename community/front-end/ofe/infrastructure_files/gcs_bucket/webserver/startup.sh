@@ -35,10 +35,87 @@ c2_topic=$(curl --silent --show-error http://metadata/computeMetadata/v1/instanc
 deploy_mode=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/deploy_mode -H "Metadata-Flavor: Google")
 deployment_name=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/deployment_name -H "Metadata-Flavor: Google")
 
+# The TKFE code, and the markers of the first boot's progress. The first boot
+# writes first-boot-started before it fetches the code, first-boot-fetched
+# once the code is fetched, and first-boot-complete once the server is
+# installed and running. A server with the code and the first two markers
+# only stopped part-way through its first boot and cannot start; one with no
+# markers was installed by an earlier TKFE version.
+tkfe_code_dir=/opt/gcluster/cluster-toolkit
+ofe_state_dir=/var/lib/ofe-server
+first_boot_started=${ofe_state_dir}/first-boot-started
+first_boot_fetched=${ofe_state_dir}/first-boot-fetched
+first_boot_complete=${ofe_state_dir}/first-boot-complete
+
+# A first boot interrupted while it fetched the code (a reboot during the
+# clone, say) leaves part of it and only the started marker. Nothing else is
+# installed yet, so remove the partial copy and run the first boot again.
+if [[ -f ${first_boot_started} && ! -f ${first_boot_fetched} &&
+	! -f ${first_boot_complete} && -d ${tkfe_code_dir} ]]; then
+	printf "A previous first boot stopped while fetching the TKFE code; removing the partial copy and starting again\n"
+	rm -rf "${tkfe_code_dir:?}"
+fi
+
 # Exit if deployment already exists to stop startup script running on reboots
 #
-if [[ -d /opt/gcluster/cluster-toolkit ]]; then
-	printf "It appears gcluster has already been deployed. Exiting...\n"
+if [[ -d ${tkfe_code_dir} ]]; then
+	printf "It appears gcluster has already been deployed.\n"
+	# An installed server never reads its configuration again, so every
+	# version of the configuration secret that is still enabled is disabled:
+	# one an earlier TKFE version left enabled, or one a later Terraform apply
+	# added. A failure is reported, not fatal: the server is installed and
+	# must still start.
+	installed_config_secret=$(curl --silent --fail http://metadata/computeMetadata/v1/instance/attributes/ofe-server-config-secret -H "Metadata-Flavor: Google")
+	# A first boot that stopped after fetching the TKFE code but before it
+	# finished installing leaves a server that cannot start. Stop without
+	# disabling any version or preparing credentials, so a new VM can still
+	# read its configuration. The web server may already be enabled (a boot
+	# reset after it started it), so stop and disable it: a half-installed
+	# server must not serve.
+	if [[ ! -f ${first_boot_complete} && -f ${first_boot_started} ]]; then
+		if systemctl disable --now gcluster.service; then
+			web_server="the web server has been stopped and disabled"
+		else
+			printf "ERROR: could not stop the web server; run: systemctl disable --now gcluster.service\n"
+			web_server="the web server could not be stopped (see above)"
+		fi
+		if [[ -n ${installed_config_secret} ]]; then
+			printf "ERROR: the first boot did not finish installing TKFE; this server cannot start, and %s. Recreate the server VM; the enabled versions of secret %s stay enabled so the new VM can read its configuration\n" \
+				"${web_server}" "${installed_config_secret}"
+		else
+			printf "ERROR: the first boot did not finish installing TKFE; this server cannot start, and %s. Recreate the server VM\n" \
+				"${web_server}"
+		fi
+		exit 1
+	fi
+	if [[ -n ${installed_config_secret} ]]; then
+		if enabled_config_versions=$(gcloud secrets versions list "${installed_config_secret}" \
+			--project="${GCP_PROJECT}" --filter="state:ENABLED" --format="value(name.basename())"); then
+			for config_version in ${enabled_config_versions}; do
+				if gcloud secrets versions disable "${config_version}" \
+					--secret="${installed_config_secret}" --project="${GCP_PROJECT}" --quiet; then
+					printf "Disabled version %s of secret %s\n" "${config_version}" "${installed_config_secret}"
+				else
+					printf "WARNING: could not disable version %s of secret %s, which holds the admin password; disable it by hand\n" "${config_version}" "${installed_config_secret}"
+				fi
+			done
+		else
+			printf "WARNING: could not list the versions of secret %s, which holds the admin password; disable its enabled versions by hand\n" "${installed_config_secret}"
+		fi
+	fi
+	# Stored credentials are prepared on every start (the command is safe to
+	# run again), so a server whose code was upgraded encrypts its stored
+	# keys and registers its provisioning account too. Older code has no
+	# such command.
+	if [[ -f /opt/gcluster/cluster-toolkit/community/front-end/ofe/website/ghpcfe/management/commands/ofe_bootstrap_credentials.py ]]; then
+		printf "Preparing stored credentials...\n"
+		sudo su - gcluster -c /bin/bash <<'EOF'
+  source /opt/gcluster/django-env/bin/activate
+  cd /opt/gcluster/cluster-toolkit/community/front-end/ofe/website
+  python manage.py ofe_bootstrap_credentials || printf "ERROR: preparing stored credentials failed; see the messages above. TKFE shows the recorded errors to administrators until a start succeeds\n"
+EOF
+	fi
+	printf "Exiting...\n"
 	exit 0
 fi
 
@@ -115,10 +192,38 @@ pip3.12 install --require-hashes -r "$(dirname "$0")/requirements.txt"
 
 # Set Python3.12 as default Python3
 echo '2' | update-alternatives --config python3
-# Download configuration file
+# Read the configuration file (the admin user's details and the other
+# first-boot settings) from its Secret Manager secret, which only this server's
+# account may read. Only root can read the copy, which is removed once read.
+# The version read stays enabled until the server is installed and running
+# (see below). A boot that stops before the TKFE code is fetched, or whose
+# fetch fails, leaves no code, so the next boot tries again. One that stops
+# later leaves the server half-installed: later boots stop with an error (see
+# the top of this script) and leave the version enabled, and the server VM
+# must be recreated.
 #
-gcloud storage cp "gs://${config_bucket}/webserver/config" /tmp/config
-gcloud storage rm "gs://${config_bucket}/webserver/config"
+config_secret=$(curl --silent --fail http://metadata/computeMetadata/v1/instance/attributes/ofe-server-config-secret -H "Metadata-Flavor: Google")
+if [[ -z ${config_secret} ]]; then
+	printf "ERROR: the instance metadata key ofe-server-config-secret is not set\n"
+	exit 1
+fi
+# The newest version is resolved to its number first, so the version read is
+# the version disabled once the server is installed.
+if ! config_version=$(gcloud secrets versions describe latest \
+	--secret="${config_secret}" --project="${GCP_PROJECT}" --format="value(name.basename())") ||
+	[[ -z ${config_version} ]]; then
+	printf "ERROR: could not find the newest version of secret %s\n" "${config_secret}"
+	exit 1
+fi
+rm -f /tmp/config
+if ! (umask 077 && gcloud secrets versions access "${config_version}" \
+	--secret="${config_secret}" --project="${GCP_PROJECT}" >/tmp/config); then
+	printf "ERROR: could not read the server configuration from secret %s\n" "${config_secret}"
+	printf "A completed install disables the version it read; if version %s is disabled, enable it again with: gcloud secrets versions enable %s --secret=%s --project=%s\n" \
+		"${config_version}" "${config_version}" "${config_secret}" "${GCP_PROJECT}"
+	rm -f /tmp/config
+	exit 1
+fi
 
 # Load configurations
 #
@@ -130,6 +235,7 @@ GOOGLE_CLIENT_SECRET=$(/usr/local/bin/yq e '.google_client_secret' /tmp/config)
 repo_fork=$(/usr/local/bin/yq e '.git_fork' /tmp/config)
 repo_branch=$(/usr/local/bin/yq e '.git_branch' /tmp/config)
 # 'yq' does not handle multi-line string properly, need to restore the correct key format
+rm -f /tmp/config
 
 printf "\n####################\n#### Creating firewall & SELinux rules\n####################\n"
 printf "Adding rule for port 22 (ssh): "
@@ -141,6 +247,18 @@ firewall-cmd --permanent --add-port=443/tcp
 printf "Reloading firewall: "
 firewall-cmd --reload
 setsebool httpd_can_network_connect on -P
+
+# Record that the first boot has started, before the code is fetched: a boot
+# that stops part-way once the code is there leaves a server that cannot
+# start, and later boots find this marker without first-boot-complete.
+# Without it a half-installed server would look like one from an earlier
+# TKFE version, so stop: nothing is installed yet, and a restart tries again.
+if ! mkdir -p "${ofe_state_dir}" ||
+	! rm -f "${first_boot_complete}" "${first_boot_fetched}" ||
+	! touch "${first_boot_started}"; then
+	printf "ERROR: could not write %s; nothing has been installed, restart the server VM to try again\n" "${first_boot_started}"
+	exit 1
+fi
 
 printf "\n####################\n#### Create gcluster user & create deployment key\n####################\n"
 printf "Adding gcluster user...\n"
@@ -184,9 +302,24 @@ chown gcluster:gcluster -R /opt/gcluster
 # Run the following as 'gcluster' user
 #
 sudo su - gcluster -c /bin/bash <<EOF
+  set -e
   cd /opt/gcluster
   ${fetch_hpc_toolkit}
 EOF
+fetch_rc=$?
+# The code is all there: from here on, a boot that stops leaves a server that
+# cannot start (see the top of this script). Without the marker a later boot
+# would take the code for a partial copy, so treat that as a failed fetch.
+if [[ ${fetch_rc} -eq 0 ]] && ! touch "${first_boot_fetched}"; then
+	printf "ERROR: could not write %s\n" "${first_boot_fetched}"
+	fetch_rc=1
+fi
+# A failed fetch can leave part of the code (a partial extract); remove it so
+# the next boot runs the first boot again instead of finding an install.
+if [[ ${fetch_rc} -ne 0 ]]; then
+	printf "ERROR: fetching the TKFE code failed\n"
+	rm -rf "${tkfe_code_dir:?}"
+fi
 
 # Install go version specified in go.mod file
 #
@@ -199,10 +332,15 @@ curl --silent --show-error --location "${GO_DOWNLOAD_URL}" --output "/tmp/${GO_V
 rm -rf /usr/local/go && tar -C /usr/local -xzf "/tmp/${GO_VERSION}.linux-amd64.tar.gz"
 
 # Add path entry for Go binaries to bashrc for all users (only works on future logins)
+# (once: a first boot run again must not add it twice)
 # shellcheck disable=SC2016
-echo 'export PATH=$PATH:/usr/local/go/bin:~/go/bin' >>/etc/bashrc
+go_path_line='export PATH=$PATH:/usr/local/go/bin:~/go/bin'
+grep -qxF "${go_path_line}" /etc/bashrc || printf '%s\n' "${go_path_line}" >>/etc/bashrc
 
+# Any failed step fails the set-up, except preparing stored credentials,
+# whose errors TKFE shows to administrators.
 sudo su - gcluster -c /bin/bash <<EOF
+  set -e
   cd /opt/gcluster/cluster-toolkit/community/front-end/ofe
 
   printf "\nDownloading Frontend dependencies...\n"
@@ -215,7 +353,7 @@ sudo su - gcluster -c /bin/bash <<EOF
 
   printf "\nDownloading ghpc dependencies...\n"
   go install github.com/terraform-docs/terraform-docs@v0.16.0
-  go install github.com/google/addlicense@latest
+  go install github.com/google/addlicense@v1.2.0
   pushd /opt/gcluster/cluster-toolkit
   make
   popd
@@ -247,8 +385,12 @@ sudo su - gcluster -c /bin/bash <<EOF
   DJANGO_SUPERUSER_PASSWORD=$DJANGO_PASSWORD python manage.py createsuperuser --username $DJANGO_USERNAME --email $DJANGO_EMAIL --noinput
   printf "\nInitialise Django db"
   python manage.py custom_setup_command $GOOGLE_CLIENT_ID $GOOGLE_CLIENT_SECRET ${SERVER_HOSTNAME:-${SERVER_IP_ADDRESS}}
+  printf "\nPreparing stored credentials...\n"
+  # The database key in Secret Manager, and the provisioning account's
+  # credential, owned by the admin user created above
+  python manage.py ofe_bootstrap_credentials || printf "ERROR: preparing stored credentials failed; see the messages above. TKFE shows the recorded errors to administrators until a start succeeds\n"
   printf "\nSet up static contents..."
-  python manage.py collectstatic
+  python manage.py collectstatic --noinput
   python manage.py seed_workbench_presets
   popd
 
@@ -261,6 +403,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   fi
 
 EOF
+setup_rc=$?
 
 # Tweak Grafana settings
 #
@@ -309,6 +452,91 @@ systemctl daemon-reload
 systemctl enable gcluster.service
 systemctl start gcluster.service
 systemctl status gcluster.service
+
+# Once the server is installed and running it never reads its configuration
+# again: record that the first boot is complete, then disable the version read
+# above, so the admin password cannot be read again. The marker comes first:
+# a boot stopped between the two leaves a complete server, and each later
+# start disables every version still enabled. The script does not stop
+# at a failed step, so the install is complete only if the code was fetched,
+# the set-up succeeded, the server (nginx) is running and so is the TKFE
+# application under supervisord. Otherwise the version stays enabled: after a
+# failed fetch there is no code, so restarting the VM runs the first boot
+# again; after a later failure the server must be recreated. Either way the
+# web server, the only public listener, is stopped and disabled, and the
+# script stops with an error, so a half-installed server does not serve. A failed disable of the version is
+# reported, not fatal: the install is complete, and each later start disables
+# every version still enabled.
+#
+# supervisord starts the application in the background and reports it RUNNING
+# only once it has stayed up for its startsecs, so it is polled, every
+# app_wait_interval seconds and at most app_wait_polls times (60 s of waiting
+# between polls, plus at most 5 s for each answer). RUNNING alone is not
+# enough: the program runs uvicorn with --reload, whose reloader stays
+# RUNNING when the application fails to import, so the application must also
+# answer on its port (8001, see the supervisord program above); any HTTP
+# answer means Django loaded, while a refused or closed connection does not.
+# The exit status of supervisorctl status differs between supervisor
+# versions, so its output is read instead: every process of the program must
+# be RUNNING. Only standard output is read (it carries socket and group
+# errors too); a warning on standard error goes to the log and does not
+# count, and no output counts as not running.
+app_wait_polls=30
+app_wait_interval=2
+tkfe_app_running() {
+	local poll
+	for ((poll = 1; poll <= app_wait_polls; poll++)); do
+		if supervisorctl status 'gcluster-uvicorn-background:*' |
+			awk 'NF { n++; if ($2 != "RUNNING") bad = 1 } END { exit !(n > 0 && !bad) }' &&
+			curl --silent --output /dev/null --max-time 5 http://127.0.0.1:8001/; then
+			return 0
+		fi
+		if ((poll < app_wait_polls)); then
+			sleep "${app_wait_interval}"
+		fi
+	done
+	return 1
+}
+install_failure=""
+if [[ ${fetch_rc} -ne 0 ]]; then
+	install_failure="fetching the TKFE code failed"
+elif [[ ${setup_rc} -ne 0 ]]; then
+	install_failure="setting up TKFE failed"
+elif ! systemctl is-active --quiet gcluster.service; then
+	install_failure="the gcluster service is not running"
+elif ! tkfe_app_running; then
+	install_failure="the TKFE application is not running"
+fi
+if [[ -z ${install_failure} ]]; then
+	if ! touch "${first_boot_complete}"; then
+		# Not disabled: later starts take this server for a half-installed one
+		# until the marker exists, and say its versions stay enabled
+		printf "ERROR: could not write %s, which records that the first boot is complete, so version %s of secret %s stays enabled; run: sudo touch %s, then restart the server VM\n" \
+			"${first_boot_complete}" "${config_version}" "${config_secret}" "${first_boot_complete}"
+	elif ! gcloud secrets versions disable "${config_version}" \
+		--secret="${config_secret}" --project="${GCP_PROJECT}" --quiet; then
+		printf "ERROR: could not disable version %s of secret %s, which holds the admin password; the next start disables it, or run: gcloud secrets versions disable %s --secret=%s --project=%s\n" \
+			"${config_version}" "${config_secret}" "${config_version}" "${config_secret}" "${GCP_PROJECT}"
+	fi
+else
+	if systemctl disable --now gcluster.service; then
+		web_server="the web server has been stopped and disabled"
+	else
+		printf "ERROR: could not stop the web server; run: systemctl disable --now gcluster.service\n"
+		web_server="the web server could not be stopped (see above)"
+	fi
+	if [[ ! -d ${tkfe_code_dir} ]]; then
+		printf "ERROR: the first boot did not finish installing TKFE (%s); version %s of secret %s stays enabled, and %s. No TKFE code was installed, so restarting the server VM tries again\n" \
+			"${install_failure}" "${config_version}" "${config_secret}" "${web_server}"
+	else
+		printf "ERROR: the first boot did not finish installing TKFE (%s); version %s of secret %s stays enabled, and %s. Recreate the server VM\n" \
+			"${install_failure}" "${config_version}" "${config_secret}" "${web_server}"
+	fi
+	# Nothing after this block runs on a failed install: certbot's nginx
+	# plugin could start nginx again, and the Grafana set-up needs a running
+	# server. The failure also shows in the startup script's status.
+	exit 1
+fi
 
 # Now that Grafana and Django are running, initialize integration
 #

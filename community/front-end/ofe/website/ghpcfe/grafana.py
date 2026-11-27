@@ -14,44 +14,67 @@
 
 """ Grafana utilities """
 
-import json
 import logging
 
 from grafana_api.grafana_face import GrafanaFace
 
 from django.conf import settings
 
+from .cluster_manager import credentials
+
 logger = logging.getLogger(__name__)
 
-def add_gcp_datasource(name, creds):
+# The datasource the setup_grafana command creates. It authenticates with
+# Google Compute Engine, as the web server's own account.
+GCE_DATASOURCE = "default"
+
+
+def datasource_name(credential):
+    """The Grafana datasource that reads metrics for credential.
+
+    A key credential has its own datasource, named after it. A credential
+    without a key uses the server's GCE datasource, so its dashboards read
+    metrics as the web server's account.
+    """
+    if credential.kind == credentials.KIND_IMPERSONATE:
+        return GCE_DATASOURCE
+    return credential.name
+
+
+def add_gcp_datasource(credential):
+    """Create the Grafana datasource of a key credential.
+
+    A credential without a key needs none: its dashboards use GCE_DATASOURCE.
+    """
+    if credential.kind == credentials.KIND_IMPERSONATE:
+        logger.info(
+            "Credential %s has no key; its dashboards use the %s datasource",
+            credential.name,
+            GCE_DATASOURCE,
+        )
+        return
+    json_data, secure_json_data = credentials.grafana_key_settings(credential)
     auth = ("admin", settings.SECRET_KEY)
     api = GrafanaFace(auth=auth, host="localhost:3000")
-    creds = json.loads(creds)
     api.datasource.create_datasource(
         {
-            "name": name,
+            "name": credential.name,
             "type": "stackdriver",
             "access": "proxy",
-            "jsonData": {
-                "authenticationType": "jwt",
-                "tokenUri": creds["token_uri"],
-                "clientEmail": creds["client_email"],
-                "defaultProject": creds["project_id"],
-            },
-            "secureJsonData": {
-                "privateKey": creds["private_key"],
-            }
+            "jsonData": json_data,
+            "secureJsonData": secure_json_data,
         }
     )
 
 
 def create_cluster_dashboard(cluster):
 
-    cred_info = json.loads(cluster.cloud_credential.detail)
+    datasource = datasource_name(cluster.cloud_credential)
+    project_id = cluster.cloud_credential.project_id
     # pylint: disable=line-too-long
     panels = [
         {
-            "datasource": cluster.cloud_credential.name,
+            "datasource": datasource,
             "fill": 1,
             "fillGradient": 0,
             "gridPos": {
@@ -80,7 +103,7 @@ def create_cluster_dashboard(cluster):
                         "metricKind": "GAUGE",
                         "metricType": "compute.googleapis.com/instance/cpu/utilization",
                         "perSeriesAligner": "ALIGN_INTERPOLATE",
-                        "projectName": cred_info["project_id"],
+                        "projectName": project_id,
                         "query": "",
                         "unit": "10^2.%",
                         "valueType": "DOUBLE",
@@ -118,7 +141,7 @@ def create_cluster_dashboard(cluster):
             ],
         },
         {
-            "datasource": cluster.cloud_credential.name,
+            "datasource": datasource,
             "fill": 1,
             "fillGradient": 0,
             "gridPos": {
@@ -147,7 +170,7 @@ def create_cluster_dashboard(cluster):
                         "metricKind": "GAUGE",
                         "metricType": "agent.googleapis.com/memory/bytes_used",
                         "perSeriesAligner": "ALIGN_INTERPOLATE",
-                        "projectName": cred_info["project_id"],
+                        "projectName": project_id,
                         "query": "",
                         "unit": "By",
                         "valueType": "DOUBLE",
@@ -185,7 +208,7 @@ def create_cluster_dashboard(cluster):
             ],
         },
         {
-            "datasource": cluster.cloud_credential.name,
+            "datasource": datasource,
             "fill": 1,
             "fillGradient": 0,
             "gridPos": {
@@ -214,7 +237,7 @@ def create_cluster_dashboard(cluster):
                         "metricKind": "DELTA",
                         "metricType": "compute.googleapis.com/instance/network/sent_bytes_count",
                         "perSeriesAligner": "ALIGN_DELTA",
-                        "projectName": cred_info["project_id"],
+                        "projectName": project_id,
                         "query": "",
                         "unit": "By",
                         "valueType": "INT64",
@@ -252,7 +275,7 @@ def create_cluster_dashboard(cluster):
             ],
         },
         {
-            "datasource": cluster.cloud_credential.name,
+            "datasource": datasource,
             "fill": 1,
             "fillGradient": 0,
             "gridPos": {
@@ -281,7 +304,7 @@ def create_cluster_dashboard(cluster):
                         "metricKind": "DELTA",
                         "metricType": "compute.googleapis.com/instance/network/received_bytes_count",
                         "perSeriesAligner": "ALIGN_DELTA",
-                        "projectName": cred_info["project_id"],
+                        "projectName": project_id,
                         "query": "",
                         "unit": "By",
                         "valueType": "INT64",

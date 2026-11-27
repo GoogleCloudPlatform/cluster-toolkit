@@ -1,0 +1,290 @@
+{
+  "version": 4,
+  "terraform_version": "1.16.1",
+  "serial": 58,
+  "lineage": "6a1f6c2e-3b7d-4f0a-9c1e-2d5b8e7f4a10",
+  "outputs": {},
+  "resources": [
+    {
+      "module": "module.cmp_profile",
+      "mode": "managed",
+      "type": "google_project_iam_member",
+      "name": "project_role",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": "predefined_logging.logWriter",
+          "schema_version": 0,
+          "attributes": {
+            "condition": [],
+            "etag": "BwY+cmp0001=",
+            "id": "example-project/roles/logging.logWriter/serviceAccount:alpha-0a1b2c3d-cmp@example-project.iam.gserviceaccount.com",
+            "member": "serviceAccount:alpha-0a1b2c3d-cmp@example-project.iam.gserviceaccount.com",
+            "project": "example-project",
+            "role": "roles/logging.logWriter"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "module.cmp_profile.terraform_data.input_checks",
+            "module.cmp_sa.module.service_account.google_service_account.service_accounts"
+          ],
+          "create_before_destroy": true
+        }
+      ]
+    },
+    {
+      "module": "module.cmp_profile",
+      "mode": "managed",
+      "type": "google_storage_bucket_iam_member",
+      "name": "this",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": "ofe_bucket",
+          "schema_version": 0,
+          "attributes": {
+            "bucket": "b/ofe-test-bucket",
+            "condition": [],
+            "etag": "CAI=",
+            "id": "b/ofe-test-bucket/roles/storage.objectAdmin/serviceAccount:alpha-0a1b2c3d-cmp@example-project.iam.gserviceaccount.com",
+            "member": "serviceAccount:alpha-0a1b2c3d-cmp@example-project.iam.gserviceaccount.com",
+            "role": "roles/storage.objectAdmin",
+            "timeouts": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "module.cmp_profile.terraform_data.input_checks",
+            "module.cmp_sa.module.service_account.google_service_account.service_accounts"
+          ],
+          "create_before_destroy": true
+        }
+      ]
+    },
+    {
+      "module": "module.cmp_profile",
+      "mode": "managed",
+      "type": "terraform_data",
+      "name": "input_checks",
+      "provider": "provider[\"terraform.io/builtin/terraform\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "id": "4e8a2b1c-6f3d-4a59-b0c7-8d9e0f1a2b3c",
+            "input": null,
+            "output": null,
+            "store": null,
+            "triggers_replace": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "create_before_destroy": true
+        }
+      ]
+    },
+    {
+      "module": "module.cmp_profile",
+      "mode": "managed",
+      "type": "time_sleep",
+      "name": "wait_for_iam",
+      "provider": "provider[\"registry.terraform.io/hashicorp/time\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "create_duration": "60s",
+            "destroy_duration": null,
+            "id": "2026-11-04T12:00:00Z",
+            "triggers": {
+              "member": "serviceAccount:alpha-0a1b2c3d-cmp@example-project.iam.gserviceaccount.com",
+              "project_id": "example-project"
+            }
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "dependencies": [
+            "module.cmp_profile.google_project_iam_member.project_role",
+            "module.cmp_profile.google_storage_bucket_iam_member.this",
+            "module.cmp_profile.terraform_data.input_checks",
+            "module.cmp_sa.module.service_account.google_service_account.service_accounts"
+          ],
+          "create_before_destroy": true
+        }
+      ]
+    },
+    {
+      "module": "module.cmp_sa",
+      "mode": "managed",
+      "type": "time_sleep",
+      "name": "wait_for_service_account",
+      "provider": "provider[\"registry.terraform.io/hashicorp/time\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "create_duration": "30s",
+            "destroy_duration": null,
+            "id": "2026-11-04T11:59:00Z",
+            "triggers": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "dependencies": [
+            "module.cmp_sa.module.service_account.google_service_account.service_accounts"
+          ],
+          "create_before_destroy": true
+        }
+      ]
+    },
+    {
+      "module": "module.cmp_sa.module.service_account",
+      "mode": "managed",
+      "type": "google_service_account",
+      "name": "service_accounts",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": "cmp",
+          "schema_version": 0,
+          "attributes": {
+            "account_id": "alpha-0a1b2c3d-cmp",
+            "create_ignore_already_exists": null,
+            "deletion_policy": null,
+            "description": "Service Account (alpha-0a1b2c3d)",
+            "disabled": false,
+            "display_name": "Service Account (alpha-0a1b2c3d)",
+            "email": "alpha-0a1b2c3d-cmp@example-project.iam.gserviceaccount.com",
+            "id": "projects/example-project/serviceAccounts/alpha-0a1b2c3d-cmp@example-project.iam.gserviceaccount.com",
+            "member": "serviceAccount:alpha-0a1b2c3d-cmp@example-project.iam.gserviceaccount.com",
+            "name": "projects/example-project/serviceAccounts/alpha-0a1b2c3d-cmp@example-project.iam.gserviceaccount.com",
+            "project": "example-project",
+            "timeouts": null,
+            "unique_id": "100000000000000000001"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "create_before_destroy": true
+        }
+      ]
+    },
+    {
+      "module": "module.ctl_profile",
+      "mode": "managed",
+      "type": "google_project_iam_custom_role",
+      "name": "scoped",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "deleted": false,
+            "deletion_policy": "DELETE",
+            "description": "Least-privilege permissions for the Slurm controller. Instances whose names start with alpha0a1b2c3d-.",
+            "id": "projects/example-project/roles/alpha_0a1b2c3d.ctl.a1b2c3.scoped",
+            "name": "projects/example-project/roles/alpha_0a1b2c3d.ctl.a1b2c3.scoped",
+            "permissions": [
+              "compute.instances.setMetadata"
+            ],
+            "project": "example-project",
+            "role_id": "alpha_0a1b2c3d.ctl.a1b2c3.scoped",
+            "stage": "GA",
+            "title": "Slurm Controller (name-scoped)"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 1,
+          "identity": {
+            "project": "example-project",
+            "role_id": "alpha_0a1b2c3d.ctl.a1b2c3.scoped"
+          },
+          "private": "bnVsbA==",
+          "dependencies": [
+            "module.cmp_profile.google_project_iam_member.project_role",
+            "module.cmp_profile.google_storage_bucket_iam_member.this",
+            "module.cmp_profile.terraform_data.input_checks",
+            "module.cmp_profile.time_sleep.wait_for_iam",
+            "module.cmp_sa.module.service_account.google_service_account.service_accounts",
+            "module.cmp_sa.time_sleep.wait_for_service_account",
+            "module.ctl_profile.terraform_data.input_checks"
+          ],
+          "create_before_destroy": true
+        }
+      ]
+    },
+    {
+      "module": "module.ctl_profile",
+      "mode": "managed",
+      "type": "google_project_iam_custom_role",
+      "name": "this",
+      "provider": "provider[\"registry.terraform.io/hashicorp/google\"]",
+      "instances": [
+        {
+          "index_key": 0,
+          "schema_version": 0,
+          "attributes": {
+            "deleted": false,
+            "deletion_policy": "DELETE",
+            "description": "Least-privilege permissions for the Slurm controller.",
+            "id": "projects/example-project/roles/alpha_0a1b2c3d.ctl.a1b2c3",
+            "name": "projects/example-project/roles/alpha_0a1b2c3d.ctl.a1b2c3",
+            "permissions": [
+              "compute.instances.create",
+              "compute.instances.delete",
+              "compute.instances.get",
+              "compute.instances.list"
+            ],
+            "project": "example-project",
+            "role_id": "alpha_0a1b2c3d.ctl.a1b2c3",
+            "stage": "GA",
+            "title": "Slurm Controller"
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 1,
+          "identity": {
+            "project": "example-project",
+            "role_id": "alpha_0a1b2c3d.ctl.a1b2c3"
+          },
+          "private": "bnVsbA==",
+          "dependencies": [
+            "module.cmp_profile.google_project_iam_member.project_role",
+            "module.cmp_profile.google_storage_bucket_iam_member.this",
+            "module.cmp_profile.terraform_data.input_checks",
+            "module.cmp_profile.time_sleep.wait_for_iam",
+            "module.cmp_sa.module.service_account.google_service_account.service_accounts",
+            "module.cmp_sa.time_sleep.wait_for_service_account",
+            "module.ctl_profile.terraform_data.input_checks"
+          ],
+          "create_before_destroy": true
+        }
+      ]
+    },
+    {
+      "module": "module.ctl_profile",
+      "mode": "managed",
+      "type": "terraform_data",
+      "name": "input_checks",
+      "provider": "provider[\"terraform.io/builtin/terraform\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "id": "0b5c9f2e-8d4a-4e61-a7b3-1c2d3e4f5a6b",
+            "input": null,
+            "output": null,
+            "store": null,
+            "triggers_replace": null
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "create_before_destroy": true
+        }
+      ]
+    }
+  ],
+  "check_results": null
+}

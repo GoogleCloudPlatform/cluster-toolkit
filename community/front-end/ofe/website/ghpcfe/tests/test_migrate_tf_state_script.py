@@ -21,14 +21,18 @@ survive later operations on the resource. For clusters, filesystems and image
 builders the Terraform working directory is a Cluster Toolkit deployment
 group, which `gcluster create -w` moves into .ghpc/previous_deployment_groups/
 on every reconfigure, deleting the set it moved there the time before. The
-copy therefore lives in the resource's run-time directory instead, beside its
-cloud_credentials.
+copy therefore lives in the resource's run-time directory instead.
+
+Terraform runs as each resource's credential stored in the database, through
+`manage.py ofe_terraform_as_credential`, not with a key file: the server
+deletes the key files older releases kept in the run-time directories each
+time it starts, so none exists here.
 
 Each test runs the real script in a synthetic TKFE tree in a temporary
 directory: a copy of the script, the real cluster_manager/utils.py, a
 configuration.yaml, and stubs for `terraform` and for the application's
-Python interpreter. Nothing here needs Django, network access or cloud
-credentials.
+Python interpreter, which stands in for the management commands. Nothing
+here needs Django, network access or cloud credentials.
 """
 
 import shutil
@@ -47,12 +51,14 @@ BUCKET = "test-bucket"
 STATE = '{"version": 4, "resources": [{"type": "google_compute_network"}]}'
 BACKUP_NAME = "terraform.tfstate.premigration"
 
-# A stand-in for `terraform`. Every call is appended to $TF_CALL_LOG.
+# A stand-in for `terraform`. Every call is appended to $TF_CALL_LOG, after
+# the resource it runs as ($AS_CREDENTIAL, set only by the stand-in for
+# ofe_terraform_as_credential) in brackets.
 # `init -migrate-state` exits with $INIT_RC; on success it empties the local
 # state, as the real one does after copying it to the backend.
 # `plan -detailed-exitcode` exits with $PLAN_RC.
 TERRAFORM_STUB = """#!/bin/bash
-echo "$*" >>"${TF_CALL_LOG}"
+echo "[${AS_CREDENTIAL:-no credential}] $*" >>"${TF_CALL_LOG}"
 dir=${1#-chdir=}
 case "$*" in
 *"init -migrate-state"*)
@@ -61,6 +67,36 @@ case "$*" in
 	;;
 *"plan -detailed-exitcode"*) exit "${PLAN_RC:-0}" ;;
 esac
+"""
+
+# A stand-in for the application's interpreter. It answers the namespace
+# command; for ofe_terraform_as_credential <kind> <id> -- <args> it logs
+# "<kind> <id> <working directory>" to $CMD_CALL_LOG, refuses with exit code
+# 1 when "<kind> <id>" is $REFUSE_CREDENTIAL, as the command does for a
+# credential it cannot use, and otherwise runs `terraform <args>` as that
+# resource; anything else runs with this test's interpreter.
+OFE_PYTHON_STUB = """#!/bin/bash
+if [[ $1 == manage.py ]]; then
+	case $2 in
+	tfstate_namespace)
+		echo "{namespace}"
+		exit 0
+		;;
+	ofe_terraform_as_credential)
+		echo "$3 $4 $PWD" >>"${{CMD_CALL_LOG}}"
+		[[ $5 == -- ]] || exit 64
+		if [[ "$3 $4" == "${{REFUSE_CREDENTIAL:-}}" ]]; then
+			echo "$3 $4: its stored credential cannot be used" >&2
+			exit 1
+		fi
+		export AS_CREDENTIAL="$3 $4"
+		shift 5
+		exec terraform "$@"
+		;;
+	esac
+	exit 64
+fi
+exec "{python}" "$@"
 """
 
 # A Toolkit-generated deployment group already carries its backend block.
@@ -90,14 +126,10 @@ class MigrateScriptBackupTests(unittest.TestCase):
         bin_dir = root / "bin"
         bin_dir.mkdir()
         self._write_executable(bin_dir / "terraform", TERRAFORM_STUB)
-        # The application's interpreter answers the namespace management
-        # command and runs everything else with this test's interpreter.
         ofe_python = bin_dir / "ofe-python"
         self._write_executable(
             ofe_python,
-            "#!/bin/bash\n"
-            f"if [[ $1 == manage.py ]]; then echo {NAMESPACE}; exit 0; fi\n"
-            f'exec "{sys.executable}" "$@"\n',
+            OFE_PYTHON_STUB.format(namespace=NAMESPACE, python=sys.executable),
         )
         # The script also calls plain python3 for JSON checks; make sure it
         # resolves to an interpreter that exists in this environment.
@@ -107,10 +139,13 @@ class MigrateScriptBackupTests(unittest.TestCase):
 
         self.tf_call_log = root / "terraform-calls.log"
         self.tf_call_log.write_text("")
+        self.cmd_call_log = root / "command-calls.log"
+        self.cmd_call_log.write_text("")
         self.env = {
             "PATH": f"{bin_dir}:/usr/bin:/bin",
             "OFE_PYTHON": str(ofe_python),
             "TF_CALL_LOG": str(self.tf_call_log),
+            "CMD_CALL_LOG": str(self.cmd_call_log),
             # Keep the tree byte-for-byte unchanged by a dry run.
             "PYTHONDONTWRITEBYTECODE": "1",
         }
@@ -123,20 +158,25 @@ class MigrateScriptBackupTests(unittest.TestCase):
     def _resource(self, rel_resource_dir, rel_working_dir="", generated=False):
         """Create a resource run-time directory and its Terraform working
         directory holding local state. Returns (resource_dir, working_dir).
+        As on a server that has started this release, there is no key file.
         """
         resource_dir = self.ofe / rel_resource_dir
         working_dir = resource_dir / rel_working_dir
         working_dir.mkdir(parents=True)
-        (resource_dir / "cloud_credentials").write_text("{}")
         (working_dir / "terraform.tfstate").write_text(STATE)
         if generated:
             (working_dir / "main.tf").write_text(GENERATED_MAIN_TF)
         return resource_dir, working_dir
 
-    def _run(self, *args, init_rc=0, plan_rc=0):
+    def _run(self, *args, init_rc=0, plan_rc=0, refuse=""):
         return subprocess.run(
             ["bash", str(self.ofe / "script" / MIGRATE_SCRIPT.name), *args],
-            env={**self.env, "INIT_RC": str(init_rc), "PLAN_RC": str(plan_rc)},
+            env={
+                **self.env,
+                "INIT_RC": str(init_rc),
+                "PLAN_RC": str(plan_rc),
+                "REFUSE_CREDENTIAL": refuse,
+            },
             cwd=self.ofe,
             capture_output=True,
             text=True,
@@ -164,6 +204,70 @@ class MigrateScriptBackupTests(unittest.TestCase):
         for entry in sorted(deployment_dir.iterdir()):
             if entry.is_dir() and entry.name != ".ghpc":
                 entry.rename(previous / entry.name)
+
+    def test_terraform_runs_as_stored_credential_without_key_file(self):
+        cluster, working_dir = self._resource(
+            "clusters/cluster_5", "c5/primary", generated=True
+        )
+        vpc, _ = self._resource("vpcs/vpc_1")
+        self.assertEqual(list(self.ofe.rglob("cloud_credentials")), [])
+
+        res = self._run("--yes")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("Migrated: 2", res.stdout)
+        self.assertEqual((cluster / BACKUP_NAME).read_text(), STATE)
+        self.assertEqual((vpc / BACKUP_NAME).read_text(), STATE)
+        self.assertFalse((working_dir / "terraform.tfstate").exists())
+
+        website = self.ofe / "website"
+        self.assertEqual(
+            self.cmd_call_log.read_text().splitlines(),
+            [f"cluster 5 {website}"] * 3 + [f"vpc 1 {website}"] * 3,
+        )
+        # Every Terraform run went through the command, as the resource's
+        # credential, with the working directory as an absolute path.
+        self.assertEqual(
+            self.tf_call_log.read_text().splitlines(),
+            [
+                "[cluster 5] version",
+                f"[cluster 5] -chdir={working_dir} init -migrate-state -force-copy -no-color",
+                f"[cluster 5] -chdir={working_dir} plan -detailed-exitcode -no-color",
+                "[vpc 1] version",
+                f"[vpc 1] -chdir={vpc} init -migrate-state -force-copy -no-color",
+                f"[vpc 1] -chdir={vpc} plan -detailed-exitcode -no-color",
+            ],
+        )
+
+    def test_unusable_credential_is_reported_and_changes_nothing(self):
+        cluster, working_dir = self._resource(
+            "clusters/cluster_5", "c5/primary", generated=True
+        )
+        vpc, _ = self._resource("vpcs/vpc_1")
+        before = self._snapshot()
+
+        res = self._run("--yes", refuse="vpc 1")
+        self.assertEqual(res.returncode, 1, res.stdout + res.stderr)
+        self.assertIn("vpc 1: its stored credential cannot be used", res.stderr)
+        self.assertIn(
+            f"FAIL: {vpc}: Terraform cannot run as the stored credential of",
+            res.stderr,
+        )
+        self.assertIn("vpc 1 (see the message above); nothing was changed", res.stderr)
+        self.assertNotIn("cloud_credentials", res.stdout + res.stderr)
+        self.assertIn("Migrated: 1   Skipped: 0   Failed: 1", res.stdout)
+
+        # The network is exactly as it was; the cluster still migrated.
+        after = self._snapshot()
+        for path, content in before.items():
+            if path.startswith("vpcs/"):
+                self.assertEqual(after.get(path), content, path)
+        self.assertEqual(
+            sorted(p for p in after if p.startswith("vpcs/")),
+            sorted(p for p in before if p.startswith("vpcs/")),
+        )
+        self.assertEqual((cluster / BACKUP_NAME).read_text(), STATE)
+        self.assertFalse((working_dir / "terraform.tfstate").exists())
+        self.assertNotIn("[vpc 1]", self.tf_call_log.read_text())
 
     def test_blueprint_resource_backup_is_kept_in_resource_dir(self):
         cases = {
@@ -277,7 +381,35 @@ class MigrateScriptBackupTests(unittest.TestCase):
         self.assertIn(f"original to be kept as {cluster / BACKUP_NAME}", res.stdout)
         self.assertIn(f"original to be kept as {vpc / BACKUP_NAME}", res.stdout)
         self.assertEqual(self._snapshot(), before)
-        self.assertEqual(self.tf_call_log.read_text(), "")
+        # Only the credential check, which changes nothing, ran Terraform.
+        self.assertEqual(
+            self.tf_call_log.read_text().splitlines(),
+            ["[cluster 5] version", "[vpc 1] version"],
+        )
+
+    def test_dry_run_reports_an_unusable_credential_as_failed(self):
+        cluster, working_dir = self._resource(
+            "clusters/cluster_5", "c5/primary", generated=True
+        )
+        vpc, _ = self._resource("vpcs/vpc_1")
+        before = self._snapshot()
+
+        res = self._run("--dry-run", refuse="vpc 1")
+        self.assertEqual(res.returncode, 1, res.stdout + res.stderr)
+        self.assertIn("vpc 1: its stored credential cannot be used", res.stderr)
+        self.assertIn(
+            f"FAIL: {vpc}: Terraform cannot run as the stored credential of",
+            res.stderr,
+        )
+        self.assertIn("vpc 1 (see the message above); nothing was changed", res.stderr)
+        # The preview does not claim the network would migrate.
+        self.assertIn(f"would migrate: {working_dir}", res.stdout)
+        self.assertNotIn(f"would migrate: {vpc}\n", res.stdout)
+        self.assertIn("Migrated: 0   Skipped: 0   Failed: 1", res.stdout)
+        self.assertEqual(self._snapshot(), before)
+        self.assertEqual(
+            self.tf_call_log.read_text().splitlines(), ["[cluster 5] version"]
+        )
 
     def test_failed_plan_points_to_backup_in_resource_dir(self):
         cluster, working_dir = self._resource(

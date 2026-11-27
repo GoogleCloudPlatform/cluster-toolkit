@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ forms.py """
+import json
 import logging
 
 from django import forms
@@ -28,6 +29,7 @@ from crispy_forms.layout import Layout, Field, Submit, Div, Hidden
 from crispy_forms.bootstrap import InlineCheckboxes
 
 from .cluster_manager import cloud_info
+from .cluster_manager import credentials as credential_store
 from .cluster_manager import validate_credential
 from .views.view_utils import RegistryDataHelper
 
@@ -82,26 +84,230 @@ class UserAdminUpdateForm(forms.ModelForm):
 
 
 class CredentialForm(forms.ModelForm):
-    """Custom form for Credential model implementing additional validation"""
+    """Custom form for Credential model implementing additional validation.
+
+    An admin either uploads a service account key (stored encrypted) or
+    names a service account the server impersonates, with its project.
+    """
+
+    service_account_email = forms.EmailField(
+        required=False,
+        label="Service account to impersonate",
+        widget=forms.EmailInput(attrs={"class": "form-control"}),
+        help_text=(
+            "For an impersonated credential: the service account the server "
+            "acts as, without a key. The server's own service account needs "
+            "the Service Account Token Creator role on it."
+        ),
+    )
 
     class Meta:
         model = Credential
 
-        fields = ("name", "detail")
+        fields = ("name", "kind", "service_account_email", "project_id", "detail")
+
+        labels = {"project_id": "Project ID"}
+
+        help_texts = {
+            "project_id": (
+                "For an impersonated credential: the project it provisions "
+                "in. An uploaded key's project is read from the key."
+            ),
+        }
 
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
+            "kind": forms.RadioSelect(),
+            "project_id": forms.TextInput(attrs={"class": "form-control"}),
             "detail": forms.Textarea(attrs={"class": "form-control"}),
         }
 
-    def clean(self):
-        super().clean()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Required for an uploaded key only; clean() checks
+        self.fields["detail"].required = False
+        if (
+            self.instance.pk
+            and self.instance.kind == credential_store.KIND_IMPERSONATE
+        ):
+            self.fields["service_account_email"].initial = (
+                credential_store.impersonation_target(self.instance)
+            )
+        if self.instance.pk and self.instance.kind == credential_store.KIND_KEY:
+            self.fields["detail"].help_text = "Leave blank to keep the stored key."
 
+    def _resources_using(self):
+        """How many cloud resources (clusters, networks, subnets,
+        filesystems, images, workbenches...) use the credential being
+        edited; 0 for a new credential"""
+        if not self.instance.pk:
+            return 0
+        return CloudResource.objects.filter(
+            cloud_credential=self.instance
+        ).count()
+
+    @staticmethod
+    def _in_use(count, what):
+        """The error for a change refused because count resources use the
+        credential"""
+        resources = "resource" if count == 1 else "resources"
+        return (
+            f"This credential is used by {count} cloud {resources} "
+            f"(clusters, networks, filesystems, images or workbenches), so "
+            f"{what}"
+        )
+
+    def _refuse_identity_change(self, in_use, kind, email, project_id):
+        """Add an error for each change to an in-use credential's kind,
+        project or impersonated account. True if any was refused."""
+        if not in_use:
+            return False
+        if kind != self.instance.kind:
+            self.add_error("kind", self._in_use(
+                in_use,
+                "its type cannot be changed. Create a new credential instead.",
+            ))
+            return True
+        if kind != credential_store.KIND_IMPERSONATE:
+            return False
+        refused = False
+        if email and email != credential_store.impersonation_target(
+            self.instance
+        ):
+            self.add_error("service_account_email", self._in_use(
+                in_use,
+                "the service account it impersonates cannot be changed. "
+                "Create a new credential instead.",
+            ))
+            refused = True
+        if project_id and project_id != self.instance.project_id:
+            self.add_error("project_id", self._in_use(
+                in_use,
+                "its project cannot be changed. Create a new credential "
+                "instead.",
+            ))
+            refused = True
+        return refused
+
+    def _refuse_other_key_account(self, in_use, detail):
+        """For an in-use key credential: add an error unless the key in
+        detail is for the stored key's service account and project. True
+        if it was refused.
+
+        A row with no stored project id (one saved before project ids were
+        kept, until the start-up fills it) takes the project from its
+        stored key; if that names none either, only the accounts are
+        compared."""
+        if not in_use:
+            return False
+        try:
+            old_email = credential_store.identity_email(self.instance)
+            old_project = self.instance.project_id or (
+                credential_store.key_project_id(
+                    credential_store.key_json(self.instance)
+                )
+            )
+        except (credential_store.CredentialError, ValueError) as err:
+            # ValueError: stored text that is not a token at all. Its text
+            # can quote a character of the stored text, so only its type is
+            # logged; CredentialError's own text names no key.
+            if isinstance(err, credential_store.CredentialError):
+                reason = str(err)
+            else:
+                reason = (
+                    "stored text is not a valid token "
+                    f"({type(err).__name__})"
+                )
+            logger.warning(
+                "Credential %s: stored key cannot be read: %s",
+                self.instance.pk,
+                reason,
+            )
+            self.add_error("detail", self._in_use(
+                in_use,
+                "a new key must be for the same service account and "
+                "project, and the stored key cannot be read to check that. "
+                "See the server log.",
+            ))
+            return True
+        try:
+            new_email = json.loads(detail).get("client_email", "")
+        except (ValueError, AttributeError):
+            new_email = ""
+        new_project = credential_store.key_project_id(detail)
+        if new_email == old_email and (
+            not old_project or new_project == old_project
+        ):
+            return False
+        same = f"the same service account ({old_email})"
+        if old_project:
+            same += f" and project ({old_project})"
+        self.add_error("detail", self._in_use(
+            in_use,
+            f"a new key must be for {same}. Create a new credential for "
+            "another account or project.",
+        ))
+        return True
+
+    def clean(self):
+        cleaned_data = super().clean()
+        kind = cleaned_data.get("kind") or credential_store.KIND_KEY
+        in_use = self._resources_using()
+
+        if kind == credential_store.KIND_IMPERSONATE:
+            email = (cleaned_data.get("service_account_email") or "").strip()
+            project_id = (cleaned_data.get("project_id") or "").strip()
+            if self._refuse_identity_change(in_use, kind, email, project_id):
+                # Checked before Google is asked, which is then not needed
+                return cleaned_data
+            if not email:
+                self.add_error(
+                    "service_account_email",
+                    "Enter the service account to impersonate.",
+                )
+            if not project_id:
+                self.add_error(
+                    "project_id",
+                    "Enter the project this credential provisions in.",
+                )
+            if email and project_id:
+                # The server impersonates the account and asks Google which
+                # of the checked permissions it has in the project
+                problem = validate_credential.validate_impersonation(
+                    "GCP", email, project_id
+                )
+                if problem:
+                    raise ValidationError(
+                        f"Credential cannot be validated: {problem}"
+                    )
+            cleaned_data["detail"] = email
+            cleaned_data["project_id"] = project_id
+            return cleaned_data
+
+        if self._refuse_identity_change(in_use, kind, "", ""):
+            return cleaned_data
+        detail = cleaned_data.get("detail") or ""
+        if (
+            not detail.strip()
+            and self.instance.pk
+            and self.instance.kind == credential_store.KIND_KEY
+        ):
+            # An edit that leaves the key blank keeps the stored key and its
+            # project as they are: it was checked when it was saved, and
+            # seal() leaves a sealed key alone. A field missing from
+            # cleaned_data is not copied onto the instance, so neither is
+            # read here (only credentials.py reads keys).
+            cleaned_data.pop("detail", None)
+            cleaned_data.pop("project_id", None)
+            return cleaned_data
         # validate the credential details with cloud platform
-        detail = self.cleaned_data["detail"]
         validated = validate_credential.validate_credential("GCP", detail)
         if not validated:
             raise ValidationError("Credential cannot be validated.")
+        if self._refuse_other_key_account(in_use, detail):
+            return cleaned_data
+        cleaned_data["project_id"] = credential_store.key_project_id(detail)
+        return cleaned_data
 
 
 class ClusterForm(forms.ModelForm):
@@ -117,9 +323,15 @@ class ClusterForm(forms.ModelForm):
             creds = self.instance.cloud_credential
         return creds
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
+        """user is the user editing the cluster; the cluster pages pass it.
+        Only a superuser can set or change the existing service accounts,
+        so without a user they cannot be changed either."""
 
         super().__init__(*args, **kwargs)
+        self.own_accounts_superuser_only = not (
+            user is not None and user.is_superuser
+        )
 
         # Set default for new creations to True (Native Auth)
         if not self.instance.id:
@@ -161,6 +373,60 @@ class ClusterForm(forms.ModelForm):
                 self.fields[field_name].widget = forms.TextInput(attrs={'class': 'form-control'})
                 self.fields[field_name].widget.attrs['readonly'] = True
 
+        # Existing service accounts are chosen when the cluster is created,
+        # and only clusters that use service-account profiles can have them
+        if (
+            self.instance.status != "n"
+            or not self.instance.uses_service_account_profiles
+        ):
+            for field_name in self.OWN_SERVICE_ACCOUNT_FIELDS:
+                self.fields[field_name].disabled = True
+        elif self.own_accounts_superuser_only:
+            # Shown read-only; clean() refuses a changed value
+            for field_name in self.OWN_SERVICE_ACCOUNT_FIELDS:
+                field = self.fields[field_name]
+                field.widget.attrs["readonly"] = True
+                field.help_text = (
+                    f"{self.OWN_ACCOUNTS_SUPERUSER_ONLY} {field.help_text}"
+                )
+
+    OWN_SERVICE_ACCOUNT_FIELDS = (
+        "controller_service_account_email",
+        "login_service_account_email",
+        "compute_service_account_email",
+    )
+
+    OWN_ACCOUNTS_SUPERUSER_ONLY = (
+        "Only a superuser can set or change the existing service accounts."
+    )
+
+    def _refuse_own_account_changes(self, cleaned_data):
+        """Unless a superuser is editing: an error on each existing service
+        account field whose value differs from the cluster's"""
+        if not self.own_accounts_superuser_only:
+            return
+        for name in self.OWN_SERVICE_ACCOUNT_FIELDS:
+            if self.fields[name].disabled or self.has_error(name):
+                continue
+            if (cleaned_data.get(name) or "") != (
+                getattr(self.instance, name) or ""
+            ):
+                self.add_error(name, self.OWN_ACCOUNTS_SUPERUSER_ONLY)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        self._refuse_own_account_changes(cleaned_data)
+        if any(self.has_error(name) for name in self.OWN_SERVICE_ACCOUNT_FIELDS):
+            # The field's own error says what is wrong with it
+            return cleaned_data
+        own = [cleaned_data.get(name) for name in self.OWN_SERVICE_ACCOUNT_FIELDS]
+        if any(own) and not all(own):
+            raise ValidationError(
+                "Enter all three existing service accounts (controller, "
+                "login and compute), or none to let OFE create them."
+            )
+        return cleaned_data
+
     class Meta:
         model = Cluster
 
@@ -185,6 +451,9 @@ class ClusterForm(forms.ModelForm):
             "use_bigquery",
             "use_containers",
             "enable_slurm_auth",
+            "controller_service_account_email",
+            "login_service_account_email",
+            "compute_service_account_email",
         )
 
         widgets = {
@@ -230,6 +499,15 @@ class ClusterForm(forms.ModelForm):
             "use_bigquery": forms.CheckboxInput(attrs={"class": "required checkbox"}),
             "use_containers": forms.CheckboxInput(attrs={"class": "required checkbox"}),
             "enable_slurm_auth": forms.CheckboxInput(attrs={"class": "required checkbox"}),
+            "controller_service_account_email": forms.EmailInput(
+                attrs={"class": "form-control", "placeholder": "Optional"}
+            ),
+            "login_service_account_email": forms.EmailInput(
+                attrs={"class": "form-control", "placeholder": "Optional"}
+            ),
+            "compute_service_account_email": forms.EmailInput(
+                attrs={"class": "form-control", "placeholder": "Optional"}
+            ),
         }
 
 
@@ -273,7 +551,8 @@ class ClusterPartitionForm(forms.ModelForm):
             "additional_disk_type",
             "additional_disk_count",
             "additional_disk_size",
-            "additional_disk_auto_delete"
+            "additional_disk_auto_delete",
+            "separate_service_account",
         )
 
     def __init__(self, *args, **kwargs):
@@ -285,7 +564,16 @@ class ClusterPartitionForm(forms.ModelForm):
                 self.fields[field].widget.attrs.update(
                     {"title": self.fields[field].help_text}
                 )
-        
+
+        # A partition's account is fixed once its cluster is created (the
+        # model's clean() enforces it); a new partition may still choose
+        if (
+            self.instance.pk is not None
+            and self.instance.cluster_id is not None
+            and self.instance.cluster.status != "n"
+        ):
+            self.fields["separate_service_account"].disabled = True
+
         self.fields["boot_disk_type"].widget = forms.Select(attrs={"class": "form-control disk_type_select"})
         self.fields["additional_disk_type"].widget = forms.Select(attrs={"class": "form-control disk_type_select"})
 
@@ -366,7 +654,7 @@ class ClusterPartitionForm(forms.ModelForm):
         if reservation_name:
             try:
                 cluster = cleaned_data.get('cluster')
-                cloud_credential = cluster.cloud_credential.detail
+                cloud_credential = cluster.cloud_credential
                 cloud_zone = cluster.cloud_zone
 
                 # logger.info(f"Cluster: {cluster}")
@@ -481,7 +769,7 @@ class WorkbenchForm(forms.ModelForm):
             self.fields["attached_cluster"].disabled = True
 
         self.workbench_zones = cloud_info.get_gcp_workbench_region_zone_info(
-            credential.detail
+            credential
         )
 
         self.fields["trusted_user"].queryset = (
@@ -490,7 +778,7 @@ class WorkbenchForm(forms.ModelForm):
 
         # Pull instance types from cloud_info
         instance_types = cloud_info.get_machine_types(
-            "GCP", credential.detail, "europe-west4", "europe-west4-a"
+            "GCP", credential, "europe-west4", "europe-west4-a"
         )
         # set variables for retrieving instance types for dropdown menu
         choices_list = []
@@ -1070,7 +1358,7 @@ class FilesystemImportForm(forms.ModelForm):
         self.fields["vpc"].queryset = VirtualNetwork.objects.filter(
             cloud_credential=creds
         ).filter(Q(cloud_state="i") | Q(cloud_state="m"))
-        region_info = cloud_info.get_region_zone_info("GCP", creds.detail)
+        region_info = cloud_info.get_region_zone_info("GCP", creds)
         self.fields["cloud_zone"].widget.choices = [
             (r, [(z, z) for z in rz]) for r, rz in region_info.items()
         ]
@@ -1115,7 +1403,7 @@ class FilestoreForm(forms.ModelForm):
         self.fields["vpc"].queryset = VirtualNetwork.objects.filter(
             cloud_credential=creds
         ).filter(Q(cloud_state="i") | Q(cloud_state="m"))
-        region_info = cloud_info.get_region_zone_info("GCP", creds.detail)
+        region_info = cloud_info.get_region_zone_info("GCP", creds)
         self.fields["cloud_zone"].widget.choices = [
             (r, [(z, z) for z in rz]) for r, rz in region_info.items()
         ]
@@ -1242,6 +1530,14 @@ class ImageForm(forms.ModelForm):
         user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
         self.fields["startup_script"].queryset = self.get_startup_scripts(user)
+
+    def clean_cloud_credential(self):
+        credential = self.cleaned_data["cloud_credential"]
+        # Packer, which builds the image, needs an uploaded key
+        refusal = credential_store.image_build_refusal(credential)
+        if refusal:
+            raise ValidationError(refusal)
+        return credential
 
     def get_startup_scripts(self, user):
         # Retrieve startup scripts owned by the user

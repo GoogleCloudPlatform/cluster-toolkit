@@ -26,3 +26,5 @@ tf/.tkfe.lock
 tf/tfapply.log
 tf/tfdestroy.log
 config.yaml
+credential-setup-errors.json
+.credential-setup-errors.json.*.tmp

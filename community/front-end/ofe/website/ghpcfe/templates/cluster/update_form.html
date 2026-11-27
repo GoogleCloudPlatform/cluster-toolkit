@@ -340,6 +340,36 @@
     </div>
   </div>
   <hr>
+  {% if object.uses_service_account_profiles %}
+  <p style="text-decoration: underline; font-size: large;">Existing service accounts (optional)</p>
+  <p class="form-text text-muted">
+    OFE creates separate controller, login and compute service accounts for
+    this cluster and grants each one only what it needs. To use accounts you
+    manage instead, enter all three. OFE then creates no service account for
+    this cluster and grants these accounts nothing, so give each one the
+    permissions listed under it before you create the cluster. They cannot be
+    changed after the cluster is created.
+  </p>
+  <div class="form-group">
+    {{ form.controller_service_account_email.errors }}
+    {{ form.controller_service_account_email.label_tag }}
+    {{ form.controller_service_account_email }}
+    <small class="form-text text-muted">{{ form.controller_service_account_email.help_text }}</small>
+  </div>
+  <div class="form-group">
+    {{ form.login_service_account_email.errors }}
+    {{ form.login_service_account_email.label_tag }}
+    {{ form.login_service_account_email }}
+    <small class="form-text text-muted">{{ form.login_service_account_email.help_text }}</small>
+  </div>
+  <div class="form-group">
+    {{ form.compute_service_account_email.errors }}
+    {{ form.compute_service_account_email.label_tag }}
+    {{ form.compute_service_account_email }}
+    <small class="form-text text-muted">{{ form.compute_service_account_email.help_text }}</small>
+  </div>
+  <hr>
+  {% endif %}
 
   <br />
   {% if object.status == "n" %}

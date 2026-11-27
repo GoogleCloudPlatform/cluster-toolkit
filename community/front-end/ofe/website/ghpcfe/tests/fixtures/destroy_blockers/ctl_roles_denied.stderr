@@ -1,0 +1,35 @@
+
+Error: Error deleting the custom project role Slurm Controller: googleapi: Error 403: Permission 'iam.roles.delete' denied on resource (or it may not exist).
+Details:
+[
+  {
+    "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+    "domain": "iam.googleapis.com",
+    "metadata": {
+      "permission": "iam.roles.delete"
+    },
+    "reason": "IAM_PERMISSION_DENIED"
+  }
+]
+
+  with module.ctl_profile.google_project_iam_custom_role.this[0],
+  on ../_modules/embedded/community/modules/iam/service-account-profiles/main.tf line 426, in resource "google_project_iam_custom_role" "this":
+ 426: resource "google_project_iam_custom_role" "this" {
+
+
+Error: Error deleting the custom project role Slurm Controller (name-scoped): googleapi: Error 403: Permission 'iam.roles.delete' denied on resource (or it may not exist).
+Details:
+[
+  {
+    "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+    "domain": "iam.googleapis.com",
+    "metadata": {
+      "permission": "iam.roles.delete"
+    },
+    "reason": "IAM_PERMISSION_DENIED"
+  }
+]
+
+  with module.ctl_profile.google_project_iam_custom_role.scoped[0],
+  on ../_modules/embedded/community/modules/iam/service-account-profiles/main.tf line 442, in resource "google_project_iam_custom_role" "scoped":
+ 442: resource "google_project_iam_custom_role" "scoped" {

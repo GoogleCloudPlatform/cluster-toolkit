@@ -1,0 +1,13 @@
+
+Error: Error deleting the custom project role Slurm Controller: googleapi: Error 503: The service is currently unavailable., backendError
+
+  with module.ctl_profile.google_project_iam_custom_role.this[0],
+  on ../_modules/embedded/community/modules/iam/service-account-profiles/main.tf line 426, in resource "google_project_iam_custom_role" "this":
+ 426: resource "google_project_iam_custom_role" "this" {
+
+
+Error: Error deleting instance template: googleapi: Error 400: The instance_template resource 'projects/example-project/global/instanceTemplates/alpha0a1b2c3d-compute-batch-20261104120000000000000001' is already being used by 'projects/example-project/zones/us-central1-a/instances/alpha0a1b2c3d-batch-0', resourceInUseByAnotherResource
+
+  with module.slurm_controller.module.slurm_nodeset_template["batch"].module.instance_template.google_compute_instance_template.tpl,
+  on ../_modules/embedded/community/modules/internal/slurm-gcp/internal_instance_template/main.tf line 83, in resource "google_compute_instance_template" "tpl":
+  83: resource "google_compute_instance_template" "tpl" {

@@ -52,7 +52,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _probe_private_google_access(credential_detail, region, subnet):
+def _probe_private_google_access(credential, region, subnet):
     """Read a subnet's real Private Google Access state, or keep the default.
 
     Imported subnets are not managed by OFE, so the model default does not
@@ -69,7 +69,7 @@ def _probe_private_google_access(credential_detail, region, subnet):
     ).default
     try:
         egress = cloud_info.get_subnet_egress_info(
-            "GCP", credential_detail, region, subnet
+            "GCP", credential, region, subnet
         )
     except Exception as e:  # noqa: BLE001 - best effort, keep default
         logger.warning(
@@ -189,7 +189,7 @@ class VPCCreateView2(SuperUserRequiredMixin, CreateView):
         return {
             "cloud_credential": self.cloud_credential,
             "regions": cloud_info.get_region_zone_info(
-                "GCP", self.cloud_credential.detail
+                "GCP", self.cloud_credential
             ).keys(),
         }
 
@@ -238,7 +238,7 @@ class VPCImportView2(SuperUserRequiredMixin, CreateView):
     def _setup_data(self, cred_id):
         self.cloud_credential = get_object_or_404(Credential, pk=cred_id)
         self.subnet_info = cloud_info.get_subnets(
-            "GCP", self.cloud_credential.detail
+            "GCP", self.cloud_credential
         )
         self.vpc_sub_map = defaultdict(list)
         for (vpc, region, subnet, cidr) in self.subnet_info:
@@ -262,7 +262,7 @@ class VPCImportView2(SuperUserRequiredMixin, CreateView):
 
         def add_subnet(unused_vpc_name, region, subnet, cidr):
             pga = _probe_private_google_access(
-                self.cloud_credential.detail, region, subnet
+                self.cloud_credential, region, subnet
             )
             vs = VirtualSubnet(
                 name=subnet,
@@ -304,12 +304,12 @@ class VPCUpdateView(SuperUserRequiredMixin, UpdateView):
     def get_initial(self):
         initial = {
             "regions": cloud_info.get_region_zone_info(
-                "GCP", self.get_object().cloud_credential.detail
+                "GCP", self.get_object().cloud_credential
             ).keys()
         }
         if self.get_object().cloud_state == "i":
             subnet_info = cloud_info.get_subnets(
-                "GCP", self.get_object().cloud_credential.detail
+                "GCP", self.get_object().cloud_credential
             )
             initial["available_subnets"] = [
                 (x[2], x[2])
@@ -329,7 +329,7 @@ class VPCUpdateView(SuperUserRequiredMixin, UpdateView):
 
         def add_subnet(unused_vpc_name, region, subnet, cidr):
             pga = _probe_private_google_access(
-                self.object.cloud_credential.detail, region, subnet
+                self.object.cloud_credential, region, subnet
             )
             vs = VirtualSubnet(
                 name=subnet,
@@ -344,7 +344,7 @@ class VPCUpdateView(SuperUserRequiredMixin, UpdateView):
             vs.save()
 
         subnet_info = cloud_info.get_subnets(
-            "GCP", self.get_object().cloud_credential.detail
+            "GCP", self.get_object().cloud_credential
         )
         # Need list of subnets to delete - not selected, but are in DB
         for sn in self.object.subnets.all():
@@ -467,12 +467,33 @@ class VirtualSubnetView(SuperUserRequiredMixin, generic.TemplateView):
             extra=1,
         )
 
+    def _refuse_while_busy(self, vpc):
+        """A redirect to the network page, with a message, while the network
+        is being created or destroyed; None otherwise.
+
+        The network page hides Edit Subnets then. A subnet saved or deleted
+        meanwhile would wait for the apply or destroy to release the
+        network's directory lock, which can take minutes.
+        """
+        if "c" not in vpc.cloud_state and "d" not in vpc.cloud_state:
+            return None
+        action = "created" if "c" in vpc.cloud_state else "destroyed"
+        messages.error(
+            self.request,
+            f"VPC {vpc.name} is being {action}. Edit its subnets when that "
+            "has finished.",
+        )
+        return redirect(reverse("vpc-detail", kwargs={"pk": vpc.pk}))
+
     def get(self, *args, **kwargs):
         vpc = VirtualNetwork.objects.get(pk=kwargs["vpc_id"])
+        refused = self._refuse_while_busy(vpc)
+        if refused:
+            return refused
         qset = VirtualSubnet.objects.filter(vpc=vpc)
         region_list = list(
             cloud_info.get_region_zone_info(
-                "GCP", vpc.cloud_credential.detail
+                "GCP", vpc.cloud_credential
             ).keys()
         )
         formset = self.get_formset(region_list)(
@@ -490,8 +511,11 @@ class VirtualSubnetView(SuperUserRequiredMixin, generic.TemplateView):
     def post(self, *args, **kwargs):
 
         vpc = VirtualNetwork.objects.get(pk=kwargs["vpc_id"])
+        refused = self._refuse_while_busy(vpc)
+        if refused:
+            return refused
         region_list = cloud_info.get_region_zone_info(
-            "GCP", vpc.cloud_credential.detail
+            "GCP", vpc.cloud_credential
         ).keys()
         formset = self.get_formset(region_list)(
             data=self.request.POST, instance=vpc

@@ -14,6 +14,7 @@
 
 """Commonly used utility routines"""
 
+import collections
 import copy
 import datetime
 import json
@@ -31,6 +32,18 @@ import shutil
 import yaml
 
 logger = logging.getLogger(__name__)
+
+
+def _credentials():
+    """The credentials module, imported when a function first needs it.
+
+    It needs Django, and this module must stay importable without it:
+    script/migrate_tf_state_to_gcs.sh and Django-free tests load it for the
+    state bucket and prefix alone.
+    """
+    from . import credentials  # pylint: disable=import-outside-toplevel
+
+    return credentials
 
 # TODO = Make some form of global config file
 g_baseDir = Path(__file__).resolve().parent.parent.parent.parent
@@ -296,37 +309,73 @@ def rsync_dir(
         raise
 
 
-def _terraform_env(extra_env=None):
-    """Build the environment for a terraform invocation."""
-    new_env = os.environ.copy()
+def _without_cloud_identity(env):
+    """A copy of env without any ambient credential variable
+    (credentials.AMBIENT_CREDENTIAL_VARIABLES), for a tool run that is given
+    no credential"""
+    env = dict(env)
+    for variable in _credentials().AMBIENT_CREDENTIAL_VARIABLES:
+        env.pop(variable, None)
+    return env
+
+
+def _terraform_env(extra_env=None, base_env=None):
+    """Build the environment for a terraform invocation.
+
+    base_env (default: the server's environment) is copied, never changed.
+    """
+    new_env = dict(os.environ if base_env is None else base_env)
     # Don't have terraform try to reuse any existing SSH agent
     # It has its own keys
-    if "SSH_AUTH_SOCK" in new_env:
-        del new_env["SSH_AUTH_SOCK"]
+    new_env.pop("SSH_AUTH_SOCK", None)
     new_env.update(extra_env if extra_env else {})
     return new_env
 
 
-def get_terraform_state(target_dir, extra_env=None):
+def get_terraform_state(
+    target_dir, credential=None, operation=None, extra_env=None
+):
     """Return the Terraform state document for a working directory.
 
     Uses `terraform state pull`, because with a GCS backend there is no local
     terraform.tfstate; the output is the same raw state document.
 
-    This contacts the backend, so `extra_env` must carry
-    GOOGLE_APPLICATION_CREDENTIALS for the resource's provisioning credential.
+    This contacts the backend, so pass the resource's provisioning credential
+    (a Credential): the pull acts as it, as run_terraform does. operation
+    names what the read is for in the message raised when Google Cloud
+    refuses a permission.
 
     Not run through run_terraform(): it inserts -no-color directly after the
     command word, which `terraform state pull` rejects.
     """
-    result = subprocess.run(
-        ["terraform", "state", "pull"],
-        cwd=target_dir,
-        env=_terraform_env(extra_env),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=True,
-    )
+
+    def pull(base_env):
+        return subprocess.run(
+            ["terraform", "state", "pull"],
+            cwd=target_dir,
+            env=_terraform_env(extra_env, base_env),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+
+    if credential is None:
+        # As run_terraform without a credential: no ambient credential
+        result = pull(_without_cloud_identity(os.environ))
+    else:
+        credentials = _credentials()
+        with credentials.tool_environment(credential) as cred_env:
+            try:
+                result = pull(cred_env)
+            except subprocess.CalledProcessError as cpe:
+                gap = credentials.permission_error_from_output(
+                    (cpe.stderr or b"").decode("utf-8", errors="replace"),
+                    credential,
+                    operation or f"read the Terraform state of {target_dir}",
+                )
+                if gap is None:
+                    raise
+                raise credentials.PermissionDeniedRunError(cpe, gap) from cpe
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError as err:
@@ -380,15 +429,87 @@ def _gcs_backend_config(target_dir):
     return config["bucket"], config.get("prefix") or ""
 
 
-def _gcs_client(credentials_file):
+def _gcs_client(credential):
+    """A Cloud Storage client that acts as credential (a Credential)."""
     # Imported here so this module stays importable without the Cloud
-    # client libraries, which the Django-free tests rely on.
+    # client libraries.
     from google.cloud import storage  # pylint: disable=import-outside-toplevel
 
-    return storage.Client.from_service_account_json(credentials_file)
+    return storage.Client(
+        project=credential.project_id or None,
+        credentials=_credentials().python_credentials(credential),
+    )
 
 
-def _read_gcs_state_lock(bucket, prefix, credentials_file):
+class StateContents(
+    collections.namedtuple("StateContents", ["states", "resources"])
+):
+    """What the Terraform state under one prefix holds: how many state
+    documents (states) and how many resources in all of them (resources).
+
+    states == 0 means there is no state at all, which is not evidence that
+    nothing was ever deployed from that prefix; see state_contents().
+    """
+
+
+def state_contents(bucket, prefix, credential):
+    """Return the StateContents of the Terraform state under prefix.
+
+    Every `*.tfstate` object below `<prefix>/` in bucket (the GCS backend
+    keeps one per workspace, `<prefix>/<workspace>.tfstate`; one nested
+    deeper is read too, so that no state is missed) is read as credential
+    (a Credential) and parsed. An empty object is no state, as Terraform
+    reads it, so it is not counted.
+
+    `resources` is the total number of entries in the documents'
+    `resources` lists: every entry counts, whatever its mode (managed or
+    data) and however many instances it has, so a state that holds
+    anything at all is never taken for an empty one. A state with no
+    resources (the one `terraform init` leaves, or a finished destroy)
+    counts as a state with 0 resources. No state object at all gives
+    states == 0: the caller decides what that means, because state can be
+    missing for reasons other than "never deployed" (never migrated to the
+    bucket, a server under another deployment name, a restored database
+    with a new state namespace).
+
+    Raises on any read or parse failure: the Cloud Storage client's own
+    error (permission, network), or RuntimeError for an object that is not
+    a Terraform state document of format version 4.
+    """
+    states = 0
+    total = 0
+    directory = f"{prefix.strip('/')}/"
+    for blob in _gcs_client(credential).list_blobs(bucket, prefix=directory):
+        if not blob.name.endswith(".tfstate"):
+            continue
+        where = f"gs://{bucket}/{blob.name}"
+        data = blob.download_as_bytes()
+        if not data.strip():
+            continue
+        try:
+            document = json.loads(data)
+        except ValueError as err:
+            raise RuntimeError(
+                f"{where} is not a Terraform state document: {err}"
+            ) from err
+        resources = (
+            document.get("resources") if isinstance(document, dict) else None
+        )
+        if (
+            not isinstance(document, dict)
+            or document.get("version") != 4
+            or not isinstance(resources, (list, type(None)))
+        ):
+            raise RuntimeError(
+                f"{where} is not a Terraform state document of format "
+                "version 4 with a list of resources"
+            )
+        states += 1
+        total += len(resources or [])
+    return StateContents(states=states, resources=total)
+
+
+def _read_gcs_state_lock(bucket, prefix, credential):
     """Return the lock info of the default workspace's state, or None.
 
     The GCS backend uses the lock object's generation as the lock ID, not the
@@ -396,7 +517,7 @@ def _read_gcs_state_lock(bucket, prefix, credentials_file):
     "ID" is replaced with it.
     """
     name = posixpath.join(prefix.strip("/"), "default.tflock")
-    blob = _gcs_client(credentials_file).bucket(bucket).get_blob(name)
+    blob = _gcs_client(credential).bucket(bucket).get_blob(name)
     if blob is None:
         return None
     info = json.loads(blob.download_as_bytes())
@@ -441,12 +562,11 @@ def _lock_age(created):
     return str(datetime.timedelta(seconds=max(0, int(age.total_seconds()))))
 
 
-def _state_lock_message(target_dir, info, credentials_file, reason):
+def _state_lock_message(target_dir, info, credential, reason):
     lock_id = info.get("ID") or "<lock ID>"
-    credentials_file = credentials_file or "<resource credential file>"
     unlock = (
         f"cd {shlex.quote(str(target_dir))} && "
-        f"GOOGLE_APPLICATION_CREDENTIALS={shlex.quote(str(credentials_file))} "
+        f"{_credentials().shell_identity(credential)} "
         f"terraform force-unlock -force {lock_id}"
     )
     return "\n".join([
@@ -464,7 +584,7 @@ def _state_lock_message(target_dir, info, credentials_file, reason):
     ])
 
 
-def _check_stale_state_lock(target_dir, cmdline, credentials_file):
+def _check_stale_state_lock(target_dir, cmdline, credential):
     """Raise TerraformStateLockError if the state lock is provably stale.
 
     A lock goes stale only when Terraform is killed hard (server reboot, OOM,
@@ -476,13 +596,13 @@ def _check_stale_state_lock(target_dir, cmdline, credentials_file):
     This never removes the lock: removing a lock that is in use corrupts the
     state it protects.
     """
-    if not credentials_file:
+    if credential is None:
         return
     try:
         backend = _gcs_backend_config(target_dir)
         if backend is None:
             return
-        info = _read_gcs_state_lock(*backend, credentials_file)
+        info = _read_gcs_state_lock(*backend, credential)
         if info is None:
             return
         _, sep, host = str(info.get("Who", "")).rpartition("@")
@@ -494,7 +614,7 @@ def _check_stale_state_lock(target_dir, cmdline, credentials_file):
             return
         # The holder may have finished and released the lock between the
         # read and the process scan; only the same lock still present counts.
-        again = _read_gcs_state_lock(*backend, credentials_file)
+        again = _read_gcs_state_lock(*backend, credential)
         if again is None or again.get("ID") != info.get("ID"):
             return
     except Exception as err:  # pylint: disable=broad-except
@@ -506,7 +626,7 @@ def _check_stale_state_lock(target_dir, cmdline, credentials_file):
         return
 
     message = _state_lock_message(
-        target_dir, info, credentials_file,
+        target_dir, info, credential,
         "The lock was taken on this server and no Terraform process on this"
         " server holds it, so it is stale: left by a Terraform run that was"
         " killed.",
@@ -520,7 +640,7 @@ _LOCK_INFO_LINE = re.compile(
 )
 
 
-def _raise_if_lock_timeout(err, target_dir, log_err_fn, credentials_file):
+def _raise_if_lock_timeout(err, target_dir, log_err_fn, credential):
     """Turn a run that timed out waiting for the state lock into a clear error."""
     try:
         stderr = Path(log_err_fn).read_text(errors="replace")
@@ -532,14 +652,27 @@ def _raise_if_lock_timeout(err, target_dir, log_err_fn, credentials_file):
     for key, value in _LOCK_INFO_LINE.findall(stderr):
         info.setdefault(key, value)
     message = _state_lock_message(
-        target_dir, info, credentials_file,
+        target_dir, info, credential,
         f"Terraform waited {TERRAFORM_LOCK_TIMEOUT} for the lock and gave up.",
     )
     logger.error(message)
     raise TerraformStateLockError(err.cmd, message, err.returncode) from err
 
 
-def run_terraform(target_dir, command, arguments=None, extra_env=None):
+def run_terraform(
+    target_dir, command, arguments=None, extra_env=None, credential=None,
+    operation=None,
+):
+    """Run a Terraform command in target_dir, logging to files there.
+
+    With credential (a Credential), Terraform acts as it; see
+    credentials.tool_environment. operation (e.g. "create cluster x") names
+    what the run is for in the message raised when Google Cloud refuses a
+    permission. Without credential, the command gets no cloud identity of
+    its own; use that only for commands that need no cloud access. In a
+    directory whose state is in the GCS state bucket, every command that
+    reads or writes state, init and output included, needs the credential.
+    """
 
     arguments = arguments if arguments else []
     extra_env = extra_env if extra_env else {}
@@ -559,73 +692,61 @@ def run_terraform(target_dir, command, arguments=None, extra_env=None):
     log_out_fn = Path(target_dir) / f"terraform_{command}_log.stdout"
     log_err_fn = Path(target_dir) / f"terraform_{command}_log.stderr"
 
-    new_env = _terraform_env(extra_env)
-
     if command in TERRAFORM_LOCKING_COMMANDS:
-        _check_stale_state_lock(
-            target_dir, cmdline, new_env.get("GOOGLE_APPLICATION_CREDENTIALS")
-        )
+        _check_stale_state_lock(target_dir, cmdline, credential)
+
+    def run(base_env):
+        new_env = _terraform_env(extra_env, base_env)
+        with log_out_fn.open("wb") as log_out:
+            with log_err_fn.open("wb") as log_err:
+                try:
+                    subprocess.run(
+                        cmdline,
+                        cwd=target_dir,
+                        env=new_env,
+                        stdout=log_out,
+                        stderr=log_err,
+                        check=True,
+                    )
+                except subprocess.CalledProcessError as err:
+                    if command in TERRAFORM_LOCKING_COMMANDS:
+                        log_err.flush()
+                        _raise_if_lock_timeout(
+                            err, target_dir, log_err_fn, credential
+                        )
+                    raise
+
+    if credential is None:
+        # Commands that need no cloud access, with no ambient credential
+        run(_without_cloud_identity(os.environ))
+        return (log_out_fn, log_err_fn)
 
     # Some Cluster Toolkit modules (e.g. the Slurm controller's compute-node
-    # cleanup) run `gcloud` directly from an apply/destroy-time local-exec
-    # provisioner. The gcloud CLI does not read GOOGLE_APPLICATION_CREDENTIALS
-    # -- that only feeds Terraform's own provider and client libraries -- so
-    # without an explicit gcloud auth context those provisioners silently run
-    # as whatever account (if any) is ambiently active and typically do
-    # nothing. Give this invocation its own isolated gcloud config, activated
-    # with the same credential, so any local-exec that shells out to gcloud
-    # is authenticated as the identity the operation was actually run with.
-    creds_file = new_env.get("GOOGLE_APPLICATION_CREDENTIALS")
-    if creds_file and command in ("apply", "destroy"):
-        gcloud_config_dir = Path(target_dir) / ".gcloud_config"
-        gcloud_config_dir.mkdir(exist_ok=True)
-        new_env["CLOUDSDK_CONFIG"] = str(gcloud_config_dir)
+    # cleanup) run `gcloud` from an apply/destroy-time local-exec
+    # provisioner, and gcloud reads only a key file, so those runs also get
+    # one. The run's environment also gives gcloud its own configuration
+    # directory, so a provisioner acts as the credential, never as an
+    # account that is ambiently active.
+    operation = operation or f"run terraform {command} in {target_dir}"
+    credentials = _credentials()
+    with credentials.tool_environment(
+        credential, key_file=command in ("apply", "destroy")
+    ) as new_env:
         try:
-            project_id = json.loads(Path(creds_file).read_text()).get("project_id")
-        except (OSError, ValueError):
-            project_id = None
-        activate_cmd = [
-            "gcloud", "--quiet", "auth", "activate-service-account",
-            f"--key-file={creds_file}",
-        ]
-        if project_id:
-            activate_cmd.append(f"--project={project_id}")
-        try:
-            subprocess.run(
-                activate_cmd, env=new_env, check=True,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
-        except (subprocess.CalledProcessError, OSError) as err:
-            # Best-effort: a module without a gcloud-dependent provisioner is
-            # unaffected, and we must not block the terraform operation itself.
-            logger.warning(
-                "Could not activate gcloud auth context for %s: %s",
-                target_dir, err,
-            )
-
-    with log_out_fn.open("wb") as log_out:
-        with log_err_fn.open("wb") as log_err:
-            try:
-                subprocess.run(
-                    cmdline,
-                    cwd=target_dir,
-                    env=new_env,
-                    stdout=log_out,
-                    stderr=log_err,
-                    check=True,
-                )
-            except subprocess.CalledProcessError as err:
-                if command in TERRAFORM_LOCKING_COMMANDS:
-                    log_err.flush()
-                    _raise_if_lock_timeout(
-                        err, target_dir, log_err_fn,
-                        new_env.get("GOOGLE_APPLICATION_CREDENTIALS"),
-                    )
-                raise
+            run(new_env)
+        except TerraformStateLockError:
+            raise
+        except subprocess.CalledProcessError as cpe:
+            raise credentials.explain_failed_run(
+                cpe, [log_err_fn, log_out_fn], credential, operation
+            ) from cpe
 
     return (log_out_fn, log_err_fn)
 
-def run_packer(target_dir, command, arguments=None, extra_env=None):
+def run_packer(
+    target_dir, command, arguments=None, extra_env=None, credential=None,
+    operation=None,
+):
     """
     Run the Packer command with the specified arguments in the given target directory.
 
@@ -680,11 +801,9 @@ def run_packer(target_dir, command, arguments=None, extra_env=None):
     log_out_fn = Path(target_dir) / f"packer_{command}_log.stdout"
     log_err_fn = Path(target_dir) / f"packer_{command}_log.stderr"
 
-    new_env = os.environ.copy()
-    new_env.pop("SSH_AUTH_SOCK", None)
-    new_env.update(extra_env)
-
-    try:
+    def run(new_env):
+        new_env.pop("SSH_AUTH_SOCK", None)
+        new_env.update(extra_env)
         with log_out_fn.open("wb") as log_out, log_err_fn.open("wb") as log_err:
             subprocess.run(
                 cmdline,
@@ -694,6 +813,26 @@ def run_packer(target_dir, command, arguments=None, extra_env=None):
                 stderr=log_err,
                 check=True,
             )
+
+    try:
+        if credential is None:
+            # Commands that need no cloud access, such as init, with no
+            # ambient credential
+            run(_without_cloud_identity(os.environ))
+        else:
+            # Packer reads only a key file; credentials.py refuses image
+            # builds with an impersonate credential before Packer runs
+            credentials = _credentials()
+            with credentials.tool_environment(credential, key_file=True) as new_env:
+                try:
+                    run(new_env)
+                except subprocess.CalledProcessError as cpe:
+                    raise credentials.explain_failed_run(
+                        cpe,
+                        [log_err_fn, log_out_fn],
+                        credential,
+                        operation or f"run packer {command} in {target_dir}",
+                    ) from cpe
     except subprocess.CalledProcessError as e:
         # Handle the error from Packer command execution
         raise RuntimeError(f"Packer command failed: {e}")

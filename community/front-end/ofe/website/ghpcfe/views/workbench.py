@@ -162,7 +162,7 @@ class WorkbenchCreateView2(LoginRequiredMixin, CreateView):
         """Perform extra query to populate instance types data"""
         context = super().get_context_data(**kwargs)
         region_info = cloud_info.get_region_zone_info(
-            "GCP", self.cloud_credential.detail
+            "GCP", self.cloud_credential
         )
         subnet_regions = {
             sn.id: sn.cloud_region
@@ -319,12 +319,11 @@ class BackendCreateWorkbench(BackendAsyncView):
     @sync_to_async
     def get_orm(self, workbench_id):
         workbench = Workbench.objects.get(pk=workbench_id)
-        creds = workbench.cloud_credential.detail
-        return (workbench, creds)
+        return (workbench,)
 
-    def cmd(self, unused_task_id, unused_token, workbench, creds):
+    def cmd(self, unused_task_id, unused_token, workbench):
 
-        WorkbenchInfo(workbench).create_workbench_dir(creds)
+        WorkbenchInfo(workbench).create_workbench_dir()
 
     async def get(self, request, pk):
         """this will invoke the background tasks and return immediately"""
