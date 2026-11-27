@@ -45,95 +45,6 @@ variable "target_architecture" {
   }
 }
 
-resource "terraform_data" "kueue_validations" {
-  lifecycle {
-    precondition {
-      condition     = !var.kueue.install || contains(local.kueue_supported_versions, var.kueue.version)
-      error_message = "Supported version of Kueue are ${join(", ", local.kueue_supported_versions)}"
-    }
-    precondition {
-      condition     = !var.kueue.install || !(var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false)) || (var.kueue.config_path != null && var.kueue.config_path != "") || contains(keys(coalesce(var.kueue.config_template_vars, {})), "accelerator_type")
-      error_message = "accelerator_type must be set in kueue.config_template_vars when using the default pathways configuration."
-    }
-    precondition {
-      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || var.kueue.accelerator_topology_mode == "PROVISION_ONLY"
-      error_message = "When enable_dynamic_slicing_for_tpus is true, accelerator_topology_mode must be 'PROVISION_ONLY'."
-    }
-    precondition {
-      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || (var.kueue.machine_type != null && length(regexall("^(tpu|ct)", var.kueue.machine_type)) > 0)
-      error_message = "When enable_dynamic_slicing_for_tpus is true, machine_type must be a TPU machine type."
-    }
-    precondition {
-      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || (var.kueue.config_path != null && var.kueue.config_path != "") || (var.kueue.config_template_vars != null && contains(keys(var.kueue.config_template_vars), "accelerator_type"))
-      error_message = "accelerator_type must be set in kueue.config_template_vars when using the default dynamic slicing configuration."
-    }
-    precondition {
-      condition     = !(var.kueue.enable_dynamic_slicing_for_tpus && !var.kueue.install)
-      error_message = "Slice controller requires Kueue to be installed. Set kueue.install to true when kueue.enable_dynamic_slicing_for_tpus is true."
-    }
-    precondition {
-      condition     = !(var.kueue.enable_dynamic_slicing_for_tpus && !var.jobset.install)
-      error_message = "Slice controller requires Jobset to be installed. Set jobset.install to true when kueue.enable_dynamic_slicing_for_tpus is true."
-    }
-    precondition {
-      condition     = !var.kueue.install || var.kueue.wait_for_pods_ready == null || module.kueue_pods_ready_default_on_check.is_greater_than_or_equal
-      error_message = "kueue.wait_for_pods_ready is only supported on Kueue >= 0.19.0."
-    }
-    precondition {
-      condition     = !local.install_kueue || local.kueue_helm_values_path == "" || local.kueue_helm_values_file_exists
-      error_message = "kueue.helm_values_path '${local.kueue_helm_values_path}' does not exist. Ensure the file exists and is staged with ghpc_stage(...) when referenced from a blueprint."
-    }
-    precondition {
-      condition     = !local.kueue_helm_values_file_exists || !local.kueue_helm_values_not_k8s_manifest || local.kueue_helm_values_is_mapping
-      error_message = "kueue.helm_values_path must render to a valid single-document YAML mapping of Kueue Helm chart values."
-    }
-    precondition {
-      condition     = !local.kueue_helm_values_file_exists || local.kueue_helm_values_not_k8s_manifest
-      error_message = "kueue.helm_values_path expects Kueue Helm chart values (for example managerConfig.controllerManagerConfigYaml and controllerManager.featureGates), not a Kubernetes manifest with top-level 'apiVersion' or 'kind'. Wrap Kueue Configuration YAML under managerConfig.controllerManagerConfigYaml, or use kueue.config_path for post-install resources such as ClusterQueue and LocalQueue."
-    }
-    precondition {
-      condition     = !local.kueue_helm_values_check_fields || local.kueue_helm_values_preserves_fullname
-      error_message = "fullnameOverride and nameOverride in kueue.helm_values_path must not be customized (leave unset, empty, or 'kueue') so gcluster job can locate kueue-controller-manager and kueue-webhook-service."
-    }
-    precondition {
-      condition     = !local.kueue_helm_values_check_fields || local.kueue_user_cert_manager_order_valid
-      error_message = "enableCertManager: true in kueue.helm_values_path cannot be combined with cert_manager.install = true in the same kubectl-apply module because Kueue is installed before cert-manager; pre-install cert-manager in an earlier module or deployment group first."
-    }
-    precondition {
-      condition     = !local.kueue_helm_values_check_fields || local.kueue_user_controller_manager_valid
-      error_message = "controllerManager in kueue.helm_values_path must be a YAML mapping."
-    }
-    precondition {
-      condition     = !local.kueue_helm_values_check_fields || local.kueue_user_feature_gates_valid
-      error_message = "controllerManager.featureGates in kueue.helm_values_path must be a YAML list of {name, enabled} objects with non-empty string name and boolean enabled (for example: [{name: 'VisibilityOnDemand', enabled: true}])."
-    }
-    precondition {
-      condition     = !local.kueue_helm_values_check_fields || local.kueue_user_tolerations_valid
-      error_message = "controllerManager.tolerations in kueue.helm_values_path must be a YAML list of toleration objects."
-    }
-    precondition {
-      condition     = !local.kueue_helm_values_check_fields || local.kueue_user_manager_config_container_valid
-      error_message = "managerConfig in kueue.helm_values_path must be a YAML mapping."
-    }
-    precondition {
-      condition     = !local.kueue_helm_values_check_fields || local.kueue_user_manager_config_valid_yaml
-      error_message = "managerConfig.controllerManagerConfigYaml in kueue.helm_values_path must be a YAML string (use '|') containing a valid single-document Kueue Configuration mapping."
-    }
-    precondition {
-      condition     = !local.kueue_helm_values_check_fields || !local.kueue_user_manager_config_valid_yaml || local.kueue_user_manager_config_valid_kind
-      error_message = "managerConfig.controllerManagerConfigYaml in kueue.helm_values_path must have kind 'Configuration' (or omit kind to inherit defaults)."
-    }
-    precondition {
-      condition     = !local.kueue_helm_values_check_fields || !local.kueue_user_manager_config_valid_yaml || !local.kueue_user_manager_config_valid_kind || local.kueue_user_manager_config_no_feature_gates
-      error_message = "featureGates cannot be set inside managerConfig.controllerManagerConfigYaml because Kueue rejects specifying feature gates in both CLI flags and Configuration; set controllerManager.featureGates in kueue.helm_values_path instead."
-    }
-    precondition {
-      condition     = !local.kueue_helm_values_check_fields || !local.kueue_user_manager_config_valid_yaml || !local.kueue_user_manager_config_valid_kind || local.kueue_user_manager_config_sections_valid
-      error_message = "Nested configuration sections in managerConfig.controllerManagerConfigYaml (health, metrics, webhook, leaderElection, clientConnection, integrations, controller, controller.groupKindConcurrency, waitForPodsReady) must be YAML mappings when set."
-    }
-  }
-}
-
 resource "terraform_data" "jobset_validations" {
   lifecycle {
     precondition {
@@ -253,7 +164,7 @@ variable "kueue" {
     config_path                     = optional(string, null)
     config_template_vars            = optional(map(any), null)
     helm_values_path                = optional(string, null)
-    helm_values_template_vars       = optional(map(any), null)
+    helm_values_template_vars       = optional(any, null)
     enable_pathways_for_tpus        = optional(bool, false)
     enable_dynamic_slicing_for_tpus = optional(bool, false)
     accelerator_topology_mode       = optional(string, null)
@@ -274,6 +185,11 @@ variable "kueue" {
     }), null)
   })
   default = {}
+
+  validation {
+    condition     = var.kueue.helm_values_template_vars == null || can(keys(var.kueue.helm_values_template_vars))
+    error_message = "kueue.helm_values_template_vars must be a mapping (key-value object) when set."
+  }
 
   validation {
     condition = alltrue([

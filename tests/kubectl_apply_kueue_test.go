@@ -28,7 +28,6 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/ext/tryfunc"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/function"
 	"github.com/zclconf/go-cty/cty/function/stdlib"
@@ -39,69 +38,24 @@ import (
 
 const kubectlApplyModuleDir = "../modules/management/kubectl-apply"
 
-var kueueOrderedLocalNames = []string{
-	"kueue_supported_versions",
-	"enable_pathways",
-	"enable_slicing",
-	"install_kueue",
-	"install_cert_manager",
-	"kueue_controller_cpu",
-	"kueue_controller_memory",
-	"kueue_controller_replicas",
-	"kueue_enable_wait_for_pods_ready",
-	"kueue_pods_ready_recovery_timeout",
-	"kueue_wait_for_pods_ready",
-	"kueue_helm_values_path",
-	"kueue_helm_values_file_exists",
-	"kueue_user_helm_values_raw",
-	"kueue_user_helm_values_is_blank",
-	"kueue_user_helm_values_content",
-	"kueue_helm_values_is_mapping",
-	"kueue_user_helm_values_parsed",
-	"kueue_helm_values_not_k8s_manifest",
-	"kueue_helm_values_check_fields",
-	"kueue_helm_values_preserves_fullname",
-	"kueue_user_controller_manager_valid",
-	"kueue_user_manager_config_container_valid",
-	"kueue_user_cert_manager_order_valid",
-	"kueue_has_user_feature_gates_field",
-	"kueue_user_feature_gates_valid",
-	"kueue_user_feature_gates",
-	"kueue_user_feature_gates_by_name",
-	"kueue_base_feature_gates",
-	"kueue_merged_feature_gates",
-	"kueue_has_user_tolerations_field",
-	"kueue_user_tolerations_valid",
-	"kueue_has_user_tolerations",
-	"kueue_user_tolerations",
-	"kueue_merged_tolerations",
-	"kueue_has_user_manager_config_field",
-	"kueue_user_manager_config_valid_yaml",
-	"kueue_user_manager_config",
-	"kueue_user_manager_config_valid_kind",
-	"kueue_user_manager_config_no_feature_gates",
-	"kueue_user_manager_config_sections_valid",
-	"kueue_raw_base_manager_config",
-	"kueue_base_manager_config",
-	"kueue_merged_wfpr_entry",
-	"kueue_merged_manager_config",
-}
-
 type kueueEvalInput struct {
-	version               string
-	install               bool
-	installCertManager    bool
-	enablePathways        bool
-	helmValuesPath        *string
-	helmValuesTemplateVar map[string]cty.Value
-	waitForPodsReady      map[string]cty.Value
-	controllerCPU         *string
-	controllerMemory      *string
-	controllerReplicas    *int64
+	version                  string
+	install                  bool
+	installCertManager       bool
+	enablePathways           bool
+	enableDynamicSlicing     bool
+	helmValuesPath           *string
+	helmValuesTemplateVar    map[string]cty.Value
+	rawHelmValuesTemplateVar *cty.Value
+	waitForPodsReady         map[string]cty.Value
+	controllerCPU            *string
+	controllerMemory         *string
+	controllerReplicas       *int64
 }
 
 type kueueParsedHCL struct {
 	locals        map[string]hcl.Expression
+	validations   []validationRule
 	preconditions []validationRule
 	valuesYAML    hcl.Expression
 }
@@ -221,14 +175,14 @@ func renderTemplateFile(path string, varsVal cty.Value) (cty.Value, error) {
 	if !varsVal.IsNull() {
 		maps.Copy(vars, varsVal.AsValueMap())
 	}
-	val, diags := expr.Value(&hcl.EvalContext{Variables: vars, Functions: stubTemplateFuncs()})
+	val, diags := expr.Value(&hcl.EvalContext{Variables: vars, Functions: kueuePureEvalFunctions()})
 	if diags.HasErrors() {
 		return cty.NilVal, diags
 	}
 	return val, nil
 }
 
-func kueueEvalFunctions() map[string]function.Function {
+func kueuePureEvalFunctions() map[string]function.Function {
 	endswithFn := function.New(&function.Spec{
 		Params: []function.Parameter{{Type: cty.String}, {Type: cty.String}},
 		Type:   function.StaticReturnType(cty.Bool),
@@ -261,7 +215,7 @@ func kueueEvalFunctions() map[string]function.Function {
 		},
 	})
 
-	funcs := map[string]function.Function{
+	return map[string]function.Function{
 		"alltrue":    alltrueFn,
 		"anytrue":    anytrueFn,
 		"can":        tryfunc.CanFunc,
@@ -271,7 +225,10 @@ func kueueEvalFunctions() map[string]function.Function {
 		"contains":   stdlib.ContainsFunc,
 		"distinct":   stdlib.DistinctFunc,
 		"endswith":   endswithFn,
+		"flatten":    stdlib.FlattenFunc,
+		"indent":     stdlib.IndentFunc,
 		"join":       stdlib.JoinFunc,
+		"jsonencode": stdlib.JSONEncodeFunc,
 		"keys":       stdlib.KeysFunc,
 		"length":     stdlib.LengthFunc,
 		"lookup":     stdlib.LookupFunc,
@@ -285,48 +242,65 @@ func kueueEvalFunctions() map[string]function.Function {
 		"yamldecode": yamlDecodeCtyFunc(),
 		"yamlencode": yamlEncodeCtyFunc(),
 	}
+}
+
+func kueueEvalFunctions() map[string]function.Function {
+	funcs := kueuePureEvalFunctions()
 	maps.Copy(funcs, fileSystemCtyFuncs())
 	return funcs
 }
 
 func readKubectlApplyKueueHCL(t *testing.T) kueueParsedHCL {
 	t.Helper()
-	varBody := parseHCLFile(t, filepath.Join(kubectlApplyModuleDir, "variables.tf"))
-	mainBody := parseHCLFile(t, filepath.Join(kubectlApplyModuleDir, "main.tf"))
+	tfPaths, err := filepath.Glob(filepath.Join(kubectlApplyModuleDir, "*.tf"))
+	if err != nil || len(tfPaths) == 0 {
+		t.Fatalf("globbing %s/*.tf failed: paths=%v err=%v", kubectlApplyModuleDir, tfPaths, err)
+	}
+	slices.Sort(tfPaths)
 
 	locals := make(map[string]hcl.Expression)
-	for _, block := range append(varBody.Blocks, mainBody.Blocks...) {
-		if block.Type != "locals" {
-			continue
+	var topBlocks []*hclsyntax.Block
+	var allBlocks []*hclsyntax.Block
+	for _, p := range tfPaths {
+		body := parseHCLFile(t, p)
+		topBlocks = append(topBlocks, body.Blocks...)
+		allBlocks = append(allBlocks, flattenBlocks(body)...)
+	}
+
+	var validations, preconditions []validationRule
+	for _, block := range topBlocks {
+		if block.Type == "locals" {
+			for name, attr := range block.Body.Attributes {
+				locals[name] = attr.Expr
+			}
 		}
-		for name, attr := range block.Body.Attributes {
-			locals[name] = attr.Expr
+		if block.Type == "variable" && slices.Equal(block.Labels, []string{"kueue"}) {
+			validations = append(validations, collectValidationRules(block.Body, "validation")...)
+		}
+		if block.Type == "resource" && slices.Equal(block.Labels, []string{"terraform_data", "kueue_validations"}) {
+			preconditions = append(preconditions, collectValidationRules(block.Body, "precondition")...)
 		}
 	}
 
-	var preconditions []validationRule
-	for _, block := range varBody.Blocks {
-		if block.Type != "resource" || !slices.Equal(block.Labels, []string{"terraform_data", "kueue_validations"}) {
-			continue
-		}
-		for _, sub := range flattenBlocks(block.Body) {
-			if sub.Type != "precondition" {
-				continue
-			}
-			preconditions = append(preconditions, validationRule{
+	return kueueParsedHCL{
+		locals:        locals,
+		validations:   validations,
+		preconditions: preconditions,
+		valuesYAML:    findBlockAttribute(t, allBlocks, "module", "values_yaml", "install_kueue"),
+	}
+}
+
+func collectValidationRules(body *hclsyntax.Body, blockType string) []validationRule {
+	var rules []validationRule
+	for _, sub := range flattenBlocks(body) {
+		if sub.Type == blockType {
+			rules = append(rules, validationRule{
 				condition:    sub.Body.Attributes["condition"].Expr,
 				errorMessage: sub.Body.Attributes["error_message"].Expr,
 			})
 		}
 	}
-
-	mainBlocks := flattenBlocks(mainBody)
-	valuesYAML := findBlockAttribute(t, mainBlocks, "module", "values_yaml", "install_kueue")
-	return kueueParsedHCL{
-		locals:        locals,
-		preconditions: preconditions,
-		valuesYAML:    valuesYAML,
-	}
+	return rules
 }
 
 func semverAtLeast(ver string, minMinor int) bool {
@@ -353,26 +327,34 @@ func optIntVal(n *int64) cty.Value {
 	return cty.NumberIntVal(*n)
 }
 
+func buildKueueTemplateVarsValue(in kueueEvalInput) cty.Value {
+	if in.rawHelmValuesTemplateVar != nil {
+		return *in.rawHelmValuesTemplateVar
+	}
+	if in.helmValuesTemplateVar == nil {
+		return cty.NullVal(cty.DynamicPseudoType)
+	}
+	return cty.ObjectVal(in.helmValuesTemplateVar)
+}
+
 func buildKueueVarValue(in kueueEvalInput) cty.Value {
 	ver := in.version
 	if ver == "" {
 		ver = "0.19.6"
-	}
-	tmplVars := cty.NullVal(cty.Map(cty.DynamicPseudoType))
-	if in.helmValuesTemplateVar != nil {
-		if len(in.helmValuesTemplateVar) == 0 {
-			tmplVars = cty.MapValEmpty(cty.DynamicPseudoType)
-		} else {
-			tmplVars = cty.MapVal(in.helmValuesTemplateVar)
-		}
 	}
 	wfpr := cty.NullVal(cty.DynamicPseudoType)
 	if in.waitForPodsReady != nil {
 		wfpr = cty.ObjectVal(in.waitForPodsReady)
 	}
 	cfgTmplVars := cty.NullVal(cty.DynamicPseudoType)
-	if in.enablePathways {
+	if in.enablePathways || in.enableDynamicSlicing {
 		cfgTmplVars = cty.ObjectVal(map[string]cty.Value{"accelerator_type": cty.StringVal("tpu-v5p-slice")})
+	}
+	topoMode := cty.NullVal(cty.String)
+	machineType := cty.NullVal(cty.String)
+	if in.enableDynamicSlicing {
+		topoMode = cty.StringVal("PROVISION_ONLY")
+		machineType = cty.StringVal("ct5lp-hightpu-4t")
 	}
 	return cty.ObjectVal(map[string]cty.Value{
 		"version":                         cty.StringVal(ver),
@@ -380,11 +362,11 @@ func buildKueueVarValue(in kueueEvalInput) cty.Value {
 		"config_path":                     cty.NullVal(cty.String),
 		"config_template_vars":            cfgTmplVars,
 		"helm_values_path":                optStringVal(in.helmValuesPath),
-		"helm_values_template_vars":       tmplVars,
+		"helm_values_template_vars":       buildKueueTemplateVarsValue(in),
 		"enable_pathways_for_tpus":        cty.False,
-		"enable_dynamic_slicing_for_tpus": cty.False,
-		"accelerator_topology_mode":       cty.NullVal(cty.String),
-		"machine_type":                    cty.NullVal(cty.String),
+		"enable_dynamic_slicing_for_tpus": cty.BoolVal(in.enableDynamicSlicing),
+		"accelerator_topology_mode":       topoMode,
+		"machine_type":                    machineType,
 		"controller_cpu":                  optStringVal(in.controllerCPU),
 		"controller_memory":               optStringVal(in.controllerMemory),
 		"controller_replicas":             optIntVal(in.controllerReplicas),
@@ -406,7 +388,7 @@ func evalKueueHCL(t *testing.T, parsed kueueParsedHCL, in kueueEvalInput) ([]str
 			"var": cty.ObjectVal(map[string]cty.Value{
 				"enable_pathways_for_tpus": cty.BoolVal(in.enablePathways),
 				"cert_manager":             cty.ObjectVal(map[string]cty.Value{"install": cty.BoolVal(in.installCertManager)}),
-				"jobset":                   cty.ObjectVal(map[string]cty.Value{"install": cty.False}),
+				"jobset":                   cty.ObjectVal(map[string]cty.Value{"install": cty.BoolVal(in.enableDynamicSlicing)}),
 				"kueue":                    buildKueueVarValue(in),
 			}),
 			"module": cty.ObjectVal(map[string]cty.Value{
@@ -421,25 +403,41 @@ func evalKueueHCL(t *testing.T, parsed kueueParsedHCL, in kueueEvalInput) ([]str
 		},
 	}
 
-	for _, name := range kueueOrderedLocalNames {
+	evaluated := map[string]bool{}
+	var evalLocal func(string)
+	evalExpr := func(expr hcl.Expression) cty.Value {
+		for _, tr := range expr.Variables() {
+			if tr.RootName() == "local" && len(tr) >= 2 {
+				if attr, ok := tr[1].(hcl.TraverseAttr); ok {
+					evalLocal(attr.Name)
+				}
+			}
+		}
+		val, diags := expr.Value(ctx)
+		if diags.HasErrors() {
+			t.Fatalf("HCL evaluation failed: %v", diags)
+		}
+		return val
+	}
+	evalLocal = func(name string) {
+		if evaluated[name] {
+			return
+		}
 		expr, ok := parsed.locals[name]
 		if !ok {
 			t.Fatalf("missing local.%s in kubectl-apply", name)
 		}
-		val, diags := expr.Value(ctx)
-		if diags.HasErrors() {
-			t.Fatalf("evaluating local.%s failed: %v", name, diags)
-		}
-		localMap[name] = val
+		evaluated[name] = true
+		localMap[name] = evalExpr(expr)
 		ctx.Variables["local"] = cty.ObjectVal(localMap)
 	}
 
-	failedMsgs := evaluatePreconditions(t, parsed.preconditions, ctx)
+	failedMsgs := append(
+		evaluateValidationRules(parsed.validations, evalExpr),
+		evaluateValidationRules(parsed.preconditions, evalExpr)...,
+	)
 
-	valsVal, diags := parsed.valuesYAML.Value(ctx)
-	if diags.HasErrors() {
-		t.Fatalf("evaluating install_kueue.values_yaml failed: %v", diags)
-	}
+	valsVal := evalExpr(parsed.valuesYAML)
 	var valuesYAML []string
 	for it := valsVal.ElementIterator(); it.Next(); {
 		_, elem := it.Element()
@@ -448,20 +446,11 @@ func evalKueueHCL(t *testing.T, parsed kueueParsedHCL, in kueueEvalInput) ([]str
 	return valuesYAML, failedMsgs
 }
 
-func evaluatePreconditions(t *testing.T, preconditions []validationRule, ctx *hcl.EvalContext) []string {
-	t.Helper()
+func evaluateValidationRules(rules []validationRule, evalExpr func(hcl.Expression) cty.Value) []string {
 	var failedMsgs []string
-	for _, pre := range preconditions {
-		cond, diags := pre.condition.Value(ctx)
-		if diags.HasErrors() {
-			t.Fatalf("precondition evaluation failed: %v", diags)
-		}
-		if !cond.True() {
-			msgVal, msgDiags := pre.errorMessage.Value(ctx)
-			if msgDiags.HasErrors() {
-				t.Fatalf("precondition error_message evaluation failed: %v", msgDiags)
-			}
-			failedMsgs = append(failedMsgs, msgVal.AsString())
+	for _, r := range rules {
+		if !evalExpr(r.condition).True() {
+			failedMsgs = append(failedMsgs, evalExpr(r.errorMessage).AsString())
 		}
 	}
 	return failedMsgs
@@ -556,36 +545,138 @@ func decodeControllerManagerConfig(t *testing.T, helmValues map[string]any) map[
 	return cfg
 }
 
-func TestKueueHCLFormatting(t *testing.T) {
-	for _, name := range []string{"variables.tf", "main.tf"} {
-		p := filepath.Join(kubectlApplyModuleDir, name)
-		src, err := os.ReadFile(p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		formatted := hclwrite.Format(src)
-		if !bytes.Equal(src, formatted) {
-			t.Fatalf("%s is not canonically formatted", p)
-		}
+func layerTopLevelKeys(t *testing.T, raw string) []string {
+	t.Helper()
+	var m map[string]any
+	if err := sigsyaml.Unmarshal([]byte(raw), &m); err != nil {
+		t.Fatalf("unmarshal layer failed: %v\n%s", err, raw)
 	}
+	keys := slices.Collect(maps.Keys(m))
+	slices.Sort(keys)
+	return keys
 }
 
 func TestKueueHelmValuesDefaultBackwardCompat(t *testing.T) {
 	parsed := readKubectlApplyKueueHCL(t)
-	layers, errs := evalKueueHCL(t, parsed, kueueEvalInput{install: true, version: "0.19.6"})
+	cpu, mem, replicas := "4", "8Gi", int64(2)
+	wfpr := map[string]cty.Value{
+		"timeout":          cty.StringVal("45m"),
+		"recovery_timeout": cty.StringVal("5m"),
+		"block_admission":  cty.False,
+	}
+
+	cases := []struct {
+		name           string
+		in             kueueEvalInput
+		wantLayerKeys  [][]string
+		wantReplicas   float64
+		wantCPU        string
+		wantHasManager bool
+	}{
+		{
+			name:          "0.17.1_default",
+			in:            kueueEvalInput{install: true, version: "0.17.1"},
+			wantLayerKeys: [][]string{{"controllerManager"}},
+		},
+		{
+			name:          "0.18.2_default",
+			in:            kueueEvalInput{install: true, version: "0.18.2"},
+			wantLayerKeys: [][]string{{"controllerManager"}, {"controllerManager"}},
+		},
+		{
+			name:          "0.18.2_controller_sizing",
+			in:            kueueEvalInput{install: true, version: "0.18.2", controllerCPU: &cpu, controllerMemory: &mem, controllerReplicas: &replicas},
+			wantLayerKeys: [][]string{{"controllerManager"}, {"controllerManager"}},
+			wantReplicas:  2,
+			wantCPU:       "4",
+		},
+		{
+			name:          "0.19.6_default",
+			in:            kueueEvalInput{install: true, version: "0.19.6"},
+			wantLayerKeys: [][]string{{"controllerManager"}, {"controllerManager"}},
+		},
+		{
+			name:           "0.19.6_pathways",
+			in:             kueueEvalInput{install: true, version: "0.19.6", enablePathways: true},
+			wantLayerKeys:  [][]string{{"controllerManager"}, {"managerConfig"}, {"controllerManager"}},
+			wantHasManager: true,
+		},
+		{
+			name:           "0.19.6_wait_for_pods_ready",
+			in:             kueueEvalInput{install: true, version: "0.19.6", waitForPodsReady: wfpr},
+			wantLayerKeys:  [][]string{{"controllerManager"}, {"managerConfig"}, {"controllerManager"}},
+			wantHasManager: true,
+		},
+		{
+			name:          "0.19.6_dynamic_slicing",
+			in:            kueueEvalInput{install: true, version: "0.19.6", enableDynamicSlicing: true},
+			wantLayerKeys: [][]string{{"controllerManager"}, {"controllerManager"}},
+			wantReplicas:  3,
+			wantCPU:       "16",
+		},
+		{
+			name:           "0.19.6_dynamic_slicing_and_pathways",
+			in:             kueueEvalInput{install: true, version: "0.19.6", enableDynamicSlicing: true, enablePathways: true},
+			wantLayerKeys:  [][]string{{"controllerManager"}, {"managerConfig"}, {"controllerManager"}},
+			wantReplicas:   3,
+			wantCPU:        "16",
+			wantHasManager: true,
+		},
+		{
+			name:          "0.19.6_controller_sizing",
+			in:            kueueEvalInput{install: true, version: "0.19.6", controllerCPU: &cpu, controllerMemory: &mem, controllerReplicas: &replicas},
+			wantLayerKeys: [][]string{{"controllerManager"}, {"controllerManager"}},
+			wantReplicas:  2,
+			wantCPU:       "4",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertDefaultBackwardCompatCase(t, parsed, tc.in, tc.wantLayerKeys, tc.wantReplicas, tc.wantCPU, tc.wantHasManager)
+		})
+	}
+}
+
+func assertDefaultBackwardCompatCase(
+	t *testing.T,
+	parsed kueueParsedHCL,
+	in kueueEvalInput,
+	wantLayerKeys [][]string,
+	wantReplicas float64,
+	wantCPU string,
+	wantHasManager bool,
+) {
+	t.Helper()
+	layers, errs := evalKueueHCL(t, parsed, in)
 	if len(errs) > 0 {
 		t.Fatalf("unexpected validation errors: %v", errs)
 	}
-	if len(layers) != 2 {
-		t.Fatalf("got %d values_yaml layers, want 2: %v", len(layers), layers)
+	if len(layers) != len(wantLayerKeys) {
+		t.Fatalf("got %d values_yaml layers, want %d:\n%v", len(layers), len(wantLayerKeys), layers)
+	}
+	for i, wantKeys := range wantLayerKeys {
+		if gotKeys := layerTopLevelKeys(t, layers[i]); !slices.Equal(gotKeys, wantKeys) {
+			t.Fatalf("layer %d top-level keys = %v, want %v:\n%s", i, gotKeys, wantKeys, layers[i])
+		}
 	}
 	merged := simulateHelmValuesMerge(t, layers)
-	if _, hasMC := merged["managerConfig"]; hasMC {
-		t.Fatalf("default non-Pathways install must not override managerConfig: %#v", merged["managerConfig"])
+	if _, hasMC := merged["managerConfig"]; hasMC != wantHasManager {
+		t.Fatalf("has managerConfig = %t, want %t: %#v", hasMC, wantHasManager, merged["managerConfig"])
 	}
 	gates := extractFeatureGateMap(t, merged)
-	if !gates["TopologyAwareScheduling"] || gates["KueueDRAIntegration"] {
-		t.Fatalf("unexpected default feature gates: %#v", gates)
+	if !gates["TopologyAwareScheduling"] {
+		t.Fatalf("expected TopologyAwareScheduling=true, got %#v", gates)
+	}
+	if semverAtLeast(in.version, 18) && gates["KueueDRAIntegration"] {
+		t.Fatalf("expected KueueDRAIntegration=false on %s, got %#v", in.version, gates)
+	}
+	if wantReplicas > 0 {
+		cm := merged["controllerManager"].(map[string]any)
+		reqs := cm["manager"].(map[string]any)["resources"].(map[string]any)["requests"].(map[string]any)
+		if cm["replicas"] != wantReplicas || reqs["cpu"] != wantCPU {
+			t.Fatalf("unexpected sizing in single controllerManager layer: cm=%#v", cm)
+		}
 	}
 }
 
@@ -737,7 +828,7 @@ controllerManager:
 	}
 }
 
-func TestKueueHelmValuesPathwaysPartialAndNullWaitForPodsReady(t *testing.T) {
+func TestKueueHelmValuesPathwaysPartialAndNullSections(t *testing.T) {
 	parsed := readKubectlApplyKueueHCL(t)
 	tmplPath := writeTempValuesFile(t, "kueue-helm-values.yaml.tftpl", `
 controllerManager:
@@ -746,12 +837,17 @@ controllerManager:
       enabled: false
 managerConfig:
   controllerManagerConfigYaml: |
+    metrics:
+      enableClusterQueueResources: ${enable_cq_metrics}
     manageJobsWithoutQueueName: true
     managedJobsNamespaceSelector:
       matchExpressions:
         - key: kubernetes.io/metadata.name
           operator: NotIn
           values:
+%{ for ns in system_namespaces ~}
+            - ${ns}
+%{ endfor ~}
             - ${excluded_ns}
     waitForPodsReady:
       requeuingStrategy:
@@ -763,7 +859,9 @@ managerConfig:
 		enablePathways: true,
 		helmValuesPath: tmplPath,
 		helmValuesTemplateVar: map[string]cty.Value{
-			"excluded_ns": cty.StringVal("kuberay-system"),
+			"excluded_ns":       cty.StringVal("kuberay-system"),
+			"enable_cq_metrics": cty.True,
+			"system_namespaces": cty.ListVal([]cty.Value{cty.StringVal("kube-system"), cty.StringVal("kueue-system")}),
 		},
 	})
 	if len(errs) > 0 {
@@ -774,29 +872,53 @@ managerConfig:
 		t.Fatalf("explicit user TopologyAwareScheduling=false should win")
 	}
 	cfg := decodeControllerManagerConfig(t, merged)
-	wfpr := cfg["waitForPodsReady"].(map[string]any)
-	if wfpr["timeout"] != "30m" || wfpr["recoveryTimeout"] != "0s" || wfpr["requeuingStrategy"] == nil {
-		t.Fatalf("expected Pathways waitForPodsReady defaults preserved alongside requeuingStrategy, got %#v", wfpr)
-	}
+	assertRenderedNamespaceSelectorAndPathwaysWfpr(t, cfg)
 
-	// Explicit waitForPodsReady: null in controllerManagerConfigYaml must suppress Pathways waitForPodsReady
-	nullWfprPath := writeTempValuesFile(t, "null-wfpr.yaml", `
+	// Setting sections to null in controllerManagerConfigYaml must omit the keys completely
+	// (reverting waitForPodsReady to Kueue 0.19+ chart defaults, preserving the chart's default
+	// managedJobsNamespaceSelector exclusion, and removing base sections like leaderElection).
+	nullSectionsPath := writeTempValuesFile(t, "null-sections.yaml", `
 managerConfig:
   controllerManagerConfigYaml: |
     waitForPodsReady: null
+    managedJobsNamespaceSelector: null
+    leaderElection: null
 `)
 	nullLayers, nullErrs := evalKueueHCL(t, parsed, kueueEvalInput{
 		install:        true,
 		version:        "0.19.6",
 		enablePathways: true,
-		helmValuesPath: nullWfprPath,
+		helmValuesPath: nullSectionsPath,
 	})
 	if len(nullErrs) > 0 {
-		t.Fatalf("unexpected validation errors for waitForPodsReady: null: %v", nullErrs)
+		t.Fatalf("unexpected validation errors for null sections: %v", nullErrs)
 	}
 	nullCfg := decodeControllerManagerConfig(t, simulateHelmValuesMerge(t, nullLayers))
-	if nullCfg["waitForPodsReady"] != nil {
-		t.Fatalf("expected waitForPodsReady to remain nil when explicitly nulled, got %#v", nullCfg["waitForPodsReady"])
+	for _, omittedKey := range []string{"waitForPodsReady", "managedJobsNamespaceSelector", "leaderElection"} {
+		if val, exists := nullCfg[omittedKey]; exists {
+			t.Fatalf("expected key %q to be absent when set to null, got key present with value %#v", omittedKey, val)
+		}
+	}
+}
+
+func assertRenderedNamespaceSelectorAndPathwaysWfpr(t *testing.T, cfg map[string]any) {
+	t.Helper()
+	if cfg["metrics"].(map[string]any)["enableClusterQueueResources"] != true {
+		t.Fatalf("expected mixed-type bool template var enableClusterQueueResources=true, got %#v", cfg["metrics"])
+	}
+	exprs := cfg["managedJobsNamespaceSelector"].(map[string]any)["matchExpressions"].([]any)
+	rawVals := exprs[0].(map[string]any)["values"].([]any)
+	var gotNS []string
+	for _, v := range rawVals {
+		gotNS = append(gotNS, v.(string))
+	}
+	wantNS := []string{"kube-system", "kueue-system", "kuberay-system"}
+	if !slices.Equal(gotNS, wantNS) {
+		t.Fatalf("rendered managedJobsNamespaceSelector values = %v, want %v", gotNS, wantNS)
+	}
+	wfpr := cfg["waitForPodsReady"].(map[string]any)
+	if wfpr["timeout"] != "30m" || wfpr["recoveryTimeout"] != "0s" || wfpr["requeuingStrategy"] == nil {
+		t.Fatalf("expected Pathways waitForPodsReady defaults preserved alongside requeuingStrategy, got %#v", wfpr)
 	}
 }
 
@@ -912,15 +1034,18 @@ func assertOlderVersionDefaults(t *testing.T, parsed kueueParsedHCL, path *strin
 func TestKueueHelmValuesValidationGuardrails(t *testing.T) {
 	parsed := readKubectlApplyKueueHCL(t)
 	missing := filepath.Join(t.TempDir(), "does-not-exist.yaml")
+	nonMapTmplVars := cty.ListVal([]cty.Value{cty.StringVal("not-a-map")})
 
 	cases := []struct {
 		name               string
 		path               *string
 		content            string
 		installCertManager bool
+		rawTmplVars        *cty.Value
 		wantSubstr         string
 	}{
 		{name: "missing_file", path: &missing, wantSubstr: "does not exist"},
+		{name: "non_mapping_template_vars", content: "enablePrometheus: true\n", rawTmplVars: &nonMapTmplVars, wantSubstr: "kueue.helm_values_template_vars must be a mapping"},
 		{name: "enable_cert_manager_same_module", content: "enableCertManager: true\n", installCertManager: true, wantSubstr: "cannot be combined with cert_manager.install = true"},
 		{name: "invalid_yaml_syntax", content: "controllerManager: [unclosed", wantSubstr: "single-document YAML mapping"},
 		{name: "yaml_list_not_mapping", content: "- item1\n- item2\n", wantSubstr: "single-document YAML mapping"},
@@ -944,8 +1069,11 @@ func TestKueueHelmValuesValidationGuardrails(t *testing.T) {
 		{name: "manager_config_yaml_null", content: "managerConfig:\n  controllerManagerConfigYaml: null\n", wantSubstr: "must be a YAML string"},
 		{name: "manager_config_as_nested_map_not_string", content: "managerConfig:\n  controllerManagerConfigYaml:\n    manageJobsWithoutQueueName: true\n", wantSubstr: "must be a YAML string"},
 		{name: "manager_config_wrong_kind", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    apiVersion: v1\n    kind: ConfigMap\n", wantSubstr: "kind 'Configuration'"},
+		{name: "manager_config_queue_apiversion", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    apiVersion: kueue.x-k8s.io/v1beta2\n    kind: Configuration\n", wantSubstr: "apiVersion 'config.kueue.x-k8s.io/v1beta2'"},
+		{name: "manager_config_v1beta1_apiversion", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    apiVersion: config.kueue.x-k8s.io/v1beta1\n    kind: Configuration\n", wantSubstr: "apiVersion 'config.kueue.x-k8s.io/v1beta2'"},
 		{name: "manager_config_feature_gates_conflict", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    featureGates:\n      VisibilityOnDemand: true\n", wantSubstr: "featureGates cannot be set inside managerConfig.controllerManagerConfigYaml"},
 		{name: "manager_config_invalid_section_type", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    integrations:\n      - batch/job\n", wantSubstr: "Nested configuration sections"},
+		{name: "manager_config_invalid_wfpr_type", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    waitForPodsReady: \"30m\"\n", wantSubstr: "Nested configuration sections"},
 		{name: "manager_config_invalid_gkc_type", content: "managerConfig:\n  controllerManagerConfigYaml: |\n    controller:\n      groupKindConcurrency:\n        - Pod\n", wantSubstr: "Nested configuration sections"},
 	}
 
@@ -956,10 +1084,11 @@ func TestKueueHelmValuesValidationGuardrails(t *testing.T) {
 				p = writeTempValuesFile(t, tc.name+".yaml", tc.content)
 			}
 			_, errs := evalKueueHCL(t, parsed, kueueEvalInput{
-				install:            true,
-				installCertManager: tc.installCertManager,
-				version:            "0.19.6",
-				helmValuesPath:     p,
+				install:                  true,
+				installCertManager:       tc.installCertManager,
+				version:                  "0.19.6",
+				helmValuesPath:           p,
+				rawHelmValuesTemplateVar: tc.rawTmplVars,
 			})
 			if len(errs) != 1 {
 				t.Fatalf("got %d validation errors, want 1:\n%s", len(errs), strings.Join(errs, "\n"))
