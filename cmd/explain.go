@@ -48,11 +48,11 @@ var explainCmd = &cobra.Command{
 	Use:   "explain [module-or-blueprint-or-specs...]",
 	Short: "Discover and inspect blueprints, embedded modules, and cluster specs.",
 	Long: `Inspect Cluster Toolkit blueprints and modules, or find the best blueprint for given specs:
-  1. ./gcluster explain
+  1. gcluster explain
      Lists all available blueprint paths and top-level embedded modules.
-  2. ./gcluster explain <blueprint.yaml | modules/...>
+  2. gcluster explain <blueprint.yaml | modules/...>
      Shows required GCP APIs, customizable variables, deployment stages, and ready-to-copy 'use:' snippets.
-  3. ./gcluster explain <specs...> (e.g., './gcluster explain slurm a3u lustre' or './gcluster explain gke a3-megagpu lustre')
+  3. gcluster explain <specs...> (e.g., 'gcluster explain slurm a3u lustre' or 'gcluster explain gke a3-megagpu lustre')
      Finds the exact or closest matching blueprint and generates snippets for any missing module specs.`,
 	Args:         cobra.ArbitraryArgs,
 	RunE:         runExplainCmd,
@@ -72,6 +72,10 @@ type ExplainIndexResult struct {
 	Blueprints []ExplainBlueprintSummary `json:"blueprints" yaml:"blueprints"`
 	Modules    map[string][]string       `json:"modules" yaml:"modules"`
 	Hint       string                    `json:"hint" yaml:"hint"`
+	// BlueprintsDir is the folder the blueprints were read from.
+	BlueprintsDir string `json:"blueprints_dir,omitempty" yaml:"blueprints_dir,omitempty"`
+	// GclusterPath is the running gcluster binary, with symlinks resolved.
+	GclusterPath string `json:"gcluster_path,omitempty" yaml:"gcluster_path,omitempty"`
 }
 
 // ExplainBlueprintSummary is a compact entry in Mode 1.
@@ -282,7 +286,7 @@ func tryExplainSingleTarget(out io.Writer, format, repoRoot, target string) (boo
 
 	if looksLikePathTarget(target) {
 		setTelemetryMetadata(telemetry.EXPLAIN_TARGET, classifyMissingPathTarget(target))
-		return true, fmt.Errorf("blueprint or module path %q not found; run './gcluster explain' to list all available blueprints and modules", target)
+		return true, fmt.Errorf("blueprint or module path %q not found; run '%s explain' to list all available blueprints and modules", target, execPath())
 	}
 	return false, nil
 }
@@ -338,13 +342,14 @@ func findExplainRepoRoot() string {
 	if root := walkUpForExplainRoot(cwd); root != "" {
 		return root
 	}
-	if exe, err := os.Executable(); err == nil {
-		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-			exe = resolved
-		}
+	if exe := realExecutable(); exe != "" {
 		if root := walkUpForExplainRoot(filepath.Dir(exe)); root != "" {
 			return root
 		}
+	}
+	// gcluster installed with pip, uv or pipx: examples are in <prefix>/share.
+	if share := installedShareDir(); share != "" {
+		return share
 	}
 	return cwd
 }
@@ -567,11 +572,19 @@ func buildExplainIndex(repoRoot string) (ExplainIndexResult, error) {
 		groupedMods[m.Category] = append(groupedMods[m.Category], m.Path)
 	}
 
-	return ExplainIndexResult{
+	res := ExplainIndexResult{
 		Blueprints: bpSummaries,
 		Modules:    groupedMods,
-		Hint:       "Run './gcluster explain <path>' to inspect a blueprint/module, or './gcluster explain <specs...>' (e.g. 'slurm a3u lustre') to find the closest blueprint.",
-	}, nil
+		Hint: fmt.Sprintf("Run '%[1]s explain <path>' to inspect a blueprint/module, or '%[1]s explain <specs...>' "+
+			"(e.g. 'slurm a3u lustre') to find the closest blueprint.", execPath()),
+		GclusterPath: realExecutable(),
+	}
+	if len(bpSummaries) > 0 {
+		if abs, err := filepath.Abs(repoRoot); err == nil {
+			res.BlueprintsDir = abs
+		}
+	}
+	return res, nil
 }
 
 var storageTagSuffixes = []struct {
@@ -600,9 +613,15 @@ func extractBlueprintStorageTags(bp catalog.BlueprintEntry) []string {
 }
 
 func printExplainIndexText(w io.Writer, res ExplainIndexResult) {
+	if res.GclusterPath != "" {
+		writef(w, "gcluster: %s\n", res.GclusterPath)
+	}
+	if res.BlueprintsDir != "" {
+		writef(w, "Blueprints from: %s\n\n", res.BlueprintsDir)
+	}
 	writef(w, "Available Blueprints (%d):\n", len(res.Blueprints))
 	if len(res.Blueprints) == 0 {
-		writeln(w, "  (no Cluster Toolkit checkout or gcluster_bundle found from current directory; blueprints are read from examples/ in a repo checkout or release bundle)")
+		writeln(w, "  (no Cluster Toolkit checkout, gcluster_bundle or pip/uv/pipx install found; blueprints are read from examples/ in a repo checkout, a release bundle, or <prefix>/share/cluster-toolkit next to an installed gcluster)")
 	} else {
 		for _, bp := range res.Blueprints {
 			printBlueprintSummaryLine(w, bp)
@@ -831,9 +850,9 @@ func buildExplainBlueprint(repoRoot, bpPath, explicitDeplPath string) (ExplainBl
 	}
 
 	varsList := mergeAndFormatBlueprintVars(bp.Vars, ds.Vars)
-	deployCmd := fmt.Sprintf("./gcluster deploy %s", displayBPPath)
+	deployCmd := fmt.Sprintf("%s deploy %s", execPath(), displayBPPath)
 	if displayDeplPath != "" {
-		deployCmd = fmt.Sprintf("./gcluster deploy -d %s %s", displayDeplPath, displayBPPath)
+		deployCmd = fmt.Sprintf("%s deploy -d %s %s", execPath(), displayDeplPath, displayBPPath)
 	}
 
 	return ExplainBlueprintResult{
@@ -2096,7 +2115,7 @@ func scanBlueprintsForSpecMatch(repoRoot string) ([]catalog.BlueprintEntry, erro
 		return nil, fmt.Errorf("failed to scan blueprints: %w", err)
 	}
 	if len(blueprints) == 0 {
-		return nil, fmt.Errorf("no blueprints found under %s/examples; run './gcluster explain <module>' to inspect embedded modules", repoRoot)
+		return nil, fmt.Errorf("no blueprints found under %s/examples; run '%s explain <module>' to inspect embedded modules", repoRoot, execPath())
 	}
 	return blueprints, nil
 }
@@ -2273,8 +2292,8 @@ func formatUnmatchedSpecsError(specs []normalizedSpec) error {
 		rawList = append(rawList, s.Raw)
 	}
 	return fmt.Errorf(
-		"no blueprint matched specs [%s]; try keywords like 'slurm a3u lustre', 'gke a4', 'tpu 7x', or run './gcluster explain' to list all blueprints and modules",
-		strings.Join(rawList, ", "))
+		"no blueprint matched specs [%s]; try keywords like 'slurm a3u lustre', 'gke a4', 'tpu 7x', or run '%s explain' to list all blueprints and modules",
+		strings.Join(rawList, ", "), execPath())
 }
 
 func assembleSpecMatchResult(repoRoot string, specs []normalizedSpec, best *scoredBlueprintCandidate, otherExactPaths []string, allBlueprints []catalog.BlueprintEntry) (ExplainSpecMatchResult, error) {

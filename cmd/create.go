@@ -328,12 +328,15 @@ func creatorFromLabels(labels cty.Value) (string, bool) {
 }
 
 func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.YamlCtx) {
+	path = resolveBlueprintPath(path)
 	bp, ctx, err := config.NewBlueprint(path)
 	checkErr(err, ctx)
 
 	var ds config.DeploymentSettings
 	var dCtx config.YamlCtx
 	if expandFlags.deploymentFile != "" {
+		// Example deployment files can be installed with gcluster too.
+		expandFlags.deploymentFile = resolveBlueprintPath(expandFlags.deploymentFile)
 		ds, dCtx, err = config.NewDeploymentSettings(expandFlags.deploymentFile)
 		checkErr(err, &dCtx)
 	}
