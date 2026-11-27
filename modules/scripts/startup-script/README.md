@@ -221,6 +221,47 @@ For official documentation see troubleshooting docs:
 - [Legacy Monitoring Agent](https://cloud.google.com/stackdriver/docs/solutions/agents/monitoring/troubleshooting)
 - [Legacy Logging Agent](https://cloud.google.com/stackdriver/docs/solutions/agents/logging/troubleshooting)
 
+### ML Diagnostics Daemon Installation
+
+Set `enable_ml_diagnostics_daemon` to `true` to install and start the Google
+Cloud ML Diagnostics daemon (`diagon-daemon.service`) on Ubuntu `x86_64` VMs
+(tested on Ubuntu 22.04 and 24.04). Other images (such as the default Rocky
+Linux images) log a warning and skip installation safely.
+
+```yaml
+- id: startup
+  source: modules/scripts/startup-script
+  settings:
+    enable_ml_diagnostics_daemon: true
+    # Optional: lock an exact package version so OS updates do not change it.
+    # ml_diagnostics_daemon_version: "1.0.1"
+```
+
+- **Version choice:** Leaving `ml_diagnostics_daemon_version` blank installs the
+  latest available release on a fresh VM and keeps whatever version is already
+  installed across reboots (removing any prior version lock). Setting a specific
+  `ml_diagnostics_daemon_version` installs that exact package and locks it
+  (`apt-mark hold`) so automatic OS updates do not change it.
+- **What your VMs need:** Access to Google Cloud APIs (`cloud-platform` scope),
+  the ML Diagnostics APIs enabled in your project (`metadata.yaml` does not
+  enforce them for blueprints that leave this disabled), the required ML
+  Diagnostics IAM roles on the VM's service account to record runs and profiles
+  (see the [ML Diagnostics docs][ml-diagnostics-docs]), and outbound HTTPS
+  access to `us-central1-apt.pkg.dev` and `packages.cloud.google.com`. Do not
+  enable this if OS Config is already managing ML Diagnostics on the same VMs.
+- **Boot order and safety:** Runs after custom `runners`. If installation fails,
+  it cleans up partial files, logs a warning, and lets the VM finish booting
+  normally.
+- **Checking status:**
+
+```bash
+sudo systemctl status diagon-daemon.service
+sudo journalctl -u diagon-daemon.service
+sudo journalctl -t install_ml_diagnostics_agent
+```
+
+[ml-diagnostics-docs]: https://docs.cloud.google.com/tpu/docs/ml-diagnostics/overview
+
 ### Example
 
 ```yaml
@@ -324,6 +365,7 @@ No modules.
 | <a name="input_docker"></a> [docker](#input\_docker) | Install and configure Docker | <pre>object({<br/>    enabled        = optional(bool, false)<br/>    world_writable = optional(bool, false)<br/>    daemon_config  = optional(string, "")<br/>  })</pre> | <pre>{<br/>  "enabled": false<br/>}</pre> | no |
 | <a name="input_enable_docker_world_writable"></a> [enable\_docker\_world\_writable](#input\_enable\_docker\_world\_writable) | DEPRECATED: use var.docker | `bool` | `null` | no |
 | <a name="input_enable_gpu_network_wait_online"></a> [enable\_gpu\_network\_wait\_online](#input\_enable\_gpu\_network\_wait\_online) | Enable a SystemD unit that blocks execution of startup-scripts until after all network interfaces are online. (Works on reboots or boots of an image built using this solution) | `bool` | `false` | no |
+| <a name="input_enable_ml_diagnostics_daemon"></a> [enable\_ml\_diagnostics\_daemon](#input\_enable\_ml\_diagnostics\_daemon) | Install and start the Google Cloud ML Diagnostics daemon (diagon-daemon.service) on Ubuntu x86\_64 VMs (tested on Ubuntu 22.04 and 24.04). Errors log a warning and let VM boot continue. | `bool` | `false` | no |
 | <a name="input_gcloud_path_override"></a> [gcloud\_path\_override](#input\_gcloud\_path\_override) | Path to the directory containing the gcloud binary to use as an override for local execution. | `string` | `""` | no |
 | <a name="input_gcs_bucket_path"></a> [gcs\_bucket\_path](#input\_gcs\_bucket\_path) | The GCS path for storage bucket and the object, starting with `gs://`. | `string` | `null` | no |
 | <a name="input_http_no_proxy"></a> [http\_no\_proxy](#input\_http\_no\_proxy) | Domains for which to disable http\_proxy behavior. Honored only if var.http\_proxy is set | `string` | `".google.com,.googleapis.com,metadata.google.internal,localhost,127.0.0.1"` | no |
@@ -336,6 +378,7 @@ No modules.
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels for the created GCS bucket. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_ssd_filesystem"></a> [local\_ssd\_filesystem](#input\_local\_ssd\_filesystem) | Create and mount a filesystem from local SSD disks (data will be lost if VMs are powered down without enabling migration); enable by setting mountpoint field to a valid directory path. | <pre>object({<br/>    fs_type     = optional(string, "ext4")<br/>    mountpoint  = optional(string, "")<br/>    permissions = optional(string, "0755")<br/>  })</pre> | <pre>{<br/>  "fs_type": "ext4",<br/>  "mountpoint": "",<br/>  "permissions": "0755"<br/>}</pre> | no |
 | <a name="input_managed_lustre"></a> [managed\_lustre](#input\_managed\_lustre) | Configure Managed Lustre (assumes driver already installed) | <pre>object({<br/>    enabled = optional(bool, false)<br/>    port    = optional(number, 988)<br/>  })</pre> | <pre>{<br/>  "enabled": false,<br/>  "port": 988<br/>}</pre> | no |
+| <a name="input_ml_diagnostics_daemon_version"></a> [ml\_diagnostics\_daemon\_version](#input\_ml\_diagnostics\_daemon\_version) | Optional Debian package version to lock when enable\_ml\_diagnostics\_daemon is true (for example, "1.0.1"). Leave empty to install the latest available release on new VMs and keep existing installs across reboots. | `string` | `""` | no |
 | <a name="input_prepend_ansible_installer"></a> [prepend\_ansible\_installer](#input\_prepend\_ansible\_installer) | DEPRECATED. Use `install_ansible=false` to prevent ansible installation. | `bool` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to | `string` | n/a | yes |
