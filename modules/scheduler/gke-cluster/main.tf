@@ -164,6 +164,7 @@ locals {
   )
 
   mldiagnostics_minimum_version            = "1.35.0-gke.3065000"
+  mldiagnostics_daemon_wlm_minimum_version = "1.36.4-gke.1247000"
   high_scale_checkpointing_minimum_version = "1.32.4-gke.1415000"
 }
 
@@ -178,6 +179,19 @@ module "mldiagnostics_version_check" {
   source          = "../../internal/semver_compare"
   current_version = local.master_version
   minimum_version = local.mldiagnostics_minimum_version
+}
+
+module "mldiagnostics_daemon_version_check" {
+  source          = "../../internal/semver_compare"
+  current_version = local.master_version
+  minimum_version = local.mldiagnostics_daemon_wlm_minimum_version
+}
+
+check "ml_diagnostics_daemon_gke_version" {
+  assert {
+    condition     = !var.enable_ml_diagnostics_daemon || module.mldiagnostics_daemon_version_check.is_greater_than_or_equal
+    error_message = "Diagon 2.0 Workload Monitoring and Auto-Capture require GKE ${local.mldiagnostics_daemon_wlm_minimum_version} or higher (detected ${local.master_version}). Continuous profiling and on-demand profiling still operate via the Diagon daemon on older GKE versions."
+  }
 }
 
 module "high_scale_checkpointing_version_check" {
@@ -845,6 +859,16 @@ module "kubectl_apply" {
         source        = "https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/v1.0.0/manifests.yaml",
         template_vars = {}
       }
+    ] : [],
+    var.enable_ml_diagnostics_daemon ? [
+      {
+        name             = "diagon-daemon"
+        source           = "${path.module}/templates/diagon-daemon.yaml.tftpl"
+        wait_for_rollout = false
+        template_vars = {
+          image = var.ml_diagnostics_daemon_image
+        }
+      }
     ] : []
   )
 }
@@ -854,6 +878,15 @@ resource "terraform_data" "validate_ml_diagnostics_version" {
     precondition {
       condition     = !var.enable_ml_diagnostics || module.mldiagnostics_version_check.is_greater_than_or_equal
       error_message = "GKE-managed ML Diagnostics requires a GKE version of ${local.mldiagnostics_minimum_version} or higher. Please update 'version_prefix' or 'min_master_version'."
+    }
+  }
+}
+
+resource "terraform_data" "validate_ml_diagnostics_daemon" {
+  lifecycle {
+    precondition {
+      condition     = !var.enable_ml_diagnostics_daemon || var.enable_ml_diagnostics
+      error_message = "Enabling 'enable_ml_diagnostics_daemon' requires 'enable_ml_diagnostics' to be true."
     }
   }
 }

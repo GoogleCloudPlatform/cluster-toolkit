@@ -111,3 +111,24 @@ variable "project_roles" {
   description = "List of roles to grant to service account (e.g. \"storage.objectViewer\" or \"compute.instanceAdmin.v1\""
   type        = list(string)
 }
+
+variable "conditional_project_roles" {
+  description = "Optional project IAM roles constrained by a CEL condition. Supports `{project_number}` placeholder replacement in `expression`."
+  type = list(object({
+    enable      = optional(bool, true)
+    role        = string
+    title       = string
+    description = optional(string, "")
+    expression  = string
+  }))
+  default  = []
+  nullable = false
+
+  validation {
+    condition = alltrue([
+      for r in var.conditional_project_roles :
+      trimspace(r.role) != "" && trimspace(r.title) != "" && trimspace(r.expression) != ""
+    ])
+    error_message = "Each conditional_project_roles entry must specify non-empty role, title, and expression values."
+  }
+}

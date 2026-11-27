@@ -230,6 +230,37 @@ To leverage ML Diagnostics in your own workloads, you need to integrate the ML D
 
 To test ML Diagnostics with a sample workload, refer to the [ML Diagnostics Sample Workload Test README](../gke-tpu-v6e/ml-diagnostics-sample-workload-test/README.md). This guide explains how to build a test image and run a job to verify metrics and profiling in the Google Cloud Console.
 
+### Optional: Diagon 2.0 ML Diagnostics daemon
+
+This blueprint can also deploy the self-managed Diagon 2.0 ML Diagnostics daemon (`mldiagnostics-daemon`) as a DaemonSet on the TPU nodes. It is disabled by default. To enable it, set `enable_ml_diagnostics_daemon: true` in the `vars` section of `examples/gke-tpu-7x/gke-tpu-7x-deployment.yaml`.
+
+When enabled:
+
+- `enable_ml_diagnostics` must stay `true` on the `gke-tpu-7x-cluster` module (the blueprint default).
+- The `diagon-daemon` DaemonSet is deployed in the `diagon` namespace and runs on x86 TPU and GPU nodes.
+- The node pool service account is granted `roles/storage.objectUser` and `roles/storage.bucketViewer`, limited by an IAM condition to the project's Diagon buckets (`diagon-<project_number>-*`), so the daemon can upload profiles.
+- Workload Monitoring and Auto-Capture require GKE `1.36.4-gke.1247000` or higher. Continuous and on-demand profiling work on earlier versions.
+
+Before enabling it, enable these APIs in addition to the ones listed in [Before you begin](#before-you-begin):
+
+```bash
+gcloud services enable \
+  hypercomputecluster.googleapis.com \
+  logging.googleapis.com \
+  monitoring.googleapis.com \
+  artifactregistry.googleapis.com \
+  cloudresourcemanager.googleapis.com \
+  --project=<PROJECT_ID>
+```
+
+To check that the daemon is running after deployment:
+
+```bash
+kubectl logs -n diagon -l name=diagon-daemon --tail=50
+```
+
+To pin a specific daemon version instead of `:latest`, set `ml_diagnostics_daemon_image` in the `gke-tpu-7x-cluster` module settings.
+
 ## Clean up
 
 To avoid recurring charges for the resources used, clean up the resources provisioned by Cluster Toolkit:

@@ -734,6 +734,25 @@ variable "enable_ml_diagnostics" {
   default     = false
 }
 
+variable "enable_ml_diagnostics_daemon" {
+  description = "Enables the self-managed Diagon 2.0 ML Diagnostics daemon (`mldiagnostics-daemon`) on x86 GPU and TPU nodes. Requires `enable_ml_diagnostics = true` on GKE and the `hypercomputecluster.googleapis.com`, `logging.googleapis.com`, `monitoring.googleapis.com`, `storage.googleapis.com`, `artifactregistry.googleapis.com`, and `container.googleapis.com` APIs; Workload Monitoring and Auto-Capture require GKE `1.36.4-gke.1247000`+."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "ml_diagnostics_daemon_image" {
+  description = "Container image reference for the Diagon 2.0 ML Diagnostics daemon (`mldiagnostics-daemon`). Defaults to `:latest` and supports pinning a specific `x.y.z` tag or digest."
+  type        = string
+  default     = "us-central1-docker.pkg.dev/hypercomputediagon-release/daemon-docker/mldiagnostics-daemon:latest"
+  nullable    = false
+
+  validation {
+    condition     = trimspace(var.ml_diagnostics_daemon_image) != "" && var.ml_diagnostics_daemon_image == trimspace(var.ml_diagnostics_daemon_image)
+    error_message = "ml_diagnostics_daemon_image must be a non-empty container image reference without leading or trailing whitespace."
+  }
+}
+
 variable "network_policy" {
   description = "Configuration for the network policy addon. Enabling network policy for clusters with GKE Dataplane V2 (ADVANCED_DATAPATH) is not supported; GKE Dataplane V2 automatically manages network policy enforcement."
   type = object({
