@@ -723,6 +723,22 @@ func formatMissingDependentMsg(rule modulereader.ValidationRule, dependentName, 
 	return fmt.Sprintf("variable %q is required when %s condition is met", dependentName, triggerDesc)
 }
 
+func resolveDependentDefault(mod config.Module, dependentName string) []cty.Value {
+	info, err := mod.Info()
+	if err != nil {
+		return []cty.Value{cty.NilVal}
+	}
+	for _, input := range info.Inputs {
+		if input.Name == dependentName {
+			if input.Default != nil {
+				return evaluateAndFlatten(convertToCty(input.Default))
+			}
+			break
+		}
+	}
+	return []cty.Value{cty.NilVal}
+}
+
 // Validate checks if the dependent variable satisfies the condition when the trigger variable is set.
 func (c *ConditionalValidator) Validate(
 	bp config.Blueprint,
@@ -753,25 +769,7 @@ func (c *ConditionalValidator) Validate(
 	if err != nil {
 		dependentVal = []cty.Value{cty.NilVal}
 		if isDepExpectedGiven {
-			if info, infoErr := mod.Info(); infoErr == nil {
-				parts := strings.Split(dependentName, ".")
-				for _, input := range info.Inputs {
-					if input.Name == parts[0] && input.Default != nil {
-						defVal := convertToCty(input.Default)
-						for _, p := range parts[1:] {
-							if defVal == cty.NilVal || !defVal.IsKnown() || defVal.IsNull() || !defVal.Type().IsObjectType() || !defVal.Type().HasAttribute(p) {
-								defVal = cty.NilVal
-								break
-							}
-							defVal = defVal.GetAttr(p)
-						}
-						if defVal != cty.NilVal {
-							dependentVal = evaluateAndFlatten(defVal)
-						}
-						break
-					}
-				}
-			}
+			dependentVal = resolveDependentDefault(mod, dependentName)
 		}
 	}
 
