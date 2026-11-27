@@ -68,10 +68,11 @@ and b) you can build software before you deploy your cluster.
 
 You can customize your deployment settings in [`cae-slurm-deployment.yaml`](./cae-slurm-deployment.yaml):
 
-- **Project & Location**: Set `project_id`, `deployment_name` (defaults to `cae-slurm-solutions`), `region`, and `zone` (ensure the selected zone supports H4D, C4D, G4, and Managed Lustre).
-- **H4D & Cloud RDMA Settings**: Configure `rdma_net_range`, `h4d_cluster_size` (static node count), and the provisioning model (`h4d_reservation_name`, `h4d_dws_flex_enabled`, or `h4d_enable_spot_vm`).
-- **G4 GPU Settings**: Configure `gpu_cluster_size`, `gpu_machine_type` (`g4-standard-48` or `g4-standard-384`), `gpu_disk_size_gb`, and the provisioning model (`gpu_reservation_name`, `gpu_enable_spot_vm`, or `gpu_dws_flex_enabled`). To use Dual NIC with `g4-standard-384`, uncomment `net1_range` in the deployment file as well as the `net1` module and `additional_networks` setting in [`cae-slurm.yaml`](./cae-slurm.yaml).
-- **Managed Lustre Settings**: Configure `lustre_instance_id`, `lustre_size_gib` (default `9000`), and `per_unit_storage_throughput` (default `1000`). Refer to [Managed Lustre performance tiers](https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers) for valid size and throughput combinations.
+- **Project & Location**: Set `project_id`, `deployment_name` (defaults to `cae-slurm-v6`), `region`, and `zone` (ensure the selected zone supports H4D, C4D, G4, and Managed Lustre).
+- **H4D & Cloud RDMA Settings**: Configure `h4d_cluster_size` (static node count), `h4d_node_count_dynamic_max`, `rdma_net_range`, and the provisioning model (`h4d_reservation_name`, `h4d_dws_flex_enabled`, or `h4d_enable_spot_vm`; on-demand by default).
+- **C4D High-Mem Settings**: Optionally override `c4d_node_count_dynamic_max` and `c4d_enable_spot_vm`.
+- **G4 GPU Settings**: Configure `gpu_cluster_size`, `gpu_node_count_dynamic_max`, `gpu_machine_type` (`g4-standard-48` or `g4-standard-384`), `gpu_disk_size_gb`, and the provisioning model (`gpu_reservation_name`, `gpu_enable_spot_vm`, or `gpu_dws_flex_enabled`; DWS Flex-Start by default). G4 nodes use the Advanced Compute Images GPU Slurm image (`gpu_slurm_image`), matching the Slurm 26.05 version of the default CPU image used by the controller, login, H4D, and C4D nodes. To use Dual NIC with `g4-standard-384`, uncomment `net1_range` in the deployment file as well as the `net1` module and `additional_networks` setting in [`cae-slurm.yaml`](./cae-slurm.yaml).
+- **Managed Lustre Settings**: Configure `lustre_instance_id` (defaults to `$(vars.deployment_name)-lustre`), `lustre_size_gib` (default `9000`), and `per_unit_storage_throughput` (default `1000`). Refer to [Managed Lustre performance tiers](https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers) for valid size and throughput combinations.
 
 ## Deployment Instructions
 
@@ -137,16 +138,15 @@ You can customize your deployment settings in [`cae-slurm-deployment.yaml`](./ca
    ```
 
    *(Alternatively, you can generate the deployment folder directly without the
-   deployment file by running `./gcluster create examples/cae/cae-slurm.yaml -w --vars project_id=<project>`,
-   which uses the default deployment name `cae-slurm-v6`.)*
+   deployment file by running `./gcluster create examples/cae/cae-slurm.yaml -w --vars project_id=<project>`.)*
 
 1. Deploy the `enable_apis` and `setup` groups
 
-   Call the following `gcluster` command to deploy the blueprint (using `cae-slurm-solutions`
-   from `cae-slurm-deployment.yaml`, or `cae-slurm-v6` if you did not use the deployment file):
+   Call the following `gcluster` command to deploy the blueprint (using `cae-slurm-v6`,
+   or your custom `deployment_name` from `cae-slurm-deployment.yaml`):
 
    ```bash
-   ./gcluster deploy cae-slurm-solutions
+   ./gcluster deploy cae-slurm-v6
    ```
 
    For each deployment group (`enable_apis`, followed by `setup`), `gcluster`
@@ -215,7 +215,7 @@ command to destroy the deployment in this reverse order. You will be prompted
 to confirm the deletion of each stage.
 
 ```bash
-./gcluster destroy cae-slurm-solutions
+./gcluster destroy cae-slurm-v6
 ```
 
 > [!WARNING]

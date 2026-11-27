@@ -205,7 +205,7 @@ the experimental badge (![experimental-badge]).
 | :--- | :--- | :--- | :--- |
 | [examples/batch-mpi.yaml](./batch-mpi.yaml) | batch | c2-standard-16, c2-standard-60 | This blueprint demonstrates how to use Spack to run a real MPI job on Batch. |
 | [examples/batch.yaml](./batch.yaml) | batch | n2-standard-4 | This example demonstrates how to use the Cluster Toolkit to set up a Google Cloud Batch job that mounts a Filestore instance and runs startup scripts. |
-| [examples/cae/cae-slurm.yaml](./cae/cae-slurm.yaml) | slurm | h4d-highmem-192-lssd, c3-highmem-176, g4-standard-48 | The Computer Aided Engineering (CAE) blueprint captures a reference architecture where the right cloud components are assembled to optimally cater to the requirements of computationally-intensive CAE workloads. Specifically, it is... |
+| [examples/cae/cae-slurm.yaml](./cae/cae-slurm.yaml) | slurm | h4d-highmem-192-lssd, c4d-highmem-192, g4-standard-48 | The Computer Aided Engineering (CAE) blueprint captures a reference architecture where the right cloud components are assembled to optimally cater to the requirements of computationally-intensive CAE workloads. Specifically, it is... |
 | [examples/gke-a3-highgpu-inference-gateway.yaml](./gke-a3-highgpu-inference-gateway.yaml) | gke | a3-highgpu-8g, n2d-standard-2 | This blueprint provisions a GKE cluster with A3 High machines, pre-configured to support the GKE Inference Gateway. It automates the setup of necessary networking components, such as a proxy-only subnet, and installs the required Custom... |
 | [examples/gke-a3-highgpu/gke-a3-highgpu.yaml](./gke-a3-highgpu/gke-a3-highgpu.yaml) | gke | a3-highgpu-8g | This blueprint provisions a GKE cluster with A3 High nodes (a3-highgpu-8g). Refer to the A3 High Deployment Guide for detailed instructions. |
 | [examples/gke-a3-megagpu/gke-a3-megagpu.yaml](./gke-a3-megagpu/gke-a3-megagpu.yaml) | gke | a3-megagpu-8g | This blueprint shows how to provision a GKE cluster with A3 Mega machines in the toolkit. Deploy an A3 Mega GKE cluster for ML training has the steps documented. |
@@ -984,11 +984,12 @@ requirements of computationally-intensive CAE workloads. Specifically, it is
 architected around Google Cloud’s VM families that provide a high memory bandwidth
 and a balanced memory/flop ratio, which is particularly useful for per-core licensed
 CAE software. The solution caters also to large CAE use cases, requiring multiple nodes
-that are tightly-coupled via MPI. Special high-memory shapes support even very
-memory-demanding workloads with up to 16GB/core. For file IO, different Google managed
-high performance NFS storage services are available. For very IO demanding workloads,
-third party parallel file systems can be integrated. The scheduling of the workloads
-is done by a workload manager.
+that are tightly-coupled via MPI over Cloud RDMA. Special high-memory shapes support
+even very memory-demanding workloads with up to 16GB/core, while GPU partitions support
+GPU-accelerated CAE solvers and visualization workloads. For file IO, Google managed
+high-performance NFS storage services (Filestore) are used for `/home` and `/apps`, and
+Google Cloud Managed Lustre provides a high-throughput parallel file system for
+`/scratch`. The scheduling of the workloads is done by the Slurm workload manager.
 
 The CAE blueprint is intended to be a starting point for more tailored explorations
 or installations of specific CAE codes, as provided by ISVs separately.
@@ -999,10 +1000,11 @@ A detailed documentation is provided in this [README](cae/README.md).
 
 For this example the following is needed in the selected region:
 
-* Cloud Filestore API: Basic SSD capacity (GB) per region: **5,120 GB**
-* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GB**
-* Compute Engine API: H3 CPUs: **88/node** active in `balance` partition up to 880
-* Compute Engine API: C3-highmem CPUs: **176/node** active in `highmem` partition up to 1,760
+* Cloud Filestore API: Basic SSD capacity (GB) per region: **5,120 GB** (`/home` and `/apps`)
+* Managed Lustre API: **9,000 GiB** at `1000 MB/s/TiB` (`/scratch`)
+* Compute Engine API: H4D CPUs: **192/node** active in `h4d` partition up to 1,920 (plus Local SSD and Hyperdisk Balanced)
+* Compute Engine API: C4D CPUs: **192/node** active in `highmem` partition up to 1,920
+* Compute Engine API: G4 CPUs & NVIDIA RTX PRO 6000 GPUs: **48 CPUs and 1 GPU/node** active in `g4` partition up to 96 CPUs and 2 GPUs
 * Compute Engine API: N1 CPUs: **8/node** active in `desktop` node.
 * Compute Engine API: T4 GPUs: **1/node** active in `desktop` node.
 * Compute Engine API: N2 CPUs: **8** for login and **16** for controller
