@@ -197,9 +197,35 @@ variable "allowed_ssh_ip_ranges" {
 }
 
 variable "firewall_rules" {
-  type        = any
+  # Keep in sync with var.firewall_rules in ../vpc/variables.tf.
+  # Passed unchanged to each VPC instance; non-empty lists collide on
+  # project-wide firewall rule names when var.network_count > 1.
+  type = list(object({
+    name                    = string
+    description             = optional(string, null)
+    direction               = optional(string, "INGRESS")
+    disabled                = optional(bool, null)
+    priority                = optional(number, null)
+    ranges                  = optional(list(string), [])
+    source_tags             = optional(list(string))
+    source_service_accounts = optional(list(string))
+    target_tags             = optional(list(string))
+    target_service_accounts = optional(list(string))
+    allow = optional(list(object({
+      protocol = string
+      ports    = optional(list(string))
+    })), [])
+    deny = optional(list(object({
+      protocol = string
+      ports    = optional(list(string))
+    })), [])
+    log_config = optional(object({
+      metadata = string
+    }))
+  }))
   description = "List of firewall rules"
   default     = []
+  nullable    = false
 }
 
 variable "network_interface_defaults" {
