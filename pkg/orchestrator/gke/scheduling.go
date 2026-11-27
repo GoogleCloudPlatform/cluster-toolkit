@@ -61,6 +61,7 @@ type SchedulingOptions struct {
 	NodeAffinityLabels map[string]string
 	IsDynamicSlicing   bool
 	IsStaticSlicing    bool
+	OmitGKENodePool    bool
 }
 
 func getNodeSelector(opts SchedulingOptions) (map[string]string, error) {
@@ -105,26 +106,14 @@ func getNodeSelector(opts SchedulingOptions) (map[string]string, error) {
 }
 
 func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
-	// Build the inner term first to reduce nesting
-	defaultPoolExclusion := corev1.NodeSelectorTerm{
-		MatchExpressions: []corev1.NodeSelectorRequirement{
-			{
-				Key:      nodePoolLabel,
-				Operator: corev1.NodeSelectorOpNotIn,
-				Values:   []string{"default-pool"},
-			},
-		},
+	term := corev1.NodeSelectorTerm{}
+	if !opts.OmitGKENodePool {
+		term.MatchExpressions = append(term.MatchExpressions, corev1.NodeSelectorRequirement{
+			Key:      nodePoolLabel,
+			Operator: corev1.NodeSelectorOpNotIn,
+			Values:   []string{"default-pool"},
+		})
 	}
-
-	affinity := &corev1.Affinity{
-		NodeAffinity: &corev1.NodeAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-				NodeSelectorTerms: []corev1.NodeSelectorTerm{defaultPoolExclusion},
-			},
-		},
-	}
-
-	term := &affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0]
 
 	// Collect and sort keys of NodeAffinityLabels to ensure deterministic output
 	keys := make([]string, 0, len(opts.NodeAffinityLabels))
@@ -135,9 +124,7 @@ func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
 
 	for _, k := range keys {
 		v := opts.NodeAffinityLabels[k]
-		hasPipe := strings.Contains(v, "|")
-
-		if !hasPipe {
+		if !strings.Contains(v, "|") {
 			continue
 		}
 
@@ -145,7 +132,6 @@ func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
 		if err != nil {
 			return nil, err
 		}
-
 		if len(values) == 0 {
 			continue
 		}
@@ -159,7 +145,17 @@ func GetAffinity(opts SchedulingOptions) (*corev1.Affinity, error) {
 		)
 	}
 
-	return affinity, nil
+	if len(term.MatchExpressions) == 0 {
+		return nil, nil
+	}
+
+	return &corev1.Affinity{
+		NodeAffinity: &corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+				NodeSelectorTerms: []corev1.NodeSelectorTerm{term},
+			},
+		},
+	}, nil
 }
 
 func parseAffinityValues(k string, v string) ([]string, error) {

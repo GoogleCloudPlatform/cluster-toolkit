@@ -232,7 +232,7 @@ gcluster cluster <list|describe|info|volume> [flags]
 
 ## gcluster job
 
-`gcluster job` submits batch and distributed workloads on GKE clusters (`submit`, `gke-template-extract`), monitors or manages workloads across GKE and Kubernetes clusters (`list`, `logs`, `cancel`, `inspect`), and manages saved CLI defaults (`config`). For detailed usage, see [`docs/gcluster_job_guide.md`](../docs/gcluster_job_guide.md).
+`gcluster job` submits, monitors, and manages batch and distributed workloads across GKE and Kubernetes clusters (`submit`, `list`, `logs`, `cancel`, `inspect`), extracts customizable GKE templates (`gke-template-extract`), and manages saved CLI defaults (`config`). For detailed usage, see [`docs/gcluster_job_guide.md`](../docs/gcluster_job_guide.md).
 
 ### Usage - job
 
@@ -242,7 +242,7 @@ gcluster job <submit|list|logs|cancel|config|inspect|gke-template-extract> [flag
 
 ### Subcommands - job
 
-* `gcluster job submit`: Builds/stages workloads and submits GKE JobSet or Pathways jobs (supports `--image` / `--base-image` + `--build-context`, `--image-pull-secret` with automatic `dockerconfigjson` secret discovery, and Pathways flags including `--pathways`, `--pathways-headless`, `--pathways-deploy-sps`, and `--pathways-max-slice-restarts`).
+* `gcluster job submit`: Builds/stages workloads and submits `JobSet` or standalone `batch/v1` Indexed `Job` workloads on GKE or Kubernetes clusters, plus Pathways workloads on GKE (`--image` / `--base-image` + `--build-context`, `--image-pull-secret` with automatic `dockerconfigjson` secret discovery, optional Kueue/JobSet adaptation, and GKE-only Pathways flags including `--pathways`, `--pathways-headless`, `--pathways-deploy-sps`, and `--pathways-max-slice-restarts`).
 * `gcluster job inspect --name <job> [--show] [--filter=pathways-sps]`: Inspects job or Shared Pathways Service (`pathways-sps`) status, events, and Kubernetes resources.
 * `gcluster job list`: Lists jobs (`--status`, `--name-contains`).
 * `gcluster job logs`: Streams pod logs.

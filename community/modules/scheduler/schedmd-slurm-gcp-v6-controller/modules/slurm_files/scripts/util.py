@@ -131,6 +131,9 @@ else:
 API_REQ_LIMIT = 2000
 # Wait time after a 409 "already exists" for a concurrent GCE resource insert to finish.
 ALREADY_EXISTS_SETTLE_SEC = 5
+# Shared prefix for permanent explicit-MIG reservation incompatibility reasons set by resume.py
+# and preserved across slurmsync ticks until the nodeset configuration is changed.
+MIG_UNSUPPORTED_RESERVATION_PREFIX = "MIG does not support reservation"
 
 
 def mkdirp(path: Path) -> None:

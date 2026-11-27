@@ -399,6 +399,31 @@ func ResolveTopologyForChips(computeType string, machineType string) (string, er
 	return "", fmt.Errorf("could not find a valid topology shape for %d chips with accelerator %s", totalChips, computeType)
 }
 
+// DefaultTopologyForChips returns the default 2D or 3D topology shape for a known TPU family
+// and total chip count (not TensorCores). Returns ("", false) when the family or chip count has
+// no standard default shape.
+func DefaultTopologyForChips(machineType string, totalChips int) (string, bool) {
+	mt := strings.ToLower(strings.TrimSpace(machineType))
+	if strings.HasPrefix(mt, "ct5l-") {
+		mt = "ct5lp-" + strings.TrimPrefix(mt, "ct5l-")
+	}
+	if totalChips <= 0 || mt == "" {
+		return "", false
+	}
+	if matchesTPUFamily(mt, valid2DTPUFamilies) {
+		shape, ok := allowed2DTopologies[totalChips]
+		return shape, ok
+	}
+	if matchesTPUFamily(mt, valid3DTPUFamilies) {
+		if totalChips == 1 && strings.Contains(mt, "tpu7") {
+			return "1x1x1", true
+		}
+		shape, ok := common3DTopologies[totalChips]
+		return shape, ok
+	}
+	return "", false
+}
+
 // ValidateHardwareRequest validates hardware requests for TPUs.
 func ValidateHardwareRequest(machineType, topology string) error {
 	if !IsTPU(machineType) {

@@ -664,3 +664,30 @@ func TestIs3DTorusTPU(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultTopologyForChips(t *testing.T) {
+	tests := []struct {
+		mt    string
+		chips int
+		want  string
+		ok    bool
+	}{
+		{"tpu7x-standard-1t", 1, "1x1x1", true},
+		{"tpu7x-standard-4t", 4, "2x2x1", true},
+		{"tpu7x-standard-4t", 8, "2x2x2", true},
+		{"ct5p-hightpu-4t", 8, "2x2x2", true},
+		{"ct4p-hightpu-4t", 4, "2x2x1", true},
+		{"ct6e-standard-4t", 8, "2x4", true},
+		{"ct5lp-hightpu-8t", 8, "2x4", true},
+		{"ct5l-hightpu-8t", 8, "2x4", true},
+		{"ct6e-standard-1t", 1, "1x1", true},
+		{"n2-standard-8", 4, "", false},
+		{"tpu7x-standard-4t", 3, "", false},
+	}
+	for _, tc := range tests {
+		got, ok := DefaultTopologyForChips(tc.mt, tc.chips)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("DefaultTopologyForChips(%q, %d) = (%q, %v), want (%q, %v)", tc.mt, tc.chips, got, ok, tc.want, tc.ok)
+		}
+	}
+}

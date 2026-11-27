@@ -80,31 +80,6 @@ func makeTestDockerSecret(name string, authKeys ...string) unstructured.Unstruct
 	return rawDockerSecret(name, base64.StdEncoding.EncodeToString(raw))
 }
 
-func TestSplitImageRef(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		ref, wantHost, wantPath string
-		wantOK                  bool
-	}{
-		{"", "", "", false},
-		{":latest", "", "", false},
-		{"alpine:3.20", "docker.io", "library/alpine", true},
-		{"myreg:5000", "docker.io", "library/myreg", true},
-		{"pytorch/pytorch:2.4@sha256:1111", "docker.io", "pytorch/pytorch", true},
-		{"docker.io/nginx", "docker.io", "library/nginx", true},
-		{"index.docker.io/team/app:v1", "docker.io", "team/app", true},
-		{"gcr.io/proj/img@sha256:abc", "gcr.io", "proj/img", true},
-		{"localhost:5000/repo/img:tag", "localhost:5000", "repo/img", true},
-		{"[fd00::1]:5000/obs/collector:v1", "[fd00::1]:5000", "obs/collector", true},
-	}
-	for _, tc := range cases {
-		gotHost, gotPath, gotOK := splitImageRef(tc.ref)
-		if gotHost != tc.wantHost || gotPath != tc.wantPath || gotOK != tc.wantOK {
-			t.Errorf("splitImageRef(%q) = (%q, %q, %v), want (%q, %q, %v)", tc.ref, gotHost, gotPath, gotOK, tc.wantHost, tc.wantPath, tc.wantOK)
-		}
-	}
-}
-
 func TestAuthKeyHostAndPath(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -116,6 +91,7 @@ func TestAuthKeyHostAndPath(t *testing.T) {
 		{"/team-a", "", "", false},
 		{"https://%zz", "", "", false},
 		{"https://index.docker.io/v1/", "docker.io", "", true},
+		{"https://INDEX.DOCKER.IO/v1/", "INDEX.DOCKER.IO", "", true},
 		{"index.docker.io", "docker.io", "", true},
 		{"docker.io", "docker.io", "", true},
 		{"registry-1.docker.io", "registry-1.docker.io", "", true},
@@ -123,6 +99,7 @@ func TestAuthKeyHostAndPath(t *testing.T) {
 		{"https://gcr.io/v2/proj/", "gcr.io", "proj", true},
 		{"gcr.io/v1", "gcr.io", "v1", true},
 		{"harbor.local:8443/team-a", "harbor.local:8443", "team-a", true},
+		{"HARBOR.LOCAL:8443/team-a", "HARBOR.LOCAL:8443", "team-a", true},
 		{"http://[fd00::1]:5000", "[fd00::1]:5000", "", true},
 		{"*.pkg.dev", "*.pkg.dev", "", true},
 	}
@@ -282,13 +259,17 @@ func TestDiscoverImagePullSecrets_MatchingSemantics(t *testing.T) {
 		{"docker.io/library/nginx", []string{"hub-default"}},
 		{"quay.io/org/img:v1", []string{"quay-userpass"}},
 		{"us-docker.pkg.dev/p/r/img:v1", []string{"pkg-wildcard"}},
+		// Kubelet keyring matches hosts case-sensitively.
+		{"US-DOCKER.PKG.DEV/p/r/img:v1", nil},
 		{"us-docker.pkg.dev:5000/p/r/img:v1", []string{"pkg-wildcard-port"}},
 		{"sub.us-docker.pkg.dev/p/r/img:v1", nil},
 		{"harbor.local/team-a/trainer:v1", []string{"scoped-v2"}},
+		{"Harbor.Local/team-a/trainer:v1", nil},
 		// Path prefix scoping matches on path segment boundaries; team-alpha does not match team-a.
 		{"harbor.local/team-alpha/x:v1", nil},
 		{"harbor.local/other/x:v1", nil},
 		{"[fd00::1]:5000/obs/collector:v1", []string{"ipv6-sec"}},
+		{"[FD00::1]:5000/obs/collector:v1", nil},
 		{"dup.local/app:v1", []string{"a-dup", "z-dup"}},
 		// The kubelet rejects the whole secret when "auth" is not base64("user:pass"), failing every pull in the pod.
 		{"tok.local/app:v1", nil},
@@ -299,6 +280,24 @@ func TestDiscoverImagePullSecrets_MatchingSemantics(t *testing.T) {
 		if got := matchingSecretNames(secrets, tc.image); !slices.Equal(got, tc.want) {
 			t.Errorf("matchingSecretNames(%q) = %v, want %v", tc.image, got, tc.want)
 		}
+	}
+
+	wildAndUpper := []unstructured.Unstructured{
+		makeTestDockerSecret("wild", "*"),
+		makeTestDockerSecret("upper-hub", "https://INDEX.DOCKER.IO/v1/"),
+		makeTestDockerSecret("upper-reg", "HARBOR.LOCAL:8443"),
+		makeTestDockerSecret("lower-reg", "harbor.local:8443"),
+	}
+	for _, bad := range []string{"", ":latest", "us-docker.pkg.dev/", "/nginx", "myorg/"} {
+		if got := matchingSecretNames(wildAndUpper, bad); len(got) != 0 {
+			t.Errorf("matchingSecretNames(wildAndUpper, %q) = %v, want nil", bad, got)
+		}
+	}
+	if got := matchingSecretNames(wildAndUpper, "nginx:1.27"); len(got) != 0 {
+		t.Errorf("uppercase INDEX.DOCKER.IO auth key match = %v, want nil", got)
+	}
+	if got := matchingSecretNames(wildAndUpper, "harbor.local:8443/app:v1"); !slices.Equal(got, []string{"lower-reg"}) {
+		t.Errorf("case-sensitive harbor.local:8443 match = %v, want [lower-reg]", got)
 	}
 
 	lister := &stubResourceLister{items: secrets}

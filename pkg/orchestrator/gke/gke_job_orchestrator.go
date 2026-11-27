@@ -143,13 +143,10 @@ func (g *GKEOrchestrator) resetSubmissionSession() {
 // creates the required Kubernetes manifests (JobSet, or standalone batch/v1 Indexed Job when JobSet is absent),
 // and applies them to the cluster.
 func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
-	g.resetSubmissionSession()
-	if g.mode == orchestrator.TypeK8s {
-		return orchestrator.UnsupportedK8sSubmitError()
-	}
 	job.GKENamespace = strings.TrimSpace(job.GKENamespace)
 	job.Pathways.RunSPSWorkload = strings.TrimSpace(job.Pathways.RunSPSWorkload)
 	g.namespace = job.GKENamespace
+	g.resetSubmissionSession()
 	logging.Info("Starting gcluster job submit workflow...")
 	g.gkeCustomTemplatesPath = job.GkeCustomTemplatesPath
 
@@ -169,7 +166,7 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	if err != nil {
 		return err
 	}
-	if err := g.validatePostHardwareChecks(sm, &job); err != nil {
+	if err := g.validatePostHardwareChecks(sm, &job, profile); err != nil {
 		return err
 	}
 
@@ -197,8 +194,8 @@ func (g *GKEOrchestrator) prepareAndValidateSubmission(job *orchestrator.JobDefi
 	return g.fetchClusterState(job)
 }
 
-func (g *GKEOrchestrator) validatePostHardwareChecks(sm *StorageManager, job *orchestrator.JobDefinition) error {
-	if err := g.validateTier3Workload(job); err != nil {
+func (g *GKEOrchestrator) validatePostHardwareChecks(sm *StorageManager, job *orchestrator.JobDefinition, profile JobProfile) error {
+	if err := g.validateTier3Workload(job, profile.IsTPU); err != nil {
 		return err
 	}
 	if err := sm.ValidateClusterMounts(*job); err != nil {
@@ -207,7 +204,7 @@ func (g *GKEOrchestrator) validatePostHardwareChecks(sm *StorageManager, job *or
 	if err := sm.RunStorageProfilePreflight(job.RawMounts, job.ProjectID, job.ClusterLocation, job.DryRunManifest != ""); err != nil {
 		return err
 	}
-	return g.pinTelemetryAndValidate(job)
+	return g.pinTelemetryAndValidate(job, profile.IsTPU)
 }
 
 // workloadTemplateName selects the JobSet workload template assumed before cluster add-on resolution.
@@ -242,11 +239,11 @@ func (g *GKEOrchestrator) validateResolvedCustomTemplate(job orchestrator.JobDef
 // pinTelemetryAndValidate runs the cheap name-conflict check, then resolves the ML Diagnostics collector before
 // the image build, so a missing TPU node image cache or an RBAC denial fails fast and PrepareManifestOptions sees
 // the resolved image as explicit, and finally validates the MTC configuration.
-func (g *GKEOrchestrator) pinTelemetryAndValidate(job *orchestrator.JobDefinition) error {
+func (g *GKEOrchestrator) pinTelemetryAndValidate(job *orchestrator.JobDefinition, isTPU bool) error {
 	if err := g.validateJobConflicts(*job); err != nil {
 		return err
 	}
-	telemetryImg, _, err := g.resolveTelemetryCollector(*job)
+	telemetryImg, _, err := g.resolveTelemetryCollector(*job, isTPU)
 	if err != nil {
 		return err
 	}
@@ -254,10 +251,17 @@ func (g *GKEOrchestrator) pinTelemetryAndValidate(job *orchestrator.JobDefinitio
 	return g.validateMTCConfig(job)
 }
 
-// validateSubmitLocalPreflight runs the checks that need no cluster access or image build: Tier-3 flag
-// compatibility when GCLUSTER_DISABLE_JOBSET is set, mount syntax, ML Diagnostics flags, Pathways image
-// resolution, and custom template parsing.
+// validateSubmitLocalPreflight runs the checks that need no cluster access or image build: GKE-only flag
+// rejection in TypeK8s, Tier-3 flag compatibility when GCLUSTER_DISABLE_JOBSET is set, mount syntax,
+// ML Diagnostics flags, Pathways image resolution, and custom template parsing.
 func (g *GKEOrchestrator) validateSubmitLocalPreflight(sm *StorageManager, job orchestrator.JobDefinition) error {
+	if g.mode == orchestrator.TypeK8s {
+		if err := orchestrator.ValidateK8sSubmitJob(job); err != nil {
+			return err
+		}
+	} else if err := validateGKETPUNumNodes(job); err != nil {
+		return err
+	}
 	if !g.jobSetEnabled() {
 		if err := g.validateTier3FlagsWithWarn(&job, false); err != nil {
 			return err
@@ -1063,6 +1067,9 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 	if err := g.validateMTCJobFlags(job); err != nil {
 		return err
 	}
+	if g.mode == orchestrator.TypeK8s {
+		return g.initializeK8sJobSubmission(job)
+	}
 	if err := g.populateClusterMetadata(job); err != nil {
 		return err
 	}
@@ -1077,6 +1084,34 @@ func (g *GKEOrchestrator) initializeJobSubmission(job *orchestrator.JobDefinitio
 			return err
 		}
 	} else if g.isEnvTruthy(disableJobSetEnvVar) || g.isEnvTruthy(disableKueueEnvVar) || g.isAirGapped() {
+		if err := g.resolveClusterAddons(job, true); err != nil {
+			return err
+		}
+	}
+	if err := g.validateTier3Flags(job); err != nil {
+		return err
+	}
+	if err := g.validateResolvedCustomTemplate(*job); err != nil {
+		return err
+	}
+
+	return g.configureClusterEnvironment(job)
+}
+
+func (g *GKEOrchestrator) initializeK8sJobSubmission(job *orchestrator.JobDefinition) error {
+	logging.Info("Configuring kubectl for Kubernetes cluster '%s'...", job.ClusterName)
+	if err := g.configureKubectl(job.ClusterName, job.ClusterLocation, job.ProjectID); err != nil {
+		return err
+	}
+	if _, err := g.DiscoverK8sInventory(); err != nil {
+		return err
+	}
+
+	if job.DryRunManifest == "" {
+		if err := g.ValidateClusterState(job); err != nil {
+			return err
+		}
+	} else {
 		if err := g.resolveClusterAddons(job, true); err != nil {
 			return err
 		}
@@ -2722,16 +2757,6 @@ func (g *GKEOrchestrator) waitWorkloadFinished(targetWorkloadName, ns, timeout, 
 	return nil
 }
 
-func (g *GKEOrchestrator) addAcceleratorLabel(nodeSelector map[string]string, accelLabel string, isCPUMachine bool, machineType string) {
-	if accelLabel != "" && !isCPUMachine {
-		if config.IsTPU(machineType) {
-			nodeSelector["cloud.google.com/gke-tpu-accelerator"] = accelLabel
-		} else {
-			nodeSelector["cloud.google.com/gke-accelerator"] = accelLabel
-		}
-	}
-}
-
 func (g *GKEOrchestrator) addTopologyLabel(nodeSelector map[string]string, schedOpts SchedulingOptions, isGPU bool, isCPUMachine bool) error {
 	if schedOpts.Topology != "" {
 		if isGPU || isCPUMachine {
@@ -2771,7 +2796,7 @@ func injectProvisioningLabels(nodeSelector map[string]string, provisioning strin
 	}
 }
 
-func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orchestrator.JobDefinition, isCPUMachine bool) (string, error) {
+func (g *GKEOrchestrator) buildNodeSelectorWithProfile(schedOpts SchedulingOptions, job orchestrator.JobDefinition, profile JobProfile) (string, error) {
 	nodeSelector := make(map[string]string)
 	existing, err := getNodeSelector(schedOpts)
 	if err != nil {
@@ -2784,19 +2809,11 @@ func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orc
 	// Inject unified consumption options
 	injectProvisioningLabels(nodeSelector, job.GKENAPProvisioning, job.GKENAPReservation)
 
-	cap, err := g.FetchMachineCapabilities(job.MachineType, job.ClusterLocation)
+	accelLabel, isTPU, isGPU, err := g.resolveNodeSelectorAccelerator(job, profile)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch machine capabilities: %w", err)
+		return "", err
 	}
-
-	var accelLabel string
-	if len(cap.Accelerators) > 0 {
-		accelLabel = cap.Accelerators[0].Type
-	}
-
-	isGPU := !isCPUMachine && !config.IsTPU(job.MachineType)
-	g.addAcceleratorLabel(nodeSelector, accelLabel, isCPUMachine, job.MachineType)
-	if err := g.addTopologyLabel(nodeSelector, schedOpts, isGPU, isCPUMachine); err != nil {
+	if err := g.applyPlatformNodeSelectorLabels(nodeSelector, schedOpts, profile, accelLabel, job.MachineType, isTPU, isGPU, profile.IsCPUMachine); err != nil {
 		return "", err
 	}
 
@@ -2808,6 +2825,118 @@ func (g *GKEOrchestrator) buildNodeSelector(schedOpts SchedulingOptions, job orc
 		return "", fmt.Errorf("failed to marshal nodeSelector: %w", err)
 	}
 	return indentYaml(string(b), 16), nil
+}
+
+func (g *GKEOrchestrator) resolveNodeSelectorAccelerator(job orchestrator.JobDefinition, profile JobProfile) (accelLabel string, isTPU, isGPU bool, err error) {
+	if g.mode == orchestrator.TypeK8s {
+		isTPU = profile.IsTPU || (!profile.IsCPUMachine && profile.K8sPool == nil && defaultTPUHardwareResolver.IsTPUMachine(job.MachineType))
+		isGPU = !profile.IsCPUMachine && !isTPU
+		if !profile.IsCPUMachine {
+			accelLabel = g.resolveK8sGKEAcceleratorLabel(job.MachineType, profile, isTPU)
+		}
+		return accelLabel, isTPU, isGPU, nil
+	}
+	cap, err := g.FetchMachineCapabilities(job.MachineType, job.ClusterLocation)
+	if err != nil {
+		return "", false, false, fmt.Errorf("failed to fetch machine capabilities: %w", err)
+	}
+	if len(cap.Accelerators) > 0 {
+		accelLabel = cap.Accelerators[0].Type
+	}
+	isTPU = !profile.IsCPUMachine && config.IsTPU(job.MachineType)
+	isGPU = !profile.IsCPUMachine && !isTPU
+	return accelLabel, isTPU, isGPU, nil
+}
+
+func (g *GKEOrchestrator) resolveK8sGKEAcceleratorLabel(machineType string, profile JobProfile, isTPU bool) string {
+	if isTPU {
+		return g.resolveK8sGKETPUAcceleratorLabel(machineType, profile)
+	}
+	if profile.K8sPool != nil && profile.K8sPool.IsGPU {
+		return strings.TrimSpace(profile.K8sPool.GKEAcceleratorLabel)
+	}
+	mapped := g.GenerateGKENodeSelectorLabel(machineType)
+	if mapped == "" || strings.Contains(mapped, "/") {
+		return ""
+	}
+	if config.ValidGPUAccelerators[strings.ToLower(mapped)] || !strings.EqualFold(mapped, strings.TrimSpace(machineType)) {
+		return mapped
+	}
+	return ""
+}
+
+// resolveK8sGKETPUAcceleratorLabel prefers the observed pool label and falls back to the static machine map only
+// when no pool matched. GenerateGKENodeSelectorLabel echoes unmapped input (e.g. "ct5l-hightpu-8t", "bm-host"),
+// so a raw machine type is never emitted as the accelerator label.
+func (g *GKEOrchestrator) resolveK8sGKETPUAcceleratorLabel(machineType string, profile JobProfile) string {
+	if profile.K8sPool != nil && profile.K8sPool.IsTPU {
+		if obs := strings.TrimSpace(profile.K8sPool.GKETPUAcceleratorLabel); obs != "" && !strings.Contains(obs, "/") {
+			return obs
+		}
+		return ""
+	}
+	mapped := g.GenerateGKENodeSelectorLabel(machineType)
+	if mapped == "" || strings.Contains(mapped, "/") || strings.EqualFold(mapped, strings.TrimSpace(machineType)) {
+		return ""
+	}
+	return mapped
+}
+
+func (g *GKEOrchestrator) applyPlatformNodeSelectorLabels(nodeSelector map[string]string, schedOpts SchedulingOptions, profile JobProfile, accelLabel, machineType string, isTPU, isGPU, isCPUMachine bool) error {
+	if g.mode != orchestrator.TypeK8s || g.labelScheme() == k8s.SchemeGKE {
+		return g.applyGKEPlatformNodeSelectorLabels(nodeSelector, schedOpts, profile, accelLabel, machineType, isTPU, isGPU, isCPUMachine)
+	}
+	if schedOpts.Topology != "" && (isGPU || isCPUMachine) {
+		return fmt.Errorf("topology is not allowed for GPU and CPU jobs")
+	}
+	if g.labelScheme() == k8s.SchemeGeneric || isGPU || isCPUMachine {
+		g.applyGenericObservedNodeSelector(nodeSelector, schedOpts.NodeAffinityLabels, profile, machineType, isGPU)
+	}
+	return nil
+}
+
+func (g *GKEOrchestrator) applyGKEPlatformNodeSelectorLabels(nodeSelector map[string]string, schedOpts SchedulingOptions, profile JobProfile, accelLabel, machineType string, isTPU, isGPU, isCPUMachine bool) error {
+	if accelLabel != "" && !isCPUMachine {
+		if isTPU {
+			nodeSelector["cloud.google.com/gke-tpu-accelerator"] = accelLabel
+		} else {
+			nodeSelector["cloud.google.com/gke-accelerator"] = accelLabel
+		}
+	} else if g.mode == orchestrator.TypeK8s && (isGPU || isTPU) {
+		g.applyGenericObservedNodeSelector(nodeSelector, schedOpts.NodeAffinityLabels, profile, machineType, isGPU)
+	}
+	return g.addTopologyLabel(nodeSelector, schedOpts, isGPU, isCPUMachine)
+}
+
+func (g *GKEOrchestrator) applyGenericObservedNodeSelector(nodeSelector, affinityLabels map[string]string, profile JobProfile, machineType string, isGPU bool) {
+	var pool k8s.PoolCapacity
+	if profile.K8sPool != nil {
+		pool = *profile.K8sPool
+	} else if strings.TrimSpace(machineType) != "" {
+		foundPool, ok := g.findK8sPoolForRequest("", machineType)
+		if !ok {
+			return
+		}
+		pool = foundPool
+	} else {
+		return
+	}
+	setIfUnconstrained := func(key, val string) {
+		if val == "" {
+			return
+		}
+		if _, inSel := nodeSelector[key]; inSel {
+			return
+		}
+		if _, inAff := affinityLabels[key]; inAff {
+			return
+		}
+		nodeSelector[key] = val
+	}
+	setIfUnconstrained(k8s.InstanceTypeLabel, pool.InstanceTypeLabel)
+	if isGPU {
+		setIfUnconstrained(k8s.NvidiaGPUProductLabel, pool.GPUProductLabel)
+	}
 }
 
 func (g *GKEOrchestrator) buildAffinity(schedOpts SchedulingOptions) (string, error) {
@@ -2826,6 +2955,9 @@ func (g *GKEOrchestrator) buildAffinity(schedOpts SchedulingOptions) (string, er
 }
 
 func (g *GKEOrchestrator) buildTopologyAnnotation(topology string, machineType string, numSlices int, nodesPerSlice int, isSubSlicing bool) string {
+	if g.mode == orchestrator.TypeK8s && g.labelScheme() != k8s.SchemeGKE {
+		return ""
+	}
 	var topologyAnnotation map[string]string
 	if isSubSlicing {
 		topologyAnnotation = GetTopologyAnnotation(topology, machineType, numSlices, nodesPerSlice)

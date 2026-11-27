@@ -5149,6 +5149,315 @@ func TestSetKubeClientAndSetDynamicClientSync(t *testing.T) {
 	}
 }
 
+func makeTPUSliceK8sSubmitOrchestrator(t *testing.T, disableJobSet bool) (*GKEOrchestrator, *MockExecutor) {
+	t.Helper()
+	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
+	responses := map[string][]shell.CommandResult{
+		"kubectl get --raw /apis/" + k8s.TPUSliceAPIGroupVersion:                         {{ExitCode: 0, Stdout: "{}"}},
+		"kubectl get crd jobsets.jobset.x-k8s.io":                                        {{ExitCode: 0, Stdout: "crd/jobsets"}},
+		"kubectl get endpointslice -l kubernetes.io/service-name=jobset-webhook-service": {{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.2"],"conditions":{"ready":true}}]}]}`}},
+		"kubectl get crd clusterqueues.kueue.x-k8s.io":                                   {{ExitCode: 1, Stderr: `Error from server (NotFound): crd "clusterqueues.kueue.x-k8s.io" not found`}},
+		"kubectl get deployment kueue-controller-manager":                                {{ExitCode: 1, Stderr: `Error from server (NotFound): deployments.apps "kueue-controller-manager" not found`}},
+	}
+	mockExec := NewMockExecutor(responses)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = orchestrator.TypeK8s
+	orc.kubeContext = "tpu-slice-ctx"
+	orc.k8sCluster = "tpu-slice-cluster"
+	orc.connectivity = &connectivityChecker{
+		getenv: func(k string) string {
+			if disableJobSet && k == disableJobSetEnvVar {
+				return "1"
+			}
+			return ""
+		},
+	}
+	orc.kubeClient = &MockKubeClient{
+		Namespace: "ml-ns",
+		Objects: map[string][]unstructured.Unstructured{
+			"nodes": {
+				{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "tpu-worker-0",
+						"labels": map[string]interface{}{
+							k8s.TPUSliceTypeLabel:     "tpu7x",
+							k8s.TPUSliceTopologyLabel: "2x2x2",
+							k8s.TPUSliceNameLabel:     "ready-2x2x2",
+						},
+					},
+					"status": map[string]interface{}{
+						"allocatable": map[string]interface{}{"cpu": "240", "memory": "1024Gi", "google.com/tpu": "4"},
+						"conditions":  []interface{}{map[string]interface{}{"type": "Ready", "status": "True"}},
+					},
+				}},
+				{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"name": "tpu-worker-1",
+						"labels": map[string]interface{}{
+							k8s.TPUSliceTypeLabel:     "tpu7x",
+							k8s.TPUSliceTopologyLabel: "2x2x2",
+							k8s.TPUSliceNameLabel:     "ready-2x2x2",
+						},
+					},
+					"status": map[string]interface{}{
+						"allocatable": map[string]interface{}{"cpu": "240", "memory": "1024Gi", "google.com/tpu": "4"},
+						"conditions":  []interface{}{map[string]interface{}{"type": "Ready", "status": "True"}},
+					},
+				}},
+			},
+			"slices": {
+				{Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "ready-2x2x2"},
+					"spec":     map[string]interface{}{"type": "tpu7x", "topology": "2x2x2"},
+					"status": map[string]interface{}{
+						"conditions": []interface{}{
+							map[string]interface{}{"type": "Ready", "status": "True", "reason": "SliceReady"},
+						},
+					},
+				}},
+			},
+		},
+	}
+	return orc, mockExec
+}
+
+func assertZeroGCloudOrKueueSlicingCalls(t *testing.T, calls []string) {
+	t.Helper()
+	for _, call := range calls {
+		if strings.HasPrefix(call, "gcloud") {
+			t.Errorf("unexpected gcloud call in TypeK8s mode: %q", call)
+		}
+		if strings.Contains(call, "topologies.kueue.x-k8s.io") || strings.Contains(call, "resourceflavors.kueue.x-k8s.io") {
+			t.Errorf("unexpected Kueue slicing lookup when Kueue is absent: %q", call)
+		}
+	}
+}
+
+func TestSubmitJob_TypeK8sTier2AndTier3DryRun(t *testing.T) {
+	t.Run("tier2_jobset_without_kueue_or_gke_labels", func(t *testing.T) {
+		orc, mockExec := makeTPUSliceK8sSubmitOrchestrator(t, false)
+		outPath := filepath.Join(t.TempDir(), "tier2.yaml")
+		err := orc.SubmitJob(orchestrator.JobDefinition{
+			WorkloadName:   "tpu-tier2",
+			ClusterName:    "tpu-slice-cluster",
+			GKENamespace:   "ml-ns",
+			ImageName:      "registry.local/jax:v1",
+			CommandToRun:   "python3 train.py",
+			NumSlices:      1,
+			NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "ready-2x2x2"},
+			DryRunManifest: outPath,
+		})
+		if err != nil {
+			t.Fatalf("SubmitJob(TypeK8s Tier 2) err = %v", err)
+		}
+		assertZeroGCloudOrKueueSlicingCalls(t, mockExec.calls)
+		assertTier2TPUDryRunYAML(t, outPath)
+	})
+
+	t.Run("tier2_unnamed_tpu_slice_rejected_until_dynamic_slice_provisioning", func(t *testing.T) {
+		orc, _ := makeTPUSliceK8sSubmitOrchestrator(t, false)
+		err := orc.SubmitJob(orchestrator.JobDefinition{
+			WorkloadName:   "tpu-tier2-unnamed",
+			ClusterName:    "tpu-slice-cluster",
+			GKENamespace:   "ml-ns",
+			ComputeType:    "tpu7x",
+			Topology:       "2x2x2",
+			ImageName:      "registry.local/jax:v1",
+			CommandToRun:   "python3 train.py",
+			NumSlices:      1,
+			DryRunManifest: filepath.Join(t.TempDir(), "unnamed.yaml"),
+		})
+		if err == nil || !strings.Contains(err.Error(), k8s.TPUSliceNameLabel) {
+			t.Fatalf("SubmitJob(unnamed tpu-slice Tier 2) err = %v, want explicit slice-name error", err)
+		}
+	})
+
+	t.Run("tier3_batch_job_reuses_ready_slice_and_renders_service_plus_job", func(t *testing.T) {
+		orc, mockExec := makeTPUSliceK8sSubmitOrchestrator(t, true)
+		outPath := filepath.Join(t.TempDir(), "tier3.yaml")
+		err := orc.SubmitJob(orchestrator.JobDefinition{
+			WorkloadName:   "tpu-tier3",
+			ClusterName:    "tpu-slice-cluster",
+			GKENamespace:   "ml-ns",
+			ImageName:      "registry.local/jax:v1",
+			CommandToRun:   "python3 train.py",
+			NumSlices:      1,
+			NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "ready-2x2x2"},
+			DryRunManifest: outPath,
+		})
+		if err != nil {
+			t.Fatalf("SubmitJob(TypeK8s Tier 3) err = %v", err)
+		}
+		assertZeroGCloudOrKueueSlicingCalls(t, mockExec.calls)
+		assertTier3TPUDryRunYAML(t, outPath)
+	})
+}
+
+func assertTier2TPUDryRunYAML(t *testing.T, path string) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	docs, err := splitYAMLDocuments(string(raw))
+	if err != nil || len(docs) != 1 {
+		t.Fatalf("Tier 2 splitYAMLDocuments len=%d err=%v, want 1 JobSet", len(docs), err)
+	}
+	var js unstructured.Unstructured
+	if err := k8syaml.Unmarshal([]byte(docs[0]), &js.Object); err != nil {
+		t.Fatalf("unmarshal Tier 2 JobSet: %v", err)
+	}
+	if js.GetKind() != "JobSet" || js.GetName() != "tpu-tier2" {
+		t.Fatalf("Tier 2 object = (%s/%s), want JobSet/tpu-tier2", js.GetKind(), js.GetName())
+	}
+	if _, hasQueue := js.GetLabels()["kueue.x-k8s.io/queue-name"]; hasQueue {
+		t.Errorf("Tier 2 JobSet must omit queue label: %v", js.GetLabels())
+	}
+	manifest := string(raw)
+	for _, want := range []string{"google.com/tpu: \"4\"", "parallelism: 2", "completions: 2"} {
+		if !strings.Contains(manifest, want) {
+			t.Errorf("Tier 2 manifest missing %q:\n%s", want, manifest)
+		}
+	}
+	for _, forbid := range []string{"cloud.google.com/gke-nodepool", "cloud.google.com/gke-tpu-accelerator", "cloud.google.com/gke-tpu-topology"} {
+		if strings.Contains(manifest, forbid) {
+			t.Errorf("Tier 2 manifest must omit %q:\n%s", forbid, manifest)
+		}
+	}
+}
+
+func assertTier3TPUDryRunYAML(t *testing.T, path string) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	docs, err := splitYAMLDocuments(string(raw))
+	if err != nil || len(docs) != 2 {
+		t.Fatalf("Tier 3 splitYAMLDocuments len=%d err=%v, want 2 (Service + Job)", len(docs), err)
+	}
+	assertHeadlessServiceYAML(t, docs[0], "tpu-tier3")
+	var job batchv1.Job
+	if err := k8syaml.Unmarshal([]byte(docs[1]), &job); err != nil {
+		t.Fatalf("unmarshal Tier 3 Job: %v", err)
+	}
+	if job.Kind != "Job" || job.Name != "tpu-tier3" || job.Spec.Template.Spec.Subdomain != "tpu-tier3" {
+		t.Errorf("unexpected Tier 3 Job: %+v", job)
+	}
+	if job.Spec.Template.Spec.NodeSelector[k8s.TPUSliceNameLabel] != "ready-2x2x2" {
+		t.Errorf("Tier 3 Job nodeSelector = %v, want %s=ready-2x2x2", job.Spec.Template.Spec.NodeSelector, k8s.TPUSliceNameLabel)
+	}
+	tpuQty := job.Spec.Template.Spec.Containers[0].Resources.Limits[corev1.ResourceName("google.com/tpu")]
+	if tpuQty.String() != "4" {
+		t.Errorf("Tier 3 Job TPU limit = %q, want 4", tpuQty.String())
+	}
+}
+
+func TestSubmitJob_TypeK8sExplicitModeRBACRequirements(t *testing.T) {
+	t.Cleanup(func() { shell.SetDefaultAirGapped(false) })
+	newExplicitOrc := func() (*GKEOrchestrator, *MockExecutor) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get --raw /apis/" + k8s.TPUSliceAPIGroupVersion:                         {{ExitCode: 0, Stdout: "{}"}},
+			"kubectl get crd jobsets.jobset.x-k8s.io":                                        {{ExitCode: 0, Stdout: "crd/jobsets"}},
+			"kubectl get endpointslice -l kubernetes.io/service-name=jobset-webhook-service": {{ExitCode: 0, Stdout: `{"items":[{"endpoints":[{"addresses":["10.0.0.2"],"conditions":{"ready":true}}]}]}`}},
+			"kubectl get crd clusterqueues.kueue.x-k8s.io":                                   {{ExitCode: 1, Stderr: `Error from server (NotFound): not found`}},
+			"kubectl get deployment kueue-controller-manager":                                {{ExitCode: 1, Stderr: `Error from server (NotFound): not found`}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.mode = orchestrator.TypeK8s
+		orc.kubeContext = "explicit-ctx"
+		orc.k8sCluster = "explicit-cluster"
+		orc.kubeClient = &MockKubeClient{
+			Namespace: "ml-ns",
+			ListErrs: map[string]error{
+				"nodes":          apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("denied")),
+				"slices":         apierrors.NewForbidden(schema.GroupResource{Resource: "slices"}, "", errors.New("denied")),
+				"partitiontrees": apierrors.NewForbidden(schema.GroupResource{Resource: "partitiontrees"}, "", errors.New("denied")),
+			},
+		}
+		return orc, mockExec
+	}
+
+	t.Run("missing_compute_type_names_rbac_cause", func(t *testing.T) {
+		orc, _ := newExplicitOrc()
+		err := orc.SubmitJob(orchestrator.JobDefinition{
+			WorkloadName:   "explicit-no-ct",
+			ClusterName:    "explicit-cluster",
+			GKENamespace:   "ml-ns",
+			ImageName:      "registry.local/jax:v1",
+			CommandToRun:   "echo hi",
+			NumSlices:      1,
+			DryRunManifest: filepath.Join(t.TempDir(), "out.yaml"),
+		})
+		if err == nil || !strings.Contains(err.Error(), "--compute-type") || !strings.Contains(err.Error(), "403 Forbidden") {
+			t.Fatalf("SubmitJob(ExplicitMode no compute-type) err = %v, want RBAC --compute-type error", err)
+		}
+	})
+
+	t.Run("tpu_missing_topology_names_rbac_cause", func(t *testing.T) {
+		orc, _ := newExplicitOrc()
+		err := orc.SubmitJob(orchestrator.JobDefinition{
+			WorkloadName:   "explicit-no-topo",
+			ClusterName:    "explicit-cluster",
+			GKENamespace:   "ml-ns",
+			ComputeType:    "tpu7x",
+			NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "precreated-slice"},
+			ImageName:      "registry.local/jax:v1",
+			CommandToRun:   "echo hi",
+			NumSlices:      1,
+			DryRunManifest: filepath.Join(t.TempDir(), "out.yaml"),
+		})
+		if err == nil || !strings.Contains(err.Error(), "--topology") || !strings.Contains(err.Error(), "403 Forbidden") {
+			t.Fatalf("SubmitJob(ExplicitMode no topology) err = %v, want RBAC --topology error", err)
+		}
+	})
+
+	t.Run("explicit_flags_succeed_with_zero_gcloud_and_dry_run_skips_priority_probe", func(t *testing.T) {
+		orc, mockExec := newExplicitOrc()
+		outPath := filepath.Join(t.TempDir(), "explicit.yaml")
+		err := orc.SubmitJob(orchestrator.JobDefinition{
+			WorkloadName:      "explicit-ok",
+			ClusterName:       "explicit-cluster",
+			GKENamespace:      "ml-ns",
+			ComputeType:       "tpu7x",
+			Topology:          "2x2x2",
+			PriorityClassName: "custom-priority",
+			NodeConstraint:    map[string]string{k8s.TPUSliceNameLabel: "precreated-slice"},
+			ImageName:         "registry.local/jax:v1",
+			CommandToRun:      "echo hi",
+			NumSlices:         1,
+			DryRunManifest:    outPath,
+		})
+		if err != nil {
+			t.Fatalf("SubmitJob(ExplicitMode with flags) err = %v", err)
+		}
+		assertZeroGCloudOrKueueSlicingCalls(t, mockExec.calls)
+		for _, call := range mockExec.calls {
+			if strings.Contains(call, "get priorityclass") {
+				t.Errorf("--dry-run-out must not probe PriorityClass via kubectl; got call %q", call)
+			}
+		}
+	})
+
+	t.Run("explicit_mode_unnamed_tpu_slice_rejected", func(t *testing.T) {
+		orc, _ := newExplicitOrc()
+		err := orc.SubmitJob(orchestrator.JobDefinition{
+			WorkloadName:   "explicit-unnamed",
+			ClusterName:    "explicit-cluster",
+			GKENamespace:   "ml-ns",
+			ComputeType:    "tpu7x",
+			Topology:       "2x2x2",
+			ImageName:      "registry.local/jax:v1",
+			CommandToRun:   "echo hi",
+			NumSlices:      1,
+			DryRunManifest: filepath.Join(t.TempDir(), "explicit-unnamed.yaml"),
+		})
+		if err == nil || !strings.Contains(err.Error(), k8s.TPUSliceNameLabel) {
+			t.Fatalf("SubmitJob(ExplicitMode unnamed tpu-slice) err = %v, want explicit slice-name error", err)
+		}
+	})
+}
+
 type versionTrackingDynamicClient struct {
 	dynamic.Interface
 	listByGVR   func(gvr schema.GroupVersionResource, ns string, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
@@ -5477,6 +5786,182 @@ func TestListJobs_MergesStandaloneBatchJobsAndDisableJobSetSkipsJobSets(t *testi
 	}
 }
 
+func TestResolveK8sHardwareRequirements_GPUCPUAndExplicitSlice(t *testing.T) {
+	t.Run("gpu_only_inventory_autodiscovers_gpu", func(t *testing.T) {
+		orc := &GKEOrchestrator{
+			mode: orchestrator.TypeK8s,
+			submissionSession: submissionSession{
+				inventory: &k8s.Inventory{
+					LabelScheme: k8s.SchemeGeneric,
+					PoolNames:   []string{"gpu-pool"},
+					Pools: map[string]k8s.PoolCapacity{
+						"gpu-pool": {MachineType: "a3-highgpu-8g", IsGPU: true, GPUsPerNode: 8, GPUType: "nvidia-h100-80gb", AllocatableCPUMilli: 208000, MemMiBPerNode: 1800000, ReadyNodes: 2},
+					},
+				},
+			},
+		}
+		job := orchestrator.JobDefinition{NumSlices: 1}
+		profile, _, _, err := orc.resolveK8sHardwareRequirements(&job)
+		if err != nil {
+			t.Fatalf("resolveK8sHardwareRequirements(GPU) err = %v", err)
+		}
+		if job.MachineType != "a3-highgpu-8g" || profile.IsCPUMachine || profile.CapacityCount != 8 {
+			t.Errorf("got machine=%q profile=%+v, want a3-highgpu-8g GPU count=8", job.MachineType, profile)
+		}
+	})
+
+	t.Run("cpu_only_inventory_autodiscovers_cpu", func(t *testing.T) {
+		orc := &GKEOrchestrator{
+			mode: orchestrator.TypeK8s,
+			submissionSession: submissionSession{
+				inventory: &k8s.Inventory{
+					LabelScheme: k8s.SchemeGeneric,
+					PoolNames:   []string{"cpu-pool"},
+					Pools: map[string]k8s.PoolCapacity{
+						"cpu-pool": {MachineType: "n2-standard-16", AllocatableCPUMilli: 16000, MemMiBPerNode: 65536, ReadyNodes: 1},
+					},
+					CPUPoolCap: &k8s.PoolCapacity{MachineType: "n2-standard-16", AllocatableCPUMilli: 16000, MemMiBPerNode: 65536, ReadyNodes: 1},
+				},
+			},
+		}
+		job := orchestrator.JobDefinition{NumSlices: 1}
+		profile, _, _, err := orc.resolveK8sHardwareRequirements(&job)
+		if err != nil {
+			t.Fatalf("resolveK8sHardwareRequirements(CPU) err = %v", err)
+		}
+		if !profile.IsCPUMachine || profile.CapacityCount != 16 {
+			t.Errorf("got profile=%+v, want CPU CapacityCount=16", profile)
+		}
+	})
+
+	t.Run("explicit_mode_g2_l4_gpu_resolves_without_nodes", func(t *testing.T) {
+		orc := &GKEOrchestrator{
+			mode:              orchestrator.TypeK8s,
+			submissionSession: submissionSession{inventory: &k8s.Inventory{LabelScheme: k8s.SchemeGeneric, ExplicitMode: true}},
+		}
+		job := orchestrator.JobDefinition{ComputeType: "g2-standard-4", NumSlices: 1}
+		profile, _, _, err := orc.resolveK8sHardwareRequirements(&job)
+		if err != nil {
+			t.Fatalf("resolveK8sHardwareRequirements(g2-standard-4) err = %v", err)
+		}
+		if profile.IsCPUMachine || profile.CapacityCount != 1 {
+			t.Errorf("got profile=%+v, want GPU CapacityCount=1", profile)
+		}
+	})
+
+	t.Run("explicit_mode_cpu_machine_not_misclassified_as_gpu", func(t *testing.T) {
+		orc := &GKEOrchestrator{
+			mode:              orchestrator.TypeK8s,
+			submissionSession: submissionSession{inventory: &k8s.Inventory{LabelScheme: k8s.SchemeGeneric, ExplicitMode: true}},
+		}
+		job := orchestrator.JobDefinition{ComputeType: "n2-standard-8", NumSlices: 1}
+		profile, _, _, err := orc.resolveK8sHardwareRequirements(&job)
+		if err != nil {
+			t.Fatalf("resolveK8sHardwareRequirements(n2-standard-8) err = %v", err)
+		}
+		if !profile.IsCPUMachine {
+			t.Errorf("got profile=%+v, want IsCPUMachine=true", profile)
+		}
+	})
+}
+
+func TestK8sCPUSizing_NoSharedCoreClampingOrTruncation(t *testing.T) {
+	orc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				PoolNames:   []string{"aws-cpu", "small-cpu"},
+				Pools: map[string]k8s.PoolCapacity{
+					"aws-cpu":   {MachineType: "m5.16xlarge", AllocatableCPUMilli: 63800, MemMiBPerNode: 256000, ReadyNodes: 1},
+					"small-cpu": {MachineType: "kind-worker", AllocatableCPUMilli: 940, MemMiBPerNode: 2048, ReadyNodes: 1},
+				},
+			},
+		},
+	}
+	bigJob := orchestrator.JobDefinition{ComputeType: "m5.16xlarge", NumSlices: 1}
+	bigProf, _, _, err := orc.resolveK8sHardwareRequirements(&bigJob)
+	if err != nil {
+		t.Fatalf("resolveK8sHardwareRequirements(m5.16xlarge) err = %v", err)
+	}
+	cpuLim, _, _, _, err := orc.calculateResourceLimits(ManifestOptions{MachineType: "m5.16xlarge"}, bigProf)
+	if err != nil || cpuLim != "62800m" {
+		t.Errorf("m5.16xlarge CPU limit = (%q, %v), want 62800m (not clamped to 570m)", cpuLim, err)
+	}
+
+	smallJob := orchestrator.JobDefinition{ComputeType: "kind-worker", NumSlices: 1}
+	smallProf, _, _, err := orc.resolveK8sHardwareRequirements(&smallJob)
+	if err != nil {
+		t.Fatalf("resolveK8sHardwareRequirements(kind-worker) err = %v", err)
+	}
+	smallLim, _, _, _, err := orc.calculateResourceLimits(ManifestOptions{MachineType: "kind-worker"}, smallProf)
+	if err != nil || smallLim != "570m" {
+		t.Errorf("kind-worker(940m) CPU limit = (%q, %v), want 570m (not truncated to 0)", smallLim, err)
+	}
+}
+
+func TestK8sGPUAndTPUFallbackResolution(t *testing.T) {
+	orc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				PoolNames:   []string{"bm-gpu"},
+				Pools: map[string]k8s.PoolCapacity{
+					"bm-gpu": {IsGPU: true, GPUsPerNode: 8, GPUType: "NVIDIA-H100-80GB-HBM3", ReadyNodes: 1},
+				},
+			},
+		},
+	}
+	job := orchestrator.JobDefinition{NumSlices: 1}
+	prof, _, _, err := orc.resolveK8sHardwareRequirements(&job)
+	if err != nil || prof.IsCPUMachine || prof.CapacityCount != 8 {
+		t.Fatalf("baremetal GPU pool = (prof=%+v, err=%v), want 8 GPUs", prof, err)
+	}
+
+	explicitOrc := &GKEOrchestrator{
+		mode:              orchestrator.TypeK8s,
+		submissionSession: submissionSession{inventory: &k8s.Inventory{LabelScheme: k8s.SchemeGKE, ExplicitMode: true}},
+	}
+	if lbl := explicitOrc.resolveK8sGKEAcceleratorLabel("a3-highgpu-8g", JobProfile{}, false); lbl != "nvidia-h100-80gb" {
+		t.Errorf("explicit SchemeGKE a3-highgpu-8g label = %q, want nvidia-h100-80gb", lbl)
+	}
+	if prof, err := explicitOrc.buildK8sJobProfile(&orchestrator.JobDefinition{MachineType: "g4-standard-192"}, k8s.PoolCapacity{}, false, false); err != nil || prof.IsCPUMachine || prof.CapacityCount != 4 {
+		t.Errorf("explicit g4-standard-192 profile = (%+v, %v), want 4 GPUs", prof, err)
+	}
+	if prof, err := explicitOrc.buildK8sJobProfile(&orchestrator.JobDefinition{MachineType: "custom-mem-64g"}, k8s.PoolCapacity{}, false, false); err != nil || !prof.IsCPUMachine {
+		t.Errorf("custom-mem-64g profile = (%+v, %v), want CPU profile", prof, err)
+	}
+}
+
+func TestK8sTPUPoolChipCountAndExplicitSliceTopologyMismatch(t *testing.T) {
+	orc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeTPUSlice,
+				PoolNames:   []string{"v6e-4t"},
+				Pools: map[string]k8s.PoolCapacity{
+					"v6e-4t": {MachineType: "ct6e-standard-4t", IsTPU: true, TPUType: "v6e", TPUsPerNode: 4, ReadyNodes: 2},
+				},
+				Slices: []k8s.SliceInfo{{Name: "s-2x4", TPUType: "v6e", Topology: "2x4", Ready: true, NodesPerSlice: 2}},
+			},
+		},
+	}
+	if got := orc.resolveK8sMachineType("v6e-1", nil); got != "ct6e-standard-1t" {
+		t.Errorf("resolveK8sMachineType(v6e-1) = %q, want ct6e-standard-1t (not 4t pool)", got)
+	}
+	mismatchJob := orchestrator.JobDefinition{
+		ComputeType:    "v6e-4",
+		Topology:       "4x4",
+		NumSlices:      1,
+		NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "s-2x4"},
+	}
+	if _, _, _, err := orc.resolveK8sHardwareRequirements(&mismatchJob); err == nil || !strings.Contains(err.Error(), "does not match slice") {
+		t.Errorf("explicit slice topology mismatch err = %v, want mismatch error", err)
+	}
+}
+
 func TestTier3ConflictAndRollback(t *testing.T) {
 	unownedJobDyn := &versionTrackingDynamicClient{
 		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
@@ -5554,6 +6039,28 @@ func TestAwaitUnqueuedKueueClusterAndTypeK8sPreflight(t *testing.T) {
 	}
 	if dur, err := parseDirectAwaitTimeout("-1s"); err != nil || dur != maxDirectAwaitTimeout {
 		t.Errorf("parseDirectAwaitTimeout(-1s) = (%v, %v), want (%v, nil)", dur, err, maxDirectAwaitTimeout)
+	}
+}
+
+func TestTypeK8sLocalPreflight_RejectsGKEOnlyFlagsAndCloudMounts(t *testing.T) {
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.mode = orchestrator.TypeK8s
+	sm := &StorageManager{orchestrator: orc}
+	cases := []struct {
+		name    string
+		job     orchestrator.JobDefinition
+		wantErr string
+	}{
+		{"pathways", orchestrator.JobDefinition{IsPathwaysJob: true}, "Pathways"},
+		{"placement_policy", orchestrator.JobDefinition{PlacementPolicy: "compact"}, "--placement-policy"},
+		{"nap_provisioning", orchestrator.JobDefinition{GKENAPProvisioning: "spot"}, "--gke-nap-provisioning"},
+		{"dry_run_gcs", orchestrator.JobDefinition{RawMounts: []string{"gs://my-bucket;/data"}, DryRunManifest: "/tmp/out.yaml"}, "GCS mounts"},
+		{"dry_run_filestore", orchestrator.JobDefinition{RawMounts: []string{"filestore://10.0.0.1/share;/data"}, DryRunManifest: "/tmp/out.yaml"}, "Filestore mounts"},
+	}
+	for _, tc := range cases {
+		if err := orc.validateSubmitLocalPreflight(sm, tc.job); err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+			t.Errorf("%s: preflight err = %v, want %q", tc.name, err, tc.wantErr)
+		}
 	}
 }
 
@@ -5676,7 +6183,28 @@ func TestAttachBatchJobServiceOwnerRef_PatchesAndWarnsWithValidCancelCmd(t *test
 	}
 }
 
-func TestCrossTierCollisions(t *testing.T) {
+func TestSchemeGenericNodeSelectorAndCrossTierCollisions(t *testing.T) {
+	genOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				PoolNames:   []string{"h100", "l4"},
+				Pools: map[string]k8s.PoolCapacity{
+					"h100": {MachineType: "a3-highgpu-8g", IsGPU: true, GPUsPerNode: 8, InstanceTypeLabel: "a3-highgpu-8g", GPUProductLabel: "NVIDIA-H100-80GB-HBM3"},
+					"l4":   {MachineType: "g2-standard-96", IsGPU: true, GPUsPerNode: 8, InstanceTypeLabel: "g2-standard-96", GPUProductLabel: "NVIDIA-L4"},
+				},
+			},
+		},
+	}
+	sel := map[string]string{}
+	if err := genOrc.applyPlatformNodeSelectorLabels(sel, SchedulingOptions{}, JobProfile{}, "nvidia-h100-80gb", "a3-highgpu-8g", false, true, false); err != nil {
+		t.Fatalf("applyPlatformNodeSelectorLabels(SchemeGeneric) err = %v", err)
+	}
+	if sel[k8s.InstanceTypeLabel] != "a3-highgpu-8g" || sel[k8s.NvidiaGPUProductLabel] != "NVIDIA-H100-80GB-HBM3" {
+		t.Errorf("SchemeGeneric nodeSelector = %v, want observed H100 labels", sel)
+	}
+
 	crossDyn := &versionTrackingDynamicClient{
 		getByGVR: func(gvr schema.GroupVersionResource, ns, name string) (*unstructured.Unstructured, error) {
 			if gvr == jobGVR && name == "active-t3" {
@@ -6383,5 +6911,350 @@ func TestNamespacedMissingCRD404TriggersStrictBatchJobCheck(t *testing.T) {
 	orc.SetDynamicClient(dyn)
 	if _, err := orc.getJobStatus("taken"); err == nil || !strings.Contains(err.Error(), "not managed by gcluster") {
 		t.Errorf("namespaced missing-CRD 404 must run strict batch Job conflict check, got %v", err)
+	}
+}
+
+func TestResolveHostNetwork_TypeK8sPreservesHostNetworkWithServiceAccount(t *testing.T) {
+	if !resolveHostNetwork(ManifestOptions{ServiceAccountName: "my-sa"}, true, false, false) {
+		t.Errorf("TypeK8s TPU job with --service-account must keep hostNetwork=true")
+	}
+	if resolveHostNetwork(ManifestOptions{ServiceAccountName: "my-sa"}, true, false, true) {
+		t.Errorf("GKE TPU job with --service-account must disable hostNetwork for Workload Identity")
+	}
+	if !resolveHostNetwork(ManifestOptions{}, true, false, true) {
+		t.Errorf("GKE TPU job without --service-account must keep hostNetwork=true")
+	}
+}
+
+func TestStorageManager_TypeK8sSkipsGCSFuseSidecar(t *testing.T) {
+	mockExec := NewMockExecutor(nil)
+	k8sOrc := newTestGKEOrchestrator(mockExec)
+	k8sOrc.mode = orchestrator.TypeK8s
+	k8sSM := &StorageManager{orchestrator: k8sOrc}
+	if k8sSM.pvcNeedsGCSFuseSidecar("shared-pvc", orchestrator.JobDefinition{}, &mountBuildState{}) {
+		t.Errorf("TypeK8s must never inject GCSFuse sidecar for PVCs")
+	}
+	if len(mockExec.calls) != 0 {
+		t.Errorf("TypeK8s pvcNeedsGCSFuseSidecar made unexpected kubectl calls: %v", mockExec.calls)
+	}
+
+	// GKE dry-run must still inspect PVCs so gke-gcsfuse/volumes is preserved in dry-run manifests.
+	gkeExec := NewMockExecutor(map[string][]shell.CommandResult{
+		fmt.Sprintf("kubectl get pvc -n default --ignore-not-found %s -o %s -- my-gcs-pvc", kubectlReadTimeout, pvcGCSFuseJSONPath): {{
+			ExitCode: 0,
+			Stdout:   "pv-gcs\tstandard\tgcsfuse.csi.storage.gke.io\t",
+		}},
+	})
+	gkeOrc := newTestGKEOrchestrator(gkeExec)
+	gkeOrc.mode = orchestrator.TypeGKE
+	gkeSM := &StorageManager{orchestrator: gkeOrc}
+	if !gkeSM.pvcNeedsGCSFuseSidecar("my-gcs-pvc", orchestrator.JobDefinition{DryRunManifest: "/tmp/out.yaml"}, &mountBuildState{}) {
+		t.Errorf("GKE dry-run must still emit gke-gcsfuse/volumes for GCSFuse-backed PVC")
+	}
+}
+
+func TestSchemeGKETPUNodeSelector_PrefersObservedLabel(t *testing.T) {
+	tpuPool := k8s.PoolCapacity{
+		MachineType:            "ct5l-hightpu-8t",
+		IsTPU:                  true,
+		TPUType:                "v5e",
+		TPUsPerNode:            8,
+		GKETPUAcceleratorLabel: "tpu-v5-lite-device",
+		InstanceTypeLabel:      "ct5l-hightpu-8t",
+		NodePoolName:           "v5e-pool",
+		ReadyNodes:             1,
+	}
+	orc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGKE,
+				PoolNames:   []string{"v5e-pool"},
+				Pools:       map[string]k8s.PoolCapacity{"v5e-pool": tpuPool},
+			},
+		},
+	}
+	selYAML, err := orc.buildNodeSelectorWithProfile(SchedulingOptions{Topology: "2x4", IsTPU: true}, orchestrator.JobDefinition{MachineType: "ct5l-hightpu-8t"}, JobProfile{IsTPU: true, K8sPool: &tpuPool, CapacityCount: 8})
+	if err != nil {
+		t.Fatalf("buildNodeSelectorWithProfile(ct5l-hightpu-8t on SchemeGKE) err = %v", err)
+	}
+	if !strings.Contains(selYAML, "cloud.google.com/gke-tpu-accelerator: tpu-v5-lite-device") {
+		t.Errorf("expected observed gke-tpu-accelerator label tpu-v5-lite-device, got:\n%s", selYAML)
+	}
+	if strings.Contains(selYAML, "cloud.google.com/gke-tpu-accelerator: ct5l-hightpu-8t") {
+		t.Errorf("must not emit raw ct5l-hightpu-8t into gke-tpu-accelerator:\n%s", selYAML)
+	}
+
+	// ExplicitMode (no matched pool) falls back to static machine map.
+	explicitOrc := &GKEOrchestrator{
+		mode:              orchestrator.TypeK8s,
+		submissionSession: submissionSession{inventory: &k8s.Inventory{LabelScheme: k8s.SchemeGKE, ExplicitMode: true}},
+	}
+	explicitYAML, err := explicitOrc.buildNodeSelectorWithProfile(SchedulingOptions{Topology: "2x2", IsTPU: true}, orchestrator.JobDefinition{MachineType: "ct6e-standard-4t"}, JobProfile{IsTPU: true, CapacityCount: 4})
+	if err != nil {
+		t.Fatalf("buildNodeSelectorWithProfile(explicit SchemeGKE TPU) err = %v", err)
+	}
+	if !strings.Contains(explicitYAML, "cloud.google.com/gke-tpu-accelerator: tpu-v6e-slice") {
+		t.Errorf("expected static map fallback tpu-v6e-slice when no pool matched, got:\n%s", explicitYAML)
+	}
+
+	// Matched SchemeGKE TPU pool without gke-tpu-accelerator label falls back to observed instance-type label.
+	unlabeledTPUPool := k8s.PoolCapacity{
+		MachineType:       "ct5l-hightpu-8t",
+		IsTPU:             true,
+		TPUType:           "v5e",
+		TPUsPerNode:       8,
+		InstanceTypeLabel: "ct5l-hightpu-8t",
+		ReadyNodes:        1,
+	}
+	fallbackYAML, err := orc.buildNodeSelectorWithProfile(SchedulingOptions{Topology: "2x4", IsTPU: true}, orchestrator.JobDefinition{MachineType: "ct5l-hightpu-8t"}, JobProfile{IsTPU: true, K8sPool: &unlabeledTPUPool, CapacityCount: 8})
+	if err != nil {
+		t.Fatalf("buildNodeSelectorWithProfile(unlabeled SchemeGKE TPU pool) err = %v", err)
+	}
+	if strings.Contains(fallbackYAML, "cloud.google.com/gke-tpu-accelerator") || !strings.Contains(fallbackYAML, "node.kubernetes.io/instance-type: ct5l-hightpu-8t") {
+		t.Errorf("unlabeled SchemeGKE TPU pool should fall back to observed instance-type, got:\n%s", fallbackYAML)
+	}
+}
+
+func TestObservedNodeSelector_PreservesPipeAffinityAndEmitsForCPUGPUOnTPUSlice(t *testing.T) {
+	tpuSliceOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeTPUSlice,
+				PoolNames:   []string{"gpu-a100", "cpu-pool"},
+				Pools: map[string]k8s.PoolCapacity{
+					"gpu-a100": {MachineType: "a2-highgpu-8g", IsGPU: true, GPUsPerNode: 8, InstanceTypeLabel: "a2-highgpu-8g", GPUProductLabel: "NVIDIA-A100-SXM4-80GB", ReadyNodes: 2},
+					"cpu-pool": {MachineType: "n2-standard-16", InstanceTypeLabel: "n2-standard-16", ReadyNodes: 2},
+				},
+			},
+		},
+	}
+
+	// GPU job on a SchemeTPUSlice cluster with pipe-delimited affinity on instance-type:
+	// must NOT overwrite instance-type in nodeSelector, while still emitting observed GPU product label.
+	gpuPool := tpuSliceOrc.inventory.Pools["gpu-a100"]
+	sel := map[string]string{}
+	schedOpts := SchedulingOptions{
+		NodeAffinityLabels: map[string]string{k8s.InstanceTypeLabel: "a2-highgpu-8g|a2-ultragpu-8g"},
+	}
+	err := tpuSliceOrc.applyPlatformNodeSelectorLabels(sel, schedOpts, JobProfile{K8sPool: &gpuPool}, "nvidia-a100-80gb", "a2-highgpu-8g", false, true, false)
+	if err != nil {
+		t.Fatalf("applyPlatformNodeSelectorLabels(GPU on SchemeTPUSlice) err = %v", err)
+	}
+	if _, leaked := sel[k8s.InstanceTypeLabel]; leaked {
+		t.Errorf("nodeSelector leaked pipe-affinity key %s: %v", k8s.InstanceTypeLabel, sel)
+	}
+	if sel[k8s.NvidiaGPUProductLabel] != "NVIDIA-A100-SXM4-80GB" {
+		t.Errorf("GPU on SchemeTPUSlice missing observed product label: %v", sel)
+	}
+
+	// CPU job on SchemeTPUSlice cluster emits observed instance-type selector.
+	cpuPool := tpuSliceOrc.inventory.Pools["cpu-pool"]
+	cpuSel := map[string]string{}
+	if err := tpuSliceOrc.applyPlatformNodeSelectorLabels(cpuSel, SchedulingOptions{}, JobProfile{IsCPUMachine: true, K8sPool: &cpuPool}, "", "n2-standard-16", false, false, true); err != nil {
+		t.Fatalf("applyPlatformNodeSelectorLabels(CPU on SchemeTPUSlice) err = %v", err)
+	}
+	if cpuSel[k8s.InstanceTypeLabel] != "n2-standard-16" {
+		t.Errorf("CPU on SchemeTPUSlice nodeSelector = %v, want %s=n2-standard-16", cpuSel, k8s.InstanceTypeLabel)
+	}
+}
+
+func TestSchemeGKEGPUNodeSelector_NoSyntheticOrSlashLabels(t *testing.T) {
+	migPool := k8s.PoolCapacity{
+		MachineType:       "a2-highgpu-1g",
+		NodePoolName:      "mig-pool",
+		IsGPU:             true,
+		GPUsPerNode:       7,
+		GPUType:           "nvidia.com/mig-1g.5gb",
+		GPUResourceName:   "nvidia.com/mig-1g.5gb",
+		InstanceTypeLabel: "a2-highgpu-1g",
+		GPUProductLabel:   "NVIDIA-A100-SXM4-40GB",
+		ReadyNodes:        2,
+	}
+	orc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGKE,
+				PoolNames:   []string{"mig"},
+				Pools:       map[string]k8s.PoolCapacity{"mig": migPool},
+			},
+		},
+	}
+	selYAML, err := orc.buildNodeSelectorWithProfile(SchedulingOptions{}, orchestrator.JobDefinition{MachineType: "a2-highgpu-1g"}, JobProfile{K8sPool: &migPool, CapacityCount: 7, GPUResourceName: "nvidia.com/mig-1g.5gb"})
+	if err != nil {
+		t.Fatalf("buildNodeSelectorWithProfile(MIG on SchemeGKE) err = %v", err)
+	}
+	if strings.Contains(selYAML, "cloud.google.com/gke-accelerator") {
+		t.Errorf("MIG pool without gke-accelerator label must not emit cloud.google.com/gke-accelerator:\n%s", selYAML)
+	}
+	if !strings.Contains(selYAML, "nvidia.com/gpu.product: NVIDIA-A100-SXM4-40GB") {
+		t.Errorf("MIG pool on SchemeGKE should fall back to observed product label:\n%s", selYAML)
+	}
+
+	// ExplicitMode with nvidia.com/mig-1g.5gb must never emit '/' in cloud.google.com/gke-accelerator.
+	explicitOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{LabelScheme: k8s.SchemeGKE, ExplicitMode: true},
+		},
+	}
+	explicitYAML, err := explicitOrc.buildNodeSelectorWithProfile(SchedulingOptions{}, orchestrator.JobDefinition{MachineType: "nvidia.com/mig-1g.5gb"}, JobProfile{CapacityCount: 1, GPUResourceName: "nvidia.com/mig-1g.5gb"})
+	if err != nil || strings.Contains(explicitYAML, "cloud.google.com/gke-accelerator") {
+		t.Errorf("ExplicitMode nvidia.com/mig-1g.5gb emitted invalid selector: %q (err=%v)", explicitYAML, err)
+	}
+}
+
+func TestMultiSliceTPUSliceJobSet_ExclusiveTopologyCardinalityAndTypoFailFast(t *testing.T) {
+	orc, _ := makeTPUSliceK8sSubmitOrchestrator(t, false)
+	// Add second identical READY 2x2x2 slice to test pipe-delimited multi-slice JobSet.
+	mk := orc.kubeClient.(*MockKubeClient)
+	mk.Objects["slices"] = append(mk.Objects["slices"], unstructured.Unstructured{Object: map[string]interface{}{
+		"metadata": map[string]interface{}{"name": "ready-2x2x2-b"},
+		"spec":     map[string]interface{}{"type": "tpu7x", "topology": "2x2x2"},
+		"status": map[string]interface{}{
+			"conditions": []interface{}{
+				map[string]interface{}{"type": "Ready", "status": "True", "reason": "SliceReady"},
+			},
+		},
+	}})
+
+	outPath := filepath.Join(t.TempDir(), "multi-slice.yaml")
+	if err := orc.SubmitJob(orchestrator.JobDefinition{
+		WorkloadName:   "tpu-multi",
+		ClusterName:    "tpu-slice-cluster",
+		GKENamespace:   "ml-ns",
+		ImageName:      "registry.local/jax:v1",
+		CommandToRun:   "python3 train.py",
+		NumSlices:      2,
+		NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "ready-2x2x2|ready-2x2x2-b"},
+		DryRunManifest: outPath,
+	}); err != nil {
+		t.Fatalf("multi-slice JobSet SubmitJob err = %v", err)
+	}
+	raw, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "alpha.jobset.sigs.k8s.io/exclusive-topology: "+k8s.TPUSliceNameLabel) {
+		t.Errorf("multi-slice SchemeTPUSlice JobSet missing exclusive-topology annotation:\n%s", string(raw))
+	}
+
+	// Cardinality guard: --num-slices=2 with single slice (or duplicate) fails fast.
+	orc2, _ := makeTPUSliceK8sSubmitOrchestrator(t, false)
+	if err := orc2.SubmitJob(orchestrator.JobDefinition{
+		WorkloadName:   "tpu-short",
+		ClusterName:    "tpu-slice-cluster",
+		GKENamespace:   "ml-ns",
+		ImageName:      "registry.local/jax:v1",
+		CommandToRun:   "python3 train.py",
+		NumSlices:      2,
+		NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "ready-2x2x2|ready-2x2x2"},
+		DryRunManifest: filepath.Join(t.TempDir(), "short.yaml"),
+	}); err == nil || !strings.Contains(err.Error(), "requires at least 2 distinct READY slices") {
+		t.Errorf("--num-slices=2 with duplicate slice err = %v, want distinct slice count error", err)
+	}
+
+	// Typo slice without --topology fails with "does not exist", NOT "--topology is required".
+	orc3, _ := makeTPUSliceK8sSubmitOrchestrator(t, false)
+	if err := orc3.SubmitJob(orchestrator.JobDefinition{
+		WorkloadName:   "tpu-typo",
+		ClusterName:    "tpu-slice-cluster",
+		GKENamespace:   "ml-ns",
+		ComputeType:    "tpu7x",
+		ImageName:      "registry.local/jax:v1",
+		CommandToRun:   "python3 train.py",
+		NumSlices:      1,
+		NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "typo-slice"},
+		DryRunManifest: filepath.Join(t.TempDir(), "typo.yaml"),
+	}); err == nil || !strings.Contains(err.Error(), `TPU slice "typo-slice" does not exist`) {
+		t.Errorf("typo slice without --topology err = %v, want 'does not exist'", err)
+	}
+}
+
+func TestInitializeK8sJobSubmission_ValidatesResolvedCustomTemplate(t *testing.T) {
+	tplDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tplDir, "job.tmpl"), []byte("{{ .InvalidUnclosed"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate JobSet absent at runtime (GCLUSTER_DISABLE_JOBSET unset, JobSet CRD returns empty for --ignore-not-found).
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get --raw /apis/" + k8s.TPUSliceAPIGroupVersion: {{ExitCode: 0, Stdout: "{}"}},
+		"kubectl get crd jobsets.jobset.x-k8s.io":                {{ExitCode: 0, Stdout: ""}},
+		"kubectl get service jobset-webhook-service":             {{ExitCode: 0, Stdout: ""}},
+		"kubectl get deployment jobset-controller-manager":       {{ExitCode: 0, Stdout: ""}},
+		"kubectl get crd clusterqueues.kueue.x-k8s.io":           {{ExitCode: 1, Stderr: `Error from server (NotFound): not found`}},
+		"kubectl get deployment kueue-controller-manager":        {{ExitCode: 1, Stderr: `Error from server (NotFound): not found`}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = orchestrator.TypeK8s
+	orc.kubeContext = "tier3-tpl-ctx"
+	orc.k8sCluster = "tpu-slice-cluster"
+	orc.gkeCustomTemplatesPath = tplDir
+	orc.kubeClient = &MockKubeClient{Namespace: "ml-ns"}
+	job := orchestrator.JobDefinition{
+		WorkloadName:   "bad-tpl",
+		ClusterName:    "tpu-slice-cluster",
+		GKENamespace:   "ml-ns",
+		DryRunManifest: filepath.Join(t.TempDir(), "out.yaml"),
+	}
+	if err := orc.initializeK8sJobSubmission(&job); err == nil || !strings.Contains(err.Error(), "job.tmpl") {
+		t.Fatalf("initializeK8sJobSubmission(broken custom job.tmpl) err = %v, want job.tmpl validation error", err)
+	}
+}
+
+func TestResolveK8sGKETPUAcceleratorLabel_NoPoolFallbackNeverEmitsRawMachineType(t *testing.T) {
+	orc := &GKEOrchestrator{
+		mode:              orchestrator.TypeK8s,
+		submissionSession: submissionSession{inventory: &k8s.Inventory{LabelScheme: k8s.SchemeGKE, ExplicitMode: true}},
+	}
+	for machineType, want := range map[string]string{
+		"ct5l-hightpu-8t":   "",
+		"bm-host":           "",
+		"ct5lp-hightpu-4t":  "tpu-v5-lite-podslice",
+		"ct6e-standard-4t":  "tpu-v6e-slice",
+		"tpu7x-standard-4t": "tpu7x",
+	} {
+		if got := orc.resolveK8sGKEAcceleratorLabel(machineType, JobProfile{}, true); got != want {
+			t.Errorf("resolveK8sGKEAcceleratorLabel(%q, no pool) = %q, want %q", machineType, got, want)
+		}
+	}
+	observed := JobProfile{K8sPool: &k8s.PoolCapacity{IsTPU: true, GKETPUAcceleratorLabel: "tpu-v5-lite-device"}}
+	if got := orc.resolveK8sGKEAcceleratorLabel("ct5l-hightpu-8t", observed, true); got != "tpu-v5-lite-device" {
+		t.Errorf("resolveK8sGKEAcceleratorLabel(ct5l-hightpu-8t, observed pool) = %q, want tpu-v5-lite-device", got)
+	}
+}
+
+func TestGKELocalPreflight_RejectsTPUNumNodesBeforeClusterAccess(t *testing.T) {
+	mockExec := NewMockExecutor(nil)
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = orchestrator.TypeGKE
+	sm := &StorageManager{orchestrator: orc}
+	for _, ct := range []string{"v6e-8", "ct6e-standard-4t", "tpu7x"} {
+		err := orc.validateSubmitLocalPreflight(sm, orchestrator.JobDefinition{ComputeType: ct, NumNodesSpecified: true, NumSlices: 1})
+		if !errors.Is(err, errTPUNumNodes) {
+			t.Errorf("GKE preflight(%q, --num-nodes) err = %v, want errTPUNumNodes", ct, err)
+		}
+	}
+	if len(mockExec.calls) != 0 || len(mockExec.timeouts) != 0 {
+		t.Errorf("GKE preflight executed commands %v, want none before rejecting --num-nodes", mockExec.calls)
+	}
+
+	for _, job := range []orchestrator.JobDefinition{
+		{ComputeType: "v6e-8", NumSlices: 1},
+		{ComputeType: "n2-standard-32", NumNodesSpecified: true, NumSlices: 1},
+		{ComputeType: "nvidia-l4", NumNodesSpecified: true, NumSlices: 1},
+	} {
+		if err := validateGKETPUNumNodes(job); err != nil {
+			t.Errorf("validateGKETPUNumNodes(%+v) err = %v, want nil", job, err)
+		}
+	}
+
+	k8sOrc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	k8sOrc.mode = orchestrator.TypeK8s
+	err := k8sOrc.validateSubmitLocalPreflight(&StorageManager{orchestrator: k8sOrc}, orchestrator.JobDefinition{ComputeType: "v6e-8", NumNodesSpecified: true, NumSlices: 1})
+	if errors.Is(err, errTPUNumNodes) {
+		t.Errorf("k8s preflight err = %v; TPU --num-nodes must be checked after node discovery in k8s mode", err)
 	}
 }

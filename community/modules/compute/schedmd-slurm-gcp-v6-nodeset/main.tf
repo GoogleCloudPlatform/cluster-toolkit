@@ -157,7 +157,7 @@ locals {
     node_conf              = var.node_conf
     nodeset_name           = local.name
     dws_flex               = var.dws_flex
-    provisioning_engine    = var.provisioning_engine
+    provisioning_engine    = local.resolved_provisioning_engine
 
     disk_auto_delete            = var.disk_auto_delete
     disk_labels                 = merge(local.labels, var.disk_labels)
@@ -227,10 +227,56 @@ locals {
 }
 
 locals {
-  zones             = setunion(var.zones, [var.zone])
-  zone_target_shape = coalesce(var.zone_target_shape, "ANY_SINGLE_ZONE")
+  zones                    = setunion(var.zones, [var.zone])
+  zone_target_shape        = coalesce(var.zone_target_shape, "ANY_SINGLE_ZONE")
+  has_accelerator_topology = var.accelerator_topology != null && trimspace(var.accelerator_topology) != ""
+  has_maintenance_interval = var.maintenance_interval != null && trimspace(var.maintenance_interval) != ""
+  has_instance_properties  = var.instance_properties != null && try(length(var.instance_properties) > 0, true)
+
+  a4x_topo_slice_aligned = (
+    local.has_accelerator_topology &&
+    !local.is_tpu &&
+    can(regex("^a4x-", var.machine_type)) &&
+    can(regex("^[1-9][0-9]*[xX][1-9][0-9]*$", trimspace(var.accelerator_topology))) &&
+    try(
+      tonumber(split("x", lower(trimspace(var.accelerator_topology)))[1]) % local.gpu_count == 0 &&
+      var.node_count_static % (
+        (tonumber(split("x", lower(trimspace(var.accelerator_topology)))[0]) * tonumber(split("x", lower(trimspace(var.accelerator_topology)))[1])) / local.gpu_count
+      ) == 0,
+      false
+    )
+  )
+
+  # AUTO routes pure-static, MIG-eligible NodeSets to MIG while keeping dynamic, hybrid, TPU,
+  # reserved, non-topology compact-placement, and BULK_INSERT-only overrides safely on BULK_INSERT.
+  # Keep in sync with schedmd-slurm-gcp-v6-controller/partition.tf (nodeset_auto_mig_eligible).
+  auto_mig_eligible = (
+    !var.dws_flex.enabled &&
+    !local.is_tpu &&
+    var.node_count_static > 0 &&
+    var.node_count_dynamic_max == 0 &&
+    var.reservation_name == "" &&
+    var.future_reservation == "" &&
+    !local.has_maintenance_interval &&
+    !local.has_instance_properties &&
+    (
+      (!var.enable_placement && !local.has_accelerator_topology) ||
+      (local.a4x_topo_slice_aligned && local.zone_target_shape == "ANY_SINGLE_ZONE")
+    )
+  )
+
+  resolved_provisioning_engine = (
+    var.dws_flex.enabled && !var.dws_flex.use_bulk_insert ? "MIG" : (
+      var.provisioning_engine == "MIG" ? "MIG" : (
+        var.provisioning_engine == "BULK_INSERT" ? "BULK_INSERT" : (
+          local.auto_mig_eligible ? "MIG" : "BULK_INSERT"
+        )
+      )
+    )
+  )
+
   # Static MIG only: DWS Flex MIGs are created by mig_flex.py with ANY_SINGLE_ZONE.
-  mig_provisioned = !var.dws_flex.enabled && var.provisioning_engine == "MIG"
+  mig_provisioned = !var.dws_flex.enabled && local.resolved_provisioning_engine == "MIG"
 
   # Expand to all regional zones when a multi-zone target shape is set on a MIG without explicit zones or zonal reservations.
   expand_zones = (

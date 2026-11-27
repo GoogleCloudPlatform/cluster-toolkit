@@ -4012,6 +4012,203 @@ spec:
 	}
 }
 
+func TestValidateJobSetManifest_DuplicateEnv(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		manifest string
+		wantErr  string
+	}{
+		{
+			name: "duplicate env in JobSet container rejected",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: dup-env
+spec:
+  replicatedJobs:
+  - name: pathways-head
+    replicas: 1
+    template:
+      spec:
+        parallelism: 1
+        completions: 1
+        template:
+          spec:
+            containers:
+            - name: workload-container
+              image: busybox
+              env:
+              - name: JAX_PLATFORMS
+                value: proxy
+              - name: JAX_PLATFORMS
+                value: cpu
+`,
+			wantErr: `invalid JobSet manifest: replicatedJob "pathways-head" container "workload-container" defines duplicate environment variable "JAX_PLATFORMS"`,
+		},
+		{
+			name: "duplicate env in JobSet initContainer rejected",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: dup-init-env
+spec:
+  replicatedJobs:
+  - name: pathways-head
+    replicas: 1
+    template:
+      spec:
+        parallelism: 1
+        completions: 1
+        template:
+          spec:
+            initContainers:
+            - name: pathways-proxy
+              image: busybox
+              env:
+              - name: FOO
+                value: "1"
+              - name: FOO
+                value: "2"
+            containers:
+            - name: workload-container
+              image: busybox
+`,
+			wantErr: `invalid JobSet manifest: replicatedJob "pathways-head" container "pathways-proxy" defines duplicate environment variable "FOO"`,
+		},
+		{
+			name: "duplicate env in batch Job container allowed",
+			manifest: `apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dup-job-env
+spec:
+  template:
+    spec:
+      containers:
+      - name: workload-container
+        image: busybox
+        env:
+        - name: MASTER_ADDR
+          value: a
+        - name: MASTER_ADDR
+          value: b
+`,
+		},
+		{
+			name: "duplicate env across valueFrom and value rejected",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: dup-valuefrom
+spec:
+  replicatedJobs:
+  - name: pathways-head
+    replicas: 1
+    template:
+      spec:
+        parallelism: 1
+        completions: 1
+        template:
+          spec:
+            containers:
+            - name: workload-container
+              image: busybox
+              env:
+              - name: PATHWAYS_HEAD
+                valueFrom:
+                  fieldRef:
+                    fieldPath: status.podIP
+              - name: PATHWAYS_HEAD
+                value: custom-head
+`,
+			wantErr: `invalid JobSet manifest: replicatedJob "pathways-head" container "workload-container" defines duplicate environment variable "PATHWAYS_HEAD"`,
+		},
+		{
+			name: "empty env names are skipped without duplicate error",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: empty-env-names
+spec:
+  replicatedJobs:
+  - name: pathways-head
+    replicas: 1
+    template:
+      spec:
+        parallelism: 1
+        completions: 1
+        template:
+          spec:
+            containers:
+            - name: workload-container
+              image: busybox
+              env:
+              - name: ""
+                value: a
+              - name: ""
+                value: b
+`,
+		},
+		{
+			name: "same env name in different containers allowed",
+			manifest: `apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: distinct-containers
+spec:
+  replicatedJobs:
+  - name: pathways-head
+    replicas: 1
+    template:
+      spec:
+        parallelism: 1
+        completions: 1
+        template:
+          spec:
+            initContainers:
+            - name: pathways-proxy
+              image: busybox
+              env:
+              - name: LOG_LEVEL
+                value: info
+            containers:
+            - name: workload-container
+              image: busybox
+              env:
+              - name: LOG_LEVEL
+                value: debug
+`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateJobSetManifest(tc.manifest)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("ValidateJobSetManifest() err = %v, want substring %q", err, tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), "gke-template-extract") {
+					t.Errorf("expected custom template extract hint in err, got: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ValidateJobSetManifest() unexpected err: %v", err)
+			}
+		})
+	}
+}
+
+func TestGeneratePathwaysManifest_LegacyTemplateDuplicateEnv(t *testing.T) {
+	_, err := generatePathwaysTestManifest(t, writeLegacyPathwaysTemplate(t), false, "", "", nil, func(j *orchestrator.JobDefinition) {
+		j.Env = map[string]string{"PATHWAYS_HEAD": "custom-head"}
+	})
+	if err == nil || !strings.Contains(err.Error(), `invalid JobSet manifest: replicatedJob "pathways-head" container "workload-container" defines duplicate environment variable "PATHWAYS_HEAD"`) || !strings.Contains(err.Error(), "gke-template-extract") {
+		t.Fatalf("legacy template colliding --env err = %v, want duplicate PATHWAYS_HEAD error with gke-template-extract hint", err)
+	}
+}
+
 func TestGeneratePathwaysManifest_DeploySPS(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -6437,41 +6634,56 @@ func TestWarnPathwaysHostNetworkManifest(t *testing.T) {
 	}
 }
 
-func TestGenerateJobManifest_TypedServiceAndIndexedJobYAML(t *testing.T) {
-	g := newGPUDerivationTestOrc(t)
+func TestGenerateJobManifest_TypedServiceJobAndCustomGPUResourceKey(t *testing.T) {
+	g := newTestGKEOrchestrator(NewMockExecutor(nil))
+	g.mode = orchestrator.TypeK8s
 	g.namespace = "ml-ns"
+	g.inventory = &k8s.Inventory{
+		LabelScheme: k8s.SchemeGeneric,
+		PoolNames:   []string{"amd-pool"},
+		Pools: map[string]k8s.PoolCapacity{
+			"amd-pool": {
+				MachineType:     "mi300x-node",
+				IsGPU:           true,
+				GPUsPerNode:     8,
+				GPUType:         "amd",
+				GPUResourceName: "amd.com/gpu",
+				ReadyNodes:      2,
+			},
+		},
+	}
 
 	opts := ManifestOptions{
-		WorkloadName:                  "tier3-job",
-		FullImageName:                 "registry.local/train:v1",
+		WorkloadName:                  "amd-tier3",
+		FullImageName:                 "registry.local/rocm:v1",
 		CommandToRun:                  "python train.py",
-		ComputeType:                   "g2-standard-48",
-		MachineType:                   "g2-standard-48",
-		ClusterLocation:               "us-central1-a",
+		ComputeType:                   "mi300x-node",
+		MachineType:                   "mi300x-node",
 		NumSlices:                     1,
 		NodesPerSlice:                 2,
 		ParallelContainers:            1,
 		TtlSecondsAfterFinished:       3600,
 		TerminationGracePeriodSeconds: 30,
 	}
-	profile := JobProfile{IsCPUMachine: false, CapacityCount: 4}
+	profile := JobProfile{IsCPUMachine: false, CapacityCount: 8, GPUResourceName: "amd.com/gpu"}
 
 	manifest, err := g.GenerateJobManifest(opts, profile)
 	if err != nil {
 		t.Fatalf("GenerateJobManifest() err = %v", err)
 	}
 	if err := ValidateJobSetManifest(manifest); err != nil {
-		t.Fatalf("ValidateJobSetManifest(Service+Job) err = %v", err)
+		t.Fatalf("ValidateJobSetManifest(Tier 3 Service + Job) err = %v", err)
 	}
-	if err := ValidateJobSetManifest("apiVersion: v1\nkind: Service\nspec:\n  ports: \"not-a-list\"\n"); err == nil {
-		t.Fatalf("ValidateJobSetManifest(malformed Service) = nil, want parse error")
+	badSvcManifest := "apiVersion: v1\nkind: Service\nmetadata:\n  name: bad-svc\nspec:\n  ports: not-a-list\n"
+	if err := ValidateJobSetManifest(badSvcManifest); err == nil || !strings.Contains(err.Error(), "failed to parse Service manifest spec") {
+		t.Fatalf("ValidateJobSetManifest(malformed Service) err = %v, want Service parse error", err)
 	}
 	docs, err := splitYAMLDocuments(manifest)
 	if err != nil || len(docs) != 2 {
 		t.Fatalf("splitYAMLDocuments() len=%d err=%v, want 2 (Service + Job)", len(docs), err)
 	}
-	assertHeadlessServiceYAML(t, docs[0], "tier3-job")
-	assertIndexedJobYAML(t, docs[1], "tier3-job")
+	assertHeadlessServiceYAML(t, docs[0], "amd-tier3")
+	assertIndexedJobAMDGPUYAML(t, docs[1], "amd-tier3")
 }
 
 func assertHeadlessServiceYAML(t *testing.T, doc, name string) {
@@ -6488,7 +6700,7 @@ func assertHeadlessServiceYAML(t *testing.T, doc, name string) {
 	}
 }
 
-func assertIndexedJobYAML(t *testing.T, doc, name string) {
+func assertIndexedJobAMDGPUYAML(t *testing.T, doc, name string) {
 	t.Helper()
 	var job batchv1.Job
 	if err := k8syaml.Unmarshal([]byte(doc), &job); err != nil {
@@ -6501,7 +6713,26 @@ func assertIndexedJobYAML(t *testing.T, doc, name string) {
 		t.Errorf("expected Indexed completionMode, got %v", job.Spec.CompletionMode)
 	}
 	limits := job.Spec.Template.Spec.Containers[0].Resources.Limits
-	if qty, ok := limits[corev1.ResourceName("nvidia.com/gpu")]; !ok || qty.String() != "4" {
-		t.Errorf("GPU limits = %v, want nvidia.com/gpu=4", limits)
+	if qty, ok := limits[corev1.ResourceName("amd.com/gpu")]; !ok || qty.String() != "8" {
+		t.Errorf("GPU limits = %v, want amd.com/gpu=8", limits)
+	}
+	if _, hasNvidia := limits[corev1.ResourceName("nvidia.com/gpu")]; hasNvidia {
+		t.Errorf("AMD job must not request nvidia.com/gpu: %v", limits)
+	}
+}
+
+func TestPrepareJobSetTemplateData_ExclusiveTopologyByLabelScheme(t *testing.T) {
+	g := newTestGKEOrchestrator(NewMockExecutor(nil))
+	g.mode = orchestrator.TypeK8s
+	g.inventory = &k8s.Inventory{LabelScheme: k8s.SchemeGeneric}
+	opts := ManifestOptions{NodesPerSlice: 2, ParallelContainers: 1}
+	data := g.prepareJobSetTemplateData(opts, []string{"echo"}, "", false, true)
+	if data.ExclusiveTopologyAnnotation != "" {
+		t.Errorf("multi-node non-GKE ExclusiveTopologyAnnotation = %q, want empty", data.ExclusiveTopologyAnnotation)
+	}
+	g.inventory.LabelScheme = k8s.SchemeGKE
+	dataGKE := g.prepareJobSetTemplateData(opts, []string{"echo"}, "", false, true)
+	if !strings.Contains(dataGKE.ExclusiveTopologyAnnotation, "cloud.google.com/gke-nodepool") {
+		t.Errorf("SchemeGKE multi-node ExclusiveTopologyAnnotation = %q, want gke-nodepool", dataGKE.ExclusiveTopologyAnnotation)
 	}
 }

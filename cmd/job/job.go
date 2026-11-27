@@ -39,17 +39,20 @@ var (
 	// propagate the resolved GCP project ID to the root telemetry collector.
 	OnTelemetryProjectResolved func(projectID string)
 	// gkeOrchestratorFactory overrides registry-based orchestrator construction when set in unit tests.
-	gkeOrchestratorFactory func() orchestrator.JobOrchestrator
-	orc                    orchestrator.JobOrchestrator
+	gkeOrchestratorFactory   func() orchestrator.JobOrchestrator
+	orc                      orchestrator.JobOrchestrator
+	detectedOrchestratorType orchestrator.Type
 )
 
 // JobCmd represents the base command for job-related operations.
 var JobCmd = &cobra.Command{
 	Use:   "job",
 	Short: "Manage jobs on the cluster.",
-	Long: `Submit batch and distributed workloads on GKE clusters, and monitor or manage workloads (list, logs, cancel, inspect) across GKE and Kubernetes clusters.
-Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic kubeconfig detection, or GCLUSTER_AIR_GAPPED=true in disconnected environments.`,
+	Long: `Submit, monitor, and manage batch and distributed workloads (submit, list, logs, cancel, inspect) across GKE and Kubernetes clusters.
+Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic kubeconfig detection.
+Missing add-on downloads auto-detect offline environments via a bounded connectivity check; set GCLUSTER_AIR_GAPPED=true in strict zero-packet disconnected environments (or false to override).`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		detectedOrchestratorType = ""
 		if cmd.Name() == "gke-template-extract" {
 			reportTelemetryProjectID("")
 			return nil
@@ -73,7 +76,7 @@ Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic kubeconfig detection, or
 		}
 		if isMissingClusterWithGKEFlags(det) {
 			logSavedDefaultsIfActive(orchestrator.Detection{Type: orchestrator.TypeGKE}, savedClusterUsed, savedGKE)
-			return validateTypeGKEFlags(cmd.Name(), det, clusterName, location, projectID)
+			return validateTypeGKEFlags(det, clusterName, location, projectID)
 		}
 		if err := validateExplicitClusterFlag(cmd, det); err != nil {
 			return err
@@ -81,9 +84,10 @@ Set GCLUSTER_ORCHESTRATOR=gke|k8s to override automatic kubeconfig detection, or
 		reconcileTypeK8sFlags(cmd, det)
 		logSavedDefaultsIfActive(det, savedClusterUsed, savedGKE)
 
-		if err := validateOrchestratorFlags(cmd.Name(), det, clusterName, location, projectID); err != nil {
+		if err := validateOrchestratorFlags(det, clusterName, location, projectID); err != nil {
 			return err
 		}
+		detectedOrchestratorType = det.Type
 		logging.Info("Orchestrator: %s (%s)", det.Type, det.Reason)
 
 		// Report before initCommandOrchestrator so FatalHook paths observe the resolved project.
@@ -120,8 +124,8 @@ func resolveTelemetryProjectID(proj string, projectFlagChanged bool, det orchest
 	return ""
 }
 
-func canOverrideSavedGKEWithK8sCluster(cmdName string, clusterChanged, explicitGKEFlags, savedGKE bool, savedClusterName string) bool {
-	if cmdName == SubmitCmd.Name() || explicitGKEFlags || !savedGKE {
+func canOverrideSavedGKEWithK8sCluster(clusterChanged, explicitGKEFlags, savedGKE bool, savedClusterName string) bool {
+	if explicitGKEFlags || !savedGKE {
 		return false
 	}
 	return clusterChanged && clusterName != "" && clusterName != savedClusterName
@@ -130,7 +134,7 @@ func canOverrideSavedGKEWithK8sCluster(cmdName string, clusterChanged, explicitG
 func detectJobOrchestrator(cmd *cobra.Command, savedClusterName string, savedGKE bool) (orchestrator.Detection, error) {
 	d := &orchestrator.Detector{}
 	explicitGKEFlags := cmd.Flags().Changed("location") || cmd.Flags().Changed("project")
-	k8sClusterOverride := canOverrideSavedGKEWithK8sCluster(cmd.Name(), cmd.Flags().Changed("cluster"), explicitGKEFlags, savedGKE, savedClusterName)
+	k8sClusterOverride := canOverrideSavedGKEWithK8sCluster(cmd.Flags().Changed("cluster"), explicitGKEFlags, savedGKE, savedClusterName)
 	if strings.TrimSpace(os.Getenv(orchestrator.EnvVar)) == "" && k8sClusterOverride {
 		if det, ok, err := detectExplicitClusterWithSavedGKE(d); err != nil || ok {
 			return det, err
@@ -184,11 +188,8 @@ func validateExplicitClusterFlag(cmd *cobra.Command, det orchestrator.Detection)
 	if !cmd.Flags().Changed("cluster") || clusterName != "" {
 		return nil
 	}
-	if cmd.Name() == SubmitCmd.Name() && det.Forced && det.Type == orchestrator.TypeK8s {
-		return orchestrator.UnsupportedK8sSubmitError()
-	}
-	if cmd.Name() == SubmitCmd.Name() || det.Type == orchestrator.TypeGKE {
-		return validateTypeGKEFlags(cmd.Name(), det, clusterName, location, projectID)
+	if det.Type == orchestrator.TypeGKE {
+		return validateTypeGKEFlags(det, clusterName, location, projectID)
 	}
 	return fmt.Errorf("cluster name is required when --cluster is set; pass a non-empty value or omit --cluster to use kubeconfig current-context")
 }
@@ -275,17 +276,11 @@ func reconcileTypeK8sFlags(cmd *cobra.Command, det orchestrator.Detection) {
 	}
 }
 
-func validateOrchestratorFlags(cmdName string, det orchestrator.Detection, cluster, loc, proj string) error {
+func validateOrchestratorFlags(det orchestrator.Detection, cluster, loc, proj string) error {
 	if det.Type == orchestrator.TypeK8s {
-		if cmdName == SubmitCmd.Name() {
-			if det.KubeContext != "" || det.Forced {
-				return orchestrator.UnsupportedK8sSubmitError()
-			}
-			return validateTypeGKEFlags(cmdName, det, cluster, loc, proj)
-		}
 		return validateTypeK8sFlags(det, cluster)
 	}
-	return validateTypeGKEFlags(cmdName, det, cluster, loc, proj)
+	return validateTypeGKEFlags(det, cluster, loc, proj)
 }
 
 func validateTypeK8sFlags(det orchestrator.Detection, cluster string) error {
@@ -307,9 +302,9 @@ func validateTypeK8sFlags(det orchestrator.Detection, cluster string) error {
 	return nil
 }
 
-func validateTypeGKEFlags(cmdName string, det orchestrator.Detection, cluster, loc, proj string) error {
+func validateTypeGKEFlags(det orchestrator.Detection, cluster, loc, proj string) error {
 	var k8sHint string
-	if det.KubeContext != "" && cmdName != SubmitCmd.Name() && (!det.Forced || det.Type != orchestrator.TypeGKE) {
+	if det.KubeContext != "" && (!det.Forced || det.Type != orchestrator.TypeGKE) {
 		k8sHint = fmt.Sprintf(" (or set %s=k8s to use kubeconfig context %q directly)", orchestrator.EnvVar, det.KubeContext)
 	}
 	if cluster == "" {

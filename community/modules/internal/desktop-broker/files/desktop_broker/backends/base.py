@@ -74,11 +74,16 @@ class VNCBackend:
         if not self.gpu_acceleration:
             return None
         if gpu.gpu_display() is None:
+            if gpu.nvidia_device_present():
+                return (
+                    "an NVIDIA device is present but its driver has no "
+                    "graphics support - a compute-only driver ships no "
+                    "libEGL_nvidia and cannot render. Add the driver's GL "
+                    "libraries to the image."
+                )
             return (
-                "no usable GPU device was found (neither a /dev/dri render node "
-                "nor /dev/nvidia*). The image most likely has no NVIDIA driver, "
-                "or only a compute driver without graphics support - a compute "
-                "driver ships no libEGL_nvidia and cannot render."
+                "no NVIDIA device was found (no /dev/nvidia*). The host has "
+                "no GPU attached, or the image has no NVIDIA driver."
             )
         return None
 
@@ -97,8 +102,8 @@ class VNCBackend:
 
         Keyed on accelerated(), not on the presence of a render node. Xvnc's
         children inherit this, and xstartup is one of them, so forcing software
-        Mesa here would contradict the session's own hardware GL setup: on GCE
-        there is no render node even when a GPU is present and VirtualGL is
+        Mesa here would contradict the session's own hardware GL setup: a host
+        can have no render node even when a GPU is present and VirtualGL is
         rendering on it.
 
         NOTE: this does NOT prevent the Xvnc crash described in start_command.

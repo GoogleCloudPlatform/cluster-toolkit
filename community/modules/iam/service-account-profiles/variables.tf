@@ -321,7 +321,8 @@ variable "enable_public_ips" {
 variable "enable_mig" {
   description = <<-EOT
     Capability: add the permissions to manage nodesets backed by a managed instance group that
-    Terraform creates (provisioning_engine = "MIG"). Includes compute.instances.setMetadata
+    Terraform creates (explicit provisioning_engine = "MIG", or provisioning_engine = "AUTO"
+    when it resolves an eligible pure-static nodeset to MIG). Includes compute.instances.setMetadata
     without a name condition, because Google requires it for instance group manager patch,
     whose target is a group rather than an instance.
   EOT

@@ -637,7 +637,7 @@ func TestResolveTelemetryCollector_PartialTPUInputs(t *testing.T) {
 		{WorkloadName: "ct-only", ComputeType: "v6e-4", MLDiagnosticsEnabled: true, MLDiagnosticsImage: "registry.local/col:v1"},
 		{WorkloadName: "mt-only", MachineType: "tpu-v6e-slice", MLDiagnosticsEnabled: true, MLDiagnosticsImage: "registry.local/col:v1"},
 	} {
-		if img, _, err := orc.resolveTelemetryCollector(partial); err != nil || img != "registry.local/col:v1" {
+		if img, _, err := orc.resolveTelemetryCollector(partial, true); err != nil || img != "registry.local/col:v1" {
 			t.Fatalf("resolveTelemetryCollector(%s) = (%q, %v), want registry.local/col:v1", partial.WorkloadName, img, err)
 		}
 	}
@@ -669,7 +669,7 @@ func TestIsGKE_UsesDetectedPlatformMode(t *testing.T) {
 		ComputeType:          "e2-standard-4",
 		ProjectID:            "ar-build-proj",
 		MLDiagnosticsEnabled: true,
-	})
+	}, false)
 	if err == nil || !strings.Contains(err.Error(), "the non-GKE target") || !strings.Contains(err.Error(), "omit --enable-ml-diagnostics for non-TPU workloads") {
 		t.Errorf("k8sOrc.resolveTelemetryCollector(CPU with ProjectID) err = %v, want non-GKE target and omit --enable-ml-diagnostics guidance", err)
 	}
