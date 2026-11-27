@@ -2544,7 +2544,7 @@ blueprints:
     a3_partition_name: null
     a3_reservation_name: null
     a3_static_cluster_size: null
-    build_slurm_from_git_ref: 6.13.2
+    build_slurm_from_git_ref: 6.13.4
     controller_machine_type: c2-standard-8
     deployment_name: null
     disk_size_gb: 200
@@ -2634,7 +2634,7 @@ blueprints:
     base_image:
       family: aci-gpu-u2404-cuda-132-nvidia-595-amd64
       project: advanced-compute-images
-    build_slurm_from_git_ref: 6.13.3
+    build_slurm_from_git_ref: 6.13.4
     controller_machine_type: c2-standard-8
     debug_machine_type: n2-standard-2
     debug_node_count_dynamic_max: 4
@@ -3157,7 +3157,7 @@ blueprints:
     benchmark_dir: "$(ghpc_stage(\"system_benchmarks\"))"
     build_from_image_family: ubuntu-accelerator-2404-arm64-with-nvidia-580
     build_from_image_project: ubuntu-os-accelerator-images
-    build_slurm_from_git_ref: 6.13.2
+    build_slurm_from_git_ref: 6.13.4
     built_image_family: slurm-ubuntu2404-a4x-max-metal
     controller_machine_type: c4a-highcpu-16
     deployment_name: null
@@ -3466,7 +3466,7 @@ blueprints:
   workloads: [ml-training, ml-inference]
   required_services: [compute.googleapis.com, file.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
-    build_slurm_from_git_ref: 6.13.2
+    build_slurm_from_git_ref: 6.13.4
     built_image_family: slurm-vgpu-ubuntu2404
     compute_disk_size_gb: 100
     compute_machine_type: g4-standard-12
@@ -3533,7 +3533,7 @@ blueprints:
   workloads: [ml-training, ml-inference]
   required_services: [compute.googleapis.com, file.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
-    build_slurm_from_git_ref: 6.13.3
+    build_slurm_from_git_ref: 6.13.4
     built_image_family: slurm-g4-ubuntu2404
     compute_disk_size_gb: 100
     compute_dws_flex_enabled: false
@@ -4954,7 +4954,7 @@ blueprints:
   workloads: [hpc]
   required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
-    build_from_git_ref: 6.13.2
+    build_from_git_ref: 6.13.4
     build_from_image_family: aci-cpu-rocky-linux-9-amd64
     build_from_image_project: advanced-compute-images
     built_image_family: my-custom-slurm
@@ -5053,7 +5053,7 @@ blueprints:
   required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
     authorized_ssh_ranges: []
-    build_slurm_from_git_ref: 6.13.2
+    build_slurm_from_git_ref: 6.13.4
     built_instance_image:
       family: slurm-rocky9-eda
       project: $(vars.project_id)
@@ -5118,7 +5118,7 @@ blueprints:
   workloads: [hpc]
   required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
-    build_slurm_from_git_ref: 6.13.2
+    build_slurm_from_git_ref: 6.13.4
     built_instance_image:
       family: slurm-rocky9
       project: $(vars.project_id)
@@ -5231,7 +5231,7 @@ blueprints:
   required_services: [compute.googleapis.com, iam.googleapis.com, logging.googleapis.com, storage.googleapis.com]
   vars:
     authorized_ssh_ranges: []
-    build_slurm_from_git_ref: 6.13.3
+    build_slurm_from_git_ref: 6.13.4
     built_instance_image:
       family: slurm-rocky9
       project: $(vars.project_id)
