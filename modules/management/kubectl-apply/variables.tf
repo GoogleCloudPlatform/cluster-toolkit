@@ -96,6 +96,10 @@ resource "terraform_data" "kueue_validations" {
       error_message = "fullnameOverride and nameOverride in kueue.helm_values_path must not be customized (leave unset, empty, or 'kueue') so gcluster job can locate kueue-controller-manager and kueue-webhook-service."
     }
     precondition {
+      condition     = !local.kueue_helm_values_check_fields || local.kueue_user_cert_manager_order_valid
+      error_message = "enableCertManager: true in kueue.helm_values_path cannot be combined with cert_manager.install = true in the same kubectl-apply module because Kueue is installed before cert-manager; pre-install cert-manager in an earlier module or deployment group first."
+    }
+    precondition {
       condition     = !local.kueue_helm_values_check_fields || local.kueue_user_controller_manager_valid
       error_message = "controllerManager in kueue.helm_values_path must be a YAML mapping."
     }

@@ -197,7 +197,7 @@ locals {
   kueue_helm_values_file_exists = local.install_kueue && local.kueue_helm_values_path != "" ? fileexists(local.kueue_helm_values_path) : false
 
   kueue_user_helm_values_raw = local.kueue_helm_values_file_exists ? (
-    can(regex("\\.tftpl(_[0-9a-f]{10})?$", local.kueue_helm_values_path)) || var.kueue.helm_values_template_vars != null ?
+    can(regex("\\.tftpl(_[0-9a-f]{10})?$", local.kueue_helm_values_path)) || (var.kueue.helm_values_template_vars != null && length(var.kueue.helm_values_template_vars) > 0) ?
     templatefile(local.kueue_helm_values_path, var.kueue.helm_values_template_vars != null ? var.kueue.helm_values_template_vars : {}) :
     file(local.kueue_helm_values_path)
   ) : ""
@@ -251,6 +251,12 @@ locals {
   kueue_user_manager_config_container_valid = (
     !contains(keys(local.kueue_user_helm_values_parsed), "managerConfig") ||
     can(keys(local.kueue_user_helm_values_parsed.managerConfig))
+  )
+  kueue_user_cert_manager_order_valid = (
+    !local.install_cert_manager ||
+    !contains(keys(local.kueue_user_helm_values_parsed), "enableCertManager") ||
+    try(local.kueue_user_helm_values_parsed.enableCertManager == null, false) ||
+    try(local.kueue_user_helm_values_parsed.enableCertManager == false, false)
   )
 
   # Feature-gate merging by .name (preserves TopologyAwareScheduling and Kueue >= 0.18 DRA disables unless explicitly overridden)

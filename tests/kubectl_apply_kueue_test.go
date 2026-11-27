@@ -44,6 +44,7 @@ var kueueOrderedLocalNames = []string{
 	"enable_pathways",
 	"enable_slicing",
 	"install_kueue",
+	"install_cert_manager",
 	"kueue_controller_cpu",
 	"kueue_controller_memory",
 	"kueue_controller_replicas",
@@ -62,6 +63,7 @@ var kueueOrderedLocalNames = []string{
 	"kueue_helm_values_preserves_fullname",
 	"kueue_user_controller_manager_valid",
 	"kueue_user_manager_config_container_valid",
+	"kueue_user_cert_manager_order_valid",
 	"kueue_has_user_feature_gates_field",
 	"kueue_user_feature_gates_valid",
 	"kueue_user_feature_gates",
@@ -88,6 +90,7 @@ var kueueOrderedLocalNames = []string{
 type kueueEvalInput struct {
 	version               string
 	install               bool
+	installCertManager    bool
 	enablePathways        bool
 	helmValuesPath        *string
 	helmValuesTemplateVar map[string]cty.Value
@@ -355,9 +358,13 @@ func buildKueueVarValue(in kueueEvalInput) cty.Value {
 	if ver == "" {
 		ver = "0.19.6"
 	}
-	tmplVars := cty.NullVal(cty.DynamicPseudoType)
+	tmplVars := cty.NullVal(cty.Map(cty.DynamicPseudoType))
 	if in.helmValuesTemplateVar != nil {
-		tmplVars = cty.ObjectVal(in.helmValuesTemplateVar)
+		if len(in.helmValuesTemplateVar) == 0 {
+			tmplVars = cty.MapValEmpty(cty.DynamicPseudoType)
+		} else {
+			tmplVars = cty.MapVal(in.helmValuesTemplateVar)
+		}
 	}
 	wfpr := cty.NullVal(cty.DynamicPseudoType)
 	if in.waitForPodsReady != nil {
@@ -398,6 +405,7 @@ func evalKueueHCL(t *testing.T, parsed kueueParsedHCL, in kueueEvalInput) ([]str
 			"path": cty.ObjectVal(map[string]cty.Value{"module": cty.StringVal(kubectlApplyModuleDir)}),
 			"var": cty.ObjectVal(map[string]cty.Value{
 				"enable_pathways_for_tpus": cty.BoolVal(in.enablePathways),
+				"cert_manager":             cty.ObjectVal(map[string]cty.Value{"install": cty.BoolVal(in.installCertManager)}),
 				"jobset":                   cty.ObjectVal(map[string]cty.Value{"install": cty.False}),
 				"kueue":                    buildKueueVarValue(in),
 			}),
@@ -813,6 +821,18 @@ enablePrometheus: true
 		t.Fatalf("staged .tftpl_<hash> template directive was not rendered")
 	}
 
+	// Plain .yaml with empty helm_values_template_vars = {} and literal ${...} in a comment must use file(), not templatefile()
+	plainWithDollar := writeTempValuesFile(t, "plain-values.yaml", "# literal ${UNSET_SHELL_VAR} in comment\nenableCertManager: true\n")
+	plainLayers, plainErrs := evalKueueHCL(t, parsed, kueueEvalInput{
+		install:               true,
+		version:               "0.19.6",
+		helmValuesPath:        plainWithDollar,
+		helmValuesTemplateVar: map[string]cty.Value{},
+	})
+	if len(plainErrs) > 0 || simulateHelmValuesMerge(t, plainLayers)["enableCertManager"] != true {
+		t.Fatalf("plain .yaml with empty template_vars failed: errs=%v", plainErrs)
+	}
+
 	// Comment-only and conditionally empty templates must succeed as no-ops
 	for name, content := range map[string]string{
 		"comments.yaml":               "# comment only\n   # another comment\n",
@@ -894,12 +914,14 @@ func TestKueueHelmValuesValidationGuardrails(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist.yaml")
 
 	cases := []struct {
-		name       string
-		path       *string
-		content    string
-		wantSubstr string
+		name               string
+		path               *string
+		content            string
+		installCertManager bool
+		wantSubstr         string
 	}{
 		{name: "missing_file", path: &missing, wantSubstr: "does not exist"},
+		{name: "enable_cert_manager_same_module", content: "enableCertManager: true\n", installCertManager: true, wantSubstr: "cannot be combined with cert_manager.install = true"},
 		{name: "invalid_yaml_syntax", content: "controllerManager: [unclosed", wantSubstr: "single-document YAML mapping"},
 		{name: "yaml_list_not_mapping", content: "- item1\n- item2\n", wantSubstr: "single-document YAML mapping"},
 		{name: "multi_doc_non_k8s_yaml", content: "enablePrometheus: true\n---\nenableCertManager: true\n", wantSubstr: "single-document YAML mapping"},
@@ -934,9 +956,10 @@ func TestKueueHelmValuesValidationGuardrails(t *testing.T) {
 				p = writeTempValuesFile(t, tc.name+".yaml", tc.content)
 			}
 			_, errs := evalKueueHCL(t, parsed, kueueEvalInput{
-				install:        true,
-				version:        "0.19.6",
-				helmValuesPath: p,
+				install:            true,
+				installCertManager: tc.installCertManager,
+				version:            "0.19.6",
+				helmValuesPath:     p,
 			})
 			if len(errs) != 1 {
 				t.Fatalf("got %d validation errors, want 1:\n%s", len(errs), strings.Join(errs, "\n"))
