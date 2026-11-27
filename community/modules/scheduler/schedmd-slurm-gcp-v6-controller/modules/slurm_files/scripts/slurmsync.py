@@ -30,6 +30,7 @@ from typing import Dict, Set, Tuple, List, Optional, Protocol, Any
 from functools import lru_cache
 
 import util
+import capacity_circuit
 from util import (
     batch_execute,
     ensure_execute,
@@ -375,6 +376,9 @@ def get_node_action(nodename: str) -> NodeAction:
 
     if lkp.node_is_dyn(nodename):
         return _find_dynamic_node_status()
+
+    if capacity_circuit.owns_node(nodename, lkp):
+        return NodeActionUnchanged()
 
     # split below is workaround for VMs whose hostname is FQDN
     short_nodename = nodename.split(".")[0]
@@ -907,10 +911,9 @@ def main():
     config_changed = False
     try:
         config_changed = reconfigure_slurm()
-        if config_changed:
-            lkp = lookup()
     except Exception:
         log.exception("failed to reconfigure slurm")
+    lkp = lookup()
 
     topology_changed = False
     topology_summary = None
@@ -930,6 +933,11 @@ def main():
             process_messages(lkp)
         except:
             log.exception("failed to process messages")
+
+        try:
+            capacity_circuit.reconcile(lkp)
+        except Exception:
+            log.exception("failed to reconcile capacity circuits")
 
         try:
             sync_instances()
