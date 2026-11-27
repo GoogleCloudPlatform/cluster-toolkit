@@ -124,6 +124,11 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
+      # Allow non-root users to access NVIDIA GPU performance counters for profiling (e.g. Nsight)
+      - type: data
+        destination: /etc/modprobe.d/nvidia-profiling.conf
+        content: |
+          options nvidia NVreg_RestrictProfilingToAdminUsers=0
       - type: ansible-local
         destination: "apptainer_image.yml"
         source: $(ghpc_stage("adm/apptainer_image.yml"))
