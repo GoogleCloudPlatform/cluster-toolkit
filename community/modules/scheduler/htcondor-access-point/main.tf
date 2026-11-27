@@ -110,6 +110,13 @@ locals {
   regional_pd_families = ["e2", "n1", "n2", "n2d"]
 }
 
+locals {
+  # Previous default of var.disk_size_gb, kept as a minimum so that deployments
+  # which do not set it see no change.
+  min_disk_size_gb = 32
+  disk_size_gb     = coalesce(var.disk_size_gb, max(data.google_compute_image.htcondor.disk_size_gb, local.min_disk_size_gb))
+}
+
 data "google_compute_image" "htcondor" {
   family  = try(var.instance_image.family, null)
   name    = try(var.instance_image.name, null)
@@ -117,7 +124,7 @@ data "google_compute_image" "htcondor" {
 
   lifecycle {
     postcondition {
-      condition     = self.disk_size_gb <= var.disk_size_gb
+      condition     = var.disk_size_gb == null ? true : self.disk_size_gb <= var.disk_size_gb
       error_message = "var.disk_size_gb must be set to at least the size of the image (${self.disk_size_gb})"
     }
     postcondition {
@@ -256,7 +263,7 @@ module "access_point_instance_template" {
   labels = local.labels
 
   machine_type   = var.machine_type
-  disk_size_gb   = var.disk_size_gb
+  disk_size_gb   = local.disk_size_gb
   disk_type      = var.disk_type
   preemptible    = false
   startup_script = module.startup_script.startup_script

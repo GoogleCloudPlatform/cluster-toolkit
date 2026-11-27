@@ -26,8 +26,8 @@ locals {
   # Officially supported latest helm chart versions of Jobset.
   # For details refer the official change log https://github.com/kubernetes-sigs/jobset/releases
   jobset_supported_versions    = ["0.12.0", "0.10.1", "0.10.0", "0.9.1", "0.9.0"]
-  gib_supported_versions_x86   = ["v1.1.2", "v1.1.0", "v1.0.6", "v1.0.5", "v1.0.3", "v1.0.2"]
-  gib_supported_versions_arm64 = ["v1.1.2", "v1.1.0", "v1.0.7"]
+  gib_supported_versions_x86   = ["v1.1.4", "v1.1.3", "v1.1.2", "v1.1.0", "v1.0.6", "v1.0.5", "v1.0.3", "v1.0.2"]
+  gib_supported_versions_arm64 = ["v1.1.4", "v1.1.3", "v1.1.2", "v1.1.0", "v1.0.7"]
   gib_supported_versions = var.target_architecture == "arm64" ? (
     local.gib_supported_versions_arm64
     ) : (
@@ -42,43 +42,6 @@ variable "target_architecture" {
   validation {
     condition     = contains(["x86_64", "arm64"], var.target_architecture)
     error_message = "The target_architecture must be either 'x86_64' or 'arm64'."
-  }
-}
-
-resource "terraform_data" "kueue_validations" {
-  lifecycle {
-    precondition {
-      condition     = !var.kueue.install || contains(local.kueue_supported_versions, var.kueue.version)
-      error_message = "Supported version of Kueue are ${join(", ", local.kueue_supported_versions)}"
-    }
-    precondition {
-      condition     = !var.kueue.install || !(var.enable_pathways_for_tpus || try(var.kueue.enable_pathways_for_tpus, false)) || (var.kueue.config_path != null && var.kueue.config_path != "") || contains(keys(coalesce(var.kueue.config_template_vars, {})), "accelerator_type")
-      error_message = "accelerator_type must be set in kueue.config_template_vars when using the default pathways configuration."
-    }
-    precondition {
-      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || var.kueue.accelerator_topology_mode == "PROVISION_ONLY"
-      error_message = "When enable_dynamic_slicing_for_tpus is true, accelerator_topology_mode must be 'PROVISION_ONLY'."
-    }
-    precondition {
-      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || (var.kueue.machine_type != null && length(regexall("^(tpu|ct)", var.kueue.machine_type)) > 0)
-      error_message = "When enable_dynamic_slicing_for_tpus is true, machine_type must be a TPU machine type."
-    }
-    precondition {
-      condition     = !var.kueue.enable_dynamic_slicing_for_tpus || (var.kueue.config_path != null && var.kueue.config_path != "") || (var.kueue.config_template_vars != null && contains(keys(var.kueue.config_template_vars), "accelerator_type"))
-      error_message = "accelerator_type must be set in kueue.config_template_vars when using the default dynamic slicing configuration."
-    }
-    precondition {
-      condition     = !(var.kueue.enable_dynamic_slicing_for_tpus && !var.kueue.install)
-      error_message = "Slice controller requires Kueue to be installed. Set kueue.install to true when kueue.enable_dynamic_slicing_for_tpus is true."
-    }
-    precondition {
-      condition     = !(var.kueue.enable_dynamic_slicing_for_tpus && !var.jobset.install)
-      error_message = "Slice controller requires Jobset to be installed. Set jobset.install to true when kueue.enable_dynamic_slicing_for_tpus is true."
-    }
-    precondition {
-      condition     = !var.kueue.install || var.kueue.wait_for_pods_ready == null || module.kueue_pods_ready_default_on_check.is_greater_than_or_equal
-      error_message = "kueue.wait_for_pods_ready is only supported on Kueue >= 0.19.0."
-    }
   }
 }
 
@@ -191,7 +154,7 @@ variable "enable_multi_tier_checkpointing" {
 
 
 variable "kueue" {
-  description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
+  description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. Custom Helm chart values (such as managerConfig.controllerManagerConfigYaml and controllerManager.featureGates) can be provided with helm_values_path (and helm_values_template_vars for template files). A post-install configuration yaml/template file (for example ClusterQueue, LocalQueue, and ResourceFlavor manifests) can be provided with config_path (and config_template_vars)."
   type = object({
     # ATTENTION: If you update the KUEUE's default version below, please also update the corresponding
     # defaultKueueVersion constant in pkg/orchestrator/gke/infra_manager.go (note the 'v' prefix there)
@@ -200,6 +163,8 @@ variable "kueue" {
     install                         = optional(bool, false)
     config_path                     = optional(string, null)
     config_template_vars            = optional(map(any), null)
+    helm_values_path                = optional(string, null)
+    helm_values_template_vars       = optional(any, null)
     enable_pathways_for_tpus        = optional(bool, false)
     enable_dynamic_slicing_for_tpus = optional(bool, false)
     accelerator_topology_mode       = optional(string, null)
@@ -220,6 +185,11 @@ variable "kueue" {
     }), null)
   })
   default = {}
+
+  validation {
+    condition     = var.kueue.helm_values_template_vars == null || can(keys(var.kueue.helm_values_template_vars))
+    error_message = "kueue.helm_values_template_vars must be a mapping (key-value object) when set."
+  }
 
   validation {
     condition = alltrue([
@@ -272,6 +242,17 @@ variable "cert_manager" {
   type = object({
     install = optional(bool, false)
     version = optional(string, "v1.17.2")
+  })
+  default = {}
+}
+
+variable "k8s_aibom" {
+  description = "Install [k8s-aibom](https://github.com/GoogleCloudPlatform/k8s-aibom), which records an AI bill of materials (CycloneDX) for inference and training workloads in namespaces labeled `aibom.k8saibom.dev/enabled=true`. Unprivileged; reads the Kubernetes API only."
+  type = object({
+    install           = optional(bool, false)
+    version           = optional(string, "1.6.2")
+    controller_cpu    = optional(string, null)
+    controller_memory = optional(string, null)
   })
   default = {}
 }

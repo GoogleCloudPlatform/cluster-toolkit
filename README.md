@@ -184,7 +184,7 @@ After installing `gcluster`, you can deploy, manage, and destroy infrastructure 
 | `./gcluster export-outputs <DEPLOYMENT_GROUP_DIR>` | Export Terraform outputs from a deployment group for cross-group consumption. |
 | `./gcluster import-inputs <DEPLOYMENT_GROUP_DIR>` | Import output values from prior deployment groups as input `.tfvars`. |
 | `./gcluster cluster <list\|describe\|info\|volume>` | Discover, list, and inspect deployed target clusters and storage volumes. |
-| `./gcluster job <submit\|list\|logs\|cancel\|config\|inspect\|gke-template-extract>` | Submit, monitor, inspect, and manage workloads on GKE clusters. |
+| `./gcluster job <submit\|list\|logs\|cancel\|config\|inspect\|gke-template-extract>` | Submit, monitor, inspect, and manage workloads on GKE and Kubernetes clusters. |
 | `./gcluster telemetry <on\|off>` | Enable or disable anonymous usage telemetry. |
 | `./gcluster completion <bash\|zsh\|fish\|powershell>` | Generate shell autocompletion scripts. |
 
@@ -203,14 +203,13 @@ For detailed guides, blueprint syntax, and configuration options, see the [Googl
 
 ## Job submission (gcluster job submit)
 
-The `gcluster job submit` command provides a unified interface to submit batch and distributed containerized workloads (JobSets) to your GKE clusters.
+The `gcluster job submit` command provides a unified interface to submit batch and distributed containerized workloads (JobSets, or standalone `batch/v1` Indexed Jobs when JobSet is absent) to your GKE or Kubernetes clusters.
 
 ### Prerequisites for job submission
 
 Ensure your environment is set up before submitting jobs:
-- A deployed GKE cluster managed by Cluster Toolkit (with Kueue and JobSet enabled).
-- `kubectl` and `gke-gcloud-auth-plugin` installed and authenticated (`gcloud auth login`).
-- For on-the-fly builds (`--build-context`), set `export GCLUSTER_IMAGE_REPO=<repository-name>` to specify your Artifact Registry repository name (e.g., `export GCLUSTER_IMAGE_REPO=gcluster-repo`).
+- A GKE cluster (with `kubectl`, `gke-gcloud-auth-plugin`, and `gcloud auth login`) or a generic Kubernetes cluster configured in `KUBECONFIG` (requires only `kubectl`; JobSet and Kueue are optional).
+- For on-the-fly builds (`--build-context`), set `export GCLUSTER_IMAGE_REPO=<repository-name>` (Artifact Registry repository name, or `<registry-host>[/<repository>]` for custom OCI registries).
 
 ### Configure default settings
 
@@ -332,9 +331,8 @@ Cluster Toolkit provides specialized modules for Slurm.
 ### Standard images
 
 The toolkit also supports standard OS images for general-purpose modules:
-- HPC Rocky Linux 8
-- Debian 11
-- Ubuntu 22.04 LTS
+- Rocky Linux 9
+- Ubuntu 24.04 LTS
 
 For more details, see [VM image support](docs/vm-images.md).
 
@@ -344,11 +342,12 @@ A cluster blueprint is the core configuration file (YAML) for your deployment. C
 
 ## Documentation guides (`docs/`)
 
-- **GPU & AI Hypercomputer:** [GPU Support](docs/gpu-support.md), [MaxText on Slurm TPU](docs/hpc-slurm6-tpu-maxtext.md)
+- **GPU & AI Hypercomputer:** [GPU Support](docs/gpu-support.md)
 - **GKE Orchestration & Workloads:** [Gcluster Job Submission Guide](docs/gcluster_job_guide.md), [Advanced GKE Infrastructure Features](docs/gke-advanced-features.md), [GKE Cluster Management](docs/gke-cluster-management.md), [Migrating from XPK to Cluster Toolkit](docs/migration/xpk_to_clustertoolkit.md)
-- **Slurm on GCP:** [Slurm GCP Support](docs/slurm-gcp-support.md), [Slurm Advanced Features](docs/slurm-advanced-features.md), [Slurm Topology](docs/slurm-topology.md), [Slurm DWS Flex-Start](docs/slurm-dws-flex.md), [Slurm DWS Calendar Mode](docs/slurm-dws-calendar.md), [Slurm Native Auth Migration](docs/slurm-native-auth-migration-guide.md), [CHS Slurm](docs/CHS-Slurm.md), [Hybrid Slurm Cluster](docs/hybrid-slurm-cluster/README.md), [Slurm Troubleshooting](docs/slurm-troubleshooting.md)
+- **Slurm on GCP:** [Slurm GCP Support](docs/slurm-gcp-support.md), [Slurm Advanced Features](docs/slurm-advanced-features.md), [Slurm Image Upgrade](docs/slurm-image-upgrade.md), [Slurm Topology](docs/slurm-topology.md), [Slurm DWS Flex-Start](docs/slurm-dws-flex.md), [Slurm DWS Calendar Mode](docs/slurm-dws-calendar.md), [Slurm Native Auth Migration](docs/slurm-native-auth-migration-guide.md), [CHS Slurm](docs/CHS-Slurm.md), [Hybrid Slurm Cluster](docs/hybrid-slurm-cluster/README.md), [Slurm Troubleshooting](docs/slurm-troubleshooting.md)
 - **Storage, Images & Batch:** [Network Storage](docs/network_storage.md), [VM Images](docs/vm-images.md), [Custom Image Building](docs/image-building.md), [Cloud Batch](docs/batch.md)
 - **Validation & Module Authoring:** [Blueprint Validation](docs/blueprint-validation.md), [Module Guidelines](docs/module-guidelines.md)
+- **Cluster Director:** [Export deployments to Cluster Director](docs/cluster-director.md)
 - **LLM & AI Assistant Indexes:** [`llms.txt`](llms.txt) (concise index) and [`llms-full.txt`](llms-full.txt) (complete blueprint and module reference)
 
 ## Billing reports
@@ -382,7 +381,6 @@ Common deployment failures:
 Install the following tools to ensure your changes pass validation:
 - [pre-commit](https://pre-commit.com/)
 - [TFLint](https://github.com/terraform-linters/tflint#installation) (requires version compatible with `.tflint.hcl`)
-- [ShellCheck](https://github.com/koalaman/shellcheck#installing)
 
 Additional development dependencies can be installed with a single command:
 

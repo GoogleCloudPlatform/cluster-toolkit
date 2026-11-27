@@ -81,15 +81,15 @@ gcloud auth login
 gcloud auth application-default login
 gcloud config set project YOUR_PROJECT_ID
 
-# Set GCLUSTER_IMAGE_REPO to your Artifact Registry repository name (not the full URL):
+# Set GCLUSTER_IMAGE_REPO to an Artifact Registry repository name (or a full registry/repository prefix):
 export GCLUSTER_IMAGE_REPO="my-ar-repo"
 ```
 
 > [!NOTE]
-> **Artifact Registry configuration for on-the-fly builds (`GCLUSTER_IMAGE_REPO`):**
+> **Container registry configuration for on-the-fly builds (`GCLUSTER_IMAGE_REPO`):**
 >
-> - When you use `--base-image` with `--build-context`, `gcluster` automatically constructs the target image registry path using your cluster's region and project ID: `REGION-docker.pkg.dev/PROJECT_ID/IMAGE_REPO/IMAGE_NAME:TAG` (where `IMAGE_REPO` is the value of `$GCLUSTER_IMAGE_REPO`).
-> - **Cross-region / cross-project constraint:** The on-the-fly container image builder currently does not support Artifact Registry repositories located in a different region or Google Cloud project than the target cluster. If your workflow relies on a centralized registry across projects or regions, build and push your container image independently, and supply the full image URI directly via `--image`.
+> - When `GCLUSTER_IMAGE_REPO` is set to a bare repository name (or subpath such as `my-ar-repo/team-a`), `gcluster` constructs the regional Artifact Registry path using your cluster's region and project ID: `REGION-docker.pkg.dev/PROJECT_ID/IMAGE_REPO/USER-runner:TAG`.
+> - **Cross-region, cross-project, and non-Artifact Registry OCI repositories:** To push to an Artifact Registry repository in another region or Google Cloud project—or to an OCI registry such as Harbor—set `GCLUSTER_IMAGE_REPO` to the full `<registry-host>/<repository>` prefix (for example, `us-west4-docker.pkg.dev/shared-project/my-ar-repo` or `harbor.example.com/ml-team`).
 
 ---
 

@@ -536,8 +536,6 @@ var varRefRegex = regexp.MustCompile(`^\$\(vars?\.([a-zA-Z0-9_]+)\)$`)
 var controlPlaneModuleSources = []string{
 	"schedmd-slurm-gcp-v6-login",
 	"schedmd-slurm-gcp-v6-controller",
-	"schedmd-slurm-gcp-v5-login",
-	"schedmd-slurm-gcp-v5-controller",
 	"modules/packer/",
 }
 

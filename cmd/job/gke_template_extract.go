@@ -33,9 +33,8 @@ var (
 var gkeTemplateExtractCmd = &cobra.Command{
 	Use:   "gke-template-extract",
 	Short: "Extract all default GKE templates to a local directory",
-	Long: `Extracts embedded GKE manifest templates (including jobset.tmpl, pathways_jobset.tmpl,
-and shared blocks in base.tmpl; note that job.tmpl is not yet used by 'gcluster job submit')
-to a local directory for customization.
+	Long: `Extracts embedded Kubernetes/GKE manifest templates (including jobset.tmpl, job.tmpl,
+pathways_jobset.tmpl, and shared blocks in base.tmpl) to a local directory for customization.
 
 Pass the directory to 'gcluster job submit --gke-custom-templates-path=<dir>' to apply overrides.
 Any template file or base.tmpl block omitted from the custom directory falls back to its embedded default.`,

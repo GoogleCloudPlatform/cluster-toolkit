@@ -116,7 +116,7 @@ locals {
       # sets no metadata itself.
       scoped_permissions             = ["compute.instances.setMetadata"]
       default_instance_name_prefixes = ["${local.slurm_cluster_name_default}-"]
-      accepted_capabilities          = ["placement_policies", "public_ips", "mig", "mig_flex", "bigquery_load", "tpu", "tpu_gce"]
+      accepted_capabilities          = ["placement_policies", "public_ips", "mig", "mig_flex", "bigquery_load", "tpu_gce"]
       default_capabilities           = ["placement_policies"]
       accepts_act_as                 = true
       self_act_as                    = false
@@ -177,7 +177,7 @@ locals {
       default_instance_name_prefixes = []
       # No mig/mig_flex/tpu_gce: their setMetadata cannot be name-scoped, and
       # custom_permissions denies setMetadata.
-      accepted_capabilities = ["placement_policies", "public_ips", "bigquery_load", "tpu"]
+      accepted_capabilities = ["placement_policies", "public_ips", "bigquery_load"]
       default_capabilities  = []
       accepts_act_as        = false
       self_act_as           = false
@@ -215,18 +215,6 @@ locals {
       "bigquery.tables.update",
       "bigquery.tables.updateData",
     ]
-    # tpu.py never calls UpdateNode, so tpu.nodes.update is deliberately absent.
-    tpu = [
-      "tpu.acceleratortypes.get",
-      "tpu.nodes.create",
-      "tpu.nodes.delete",
-      "tpu.nodes.get",
-      "tpu.nodes.list",
-      "tpu.nodes.start",
-      "tpu.nodes.stop",
-      "tpu.operations.get",
-      "tpu.runtimeversions.get",
-    ]
     # TPU machine types on Compute Engine (ct*/tpu* in a regular nodeset):
     # mig_flex.py copies the nodeset's template, ensures a workload policy and
     # creates a MIG per slice, deleting it on suspend. images.get and
@@ -249,7 +237,6 @@ locals {
     mig                = var.enable_mig
     mig_flex           = var.enable_mig_flex
     bigquery_load      = var.enable_bigquery_load
-    tpu                = var.enable_tpu
     tpu_gce            = var.enable_tpu_gce
   }
   # Flags explicitly set to true. Variable validations read these two, so they

@@ -181,7 +181,8 @@ REGION=<your-preferred-region>
 gcloud storage buckets create gs://${UNIQUE_JOB_BUCKET} \
     --project=${PROJECT_ID} \
     --default-storage-class=STANDARD --location=${REGION} \
-    --uniform-bucket-level-access
+    --uniform-bucket-level-access \
+    --public-access-prevention
 ```
 
 This bucket will serve as the interface to the service. This is where you place input files

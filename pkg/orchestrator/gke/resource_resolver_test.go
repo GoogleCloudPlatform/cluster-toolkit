@@ -16,8 +16,11 @@ package gke
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
+	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 	"strings"
 	"testing"
@@ -225,7 +228,7 @@ func TestResolveJobMachineType_TPUShorthandFollowsCluster(t *testing.T) {
 				g.clusterDesc.NodePools = append(g.clusterDesc.NodePools, gkeJobNodePool{Config: gkeNodePoolConfig{MachineType: mt}})
 			}
 
-			got, err := g.resolveJobMachineType(tt.computeType)
+			got, err := g.resolveJobMachineType(tt.computeType, "", "", false)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("resolveJobMachineType() error = %v, want containing %q", err, tt.wantErr)
@@ -254,9 +257,91 @@ func TestFetchMachineCapacity_AllZonesFail(t *testing.T) {
 		t.Fatalf("Expected error, got nil")
 	}
 
-	expectedErrStr := "failed to fetch machine capabilities for tpu7x-1: tried in all candidate zones [europe-west2-a europe-west2-c europe-west2-b] but did not find machine type in any of them"
+	expectedErrStr := "failed to fetch machine capabilities for tpu7x-1: tried in all candidate zones [europe-west2-a europe-west2-c europe-west2-b] but did not find machine type in any of them: resource not found"
 	if err.Error() != expectedErrStr {
 		t.Errorf("Expected error %q, got %q", expectedErrStr, err.Error())
+	}
+}
+
+type funcMachineTypeClient func(project, zone, machineType string) (*compute.MachineType, error)
+
+func (f funcMachineTypeClient) GetMachineType(project, zone, machineType string) (*compute.MachineType, error) {
+	return f(project, zone, machineType)
+}
+
+func TestFetchMachineCapabilities_NilGuardsAndWrappedErr(t *testing.T) {
+	t.Parallel()
+	t.Run("nil machineTypeClient returns error without panic", func(t *testing.T) {
+		t.Parallel()
+		g := newTestGKEOrchestrator(nil)
+		g.machineTypeClient = nil
+		if _, err := g.FetchMachineCapabilities("n2-standard-32", "us-central1-a"); err == nil || !strings.Contains(err.Error(), "machine type client is not initialized") {
+			t.Fatalf("FetchMachineCapabilities(nil client) err = %v, want client not initialized", err)
+		}
+	})
+	t.Run("nil MachineType response returns error without panic", func(t *testing.T) {
+		t.Parallel()
+		g := newTestGKEOrchestrator(nil)
+		g.machineTypeClient = funcMachineTypeClient(func(string, string, string) (*compute.MachineType, error) {
+			return nil, nil
+		})
+		if _, err := g.FetchMachineCapabilities("n2-standard-32", "us-central1-a"); err == nil || !strings.Contains(err.Error(), "empty machine type response") {
+			t.Fatalf("FetchMachineCapabilities(nil MT) err = %v, want empty response error", err)
+		}
+	})
+	t.Run("regional all-zones failure wraps underlying client error", func(t *testing.T) {
+		t.Parallel()
+		sentinel := errors.New("403 quota exceeded")
+		g := newTestGKEOrchestrator(nil)
+		g.clusterZones = []string{"us-central1-a", "us-central1-b"}
+		g.clusterDesc.Autoscaling.EnableNodeAutoprovisioning = true
+		g.machineTypeClient = funcMachineTypeClient(func(string, string, string) (*compute.MachineType, error) {
+			return nil, sentinel
+		})
+		_, err := g.FetchMachineCapabilities("n2-standard-32", "us-central1")
+		if !errors.Is(err, sentinel) {
+			t.Fatalf("FetchMachineCapabilities(regional failure) err = %v, want wrapped %v", err, sentinel)
+		}
+	})
+	t.Run("regional lookup honors napEnabled even when EnableNodeAutoprovisioning is unset", func(t *testing.T) {
+		t.Parallel()
+		g := newTestGKEOrchestrator(nil)
+		g.napEnabled = true
+		g.clusterZones = []string{"us-central1-a", "us-central1-b"}
+		g.machineTypeClient = funcMachineTypeClient(func(_, zone, mt string) (*compute.MachineType, error) {
+			if zone == "us-central1-b" {
+				return &compute.MachineType{Name: mt, GuestCpus: 32, MemoryMb: 131072}, nil
+			}
+			return nil, errors.New("not in zone a")
+		})
+		cap, err := g.FetchMachineCapabilities("n2-standard-32", "us-central1")
+		if err != nil || cap.GuestCpus != 32 || cap.MemoryMb != 131072 {
+			t.Fatalf("FetchMachineCapabilities(regional napEnabled) = (%+v, %v), want 32 vCPU / 131072 MiB", cap, err)
+		}
+	})
+}
+
+func TestFetchMachineCapabilities_RegionalAutoprovisioningLocations(t *testing.T) {
+	t.Parallel()
+	g := newTestGKEOrchestrator(nil)
+	g.napEnabled = true
+	g.clusterZones = []string{"us-central1-a"}
+	g.clusterDesc.Autoscaling.AutoprovisioningLocations = []string{"us-central1-c"}
+	g.machineTypeClient = funcMachineTypeClient(func(_, zone, mt string) (*compute.MachineType, error) {
+		if zone == "us-central1-c" {
+			return &compute.MachineType{Name: mt, GuestCpus: 32, MemoryMb: 131072}, nil
+		}
+		return nil, errors.New("not in zone")
+	})
+	cap, err := g.FetchMachineCapabilities("n2-standard-32", "us-central1")
+	if err != nil || cap.GuestCpus != 32 {
+		t.Fatalf("FetchMachineCapabilities(autoprovisioningLocations) = (%+v, %v), want 32 vCPU", cap, err)
+	}
+
+	emptyG := newTestGKEOrchestrator(nil)
+	emptyG.napEnabled = true
+	if _, err := emptyG.FetchMachineCapabilities("n2-standard-32", "us-central1"); err == nil || !strings.Contains(err.Error(), "no candidate zones") {
+		t.Fatalf("FetchMachineCapabilities(empty regional zones) err = %v, want no candidate zones error", err)
 	}
 }
 
@@ -2019,6 +2104,1375 @@ func TestVerifyDynamicSlicingActive(t *testing.T) {
 			}
 			if !tt.wantErr && got != tt.wantResult {
 				t.Errorf("Expected %t, got %t", tt.wantResult, got)
+			}
+		})
+	}
+}
+
+func TestGCETPUHardwareResolver(t *testing.T) {
+	t.Parallel()
+	r := gceTPUHardwareResolver{}
+	for _, tc := range [][2]string{
+		{"tpu7", "tpu7x"},
+		{"tpu7-8", "tpu7x"},
+		{"tpu7-podslice", "tpu7x"},
+		{"tpu7x", "tpu7x"},
+		{"tpu-7x", "tpu7x"},
+		{"tpu-v7x-slice", "tpu7x"},
+		{"TPU_V7X", "tpu7x"},
+		{"ironwood", "tpu7x"},
+		{"tpu7custom", "tpu7custom"},
+		{"ct5l-hightpu-4t", "v5e"},
+		{"TPU_V5_LITE", "v5e"},
+		{"TPU_V4", "v4"},
+		{"v6e-8", "v6e"},
+		{"TRILLIUM", "v6e"},
+		{"custom_accel", "custom_accel"},
+	} {
+		if got := r.NormalizeTPUType(tc[0]); got != tc[1] {
+			t.Errorf("NormalizeTPUType(%q) = %q, want %q", tc[0], got, tc[1])
+		}
+	}
+	for _, tc := range []struct {
+		in   string
+		want bool
+	}{
+		{"v7x", true},
+		{"v7x-1", true},
+		{"ironwood", true},
+		{"ironwood-1", true},
+		{"tpu-7x-1", true},
+		{"tpu-v7x-1", true},
+		{"tpu7x-standard-4t", true},
+		{"v5lite-4", true},
+		{"v5-lite-4", true},
+		{"custom-node-2t", false},
+		{"ctl-plane-0", false},
+		{"output-worker", false},
+		{"my-tpu-baremetal-host", false},
+		{"my-tpu7x-baremetal-host", false},
+		{"node-ironwood-01", false},
+		{"v4-standard-8", false},
+		{"v5e-cpu-worker", false},
+		{"v6e-login", false},
+		{"tpu7-head", false},
+		{"tpu7x-login", false},
+		{"ironwood-mgmt", false},
+	} {
+		if got := r.IsTPUMachine(tc.in); got != tc.want {
+			t.Errorf("IsTPUMachine(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+	assertGCETPUInferAndChips(t, r)
+}
+
+func assertGCETPUInferAndChips(t *testing.T, r gceTPUHardwareResolver) {
+	t.Helper()
+	for _, tc := range []struct {
+		tpuType, rawMachine string
+		chips               int
+		want                string
+	}{
+		{"tpu7x", "", 8, "tpu7x-standard-4t"},
+		{"tpu7x", "", 1, "tpu7x-standard-1t"},
+		{"TPU7X", "", 4, "tpu7x-standard-4t"},
+		{"tpu-v7x-slice", "tpu-v7x-slice", 4, "tpu7x-standard-4t"},
+		{"tpu7x", "tpu7x-8", 0, "tpu7x-standard-4t"},
+		{"tpu7x", "tpu7x-16", 0, "tpu7x-standard-4t"},
+		{"tpu7x", "tpu7x-podslice", 0, "tpu7x-standard-4t"},
+		{"tpu7x", "tpu7x-standard-1t", 4, "tpu7x-standard-1t"},
+		{"", "v7x-1", 0, "tpu7x-standard-1t"},
+		{"", "v7x-8", 0, "tpu7x-standard-4t"},
+		{"", "ironwood-1", 0, "tpu7x-standard-1t"},
+		{"", "tpu-7x-1", 0, "tpu7x-standard-1t"},
+		{"", "tpu-v7x-1", 0, "tpu7x-standard-1t"},
+		{"", "v6e-8", 0, "ct6e-standard-8t"},
+		{"", "tpu-v6e-1", 0, "ct6e-standard-1t"},
+		{"", "tpu-v6e-8", 0, "ct6e-standard-8t"},
+		{"v5e", "v5e-1", 0, "ct5lp-hightpu-1t"},
+		{"v5e", "v5lite-1", 0, "ct5lp-hightpu-1t"},
+		{"v5e", "v5lite-4", 0, "ct5lp-hightpu-4t"},
+		{"v5e", "v5lite-8", 0, "ct5lp-hightpu-8t"},
+		{"v5e", "v5-lite-1", 0, "ct5lp-hightpu-1t"},
+		{"v5e", "v5-lite-8", 0, "ct5lp-hightpu-8t"},
+		{"", "tpu-v5-lite-1", 0, "ct5lp-hightpu-1t"},
+		{"", "tpu-v5-lite-8", 0, "ct5lp-hightpu-8t"},
+		{"v5p", "", 4, "ct5p-hightpu-4t"},
+		{"v4", "", 4, "ct4p-hightpu-4t"},
+		{"", "my-baremetal-host", 0, "my-baremetal-host"},
+		{"", "my-tpu-baremetal-host", 0, "my-tpu-baremetal-host"},
+		{"", "my-tpu7x-baremetal-host", 0, "my-tpu7x-baremetal-host"},
+		{"", "node-ironwood-01", 0, "node-ironwood-01"},
+		{"", "v4-standard-8", 0, "v4-standard-8"},
+		{"", "v5e-cpu-worker", 0, "v5e-cpu-worker"},
+		{"", "v6e-login", 0, "v6e-login"},
+		{"", "tpu7-head", 0, "tpu7-head"},
+		{"", "tpu7x-login", 0, "tpu7x-login"},
+		{"", "ironwood-mgmt", 0, "ironwood-mgmt"},
+	} {
+		if got := r.InferTPUMachine(tc.tpuType, tc.rawMachine, tc.chips); got != tc.want {
+			t.Errorf("InferTPUMachine(%q, %q, %d) = %q, want %q", tc.tpuType, tc.rawMachine, tc.chips, got, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		in   string
+		want int
+	}{
+		{"ct6e-standard-8T", 8},
+		{"ct5lp-hightpu", 8},
+		{"ct6e-standard", 4},
+		{"tpu-4test", 0},
+		{"tpu-v7x-2t", 0},
+		{"custom-node-2t", 0},
+		{"ctl-plane-0", 0},
+		{"output-worker", 0},
+		{"my-baremetal-host", 0},
+		{"my-tpu-baremetal-host", 0},
+		{"my-tpu7x-baremetal-host", 0},
+		{"node-ironwood-01", 0},
+		{"v4-standard-8", 0},
+		{"v5e-cpu-worker", 0},
+		{"v6e-login", 0},
+		{"tpu7-head", 0},
+		{"tpu7x-login", 0},
+		{"ironwood-mgmt", 0},
+		{"v6e-8", 8},
+		{"tpu-v6e-1", 1},
+		{"tpu-v6e-8", 8},
+		{"v5e-1", 1},
+		{"v5lite-1", 1},
+		{"v5lite-8", 8},
+		{"v5-lite-8", 8},
+		{"tpu-v5-lite-1", 1},
+		{"tpu-v5-lite-8", 8},
+		{"v7x-1", 1},
+		{"v7x-8", 4},
+		{"ironwood-1", 1},
+		{"tpu-7x-1", 1},
+		{"tpu-v7x-1", 1},
+		{"tpu7x-1", 1},
+		{"tpu7-8", 4},
+		{"tpu7x-8", 4},
+		{"tpu7x-16", 4},
+		{"tpu7-podslice", 4},
+		{"tpu7x-podslice", 4},
+	} {
+		if got := r.ChipsPerNode(tc.in); got != tc.want {
+			t.Errorf("ChipsPerNode(%q) = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestK8sResourceResolution_TPUShorthandDisambiguation(t *testing.T) {
+	orc8t := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeTPUSlice,
+				TPU:         &k8s.TPUInventory{TPUType: "v6e", MachineType: "ct6e-standard-8t", ChipsPerNode: 8},
+			},
+		},
+	}
+	if got := orc8t.resolveK8sMachineType("v6e-16", nil); got != "ct6e-standard-4t" {
+		t.Errorf("resolveK8sMachineType(v6e-16 on 8t primary) = %q, want ct6e-standard-4t", got)
+	}
+
+	orc4t := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeTPUSlice,
+				PoolNames:   []string{"v6e-4t"},
+				Pools: map[string]k8s.PoolCapacity{
+					"v6e-4t": {MachineType: "ct6e-standard-4t", IsTPU: true, TPUType: "v6e", TPUsPerNode: 4, ReadyNodes: 2},
+				},
+				TPU: &k8s.TPUInventory{TPUType: "v6e", MachineType: "ct6e-standard-4t", ChipsPerNode: 4},
+			},
+		},
+	}
+	if got := orc4t.resolveK8sMachineType("v6e-8", nil); got != "ct6e-standard-4t" {
+		t.Errorf("resolveK8sMachineType(v6e-8 on 4t pool) = %q, want ct6e-standard-4t", got)
+	}
+	if chips := orc4t.resolveK8sTPUChipsPerNode("ct6e-standard-1t", k8s.PoolCapacity{}, false, 0); chips != 1 {
+		t.Errorf("resolveK8sTPUChipsPerNode(ct6e-standard-1t) = %d, want 1 chip", chips)
+	}
+}
+
+func TestK8sResourceResolution_SliceChipsAndMultiHyphenTopology(t *testing.T) {
+	job := &orchestrator.JobDefinition{ComputeType: "ct6e-standard-8t", MachineType: "ct6e-standard-8t", Topology: "2x4"}
+	slice4t := k8s.SliceInfo{Name: "s-4t", TPUType: "v6e", Topology: "2x4", ChipsPerNode: 4, Ready: true, NodesPerSlice: 2}
+	if err := (&GKEOrchestrator{}).validateSliceHardwareMatch(job, "s-4t", slice4t); err == nil || !strings.Contains(err.Error(), "chips/node") {
+		t.Errorf("validateSliceHardwareMatch(8t vs 4t slice) err = %v, want chips/node mismatch", err)
+	}
+	orc := &GKEOrchestrator{mode: orchestrator.TypeK8s}
+	for _, tc := range []struct {
+		ct, mt, want string
+	}{
+		{"tpu-v6e-8", "ct6e-standard-4t", "2x4"},
+		{"v5-lite-8", "ct5lp-hightpu-4t", "2x4"},
+	} {
+		got, err := orc.resolveK8sTPUTopology(&orchestrator.JobDefinition{ComputeType: tc.ct, MachineType: tc.mt})
+		if err != nil || got != tc.want {
+			t.Errorf("resolveK8sTPUTopology(%s, %s) = (%q, %v), want (%q, nil)", tc.ct, tc.mt, got, err, tc.want)
+		}
+	}
+	if _, err := orc.resolveK8sTPUTopology(&orchestrator.JobDefinition{ComputeType: "tpu-v6e-7", MachineType: "ct6e-standard-4t"}); err == nil {
+		t.Errorf("resolveK8sTPUTopology(invalid shorthand tpu-v6e-7) = nil, want error")
+	}
+}
+
+func TestK8sResourceResolution_SuffixesAndExplicitCPUFallback(t *testing.T) {
+	for _, tc := range []struct {
+		mt   string
+		want int
+	}{
+		{"a3-ultragpu-8g-nolocalssd", 8},
+		{"a4-highgpu-8g-nolocalssd", 8},
+		{"a3-highgpu-8g-metal", 8},
+		{"a4x-highgpu-4g-nolssd", 4},
+		{"g4-standard-384-nolocalssd", 8},
+		{"g2-custom-48-196608", 4},
+	} {
+		got, ok := inferFallbackGPUCount(tc.mt)
+		if !ok || got != tc.want {
+			t.Errorf("inferFallbackGPUCount(%q) = (%d, %v), want (%d, true)", tc.mt, got, ok, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		mt   string
+		want int
+	}{
+		{"n2-standard-32", 32},
+		{"n2-custom-16-65536", 16},
+		{"kind-worker-1", 0},
+	} {
+		if got := inferFallbackGCECPUCount(tc.mt); got != tc.want {
+			t.Errorf("inferFallbackGCECPUCount(%q) = %d, want %d", tc.mt, got, tc.want)
+		}
+	}
+}
+
+func TestK8sResourceResolution_GPUResourceNameAndTPUNumNodesGuard(t *testing.T) {
+	orc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				PoolNames:   []string{"intel-pool"},
+				Pools: map[string]k8s.PoolCapacity{
+					"intel-pool": {MachineType: "intel-gpu", IsGPU: true, GPUsPerNode: 2, GPUType: "gpu.intel.com/i915", GPUResourceName: "gpu.intel.com/i915", ReadyNodes: 1},
+				},
+			},
+		},
+	}
+	gpuJob := orchestrator.JobDefinition{ComputeType: "gpu.intel.com/i915", NumSlices: 1}
+	prof, _, _, err := orc.resolveK8sHardwareRequirements(&gpuJob)
+	if err != nil || prof.GPUResourceName != "gpu.intel.com/i915" || prof.CapacityCount != 2 {
+		t.Fatalf("intel GPU profile = (%+v, %v), want 2 of gpu.intel.com/i915", prof, err)
+	}
+
+	tpuOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeTPUSlice,
+				TPU:         &k8s.TPUInventory{TPUType: "v6e", MachineType: "ct6e-standard-4t", ChipsPerNode: 4, Topology: "2x2"},
+			},
+		},
+	}
+	for _, ct := range []string{"", "trillium"} {
+		job := orchestrator.JobDefinition{ComputeType: ct, NumSlices: 1, NodesPerSlice: 2, NumNodesSpecified: true}
+		if _, _, _, err := tpuOrc.resolveK8sHardwareRequirements(&job); err == nil || !strings.Contains(err.Error(), "--num-nodes cannot be used with TPU jobs") {
+			t.Fatalf("TPU computeType=%q with --num-nodes err = %v, want rejection", ct, err)
+		}
+	}
+}
+
+func TestK8sParallelContainersDisabledOnTypeK8sAndSingleChip(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name         string
+		mode         orchestrator.Type
+		machineType  string
+		chips        int
+		wantParallel int
+		wantTPU      string
+	}{
+		{"k8s_tpu7x_1t", orchestrator.TypeK8s, "tpu7x-standard-1t", 1, 1, "1"},
+		{"k8s_tpu7x_4t", orchestrator.TypeK8s, "tpu7x-standard-4t", 4, 1, "4"},
+		{"gke_tpu7x_1t_odd_chip_guard", orchestrator.TypeGKE, "tpu7x-standard-1t", 1, 1, "1"},
+		{"gke_tpu7x_4t_parallel_enabled", orchestrator.TypeGKE, "tpu7x-standard-4t", 4, 2, "2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{mode: tc.mode}
+			if tc.mode == orchestrator.TypeGKE {
+				orc.machineCapCache = map[string]MachineTypeCap{
+					tc.machineType + ":": {
+						Accelerators: []struct {
+							Count int    `json:"guestAcceleratorCount"`
+							Type  string `json:"guestAcceleratorType"`
+						}{{Count: tc.chips, Type: "tpu7x"}},
+					},
+				}
+			}
+			job := orchestrator.JobDefinition{
+				MachineType:           tc.machineType,
+				UseParallelContainers: true,
+			}
+			opts := ManifestOptions{
+				ComputeType:        tc.machineType,
+				MachineType:        tc.machineType,
+				ParallelContainers: 1,
+			}
+			profile := JobProfile{IsTPU: true, CapacityCount: tc.chips}
+			orc.applySchedulingGatesAndParallelism(&opts, profile, job)
+			resStr, _, _, err := orc.resolveWorkloadResourcesYAML(&opts, profile, 16)
+			if err != nil {
+				t.Fatalf("resolveWorkloadResourcesYAML() err = %v", err)
+			}
+			wantTPU := fmt.Sprintf("google.com/tpu: %q", tc.wantTPU)
+			if opts.ParallelContainers != tc.wantParallel || !strings.Contains(resStr, wantTPU) {
+				t.Errorf("got (ParallelContainers=%d, ResourcesString=%q), want (%d, containing %s)",
+					opts.ParallelContainers, resStr, tc.wantParallel, wantTPU)
+			}
+		})
+	}
+}
+
+func TestK8sResourceResolution_NonTPUSubstringAndCustomTPUTypes(t *testing.T) {
+	t.Parallel()
+	orc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				PoolNames:   []string{"cpu-output", "bm-tpu", "custom-tpu-pool"},
+				Pools: map[string]k8s.PoolCapacity{
+					"cpu-output":      {MachineType: "output-worker", IsTPU: false, IsGPU: false, ReadyNodes: 2, AllocatableCPUMilli: 16000},
+					"bm-tpu":          {MachineType: "bm-host", IsTPU: true, TPUType: "tpu7x", TPUsPerNode: 4, ReadyNodes: 2},
+					"custom-tpu-pool": {MachineType: "custom-tpu-node", IsTPU: true, TPUType: "tpu-custom-a", TPUsPerNode: 4, ReadyNodes: 2},
+				},
+			},
+		},
+	}
+
+	cpuJob := orchestrator.JobDefinition{ComputeType: "output-worker", NumSlices: 1, NodesPerSlice: 2, NumNodesSpecified: true}
+	cpuProf, _, _, err := orc.resolveK8sHardwareRequirements(&cpuJob)
+	if err != nil {
+		t.Fatalf("output-worker CPU pool rejected as TPU: %v", err)
+	}
+	if !cpuProf.IsCPUMachine || cpuProf.IsTPU || cpuJob.NodesPerSlice != 2 {
+		t.Errorf("output-worker profile = %+v nodes=%d, want CPU with 2 nodes", cpuProf, cpuJob.NodesPerSlice)
+	}
+	if len(orc.machineCapCache) != 0 {
+		t.Errorf("TypeK8s must not write machineCapCache, got %v", orc.machineCapCache)
+	}
+
+	bmJob := orchestrator.JobDefinition{ComputeType: "bm-host", Topology: "2x2x2", NumSlices: 1}
+	bmProf, _, _, err := orc.resolveK8sHardwareRequirements(&bmJob)
+	if err != nil {
+		t.Fatalf("bm-host TPU pool err = %v", err)
+	}
+	if !bmProf.IsTPU || bmProf.CapacityCount != 4 || bmJob.NodesPerSlice != 2 {
+		t.Errorf("bm-host profile = %+v nodes=%d, want TPU 4 chips/node, 2 nodes", bmProf, bmJob.NodesPerSlice)
+	}
+
+	customTPUJob := orchestrator.JobDefinition{ComputeType: "custom-tpu-node", Topology: "2x2x2", NumSlices: 1}
+	customTPUProf, _, _, err := orc.resolveK8sHardwareRequirements(&customTPUJob)
+	if err != nil {
+		t.Fatalf("custom-tpu-node custom TPU pool err = %v", err)
+	}
+	if !customTPUProf.IsTPU || customTPUJob.NodesPerSlice != 2 {
+		t.Errorf("custom-tpu-node profile = %+v nodes=%d, want TPU with 2 nodes", customTPUProf, customTPUJob.NodesPerSlice)
+	}
+}
+
+func TestK8sResourceResolution_UnlabeledCPUAndPoolRanking(t *testing.T) {
+	t.Parallel()
+	// Unlabeled CPU worker (MachineType == "") auto-discovers cleanly without emitting an instance-type selector.
+	unlabeledOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				CPUPoolCap:  &k8s.PoolCapacity{MachineType: "", ReadyNodes: 2, AllocatableCPUMilli: 8000},
+				PoolNames:   []string{"cpu"},
+				Pools: map[string]k8s.PoolCapacity{
+					"cpu": {MachineType: "", ReadyNodes: 2, AllocatableCPUMilli: 8000},
+				},
+			},
+		},
+	}
+	job := orchestrator.JobDefinition{NumSlices: 1}
+	prof, _, _, err := unlabeledOrc.resolveK8sHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("unlabeled CPU auto-discovery err = %v", err)
+	}
+	if !prof.IsCPUMachine || prof.K8sPool == nil {
+		t.Errorf("unlabeled CPU profile = %+v, want IsCPUMachine=true with K8sPool", prof)
+	}
+	sel, err := unlabeledOrc.buildNodeSelectorWithProfile(SchedulingOptions{}, job, prof)
+	if err != nil || strings.Contains(sel, k8s.InstanceTypeLabel) {
+		t.Errorf("unlabeled CPU nodeSelector = (%q, %v), must omit %s", sel, err, k8s.InstanceTypeLabel)
+	}
+
+	// Ready worker pool beats control-plane and unready pools for the same machine type.
+	rankOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				PoolNames:   []string{"a-ctrl", "b-unready", "c-worker"},
+				Pools: map[string]k8s.PoolCapacity{
+					"a-ctrl":    {MachineType: "n2-standard-8", NodePoolName: "ctrl", IsControlPlane: true, ReadyNodes: 1},
+					"b-unready": {MachineType: "n2-standard-8", NodePoolName: "down", ReadyNodes: 0},
+					"c-worker":  {MachineType: "n2-standard-8", NodePoolName: "workers", ReadyNodes: 3},
+				},
+			},
+		},
+	}
+	picked, ok := rankOrc.findK8sPoolForRequest("", "n2-standard-8")
+	if !ok || picked.NodePoolName != "workers" {
+		t.Errorf("findK8sPoolForRequest = (%+v, %v), want workers pool", picked, ok)
+	}
+
+	// Empty PoolNames with inventory.TPU still resolves TPU shorthands.
+	tpuFallbackOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeTPUSlice,
+				TPU:         &k8s.TPUInventory{TPUType: "v6e", MachineType: "ct6e-standard-4t", ChipsPerNode: 4},
+			},
+		},
+	}
+	if got := tpuFallbackOrc.resolveK8sMachineType("v6e-8", nil); got != "ct6e-standard-4t" {
+		t.Errorf("resolveK8sMachineType(v6e-8 with empty PoolNames) = %q, want ct6e-standard-4t", got)
+	}
+}
+
+func TestK8sResourceResolution_ExplicitSliceBareFamilyAndDerivedTopology(t *testing.T) {
+	t.Parallel()
+	orc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeTPUSlice,
+				TPU:         &k8s.TPUInventory{TPUType: "v5p", MachineType: "ct5p-hightpu-4t", ChipsPerNode: 4},
+				Slices: []k8s.SliceInfo{
+					{Name: "s-v6e-1t", TPUType: "v6e", MachineType: "ct6e-standard-1t", Topology: "1x1", ChipsPerNode: 1, NodesPerSlice: 1, Ready: true},
+					{Name: "s-v6e-8t", TPUType: "v6e", Topology: "2x4", ChipsPerNode: 8, NodesPerSlice: 1, Ready: true},
+					{Name: "s-derived", TPUType: "v6e", MachineType: "ct6e-standard-4t", ChipsPerNode: 4, NodesPerSlice: 2, Ready: true},
+				},
+			},
+		},
+	}
+
+	// Bare family "v6e" adopts the targeted 1t slice's machine type instead of defaulting to 4t.
+	job1t := orchestrator.JobDefinition{ComputeType: "v6e", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "s-v6e-1t"}}
+	prof1t, _, _, err := orc.resolveK8sHardwareRequirements(&job1t)
+	if err != nil || job1t.MachineType != "ct6e-standard-1t" || prof1t.CapacityCount != 1 || job1t.Topology != "1x1" {
+		t.Fatalf("bare v6e on 1t slice = (mt=%q topo=%q prof=%+v err=%v), want ct6e-standard-1t / 1x1 / 1 chip", job1t.MachineType, job1t.Topology, prof1t, err)
+	}
+
+	// Bare family "v6e" on 8t slice (empty MachineType on CRD) infers ct6e-standard-8t.
+	job8t := orchestrator.JobDefinition{ComputeType: "v6e", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "s-v6e-8t"}}
+	prof8t, _, _, err := orc.resolveK8sHardwareRequirements(&job8t)
+	if err != nil || job8t.MachineType != "ct6e-standard-8t" || prof8t.CapacityCount != 8 {
+		t.Fatalf("bare v6e on 8t slice = (mt=%q prof=%+v err=%v), want ct6e-standard-8t / 8 chips", job8t.MachineType, prof8t, err)
+	}
+
+	// Shorthand v6e-16 (4x4) against 2x4 slice must fail with topology mismatch.
+	mismatchJob := orchestrator.JobDefinition{ComputeType: "v6e-16", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "s-v6e-8t"}}
+	if _, _, _, err := orc.resolveK8sHardwareRequirements(&mismatchJob); err == nil || !strings.Contains(err.Error(), "does not match slice") {
+		t.Errorf("shorthand v6e-16 vs 2x4 slice err = %v, want mismatch error", err)
+	}
+
+	// Slice with empty Topology + NodesPerSlice=2 derives topology ("2x4") instead of leaving job.Topology empty.
+	derivedJob := orchestrator.JobDefinition{ComputeType: "v6e", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "s-derived"}}
+	if _, _, _, err := orc.resolveK8sHardwareRequirements(&derivedJob); err != nil || derivedJob.Topology != "2x4" || derivedJob.NodesPerSlice != 2 {
+		t.Fatalf("derived slice topology = (topo=%q nodes=%d err=%v), want (2x4, 2, nil)", derivedJob.Topology, derivedJob.NodesPerSlice, err)
+	}
+}
+
+func TestK8sResourceResolution_ZeroGPUPoolAndExplicitModeNonNvidiaGPUs(t *testing.T) {
+	t.Parallel()
+	zeroGPUOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				PoolNames:   []string{"broken-gpu"},
+				Pools: map[string]k8s.PoolCapacity{
+					"broken-gpu": {MachineType: "gpu-broken", IsGPU: true, GPUsPerNode: 0, GPUType: "nvidia-l4", ReadyNodes: 1},
+				},
+			},
+		},
+	}
+	zeroJob := orchestrator.JobDefinition{ComputeType: "gpu-broken", NumSlices: 1}
+	if _, _, _, err := zeroGPUOrc.resolveK8sHardwareRequirements(&zeroJob); err == nil || !strings.Contains(err.Error(), "0 allocatable GPUs") {
+		t.Fatalf("0-GPU pool err = %v, want 0 allocatable GPUs error", err)
+	}
+
+	explicitOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{LabelScheme: k8s.SchemeGeneric, ExplicitMode: true},
+		},
+	}
+	for _, resKey := range []string{"amd.com/gpu", "gpu.intel.com/i915", "nvidia.com/mig-1g.5gb"} {
+		job := orchestrator.JobDefinition{ComputeType: resKey, NumSlices: 1}
+		prof, _, _, err := explicitOrc.resolveK8sHardwareRequirements(&job)
+		if err != nil {
+			t.Fatalf("ExplicitMode %s err = %v", resKey, err)
+		}
+		if prof.IsCPUMachine || prof.GPUResourceName != resKey || prof.CapacityCount != 1 {
+			t.Errorf("ExplicitMode %s profile = %+v, want GPU resource=%s count=1", resKey, prof, resKey)
+		}
+	}
+}
+
+func TestK8sRebuttalFixes_V4V5pTopoCustomSliceZeroGPUPoolAndCaseValidation(t *testing.T) {
+	t.Parallel()
+	// C3: v4 and v5p deriveSliceTopologyFromNodes must multiply chips by 2 (TensorCores).
+	for _, tc := range []struct {
+		tpuType, mt string
+		nodes       int
+		want        string
+	}{
+		{"v5p", "ct5p-hightpu-4t", 1, "2x2x1"},
+		{"v5p", "ct5p-hightpu-4t", 2, "2x2x2"},
+		{"v4", "ct4p-hightpu-4t", 1, "2x2x1"},
+		{"v4", "ct4p-hightpu-4t", 2, "2x2x2"},
+	} {
+		got := deriveSliceTopologyFromNodes(
+			&orchestrator.JobDefinition{MachineType: tc.mt},
+			k8s.SliceInfo{TPUType: tc.tpuType, MachineType: tc.mt, ChipsPerNode: 4, NodesPerSlice: tc.nodes},
+		)
+		if got != tc.want {
+			t.Errorf("deriveSliceTopologyFromNodes(%s, %d nodes) = %q, want %q", tc.tpuType, tc.nodes, got, tc.want)
+		}
+	}
+
+	// C4 + C12 + C14: Custom bm-host TPU slice matches; s.Topology=="" validates against s.NodesPerSlice;
+	// ExplicitMode slice ChipsPerNode honored; resolveK8sTPUChipsPerNode respects TPU family guard.
+	bmOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeTPUSlice,
+				PoolNames:   []string{"bm-tpu"},
+				Pools: map[string]k8s.PoolCapacity{
+					"bm-tpu": {MachineType: "bm-host", IsTPU: true, TPUType: "tpu7x", TPUsPerNode: 4, ReadyNodes: 2},
+				},
+				TPU: &k8s.TPUInventory{TPUType: "v6e", MachineType: "ct6e-standard-8t", ChipsPerNode: 8},
+				Slices: []k8s.SliceInfo{
+					{Name: "s-bm", TPUType: "tpu7x", MachineType: "bm-host", Topology: "2x2x2", ChipsPerNode: 4, NodesPerSlice: 2, Ready: true},
+					{Name: "s-no-topo", TPUType: "v6e", MachineType: "ct6e-standard-4t", ChipsPerNode: 4, NodesPerSlice: 2, Ready: true},
+					{Name: "s-explicit-8", TPUType: "tpu-custom-a", MachineType: "custom-8", Topology: "2x2x2", ChipsPerNode: 8, NodesPerSlice: 1, Ready: true},
+				},
+			},
+		},
+	}
+	bmJob := orchestrator.JobDefinition{NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "s-bm"}}
+	if prof, _, _, err := bmOrc.resolveK8sHardwareRequirements(&bmJob); err != nil || !prof.IsTPU || bmJob.NodesPerSlice != 2 {
+		t.Fatalf("custom bm-host slice resolution = (prof=%+v nodes=%d err=%v), want TPU 2 nodes", prof, bmJob.NodesPerSlice, err)
+	}
+	mismatchNoTopo := orchestrator.JobDefinition{ComputeType: "v6e-16", NumSlices: 1, NodeConstraint: map[string]string{k8s.TPUSliceNameLabel: "s-no-topo"}}
+	if _, _, _, err := bmOrc.resolveK8sHardwareRequirements(&mismatchNoTopo); err == nil || !strings.Contains(err.Error(), "does not match slice") {
+		t.Errorf("v6e-16 (4 nodes) on 2-node empty-topology slice err = %v, want mismatch", err)
+	}
+	if chips := bmOrc.resolveK8sTPUChipsPerNode("custom-8", k8s.PoolCapacity{}, false, 8); chips != 8 {
+		t.Errorf("resolveK8sTPUChipsPerNode(custom-8, sliceChips=8) = %d, want 8", chips)
+	}
+	if chips := bmOrc.resolveK8sTPUChipsPerNode("ct5p-hightpu", k8s.PoolCapacity{}, false, 0); chips == 8 {
+		t.Errorf("resolveK8sTPUChipsPerNode(ct5p-hightpu) leaked v6e 8t inventory: got %d", chips)
+	}
+	assertZeroGPURankingAndCaseValidation(t)
+}
+
+func assertZeroGPURankingAndCaseValidation(t *testing.T) {
+	t.Helper()
+	// C5 + C6: Healthy 8-GPU pool beats restarting 0-GPU pool; calculateK8sMachineResourceLimits handles empty JobProfile.
+	gpuOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				PoolNames:   []string{"a-restarting-0gpu", "b-healthy-8gpu", "c-bm-tpu", "d-mig-3g"},
+				Pools: map[string]k8s.PoolCapacity{
+					"a-restarting-0gpu": {MachineType: "a3-highgpu-8g", IsGPU: true, GPUsPerNode: 0, GPUType: "nvidia-h100-80gb", ReadyNodes: 1},
+					"b-healthy-8gpu":    {MachineType: "a3-highgpu-8g", IsGPU: true, GPUsPerNode: 8, GPUType: "nvidia-h100-80gb", GPUResourceName: "nvidia.com/gpu", ReadyNodes: 7},
+					"c-bm-tpu":          {MachineType: "bm-host", IsTPU: true, TPUType: "tpu7x", TPUsPerNode: 4, ReadyNodes: 2},
+					"d-mig-3g":          {MachineType: "a3-highgpu-8g", IsGPU: true, GPUsPerNode: 2, GPUResourceName: "nvidia.com/mig-3g.40gb", ReadyNodes: 2},
+				},
+			},
+		},
+	}
+	picked, ok := gpuOrc.findK8sPoolForRequest("a3-highgpu-8g", "a3-highgpu-8g")
+	if !ok || picked.GPUsPerNode != 8 {
+		t.Errorf("findK8sPoolForRequest(a3-highgpu-8g) picked %+v (ok=%v), want 8-GPU pool over 0-GPU restarting pool", picked, ok)
+	}
+	if _, _, gpu, tpu, err := gpuOrc.calculateK8sMachineResourceLimits(ManifestOptions{MachineType: "bm-host"}, JobProfile{}); err != nil || tpu != "4" || gpu != "" {
+		t.Errorf("calculateK8sMachineResourceLimits(bm-host, empty profile) = (gpu=%q tpu=%q err=%v), want tpu=4", gpu, tpu, err)
+	}
+	if prof, err := gpuOrc.buildK8sJobProfile(&orchestrator.JobDefinition{MachineType: "output-gpu-worker"}, k8s.PoolCapacity{}, false, false); err != nil || prof.IsCPUMachine || prof.CapacityCount != 1 {
+		t.Errorf("buildK8sJobProfile(output-gpu-worker) = (%+v, %v), want gpu CapacityCount=1", prof, err)
+	}
+	if _, _, gpu, _, err := gpuOrc.calculateK8sMachineResourceLimits(ManifestOptions{ComputeType: "nvidia.com/mig-3g.40gb", MachineType: "a3-highgpu-8g"}, JobProfile{}); err != nil || gpu != "2" {
+		t.Errorf("calculateK8sMachineResourceLimits(mig-3g.40gb) = (gpu=%q err=%v), want gpu=2", gpu, err)
+	}
+	assertCaseAndNamedSliceShorthandValidation(t)
+}
+
+func assertCaseAndNamedSliceShorthandValidation(t *testing.T) {
+	t.Helper()
+	// C13: ct5l-hightpu-* and uppercase machine types validate properly.
+	for _, tc := range []struct{ mt, topo string }{
+		{"ct5l-hightpu-4t", "2x2"},
+		{"CT6E-STANDARD-4T", "2x2"},
+		{"TPU7X-STANDARD-1T", "1x1x1"},
+	} {
+		if err := validateK8sTPUTopology(tc.mt, tc.topo); err != nil {
+			t.Errorf("validateK8sTPUTopology(%q, %q) unexpected err = %v", tc.mt, tc.topo, err)
+		}
+	}
+
+	// C15: tpu-v6e-slice on 1t slice and v6e-8 on 4t slice adopt slice host shape.
+	sliceOrc := &GKEOrchestrator{
+		mode: orchestrator.TypeK8s,
+		submissionSession: submissionSession{
+			inventory: &k8s.Inventory{
+				LabelScheme: k8s.SchemeTPUSlice,
+				Slices: []k8s.SliceInfo{
+					{Name: "s-1t", TPUType: "v6e", MachineType: "ct6e-standard-1t", Topology: "1x1", ChipsPerNode: 1, NodesPerSlice: 1, Ready: true},
+					{Name: "s-4t", TPUType: "v6e", MachineType: "ct6e-standard-4t", Topology: "2x4", ChipsPerNode: 4, NodesPerSlice: 2, Ready: true},
+				},
+			},
+		},
+	}
+	if got := sliceOrc.resolveK8sMachineType("tpu-v6e-slice", map[string]string{k8s.TPUSliceNameLabel: "s-1t"}); got != "ct6e-standard-1t" {
+		t.Errorf("resolveK8sMachineType(tpu-v6e-slice on s-1t) = %q, want ct6e-standard-1t", got)
+	}
+	if got := sliceOrc.resolveK8sMachineType("v6e-8", map[string]string{k8s.TPUSliceNameLabel: "s-4t"}); got != "ct6e-standard-4t" {
+		t.Errorf("resolveK8sMachineType(v6e-8 on s-4t) = %q, want ct6e-standard-4t", got)
+	}
+}
+
+func TestResolveParallelContainerCount_GKEAndK8s(t *testing.T) {
+	tests := []struct {
+		name string
+		mode orchestrator.Type
+		job  orchestrator.JobDefinition
+		want int
+	}{
+		{
+			name: "gke_tpu7x_4t_uses_2_containers",
+			mode: orchestrator.TypeGKE,
+			job:  orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", UseParallelContainers: true},
+			want: 2,
+		},
+		{
+			name: "gke_tpu7x_1t_uses_1_container",
+			mode: orchestrator.TypeGKE,
+			job:  orchestrator.JobDefinition{MachineType: "tpu7x-standard-1t", UseParallelContainers: true},
+			want: 1,
+		},
+		{
+			name: "gke_tpu7x_4t_disabled_uses_1_container",
+			mode: orchestrator.TypeGKE,
+			job:  orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", UseParallelContainers: false},
+			want: 1,
+		},
+		{
+			name: "gke_tpu7x_pathways_uses_1_container",
+			mode: orchestrator.TypeGKE,
+			job:  orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", UseParallelContainers: true, IsPathwaysJob: true},
+			want: 1,
+		},
+		{
+			name: "gke_non_tpu7x_uses_1_container",
+			mode: orchestrator.TypeGKE,
+			job:  orchestrator.JobDefinition{MachineType: "ct6e-standard-4t", UseParallelContainers: true},
+			want: 1,
+		},
+		{
+			name: "k8s_tpu7x_4t_uses_1_container",
+			mode: orchestrator.TypeK8s,
+			job:  orchestrator.JobDefinition{MachineType: "tpu7x-standard-4t", UseParallelContainers: true},
+			want: 1,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{mode: tc.mode}
+			if got := orc.resolveParallelContainerCount(tc.job); got != tc.want {
+				t.Errorf("resolveParallelContainerCount() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+
+	// Verify defensive divisibility check in calculateResourceLimits rejects indivisible parallel splits.
+	k8sOrc := &GKEOrchestrator{mode: orchestrator.TypeK8s}
+	_, _, _, _, err := k8sOrc.calculateResourceLimits(
+		ManifestOptions{ComputeType: "tpu7x-standard-1t", MachineType: "tpu7x-standard-1t", ParallelContainers: 2},
+		JobProfile{IsTPU: true, CapacityCount: 1},
+	)
+	if err == nil || !strings.Contains(err.Error(), "cannot be evenly split") {
+		t.Errorf("calculateResourceLimits(1 chip / 2 containers) err = %v, want divisibility error", err)
+	}
+}
+
+func TestCalculateAllocatableMemoryBytes(t *testing.T) {
+	t.Parallel()
+	const mib int64 = 1024 * 1024
+	for _, tc := range []struct {
+		name     string
+		memoryMb int
+		want     int64
+	}{
+		{name: "zero", memoryMb: 0, want: 0},
+		{name: "tiny clamps to zero", memoryMb: 256, want: 0},
+		{name: "sub-1GiB uses 255MiB + 100MiB", memoryMb: 512, want: (512 - 255 - 100) * mib},
+		{name: "1GiB tier-1 boundary", memoryMb: 1024, want: (1024 - 256 - 100) * mib},
+		{name: "4GiB tier-1", memoryMb: 4096, want: (4096 - 1024 - 100) * mib},
+		{name: "8GiB tier-2", memoryMb: 8192, want: 8192*mib - (1024*mib + (4096*mib*20)/100) - 100*mib},
+		{name: "16GiB tier-3", memoryMb: 16384, want: 16384*mib - (1024*mib + (4096*mib*20)/100 + (8192*mib*10)/100) - 100*mib},
+		{name: "64GiB tier-4", memoryMb: 65536, want: 65536*mib - (1024*mib + (4096*mib*20)/100 + (8192*mib*10)/100 + (49152*mib*6)/100) - 100*mib},
+		{name: "128GiB tier-4 boundary", memoryMb: 131072, want: 131072*mib - (1024*mib + (4096*mib*20)/100 + (8192*mib*10)/100 + (114688*mib*6)/100) - 100*mib},
+		{name: "256GiB n2d-standard-64 tier-5", memoryMb: 262144, want: 262144*mib - (1024*mib + (4096*mib*20)/100 + (8192*mib*10)/100 + (114688*mib*6)/100 + (131072*mib*2)/100) - 100*mib},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := calculateAllocatableMemoryBytes(tc.memoryMb); got != tc.want {
+				t.Errorf("calculateAllocatableMemoryBytes(%d) = %d, want %d", tc.memoryMb, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateCPUJobResources(t *testing.T) {
+	t.Parallel()
+	n2d64 := JobProfile{IsCPUMachine: true, CapacityCount: 64, MemoryMb: 262144}
+	for _, tc := range []struct {
+		name        string
+		machineType string
+		cpuReq      string
+		memReq      string
+		profile     JobProfile
+		wantErr     string
+	}{
+		{name: "no overrides passes even for accelerator", machineType: "a3-highgpu-8g", profile: JobProfile{IsCPUMachine: false}},
+		{name: "valid fractional CPU and memory", machineType: "n2d-standard-64", cpuReq: "8", memReq: "64Gi", profile: n2d64},
+		{name: "valid memory only", machineType: "n2d-standard-64", memReq: "200G", profile: n2d64},
+		{name: "valid CPU at exact allocatable ceiling", machineType: "n2d-standard-64", cpuReq: "63770m", profile: n2d64},
+		{name: "valid memory at exact pre-1.37.2 allocatable ceiling", machineType: "n2d-standard-64", memReq: fmt.Sprintf("%d", calculateAllocatableMemoryBytes(262144)), profile: n2d64},
+		{name: "memory 1 byte over 1.37.2+ max allocatable fails with human-readable Mi/Gi", machineType: "n2d-standard-64", memReq: fmt.Sprintf("%d", calculateMaxAllocatableMemoryBytes(262144)+1), profile: n2d64, wantErr: "Mi (~"},
+		{name: "CPU exceeding allocatable fails with effective vCPUs", machineType: "n2d-standard-64", cpuReq: "64", profile: n2d64, wantErr: "from 64 effective vCPUs"},
+		{name: "large node CPU exceeding 1.37.2+ max allocatable fails", machineType: "m2-hypermem-416", cpuReq: "415001m", profile: JobProfile{IsCPUMachine: true, CapacityCount: 416, MemoryMb: 12288000}, wantErr: "exceeds estimated GKE 1.37.2+ upper-bound allocatable CPU (415 from 416 effective vCPUs)"},
+		{name: "memory exceeding 1.37.2+ max allocatable fails with human-readable units", machineType: "n2d-standard-64", memReq: "256Gi", profile: n2d64, wantErr: "exceeds estimated GKE 1.37.2+ upper-bound allocatable memory (261424Mi (~255Gi))"},
+		{name: "overflow-scale CPU rejected via Cmp", machineType: "n2d-standard-64", cpuReq: "10000000000000000", profile: n2d64, wantErr: "exceeds estimated allocatable CPU"},
+		{name: "overflow-scale memory rejected via Cmp", machineType: "n2d-standard-64", memReq: "10000000000Ei", profile: n2d64, wantErr: "exceeds estimated GKE 1.37.2+ upper-bound allocatable memory"},
+		{name: "shared-core e2-medium uses 1 effective vCPU", machineType: "e2-medium", cpuReq: "1", profile: JobProfile{IsCPUMachine: true, CapacityCount: 1, MemoryMb: 4096}, wantErr: "exceeds estimated allocatable CPU"},
+		{name: "threads_per_core=1 effective vCPU is not halved twice", machineType: "n2-standard-32", cpuReq: "15", profile: JobProfile{IsCPUMachine: true, CapacityCount: 16, MemoryMb: 131072}},
+		{name: "GPU machine rejected", machineType: "g2-standard-12", cpuReq: "4", profile: JobProfile{IsCPUMachine: false}, wantErr: "not accelerator machine type"},
+		{name: "TPU machine rejected", machineType: "ct6e-standard-4t", memReq: "32Gi", profile: JobProfile{IsCPUMachine: false}, wantErr: "not accelerator machine type"},
+		{name: "zero CapacityCount and MemoryMb skip bound checks cleanly", machineType: "n2d-standard-64", cpuReq: "8", memReq: "64Gi", profile: JobProfile{IsCPUMachine: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateCPUJobResources(tc.machineType, tc.cpuReq, tc.memReq, tc.profile)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("validateCPUJobResources() err = %v, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("validateCPUJobResources() unexpected err: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateCPUJobResources_GKE137WarningBand(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		machineType string
+		cpuReq      string
+		memReq      string
+		profile     JobProfile
+		wantWarn    string
+	}{
+		{
+			name:        "n2-standard-32 124Gi warns above pre-1.37.2 estimate without citing default max-pods",
+			machineType: "n2-standard-32",
+			memReq:      "124Gi",
+			profile:     JobProfile{IsCPUMachine: true, CapacityCount: 32, MemoryMb: 131072},
+			wantWarn:    "or with higher max-pods-per-node",
+		},
+		{
+			name:        "n2-standard-32 126Gi warns above GKE 1.37.2 default-110-pod estimate",
+			machineType: "n2-standard-32",
+			memReq:      "126Gi",
+			profile:     JobProfile{IsCPUMachine: true, CapacityCount: 32, MemoryMb: 131072},
+			wantWarn:    "default or higher max-pods-per-node",
+		},
+		{
+			name:        "n2d-standard-64 250Gi warns above pre-1.37.2 estimate without rejecting",
+			machineType: "n2d-standard-64",
+			memReq:      "250Gi",
+			profile:     JobProfile{IsCPUMachine: true, CapacityCount: 64, MemoryMb: 262144},
+			wantWarn:    "pre-GKE 1.37.2 tiered allocatable estimate (249878Mi (~244Gi))",
+		},
+		{
+			name:        "m2-hypermem-416 414950m warns above pre-1.37.2 estimate without rejecting",
+			machineType: "m2-hypermem-416",
+			cpuReq:      "414950m",
+			profile:     JobProfile{IsCPUMachine: true, CapacityCount: 416, MemoryMb: 12288000},
+			wantWarn:    "pre-GKE 1.37.2 tiered allocatable estimate (414890m from 416 effective vCPUs)",
+		},
+		{
+			name:        "requests within pre-1.37.2 estimate emit no warning",
+			machineType: "n2d-standard-64",
+			cpuReq:      "63770m",
+			memReq:      "240Gi",
+			profile:     JobProfile{IsCPUMachine: true, CapacityCount: 64, MemoryMb: 262144},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot, restore := logging.CaptureForTesting(t)
+			defer restore()
+			if err := validateCPUJobResources(tc.machineType, tc.cpuReq, tc.memReq, tc.profile); err != nil {
+				t.Fatalf("validateCPUJobResources() unexpected err: %v", err)
+			}
+			restore()
+			_, warnLogs := snapshot()
+			if tc.wantWarn == "" {
+				if warnLogs != "" {
+					t.Errorf("expected no warnings, got:\n%s", warnLogs)
+				}
+				return
+			}
+			if !strings.Contains(warnLogs, tc.wantWarn) {
+				t.Errorf("expected warning containing %q, got:\n%s", tc.wantWarn, warnLogs)
+			}
+		})
+	}
+}
+
+func TestResolveHardwareRequirements_CPUMemoryValidation(t *testing.T) {
+	t.Parallel()
+	newOrc := func(machineType string, guestCpus, memMb int, threadsPerCore string) *GKEOrchestrator {
+		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{}))
+		orc.projectID = "test-project"
+		orc.clusterZones = []string{"us-central1-a"}
+		np := gkeJobNodePool{Name: "cpu-np", Config: gkeNodePoolConfig{MachineType: machineType}}
+		if threadsPerCore != "" {
+			np.Config.AdvancedMachineFeatures = &gkeAdvancedMachineFeatures{ThreadsPerCore: threadsPerCore}
+		}
+		orc.clusterDesc.NodePools = []gkeJobNodePool{np}
+		orc.machineTypeClient = &MockMachineTypeClient{
+			MT: &compute.MachineType{Name: machineType, GuestCpus: int64(guestCpus), MemoryMb: int64(memMb)},
+		}
+		return orc
+	}
+
+	t.Run("threads_per_core=1 allows 15 CPU on 32-vCPU machine (single halving) and rejects 16", func(t *testing.T) {
+		t.Parallel()
+		orc := newOrc("n2-standard-32", 32, 131072, "1")
+		job := orchestrator.JobDefinition{
+			ComputeType: "n2-standard-32", ClusterLocation: "us-central1-a", CPURequest: "15", MemoryRequest: "64Gi",
+		}
+		profile, _, _, err := orc.resolveHardwareRequirements(&job)
+		if err != nil {
+			t.Fatalf("expected 15 CPU / 64Gi to fit on threads_per_core=1 n2-standard-32, got: %v", err)
+		}
+		if !profile.IsCPUMachine || profile.CapacityCount != 16 || profile.MemoryMb != 131072 {
+			t.Errorf("unexpected profile: %+v", profile)
+		}
+
+		tooLarge := job
+		tooLarge.CPURequest = "16"
+		if _, _, _, err := orc.resolveHardwareRequirements(&tooLarge); err == nil || !strings.Contains(err.Error(), "exceeds estimated allocatable CPU") {
+			t.Fatalf("expected 16 CPU to exceed allocatable on threads_per_core=1 n2-standard-32, got: %v", err)
+		}
+	})
+
+	t.Run("rejects memory above allocatable before cluster mounts or build", func(t *testing.T) {
+		t.Parallel()
+		orc := newOrc("n2d-standard-64", 64, 262144, "")
+		job := orchestrator.JobDefinition{
+			ComputeType: "n2d-standard-64", ClusterLocation: "us-central1-a", MemoryRequest: "256Gi",
+		}
+		if _, _, _, err := orc.resolveHardwareRequirements(&job); err == nil || !strings.Contains(err.Error(), "exceeds estimated GKE 1.37.2+ upper-bound allocatable memory") {
+			t.Fatalf("got err = %v, want allocatable memory error", err)
+		}
+	})
+
+	t.Run("rejects dynamically discovered GPU machine type with --cpu", func(t *testing.T) {
+		t.Parallel()
+		orc := newOrc("custom-gpu-box", 16, 65536, "")
+		orc.machineTypeClient = &MockMachineTypeClient{
+			MT: &compute.MachineType{
+				Name:         "custom-gpu-box",
+				GuestCpus:    16,
+				MemoryMb:     65536,
+				Accelerators: []*compute.MachineTypeAccelerators{{GuestAcceleratorCount: 1, GuestAcceleratorType: "nvidia-l4"}},
+			},
+		}
+		job := orchestrator.JobDefinition{
+			ComputeType: "custom-gpu-box", ClusterLocation: "us-central1-a", CPURequest: "4",
+		}
+		if _, _, _, err := orc.resolveHardwareRequirements(&job); err == nil || !strings.Contains(err.Error(), "not accelerator machine type") {
+			t.Fatalf("got err = %v, want accelerator machine rejection", err)
+		}
+	})
+}
+
+func TestFormatAllocatableMemory(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		bytes int64
+		want  string
+	}{
+		{bytes: 0, want: "0 bytes"},
+		{bytes: 512, want: "512 bytes"},
+		{bytes: mibBytes, want: "1Mi"},
+		{bytes: 157 * mibBytes, want: "157Mi"},
+		{bytes: 1024 * mibBytes, want: "1024Mi (~1Gi)"},
+		{bytes: 121428 * mibBytes, want: "121428Mi (~118Gi)"},
+		{bytes: calculateAllocatableMemoryBytes(262144), want: "249878Mi (~244Gi)"},
+		{bytes: calculateAllocatableMemoryBytes(262144) - gcsFuseMemoryBytes, want: "249622Mi (~243Gi)"},
+	} {
+		if got := formatAllocatableMemory(tc.bytes); got != tc.want {
+			t.Errorf("formatAllocatableMemory(%d) = %q, want %q", tc.bytes, got, tc.want)
+		}
+	}
+}
+
+func TestResolveHardwareRequirements_AttachedGPURejectsCPUMemory(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		computeType string
+	}{
+		{name: "known nvidia-tesla-t4 label", computeType: "nvidia-tesla-t4"},
+		{name: "non-nvidia attached accelerator exercises acceleratorToMachineType guard", computeType: "custom-attached-accel"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{}))
+			orc.projectID = "test-project"
+			orc.clusterZones = []string{"us-central1-a"}
+			orc.clusterDesc.NodePools = []gkeJobNodePool{
+				{Name: "gpu-np", Config: gkeNodePoolConfig{MachineType: "n1-standard-8"}},
+			}
+			orc.machineTypeClient = &MockMachineTypeClient{
+				MT: &compute.MachineType{Name: "n1-standard-8", GuestCpus: 8, MemoryMb: 30720},
+			}
+			orc.acceleratorToMachineType = map[string]string{tc.computeType: "n1-standard-8"}
+			job := orchestrator.JobDefinition{
+				ComputeType: tc.computeType, ClusterLocation: "us-central1-a", CPURequest: "4",
+			}
+			if _, _, _, err := orc.resolveHardwareRequirements(&job); err == nil || !strings.Contains(err.Error(), "not accelerator machine type") {
+				t.Fatalf("got err = %v, want attached-GPU accelerator rejection", err)
+			}
+		})
+	}
+
+	t.Run("static cluster rejects n1-standard-8 when all matching pools have attached GPUs", func(t *testing.T) {
+		t.Parallel()
+		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{}))
+		orc.projectID = "test-project"
+		orc.clusterZones = []string{"us-central1-a"}
+		orc.clusterDesc.NodePools = []gkeJobNodePool{
+			{
+				Name:             "gpu-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType:  "n1-standard-8",
+					Accelerators: []gkeAccelerator{{AcceleratorType: "nvidia-tesla-t4", AcceleratorCount: "1"}},
+				},
+			},
+		}
+		orc.machineTypeClient = &MockMachineTypeClient{
+			MT: &compute.MachineType{Name: "n1-standard-8", GuestCpus: 8, MemoryMb: 30720},
+		}
+		orc.acceleratorToMachineType = map[string]string{"nvidia-tesla-t4": "n1-standard-8"}
+		job := orchestrator.JobDefinition{
+			ComputeType: "n1-standard-8", ClusterLocation: "us-central1-a", CPURequest: "4",
+		}
+		if _, _, _, err := orc.resolveHardwareRequirements(&job); err == nil || !strings.Contains(err.Error(), "not accelerator machine type") {
+			t.Fatalf("got err = %v, want rejection when all matching static pools have attached GPUs", err)
+		}
+	})
+
+	t.Run("static cluster allows n1-standard-8 when a CPU-only matching pool also exists", func(t *testing.T) {
+		t.Parallel()
+		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{}))
+		orc.projectID = "test-project"
+		orc.clusterZones = []string{"us-central1-a"}
+		orc.clusterDesc.NodePools = []gkeJobNodePool{
+			{
+				Name:             "gpu-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType:  "n1-standard-8",
+					Accelerators: []gkeAccelerator{{AcceleratorType: "nvidia-tesla-t4", AcceleratorCount: "1"}},
+				},
+			},
+			{Name: "cpu-np", InitialNodeCount: 1, Config: gkeNodePoolConfig{MachineType: "n1-standard-8"}},
+		}
+		orc.machineTypeClient = &MockMachineTypeClient{
+			MT: &compute.MachineType{Name: "n1-standard-8", GuestCpus: 8, MemoryMb: 30720},
+		}
+		job := orchestrator.JobDefinition{
+			ComputeType: "n1-standard-8", ClusterLocation: "us-central1-a", CPURequest: "4",
+		}
+		profile, _, _, err := orc.resolveHardwareRequirements(&job)
+		if err != nil || !profile.IsCPUMachine {
+			t.Fatalf("resolveHardwareRequirements(mixed static n1-standard-8) = (profile=%+v, err=%v), want CPU profile", profile, err)
+		}
+	})
+
+	t.Run("NAP cluster allows n1-standard-8 even when existing static pool has attached GPUs", func(t *testing.T) {
+		t.Parallel()
+		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{}))
+		orc.projectID = "test-project"
+		orc.clusterZones = []string{"us-central1-a"}
+		orc.napEnabled = true
+		orc.napLimits = map[string]int64{"cpu": 64}
+		orc.clusterDesc.NodePools = []gkeJobNodePool{
+			{
+				Name:             "gpu-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType:  "n1-standard-8",
+					Accelerators: []gkeAccelerator{{AcceleratorType: "nvidia-tesla-t4", AcceleratorCount: "1"}},
+				},
+			},
+		}
+		orc.machineTypeClient = &MockMachineTypeClient{
+			MT: &compute.MachineType{Name: "n1-standard-8", GuestCpus: 8, MemoryMb: 30720},
+		}
+		job := orchestrator.JobDefinition{
+			ComputeType: "n1-standard-8", ClusterLocation: "us-central1-a", CPURequest: "4",
+		}
+		profile, _, _, err := orc.resolveHardwareRequirements(&job)
+		if err != nil || !profile.IsCPUMachine {
+			t.Fatalf("resolveHardwareRequirements(NAP n1-standard-8) = (profile=%+v, err=%v), want CPU profile", profile, err)
+		}
+	})
+}
+
+func TestResolveHardwareRequirements_StaticAttachedGPUEdgeCases(t *testing.T) {
+	t.Parallel()
+	t.Run("static cluster rejects n1-standard-8 when CPU-only matching pool has 0 nodes", func(t *testing.T) {
+		t.Parallel()
+		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{}))
+		orc.projectID = "test-project"
+		orc.clusterZones = []string{"us-central1-a"}
+		orc.clusterDesc.NodePools = []gkeJobNodePool{
+			{
+				Name:             "gpu-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType:  "n1-standard-8",
+					Accelerators: []gkeAccelerator{{AcceleratorType: "nvidia-tesla-t4", AcceleratorCount: "1"}},
+				},
+			},
+			{Name: "zero-cpu-np", InitialNodeCount: 0, Config: gkeNodePoolConfig{MachineType: "n1-standard-8"}},
+		}
+		orc.machineTypeClient = &MockMachineTypeClient{
+			MT: &compute.MachineType{Name: "n1-standard-8", GuestCpus: 8, MemoryMb: 30720},
+		}
+		job := orchestrator.JobDefinition{
+			ComputeType: "n1-standard-8", ClusterLocation: "us-central1-a", CPURequest: "4",
+		}
+		if _, _, _, err := orc.resolveHardwareRequirements(&job); err == nil || !strings.Contains(err.Error(), "not accelerator machine type") {
+			t.Fatalf("got err = %v, want rejection when CPU-only matching pool has 0 nodes", err)
+		}
+	})
+
+	t.Run("static cluster gives actionable attached-GPU error for non-fractional n1-standard-8", func(t *testing.T) {
+		t.Parallel()
+		orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{}))
+		orc.projectID = "test-project"
+		orc.clusterZones = []string{"us-central1-a"}
+		orc.clusterDesc.NodePools = []gkeJobNodePool{
+			{
+				Name:             "gpu-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType:  "n1-standard-8",
+					Accelerators: []gkeAccelerator{{AcceleratorType: "nvidia-tesla-t4", AcceleratorCount: "1"}},
+				},
+			},
+		}
+		orc.machineTypeClient = &MockMachineTypeClient{
+			MT: &compute.MachineType{Name: "n1-standard-8", GuestCpus: 8, MemoryMb: 30720},
+		}
+		job := orchestrator.JobDefinition{
+			ComputeType: "n1-standard-8", ClusterLocation: "us-central1-a",
+		}
+		if _, _, _, err := orc.resolveHardwareRequirements(&job); err == nil || !strings.Contains(err.Error(), "--compute-type nvidia-tesla-t4") {
+			t.Fatalf("got err = %v, want actionable --compute-type nvidia-tesla-t4 error", err)
+		}
+	})
+}
+
+func TestResolveHardwareRequirements_NAPCPUWithoutStaticPool(t *testing.T) {
+	t.Parallel()
+	orc := newTestGKEOrchestrator(NewMockExecutor(map[string][]shell.CommandResult{}))
+	orc.projectID = "test-project"
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.napEnabled = true
+	orc.napLimits = map[string]int64{"cpu": 256}
+	orc.clusterDesc.NodePools = []gkeJobNodePool{
+		{Name: "cpu-np", Config: gkeNodePoolConfig{MachineType: "n2d-standard-64"}},
+	}
+	orc.machineTypeClient = &MockMachineTypeClient{
+		MT: &compute.MachineType{Name: "c3-standard-44", GuestCpus: 44, MemoryMb: 180224},
+	}
+	job := orchestrator.JobDefinition{
+		ComputeType:        "c3-standard-44",
+		ClusterLocation:    "us-central1-a",
+		CPURequest:         "8",
+		MemoryRequest:      "64Gi",
+		GKENAPProvisioning: "spot",
+	}
+	profile, _, _, err := orc.resolveHardwareRequirements(&job)
+	if err != nil {
+		t.Fatalf("NAP CPU resolveHardwareRequirements without static pool failed: %v", err)
+	}
+	if !profile.IsCPUMachine || job.MachineType != "c3-standard-44" || profile.CapacityCount != 44 {
+		t.Errorf("unexpected resolution: machineType=%q profile=%+v", job.MachineType, profile)
+	}
+}
+
+func TestResolveJobMachineType_NAPCPUFallbackAndMixedCaseStatic(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		napEnabled  bool
+		computeType string
+		want        string
+		wantErr     string
+	}{
+		{name: "NAP mixed-case CPU machine normalized", napEnabled: true, computeType: " C3-Standard-44 ", want: "c3-standard-44"},
+		{name: "static mixed-case matching pool returns canonical lowercase", napEnabled: false, computeType: "N2D-Standard-64", want: "n2d-standard-64"},
+		{name: "static unmatched CPU machine rejected", napEnabled: false, computeType: "c3-standard-44", wantErr: "not a known shorthand"},
+		{name: "NAP TPU shorthand without pool rejected", napEnabled: true, computeType: "v5e-16", wantErr: "no matching machine types found in cluster"},
+		{name: "NAP attached GPU label rejected", napEnabled: true, computeType: "nvidia-tesla-t4", wantErr: "not a known shorthand"},
+		{name: "NAP unknown-count GPU shorthand rejected", napEnabled: true, computeType: "h100-16", wantErr: "no matching machine types found in cluster"},
+		{name: "NAP v7x shorthand rejected", napEnabled: true, computeType: "v7x-8", wantErr: "not a known shorthand"},
+		{name: "NAP non-hyphenated bogus compute type rejected", napEnabled: true, computeType: "bogus", wantErr: "not a known shorthand"},
+		{name: "NAP family-prefixed custom machine rejected with predefined guidance", napEnabled: true, computeType: "n2-custom-8-32768", wantErr: "predefined non-legacy GCE machine type"},
+		{name: "NAP legacy custom machine rejected with predefined guidance", napEnabled: true, computeType: "custom-8-32768", wantErr: "predefined non-legacy GCE machine type"},
+		{name: "NAP f1-micro rejected with predefined guidance", napEnabled: true, computeType: "f1-micro", wantErr: "predefined non-legacy GCE machine type"},
+		{name: "NAP g1-small rejected with predefined guidance", napEnabled: true, computeType: "g1-small", wantErr: "predefined non-legacy GCE machine type"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			orc := newTestGKEOrchestrator(nil)
+			orc.napEnabled = tc.napEnabled
+			orc.clusterDesc.NodePools = []gkeJobNodePool{
+				{Name: "cpu-np", Config: gkeNodePoolConfig{MachineType: "n2d-standard-64"}},
+			}
+			got, err := orc.resolveJobMachineType(tc.computeType, "", "", false)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("resolveJobMachineType(%q) err = %v, want substring %q", tc.computeType, err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveJobMachineType(%q) unexpected err: %v", tc.computeType, err)
+			}
+			if got != tc.want {
+				t.Errorf("resolveJobMachineType(%q) = %q, want %q", tc.computeType, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolveJobMachineType_NAPUnsupportedPoolFiltering(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name            string
+		pools           []gkeJobNodePool
+		computeType     string
+		provisioning    string
+		hasComputeClass bool
+		want            string
+		wantErr         string
+	}{
+		{
+			name:        "NAP f1-micro in default-pool only is still rejected",
+			pools:       []gkeJobNodePool{{Name: "default-pool", InitialNodeCount: 2, Config: gkeNodePoolConfig{MachineType: "f1-micro"}}},
+			computeType: "f1-micro",
+			wantErr:     "predefined non-legacy GCE machine type",
+		},
+		{
+			name:        "NAP custom shape in 0-node pool only is still rejected",
+			pools:       []gkeJobNodePool{{Name: "custom-np", InitialNodeCount: 0, Config: gkeNodePoolConfig{MachineType: "n2-custom-8-32768"}}},
+			computeType: "n2-custom-8-32768",
+			wantErr:     "predefined non-legacy GCE machine type",
+		},
+		{
+			name: "NAP custom shape in tainted system pool only is still rejected",
+			pools: []gkeJobNodePool{{
+				Name:             "sys-np",
+				InitialNodeCount: 2,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2-custom-8-32768",
+					Taints:      []gkeTaint{{Key: k8s.GKESystemTaintKey, Value: "true", Effect: "NO_SCHEDULE"}},
+				},
+			}},
+			computeType: "n2-custom-8-32768",
+			wantErr:     "predefined non-legacy GCE machine type",
+		},
+		{
+			name:         "NAP custom shape in on-demand static pool rejected for spot request",
+			pools:        []gkeJobNodePool{{Name: "custom-np", InitialNodeCount: 1, Config: gkeNodePoolConfig{MachineType: "n2-custom-8-32768"}}},
+			computeType:  "n2-custom-8-32768",
+			provisioning: "spot",
+			wantErr:      "predefined non-legacy GCE machine type",
+		},
+		{
+			name:            "NAP custom shape allowed when Custom ComputeClass is specified",
+			computeType:     "n4-custom-8-20480",
+			hasComputeClass: true,
+			want:            "n4-custom-8-20480",
+		},
+		{
+			name:        "NAP custom shape in eligible non-system static pool is allowed",
+			pools:       []gkeJobNodePool{{Name: "custom-np", InitialNodeCount: 1, Config: gkeNodePoolConfig{MachineType: "n2-custom-8-32768"}}},
+			computeType: "n2-custom-8-32768",
+			want:        "n2-custom-8-32768",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			orc := newTestGKEOrchestrator(nil)
+			orc.napEnabled = true
+			orc.clusterDesc.NodePools = tc.pools
+			got, err := orc.resolveJobMachineType(tc.computeType, tc.provisioning, "", tc.hasComputeClass)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("resolveJobMachineType(%q) err = %v, want substring %q", tc.computeType, err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Fatalf("resolveJobMachineType(%q) = (%q, %v), want (%q, nil)", tc.computeType, got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolveHardwareRequirements_TypeK8sCPUMemory(t *testing.T) {
+	t.Parallel()
+	cpuPool := k8s.PoolCapacity{
+		AllocatableCPUMilli: 15800,
+		MemMiBPerNode:       32768,
+		ReadyNodes:          2,
+	}
+	gpuPool := k8s.PoolCapacity{
+		MachineType:     "mi300x-node",
+		IsGPU:           true,
+		GPUsPerNode:     8,
+		GPUResourceName: "amd.com/gpu",
+		ReadyNodes:      1,
+	}
+	tpuPool := k8s.PoolCapacity{
+		MachineType: "ct6e-standard-4t",
+		IsTPU:       true,
+		TPUType:     "v6e",
+		TPUsPerNode: 4,
+		Topologies:  []string{"2x2"},
+		ReadyNodes:  1,
+	}
+
+	for _, tc := range []struct {
+		name    string
+		inv     *k8s.Inventory
+		job     orchestrator.JobDefinition
+		wantErr string
+	}{
+		{
+			name: "unlabeled CPU pool accepts fractional --cpu and --memory without --compute-type",
+			inv: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				CPUPoolCap:  &cpuPool,
+				PoolNames:   []string{"cpu"},
+				Pools:       map[string]k8s.PoolCapacity{"cpu": cpuPool},
+			},
+			job: orchestrator.JobDefinition{CPURequest: "4", MemoryRequest: "16Gi"},
+		},
+		{
+			name: "unlabeled CPU pool rejects --cpu above node allocatable",
+			inv: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				CPUPoolCap:  &cpuPool,
+				PoolNames:   []string{"cpu"},
+				Pools:       map[string]k8s.PoolCapacity{"cpu": cpuPool},
+			},
+			job:     orchestrator.JobDefinition{CPURequest: "16"},
+			wantErr: "exceeds node allocatable CPU (15800m)",
+		},
+		{
+			name: "unlabeled CPU pool rejects --memory above node allocatable",
+			inv: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				CPUPoolCap:  &cpuPool,
+				PoolNames:   []string{"cpu"},
+				Pools:       map[string]k8s.PoolCapacity{"cpu": cpuPool},
+			},
+			job:     orchestrator.JobDefinition{MemoryRequest: "33Gi"},
+			wantErr: "exceeds node allocatable memory (32768Mi (~32Gi))",
+		},
+		{
+			name: "GPU pool rejects --cpu",
+			inv: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGeneric,
+				PoolNames:   []string{"mi300x-node"},
+				Pools:       map[string]k8s.PoolCapacity{"mi300x-node": gpuPool},
+			},
+			job:     orchestrator.JobDefinition{ComputeType: "mi300x-node", CPURequest: "4"},
+			wantErr: "not accelerator machine type",
+		},
+		{
+			name: "TPU pool rejects --memory",
+			inv: &k8s.Inventory{
+				LabelScheme: k8s.SchemeGKE,
+				TPUPoolCap:  &tpuPool,
+				PoolNames:   []string{"ct6e-standard-4t"},
+				Pools:       map[string]k8s.PoolCapacity{"ct6e-standard-4t": tpuPool},
+			},
+			job:     orchestrator.JobDefinition{ComputeType: "ct6e-standard-4t", Topology: "2x2", MemoryRequest: "16Gi"},
+			wantErr: "not accelerator machine type",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			orc := newTestGKEOrchestrator(nil)
+			orc.mode = orchestrator.TypeK8s
+			orc.inventory = tc.inv
+			job := tc.job
+			profile, _, _, err := orc.resolveHardwareRequirements(&job)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("resolveHardwareRequirements() err = %v, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveHardwareRequirements() unexpected err: %v", err)
+			}
+			if !profile.IsCPUMachine || profile.AllocatableCPUMilli != 15800 {
+				t.Errorf("got profile = %+v, want CPU profile with AllocatableCPUMilli=15800", profile)
 			}
 		})
 	}

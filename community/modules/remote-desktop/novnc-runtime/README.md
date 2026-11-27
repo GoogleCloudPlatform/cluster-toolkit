@@ -49,9 +49,9 @@ mean an authenticated TCP mode, which means extending the backend classes in
 - `vnc_backend`
   - `tigervnc` or `turbovnc`
 - `enable_gpu_acceleration`
-  - hardware OpenGL via VirtualGL; requires `vnc_backend = "turbovnc"` and an
-    image with a graphics-capable NVIDIA driver. Falls back to software
-    otherwise. See `internal/desktop-broker`.
+  - hardware OpenGL; `vnc_backend = "turbovnc"` is recommended, and the image
+    needs a graphics-capable NVIDIA driver. Falls back to software otherwise.
+    See `internal/desktop-broker`.
 
 ## Access
 
@@ -113,7 +113,7 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_enable_gpu_acceleration"></a> [enable\_gpu\_acceleration](#input\_enable\_gpu\_acceleration) | Use hardware OpenGL for desktop sessions. Requires a GPU on the host and an<br/>image whose NVIDIA driver has graphics (not merely compute) support; falls<br/>back to software rendering otherwise. Requires vnc\_backend = "turbovnc".<br/>See community/examples/remote-desktop/README.md for which image to use. | `bool` | `false` | no |
+| <a name="input_enable_gpu_acceleration"></a> [enable\_gpu\_acceleration](#input\_enable\_gpu\_acceleration) | Use hardware OpenGL for desktop sessions. Requires a GPU on the host and an<br/>image whose NVIDIA driver has graphics (not merely compute) support; falls<br/>back to software rendering otherwise. vnc\_backend = "turbovnc" is<br/>recommended. See community/examples/remote-desktop/README.md for which<br/>image to use. | `bool` | `false` | no |
 | <a name="input_install_root"></a> [install\_root](#input\_install\_root) | Directory under which noVNC assets are installed. | `string` | `"/opt/ghpc-remote-desktop"` | no |
 | <a name="input_max_user_sessions"></a> [max\_user\_sessions](#input\_max\_user\_sessions) | Maximum number of concurrent per-user desktop sessions the host VM will support. | `number` | `32` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. | <pre>list(object({<br/>    server_ip             = string<br/>    remote_mount          = string<br/>    local_mount           = string<br/>    fs_type               = string<br/>    mount_options         = string<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  }))</pre> | `[]` | no |

@@ -53,7 +53,7 @@ func loadContext() (Context, error) {
 	var ctx Context
 	if err := json.Unmarshal(data, &ctx); err != nil {
 		logging.Error("Failed to unmarshal context from %s: %v", filePath, err)
-		return Context{}, err
+		return Context{}, fmt.Errorf("failed to parse saved job config %s: %w (run 'gcluster job config unset all' to reset)", filePath, err)
 	}
 	return ctx, nil
 }

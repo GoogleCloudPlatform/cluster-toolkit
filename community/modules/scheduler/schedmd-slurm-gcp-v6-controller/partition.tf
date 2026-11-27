@@ -16,9 +16,6 @@ locals {
   nodeset_map_ell = { for x in var.nodeset : x.nodeset_name => x... }
   nodeset_map     = { for k, vs in local.nodeset_map_ell : k => vs[0] }
 
-  nodeset_tpu_map_ell = { for x in var.nodeset_tpu : x.nodeset_name => x... }
-  nodeset_tpu_map     = { for k, vs in local.nodeset_tpu_map_ell : k => vs[0] }
-
   nodeset_dyn_map_ell = { for x in var.nodeset_dyn : x.nodeset_name => x... }
   nodeset_dyn_map     = { for k, vs in local.nodeset_dyn_map_ell : k => vs[0] }
 
@@ -109,31 +106,74 @@ module "nodeset_cleanup" {
 }
 
 locals {
-  # NodeSet-level engine resolution: DWS Flex automatically resolves to MIG; standard compute nodes default to BULK_INSERT (MIG is strictly opt-in)
-  nodeset_resolved_engine = {
-    for name, ns in local.nodeset_map : name => (
-      ns.dws_flex.enabled && !ns.dws_flex.use_bulk_insert ? "MIG" : (
-        try(ns.provisioning_engine, "AUTO") == "MIG" ? "MIG" :
-        "BULK_INSERT"
-      )
-    )
-  }
-
   # GPU count resolution: uses ns.gpu_count, falls back to ns.gpu.count, then 4
   nodeset_gpu_count = {
     for name, ns in local.nodeset_map : name => coalesce(try(ns.gpu_count, null), try(ns.gpu.count, null), 4)
   }
 
   # Slicing size for MIG NodeSets: for accelerator topologies (e.g. A4X with 1x72),
-  # slice size is (dim1 * dim2) / gpus_per_vm. Kept null when no topology is configured.
+  # slice size is (dim1 * dim2) / gpus_per_vm. Kept null when no 2D GPU topology is configured.
   nodeset_slice_size = {
     for name, ns in local.nodeset_map : name => (
-      ns.accelerator_topology != null && ns.accelerator_topology != "" ? (
+      ns.accelerator_topology != null && trimspace(ns.accelerator_topology) != "" &&
+      !try(startswith(ns.machine_type, "ct") || startswith(ns.machine_type, "tpu"), false) &&
+      can(regex("^[1-9][0-9]*[xX][1-9][0-9]*$", trimspace(ns.accelerator_topology))) ? (
         max(1, floor(
           (tonumber(split("x", lower(trimspace(ns.accelerator_topology)))[0]) * tonumber(split("x", lower(trimspace(ns.accelerator_topology)))[1])) /
           max(1, local.nodeset_gpu_count[name])
         ))
       ) : null
+    )
+  }
+
+  # Defense-in-depth AUTO resolution (matches schedmd-slurm-gcp-v6-nodeset/main.tf) for callers
+  # passing raw provisioning_engine = "AUTO" directly to the controller module.
+  nodeset_auto_mig_eligible = {
+    for name, ns in local.nodeset_map : name => (
+      !ns.dws_flex.enabled &&
+      !try(startswith(ns.machine_type, "ct") || startswith(ns.machine_type, "tpu"), false) &&
+      ns.node_count_static > 0 &&
+      ns.node_count_dynamic_max == 0 &&
+      (ns.reservation_name == null || ns.reservation_name == "") &&
+      (ns.future_reservation == null || ns.future_reservation == "") &&
+      (ns.maintenance_interval == null || trimspace(ns.maintenance_interval) == "") &&
+      !try(
+        jsondecode(ns.instance_properties_json) != null && try(length(jsondecode(ns.instance_properties_json)) > 0, true),
+        ns.instance_properties_json != null &&
+        trimspace(ns.instance_properties_json) != "" &&
+        trimspace(ns.instance_properties_json) != "null" &&
+        trimspace(ns.instance_properties_json) != "{}"
+      ) &&
+      (
+        (!ns.enable_placement && (ns.accelerator_topology == null || trimspace(ns.accelerator_topology) == "")) || (
+          ns.accelerator_topology != null &&
+          trimspace(ns.accelerator_topology) != "" &&
+          try(can(regex("^a4x-", ns.machine_type)), false) &&
+          local.nodeset_slice_size[name] != null &&
+          (ns.zone_target_shape == null || ns.zone_target_shape == "" || ns.zone_target_shape == "ANY_SINGLE_ZONE") &&
+          try(
+            tonumber(split("x", lower(trimspace(ns.accelerator_topology)))[1]) % max(1, local.nodeset_gpu_count[name]) == 0 &&
+            ns.node_count_static % local.nodeset_slice_size[name] == 0,
+            false
+          )
+        )
+      )
+    )
+  }
+
+  # NodeSet-level engine resolution:
+  # - DWS Flex (unless use_bulk_insert = true) resolves to MIG.
+  # - Explicit MIG and BULK_INSERT are honored directly.
+  # - AUTO routes eligible pure-static NodeSets to MIG and falls back to BULK_INSERT otherwise.
+  nodeset_resolved_engine = {
+    for name, ns in local.nodeset_map : name => (
+      ns.dws_flex.enabled && !ns.dws_flex.use_bulk_insert ? "MIG" : (
+        try(ns.provisioning_engine, "AUTO") == "MIG" ? "MIG" : (
+          try(ns.provisioning_engine, "AUTO") == "BULK_INSERT" ? "BULK_INSERT" : (
+            local.nodeset_auto_mig_eligible[name] ? "MIG" : "BULK_INSERT"
+          )
+        )
+      )
     )
   }
 
@@ -365,50 +405,6 @@ locals {
   }]
 }
 
-# NODESET TPU
-module "slurm_nodeset_tpu" {
-  source   = "../../internal/slurm-gcp/nodeset_tpu"
-  for_each = local.nodeset_tpu_map
-
-  project_id             = var.project_id
-  node_count_dynamic_max = each.value.node_count_dynamic_max
-  node_count_static      = each.value.node_count_static
-  nodeset_name           = each.value.nodeset_name
-  zone                   = each.value.zone
-  node_type              = each.value.node_type
-  accelerator_config     = each.value.accelerator_config
-  tf_version             = each.value.tf_version
-  preemptible            = each.value.preemptible
-  preserve_tpu           = each.value.preserve_tpu
-  enable_public_ip       = each.value.enable_public_ip
-  service_account        = each.value.service_account
-  data_disks             = each.value.data_disks
-  docker_image           = each.value.docker_image
-  subnetwork             = each.value.subnetwork
-}
-
-module "nodeset_cleanup_tpu" {
-  source   = "./modules/cleanup_tpu"
-  for_each = local.nodeset_tpu_map
-
-  nodeset = {
-    nodeset_name = each.value.nodeset_name
-    zone         = each.value.zone
-  }
-
-  project_id             = var.project_id
-  slurm_cluster_name     = local.slurm_cluster_name
-  enable_cleanup_compute = var.enable_cleanup_compute
-  universe_domain        = var.universe_domain
-  endpoint_versions      = var.endpoint_versions
-  gcloud_path_override   = var.gcloud_path_override
-
-  depends_on = [
-    # Depend on controller network, as a best effort to avoid
-    # subnetwork resourceInUseByAnotherResource error
-    var.subnetwork_self_link
-  ]
-}
 
 resource "google_storage_bucket_object" "partition_config" {
   for_each = { for p in var.partitions : p.partition_name => p }

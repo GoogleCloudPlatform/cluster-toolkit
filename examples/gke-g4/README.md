@@ -37,7 +37,8 @@ This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, al
     gcloud storage buckets create gs://BUCKET_NAME \
     --default-storage-class=STANDARD \
     --location=COMPUTE_REGION \
-    --uniform-bucket-level-access
+    --uniform-bucket-level-access \
+    --public-access-prevention
     gcloud storage buckets update gs://BUCKET_NAME --versioning
     ```
 

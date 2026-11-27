@@ -321,7 +321,8 @@ variable "enable_public_ips" {
 variable "enable_mig" {
   description = <<-EOT
     Capability: add the permissions to manage nodesets backed by a managed instance group that
-    Terraform creates (provisioning_engine = "MIG"). Includes compute.instances.setMetadata
+    Terraform creates (explicit provisioning_engine = "MIG", or provisioning_engine = "AUTO"
+    when it resolves an eligible pure-static nodeset to MIG). Includes compute.instances.setMetadata
     without a name condition, because Google requires it for instance group manager patch,
     whose target is a group rather than an instance.
   EOT
@@ -341,12 +342,6 @@ variable "enable_mig_flex" {
 
 variable "enable_bigquery_load" {
   description = "Capability: add the BigQuery permissions for the Slurm controller's enable_bigquery_load job accounting."
-  type        = bool
-  default     = false
-}
-
-variable "enable_tpu" {
-  description = "Capability: add the Cloud TPU API permissions needed to manage TPU VM nodesets (schedmd-slurm-gcp-v6-nodeset-tpu)."
   type        = bool
   default     = false
 }

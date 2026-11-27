@@ -35,6 +35,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/spf13/cobra"
+	"github.com/zclconf/go-cty/cty"
 )
 
 func addCreateFlags(c *cobra.Command) *cobra.Command {
@@ -137,6 +138,15 @@ func printAdvancedInstructionsMessage(deplDir string) {
 	logging.Info("%s", modulewriter.InstructionsPath(deplDir))
 }
 
+// gcloudAccountTimeout bounds the `gcloud auth list` call used to detect the
+// active account. gcloud is a Python program and a cold start can take several
+// seconds, so the limit is generous to avoid silently falling back to $USER.
+// It is a variable so tests can shorten it.
+var gcloudAccountTimeout = 10 * time.Second
+
+// creatorLabelKey is the label that records which account created a deployment.
+const creatorLabelKey = "ghpc_creator"
+
 func detectUsername(ctx context.Context) string {
 	// Try env var first
 	if account := os.Getenv("CLOUDSDK_CORE_ACCOUNT"); account != "" {
@@ -144,17 +154,18 @@ func detectUsername(ctx context.Context) string {
 	}
 
 	// Try gcloud next
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err == nil {
-		email := strings.TrimSpace(out.String())
-		if email != "" {
-			return email
-		}
+	account, reason, expected := activeGcloudAccount(ctx)
+	if account != "" {
+		return account
+	}
+	const consequence = "A new deployment only gets the ghpc_creator label for @google.com accounts, and later renders keep that choice. " +
+		"Set CLOUDSDK_CORE_ACCOUNT or pass --add-creator-label to override."
+	if expected {
+		// gcloud is not installed or not logged in, as is common for external
+		// users and CI: nothing went wrong, so keep this quiet.
+		logging.Info("No active gcloud account (%s); using the local user name. %s", reason, consequence)
+	} else {
+		logging.Warn("Could not detect the active gcloud account (%s); falling back to the local user name. %s", reason, consequence)
 	}
 
 	// Fallback to shell
@@ -172,6 +183,148 @@ func detectUsername(ctx context.Context) string {
 	}
 
 	return "unknown"
+}
+
+// activeGcloudAccount returns the active gcloud account, or "" and the reason
+// it could not be determined. expected is true when that is a normal setup
+// (gcloud not installed, or no account logged in) rather than a failure such
+// as a timeout or an error from gcloud.
+func activeGcloudAccount(ctx context.Context) (account string, reason string, expected bool) {
+	ctx, cancel := context.WithTimeout(ctx, gcloudAccountTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	// gcloud is a wrapper script; if it is killed on timeout, its child may
+	// keep stdout open. Stop waiting for it shortly after the timeout.
+	cmd.WaitDelay = time.Second
+	err := cmd.Run()
+	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return "", fmt.Sprintf("timed out after %s", gcloudAccountTimeout), false
+	case errors.Is(err, exec.ErrNotFound):
+		return "", "gcloud is not installed", true
+	case err != nil:
+		return "", err.Error(), false
+	}
+	if email := strings.TrimSpace(out.String()); email != "" {
+		return email, "", false
+	}
+	return "", "gcloud reported no active account", true
+}
+
+// setCreatorLabel decides whether the expanded blueprint gets a ghpc_creator
+// label and with which value.
+//
+// --add-creator-label behaves as before when it is passed. Without the flag,
+// when the deployment folder already exists, the decision recorded in its
+// expanded blueprint is reused, so re-rendering an existing deployment does
+// not add, remove or change ghpc_creator. That label is stamped on every
+// resource, and on some resources (e.g. instance templates) a label change
+// forces replacement. Only new deployments detect the active account.
+//
+// The deployment folder is <outputDir>/<deployment_name>. `gcluster expand`
+// has no output directory flag, so for expand the lookup is relative to the
+// current directory, matching what `gcluster create` does without -o.
+func setCreatorLabel(cmd *cobra.Command, bp *config.Blueprint) {
+	if cmd.Flags().Changed("add-creator-label") {
+		bp.AddCreatorLabel = expandFlags.addCreatorLabel
+		if bp.AddCreatorLabel {
+			bp.CreatorUsername = detectUsername(cmd.Context())
+		}
+		return
+	}
+
+	if creator, ok := previousCreatorLabel(createFlags.outputDir, *bp); ok {
+		if creator != "" {
+			bp.AddCreatorLabel = true
+			bp.CreatorUsername = creator
+		}
+		return
+	}
+
+	username := detectUsername(cmd.Context())
+	if strings.HasSuffix(username, "@google.com") {
+		bp.AddCreatorLabel = true
+		bp.CreatorUsername = username
+	}
+}
+
+// previousCreatorLabel reads the ghpc_creator label from the expanded
+// blueprint of an existing deployment folder for bp. It returns ok=false when
+// there is no readable previous deployment, and ("", true) when the previous
+// deployment was rendered without a ghpc_creator label.
+func previousCreatorLabel(outputDir string, bp config.Blueprint) (string, bool) {
+	name, ok := deploymentNameOf(bp)
+	if !ok {
+		return "", false
+	}
+	labels, ok := previousGlobalLabels(filepath.Join(outputDir, name))
+	if !ok {
+		return "", false
+	}
+	return creatorFromLabels(labels)
+}
+
+// deploymentNameOf returns the deployment_name of bp, if it is a known,
+// non-empty string.
+func deploymentNameOf(bp config.Blueprint) (string, bool) {
+	if !bp.Vars.Has("deployment_name") {
+		return "", false
+	}
+	name, err := bp.Eval(config.GlobalRef("deployment_name").AsValue())
+	if err != nil || name.IsNull() || !name.IsKnown() || name.Type() != cty.String || name.AsString() == "" {
+		return "", false
+	}
+	return name.AsString(), true
+}
+
+// previousGlobalLabels returns the evaluated vars.labels of the expanded
+// blueprint stored in an existing deployment folder.
+func previousGlobalLabels(deplDir string) (cty.Value, bool) {
+	expPath := filepath.Join(modulewriter.ArtifactsDir(deplDir), modulewriter.ExpandedBlueprintName)
+	if _, err := os.Stat(expPath); err != nil {
+		return cty.NilVal, false
+	}
+	prev, _, err := config.NewBlueprint(expPath)
+	if err != nil {
+		logging.Warn("Could not read ghpc_creator from %s (%v); detecting the active account instead.", expPath, err)
+		return cty.NilVal, false
+	}
+	if !prev.Vars.Has("labels") {
+		return cty.NilVal, false
+	}
+
+	// When the blueprint or deployment file sets its own vars.labels, the
+	// expanded blueprint stores labels as a merge(...) expression rather than
+	// a plain map, so evaluate it instead of reading the raw value.
+	labels, err := prev.Eval(config.GlobalRef("labels").AsValue())
+	if err != nil {
+		logging.Warn("Could not read ghpc_creator from %s (%v); detecting the active account instead.", expPath, err)
+		return cty.NilVal, false
+	}
+	labels, _ = labels.Unmark()
+	if labels.IsNull() || !labels.IsKnown() || !labels.CanIterateElements() {
+		return cty.NilVal, false
+	}
+	return labels, true
+}
+
+// creatorFromLabels returns the ghpc_creator value from labels. It returns
+// ("", true) when the label is absent and ok=false when it is not a string.
+func creatorFromLabels(labels cty.Value) (string, bool) {
+	for it := labels.ElementIterator(); it.Next(); {
+		k, v := it.Element()
+		if k.Type() != cty.String || k.AsString() != creatorLabelKey {
+			continue
+		}
+		if v.IsNull() || !v.IsKnown() || v.Type() != cty.String {
+			return "", false
+		}
+		return v.AsString(), true
+	}
+	return "", true
 }
 
 func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.YamlCtx) {
@@ -193,6 +346,9 @@ func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.Yam
 
 	checkErr(mergeDeploymentSettings(&bp, ds), ctx)
 	setSubblockIO(cmd, &bp, path)
+	if override, ok := clusterDirectorFlagOverride(cmd); ok {
+		bp.SetExportToClusterDirector(override)
+	}
 
 	checkErr(setValidationLevel(&bp, expandFlags.validationLevel), ctx)
 	skipValidators(&bp)
@@ -202,18 +358,8 @@ func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.Yam
 	}
 	bp.GhpcVersion = GitCommitInfo
 
-	if cmd.Flags().Changed("add-creator-label") {
-		bp.AddCreatorLabel = expandFlags.addCreatorLabel
-		if bp.AddCreatorLabel {
-			bp.CreatorUsername = detectUsername(cmd.Context())
-		}
-	} else {
-		username := detectUsername(cmd.Context())
-		if strings.HasSuffix(username, "@google.com") {
-			bp.AddCreatorLabel = true
-			bp.CreatorUsername = username
-		}
-	}
+	setCreatorLabel(cmd, &bp)
+	inheritExportToClusterDirector(cmd, &bp)
 
 	// Expand the blueprint
 	checkErr(bp.Expand(), ctx)
@@ -233,6 +379,10 @@ func applyAgentEnvAttribution(cmd *cobra.Command, bp *config.Blueprint) {
 }
 
 func mergeDeploymentSettings(bp *config.Blueprint, ds config.DeploymentSettings) error {
+	if ds.ExportToClusterDirector != nil {
+		v := *ds.ExportToClusterDirector
+		bp.ExportToClusterDirector = &v
+	}
 	if ds.AIAssisted {
 		bp.AIAssisted = true
 	}

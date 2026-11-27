@@ -16,25 +16,26 @@
 - name: Install but do not activate HTCondor autoscaler
   become: true
   hosts: localhost
+  vars:
+    use_python39: "{{ ansible_facts['os_family'] == 'RedHat' and (ansible_facts['distribution_major_version'] | int) < 9 }}"
+    htcondor_venv_cmd: "{{ '/usr/bin/python3.9 -m venv' if (use_python39 | bool) else '/usr/bin/python3 -m venv' }}"
   tasks:
-  - name: Install Python 3.9
+  - name: Install Python 3 and pip
     ansible.builtin.package:
-      name:
-      - python39
-      - python39-pip
+      name: "{{ ['python39', 'python39-pip'] if (use_python39 | bool) else ['python3', 'python3-pip'] }}"
       state: present
   - name: Create virtual environment for HTCondor autoscaler
     ansible.builtin.pip:
       name: pip
       state: latest
       virtualenv: /usr/local/htcondor
-      virtualenv_command: /usr/bin/python3.9 -m venv
+      virtualenv_command: "{{ htcondor_venv_cmd }}"
   - name: Install latest setuptools
     ansible.builtin.pip:
       name: setuptools
       state: latest
       virtualenv: /usr/local/htcondor
-      virtualenv_command: /usr/bin/python3.9 -m venv
+      virtualenv_command: "{{ htcondor_venv_cmd }}"
   - name: Install HTCondor autoscaler dependencies
     with_items:
     - oauth2client
@@ -45,4 +46,4 @@
       name: "{{ item }}"
       state: present  # rely on pip resolver to pick latest compatible releases
       virtualenv: /usr/local/htcondor
-      virtualenv_command: /usr/bin/python3.9 -m venv
+      virtualenv_command: "{{ htcondor_venv_cmd }}"

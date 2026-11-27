@@ -22,7 +22,7 @@ gcluster [SUBCOMMAND]
 * [`export-outputs`](#gcluster-export-outputs): Export outputs from deployment group
 * [`import-inputs`](#gcluster-import-inputs): Import input values from previous deployment groups
 * [`cluster`](#gcluster-cluster): Discover, list, and inspect target clusters and environments (`list`, `describe`, `info`, `volume`)
-* [`job`](#gcluster-job): Manage workloads on GKE clusters (`submit`, `list`, `logs`, `cancel`, `config`, `inspect`, `gke-template-extract`)
+* [`job`](#gcluster-job): Manage workloads on GKE and Kubernetes clusters (`submit`, `list`, `logs`, `cancel`, `config`, `inspect`, `gke-template-extract`)
 * [`telemetry`](#gcluster-telemetry): Enable or disable telemetry
 * [`completion`](#gcluster-completion): Generate completion script
 * [`help`](#gcluster-help): Display help information for any command
@@ -55,6 +55,15 @@ gcluster explain [MODULE | BLUEPRINT | SPECS...] [flags]
 * `-d, --deployment-file <string>`: Optional companion deployment YAML file when explaining a blueprint.
 * `-f, --format <string>`: Output format: `text`, `yaml`, or `json` (default `"text"`).
 
+In `json` and `yaml` output, a module input can include a `constraints` object with limits the module states in a simple form, in its Terraform `validation` blocks or `metadata.yaml` validators:
+
+* `allowed_values`, plus `case_insensitive: true` when the module ignores case.
+* `min` and `max`, plus `min_exclusive` / `max_exclusive` for `>` and `<`.
+* `pattern`: an RE2 regular expression. It matches anywhere in the value unless it starts with `^` and ends with `$`, like Terraform's `regex()` and JSON Schema `pattern` (the HTML `pattern` attribute needs a full match instead). If rules give different patterns, only one is listed; the others stay in `validations`.
+* `allow_null: true` when the rules explicitly accept null (when omitted, null is either rejected or not covered by the parsed rules), and `sources` (`terraform` and/or `metadata`).
+
+Limits are only listed when they can be read exactly. Other rules, such as ones that depend on several inputs, stay in `validations` as messages.
+
 ### Examples - explain
 
 ```bash
@@ -82,11 +91,12 @@ gcluster deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 
 ### Flags - deploy
 
-* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. When not set, an existing deployment keeps the `ghpc_creator` label it was created with (or none); a new deployment gets it for `@google.com` accounts. Changing this flag on an existing deployment changes labels on every resource and forces replacement of immutable ones such as instance templates.
 * `-a, --artifacts <string>`: Artifacts directory (automatically configured if unset).
 * `--auto-approve`: Automatically approve proposed changes without prompting.
 * `--backend-config <strings>`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
 * `-d, --deployment-file <string>`: Deployment file to override blueprint variables and backend configuration.
+* `--export-to-cluster-director`: Export the deployment to Cluster Director, overriding the blueprint's `export_to_cluster_director` setting (off by default). Pass `=true` to export or update the exported cluster, or `=false` to skip exporting, or to delete a previous export while keeping the infrastructure. Can't be combined with `--only` or `--skip`. See [Export deployments to Cluster Director](../docs/cluster-director.md).
 * `--force`: Forces overwrite of existing deployment directory. If set, `--overwrite-deployment` is implied and no validation is performed on the existing deployment directory.
 * `--json-output`: Write Terraform output to JSON file (instead of default English text to console).
 * `--only <strings>`: Only apply to groups with the given names (comma-separated).
@@ -117,7 +127,7 @@ gcluster create <BLUEPRINT_FILE> [flags]
 
 ### Flags - create
 
-* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. When not set, an existing deployment keeps the `ghpc_creator` label it was created with (or none); a new deployment gets it for `@google.com` accounts. Changing this flag on an existing deployment changes labels on every resource and forces replacement of immutable ones such as instance templates.
 * `--backend-config strings`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
 * `-d, --deployment-file string`: Deployment file to override blueprint variables and backend configuration.
 * `--force`: Forces overwrite of existing deployment directory. If set, `--overwrite-deployment` is implied and no validation is performed on the existing deployment directory.
@@ -167,7 +177,7 @@ gcluster expand BLUEPRINT_NAME [flags]
 
 ### Flags - expand
 
-* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. Defaults to `true` for `@google.com` accounts.
+* `--add-creator-label`: Add label `ghpc_creator` to the expanded blueprint. When not set, an existing deployment keeps the `ghpc_creator` label it was created with (or none); a new deployment gets it for `@google.com` accounts. Changing this flag on an existing deployment changes labels on every resource and forces replacement of immutable ones such as instance templates.
 * `--backend-config strings`: Comma-separated list of `name=value` variables to set Terraform backend configuration. Can be used multiple times.
 * `-d, --deployment-file string`: Deployment file to override blueprint variables and backend configuration.
 * `-o, --out string`: Output file for the expanded HPC Environment Definition (default `"expanded.yaml"`).
@@ -223,7 +233,7 @@ gcluster cluster <list|describe|info|volume> [flags]
 
 ## gcluster job
 
-`gcluster job` submits, monitors, and manages batch and distributed workloads on GKE clusters (`submit`, `list`, `logs`, `cancel`, `config`, `inspect`, `gke-template-extract`). For detailed usage, see [`docs/gcluster_job_guide.md`](../docs/gcluster_job_guide.md).
+`gcluster job` submits, monitors, and manages batch and distributed workloads across GKE and Kubernetes clusters (`submit`, `list`, `logs`, `cancel`, `inspect`), extracts customizable GKE templates (`gke-template-extract`), and manages saved CLI defaults (`config`). For detailed usage, see [`docs/gcluster_job_guide.md`](../docs/gcluster_job_guide.md).
 
 ### Usage - job
 
@@ -233,12 +243,12 @@ gcluster job <submit|list|logs|cancel|config|inspect|gke-template-extract> [flag
 
 ### Subcommands - job
 
-* `gcluster job submit`: Builds/stages workloads and submits GKE JobSet or Pathways jobs (supports `--image` / `--base-image` + `--build-context`, `--image-pull-secret` with automatic `dockerconfigjson` secret discovery, and Pathways flags including `--pathways`, `--pathways-headless`, `--pathways-deploy-sps`, and `--pathways-max-slice-restarts`).
+* `gcluster job submit`: Builds/stages workloads and submits `JobSet` or standalone `batch/v1` Indexed `Job` workloads on GKE or Kubernetes clusters, plus Pathways workloads on GKE (`--image` / `--base-image` + `--build-context`, `--image-pull-secret` with automatic `dockerconfigjson` secret discovery, optional Kueue/JobSet adaptation, and GKE-only Pathways flags including `--pathways`, `--pathways-headless`, `--pathways-deploy-sps`, and `--pathways-max-slice-restarts`).
 * `gcluster job inspect --name <job> [--show] [--filter=pathways-sps]`: Inspects job or Shared Pathways Service (`pathways-sps`) status, events, and Kubernetes resources.
 * `gcluster job list`: Lists jobs (`--status`, `--name-contains`).
 * `gcluster job logs`: Streams pod logs.
 * `gcluster job cancel`: Cancels workloads.
-* `gcluster job config`: Manages defaults.
+* `gcluster job config`: Manages saved defaults (`set`, `unset`, `show`).
 * `gcluster job gke-template-extract`: Extracts customizable K8s templates.
 
 ## gcluster telemetry

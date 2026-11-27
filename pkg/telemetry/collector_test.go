@@ -27,11 +27,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestNewCollector(t *testing.T) {
@@ -69,6 +72,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		TERRAFORM_VERSION,
 		INSTALLATION_MODE,
 		IS_AI_ASSISTED,
+		EXPORT_TO_CLUSTER_DIRECTOR,
 		EXPLAIN_TARGET,
 		IS_TEST_DATA,
 		EXIT_CODE,
@@ -1480,145 +1484,6 @@ func TestGetIsVmInstance(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := getIsVmInstance(tt.modulesList); got != tt.want {
 				t.Errorf("getIsVmInstance() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-// TestGetProjectNumber verifies that the project number is correctly fetched or gracefully fails depending on the API response.
-func TestGetProjectNumber(t *testing.T) {
-	tests := []struct {
-		name      string
-		projectID string
-		clientErr error
-		mockErr   error
-		want      string
-	}{
-		{
-			name:      "success_1",
-			projectID: "test-project-1",
-			want:      "1234567890",
-		},
-		{
-			name:      "success_2",
-			projectID: "test-project-2",
-			want:      "9876543210",
-		},
-		{
-			name:      "no_project_id",
-			projectID: "",
-			want:      "",
-		},
-		{
-			name:      "client_creation_error",
-			projectID: "any-project",
-			clientErr: errors.New("failed to create client"),
-			want:      "",
-		},
-		{
-			name:      "api_error",
-			projectID: "error-project",
-			mockErr:   errors.New("project not found"),
-			want:      "",
-		},
-		{
-			name:      "api_returns_empty_name",
-			projectID: "empty-name-project",
-			want:      "",
-		},
-		{
-			name:      "api_returns_nil_project",
-			projectID: "nil-project",
-			want:      "",
-		},
-	}
-
-	// To safely mock package-level variables without permanently altering the global state.
-	origFetchProjectName := fetchProjectName
-	defer func() { fetchProjectName = origFetchProjectName }()
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Mock the function directly for this test case
-			fetchProjectName = func(ctx context.Context, projectID string) (string, error) {
-				if tt.clientErr != nil {
-					return "", tt.clientErr
-				}
-				if tt.mockErr != nil {
-					return "", tt.mockErr
-				}
-				// simulate mock responses based on test setup
-				if projectID == "test-project-1" {
-					return "projects/1234567890", nil
-				}
-				if projectID == "test-project-2" {
-					return "projects/9876543210", nil
-				}
-				if projectID == "empty-name-project" || projectID == "nil-project" {
-					return "", nil
-				}
-				return "", errors.New("not found")
-			}
-
-			got := getProjectNumber(tt.projectID)
-			if got != tt.want {
-				t.Errorf("getProjectNumber() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-// TestGetBillingAccountId verifies the extraction and formatting of the billing account ID.
-func TestGetBillingAccountId(t *testing.T) {
-	// Save the original function and restore it after the test finishes
-	originalGetProjectBillingAccount := getProjectBillingAccount
-	defer func() { getProjectBillingAccount = originalGetProjectBillingAccount }()
-
-	tests := []struct {
-		name               string
-		projectID          string
-		mockBillingAccount string
-		mockErr            error
-		expected           string
-	}{
-		{
-			name:               "Missing project_id",
-			projectID:          "",
-			mockBillingAccount: "",
-			expected:           "",
-		},
-		{
-			name:               "Project ID present but no billing account returned",
-			projectID:          "test-project-123",
-			mockBillingAccount: "",
-			expected:           "",
-		},
-		{
-			name:               "Project ID present and billing account trimmed",
-			projectID:          "test-project-123",
-			mockBillingAccount: "billingAccounts/012345-6789AB-CDEF01",
-			expected:           "012345-6789AB-CDEF01",
-		},
-		{
-			name:               "Project ID present but API fails",
-			projectID:          "test-project-123",
-			mockBillingAccount: "",
-			mockErr:            errors.New("api error"),
-			expected:           "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Mock the GCP call for this specific test case, now returning (string, error)
-			getProjectBillingAccount = func(ctx context.Context, projectID string) (string, error) {
-				return tt.mockBillingAccount, tt.mockErr
-			}
-
-			actual := getBillingAccountId(tt.projectID)
-
-			if actual != tt.expected {
-				t.Errorf("getBillingAccountId() = %q, want %q", actual, tt.expected)
 			}
 		})
 	}
@@ -3446,5 +3311,443 @@ func TestGetMachineCategory(t *testing.T) {
 				t.Errorf("getMachineCategory() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCollector_ProjectIDResolutionAndConcordAttribution(t *testing.T) {
+	origFetchProject := fetchProjectName
+	origGetBilling := getProjectBillingAccount
+	t.Cleanup(func() {
+		fetchProjectName = origFetchProject
+		getProjectBillingAccount = origGetBilling
+	})
+
+	fetchProjectName = func(_ context.Context, projectID string) (string, error) {
+		return "projects/num-" + projectID, nil
+	}
+	getProjectBillingAccount = func(_ context.Context, projectID string) (string, error) {
+		return "billingAccounts/acct-" + projectID, nil
+	}
+
+	tests := []struct {
+		name             string
+		blueprintProject string
+		setExplicit      bool
+		explicitProject  string
+		flagProject      string
+		wantProjectNum   string
+		wantBillingAcct  string
+		wantIsTestData   string
+	}{
+		{
+			name:             "SetProjectID overrides accidental args[0] blueprint collision and --project flag",
+			blueprintProject: "bp-proj",
+			setExplicit:      true,
+			explicitProject:  "  actual-job-proj  ",
+			flagProject:      "flag-proj",
+			wantProjectNum:   "num-actual-job-proj",
+			wantBillingAcct:  "acct-actual-job-proj",
+			wantIsTestData:   "false",
+		},
+		{
+			name:             "Explicit SetProjectID empty suppresses both blueprint and --project flag fallback",
+			blueprintProject: "bp-proj",
+			setExplicit:      true,
+			explicitProject:  "",
+			flagProject:      "flag-proj",
+			wantProjectNum:   "",
+			wantBillingAcct:  "",
+			wantIsTestData:   "false",
+		},
+		{
+			name:             "Blueprint project_id is used when SetProjectID was never called",
+			blueprintProject: "bp-proj",
+			flagProject:      "flag-proj",
+			wantProjectNum:   "num-bp-proj",
+			wantBillingAcct:  "acct-bp-proj",
+			wantIsTestData:   "false",
+		},
+		{
+			name:            "CLI --project flag acts as fallback when blueprint and SetProjectID are unset",
+			flagProject:     "cli-flag-proj",
+			wantProjectNum:  "num-cli-flag-proj",
+			wantBillingAcct: "acct-cli-flag-proj",
+			wantIsTestData:  "false",
+		},
+		{
+			name:            "Test project via SetProjectID marks IS_TEST_DATA true",
+			setExplicit:     true,
+			explicitProject: "hpc-toolkit-dev",
+			wantProjectNum:  "num-hpc-toolkit-dev",
+			wantBillingAcct: "acct-hpc-toolkit-dev",
+			wantIsTestData:  "true",
+		},
+		{
+			name:            "Empty everywhere leaves Concord project fields empty",
+			wantProjectNum:  "",
+			wantBillingAcct: "",
+			wantIsTestData:  "false",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isolateTelemetryTestEnv(t)
+			t.Setenv("GHPC_AI_ASSISTED", "false")
+
+			root := &cobra.Command{Use: "gcluster"}
+			jobCmd := &cobra.Command{Use: "job"}
+			submitCmd := &cobra.Command{Use: "submit"}
+			jobCmd.PersistentFlags().StringP("project", "p", "", "GCP Project ID")
+			root.AddCommand(jobCmd)
+			jobCmd.AddCommand(submitCmd)
+			if tt.flagProject != "" {
+				if err := jobCmd.PersistentFlags().Set("project", tt.flagProject); err != nil {
+					t.Fatalf("failed to set --project flag: %v", err)
+				}
+			}
+
+			c := NewCollector(submitCmd, nil, SOURCE)
+			if tt.blueprintProject != "" {
+				c.blueprint = config.Blueprint{
+					Vars: config.NewDict(map[string]cty.Value{
+						"project_id": cty.StringVal(tt.blueprintProject),
+					}),
+				}
+			}
+			if tt.setExplicit {
+				c.SetProjectID(tt.explicitProject)
+				if got, ok := c.GetProjectID(); got != strings.TrimSpace(tt.explicitProject) || !ok {
+					t.Errorf("GetProjectID() = (%q, %v), want (%q, true)", got, ok, strings.TrimSpace(tt.explicitProject))
+				}
+			} else if got, ok := c.GetProjectID(); got != "" || ok {
+				t.Errorf("GetProjectID() before SetProjectID = (%q, %v), want ('', false)", got, ok)
+			}
+
+			c.CollectMetrics(0, nil)
+			if got, _ := c.GetMetadata(IS_TEST_DATA); got != tt.wantIsTestData {
+				t.Errorf("IS_TEST_DATA = %q, want %q", got, tt.wantIsTestData)
+			}
+
+			event := c.BuildConcordEvent()
+			if event.ProjectNumber != tt.wantProjectNum {
+				t.Errorf("ProjectNumber = %q, want %q", event.ProjectNumber, tt.wantProjectNum)
+			}
+			if event.BillingAccountId != tt.wantBillingAcct {
+				t.Errorf("BillingAccountId = %q, want %q", event.BillingAccountId, tt.wantBillingAcct)
+			}
+		})
+	}
+}
+
+func TestBuildConcordEvent_LatencyExcludesRPCTimeAndCachesProjectLookup(t *testing.T) {
+	isolateTelemetryTestEnv(t)
+	t.Setenv("GHPC_AI_ASSISTED", "false")
+
+	origFetchProject := fetchProjectName
+	origGetBilling := getProjectBillingAccount
+	t.Cleanup(func() {
+		fetchProjectName = origFetchProject
+		getProjectBillingAccount = origGetBilling
+	})
+
+	var projCalls, billCalls atomic.Int32
+	fetchProjectName = func(_ context.Context, projectID string) (string, error) {
+		projCalls.Add(1)
+		time.Sleep(150 * time.Millisecond)
+		return "projects/12345", nil
+	}
+	getProjectBillingAccount = func(_ context.Context, projectID string) (string, error) {
+		billCalls.Add(1)
+		time.Sleep(150 * time.Millisecond)
+		return "", status.Error(codes.PermissionDenied, "billing denied")
+	}
+
+	cmd := &cobra.Command{Use: "submit"}
+	c := NewCollector(cmd, nil, SOURCE)
+	c.SetProjectID("cached-proj")
+	c.CollectMetrics(0, nil)
+	// Reset start time right before BuildConcordEvent so any RPC sleep would visibly inflate LatencyMs.
+	c.eventStartTime = time.Now()
+
+	event1 := c.BuildConcordEvent()
+	if event1.ProjectNumber != "12345" || event1.BillingAccountId != "" {
+		t.Fatalf("event1 = (%q, %q), want (12345, '')", event1.ProjectNumber, event1.BillingAccountId)
+	}
+	if event1.LatencyMs >= 100 {
+		t.Errorf("LatencyMs = %d ms, want < 100ms (must exclude 150ms telemetry RPC sleep)", event1.LatencyMs)
+	}
+	if projCalls.Load() != 1 || billCalls.Load() != 1 {
+		t.Fatalf("first call RPC counts = (%d, %d), want (1, 1)", projCalls.Load(), billCalls.Load())
+	}
+
+	// Second call for the same project must hit local cache (including cached permanent billing denial).
+	c2 := NewCollector(cmd, nil, SOURCE)
+	c2.SetProjectID("cached-proj")
+	c2.CollectMetrics(0, nil)
+	event2 := c2.BuildConcordEvent()
+	if event2.ProjectNumber != "12345" || event2.BillingAccountId != "" {
+		t.Fatalf("event2 = (%q, %q), want (12345, '')", event2.ProjectNumber, event2.BillingAccountId)
+	}
+	if projCalls.Load() != 1 || billCalls.Load() != 1 {
+		t.Errorf("second call should hit cache; RPC counts = (%d, %d), want (1, 1)", projCalls.Load(), billCalls.Load())
+	}
+}
+
+func TestSleepWithContext(t *testing.T) {
+	if !sleepWithContext(context.Background(), time.Millisecond) {
+		t.Error("expected sleepWithContext to return true when timer completes")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if sleepWithContext(ctx, time.Second) {
+		t.Error("expected sleepWithContext to return false on canceled context")
+	}
+}
+
+func TestIsTransientRPCError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"PermissionDenied", status.Error(codes.PermissionDenied, "denied"), false},
+		{"NotFound", status.Error(codes.NotFound, "missing"), false},
+		{"InvalidArgument", status.Error(codes.InvalidArgument, "bad"), false},
+		{"Unauthenticated", status.Error(codes.Unauthenticated, "no auth"), false},
+		{"FailedPrecondition", status.Error(codes.FailedPrecondition, "precond"), false},
+		{"Unavailable", status.Error(codes.Unavailable, "retry"), true},
+		{"ResourceExhausted", status.Error(codes.ResourceExhausted, "quota"), true},
+		{"DeadlineExceeded", status.Error(codes.DeadlineExceeded, "timeout"), true},
+		{"Aborted", status.Error(codes.Aborted, "aborted"), true},
+		{"Internal", status.Error(codes.Internal, "internal"), true},
+		{"context.DeadlineExceeded", context.DeadlineExceeded, true},
+		{"generic error", errors.New("generic"), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isTransientRPCError(tc.err); got != tc.want {
+				t.Errorf("isTransientRPCError(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolveProjectIdentifiers_DoesNotCacheAuthOrNotFoundErrors(t *testing.T) {
+	origFetchProject := fetchProjectName
+	origGetBilling := getProjectBillingAccount
+	t.Cleanup(func() {
+		fetchProjectName = origFetchProject
+		getProjectBillingAccount = origGetBilling
+	})
+
+	nonCacheableErrors := []struct {
+		name string
+		err  error
+	}{
+		{"missing ADC", errors.New("google: could not find default credentials")},
+		{"Unauthenticated", status.Error(codes.Unauthenticated, "token expired")},
+		{"NotFound", status.Error(codes.NotFound, "project not created yet")},
+	}
+
+	for _, tc := range nonCacheableErrors {
+		t.Run(tc.name, func(t *testing.T) {
+			isolateTelemetryTestEnv(t)
+
+			var failFirst atomic.Bool
+			failFirst.Store(true)
+			var projAttempts atomic.Int32
+			fetchProjectName = func(_ context.Context, projectID string) (string, error) {
+				projAttempts.Add(1)
+				if failFirst.Load() {
+					return "", tc.err
+				}
+				return "projects/98765", nil
+			}
+			getProjectBillingAccount = func(_ context.Context, projectID string) (string, error) {
+				if failFirst.Load() {
+					return "", tc.err
+				}
+				return "billingAccounts/ABCDEF", nil
+			}
+
+			num1, bill1 := resolveProjectIdentifiers("retry-proj")
+			if num1 != "" || bill1 != "" {
+				t.Fatalf("first call = (%q, %q), want empty on %s", num1, bill1, tc.name)
+			}
+
+			// Subsequent lookup must NOT be poisoned by the failed first call.
+			failFirst.Store(false)
+			num2, bill2 := resolveProjectIdentifiers("retry-proj")
+			if num2 != "98765" || bill2 != "ABCDEF" {
+				t.Fatalf("second call = (%q, %q), want (98765, ABCDEF)", num2, bill2)
+			}
+
+			// Third call should now hit the 24h positive cache without calling fetchProjectName again.
+			callsAfterPopulate := projAttempts.Load()
+			num3, bill3 := resolveProjectIdentifiers("retry-proj")
+			if num3 != "98765" || bill3 != "ABCDEF" || projAttempts.Load() != callsAfterPopulate {
+				t.Fatalf("third call = (%q, %q, calls=%d), want cached (98765, ABCDEF, calls=%d)", num3, bill3, projAttempts.Load(), callsAfterPopulate)
+			}
+		})
+	}
+}
+
+func stubProjectLookupRPCs(projErr, billErr error) (*atomic.Int32, *atomic.Int32) {
+	var projCalls, billCalls atomic.Int32
+	fetchProjectName = func(_ context.Context, _ string) (string, error) {
+		projCalls.Add(1)
+		if projErr != nil {
+			return "", projErr
+		}
+		return "projects/55555", nil
+	}
+	getProjectBillingAccount = func(_ context.Context, _ string) (string, error) {
+		billCalls.Add(1)
+		if billErr != nil {
+			return "", billErr
+		}
+		return "billingAccounts/BILL-1", nil
+	}
+	return &projCalls, &billCalls
+}
+
+func assertShortNegativeCacheCase(t *testing.T, projErr, billErr error, wantProjNum string) {
+	t.Helper()
+	isolateTelemetryTestEnv(t)
+	projCalls, billCalls := stubProjectLookupRPCs(projErr, billErr)
+
+	if num1, bill1 := resolveProjectIdentifiers("transient-proj"); num1 != wantProjNum || bill1 != "" {
+		t.Fatalf("first call = (%q, %q), want (%q, '')", num1, bill1, wantProjNum)
+	}
+
+	// Verify entry was cached with the short negative TTL (~15m), not 24h.
+	meta, ok := config.GetCachedProjectMetadata("transient-proj", projectCacheTTL)
+	if !ok {
+		t.Fatal("expected short negative cache entry after transient error")
+	}
+	ttlRemaining := time.Until(meta.ExpiresAt)
+	if ttlRemaining <= 0 || ttlRemaining > projectNegativeCacheTTL+time.Minute {
+		t.Errorf("negative cache TTL remaining = %v, want within (0, %v]", ttlRemaining, projectNegativeCacheTTL)
+	}
+
+	// Immediate second call must hit the negative cache without firing new RPCs.
+	if num2, bill2 := resolveProjectIdentifiers("transient-proj"); num2 != wantProjNum || bill2 != "" {
+		t.Fatalf("second call = (%q, %q), want (%q, '')", num2, bill2, wantProjNum)
+	}
+	if projCalls.Load() != 1 || billCalls.Load() != 1 {
+		t.Errorf("expected negative cache hit; RPC counts = (%d, %d), want (1, 1)", projCalls.Load(), billCalls.Load())
+	}
+
+	// Once the negative cache expires, recovery succeeds and populates the 24h cache.
+	meta.ExpiresAt = time.Now().UTC().Add(-time.Second)
+	if err := config.SetCachedProjectMetadata("transient-proj", meta); err != nil {
+		t.Fatalf("failed to expire negative cache entry: %v", err)
+	}
+	stubProjectLookupRPCs(nil, nil)
+	if num3, bill3 := resolveProjectIdentifiers("transient-proj"); num3 != "55555" || bill3 != "BILL-1" {
+		t.Fatalf("after negative-cache expiry got (%q, %q), want (55555, BILL-1)", num3, bill3)
+	}
+}
+
+func TestResolveProjectIdentifiers_ShortNegativeCacheOnTransientErrors(t *testing.T) {
+	origFetchProject := fetchProjectName
+	origGetBilling := getProjectBillingAccount
+	t.Cleanup(func() {
+		fetchProjectName = origFetchProject
+		getProjectBillingAccount = origGetBilling
+	})
+
+	tests := []struct {
+		name        string
+		projErr     error
+		billErr     error
+		wantProjNum string
+	}{
+		{
+			name:        "both Unavailable",
+			projErr:     status.Error(codes.Unavailable, "blocked network"),
+			billErr:     status.Error(codes.Unavailable, "blocked network"),
+			wantProjNum: "",
+		},
+		{
+			name:        "both DeadlineExceeded",
+			projErr:     context.DeadlineExceeded,
+			billErr:     context.DeadlineExceeded,
+			wantProjNum: "",
+		},
+		{
+			name:        "project succeeds while billing Unavailable",
+			projErr:     nil,
+			billErr:     status.Error(codes.Unavailable, "billing timeout"),
+			wantProjNum: "55555",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assertShortNegativeCacheCase(t, tc.projErr, tc.billErr, tc.wantProjNum)
+		})
+	}
+}
+
+func TestIsExportToClusterDirector(t *testing.T) {
+	enabled, disabled := true, false
+	newCmd := func(setTo string) *cobra.Command {
+		cmd := &cobra.Command{Use: "deploy"}
+		var v bool
+		cmd.Flags().BoolVar(&v, "export-to-cluster-director", false, "")
+		if setTo != "" {
+			if err := cmd.Flags().Set("export-to-cluster-director", setTo); err != nil {
+				t.Fatalf("Set(%q) returned an unexpected error: %v", setTo, err)
+			}
+		}
+		return cmd
+	}
+
+	tests := []struct {
+		name string
+		bp   config.Blueprint
+		cmd  *cobra.Command
+		want bool
+	}{
+		{name: "defaults to false", bp: config.Blueprint{}, cmd: newCmd(""), want: false},
+		{name: "nil command uses the blueprint", bp: config.Blueprint{ExportToClusterDirector: &enabled}, cmd: nil, want: true},
+		{name: "blueprint true", bp: config.Blueprint{ExportToClusterDirector: &enabled}, cmd: newCmd(""), want: true},
+		{name: "blueprint false", bp: config.Blueprint{ExportToClusterDirector: &disabled}, cmd: newCmd(""), want: false},
+		{name: "flag true overrides blueprint false", bp: config.Blueprint{ExportToClusterDirector: &disabled}, cmd: newCmd("true"), want: true},
+		{name: "flag false overrides blueprint true", bp: config.Blueprint{ExportToClusterDirector: &enabled}, cmd: newCmd("false"), want: false},
+		{name: "command without the flag uses the blueprint", bp: config.Blueprint{ExportToClusterDirector: &enabled}, cmd: &cobra.Command{Use: "destroy"}, want: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isExportToClusterDirector(tc.bp, tc.cmd); got != tc.want {
+				t.Errorf("isExportToClusterDirector() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGetBlueprintMergesDeploymentFileExportToClusterDirector(t *testing.T) {
+	dir := t.TempDir()
+	bpPath := filepath.Join(dir, "bp.yaml")
+	if err := os.WriteFile(bpPath, []byte("blueprint_name: test-bp\nvars:\n  project_id: p\n  deployment_name: d\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	depPath := filepath.Join(dir, "deployment.yaml")
+	if err := os.WriteFile(depPath, []byte("export_to_cluster_director: true\nvars:\n  project_id: p\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{Use: "deploy"}
+	cmd.Flags().StringP("deployment-file", "d", "", "")
+	if err := cmd.Flags().Set("deployment-file", depPath); err != nil {
+		t.Fatal(err)
+	}
+
+	bp := getBlueprint(cmd, []string{bpPath})
+	if !isExportToClusterDirector(bp, cmd) {
+		t.Error("isExportToClusterDirector() = false when export_to_cluster_director: true is set in -d deployment.yaml, want true")
 	}
 }

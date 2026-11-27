@@ -14,13 +14,132 @@
 
 package orchestrator
 
+import (
+	"cmp"
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
+	"sync"
+	"time"
+
+	"hpc-toolkit/pkg/shell"
+
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+)
+
+// Type identifies a workload job orchestrator platform.
+type Type string
+
+const (
+	// TypeGKE selects the Google Kubernetes Engine job orchestrator.
+	TypeGKE Type = "gke"
+	// TypeK8s selects the generic / air-gapped Kubernetes job orchestrator.
+	TypeK8s Type = "k8s"
+)
+
+// Detection holds the resolved orchestrator platform, pinned kubeconfig context, and diagnostic reason.
+type Detection struct {
+	Type            Type
+	Forced          bool
+	KubeContext     string
+	ClusterName     string
+	DanglingContext string
+	Reason          string
+}
+
+// CommandRunner executes bounded local subprocess commands during provider probes.
+type CommandRunner func(timeout time.Duration, name string, args ...string) shell.CommandResult
+
+// ProbeInput carries the loaded kubeconfig and CLI inputs passed to registered provider probes.
+type ProbeInput struct {
+	ClusterName string
+	Location    string
+	ProjectID   string
+	Config      *clientcmdapi.Config
+	AirGapped   bool
+	Getenv      func(string) string
+	Runner      CommandRunner
+}
+
+// Factory constructs a JobOrchestrator configured with det.
+type Factory func(det Detection) JobOrchestrator
+
+// ProviderSpec binds an orchestrator Type to its prerequisites, context resolver, detection probe, and factory.
+type ProviderSpec struct {
+	Type           Type
+	Prerequisites  []PrereqKind
+	ResolveContext func(cfg *clientcmdapi.Config, clusterName, location, projectID string) (contextName string, kubeCtx *clientcmdapi.Context, resolvedCluster string, ok bool)
+	Probe          func(in ProbeInput) (Detection, bool)
+	Factory        Factory
+}
+
+var (
+	registryMu    sync.RWMutex
+	providerSpecs = make(map[Type]ProviderSpec)
+	providerOrder []Type
+)
+
+// RegisterProvider registers a workload orchestrator provider specification.
+func RegisterProvider(spec ProviderSpec) {
+	if spec.Type == "" || spec.Factory == nil {
+		panic("orchestrator.RegisterProvider requires non-empty Type and non-nil Factory")
+	}
+	spec.Prerequisites = slices.Clone(spec.Prerequisites)
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	if _, exists := providerSpecs[spec.Type]; !exists {
+		providerOrder = append(providerOrder, spec.Type)
+	}
+	providerSpecs[spec.Type] = spec
+}
+
+func unregisterProviderForTest(t Type) {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	delete(providerSpecs, t)
+	providerOrder = slices.DeleteFunc(providerOrder, func(x Type) bool { return x == t })
+}
+
+func snapshotProviders() []ProviderSpec {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	out := make([]ProviderSpec, 0, len(providerOrder))
+	for _, t := range providerOrder {
+		if spec, ok := providerSpecs[t]; ok {
+			out = append(out, spec)
+		}
+	}
+	return out
+}
+
+// RegisteredTypes returns the sorted list of registered orchestrator types.
+func RegisteredTypes() []Type {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	return slices.Sorted(maps.Keys(providerSpecs))
+}
+
+// NewJobOrchestrator instantiates the JobOrchestrator registered for det.Type.
+func NewJobOrchestrator(det Detection) (JobOrchestrator, error) {
+	registryMu.RLock()
+	spec, ok := providerSpecs[det.Type]
+	registryMu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("unsupported orchestrator type %q (registered: %v)", det.Type, RegisteredTypes())
+	}
+	return spec.Factory(det), nil
+}
+
 var ValidPriorityClasses = []string{"very-low", "low", "medium", "high", "very-high"}
 
 type PathwaysJobDefinition struct {
 	// Core Pathways Images
-	ProxyServerImage string // Default: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest
-	ServerImage      string // Default: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest
-	WorkerImage      string // Default: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest (or value of ServerImage)
+	// Defaults: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/{proxy_server,server}:latest, or, with the public
+	// colocated Python sidecar, the cloud-pathways images of the sidecar's release. WorkerImage defaults to ServerImage.
+	ProxyServerImage string
+	ServerImage      string
+	WorkerImage      string
 
 	// Pathways specific configurations
 	Headless         bool   // Default: false
@@ -46,6 +165,11 @@ type PathwaysJobDefinition struct {
 	HeadNodePool string // Resolved node pool to use for the Pathways head job.
 }
 
+// HasMode reports whether any Pathways execution mode flag is set.
+func (p PathwaysJobDefinition) HasMode() bool {
+	return p.RunSPSWorkload != "" || p.DeploySPS || p.Headless
+}
+
 type VolumeDefinition struct {
 	Name      string
 	Source    string // The raw <src>
@@ -68,10 +192,14 @@ type JobDefinition struct {
 	ClusterLocation string
 	GKENamespace    string
 
-	WorkloadName                  string
-	KueueQueueName                string
-	NumSlices                     int
-	NodesPerSlice                 int
+	WorkloadName   string
+	KueueQueueName string
+	NumSlices      int
+	NodesPerSlice  int
+	// NumNodesSpecified reports that --num-nodes was explicitly passed on the CLI.
+	NumNodesSpecified             bool
+	CPURequest                    string // Optional Kubernetes CPU request quantity for CPU-only workloads (e.g. "8", "4500m").
+	MemoryRequest                 string // Optional Kubernetes memory request quantity for CPU-only workloads (e.g. "64Gi", "200G").
 	MaxRestarts                   int
 	TtlSecondsAfterFinished       int
 	TerminationGracePeriodSeconds int
@@ -193,4 +321,56 @@ type ClusterOrchestrator interface {
 	GetClusterInfo(name string, opts ListOptions) (string, error)
 	DescribeEnvironment(name string, opts ListOptions) (string, error)
 	ListVolumes(opts ListOptions) ([]VolumeStatus, error)
+}
+
+func hasPathwaysFields(job JobDefinition) bool {
+	p := job.Pathways
+	if job.IsPathwaysJob || p.DeploySPS || p.Headless || p.ElasticSlices != 0 || p.MaxSliceRestarts != 0 {
+		return true
+	}
+	if len(p.ProxyEnv) > 0 || len(p.ServerEnv) > 0 || len(p.WorkerEnv) > 0 {
+		return true
+	}
+	return cmp.Or(
+		strings.TrimSpace(p.RunSPSWorkload),
+		strings.TrimSpace(p.ProxyServerImage),
+		strings.TrimSpace(p.ServerImage),
+		strings.TrimSpace(p.WorkerImage),
+		strings.TrimSpace(p.GCSLocation),
+		strings.TrimSpace(p.ColocatedPythonSidecarImage),
+		strings.TrimSpace(p.HeadNodePool),
+		strings.TrimSpace(p.ProxyArgs),
+		strings.TrimSpace(p.ServerArgs),
+		strings.TrimSpace(p.WorkerArgs),
+	) != ""
+}
+
+// ValidateK8sSubmitJob rejects GKE-only submission options before cluster/image operations in TypeK8s mode.
+func ValidateK8sSubmitJob(job JobDefinition) error {
+	if hasPathwaysFields(job) {
+		return fmt.Errorf("Pathways workloads (--pathways) require GKE mode; they are not supported in Kubernetes (k8s) mode")
+	}
+	if sched := strings.TrimSpace(job.GKEScheduler); strings.HasPrefix(strings.ToLower(sched), "gke.io/") {
+		return fmt.Errorf("--gke-scheduler %q is a GKE-specific scheduler and is not supported in Kubernetes (k8s) mode", sched)
+	}
+	if strings.TrimSpace(job.PlacementPolicy) != "" {
+		return fmt.Errorf("--placement-policy is a GCE/GKE-specific flag and is not supported in Kubernetes (k8s) mode; use --node-constraint for custom node labels")
+	}
+	if job.GKEMTCEnabled || strings.TrimSpace(job.GKEMTCRamdiskDirectory) != "" {
+		return fmt.Errorf("Multi-Tier Checkpointing (--gke-mtc-enabled / --gke-mtc-ramdisk-dir) is a GKE-only feature and is not supported in Kubernetes (k8s) mode")
+	}
+	if strings.TrimSpace(job.GKENAPProvisioning) != "" || strings.TrimSpace(job.GKENAPReservation) != "" {
+		return fmt.Errorf("GKE Node Auto-Provisioning (--gke-nap-provisioning / --gke-nap-reservation) is a GKE-only feature and is not supported in Kubernetes (k8s) mode")
+	}
+	for _, raw := range job.RawMounts {
+		src, _, _ := strings.Cut(strings.TrimSpace(raw), ";")
+		lowerSrc := strings.ToLower(strings.TrimSpace(src))
+		if strings.HasPrefix(lowerSrc, "gs://") {
+			return fmt.Errorf("GCS mounts (%q) require GKE mode and are not supported in Kubernetes (k8s) mode; use nfs://, a Kubernetes PVC, or a host path instead", src)
+		}
+		if strings.HasPrefix(lowerSrc, "filestore://") {
+			return fmt.Errorf("Filestore mounts (%q) require GKE mode and are not supported in Kubernetes (k8s) mode; use nfs://, a Kubernetes PVC, or a host path instead", src)
+		}
+	}
+	return nil
 }

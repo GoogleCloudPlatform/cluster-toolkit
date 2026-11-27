@@ -5,7 +5,7 @@ metadata:
   name: ${pv_name}
   labels:
   %{~ for key, val in labels ~}
-    ${key}: ${val}
+    ${jsonencode(key)}: ${jsonencode(val)}
   %{~ endfor ~}
 spec:
   storageClassName: "${storage_class_name != null ? storage_class_name : ""}"
@@ -13,10 +13,10 @@ spec:
     storage: ${capacity}
   accessModes:
   - ReadWriteMany
-  %{~ if mount_options != null ~}
+  %{~ if try(length(mount_options), 0) > 0 ~}
   mountOptions:
   %{~ for key in mount_options ~}
-  - ${key}
+  - ${jsonencode(key)}
   %{~ endfor ~}
   %{~ endif ~}
   csi:

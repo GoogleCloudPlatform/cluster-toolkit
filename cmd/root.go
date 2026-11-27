@@ -80,6 +80,9 @@ func init() {
 		initTelemetry(cmd, args)
 	}
 
+	cluster.OnTelemetryProjectResolved = setTelemetryProjectID
+	job.OnTelemetryProjectResolved = setTelemetryProjectID
+
 	rootCmd.AddCommand(cluster.ClusterCmd)
 	rootCmd.AddCommand(job.JobCmd)
 }
@@ -190,6 +193,12 @@ func shouldSkipFallbackTelemetry(cmd *cobra.Command) bool {
 func setTelemetryMetadata(key, value string) {
 	if telemetryCollector != nil {
 		telemetryCollector.SetMetadata(key, value)
+	}
+}
+
+func setTelemetryProjectID(projectID string) {
+	if telemetryCollector != nil {
+		telemetryCollector.SetProjectID(projectID)
 	}
 }
 

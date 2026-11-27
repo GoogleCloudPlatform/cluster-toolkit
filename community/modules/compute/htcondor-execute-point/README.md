@@ -162,6 +162,28 @@ gcloud compute instance-groups managed update-instances \
 
 [replacement]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
 
+### Shutdown Scripts
+
+By default, this module configures a VM shutdown script in instance metadata to
+stop the HTCondor service when an Execute Point is being shut down or deleted:
+
+- **Windows (`windows-shutdown-script-ps1`)**: Runs `Stop-Service condor -Force`
+  to remove the node from the pool. This reduces the chance of new jobs starting
+  during VM termination, but does not fully prevent it.
+- **Linux (`shutdown-script`)**: Runs `condor_off -fast -startd` and stops the
+  `condor` systemd service.
+
+User-supplied [`var.metadata`](#input_metadata) overrides these defaults. Setting
+`metadata.shutdown-script` (on Linux) or `metadata.windows-shutdown-script-ps1`
+(on Windows) replaces the module's built-in shutdown script.
+
+In addition, the [htcondor-access-point] module configures a job transform rule
+(`RETRY_WINDOWS_SHUTDOWN`) that automatically re-queues jobs up to 4 times
+(`NumJobCompletions < 5`) if they exit with Windows shutdown/DLL initialization
+error codes (`0xC0000142` or `0xC000026B`). Note that this retry rule is applied
+at the Access Point scheduler level and therefore applies to all jobs in the
+pool, including Linux jobs.
+
 ## Known Issues
 
 When using OS Login with "external users" (outside of the Google Cloud
@@ -242,7 +264,7 @@ limitations under the License.
 | <a name="input_execute_point_service_account_email"></a> [execute\_point\_service\_account\_email](#input\_execute\_point\_service\_account\_email) | Service account for HTCondor execute point (e-mail format) | `string` | n/a | yes |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = string,<br/>    count = number<br/>  }))</pre> | `[]` | no |
 | <a name="input_htcondor_bucket_name"></a> [htcondor\_bucket\_name](#input\_htcondor\_bucket\_name) | Name of HTCondor configuration bucket | `string` | n/a | yes |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | HTCondor execute point VM image<br/><br/>Expected Fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "family": "hpc-rocky-linux-8",<br/>  "project": "cloud-hpc-image-public"<br/>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | HTCondor execute point VM image<br/><br/>Expected Fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "family": "aci-cpu-rocky-linux-9-amd64",<br/>  "project": "advanced-compute-images"<br/>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to HTConodr execute points | `map(string)` | n/a | yes |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for HTCondor execute points | `string` | `"n2-standard-4"` | no |
 | <a name="input_max_size"></a> [max\_size](#input\_max\_size) | Maximum size of the HTCondor execute point pool. | `number` | `5` | no |

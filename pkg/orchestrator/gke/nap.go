@@ -402,6 +402,11 @@ func (g *GKEOrchestrator) populateNAPFlavors(flavors map[string]FlavorCapacity) 
 	if !g.napEnabled {
 		return nil
 	}
+	if g.napLimits["cpu"] > 0 || g.napLimits["memory"] > 0 {
+		if _, ok := flavors["flavor-default"]; !ok {
+			flavors["flavor-default"] = FlavorCapacity{}
+		}
+	}
 
 	for resName, maxLimit := range g.napLimits {
 		if maxLimit <= 0 {
