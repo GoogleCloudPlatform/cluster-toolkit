@@ -90,15 +90,16 @@ dnf install -y grafana
 # have no IPv6 route, and wget gives up without retrying when the last address
 # it tries is unreachable.
 download_sqlite() {
-	local tarball="$1"
-	local sha256="$2"
+	local year="$1"
+	local tarball="$2"
+	local sha256="$3"
 	local hosts=(www.sqlite.org www2.sqlite.org www3.sqlite.org)
 	local attempt host
 
 	for attempt in 1 2 3; do
 		for host in "${hosts[@]}"; do
 			if wget --inet4-only --tries=1 --connect-timeout=20 --read-timeout=60 \
-				--output-document="$tarball" "https://${host}/2025/${tarball}" &&
+				--output-document="$tarball" "https://${host}/${year}/${tarball}" &&
 				echo "${sha256}  ${tarball}" | sha256sum --check --status; then
 				return 0
 			fi
@@ -114,11 +115,10 @@ download_sqlite() {
 
 install_sqlite() {
 	local src_dir="/usr/local/src"
-	local tarball="sqlite-autoconf-3490100.tar.gz"
-	# When changing the version, also update the year in the download URL in
-	# download_sqlite and this checksum. sqlite.org publishes SHA3-256 only; for
-	# this file it is
+	# sqlite.org publishes SHA3-256 only; for this file it is
 	# 6cc831c9f588b637e5bd48d9fbf28e58737e08daf825c81085fb8e0a0b8ad14c.
+	local year="2025"
+	local tarball="sqlite-autoconf-3490100.tar.gz"
 	local sha256="106642d8ccb36c5f7323b64e4152e9b719f7c0215acf5bfeac3d5e7f97b59254"
 
 	cd "$src_dir" || {
@@ -126,13 +126,13 @@ install_sqlite() {
 		exit 1
 	}
 
-	if ! download_sqlite "$tarball" "$sha256"; then
+	if ! download_sqlite "$year" "$tarball" "$sha256"; then
 		echo "ERROR: Failed to download SQLite (${tarball}) from sqlite.org and its mirrors"
 		exit 1
 	fi
 
-	tar xzf sqlite-autoconf-3490100.tar.gz
-	cd sqlite-autoconf-3490100 || exit 1
+	tar xzf "$tarball"
+	cd "${tarball%.tar.gz}" || exit 1
 	./configure --prefix=/usr/local
 	make
 	sudo make install
