@@ -23,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/orchestrator/k8s"
 	"hpc-toolkit/pkg/shell"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,7 @@ import (
 	iamapi "google.golang.org/api/iam/v1"
 	gcs "google.golang.org/api/storage/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -42,9 +44,13 @@ import (
 
 const (
 	// tpuTopologyLabel is the GKE label for TPU topology.
-	tpuTopologyLabel = "cloud.google.com/gke-tpu-topology"
+	tpuTopologyLabel = k8s.GKETPUTopologyLabel
 	// nodePoolLabel is the GKE label for the node pool name.
-	nodePoolLabel = "cloud.google.com/gke-nodepool"
+	nodePoolLabel = k8s.GKENodePoolLabel
+	// machineFamilyLabel is the GKE label selecting a GCE machine family (used by NAP).
+	machineFamilyLabel = "cloud.google.com/machine-family"
+	// computeClassLabel is the GKE label selecting a custom ComputeClass.
+	computeClassLabel = "cloud.google.com/compute-class"
 	// placementPolicyNameLabel selects nodes carrying a named GCE compact placement or workload policy.
 	placementPolicyNameLabel = "cloud.google.com/placement-policy-name"
 	// placementGroupLabel is the GKE-managed compact placement group identifier used by NAP.
@@ -175,44 +181,101 @@ func (c DefaultMachineTypeClient) GetMachineType(project, zone, machineType stri
 type DefaultKubeClient struct {
 	dynClient        dynamic.Interface
 	kubeconfigLoader k8s.KubeconfigLoader
+	jobSetEnabled    func() bool
 }
 
 type DefaultExecutor struct{}
 
-type GKEOrchestrator struct {
-	executor                    Executor
-	projectID                   string
-	clusterZones                []string
-	nodePoolSAs                 []string
-	capacity                    ClusterCapacity
-	clusterDesc                 gkeCluster
-	dynClient                   dynamic.Interface
-	kubeClient                  KubeClient
-	namespace                   string
-	machineTypeClient           MachineTypeClient
+// submissionSession holds per-submission transient state reset at the start of every SubmitJob call.
+// Keeping these fields isolated ensures reused GKEOrchestrator instances never leak stale inventory,
+// add-on decisions, slicing flags, or cluster-scoped caches across submissions.
+type submissionSession struct {
 	acceleratorToMachineType    map[string]string
-	machineCapCache             map[string]MachineTypeCap
 	resolvedHeadNodePool        string
 	machineTypeToThreadsPerCore map[string]string
-	napEnabled                  bool
-	napLimits                   map[string]int64
 	dynamicSlicingCache         map[string]bool
 	staticSlicingCache          map[string]bool
 	topologyCache               map[string]string
 	resourcePolicyCache         map[string]*GCEWorkloadPolicy
 	slicingTopologiesChecked    bool
 	slicingTopologiesDetected   bool
-	gkeCustomTemplatesPath      string
-	httpClient                  HTTPClient
-	httpOnce                    sync.Once
+	// inspectedPVCs caches per-submit PVC metadata inspected during ValidateClusterMounts.
+	inspectedPVCs  map[string]pvcInspectResult
+	nfsAuthChecked bool
+	// inventory caches pure-Kubernetes node, slice, and label-scheme discovery results for the current run.
+	inventory *k8s.Inventory
+	// addons caches the resolved 3-state JobSet/Kueue matrix once per submission.
+	addons       addonPlan
+	githubProbed bool
+	githubOnline bool
+	// jobSetAPI* caches the lightweight /apis/jobset.x-k8s.io probe per kubeContext on 403 fallback paths.
+	jobSetAPIProbed  bool
+	jobSetAPIPresent bool
+	jobSetAPIContext string
+	// tpuSliceAPI* caches the lightweight /apis/slice.tpu.google.com probe per kubeContext when inventory is nil.
+	tpuSliceAPIChecked bool
+	tpuSliceAPIPresent bool
+	tpuSliceAPIContext string
+}
+
+func newSubmissionSession() submissionSession {
+	return submissionSession{
+		acceleratorToMachineType: make(map[string]string),
+		dynamicSlicingCache:      make(map[string]bool),
+		staticSlicingCache:       make(map[string]bool),
+		topologyCache:            make(map[string]string),
+		resourcePolicyCache:      make(map[string]*GCEWorkloadPolicy),
+		inspectedPVCs:            make(map[string]pvcInspectResult),
+	}
+}
+
+type GKEOrchestrator struct {
+	mode              orchestrator.Type
+	executor          Executor
+	projectID         string
+	clusterZones      []string
+	nodePoolSAs       []string
+	capacity          ClusterCapacity
+	clusterDesc       gkeCluster
+	dynClient         dynamic.Interface
+	kubeClient        KubeClient
+	namespace         string
+	machineTypeClient MachineTypeClient
+	machineCapCache   map[string]MachineTypeCap
+	napEnabled        bool
+	napLimits         map[string]int64
+	submissionSession
+	gkeCustomTemplatesPath string
+	httpClient             HTTPClient
+	httpOnce               sync.Once
 	// kubeconfigLoader reads the merged kubeconfig. nil means the default
 	// client-go loading rules (KUBECONFIG env or ~/.kube/config).
 	kubeconfigLoader k8s.KubeconfigLoader
 	// kubeContext is the context set by configureKubectl; all kubectl and dynamic-client calls use it.
-	kubeContext string
-	// inspectedPVCs caches per-submit PVC metadata inspected during ValidateClusterMounts.
-	inspectedPVCs  map[string]pvcInspectResult
-	nfsAuthChecked bool
+	kubeContext      string
+	dynClientManaged bool
+	dynClientContext string
+	k8sCluster       string
+	preflightClient  storagePreflightClient
+	// connectivity lazily probes outbound GitHub reachability once per run when an add-on install is considered.
+	connectivity *connectivityChecker
+	// isInteractiveFunc and promptLineFunc allow race-free test injection of TTY detection and 3-way prompt reads.
+	isInteractiveFunc func() bool
+	promptLineFunc    func(string) (string, bool)
+	// sliceTeardownTimeout, sliceTeardownInterval, and sleepFunc allow hermetic testing of CancelJob slice teardown wait.
+	sliceTeardownTimeout  time.Duration
+	sliceTeardownInterval time.Duration
+	sleepFunc             func(time.Duration)
+}
+
+// gceTPUHardwareResolver implements k8s.TPUHardwareResolver using GCE machine-type conventions.
+type gceTPUHardwareResolver struct{}
+
+type gceTPUFamilySpec struct {
+	canonical      string
+	normTokens     []string
+	shorthandBases []string
+	tpu7xChipRules bool
 }
 
 // Types for GetClusterInfo unmarshaling
@@ -293,8 +356,14 @@ type permissionCheck struct {
 }
 
 type JobProfile struct {
-	IsCPUMachine  bool
-	CapacityCount int
+	IsCPUMachine bool
+	IsTPU        bool
+	// CapacityCount holds effective vCPUs (already adjusted via getEffectiveCPUs) when IsCPUMachine is true.
+	CapacityCount       int
+	MemoryMb            int
+	AllocatableCPUMilli int64
+	GPUResourceName     string
+	K8sPool             *k8s.PoolCapacity
 }
 
 type ManifestOptions struct {
@@ -303,7 +372,8 @@ type ManifestOptions struct {
 	CommandToRun                  string
 	ComputeType                   string
 	MachineType                   string
-	ResourcesString               string
+	CPURequest                    string
+	MemoryRequest                 string
 	ProjectID                     string
 	ClusterName                   string
 	ClusterLocation               string
@@ -319,6 +389,8 @@ type ManifestOptions struct {
 	PodFailurePolicy              string
 	ImagePullSecrets              string
 	ServiceAccountName            string
+	WorkloadLabels                string
+	PodLabels                     string
 	TopologyAnnotation            string
 	Topology                      string
 	PathwaysInstanceType          string
@@ -332,7 +404,10 @@ type ManifestOptions struct {
 	GCSFuseEnabled                bool
 	IsDynamicSlicing              bool
 	IsStaticSlicing               bool
+	DynamicTPUSlice               bool
 	IsCPUMachine                  bool
+	OmitGKENodePool               bool
+	K8sPool                       *k8s.PoolCapacity
 	Pathways                      orchestrator.PathwaysJobDefinition
 	IsPathwaysJob                 bool
 	GKEMTCEnabled                 bool
@@ -345,13 +420,16 @@ type ManifestOptions struct {
 	AdditionalManifests           []string
 }
 
+func (o ManifestOptions) isFractionalCPU() bool {
+	return o.IsCPUMachine && !o.IsPathwaysJob && (o.CPURequest != "" || o.MemoryRequest != "")
+}
+
 // StorageManager handles parsing and validation of storage mounts.
 type StorageManager struct {
 	orchestrator    *GKEOrchestrator
 	getFilestoreIP  func(ctx context.Context, projectID, location, nameOrIP string, isIP bool) (string, string, int64, error)
 	filestoreClient filestoreClient
 	instancesCache  []*filestorepb.Instance
-	preflightClient storagePreflightClient
 	now             func() time.Time // stamps last-claimed-at; nil means time.Now
 }
 
@@ -396,8 +474,8 @@ type storagePreflightClient interface {
 
 type gcpPreflightClient struct {
 	storage *gcs.Service
-	iam     *iamapi.Service
-	crm     *crm.Service
+	iam     func() (*iamapi.Service, error)
+	crm     func() (*crm.Service, error)
 }
 
 type iamBinding struct {
@@ -407,9 +485,10 @@ type iamBinding struct {
 
 // DataLocations is set only for custom dual-region buckets.
 type bucketLocation struct {
-	Location      string
-	LocationType  string
-	DataLocations []string
+	Location              string
+	LocationType          string
+	DataLocations         []string
+	HierarchicalNamespace bool
 }
 
 type profileMount struct {
@@ -553,6 +632,12 @@ type gkeTaint struct {
 	Effect string `json:"effect"`
 }
 
+type gkeReservationAffinity struct {
+	ConsumeReservationType string   `json:"consumeReservationType,omitempty"`
+	Key                    string   `json:"key,omitempty"`
+	Values                 []string `json:"values,omitempty"`
+}
+
 type gkeNodePoolConfig struct {
 	ServiceAccount          string                      `json:"serviceAccount"`
 	MachineType             string                      `json:"machineType"`
@@ -560,6 +645,8 @@ type gkeNodePoolConfig struct {
 	AdvancedMachineFeatures *gkeAdvancedMachineFeatures `json:"advancedMachineFeatures,omitempty"`
 	Taints                  []gkeTaint                  `json:"taints"`
 	Labels                  map[string]string           `json:"labels,omitempty"`
+	Spot                    bool                        `json:"spot,omitempty"`
+	ReservationAffinity     *gkeReservationAffinity     `json:"reservationAffinity,omitempty"`
 }
 
 type gkeAutoscaling struct {
@@ -602,6 +689,7 @@ type gkeResourceLimit struct {
 type gkeClusterAutoscaling struct {
 	EnableNodeAutoprovisioning bool               `json:"enableNodeAutoprovisioning"`
 	ResourceLimits             []gkeResourceLimit `json:"resourceLimits"`
+	AutoprovisioningLocations  []string           `json:"autoprovisioningLocations,omitempty"`
 }
 
 type gkeCluster struct {
@@ -669,11 +757,13 @@ type JobSetStatus struct {
 }
 
 type jobSetInfo struct {
-	terminalState string
-	suspended     bool
-	firstJob      string
-	expectedPods  int
-	queried       bool
+	terminalState   string
+	suspended       bool
+	firstJob        string
+	expectedPods    int
+	expectedStreams int
+	queried         bool
+	isBatchJob      bool
 }
 
 func (info jobSetInfo) terminal() bool {
@@ -691,6 +781,16 @@ type EnvVar struct {
 	Name string
 	// Value is the environment variable value.
 	Value string
+}
+
+// EnvVars is the env list rendered into one container. The embedded workload templates call Has on the Env and
+// Pathways*Env fields to skip a default the user sets, so data rendered by those templates must expose them as
+// EnvVars.
+type EnvVars []EnvVar
+
+// Has reports whether the list sets the variable name.
+func (e EnvVars) Has(name string) bool {
+	return slices.ContainsFunc(e, func(v EnvVar) bool { return v.Name == name })
 }
 
 type jobSetTemplateData struct {
@@ -724,6 +824,8 @@ type jobSetTemplateData struct {
 	PodFailurePolicy              string
 	ImagePullSecrets              string
 	ServiceAccountName            string
+	WorkloadLabels                string
+	PodLabels                     string
 	TopologyAnnotation            string
 	SchedulerName                 string
 	SchedulingGates               string
@@ -741,11 +843,12 @@ type jobSetTemplateData struct {
 	PathwaysRMAddress             string // remote resource manager for the proxy (SPS client); empty means the local head
 	ExclusiveTopologyAnnotation   string
 	Verbose                       bool
-	Env                           []EnvVar
-	PathwaysProxyEnv              []EnvVar
-	PathwaysServerEnv             []EnvVar
-	PathwaysWorkerEnv             []EnvVar
+	Env                           EnvVars
+	PathwaysProxyEnv              EnvVars
+	PathwaysServerEnv             EnvVars
+	PathwaysWorkerEnv             EnvVars
 	IsTPU                         bool
+	TPUCommPortEnabled            bool
 	IsGPU                         bool
 	GKEMTCEnabled                 bool
 	GKEMTCRamdiskDirectory        string
@@ -765,6 +868,32 @@ type jobSetValidationSpec struct {
 			Template batchv1.JobTemplateSpec `json:"template"`
 		} `json:"replicatedJobs"`
 	} `json:"spec"`
+}
+
+type workloadManifestObject struct {
+	kind           string
+	jobName        string
+	objectMeta     metav1.ObjectMeta
+	jobLabels      map[string]string
+	jobAnnotations map[string]string
+	pfp            *batchv1.PodFailurePolicy
+	tmpl           *corev1.PodTemplateSpec
+}
+
+type tpuSliceManifestContract struct {
+	workloadLabelsYAML string
+	podLabelsYAML      string
+	topologyAnnotYAML  string
+	schedulerName      string
+	dynamicTPUSlice    bool
+	commPortEnabled    bool
+}
+
+type sliceTeardownState struct {
+	sawSlices       bool
+	transientWarned bool
+	lastNamesKey    string
+	lastLogElapsed  time.Duration
 }
 
 // Types for parsing kubectl get nodes -o json
@@ -1025,3 +1154,87 @@ const (
 	probeInvalid                   // empty/blank context name refused before running kubectl
 	probeUnknown
 )
+
+type kubectlServerVersion struct {
+	GitVersion string `json:"gitVersion"`
+}
+
+type kubectlVersionOutput struct {
+	ServerVersion *kubectlServerVersion `json:"serverVersion"`
+}
+
+// addonState represents the 3-state classification of an optional Kubernetes workload add-on (JobSet or Kueue),
+// plus an explicit Disabled state when pinned off by environment variable.
+type addonState int
+
+const (
+	addonStateUnknown addonState = iota
+	addonStateInstalled
+	addonStatePartial
+	addonStateMissing
+	addonStateDisabled
+)
+
+type jobSetAddonProbe struct {
+	state     addonState
+	crdExists bool
+	epReady   bool
+	epErr     error
+	checkedEP bool
+}
+
+type kueueAddonProbe struct {
+	state          addonState
+	crdExists      bool
+	dep            *kueueDeployment
+	currentVersion string
+}
+
+type addonPlan struct {
+	resolved      bool
+	jobSetEnabled bool
+	kueueEnabled  bool
+}
+
+type addonActions struct {
+	installJobSet bool
+	installKueue  bool
+	upgradeKueue  bool
+}
+
+// connectivityChecker holds injectable environment and GitHub reachability probe hooks.
+// Per-submission probe results are cached in submissionSession (githubProbed/githubOnline).
+type connectivityChecker struct {
+	getenv func(string) string
+	probe  func(ctx context.Context) bool
+}
+
+type kueueClusterQueueResourceGroup struct {
+	CoveredResources []string `json:"coveredResources"`
+}
+
+type kueueClusterQueueSpec struct {
+	ResourceGroups []kueueClusterQueueResourceGroup `json:"resourceGroups"`
+}
+
+type kueueClusterQueueDoc struct {
+	Kind string                 `json:"kind"`
+	Spec *kueueClusterQueueSpec `json:"spec"`
+}
+
+type policyListPayload[Item any] struct {
+	Kind  string `json:"kind"`
+	Items []Item `json:"items"`
+}
+
+type limitRangeSummary struct {
+	known       bool
+	defaults    map[corev1.ResourceName]bool
+	defaultReqs map[corev1.ResourceName]bool
+}
+
+type quotaRequirementCheck struct {
+	hardKey      corev1.ResourceName
+	resName      corev1.ResourceName
+	requireLimit bool
+}

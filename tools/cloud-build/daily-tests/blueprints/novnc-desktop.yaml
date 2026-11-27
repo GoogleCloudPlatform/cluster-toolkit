@@ -30,7 +30,7 @@ deployment_groups:
     use: [network]
     settings:
       machine_type: n2-standard-4
-      enable_public_ips: false
+      enable_public_ips: true
       vnc_backend: tigervnc
 
   # Makes terraform wait until the whole desktop runtime has installed: the

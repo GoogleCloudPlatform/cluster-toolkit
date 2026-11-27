@@ -67,6 +67,7 @@ var (
 	destroyGroupsFunc                           = destroyGroups
 	cleanupFirewallRulesFunc                    = cleanupFirewallRules
 	destroyTerraformGroupFunc                   = destroyTerraformGroup
+	deleteClusterDirectorFunc                   = deleteClusterDirector
 	shellConfigureTerraformFunc                 = shell.ConfigureTerraform
 	shellDestroyFunc                            = shell.Destroy
 	shellRemoveKubernetesResourcesFromStateFunc = shell.RemoveKubernetesResourcesFromState
@@ -93,10 +94,21 @@ func runDestroyCmd(cmd *cobra.Command, args []string) {
 
 	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot), ctx)
 
-	destroyRunner(deplRoot, artifactsDir, bp, ctx)
+	skippedGroups, destroyFailed := destroyRunner(deplRoot, artifactsDir, bp, ctx)
+
+	// Delete or shrink the Cluster Director export only when destruction
+	// succeeded. Because Terraform has already removed the selected
+	// infrastructure at this point, a Cluster Director cleanup failure logs a
+	// warning (preserving the marker and printing the manual gcloud delete
+	// command) rather than failing the destroy command.
+	if !destroyFailed {
+		if err := deleteClusterDirectorFunc(cmd, deplRoot, artifactsDir, bp, skippedGroups); err != nil {
+			logging.Warn("Infrastructure was destroyed, but Cluster Director cleanup did not complete: %v", err)
+		}
+	}
 }
 
-func destroyRunner(deplRoot string, artifactsDir string, bp config.Blueprint, ctx *config.YamlCtx) {
+func destroyRunner(deplRoot string, artifactsDir string, bp config.Blueprint, ctx *config.YamlCtx) (map[config.GroupName]bool, bool) {
 	maxRetries := 1
 	if robustDestroy {
 		maxRetries = 3
@@ -105,23 +117,26 @@ func destroyRunner(deplRoot string, artifactsDir string, bp config.Blueprint, ct
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		logging.Info("Destroy attempt %d of %d", attempt, maxRetries)
 
-		destroyFailed, packerManifests, err := destroyGroupsFunc(deplRoot, artifactsDir, bp, ctx)
+		destroyFailed, packerManifests, skippedGroups, err := destroyGroupsFunc(deplRoot, artifactsDir, bp, ctx)
 
 		if !destroyFailed {
 			logging.Info("Successfully destroyed all selected groups.")
 			modulewriter.WritePackerDestroyInstructions(os.Stdout, packerManifests)
-			return // Exit runDestroyCmd successfully
+			return skippedGroups, false
 		}
 
 		if errors.Is(err, errUserAborted) {
 			logging.Fatal("Destruction of %q failed: user declined state cleanup", deplRoot)
+			return nil, true
 		}
 
 		if attempt == maxRetries {
 			logging.Fatal("Destruction of %q failed after %d attempts", deplRoot, maxRetries)
+			return nil, true
 		}
 		logging.Info("Retrying destroy...")
 	}
+	return nil, true
 }
 
 func groupHasNetworkModule(group config.Group) bool {
@@ -133,9 +148,17 @@ func groupHasNetworkModule(group config.Group) bool {
 	return false
 }
 
-func destroyGroups(deplRoot string, artifactsDir string, bp config.Blueprint, ctx *config.YamlCtx) (bool, []string, error) {
+type destroyGroupResult struct {
+	manifests   []string
+	failed      bool
+	skipped     bool
+	shouldBreak bool
+}
+
+func destroyGroups(deplRoot string, artifactsDir string, bp config.Blueprint, ctx *config.YamlCtx) (bool, []string, map[config.GroupName]bool, error) {
 	// destroy in reverse order of creation!
 	packerManifests := []string{}
+	skippedGroups := map[config.GroupName]bool{}
 	destroyFailed := false
 	for i := len(bp.Groups) - 1; i >= 0; i-- {
 		group := bp.Groups[i]
@@ -144,32 +167,34 @@ func destroyGroups(deplRoot string, artifactsDir string, bp config.Blueprint, ct
 			continue
 		}
 
-		manifests, failed, shouldBreak, err := destroyGroup(group, deplRoot, artifactsDir, bp, ctx, i)
-		packerManifests = append(packerManifests, manifests...)
-		if failed {
+		res, err := destroyGroup(group, deplRoot, artifactsDir, bp, ctx, i)
+		packerManifests = append(packerManifests, res.manifests...)
+		if res.skipped {
+			skippedGroups[group.Name] = true
+		}
+		if res.failed {
 			destroyFailed = true
 		}
 		if errors.Is(err, errUserAborted) {
-			return true, packerManifests, err
+			return true, packerManifests, skippedGroups, err
 		}
-		if shouldBreak {
+		if res.shouldBreak {
 			break
 		}
 	}
-	return destroyFailed, packerManifests, nil
+	return destroyFailed, packerManifests, skippedGroups, nil
 }
 
-func destroyGroup(group config.Group, deplRoot string, artifactsDir string, bp config.Blueprint, ctx *config.YamlCtx, i int) ([]string, bool, bool, error) {
-	packerManifests := []string{}
-	destroyFailed := false
+func destroyGroup(group config.Group, deplRoot string, artifactsDir string, bp config.Blueprint, ctx *config.YamlCtx, i int) (destroyGroupResult, error) {
+	var res destroyGroupResult
 	if robustDestroy && groupHasNetworkModule(group) {
 		projectID, deploymentName, err := getProjectAndDeploymentVars(bp.Vars)
 		if err != nil {
 			logging.Error("Skipping firewall cleanup: could not get required variables. %v", err)
-			return nil, true, true, nil
+			return destroyGroupResult{failed: true, shouldBreak: true}, nil
 		} else if err := cleanupFirewallRulesFunc(projectID, deploymentName); err != nil {
 			logging.Error("Failed to cleanup firewall rules for group %s: %v", group.Name, err)
-			return nil, true, true, nil
+			return destroyGroupResult{failed: true, shouldBreak: true}, nil
 		}
 	}
 
@@ -186,7 +211,7 @@ func destroyGroup(group config.Group, deplRoot string, artifactsDir string, bp c
 		// Packer groups are enforced to have length 1
 		// TODO: destroyPackerGroup(moduleDir)
 		moduleDir := filepath.Join(groupDir, string(group.Modules[0].ID))
-		packerManifests = append(packerManifests, filepath.Join(moduleDir, "packer-manifest.json"))
+		res.manifests = append(res.manifests, filepath.Join(moduleDir, "packer-manifest.json"))
 	case config.TerraformKind:
 		err = destroyTerraformGroupFunc(groupDir)
 	default:
@@ -194,16 +219,23 @@ func destroyGroup(group config.Group, deplRoot string, artifactsDir string, bp c
 	}
 
 	if err != nil {
+		if errors.Is(err, shell.ErrDestroySkipped) {
+			res.skipped = true
+			return res, nil
+		}
 		if errors.Is(err, errUserAborted) {
-			return packerManifests, true, true, err
+			res.failed = true
+			res.shouldBreak = true
+			return res, err
 		}
 		logging.Error("failed to destroy group %q:\n%s", group.Name, renderError(err, *ctx))
-		destroyFailed = true
+		res.failed = true
 		if i == 0 || !destroyChoice(bp.Groups[i-1].Name) {
-			return packerManifests, destroyFailed, true, nil
+			res.shouldBreak = true
+			return res, nil
 		}
 	}
-	return packerManifests, destroyFailed, false, nil
+	return res, nil
 }
 
 func getStringVar(vars config.Dict, key string) (string, error) {

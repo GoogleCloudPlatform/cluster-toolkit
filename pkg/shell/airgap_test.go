@@ -79,6 +79,9 @@ func TestAirGappedPrecedenceAndConcurrency(t *testing.T) {
 func TestIsAirGappedEnv_UnrecognizedValueFallsBackToDefault(t *testing.T) {
 	t.Cleanup(func() { SetDefaultAirGapped(false) })
 	for _, raw := range []string{"invalid-value", "   "} {
+		if v, ok := ParseBoolEnv(raw); v || ok {
+			t.Fatalf("ParseBoolEnv(%q) = (%v, %v), want (false, false)", raw, v, ok)
+		}
 		t.Setenv(AirGappedEnvVar, raw)
 
 		SetDefaultAirGapped(false)

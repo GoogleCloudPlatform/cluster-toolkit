@@ -84,10 +84,11 @@ const (
 	// gatewayReleaseTimeout bounds how long submit waits for a gateway that is still being deleted.
 	gatewayReleaseTimeout = 2 * time.Minute
 
-	gcsFuseCSIDriver           = "gcsfuse.csi.storage.gke.io"
-	servingProfileStorageClass = "gcsfusecsi-serving"
-	pvcGCSFuseJSONPath         = `jsonpath={.spec.volumeName}{"\t"}{.spec.storageClassName}{"\t"}{.metadata.annotations.volume\.kubernetes\.io/storage-provisioner}{"\t"}{.metadata.annotations.volume\.beta\.kubernetes\.io/storage-provisioner}`
-	pvCSIDriverTemplate        = `go-template={{if .spec.csi}}{{.spec.csi.driver}}{{end}}`
+	gcsFuseCSIDriver                 = "gcsfuse.csi.storage.gke.io"
+	servingProfileStorageClass       = "gcsfusecsi-serving"
+	checkpointingProfileStorageClass = "gcsfusecsi-checkpointing"
+	pvcGCSFuseJSONPath               = `jsonpath={.spec.volumeName}{"\t"}{.spec.storageClassName}{"\t"}{.metadata.annotations.volume\.kubernetes\.io/storage-provisioner}{"\t"}{.metadata.annotations.volume\.beta\.kubernetes\.io/storage-provisioner}`
+	pvCSIDriverTemplate              = `go-template={{if .spec.csi}}{{.spec.csi.driver}}{{end}}`
 
 	// minGCSFuseProfileGKEVersion is the first GKE version with storage profile StorageClasses.
 	minGCSFuseProfileGKEVersion = "1.35.1-gke.1616000"
@@ -192,6 +193,9 @@ func newMountBuildState() *mountBuildState {
 }
 
 func (s *mountBuildState) volumeNameFor(pvName string, idx int) (name string, reused bool) {
+	if s == nil {
+		return fmt.Sprintf("vol-%d", idx), false
+	}
 	if existing, ok := s.gatewayVolumeNames[pvName]; ok {
 		return existing, true
 	}
@@ -246,6 +250,9 @@ func (sm *StorageManager) dispatchMount(pm parsedMount, idx int, job orchestrato
 }
 
 func (sm *StorageManager) pvcNeedsGCSFuseSidecar(pvcName string, job orchestrator.JobDefinition, state *mountBuildState) bool {
+	if sm.orchestrator != nil && sm.orchestrator.mode == orchestrator.TypeK8s {
+		return false
+	}
 	if state != nil && state.pvcNeedsSidecar != nil {
 		if needsSidecar, checked := state.pvcNeedsSidecar[pvcName]; checked {
 			return needsSidecar
@@ -311,12 +318,17 @@ func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string) bool {
 		return false
 	}
 
-	lowerSC := strings.ToLower(storageClassName)
-	if sc := gcsFuseProfileStorageClasses[lowerSC]; sc != "" && sc == lowerSC {
+	if isKnownGCSFuseProfileStorageClass(storageClassName) {
 		return true
 	}
 	return sm.hasGCSFuseCSIField("pv", volumeName, pvcName, pvCSIDriverTemplate) ||
 		sm.hasGCSFuseCSIField("storageclass", storageClassName, pvcName, "jsonpath={.provisioner}")
+}
+
+func isKnownGCSFuseProfileStorageClass(storageClassName string) bool {
+	lowerSC := strings.ToLower(storageClassName)
+	sc := gcsFuseProfileStorageClasses[lowerSC]
+	return sc != "" && sc == lowerSC
 }
 
 func parsePVCGCSFuseFields(stdout string) (volumeName, storageClassName, provisioner string) {
@@ -364,7 +376,7 @@ func buildPodLevelMount(pm parsedMount, idx int, state *mountBuildState) MountIn
 	}
 
 	volName := fmt.Sprintf("vol-%d", idx)
-	if volType == "pvc" && state != nil {
+	if volType == "pvc" {
 		volName, _ = state.volumeNameFor("pvc:"+pm.Src, idx)
 	}
 
@@ -378,10 +390,21 @@ func buildPodLevelMount(pm parsedMount, idx int, state *mountBuildState) MountIn
 		SubPath:   pm.SubPath,
 	}
 
-	// Warn here rather than in parseSingleVolume so ValidateMounts + ProcessMounts does not warn twice.
-	if volType == "gcsfuse" && len(pm.Attributes) > 0 {
-		info.Attributes = pm.Attributes
-		warnProfileOnlyAttributes(pm.Attributes, pm.Src)
+	if volType == "gcsfuse" {
+		if pm.SubPath != "" {
+			info.Options = normalizeGCSMountOptions(info.Options + ",only-dir=" + pm.SubPath)
+			info.SubPath = ""
+		}
+		key := fmt.Sprintf("gcs:%s\x00%s\x00%s", pm.Src, info.Options, canonicalAttributesKey(pm.Attributes))
+		var reused bool
+		info.Name, reused = state.volumeNameFor(key, idx)
+		// Warn once per shared inline volume rather than in parseSingleVolume so ValidateMounts + ProcessMounts does not warn twice.
+		if len(pm.Attributes) > 0 {
+			info.Attributes = pm.Attributes
+			if !reused {
+				warnProfileOnlyAttributes(pm.Attributes, pm.Src)
+			}
+		}
 	}
 
 	return info
@@ -423,6 +446,14 @@ func (sm *StorageManager) ValidateMounts(mounts []string) error {
 	return sm.validateJobMounts(mounts, false, false)
 }
 
+func canonicalAttributesKey(attrs map[string]string) string {
+	if len(attrs) == 0 {
+		return ""
+	}
+	b, _ := json.Marshal(attrs)
+	return string(b)
+}
+
 // validateJobMounts validates --mount values and, for Pathways jobs, rejects
 // destinations that collide with the built-in Pathways mounts.
 func (sm *StorageManager) validateJobMounts(mounts []string, isPathways bool, hasColocatedSidecar bool) error {
@@ -445,16 +476,12 @@ func (sm *StorageManager) validateJobMounts(mounts []string, isPathways bool, ha
 			}
 		}
 
-		dupSrc := pm.Src
-		if pm.SubPath != "" {
-			dupSrc += "/" + pm.SubPath
-		}
+		dupSrc, optsForKey := canonicalMountSourceKey(pm.Src, pm.SubPath, pm.Options, pm.Profile != "")
 		sourceKey := dupSrc
 		if pm.Profile != "" {
 			sourceKey += ";profile=" + pm.Profile
 		}
-		// %v prints map keys in sorted order, so the key is independent of attribute order.
-		sourceKey += fmt.Sprintf(";ro=%t;options=%s;attributes=%v", pm.ReadOnly, pm.Options, pm.Attributes)
+		sourceKey += fmt.Sprintf(";ro=%t;options=%s;attributes=%s", pm.ReadOnly, optsForKey, canonicalAttributesKey(pm.Attributes))
 
 		if seenSources[sourceKey] {
 			return fmt.Errorf("duplicate volume source: %s", dupSrc)
@@ -623,7 +650,14 @@ func parseVolumeAttributes(raw string) (map[string]string, error) {
 		if _, dup := attrs[key]; dup {
 			return nil, fmt.Errorf("duplicate volume attribute key %q", key)
 		}
-		attrs[key] = strings.TrimSpace(pair[1])
+		val := strings.TrimSpace(pair[1])
+		if val == "" {
+			if key == anywhereCacheZonesAttribute {
+				return nil, fmt.Errorf("invalid volume attribute %q: value must not be empty (use %s=%s to disable Rapid Cache)", kv, anywhereCacheZonesAttribute, anywhereCacheOffValue)
+			}
+			return nil, fmt.Errorf("invalid volume attribute %q: value must not be empty", kv)
+		}
+		attrs[key] = val
 	}
 	if len(attrs) == 0 {
 		return nil, fmt.Errorf("attributes= was specified but no key=value pairs were provided")
@@ -638,15 +672,19 @@ func repeatedSegmentErr(segment, vStr, joinHint string) error {
 
 func parseMountSegments(segments []string, vStr string, pm *parsedMount) (mountSegments, error) {
 	var out mountSegments
+	modeSet := false
 	optionsSet := false
 	attributesSet := false
 
 	for _, part := range segments {
 		switch {
-		case part == "ro":
-			pm.ReadOnly = true
-		case part == "rw":
-			pm.ReadOnly = false
+		case part == "ro" || part == "rw":
+			if modeSet {
+				return out, repeatedSegmentErr("ro/rw mode", vStr,
+					" Specify the access mode once: ro or rw")
+			}
+			modeSet = true
+			pm.ReadOnly = part == "ro"
 		case strings.HasPrefix(part, "options="):
 			if optionsSet {
 				return out, repeatedSegmentErr("options=", vStr,
@@ -703,6 +741,186 @@ func validateGCSOnlySegments(pm parsedMount, profileSet bool) error {
 		pm.Src, strings.Join(unsupportedSegments, ", "))
 }
 
+func splitGCSOptionKeyValue(opt string) (key, sep, val string) {
+	if idx := strings.IndexAny(opt, "=:"); idx >= 0 {
+		return opt[:idx], opt[idx : idx+1], opt[idx+1:]
+	}
+	return opt, "", ""
+}
+
+func hasDotPathSegment(p string) bool {
+	for _, seg := range strings.Split(p, "/") {
+		if seg == "." || seg == ".." {
+			return true
+		}
+	}
+	return false
+}
+
+func validateOnlyDirOption(opt, sep, val string, seenOnlyDir *bool) error {
+	if sep == "" {
+		return fmt.Errorf("invalid GCSFuse mount option %q: 'only-dir' requires a directory value (e.g., options=only-dir=<dir>)", opt)
+	}
+	if strings.Contains(val, "\\") || hasControlChar(val) {
+		return fmt.Errorf("invalid GCSFuse mount option %q: 'only-dir' directory value must use forward slashes '/' and contain no control characters", opt)
+	}
+	trimmed := strings.Trim(val, "/")
+	if strings.TrimSpace(trimmed) == "" {
+		return fmt.Errorf("invalid GCSFuse mount option %q: 'only-dir' directory value must not be empty or root '/'", opt)
+	}
+	if strings.TrimSpace(trimmed) != trimmed {
+		return fmt.Errorf("invalid GCSFuse mount option %q: 'only-dir' directory value must not have leading or trailing whitespace", opt)
+	}
+	if hasDotPathSegment(trimmed) {
+		return fmt.Errorf("invalid GCSFuse mount option %q: 'only-dir' directory value must not contain '.' or '..' path segments", opt)
+	}
+	if *seenOnlyDir {
+		return fmt.Errorf("invalid GCSFuse mount option %q: 'only-dir' may only be specified once per --mount", opt)
+	}
+	*seenOnlyDir = true
+	return nil
+}
+
+func rejectDisallowedGCSOptionToken(opt, token string) error {
+	switch token {
+	case "defaults", "_netdev":
+		return fmt.Errorf("invalid GCSFuse mount option %q: fstab-only options are not supported by the Cloud Storage FUSE CSI driver; remove %q from options=", opt, opt)
+	case "ro", "rw", "o=ro", "o=rw":
+		mode := strings.TrimPrefix(token, "o=")
+		return fmt.Errorf("invalid GCSFuse mount option %q: specify the access mode as a ';%s' --mount segment instead of in options= (e.g., gs://<bucket>;<dest>;%s)", opt, mode, mode)
+	}
+	return nil
+}
+
+func validateGCSMountOptionToken(opt string, seenOnlyDir *bool) error {
+	token := strings.TrimLeft(opt, "-")
+	if err := rejectDisallowedGCSOptionToken(opt, token); err != nil {
+		return err
+	}
+	key, sep, val := splitGCSOptionKeyValue(token)
+	if key == "only-dir" || key == "only_dir" {
+		if err := validateOnlyDirOption(opt, sep, val, seenOnlyDir); err != nil {
+			return err
+		}
+	}
+	if key == "implicit_dirs" || key == "only_dir" {
+		hyphenated := strings.Replace(key, "_", "-", 1)
+		suggestSep := sep
+		if key == "only_dir" && sep != "" {
+			suggestSep = "="
+		}
+		return fmt.Errorf("invalid GCSFuse mount option %q: the Cloud Storage FUSE CSI driver uses hyphenated %q (not fstab-style %q). Use %q in options= instead", opt, hyphenated, key, hyphenated+suggestSep+val)
+	}
+	if token != opt {
+		if token == "" {
+			return fmt.Errorf("invalid GCSFuse mount option %q: flag name is empty", opt)
+		}
+		return fmt.Errorf("invalid GCSFuse mount option %q: omit leading '-' in options= (the Cloud Storage FUSE CSI driver prepends '--' automatically). Use %q in options= instead", opt, token)
+	}
+	return nil
+}
+
+func validateGCSMountOptions(options string) error {
+	seenOnlyDir := false
+	for _, opt := range splitMountOptions(options) {
+		if err := validateGCSMountOptionToken(opt, &seenOnlyDir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateAndNormalizeGCSMount(pm *parsedMount, hasProfile bool) error {
+	if !strings.HasPrefix(pm.Src, "gs://") {
+		return nil
+	}
+	if pm.SubPath != "" {
+		if err := validateGCSSubPath(pm.Src, pm.SubPath, pm.Options, hasProfile); err != nil {
+			return err
+		}
+	}
+	if err := validateGCSMountOptions(pm.Options); err != nil {
+		return err
+	}
+	if pm.SubPath != "" {
+		pm.SubPath = path.Clean(pm.SubPath)
+	}
+	if pm.Options != "" {
+		pm.Options = normalizeGCSMountOptions(pm.Options)
+	}
+	return nil
+}
+
+func validateGCSSubPath(src, subPath, options string, hasProfile bool) error {
+	if strings.Contains(subPath, "\\") || hasControlChar(subPath) {
+		return fmt.Errorf("invalid GCS mount %q: sub-path %q must use forward slashes '/' and contain no control characters", src+"/"+subPath, subPath)
+	}
+	if hasDotPathSegment(subPath) {
+		return fmt.Errorf("invalid GCS mount %q: sub-path %q must not contain '.' or '..' path segments", src+"/"+subPath, subPath)
+	}
+	if !hasProfile {
+		if strings.Contains(subPath, ",") {
+			return fmt.Errorf("inline GCS mount subpath %q cannot contain ',' because volumeAttributes.mountOptions is comma-delimited; mount the bucket or a comma-free parent prefix, use a pre-existing PVC, or use profile=<training|checkpointing|serving> (GKE %s+) to mount via Pod subPath", subPath, minGCSFuseProfileGKEVersion)
+		}
+		if strings.TrimSpace(subPath) != subPath {
+			return fmt.Errorf("inline GCS mount subpath %q must not have leading or trailing whitespace", subPath)
+		}
+	}
+	for _, opt := range splitMountOptions(options) {
+		key, _, _ := splitGCSOptionKeyValue(strings.TrimLeft(opt, "-"))
+		if key == "only-dir" || key == "only_dir" {
+			return fmt.Errorf("mount %q specifies both a GCS subpath (%q) and %q in options=. Specify the subpath either in the URI (%s/%s without only-dir in options=) or on the bare bucket (%s with options=only-dir=<dir>), not both",
+				src+"/"+subPath, subPath, opt, src, subPath, src)
+		}
+	}
+	return nil
+}
+
+func normalizeGCSMountOptions(options string) string {
+	opts := splitMountOptions(options)
+	for i, opt := range opts {
+		if key, sep, val := splitGCSOptionKeyValue(opt); key == "only-dir" && sep != "" {
+			opts[i] = "only-dir=" + path.Clean(strings.Trim(val, "/"))
+		}
+	}
+	slices.Sort(opts)
+	return strings.Join(slices.Compact(opts), ",")
+}
+
+// canonicalMountSourceKey computes the duplicate-detection source and options key.
+// For inline GCS mounts, only-dir=<dir> is equivalent to gs://<bucket>/<dir>.
+func canonicalMountSourceKey(src, subPath, options string, hasProfile bool) (dupSrc, optsForKey string) {
+	dupSrc = src
+	if subPath != "" {
+		return src + "/" + subPath, options
+	}
+	if !strings.HasPrefix(src, "gs://") || hasProfile || options == "" {
+		return dupSrc, options
+	}
+	var remaining []string
+	for _, opt := range splitMountOptions(options) {
+		key, _, val := splitGCSOptionKeyValue(opt)
+		if key == "only-dir" {
+			dupSrc = src + "/" + val
+			continue
+		}
+		remaining = append(remaining, opt)
+	}
+	return dupSrc, strings.Join(remaining, ",")
+}
+
+// hasImplicitDirsOption reports whether a comma-separated GCSFuse mountOptions string
+// already configures implicit-dirs (including explicit opt-out).
+func hasImplicitDirsOption(options string) bool {
+	for _, token := range splitMountOptions(options) {
+		key, _, _ := splitGCSOptionKeyValue(token)
+		if key == "implicit-dirs" {
+			return true
+		}
+	}
+	return false
+}
+
 func (sm *StorageManager) parseSingleVolume(vStr string) (parsedMount, error) {
 	parts := strings.Split(vStr, ";")
 	if len(parts) < 2 {
@@ -729,6 +947,10 @@ func (sm *StorageManager) parseSingleVolume(vStr string) (parsedMount, error) {
 	}
 
 	if err := resolveMountSourceAndSubPath(&pm); err != nil {
+		return parsedMount{}, err
+	}
+
+	if err := validateAndNormalizeGCSMount(&pm, segments.ProfileSet); err != nil {
 		return parsedMount{}, err
 	}
 
@@ -1288,6 +1510,14 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 	bucket := strings.TrimPrefix(pm.Src, "gs://")
 
 	profileShortName := strings.TrimPrefix(pm.Profile, "gcsfusecsi-")
+	if pm.Profile == checkpointingProfileStorageClass && pm.ReadOnly {
+		src := pm.Src
+		if pm.SubPath != "" {
+			src += "/" + pm.SubPath
+		}
+		logging.Warn("mount %q uses profile=checkpointing with read-only access (the default when mode is omitted); checkpoint writes to %q will fail. Set ';rw' (replacing ';ro' if present) in the --mount specification if the workload writes checkpoints.",
+			src, pm.Dest)
+	}
 	ns, err := sm.resolveNamespace(job)
 	if err != nil {
 		return MountInfo{}, "", err
@@ -1424,15 +1654,16 @@ func (sm *StorageManager) recreateStaleGatewayPV(pvName string, existing existin
 	if existing.Metadata.Labels[managedByLabel] != managedByValue {
 		return fmt.Errorf(
 			"gateway PV %q already exists in %s state (left behind after its PVC was deleted) and cannot rebind. "+
-				"It is not labelled %s=%s, so gcluster will not delete it. Delete it with `kubectl delete pv %s` and resubmit",
-			pvName, phase, managedByLabel, managedByValue, pvName)
+				"It is not labelled %s=%s, so gcluster will not delete it. Delete it with `%s` and resubmit",
+			pvName, phase, managedByLabel, managedByValue,
+			kubectlCommandLine(sm.orchestrator.kubeContext, "delete", "pv", pvName))
 	}
 
 	logging.Info("Recreating stale gateway PV %q (%s)", pvName, phase)
 	res := sm.orchestrator.kubectl("delete", "pv", pvName,
 		"--ignore-not-found", "--wait=true", "--timeout=60s")
 	if res.ExitCode != 0 {
-		return fmt.Errorf("failed to delete stale gateway PV %q: %s", pvName, strings.TrimSpace(res.Stderr))
+		return fmt.Errorf("failed to delete stale gateway PV %q: %s", pvName, kubectlFailureDetail(res))
 	}
 	return nil
 }
@@ -1453,14 +1684,28 @@ func (sm *StorageManager) waitForGatewayRelease(pvName, pvcName, ns string) erro
 	if res.ExitCode == 0 {
 		return nil
 	}
-	if gone := sm.orchestrator.kubectl("get", "pv", pvName, "--ignore-not-found", "-o", "name"); gone.ExitCode == 0 && strings.TrimSpace(gone.Stdout) == "" {
+	gone := sm.orchestrator.kubectl("get", "pv", pvName, "--ignore-not-found", kubectlReadTimeout, "-o", "name")
+	if gone.ExitCode != 0 {
+		return fmt.Errorf("failed to verify deletion of gateway PV %q after wait failed (%s): %s",
+			pvName, kubectlFailureDetail(res), kubectlFailureDetail(gone))
+	}
+	if strings.TrimSpace(gone.Stdout) == "" {
 		return nil
 	}
+	waitDetail := kubectlFailureDetail(res)
+	lowerWait := strings.ToLower(waitDetail)
+	isTimeout := strings.Contains(lowerWait, "timed out") || strings.Contains(lowerWait, "deadline exceeded")
+	if !isTimeout || k8s.IsForbiddenError(errors.New(waitDetail)) || strings.Contains(lowerWait, "an error occurred while waiting") {
+		return fmt.Errorf("failed to wait for gateway PV %q to finish deleting: %s", pvName, waitDetail)
+	}
+	kubeCtx := sm.orchestrator.kubeContext
 	return fmt.Errorf(
 		"gateway PV %q is being deleted and is waiting for PVC %s/%s to be released. "+
-			"Cancel the jobs that mount it (`kubectl describe pvc %s -n %s` lists them under Used By), "+
-			"then run `kubectl delete pvc %s -n %s` and resubmit",
-		pvName, ns, pvcName, pvcName, ns, pvcName, ns)
+			"Cancel the jobs that mount it (`%s` lists them under Used By), "+
+			"then run `%s` and resubmit",
+		pvName, ns, pvcName,
+		kubectlCommandLine(kubeCtx, "describe", "pvc", pvcName, "-n", ns),
+		kubectlCommandLine(kubeCtx, "delete", "pvc", pvcName, "-n", ns, "--ignore-not-found"))
 }
 
 func unmanagedGatewayWarning(pvName, manifest string) string {
@@ -1499,12 +1744,22 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 	var mountSpecs []map[string]interface{}
 	gcsFuseEnabled := false
 	seenVolumes := make(map[string]bool)
+	volWritable := make(map[string]bool)
+	for _, v := range vols {
+		if !v.ReadOnly {
+			volWritable[v.Name] = true
+		}
+	}
 
 	for _, v := range vols {
 		mountSpecs = append(mountSpecs, buildVolumeMountSpec(v))
 		if !seenVolumes[v.Name] {
 			seenVolumes[v.Name] = true
-			volSpecs = append(volSpecs, buildVolumeSpec(v))
+			volInfo := v
+			if volWritable[v.Name] {
+				volInfo.ReadOnly = false
+			}
+			volSpecs = append(volSpecs, buildVolumeSpec(volInfo))
 		}
 		if v.Type == "gcsfuse" || v.NeedsGCSFuseSidecar {
 			gcsFuseEnabled = true
@@ -1824,7 +2079,7 @@ func (sm *StorageManager) ValidateClusterMounts(job orchestrator.JobDefinition) 
 		return err
 	}
 
-	if err := sm.validateCloudMountSchemes(job, firstGCSMount, firstFilestoreMount); err != nil {
+	if err := sm.validateCloudMountSchemes(job.ProjectID, firstGCSMount, firstFilestoreMount); err != nil {
 		return err
 	}
 
@@ -1904,21 +2159,25 @@ func recordUserPVCRequest(pvcReqs *[]userPVCRequest, idxByClaim map[string]int, 
 	}
 }
 
-func (sm *StorageManager) validateCloudMountSchemes(job orchestrator.JobDefinition, firstGCSMount, firstFilestoreMount string) error {
-	isGKE := sm.effectiveProjectID(job.ProjectID) != ""
+func (sm *StorageManager) validateCloudMountSchemes(projectID, firstGCSMount, firstFilestoreMount string) error {
+	isGKE := sm.effectiveProjectID(projectID) != ""
 	if sm.orchestrator != nil {
-		isGKE = sm.orchestrator.isGKE(job)
+		isGKE = sm.orchestrator.isGKE(projectID)
 	}
 	if (firstGCSMount != "" || firstFilestoreMount != "") && !isGKE {
 		cloudMount := firstGCSMount
 		if cloudMount == "" {
 			cloudMount = firstFilestoreMount
 		}
+		reason := "requires a GCP project (--project)"
+		if sm.orchestrator != nil && sm.orchestrator.mode == orchestrator.TypeK8s {
+			reason = "is only supported on GKE clusters"
+		}
 		return fmt.Errorf(
-			"mount %q uses a Cloud URI (filestore:// or gs://), which requires a GCP project (--project). "+
+			"mount %q uses a Cloud URI (filestore:// or gs://), which %s. "+
 				"On generic Kubernetes or off-cloud clusters, mount an NFS export directly with --mount \"nfs://<server>/<export>;<dest>\", "+
 				"mount an existing PVC with --mount \"<pvc-name>;<dest>\", or use --mount \"/host/path;<dest>\"",
-			cloudMount,
+			cloudMount, reason,
 		)
 	}
 	if firstGCSMount != "" {
@@ -2045,58 +2304,70 @@ func validatePVCAccessModes(req userPVCRequest, modes []string, totalNodes int, 
 	return nil
 }
 
-// RunStorageProfilePreflight checks that profile= mounts can be satisfied by the cluster and bucket.
+// RunStorageProfilePreflight checks that profile= mounts can be satisfied by the cluster and bucket,
+// and warns when inline gs:// mounts target flat-namespace buckets without implicit-dirs.
 func (sm *StorageManager) RunStorageProfilePreflight(rawMounts []string, projectID, clusterLocation string, dryRun bool) error {
-	mounts, err := sm.collectProfileMounts(rawMounts)
-	if err != nil || len(mounts) == 0 {
+	profileMounts, inlineBuckets, err := sm.collectPreflightMounts(rawMounts)
+	if err != nil || (len(profileMounts) == 0 && len(inlineBuckets) == 0) {
 		return err
 	}
 
-	allFound, err := sm.validateStorageClassesExist(mounts, dryRun)
-	if err != nil {
-		return err
+	if len(profileMounts) > 0 {
+		allFound, err := sm.validateStorageClassesExist(profileMounts, dryRun)
+		if err != nil {
+			return err
+		}
+		if !allFound {
+			profileMounts = nil
+		}
 	}
 	projectID = sm.effectiveProjectID(projectID)
-	if !allFound || projectID == "" {
+	if projectID == "" || (len(profileMounts) == 0 && len(inlineBuckets) == 0) {
 		return nil
 	}
 
-	return sm.checkProfileMisconfiguration(projectID, clusterLocation, mounts, dryRun)
+	return sm.runCloudStoragePreflight(projectID, clusterLocation, profileMounts, inlineBuckets, dryRun)
 }
 
-func (sm *StorageManager) collectProfileMounts(rawMounts []string) ([]profileMount, error) {
-	var out []profileMount
-	seen := map[string]bool{}
+func (sm *StorageManager) collectPreflightMounts(rawMounts []string) ([]profileMount, []string, error) {
+	var profiles []profileMount
+	var inlineBuckets []string
+	seenProfile := map[string]bool{}
+	seenInline := map[string]bool{}
 
 	for _, vStr := range rawMounts {
 		pm, err := sm.parseSingleVolume(vStr)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if pm.Profile == "" {
+		if !strings.HasPrefix(pm.Src, "gs://") {
 			continue
 		}
-		bucket, _, err := splitGCSSource(pm.Src)
-		if err != nil {
-			return nil, err
+		bucket := strings.TrimPrefix(pm.Src, "gs://")
+		if pm.Profile == "" {
+			if !hasImplicitDirsOption(pm.Options) && !seenInline[bucket] {
+				seenInline[bucket] = true
+				inlineBuckets = append(inlineBuckets, bucket)
+			}
+			continue
 		}
 
 		zones := splitAnywhereCacheZones(pm.Attributes[anywhereCacheZonesAttribute])
 		cached := usesAnywhereCache(pm)
 		key := fmt.Sprintf("%s|%s|%s|%t", bucket, pm.Profile, strings.Join(zones, ","), cached)
-		if seen[key] {
+		if seenProfile[key] {
 			continue
 		}
-		seen[key] = true
+		seenProfile[key] = true
 
-		out = append(out, profileMount{
+		profiles = append(profiles, profileMount{
 			Bucket:             bucket,
 			Profile:            pm.Profile,
 			AnywhereCacheZones: zones,
 			UsesAnywhereCache:  cached,
 		})
 	}
-	return out, nil
+	return profiles, inlineBuckets, nil
 }
 
 func usesAnywhereCache(pm parsedMount) bool {
@@ -2172,23 +2443,70 @@ func (sm *StorageManager) validateStorageClassExists(storageClass string, dryRun
 	return false, err
 }
 
-func (sm *StorageManager) checkProfileMisconfiguration(projectID, clusterLocation string, mounts []profileMount, dryRun bool) error {
-	client, err := sm.getPreflightClient(context.Background())
-	if err != nil {
-		logging.Warn("Skipping Cloud Storage pre-flight checks for storage profile mounts: %v. Proceeding with job submission.", err)
+func (sm *StorageManager) runCloudStoragePreflight(projectID, clusterLocation string, profileMounts []profileMount, inlineBuckets []string, dryRun bool) error {
+	var getenv func(string) string
+	if sm.orchestrator != nil {
+		getenv = sm.orchestrator.getenv()
+	}
+	if shell.IsAirGappedEnv(getenv) {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), storageAPITimeout)
 	defer cancel()
 
-	if agent, err := gkeServiceAgentEmail(ctx, client, projectID); err != nil {
-		logging.Warn("Skipping the GKE Service Agent IAM pre-flight check: could not resolve the project number for %q: %v. "+
-			"Verify manually that the GKE Service Agent holds the required permissions on the target bucket(s). See %s",
-			projectID, err, gcsFuseProfileIAMURL)
-	} else {
-		warnOnMissingIAM(ctx, client, projectID, agent, mounts)
+	client, err := sm.getPreflightClient(ctx)
+	if err != nil {
+		if len(profileMounts) > 0 {
+			logging.Warn("Skipping Cloud Storage pre-flight checks for storage profile mounts: %v. Proceeding with job submission.", err)
+		}
+		return nil
 	}
-	return checkBucketLocations(ctx, client, clusterLocation, mounts, dryRun)
+
+	fetchBucket := newBucketMetaFetcher(ctx, client)
+	if len(profileMounts) > 0 {
+		if agent, err := gkeServiceAgentEmail(ctx, client, projectID); err != nil {
+			logging.Warn("Skipping the GKE Service Agent IAM pre-flight check: could not resolve the project number for %q: %v. "+
+				"Verify manually that the GKE Service Agent holds the required permissions on the target bucket(s). See %s",
+				projectID, err, gcsFuseProfileIAMURL)
+		} else {
+			warnOnMissingIAM(ctx, client, projectID, agent, profileMounts)
+		}
+		if err := checkBucketLocations(fetchBucket, clusterLocation, profileMounts, dryRun); err != nil {
+			return err
+		}
+	}
+
+	warnFlatBucketsMissingImplicitDirs(fetchBucket, inlineBuckets)
+	return nil
+}
+
+func newBucketMetaFetcher(ctx context.Context, client storagePreflightClient) func(string) (bucketLocation, error) {
+	type cachedBucketMeta struct {
+		loc bucketLocation
+		err error
+	}
+	cache := map[string]cachedBucketMeta{}
+	return func(bucket string) (bucketLocation, error) {
+		if entry, ok := cache[bucket]; ok {
+			return entry.loc, entry.err
+		}
+		loc, err := client.bucketLocation(ctx, bucket)
+		cache[bucket] = cachedBucketMeta{loc: loc, err: err}
+		return loc, err
+	}
+}
+
+func warnFlatBucketsMissingImplicitDirs(fetchBucket func(string) (bucketLocation, error), buckets []string) {
+	for _, bucket := range buckets {
+		meta, err := fetchBucket(bucket)
+		if err != nil || meta.HierarchicalNamespace {
+			continue
+		}
+		logging.Warn("Bucket gs://%s uses a flat namespace (Hierarchical Namespace is disabled) and is mounted without 'implicit-dirs'. "+
+			"Subdirectories uploaded without explicit 0-byte directory objects (e.g., via gcloud storage cp or SDKs) may not be visible unless GCSFuse auto-enables implicit-dirs for the machine type. "+
+			"Add 'implicit-dirs' to options= (e.g., ;options=implicit-dirs) if you need implicit directory traversal, "+
+			"or set 'implicit-dirs=false' in options= if you explicitly want implicit directories disabled.", bucket)
+	}
 }
 
 func warnOnMissingIAM(ctx context.Context, client storagePreflightClient, projectID, agent string, mounts []profileMount) {
@@ -2216,7 +2534,7 @@ func bucketCacheUse(mounts []profileMount) ([]string, map[string]bool) {
 	return order, needsCache
 }
 
-func checkBucketLocations(ctx context.Context, client storagePreflightClient, clusterLocation string, mounts []profileMount, dryRun bool) error {
+func checkBucketLocations(fetchBucket func(string) (bucketLocation, error), clusterLocation string, mounts []profileMount, dryRun bool) error {
 	checked := map[string]bool{}
 	for _, m := range mounts {
 		key := fmt.Sprintf("%s|%s|%t|%t", m.Bucket, strings.Join(m.AnywhereCacheZones, ","), m.UsesAnywhereCache, colocationRequired(m))
@@ -2224,7 +2542,7 @@ func checkBucketLocations(ctx context.Context, client storagePreflightClient, cl
 			continue
 		}
 		checked[key] = true
-		if err := checkBucketLocation(ctx, client, clusterLocation, m, dryRun); err != nil {
+		if err := checkBucketLocation(fetchBucket, clusterLocation, m, dryRun); err != nil {
 			return err
 		}
 	}
@@ -2351,8 +2669,8 @@ func colocationRequired(m profileMount) bool {
 }
 
 // checkBucketLocation blocks on a mismatch when co-location is required (warns on dry run), else warns.
-func checkBucketLocation(ctx context.Context, client storagePreflightClient, clusterLocation string, m profileMount, dryRun bool) error {
-	loc, err := client.bucketLocation(ctx, m.Bucket)
+func checkBucketLocation(fetchBucket func(string) (bucketLocation, error), clusterLocation string, m profileMount, dryRun bool) error {
+	loc, err := fetchBucket(m.Bucket)
 	if err != nil {
 		logging.Warn("Could not read the location of bucket gs://%s: %v. Verify manually that it is in the same region as the cluster. See %s",
 			m.Bucket, err, gcsFuseProfileDocsURL)
@@ -2439,8 +2757,8 @@ func regionWithinBucketLocation(region string, loc bucketLocation) bool {
 }
 
 func (sm *StorageManager) getPreflightClient(ctx context.Context) (storagePreflightClient, error) {
-	if sm.preflightClient != nil {
-		return sm.preflightClient, nil
+	if sm.orchestrator != nil && sm.orchestrator.preflightClient != nil {
+		return sm.orchestrator.preflightClient, nil
 	}
 	return newGCPPreflightClient(ctx)
 }
@@ -2450,19 +2768,31 @@ func newGCPPreflightClient(ctx context.Context) (storagePreflightClient, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Cloud Storage client: %w", err)
 	}
-	iamSvc, err := iamapi.NewService(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create IAM client: %w", err)
-	}
-	crmSvc, err := crm.NewService(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Resource Manager client: %w", err)
-	}
-	return &gcpPreflightClient{storage: storageSvc, iam: iamSvc, crm: crmSvc}, nil
+	return &gcpPreflightClient{
+		storage: storageSvc,
+		iam: sync.OnceValues(func() (*iamapi.Service, error) {
+			svc, err := iamapi.NewService(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create IAM client: %w", err)
+			}
+			return svc, nil
+		}),
+		crm: sync.OnceValues(func() (*crm.Service, error) {
+			svc, err := crm.NewService(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create Resource Manager client: %w", err)
+			}
+			return svc, nil
+		}),
+	}, nil
 }
 
 func (c *gcpPreflightClient) projectNumber(ctx context.Context, projectID string) (int64, error) {
-	project, err := c.crm.Projects.Get(projectID).Context(ctx).Do()
+	crmSvc, err := c.crm()
+	if err != nil {
+		return 0, err
+	}
+	project, err := crmSvc.Projects.Get(projectID).Context(ctx).Do()
 	if err != nil {
 		return 0, err
 	}
@@ -2470,8 +2800,12 @@ func (c *gcpPreflightClient) projectNumber(ctx context.Context, projectID string
 }
 
 func (c *gcpPreflightClient) projectIAMBindings(ctx context.Context, projectID string) ([]iamBinding, error) {
+	crmSvc, err := c.crm()
+	if err != nil {
+		return nil, err
+	}
 	req := &crm.GetIamPolicyRequest{Options: &crm.GetPolicyOptions{RequestedPolicyVersion: 3}}
-	policy, err := c.crm.Projects.GetIamPolicy(projectID, req).Context(ctx).Do()
+	policy, err := crmSvc.Projects.GetIamPolicy(projectID, req).Context(ctx).Do()
 	if err != nil {
 		return nil, err
 	}
@@ -2499,7 +2833,11 @@ func (c *gcpPreflightClient) bucketLocation(ctx context.Context, bucket string) 
 	if err != nil {
 		return bucketLocation{}, err
 	}
-	loc := bucketLocation{Location: b.Location, LocationType: b.LocationType}
+	loc := bucketLocation{
+		Location:              b.Location,
+		LocationType:          b.LocationType,
+		HierarchicalNamespace: b.HierarchicalNamespace != nil && b.HierarchicalNamespace.Enabled,
+	}
 	if b.CustomPlacementConfig != nil {
 		loc.DataLocations = b.CustomPlacementConfig.DataLocations
 	}
@@ -2507,21 +2845,25 @@ func (c *gcpPreflightClient) bucketLocation(ctx context.Context, bucket string) 
 }
 
 func (c *gcpPreflightClient) rolePermissions(ctx context.Context, role string) ([]string, error) {
+	iamSvc, err := c.iam()
+	if err != nil {
+		return nil, err
+	}
 	switch {
 	case strings.HasPrefix(role, "projects/"):
-		r, err := c.iam.Projects.Roles.Get(role).Context(ctx).Do()
+		r, err := iamSvc.Projects.Roles.Get(role).Context(ctx).Do()
 		if err != nil {
 			return nil, err
 		}
 		return r.IncludedPermissions, nil
 	case strings.HasPrefix(role, "organizations/"):
-		r, err := c.iam.Organizations.Roles.Get(role).Context(ctx).Do()
+		r, err := iamSvc.Organizations.Roles.Get(role).Context(ctx).Do()
 		if err != nil {
 			return nil, err
 		}
 		return r.IncludedPermissions, nil
 	case strings.HasPrefix(role, "roles/"):
-		r, err := c.iam.Roles.Get(role).Context(ctx).Do()
+		r, err := iamSvc.Roles.Get(role).Context(ctx).Do()
 		if err != nil {
 			return nil, err
 		}
@@ -2547,48 +2889,69 @@ func (g *GKEOrchestrator) verifyStorageGateways(manifest, jobSetName string) err
 		return nil
 	}
 	for _, claim := range claims {
-		removed, err := g.gatewayRemoved(ns, claim)
+		removed, pvName, err := g.gatewayRemoved(ns, claim)
 		if err != nil {
 			logging.Warn("Could not verify storage gateway '%s': %v", claim, err)
 			continue
 		}
 		if removed {
+			if pvName == "" {
+				pvName = sanitizePVCName(claim + "-" + ns)
+			}
 			return g.rollBackJob(ns, jobSetName, fmt.Errorf("storage gateway %q was removed by a concurrent cleanup; resubmit to recreate it "+
-				"(if it fails again, run `kubectl delete pvc %s -n %s` and delete its PV)", claim, claim, ns))
+				"(if it fails again, run `%s` and `%s`)",
+				claim,
+				kubectlCommandLine(g.kubeContext, "delete", "pvc", claim, "-n", ns, "--ignore-not-found"),
+				kubectlCommandLine(g.kubeContext, "delete", "pv", pvName, "--ignore-not-found")))
 		}
 	}
 	return nil
 }
 
-// gatewayRemoved reports whether the gateway PVC or its PV is gone, being deleted, or still bound to a deleted PVC.
-func (g *GKEOrchestrator) gatewayRemoved(ns, claim string) (bool, error) {
+// gatewayRemoved reports whether the gateway PVC or its PV is gone, being deleted, or still bound to a deleted PVC,
+// along with the PVC's spec.volumeName when available.
+func (g *GKEOrchestrator) gatewayRemoved(ns, claim string) (bool, string, error) {
 	pvc, err := g.kubeClient.GetResource(pvcGVR, ns, claim)
 	if apierrors.IsNotFound(err) {
-		return true, nil
+		return true, "", nil
 	}
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	pvName, _, _ := unstructured.NestedString(pvc.Object, "spec", "volumeName")
 	if pvc.GetDeletionTimestamp() != nil || pvName == "" {
-		return pvc.GetDeletionTimestamp() != nil, nil
+		return pvc.GetDeletionTimestamp() != nil, pvName, nil
 	}
 	pv, err := g.kubeClient.GetResource(pvGVR, "", pvName)
 	if apierrors.IsNotFound(err) {
-		return true, nil
+		return true, pvName, nil
 	}
 	if err != nil {
-		return false, err
+		return false, pvName, err
 	}
 	boundUID, _, _ := unstructured.NestedString(pv.Object, "spec", "claimRef", "uid")
-	return pv.GetDeletionTimestamp() != nil || (boundUID != "" && boundUID != string(pvc.GetUID())), nil
+	return pv.GetDeletionTimestamp() != nil || (boundUID != "" && boundUID != string(pvc.GetUID())), pvName, nil
 }
 
 func (g *GKEOrchestrator) rollBackJob(ns, jobSetName string, cause error) error {
+	if !g.jobSetEnabled() {
+		return g.rollBackBatchJob(ns, jobSetName, cause)
+	}
 	if err := g.kubeClient.DeleteJobSet(ns, jobSetName); err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("%w; rolling back job %q also failed, delete it with `kubectl delete jobset %s -n %s`: %v", cause, jobSetName, jobSetName, ns, err)
+		return fmt.Errorf("%w; rolling back job %q also failed, delete it with `%s`: %v", cause, jobSetName, kubectlCommandLine(g.kubeContext, "delete", "jobset", jobSetName, "-n", ns), err)
 	}
 	return fmt.Errorf("job %q was not started: %w", jobSetName, cause)
+}
+
+func (g *GKEOrchestrator) rollBackBatchJob(ns, name string, cause error) error {
+	if _, _, _, err := g.cancelFallbackBatchJob(ns, name); err != nil {
+		return fmt.Errorf("%w; rolling back batch/v1 job %q also failed, delete it with `%s` and `%s`: %v",
+			cause, name,
+			kubectlCommandLine(g.kubeContext, "delete", "job", name, "-n", ns),
+			kubectlCommandLine(g.kubeContext, "delete", "service", name, "-n", ns),
+			err)
+	}
+	return fmt.Errorf("job %q was not started: %w", name, cause)
 }
 
 // manifestGatewayClaims returns the toolkit gateway PVCs declared in manifest.

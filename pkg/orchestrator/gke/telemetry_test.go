@@ -637,8 +637,40 @@ func TestResolveTelemetryCollector_PartialTPUInputs(t *testing.T) {
 		{WorkloadName: "ct-only", ComputeType: "v6e-4", MLDiagnosticsEnabled: true, MLDiagnosticsImage: "registry.local/col:v1"},
 		{WorkloadName: "mt-only", MachineType: "tpu-v6e-slice", MLDiagnosticsEnabled: true, MLDiagnosticsImage: "registry.local/col:v1"},
 	} {
-		if img, _, err := orc.resolveTelemetryCollector(partial); err != nil || img != "registry.local/col:v1" {
+		if img, _, err := orc.resolveTelemetryCollector(partial, true); err != nil || img != "registry.local/col:v1" {
 			t.Fatalf("resolveTelemetryCollector(%s) = (%q, %v), want registry.local/col:v1", partial.WorkloadName, img, err)
 		}
+	}
+}
+
+func TestIsGKE_UsesDetectedPlatformMode(t *testing.T) {
+	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	k8sOrc := &GKEOrchestrator{mode: orchestrator.TypeK8s, projectID: "ar-build-proj"}
+	if k8sOrc.isGKE("ar-build-proj") {
+		t.Errorf("k8sOrc.isGKE(%q) = true, want false", "ar-build-proj")
+	}
+
+	gkeOrc := &GKEOrchestrator{mode: orchestrator.TypeGKE}
+	if !gkeOrc.isGKE("") {
+		t.Errorf("gkeOrc.isGKE(\"\") = false, want true")
+	}
+
+	unsetOrc := &GKEOrchestrator{}
+	if unsetOrc.isGKE("") {
+		t.Errorf("unsetOrc.isGKE(\"\") = true, want false")
+	}
+	if !unsetOrc.isGKE("legacy-proj") {
+		t.Errorf("unsetOrc.isGKE(%q) = false, want true", "legacy-proj")
+	}
+
+	// Verify TypeK8s non-TPU telemetry error names "the non-GKE target" and omits GKE auto-discovery advice even when ProjectID is set.
+	_, _, err := k8sOrc.resolveTelemetryCollector(orchestrator.JobDefinition{
+		WorkloadName:         "cpu-job",
+		ComputeType:          "e2-standard-4",
+		ProjectID:            "ar-build-proj",
+		MLDiagnosticsEnabled: true,
+	}, false)
+	if err == nil || !strings.Contains(err.Error(), "the non-GKE target") || !strings.Contains(err.Error(), "omit --enable-ml-diagnostics for non-TPU workloads") {
+		t.Errorf("k8sOrc.resolveTelemetryCollector(CPU with ProjectID) err = %v, want non-GKE target and omit --enable-ml-diagnostics guidance", err)
 	}
 }

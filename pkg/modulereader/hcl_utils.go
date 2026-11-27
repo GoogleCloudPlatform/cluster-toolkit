@@ -132,24 +132,50 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 type hclVarMeta struct {
 	deprecated    bool
 	deprecatedMsg string
+	nonNullable   bool
 	validations   []string
+	constraints   []ruleConstraints
 }
 
-// ApplyVarMeta returns a copy of mi with Deprecated, DeprecatedMsg, and
-// Validations populated from the module's variable blocks. Only `gcluster
-// explain` consumes these fields, keeping the extra HCL parse off the
-// GetModuleInfo path used by create/expand/deploy and catalog-wide scans.
+// ApplyVarMeta returns a copy of mi with Deprecated, DeprecatedMsg,
+// Validations, and Constraints populated from the module's variable blocks
+// and metadata.yaml validators. Only `gcluster explain` consumes these
+// fields, keeping the extra HCL parse off the GetModuleInfo path used by
+// create/expand/deploy and catalog-wide scans.
 func ApplyVarMeta(source string, mi ModuleInfo) ModuleInfo {
 	varMeta := extractHCLVarMeta(source)
+	inputTypes := make(map[string]cty.Type, len(mi.Inputs))
+	for _, in := range mi.Inputs {
+		inputTypes[in.Name] = in.Type
+	}
+	metaVars := metadataVarInfo(mi.Metadata.Ghpc.Validators, inputTypes)
 	inputs := slices.Clone(mi.Inputs)
 	for i := range inputs {
-		meta := applyDescriptionDeprecation(inputs[i].Description, varMeta[inputs[i].Name])
+		name := inputs[i].Name
+		meta := applyDescriptionDeprecation(inputs[i].Description, varMeta[name])
 		inputs[i].Deprecated = meta.deprecated
 		inputs[i].DeprecatedMsg = meta.deprecatedMsg
-		inputs[i].Validations = meta.validations
+		inputs[i].Validations = appendUniqueStrings(meta.validations, metaVars[name].messages)
+		var nullableRules []ruleConstraints
+		if meta.nonNullable {
+			nullableRules = []ruleConstraints{{null: nullRejected}}
+		}
+		inputs[i].Constraints = buildInputConstraints(inputs[i].Type, metaVars[name].rules, meta.constraints, nullableRules)
 	}
 	mi.Inputs = inputs
 	return mi
+}
+
+// appendUniqueStrings returns base plus the items of extra it does not
+// already contain, without modifying base.
+func appendUniqueStrings(base, extra []string) []string {
+	out := slices.Clone(base)
+	for _, s := range extra {
+		if !slices.Contains(out, s) {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func isVarFile(name string) bool {
@@ -239,7 +265,7 @@ func parseFileVarMeta(src []byte, filename string, out map[string]hclVarMeta) {
 	for _, block := range body.Blocks {
 		if block.Type == "variable" && len(block.Labels) == 1 {
 			name := block.Labels[0]
-			if meta := parseVariableBlockMeta(src, name, block); meta.deprecated || len(meta.validations) > 0 {
+			if meta := parseVariableBlockMeta(src, name, block); meta.deprecated || meta.nonNullable || len(meta.validations) > 0 || len(meta.constraints) > 0 {
 				out[name] = meta
 			}
 		}
@@ -248,6 +274,11 @@ func parseFileVarMeta(src []byte, filename string, out map[string]hclVarMeta) {
 
 func parseVariableBlockMeta(src []byte, varName string, block *hclsyntax.Block) hclVarMeta {
 	var meta hclVarMeta
+	if attr := block.Body.Attributes["nullable"]; attr != nil {
+		if b, ok := boolLiteral(attr.Expr); ok && !b {
+			meta.nonNullable = true
+		}
+	}
 	for _, sub := range block.Body.Blocks {
 		if sub.Type != "validation" {
 			continue
@@ -259,8 +290,15 @@ func parseVariableBlockMeta(src []byte, varName string, block *hclsyntax.Block) 
 			if errMsg != "" {
 				meta.deprecatedMsg = errMsg
 			}
-		} else if errMsg != "" && !slices.Contains(meta.validations, errMsg) {
+			continue
+		}
+		if errMsg != "" && !slices.Contains(meta.validations, errMsg) {
 			meta.validations = append(meta.validations, errMsg)
+		}
+		if rc, ok := conditionAttrConstraints(varName, sub.Body.Attributes["condition"]); ok {
+			meta.constraints = append(meta.constraints, rc)
+		} else {
+			meta.constraints = append(meta.constraints, ruleConstraints{null: nullUnknown})
 		}
 	}
 	return meta

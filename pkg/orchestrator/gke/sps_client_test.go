@@ -15,11 +15,19 @@
 package gke
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
+
+	"github.com/google/go-cmp/cmp"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const testSPSJobSetJSON = `{
@@ -88,32 +96,6 @@ func TestSPSInstanceRef(t *testing.T) {
 		gotName, gotEndpoint := spsInstanceRef(tc.ref)
 		if gotName != tc.wantName || gotEndpoint != tc.wantEndpoint {
 			t.Errorf("spsInstanceRef(%q) = (%q, %q), want (%q, %q)", tc.ref, gotName, gotEndpoint, tc.wantName, tc.wantEndpoint)
-		}
-	}
-}
-
-func TestProxyImageFor(t *testing.T) {
-	tests := []struct {
-		serverImage string
-		want        string
-	}{
-		{
-			serverImage: "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest",
-			want:        "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest",
-		},
-		{
-			serverImage: "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server@sha256:abcdef",
-			want:        "us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server@sha256:abcdef",
-		},
-		{
-			serverImage: "custom-registry.io/my-rm:v1",
-			want:        "",
-		},
-	}
-
-	for _, tc := range tests {
-		if got := proxyImageFor(tc.serverImage); got != tc.want {
-			t.Errorf("proxyImageFor(%q) = %q, want %q", tc.serverImage, got, tc.want)
 		}
 	}
 }
@@ -210,9 +192,9 @@ func assertManifestStrings(t *testing.T, manifest string, want, unwanted []strin
 	}
 }
 
-func TestGenerateSPSClientManifest(t *testing.T) {
-	orc := NewGKEOrchestrator()
-	inst := spsInstance{
+// testSPSInstance is a two-instance tpu7x SPS deployment with the colocated Python sidecar.
+func testSPSInstance() spsInstance {
+	return spsInstance{
 		Name:           "sps-j6080103",
 		Endpoint:       "sps-j6080103-pathways-head-0-0.sps-j6080103:29001",
 		KueueQueueName: "",
@@ -224,6 +206,20 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 		InstanceCount:  2,
 		HasSidecar:     true,
 	}
+}
+
+func mustResolveSPSPathways(t *testing.T, p orchestrator.PathwaysJobDefinition, inst spsInstance) orchestrator.PathwaysJobDefinition {
+	t.Helper()
+	got, err := resolveSPSClientPathways(p, inst)
+	if err != nil {
+		t.Fatalf("resolveSPSClientPathways failed: %v", err)
+	}
+	return got
+}
+
+func TestGenerateSPSClientManifest(t *testing.T) {
+	orc := NewGKEOrchestrator()
+	inst := testSPSInstance()
 
 	t.Run("in-cluster mode renders proxy initContainer and workload-container", func(t *testing.T) {
 		job := orchestrator.JobDefinition{
@@ -231,9 +227,9 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 			NumSlices:               2,
 			TtlSecondsAfterFinished: 3600,
 			CommandToRun:            "python3 train.py",
-			Pathways: orchestrator.PathwaysJobDefinition{
+			Pathways: mustResolveSPSPathways(t, orchestrator.PathwaysJobDefinition{
 				RunSPSWorkload: "sps-j6080103",
-			},
+			}, inst),
 		}
 		manifest, err := orc.generateSPSClientManifest(job, inst, "us-docker.pkg.dev/my-proj/img:latest")
 		if err != nil {
@@ -270,9 +266,9 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 			NumSlices:               1,
 			TtlSecondsAfterFinished: 3600,
 			CommandToRun:            "python3 train.py",
-			Pathways: orchestrator.PathwaysJobDefinition{
+			Pathways: mustResolveSPSPathways(t, orchestrator.PathwaysJobDefinition{
 				RunSPSWorkload: "sps-j6080103",
-			},
+			}, instWithQueue),
 		}
 		manifest, err := orc.generateSPSClientManifest(job, instWithQueue, "")
 		if err != nil {
@@ -299,9 +295,9 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 			ImagePullSecrets:        "my-reg-secret",
 			RestartOnExitCodes:      []int{42, 43},
 			MLDiagnosticsEnabled:    true,
-			Pathways: orchestrator.PathwaysJobDefinition{
+			Pathways: mustResolveSPSPathways(t, orchestrator.PathwaysJobDefinition{
 				RunSPSWorkload: "sps-j6080103",
-			},
+			}, inst),
 		}
 		manifest, err := orc.generateSPSClientManifest(job, inst, "us-docker.pkg.dev/my-proj/img:latest")
 		if err != nil {
@@ -320,6 +316,104 @@ func TestGenerateSPSClientManifest(t *testing.T) {
 			nil,
 		)
 	})
+
+	t.Run("in-cluster and terminal SPS clients omit limits on pathways-head containers", func(t *testing.T) {
+		for _, tc := range []struct {
+			name     string
+			image    string
+			wantReqs map[string]corev1.ResourceList
+		}{
+			{
+				name:  "in-cluster",
+				image: "us-docker.pkg.dev/my-proj/img:latest",
+				wantReqs: map[string]corev1.ResourceList{
+					"pathways-proxy": {
+						corev1.ResourceCPU:    resource.MustParse("8"),
+						corev1.ResourceMemory: resource.MustParse("32Gi"),
+					},
+					"workload-container": {
+						corev1.ResourceCPU:    resource.MustParse("2"),
+						corev1.ResourceMemory: resource.MustParse("8Gi"),
+					},
+				},
+			},
+			{
+				name:  "terminal",
+				image: "",
+				wantReqs: map[string]corev1.ResourceList{
+					"pathways-proxy": {
+						corev1.ResourceCPU:    resource.MustParse("8"),
+						corev1.ResourceMemory: resource.MustParse("32Gi"),
+					},
+				},
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				job := orchestrator.JobDefinition{
+					WorkloadName:              "sps-client-res",
+					NumSlices:                 1,
+					TtlSecondsAfterFinished:   3600,
+					CommandToRun:              "python3 train.py",
+					ImagePullSecretsSpecified: true,
+					Pathways: mustResolveSPSPathways(t, orchestrator.PathwaysJobDefinition{
+						RunSPSWorkload: "sps-j6080103",
+					}, inst),
+				}
+				manifest, err := orc.generateSPSClientManifest(job, inst, tc.image)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				assertPathwaysHeadResources(t, manifest, tc.wantReqs)
+			})
+		}
+	})
+}
+
+// renderSPSClientEnvManifest renders the SPS client JobSet for testSPSInstance and a job mutated by mutate,
+// without touching a cluster or a kubeconfig.
+func renderSPSClientEnvManifest(t *testing.T, templatesPath, image string, mutate func(*orchestrator.JobDefinition)) string {
+	t.Helper()
+	orc := newTestGKEOrchestrator(NewMockExecutor(nil))
+	orc.gkeCustomTemplatesPath = templatesPath
+	inst := testSPSInstance()
+	job := orchestrator.JobDefinition{
+		WorkloadName:              "sps-env-client",
+		NumSlices:                 2,
+		CommandToRun:              "python3 train.py",
+		ImagePullSecretsSpecified: true,
+		Pathways:                  mustResolveSPSPathways(t, orchestrator.PathwaysJobDefinition{RunSPSWorkload: inst.Name}, inst),
+	}
+	mutate(&job)
+	manifest, err := orc.generateSPSClientManifest(job, inst, image)
+	if err != nil {
+		t.Fatalf("generateSPSClientManifest failed: %v", err)
+	}
+	return manifest
+}
+
+// TestGenerateSPSClientManifest_UserEnvReplacesEveryTemplateDefault is the SPS client counterpart of
+// TestGeneratePathwaysManifest_UserEnvReplacesEveryTemplateDefault, for the in-cluster and terminal modes.
+func TestGenerateSPSClientManifest_UserEnvReplacesEveryTemplateDefault(t *testing.T) {
+	for _, tc := range []struct{ name, image string }{
+		{name: "in-cluster workload", image: "us-docker.pkg.dev/my-proj/img:latest"},
+		{name: "terminal mode proxy only"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assertUserEnvReplacesDefaults(t, func(t *testing.T, mutate func(*orchestrator.JobDefinition)) map[string]map[string]string {
+				return envByContainer(t, pathwaysPodSpecs(t, renderSPSClientEnvManifest(t, "", tc.image, mutate)))
+			}, workloadEnvList, proxyEnvList)
+		})
+	}
+}
+
+// TestGenerateSPSClientManifest_LegacyTemplateRendersUserEnv renders the SPS client with a pathways_jobset.tmpl
+// extracted before the env guards and user env vars that collide with no default: each must be added once to the
+// container its list feeds and nothing else may change.
+func TestGenerateSPSClientManifest_LegacyTemplateRendersUserEnv(t *testing.T) {
+	customDir := writeLegacyPathwaysTemplate(t)
+	assertUserEnvAddedOnce(t, func(t *testing.T, mutate func(*orchestrator.JobDefinition)) map[string]map[string]string {
+		return envByContainer(t, pathwaysPodSpecs(t, renderSPSClientEnvManifest(t, customDir, "us-docker.pkg.dev/my-proj/img:latest", mutate)))
+	}, workloadEnvList, proxyEnvList)
 }
 
 func TestReadForwardedPort(t *testing.T) {
@@ -350,6 +444,69 @@ func TestReadForwardedPort(t *testing.T) {
 		<-pipeDone
 		if !strings.Contains(errOut.String(), "unable to forward port") {
 			t.Errorf("errOut = %q, want failure message", errOut.String())
+		}
+	})
+}
+
+// execEnv returns the variables, among those in want, that a process started by os/exec with this Env sees.
+func execEnv(env []string, want map[string]string) map[string]string {
+	vars := map[string]string{}
+	for _, kv := range (&exec.Cmd{Env: env}).Environ() {
+		k, v, _ := strings.Cut(kv, "=")
+		if _, ok := want[k]; ok {
+			vars[k] = v
+		}
+	}
+	return vars
+}
+
+func TestLocalCommandEnv(t *testing.T) {
+	shellEnv := []string{"PATH=/usr/bin", "JAX_PLATFORMS=cpu", "JAX_BACKEND_TARGET=grpc://10.0.0.1:29000"}
+	const target = "grpc://127.0.0.1:43210"
+	for _, tc := range []struct {
+		name string
+		env  map[string]string
+		want map[string]string
+	}{
+		{
+			name: "defaults replace the shell values",
+			want: map[string]string{"PATH": "/usr/bin", "JAX_PLATFORMS": "proxy", "JAX_BACKEND_TARGET": target},
+		},
+		{
+			name: "--env JAX_PLATFORMS replaces the default",
+			env:  map[string]string{"JAX_PLATFORMS": "proxy,cpu", "FOO": "bar"},
+			want: map[string]string{"PATH": "/usr/bin", "JAX_PLATFORMS": "proxy,cpu", "FOO": "bar", "JAX_BACKEND_TARGET": target},
+		},
+		{
+			name: "--env JAX_PLATFORMS empty string still replaces the default",
+			env:  map[string]string{"JAX_PLATFORMS": ""},
+			want: map[string]string{"PATH": "/usr/bin", "JAX_PLATFORMS": "", "JAX_BACKEND_TARGET": target},
+		},
+		{
+			name: "JAX_BACKEND_TARGET always points at the port-forward",
+			env:  map[string]string{"JAX_BACKEND_TARGET": "grpc://10.0.0.2:29000"},
+			want: map[string]string{"PATH": "/usr/bin", "JAX_PLATFORMS": "proxy", "JAX_BACKEND_TARGET": target},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if diff := cmp.Diff(tc.want, execEnv(localCommandEnv(shellEnv, tc.env, 43210), tc.want)); diff != "" {
+				t.Errorf("environment of the local command mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+	t.Run("runLocalCommand warns when ignoring --env JAX_BACKEND_TARGET", func(t *testing.T) {
+		if _, err := exec.LookPath("bash"); err != nil {
+			t.Skip("bash not found in PATH")
+		}
+		snapshot, restore := logging.CaptureForTesting(t)
+		err := runLocalCommand("true", 43210, map[string]string{"JAX_BACKEND_TARGET": "grpc://10.0.0.2:29000"}, nil)
+		restore()
+		if err != nil {
+			t.Fatalf("runLocalCommand failed: %v", err)
+		}
+		_, errOut := snapshot()
+		if !strings.Contains(errOut, "Ignoring --env JAX_BACKEND_TARGET") || !strings.Contains(errOut, "127.0.0.1:43210") {
+			t.Errorf("expected JAX_BACKEND_TARGET warning, got %q", errOut)
 		}
 	})
 }
@@ -445,9 +602,11 @@ func TestSubmitSPSClusterWorkload_ValidatesClusterMounts(t *testing.T) {
 			pvcJSONCmd: {{ExitCode: 0, Stdout: `{"spec":{"volumeName":"pv-sps-rwo","accessModes":["ReadWriteOnce"]}}`}},
 		})
 		orc := newTestGKEOrchestrator(mockExec)
-		err := orc.submitSPSClusterWorkload(baseJob, inst)
-		if err == nil || !strings.Contains(err.Error(), "pass --pathways-head-np") {
-			t.Fatalf("expected RWO PVC to pass ValidateClusterMounts and reach generateSPSClientManifest, got: %v", err)
+		job := baseJob
+		job.ImageName = ""
+		err := orc.submitSPSClusterWorkload(job, inst)
+		if err == nil || !strings.Contains(err.Error(), "either --image or --base-image must be provided") {
+			t.Fatalf("expected RWO PVC to pass ValidateClusterMounts and reach BuildContainerImage, got: %v", err)
 		}
 		if got := orc.inspectedPVCs["default/train-pvc"].volumeName; got != "pv-sps-rwo" {
 			t.Errorf("expected inspectedPVCs[default/train-pvc].volumeName = pv-sps-rwo, got %q", got)
@@ -481,6 +640,83 @@ func TestSubmitSPSClusterWorkload_ValidatesClusterMounts(t *testing.T) {
 		}
 		if len(mockExec.calls) != 0 {
 			t.Errorf("expected 0 kubectl calls when off-cloud Cloud URI fails fast, got: %v", mockExec.calls)
+		}
+	})
+}
+
+// TestRunSPSWorkload_ResolvesPathwaysBeforeMountsAndBuild pins that runSPSWorkload resolves client Pathways
+// settings once right after reading the SPS instance, so a digest-pinned server fails fast in both local and
+// in-cluster mode before cluster mount checks or container image builds.
+func TestRunSPSWorkload_ResolvesPathwaysBeforeMountsAndBuild(t *testing.T) {
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
+	digestJobSetJSON := strings.Replace(testSPSJobSetJSON, ":20261004", "@sha256:abcdef", 1)
+	newOrchestrator := func() (*GKEOrchestrator, *MockExecutor) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"gcloud container clusters get-credentials":                                {{ExitCode: 0}},
+			"kubectl get jobset sps-j6080103 -n default -o json --request-timeout=10s": {{ExitCode: 0, Stdout: digestJobSetJSON}},
+			"kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=sps-j6080103,jobset.sigs.k8s.io/replicatedjob-name=pathways-head -o jsonpath={.items[*].status.phase} --request-timeout=10s": {
+				{ExitCode: 0, Stdout: "Running"},
+			},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.dynClient = &mockDynamicClient{}
+		return orc, mockExec
+	}
+	baseJob := func() orchestrator.JobDefinition {
+		return orchestrator.JobDefinition{
+			WorkloadName:    "sps-build-check",
+			ClusterName:     "test-cluster",
+			ClusterLocation: "us-central1-a",
+			ProjectID:       "test-project",
+			NumSlices:       1,
+			NodesPerSlice:   1,
+			IsPathwaysJob:   true,
+			Pathways:        orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-j6080103"},
+		}
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*orchestrator.JobDefinition)
+	}{
+		{
+			name: "local terminal mode fails fast on digest-pinned server",
+		},
+		{
+			name: "in-cluster mode fails fast before cluster mount checks and image build",
+			mutate: func(j *orchestrator.JobDefinition) {
+				j.BaseImage = "python:3.12"
+				j.BuildContext = t.TempDir()
+				j.RawMounts = []string{"train-pvc;/data"}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			orc, mockExec := newOrchestrator()
+			job := baseJob()
+			if tc.mutate != nil {
+				tc.mutate(&job)
+			}
+			err := orc.runSPSWorkload(job)
+			if err == nil || !strings.Contains(err.Error(), "different digests") {
+				t.Fatalf("runSPSWorkload() = %v, want the digest error", err)
+			}
+			for _, call := range mockExec.calls {
+				if strings.Contains(call, "get pvc") {
+					t.Errorf("unexpected PVC check before digest error: %q", call)
+				}
+			}
+		})
+	}
+
+	t.Run("positive control advances to BuildContainerImage when proxy image is given", func(t *testing.T) {
+		orc, _ := newOrchestrator()
+		job := baseJob()
+		job.BaseImage = "python:3.12"
+		job.BuildContext = t.TempDir()
+		job.Pathways.ProxyServerImage = "proxy:pinned"
+		if err := orc.runSPSWorkload(job); err == nil || !strings.Contains(err.Error(), "crane-based image build failed") {
+			t.Fatalf("with explicit proxy image, expected BuildContainerImage error, got: %v", err)
 		}
 	})
 }
@@ -626,10 +862,11 @@ func TestResolveSPSClientPathways(t *testing.T) {
 
 	t.Run("fails when ProxyServerImage is empty", func(t *testing.T) {
 		inst := baseInst
+		inst.ServerImage = "custom-registry.io/my-rm:v1"
 		inst.ProxyImage = ""
 		_, err := resolveSPSClientPathways(orchestrator.PathwaysJobDefinition{}, inst)
-		if err == nil || !strings.Contains(err.Error(), "pass --pathways-proxy-server-image") {
-			t.Errorf("got err = %v, want --pathways-proxy-server-image error", err)
+		if err == nil || !strings.Contains(err.Error(), "pass --pathways-proxy-server-image") || strings.Contains(err.Error(), "different digests") {
+			t.Errorf("got err = %v, want generic --pathways-proxy-server-image error (without digest text)", err)
 		}
 	})
 
@@ -641,4 +878,106 @@ func TestResolveSPSClientPathways(t *testing.T) {
 			t.Errorf("got err = %v, want --pathways-gcs-location error", err)
 		}
 	})
+}
+
+func TestResolveSPSClientPathways_DigestPinnedServer(t *testing.T) {
+	for _, srv := range []string{
+		"us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server@sha256:abcdef",
+		"us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest@sha256:abcdef",
+	} {
+		inst := spsInstance{
+			Name:         "sps-inst",
+			HeadNodePool: "cpu-np",
+			ServerImage:  srv,
+			ProxyImage:   proxyImageFor(srv),
+			GCSLocation:  "gs://my-bucket/sps",
+		}
+		_, err := resolveSPSClientPathways(orchestrator.PathwaysJobDefinition{}, inst)
+		if err == nil || !strings.Contains(err.Error(), "different digests") || !strings.Contains(err.Error(), "pass --pathways-proxy-server-image") {
+			t.Errorf("server %q: got err = %v, want a digest explanation and a --pathways-proxy-server-image hint", srv, err)
+		}
+		got, err := resolveSPSClientPathways(orchestrator.PathwaysJobDefinition{ProxyServerImage: "proxy:pinned"}, inst)
+		if err != nil || got.ProxyServerImage != "proxy:pinned" {
+			t.Errorf("server %q with --pathways-proxy-server-image: got (%q, %v), want (\"proxy:pinned\", nil)", srv, got.ProxyServerImage, err)
+		}
+	}
+}
+
+func TestRunSPSWorkload_StripsQueueWhenKueueNotInstalled(t *testing.T) {
+	cases := []struct {
+		name             string
+		jobQueue         string
+		kueueAPIRes      shell.CommandResult
+		wantQueueSubstr  string
+		wantOmitQueue    bool
+		wantKueueEnabled bool
+	}{
+		{
+			name:             "explicit_queue_stripped_when_kueue_absent",
+			jobQueue:         "my-queue",
+			kueueAPIRes:      shell.CommandResult{ExitCode: 1, Stderr: "Error from server (NotFound): not found"},
+			wantOmitQueue:    true,
+			wantKueueEnabled: false,
+		},
+		{
+			name:             "inherited_instance_queue_stripped_when_kueue_absent",
+			jobQueue:         "",
+			kueueAPIRes:      shell.CommandResult{ExitCode: 1, Stderr: "Error from server (NotFound): not found"},
+			wantOmitQueue:    true,
+			wantKueueEnabled: false,
+		},
+		{
+			name:             "whitespace_queue_inherits_instance_queue_when_kueue_installed",
+			jobQueue:         "   ",
+			kueueAPIRes:      shell.CommandResult{ExitCode: 0, Stdout: "{}"},
+			wantQueueSubstr:  "kueue.x-k8s.io/queue-name: cluster-queue",
+			wantKueueEnabled: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dryOut := filepath.Join(t.TempDir(), "sps-client.yaml")
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+				"gcloud container clusters get-credentials": {{ExitCode: 0}},
+				"kubectl get jobset sps-j6080103 -n default -o json --request-timeout=10s": {
+					{ExitCode: 0, Stdout: testSPSJobSetJSON},
+				},
+				"kubectl get pods -n default -l jobset.sigs.k8s.io/jobset-name=sps-j6080103,jobset.sigs.k8s.io/replicatedjob-name=pathways-head -o jsonpath={.items[*].status.phase} --request-timeout=10s": {
+					{ExitCode: 0, Stdout: "Running"},
+				},
+				"kubectl get --raw /apis/kueue.x-k8s.io": {tc.kueueAPIRes},
+			})
+			orc := newTestGKEOrchestrator(mockExec)
+			orc.kubeconfigLoader = staticLoader(kubeconfigWith("https://10.0.0.1:6443", nil, gkeExec(), "gke_test-project_us-central1-a_test-cluster"))
+			job := orchestrator.JobDefinition{
+				WorkloadName:    "sps-client-unqueued",
+				ClusterName:     "test-cluster",
+				ClusterLocation: "us-central1-a",
+				ProjectID:       "test-project",
+				ImageName:       "gcr.io/proj/img:v1",
+				CommandToRun:    "python3 train.py",
+				KueueQueueName:  tc.jobQueue,
+				NumSlices:       1,
+				IsPathwaysJob:   true,
+				DryRunManifest:  dryOut,
+				Pathways:        orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-j6080103"},
+			}
+			if err := orc.runSPSWorkload(job); err != nil {
+				t.Fatalf("runSPSWorkload() err = %v", err)
+			}
+			raw, err := os.ReadFile(dryOut)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantOmitQueue && strings.Contains(string(raw), "kueue.x-k8s.io/queue-name") {
+				t.Errorf("SPS client manifest must omit queue-name:\n%s", string(raw))
+			}
+			if tc.wantQueueSubstr != "" && !strings.Contains(string(raw), tc.wantQueueSubstr) {
+				t.Errorf("SPS client manifest missing %q:\n%s", tc.wantQueueSubstr, string(raw))
+			}
+			if orc.kueueEnabled() != tc.wantKueueEnabled {
+				t.Errorf("orc.kueueEnabled() = %v, want %v", orc.kueueEnabled(), tc.wantKueueEnabled)
+			}
+		})
+	}
 }

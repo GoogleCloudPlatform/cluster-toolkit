@@ -15,10 +15,12 @@
 package logging
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -30,6 +32,7 @@ const (
 )
 
 var (
+	captureMu    sync.Mutex
 	infolog      *log.Logger
 	errorlog     *log.Logger
 	fatallog     *log.Logger
@@ -38,6 +41,53 @@ var (
 	TsColor      = color.New(color.FgMagenta)
 	WarningColor = color.New(color.FgYellow)
 )
+
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
+
+// CaptureForTesting redirects Info and Warn/Error/Fatal logger writers to race-safe in-memory buffers until restore is called,
+// and registers restore with tb.Cleanup when tb is non-nil so early test failures never hold captureMu.
+func CaptureForTesting(tb interface{ Cleanup(func()) }) (snapshot func() (infoOut, errOut string), restore func()) {
+	captureMu.Lock()
+	prevInfo := infolog.Writer()
+	prevErr := errorlog.Writer()
+	prevFatal := fatallog.Writer()
+	infoBuf := &syncBuffer{}
+	errBuf := &syncBuffer{}
+	infolog.SetOutput(infoBuf)
+	errorlog.SetOutput(errBuf)
+	fatallog.SetOutput(errBuf)
+
+	var once sync.Once
+	restore = func() {
+		once.Do(func() {
+			infolog.SetOutput(prevInfo)
+			errorlog.SetOutput(prevErr)
+			fatallog.SetOutput(prevFatal)
+			captureMu.Unlock()
+		})
+	}
+	if tb != nil {
+		tb.Cleanup(restore)
+	}
+	return func() (string, string) {
+		return infoBuf.String(), errBuf.String()
+	}, restore
+}
 
 func init() {
 	infolog = log.New(os.Stdout, "", 0)

@@ -16,6 +16,7 @@ package gke
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
@@ -40,6 +41,10 @@ type inspectWriter struct {
 
 // runAndLog pins kubectl to the chosen context before logging so the report shows the command that ran.
 func (w *inspectWriter) runAndLog(description string, command string, args ...string) {
+	_, _ = w.runAndLogResult(description, command, args...)
+}
+
+func (w *inspectWriter) runAndLogResult(description string, command string, args ...string) (int, string) {
 	if command == "kubectl" {
 		args = k8s.WithContext(w.orc.kubeContext, args)
 	}
@@ -56,15 +61,21 @@ func (w *inspectWriter) runAndLog(description string, command string, args ...st
 	}
 	divider := fmt.Sprintf("\n%s\n\n", spacer)
 	_, _ = fmt.Fprint(w.writer, divider)
+	return res.ExitCode, res.Stderr
 }
 
-// InspectCluster runs diagnostic checks on the GKE cluster and writes them to a log file.
+// InspectCluster runs diagnostic checks on the cluster and writes them to a log file.
 // With opts.Filter == "pathways-sps" it writes only the SPS instance summary for opts.WorkloadName.
 func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error {
 	g.namespace = opts.GKENamespace
+	if strings.TrimSpace(opts.ProjectID) == "" {
+		opts.ProjectID = strings.TrimSpace(g.projectID)
+	}
+	isGKE := g.isGKE(opts.ProjectID)
+
 	// 1. Setup Kubectl (Critical, fail fast)
-	if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
-		return fmt.Errorf("failed to configure kubectl: %w", err)
+	if err := g.prepareInspectKubectl(opts, isGKE); err != nil {
+		return err
 	}
 
 	// Resolve namespace context
@@ -88,13 +99,97 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 
 	// Initial header in log
 	_, _ = fmt.Fprintf(outputTarget, "==================\nGCLUSTER INSPECT OUTPUT:\n==================\n\n")
-	g.logSPSSummaryIfInstance(outputTarget, opts.WorkloadName, targetNamespace)
+	hasJobSet := g.hasJobSetInstalled()
+	if hasJobSet {
+		g.logSPSSummaryIfInstance(outputTarget, opts.WorkloadName, targetNamespace)
+	}
 
 	writer := &inspectWriter{
 		writer: outputTarget,
 		orc:    g,
 	}
 
+	hasKueue := g.hasKueueInstalled()
+
+	if isGKE {
+		g.logGKEInfrastructure(writer, opts, targetNamespace)
+	}
+
+	// --- 3. Node Status ---
+	writer.runAndLog("Kubectl: All Nodes", "kubectl", "get", "nodes", "-o", "wide")
+	g.logNodeCounts(outputTarget)
+
+	// --- 4. Kueue & JobSet Resources ---
+	if hasKueue {
+		g.logKueueResources(writer)
+	}
+	if hasJobSet {
+		writer.runAndLog("JobSet: Deployment Details", "kubectl", "describe", "Deployment", "jobset-controller-manager", "-n", "jobset-system")
+		writer.runAndLog("JobSet: JobSet Controller Manager Logs (tail 100)", "kubectl", "logs", "deployment/jobset-controller-manager", "-n", "jobset-system", "-c", "manager", "--tail=100")
+	}
+
+	// --- 5. Slice Controller (Dynamic Slicing) ---
+	if hasKueue {
+		g.logSliceControllerResources(writer)
+	}
+	if g.hasTPUSliceAPI() {
+		writer.runAndLog("TPU Slices: All Slices", "kubectl", "get", k8s.TPUSliceResource, "-o", "wide")
+	}
+
+	// --- 6. Workloads ---
+	g.logClusterWorkloads(writer, hasKueue, hasJobSet, targetNamespace)
+	g.inspectWorkload(writer, opts.WorkloadName, targetNamespace, hasKueue, hasJobSet)
+
+	// --- 7. Console Links ---
+	if isGKE {
+		logConsoleLinks(outputTarget, opts, targetNamespace)
+	}
+
+	logging.Info("Cluster inspection report saved to %s", filePath)
+	return nil
+}
+
+func (g *GKEOrchestrator) prepareInspectKubectl(opts orchestrator.InspectOptions, isGKE bool) error {
+	if isGKE {
+		if err := g.configureKubectl(opts.ClusterName, opts.ClusterLocation, opts.ProjectID); err != nil {
+			return fmt.Errorf("failed to configure kubectl: %w", err)
+		}
+		return nil
+	}
+	g.resetStorageCaches()
+	if err := g.configureK8sKubectl(opts.ClusterName); err != nil {
+		return fmt.Errorf("failed to configure kubectl: %w", err)
+	}
+	return g.verifyK8sClusterReachable()
+}
+
+// hasKueueInstalled checks the non-privileged /apis/kueue.x-k8s.io discovery endpoint.
+// Unexpected errors fail open so Kueue diagnostics are not silently hidden from RBAC-restricted users.
+func (g *GKEOrchestrator) hasKueueInstalled() bool {
+	if !g.kueueEnabled() {
+		return false
+	}
+	present, err := g.HasAPIGroupVersion("kueue.x-k8s.io")
+	if err != nil {
+		return true
+	}
+	return present
+}
+
+// hasJobSetInstalled checks the non-privileged /apis/jobset.x-k8s.io discovery endpoint when JobSet is not disabled.
+// Unexpected errors fail open so JobSet diagnostics are not silently hidden from RBAC-restricted users.
+func (g *GKEOrchestrator) hasJobSetInstalled() bool {
+	if !g.jobSetEnabled() {
+		return false
+	}
+	present, err := g.HasAPIGroupVersion("jobset.x-k8s.io")
+	if err != nil {
+		return true
+	}
+	return present
+}
+
+func (g *GKEOrchestrator) logGKEInfrastructure(writer *inspectWriter, opts orchestrator.InspectOptions, targetNamespace string) {
 	// --- 1. Local Setup ---
 	writer.runAndLog("Local Setup: gcloud version", "gcloud", "version")
 	writer.runAndLog("Local Setup: Active gcloud configuration", "gcloud", "config", "list")
@@ -108,67 +203,122 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	resourcesCM := fmt.Sprintf("%s-resources", opts.ClusterName)
 	writer.runAndLog("GKE: Cluster Metadata ConfigMap Details", "kubectl", "get", "configmap", metadataCM, "-n", targetNamespace, "-o", "yaml")
 	writer.runAndLog("GKE: Cluster Resources ConfigMap Details", "kubectl", "get", "configmap", resourcesCM, "-n", targetNamespace, "-o", "yaml")
+}
 
-	// --- 3. Node Status ---
-	writer.runAndLog("Kubectl: All Nodes", "kubectl", "get", "nodes", "-o", "wide")
-
-	// Count nodes per pool (healthy and total)
-	g.logNodeCounts(outputTarget)
-
-	// --- 4. Kueue & JobSet Resources ---
+func (g *GKEOrchestrator) logKueueResources(writer *inspectWriter) {
 	writer.runAndLog("Kueue: ClusterQueue Details", "kubectl", "describe", "ClusterQueue")
 	writer.runAndLog("Kueue: LocalQueue Details", "kubectl", "describe", "LocalQueue", "-A")
 	writer.runAndLog("Kueue: ResourceFlavor Details", "kubectl", "describe", "ResourceFlavor")
 	writer.runAndLog("Kueue: Kueue Deployment Details", "kubectl", "describe", "Deployment", "kueue-controller-manager", "-n", "kueue-system")
 	writer.runAndLog("Kueue: Kueue Controller Manager Logs (tail 100)", "kubectl", "logs", "deployment/kueue-controller-manager", "-n", "kueue-system", "-c", "manager", "--tail=100")
+}
 
-	writer.runAndLog("JobSet: Deployment Details", "kubectl", "describe", "Deployment", "jobset-controller-manager", "-n", "jobset-system")
-	writer.runAndLog("JobSet: JobSet Controller Manager Logs (tail 100)", "kubectl", "logs", "deployment/jobset-controller-manager", "-n", "jobset-system", "-c", "manager", "--tail=100")
-
-	// --- 5. Slice Controller (Dynamic Slicing) ---
+func (g *GKEOrchestrator) logSliceControllerResources(writer *inspectWriter) {
 	cResult := g.kubectl("get", "crd", "topologies.kueue.x-k8s.io")
 	if cResult.ExitCode == 0 {
 		writer.runAndLog("Slice Controller: Deployment Details", "kubectl", "describe", "deployment", "slice-controller-controller-manager", "-n", "slice-controller-system")
 		writer.runAndLog("Slice Controller: Logs (tail 100)", "kubectl", "logs", "deployment/slice-controller-controller-manager", "-n", "slice-controller-system", "-c", "manager", "--tail=100")
 	}
-
-	// --- 6. Workloads ---
-	g.logWorkloadList(outputTarget, "EVERYTHING", "", targetNamespace)
-	g.logWorkloadList(outputTarget, "QUEUED", "", targetNamespace)
-	g.logWorkloadList(outputTarget, "RUNNING", "", targetNamespace)
-
-	g.inspectWorkload(writer, opts.WorkloadName, targetNamespace)
-
-	// --- 7. Console Links ---
-	logConsoleLinks(outputTarget, opts, targetNamespace)
-
-	logging.Info("Cluster inspection report saved to %s", filePath)
-	return nil
 }
 
-func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, workloadNamespace string) {
+func (g *GKEOrchestrator) logClusterWorkloads(writer *inspectWriter, hasKueue, hasJobSet bool, targetNamespace string) {
+	if hasKueue {
+		g.logWorkloadList(writer.writer, "EVERYTHING", "", targetNamespace)
+		g.logWorkloadList(writer.writer, "QUEUED", "", targetNamespace)
+		g.logWorkloadList(writer.writer, "RUNNING", "", targetNamespace)
+	}
+	nsArgs := []string{"-A"}
+	if targetNamespace != "" {
+		nsArgs = []string{"-n", targetNamespace}
+	}
+	if hasJobSet {
+		writer.runAndLog("JobSet: All JobSets", "kubectl", append(append([]string{"get", "jobsets"}, nsArgs...), "-o", "wide")...)
+	}
+	writer.runAndLog("Batch Jobs: gcluster Workloads", "kubectl", append(append([]string{"get", "jobs", "-l", workloadLabel + ",!jobset.sigs.k8s.io/jobset-name"}, nsArgs...), "-o", "wide")...)
+}
+
+func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, workloadNamespace string, hasKueue, hasJobSet bool) {
 	if workloadName == "" {
 		return
 	}
+	if hasKueue {
+		g.logWorkloadList(writer.writer, "EVERYTHING", workloadName, workloadNamespace)
+	}
 
-	g.logWorkloadList(writer.writer, "EVERYTHING", workloadName, workloadNamespace)
+	isBatchJob := g.describeWorkloadResource(writer, workloadName, workloadNamespace, hasJobSet)
+	if hasKueue {
+		g.inspectKueueWorkload(writer, workloadName, workloadNamespace, isBatchJob)
+	}
+	g.inspectWorkloadSlices(writer, workloadName, workloadNamespace, isBatchJob)
 
-	writer.runAndLog(fmt.Sprintf("JobSet: Config for %s", workloadName), "kubectl", "describe", "jobsets", workloadName, "-n", workloadNamespace)
+	podSelector := workloadPodSelector(workloadName, isBatchJob)
+	writer.runAndLog(fmt.Sprintf("Pods: Status for %s", workloadName), "kubectl", "get", "pods", "-l", podSelector, "-n", workloadNamespace, "-o", "wide")
+	writer.runAndLog(fmt.Sprintf("Pods: Config and Events for %s", workloadName), "kubectl", "describe", "pods", "-l", podSelector, "-n", workloadNamespace)
+}
 
+// inspectWorkloadSlices logs Slice CR readiness, details, and events into an inspect report.
+func (g *GKEOrchestrator) inspectWorkloadSlices(writer *inspectWriter, workloadName, workloadNamespace string, isBatchJob bool) {
+	if !g.hasTPUSliceAPI() || strings.TrimSpace(workloadName) == "" {
+		return
+	}
+	sliceList, staticNames := g.fetchWorkloadSlices(workloadNamespace, workloadName, isBatchJob)
+	if len(staticNames) > 0 {
+		args := append([]string{"describe", k8s.TPUSliceResource, "--"}, staticNames...)
+		writer.runAndLog(fmt.Sprintf("TPU Slice: Static slice(s) %s for %s", strings.Join(staticNames, ", "), workloadName), "kubectl", args...)
+	} else if names := validSliceNames(sliceList); len(names) > 0 {
+		getArgs := append([]string{"get", k8s.TPUSliceResource, "-o", "wide", "--"}, names...)
+		writer.runAndLog(fmt.Sprintf("TPU Slices: Provisioned slices for %s", workloadName), "kubectl", getArgs...)
+		descArgs := append([]string{"describe", k8s.TPUSliceResource, "--"}, names...)
+		writer.runAndLog(fmt.Sprintf("TPU Slices: Details for %s", workloadName), "kubectl", descArgs...)
+	}
+	if len(sliceList) == 0 {
+		return
+	}
+	summary := k8s.FormatSliceReadiness(sliceList)
+	events := g.fetchSliceEvents(sliceList)
+	_, _ = fmt.Fprintf(writer.writer, "Description: TPU Slice Readiness Summary for %s\nOutput:\n%s\n", workloadName, summary)
+	if events != "" {
+		_, _ = fmt.Fprintf(writer.writer, "\nSlice Events:\n%s\n", events)
+	}
+	_, _ = fmt.Fprintf(writer.writer, "\n%s\n\n", spacer)
+}
+
+func (g *GKEOrchestrator) describeWorkloadResource(writer *inspectWriter, workloadName, workloadNamespace string, hasJobSet bool) bool {
+	isBatchJob := !hasJobSet
+	checkBatchJob := !hasJobSet
+	if hasJobSet {
+		exitCode, stderr := writer.runAndLogResult(fmt.Sprintf("JobSet: Config for %s", workloadName), "kubectl", "describe", "jobsets", workloadName, "-n", workloadNamespace)
+		descErr := errors.New(stderr)
+		checkBatchJob = exitCode != 0 && exitCode != -1 && (k8s.IsNotFoundOrNoMatchError(descErr) || k8s.IsForbiddenError(descErr))
+	}
+	if !checkBatchJob {
+		return isBatchJob
+	}
+	_, err := g.getBatchJobInfo(workloadNamespace, workloadName)
+	if err == nil || !hasJobSet {
+		isBatchJob = true
+		writer.runAndLog(fmt.Sprintf("Job: Config for %s", workloadName), "kubectl", "describe", "job", workloadName, "-n", workloadNamespace)
+		if err == nil {
+			writer.runAndLog(fmt.Sprintf("Service: Config for %s", workloadName), "kubectl", "describe", "service", workloadName, "-n", workloadNamespace)
+		}
+	}
+	return isBatchJob
+}
+
+func (g *GKEOrchestrator) inspectKueueWorkload(writer *inspectWriter, workloadName, workloadNamespace string, isBatchJob bool) {
 	targetWorkload := fmt.Sprintf("jobset-%s", workloadName)
+	if isBatchJob {
+		targetWorkload = fmt.Sprintf("job-%s", workloadName)
+	}
 	if g.needsDynamicClientInit() {
 		_, _ = g.getDynamicClient()
 	}
 	if g.kubeClient != nil {
-		if tw, err := g.findTargetWorkload(workloadNamespace, workloadName, 2*time.Second); err == nil {
+		if tw, err := g.findTargetWorkloadForKind(workloadNamespace, workloadName, 2*time.Second, isBatchJob); err == nil {
 			targetWorkload = tw
 		}
 	}
 	writer.runAndLog(fmt.Sprintf("Kueue: Workload config for %s", workloadName), "kubectl", "describe", "workloads", targetWorkload, "-n", workloadNamespace)
-
-	podSelector := fmt.Sprintf("jobset.sigs.k8s.io/jobset-name=%s", workloadName)
-	writer.runAndLog(fmt.Sprintf("Pods: Status for %s", workloadName), "kubectl", "get", "pods", "-l", podSelector, "-n", workloadNamespace, "-o", "wide")
-	writer.runAndLog(fmt.Sprintf("Pods: Config and Events for %s", workloadName), "kubectl", "describe", "pods", "-l", podSelector, "-n", workloadNamespace)
 }
 
 func (g *GKEOrchestrator) logNodeCounts(w io.Writer) {
@@ -219,15 +369,25 @@ func (g *GKEOrchestrator) fetchNodeList() (*kubernetesNodeList, error) {
 	return &nodeList, nil
 }
 
+func inspectNodeGroup(labels map[string]string) string {
+	for _, key := range []string{
+		nodePoolLabel,
+		"node.kubernetes.io/instance-type",
+		"beta.kubernetes.io/instance-type",
+	} {
+		if val := strings.TrimSpace(labels[key]); val != "" {
+			return val
+		}
+	}
+	return "unknown"
+}
+
 func countNodes(nodeList *kubernetesNodeList) (map[string]int, map[string]int) {
 	totalNodesPerPool := make(map[string]int)
 	healthyNodesPerPool := make(map[string]int)
 
 	for _, node := range nodeList.Items {
-		nodepool := node.Metadata.Labels["cloud.google.com/gke-nodepool"]
-		if nodepool == "" {
-			nodepool = "unknown"
-		}
+		nodepool := inspectNodeGroup(node.Metadata.Labels)
 		totalNodesPerPool[nodepool]++
 
 		isReady := false
@@ -439,21 +599,72 @@ var (
 const spsSidecarVersionScript = "import jax, jaxlib, sys; print(f'{sys.version_info.major}.{sys.version_info.minor},{jax.__version__},{jaxlib.__version__}')"
 
 func openInspectOutput(opts orchestrator.InspectOptions, defaultSuffix string) (*os.File, io.Writer, string, error) {
-	filePath := opts.OutputPath
-	if filePath == "" {
-		timestamp := time.Now().UTC().Format("20060102-150405")
-		fileName := fmt.Sprintf("gcluster-inspect-%s-%s%s", opts.ClusterName, timestamp, defaultSuffix)
-		filePath = filepath.Join(".", fileName)
-	}
-	file, err := os.Create(filePath)
-	if err != nil {
-		return nil, nil, "", fmt.Errorf("failed to create log file %s: %w", filePath, err)
+	var (
+		file     *os.File
+		filePath string
+		err      error
+	)
+	if opts.OutputPath != "" {
+		filePath = opts.OutputPath
+		file, err = os.Create(filePath)
+		if err != nil {
+			return nil, nil, "", fmt.Errorf("failed to create log file %s: %w", filePath, err)
+		}
+	} else {
+		file, filePath, err = createDefaultInspectFile(opts.ClusterName, defaultSuffix)
+		if err != nil {
+			return nil, nil, "", err
+		}
 	}
 	var outputTarget io.Writer = file
 	if opts.Show {
 		outputTarget = io.MultiWriter(file, os.Stdout)
 	}
 	return file, outputTarget, filePath, nil
+}
+
+var inspectFileSegmentSanitizer = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+
+func sanitizeInspectFileSegment(clusterName string) string {
+	seg := inspectFileSegmentSanitizer.ReplaceAllString(strings.TrimSpace(clusterName), "-")
+	seg = strings.Trim(seg, "-._")
+	if seg == "" {
+		return "cluster"
+	}
+	return seg
+}
+
+func createDefaultInspectFile(clusterName, defaultSuffix string) (*os.File, string, error) {
+	clusterSegment := sanitizeInspectFileSegment(clusterName)
+	timestamp := time.Now().UTC().Format("20060102-150405")
+	fileName := fmt.Sprintf("gcluster-inspect-%s-%s%s", clusterSegment, timestamp, defaultSuffix)
+
+	cwdPath := filepath.Join(".", fileName)
+	file, cwdErr := os.Create(cwdPath)
+	if cwdErr == nil {
+		return file, cwdPath, nil
+	}
+	return createFallbackInspectFile(clusterSegment, timestamp, defaultSuffix, fileName, cwdPath, cwdErr)
+}
+
+func createFallbackInspectFile(clusterSegment, timestamp, defaultSuffix, fileName, cwdPath string, cwdErr error) (*os.File, string, error) {
+	if homeDir, err := os.UserHomeDir(); err == nil && strings.TrimSpace(homeDir) != "" {
+		logsDir := filepath.Join(homeDir, ".gcluster", "logs")
+		if mkErr := os.MkdirAll(logsDir, 0750); mkErr == nil {
+			homePath := filepath.Join(logsDir, fileName)
+			if file, createErr := os.OpenFile(homePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600); createErr == nil {
+				logging.Warn("Unable to create inspect log file %s (%v); writing to %s instead.", cwdPath, cwdErr, homePath)
+				return file, homePath, nil
+			}
+		}
+	}
+	tmpPattern := fmt.Sprintf("gcluster-inspect-%s-%s-*%s", clusterSegment, timestamp, defaultSuffix)
+	file, tmpErr := os.CreateTemp(os.TempDir(), tmpPattern)
+	if tmpErr == nil {
+		logging.Warn("Unable to create inspect log file %s (%v); writing to %s instead.", cwdPath, cwdErr, file.Name())
+		return file, file.Name(), nil
+	}
+	return nil, "", fmt.Errorf("failed to create log file %s (and fallback locations ~/.gcluster/logs and %s: %v): %w", cwdPath, os.TempDir(), tmpErr, cwdErr)
 }
 
 func (g *GKEOrchestrator) inspectSPSInstanceToLog(opts orchestrator.InspectOptions, targetNamespace string) error {
@@ -692,12 +903,11 @@ func lastReadySlices(logs string) string {
 // imageVersions reads the Python and JAX versions from an image tag such as
 // sidecar:20260831-maxtext-v0.2.4-jax0.11.1-pwutils. Missing versions are returned empty.
 func imageVersions(image string) (python, jax string) {
-	tag, _, _ := strings.Cut(image, "@")
-	i := strings.LastIndex(tag, ":")
-	if i < 0 || strings.Contains(tag[i:], "/") {
+	parsed, ok := k8s.ParseImageRef(image)
+	if !ok || parsed.Tag == "" {
 		return "", ""
 	}
-	tag = tag[i+1:]
+	tag := parsed.Tag
 	if m := pythonVersionRe.FindStringSubmatch(tag); m != nil {
 		python = m[1]
 	}

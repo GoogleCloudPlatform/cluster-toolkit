@@ -19,6 +19,7 @@ import (
 	"context"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/shell"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -31,6 +32,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	_ = os.Unsetenv("GCLUSTER_REFRESH_CREDENTIALS")
 	// Mock store globally for tests to skip prerequisite checks by default.
 	// Tests that need to verify prerequisite checks can override it.
 	store = &MockPrereqStore{
@@ -208,8 +210,10 @@ func TestSubmitCmd_RegularDryRun(t *testing.T) {
 	}
 }
 
-func TestSubmitCmd_TPUWithNumNodes_Fails(t *testing.T) {
+func TestSubmitCmd_TPUWithNumNodes_ForwardsFlagToOrchestrator(t *testing.T) {
 	setupSubmitTestEnv(t)
+	mockOrc := &mockOrchestrator{}
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
 
 	oldStore := store
 	defer func() { store = oldStore }()
@@ -225,25 +229,23 @@ func TestSubmitCmd_TPUWithNumNodes_Fails(t *testing.T) {
 		},
 	}
 
-	output, err := executeCommand(JobCmd,
+	_, err := executeCommand(JobCmd,
 		"submit",
-		"--name", "tpu-fail-test",
+		"--name", "tpu-num-nodes-test",
 		"--image", "busybox",
 		"--command", "echo hello",
 		"--cluster", "test-cluster",
 		"--location", "us-central1-a",
 		"--project", "test-project",
-		"--compute-type", "v6e-8", // TPU type
-		"--num-nodes", "2", // Explicitly set!
+		"--compute-type", "v6e-8",
+		"--num-nodes", "2",
 	)
-
-	if err == nil {
-		t.Fatalf("expected error when passing --num-nodes for TPU job, but got nil")
+	if err != nil {
+		t.Fatalf("expected CLI to delegate TPU --num-nodes check to orchestrator, got err: %v", err)
 	}
-
-	expectedErr := "--num-nodes cannot be used with TPU jobs"
-	if !strings.Contains(output, expectedErr) && !strings.Contains(err.Error(), expectedErr) {
-		t.Errorf("expected error message to contain %q, got output: %q, err: %v", expectedErr, output, err)
+	if !mockOrc.SubmittedJob.NumNodesSpecified || mockOrc.SubmittedJob.NodesPerSlice != 2 {
+		t.Errorf("expected NumNodesSpecified=true NodesPerSlice=2 forwarded to orchestrator, got (%v, %d)",
+			mockOrc.SubmittedJob.NumNodesSpecified, mockOrc.SubmittedJob.NodesPerSlice)
 	}
 }
 
@@ -351,6 +353,7 @@ func resetCommandFlags(cmd *cobra.Command) {
 }
 
 func resetJobFlags() {
+	detectedOrchestratorType = ""
 	pathways = orchestrator.PathwaysJobDefinition{}
 	resetCommandFlags(JobCmd)
 	nodeConstraint = make(map[string]string)
@@ -358,8 +361,25 @@ func resetJobFlags() {
 
 func setupSubmitTestEnv(t *testing.T) {
 	t.Helper()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "empty-kubeconfig"))
+	t.Setenv("DOCKER_CONFIG", t.TempDir())
+	t.Setenv("GCLUSTER_ORCHESTRATOR", "")
+	t.Setenv("GCLUSTER_LABEL_SCHEME", "")
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
+	t.Setenv("GCLUSTER_AIR_GAPPED", "")
+	t.Setenv("GCLUSTER_REFRESH_CREDENTIALS", "")
 	t.Setenv("GCLUSTER_TELEMETRY_IMAGE", "")
+	t.Setenv("GCLUSTER_DISABLE_JOBSET", "")
+	t.Setenv("GCLUSTER_DISABLE_KUEUE", "")
+	t.Setenv("GOOGLE_API_USE_CLIENT_CERTIFICATE", "false")
 	resetJobFlags()
+
+	oldStore := store
+	t.Cleanup(func() { store = oldStore })
+	store = &MockPrereqStore{State: PrereqState{LastCheckedTimestamp: time.Now()}}
 
 	oldFactory := gkeOrchestratorFactory
 	t.Cleanup(func() {
@@ -379,15 +399,53 @@ func setupSubmitTestEnv(t *testing.T) {
 
 type mockOrchestrator struct {
 	orchestrator.JobOrchestrator
-	initializeFunc func(string, string, string) (string, error)
-	SubmittedJob   orchestrator.JobDefinition
+	initializeFunc     func(string, string, string) (string, error)
+	listJobsFunc       func(orchestrator.ListOptions) ([]orchestrator.JobStatus, error)
+	getJobLogsFunc     func(string, orchestrator.LogsOptions) (string, error)
+	cancelJobFunc      func(string, orchestrator.CancelOptions) error
+	inspectClusterFunc func(orchestrator.InspectOptions) error
+	InitClusterName    string
+	InitLocation       string
+	InitProjectID      string
+	SubmittedJob       orchestrator.JobDefinition
 }
 
 func (m *mockOrchestrator) Initialize(clusterName, location, projectID string) (string, error) {
+	m.InitClusterName = clusterName
+	m.InitLocation = location
+	m.InitProjectID = projectID
 	if m.initializeFunc != nil {
 		return m.initializeFunc(clusterName, location, projectID)
 	}
 	return location, nil
+}
+
+func (m *mockOrchestrator) ListJobs(opts orchestrator.ListOptions) ([]orchestrator.JobStatus, error) {
+	if m.listJobsFunc != nil {
+		return m.listJobsFunc(opts)
+	}
+	return nil, nil
+}
+
+func (m *mockOrchestrator) GetJobLogs(name string, opts orchestrator.LogsOptions) (string, error) {
+	if m.getJobLogsFunc != nil {
+		return m.getJobLogsFunc(name, opts)
+	}
+	return "", nil
+}
+
+func (m *mockOrchestrator) CancelJob(name string, opts orchestrator.CancelOptions) error {
+	if m.cancelJobFunc != nil {
+		return m.cancelJobFunc(name, opts)
+	}
+	return nil
+}
+
+func (m *mockOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error {
+	if m.inspectClusterFunc != nil {
+		return m.inspectClusterFunc(opts)
+	}
+	return nil
 }
 
 func (m *mockOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
@@ -1291,7 +1349,6 @@ func TestSubmitCmd_SkipPrereqsFalse_RunsChecks(t *testing.T) {
 // Build prerequisites (Artifact Registry API, Docker credentials) only apply when
 // gcluster builds and pushes the image; a pre-built --image is pulled by the nodes.
 func TestSubmitCmd_BuildPrerequisitesOnlyForCraneBuild(t *testing.T) {
-	t.Setenv("GCLUSTER_IMAGE_REPO", "test-repo")
 	t.Setenv("USER", "tester")
 	buildDir := t.TempDir()
 
@@ -1316,6 +1373,7 @@ func TestSubmitCmd_BuildPrerequisitesOnlyForCraneBuild(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setupSubmitTestEnv(t)
+			t.Setenv("GCLUSTER_IMAGE_REPO", "test-repo")
 			executed := stubPrereqCommands(t)
 
 			args := append([]string{
@@ -1472,6 +1530,11 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsWithoutPathways_Fails(t *testing.T) {
 			extraArgs: []string{"--pathways", "--pathways-gcs-location", "gs://my-bucket", "--pathways-elastic-slices", "-1"},
 			wantErr:   "--pathways-elastic-slices must be non-negative",
 		},
+		{
+			name:      "max-slice-restarts above the int32 range with --pathways",
+			extraArgs: []string{"--pathways", "--pathways-gcs-location", "gs://my-bucket", "--pathways-max-slice-restarts", "2147483648"},
+			wantErr:   "--pathways-max-slice-restarts must be at most 2147483647",
+		},
 	}
 
 	for _, tc := range tests {
@@ -1561,6 +1624,12 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
 			wantElasticSlices:    0,
 			wantMaxSliceRestarts: 500,
 		},
+		{
+			name:                 "accepts max-slice-restarts at the int32 limit",
+			extraArgs:            []string{"--pathways-max-slice-restarts", "2147483647"},
+			wantElasticSlices:    0,
+			wantMaxSliceRestarts: 2147483647,
+		},
 	}
 
 	for _, tc := range tests {
@@ -1598,6 +1667,170 @@ func TestSubmitCmd_PathwaysMaxSliceRestartsDefaults(t *testing.T) {
 			}
 			if got := mockOrc.SubmittedJob.Pathways.MaxSliceRestarts; got != tc.wantMaxSliceRestarts {
 				t.Errorf("MaxSliceRestarts = %d, want %d", got, tc.wantMaxSliceRestarts)
+			}
+		})
+	}
+}
+
+func TestSubmitCmd_RestartsBounds(t *testing.T) {
+	t.Run("rejects out-of-range --restarts before image checks", func(t *testing.T) {
+		cases := []struct {
+			name    string
+			val     string
+			wantErr string
+		}{
+			{name: "negative", val: "-1", wantErr: "--restarts must be non-negative"},
+		}
+		if math.MaxInt > math.MaxInt32 {
+			cases = append(cases, struct {
+				name    string
+				val     string
+				wantErr string
+			}{name: "above int32 max", val: "2147483648", wantErr: "--restarts must be at most 2147483647"})
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				setupSubmitTestEnv(t)
+				t.Setenv("GCLUSTER_IMAGE_REPO", "")
+				oldLookup := lookupArtifactRegistryRepos
+				t.Cleanup(func() { lookupArtifactRegistryRepos = oldLookup })
+				lookupArtifactRegistryRepos = func(context.Context, string, string) ([]string, bool) {
+					t.Errorf("lookupArtifactRegistryRepos must not run on invalid --restarts")
+					return nil, false
+				}
+				_, err := executeCommand(JobCmd,
+					"submit",
+					"--name", "bad-restarts",
+					"--base-image", "python:3.12-slim",
+					"--build-context", t.TempDir(),
+					"--command", "echo hello",
+					"--compute-type", "n2d-standard-64",
+					"--restarts", tc.val,
+					"--skip-prereqs",
+					"--cluster", "test-cluster",
+					"--location", "us-central1-a",
+					"--project", "test-project",
+				)
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("got err = %v, want substring %q", err, tc.wantErr)
+				}
+			})
+		}
+	})
+
+	t.Run("accepts --restarts at 0 and int32 max", func(t *testing.T) {
+		for _, tc := range []struct {
+			val  string
+			want int
+		}{
+			{val: "0", want: 0},
+			{val: "2147483647", want: 2147483647},
+		} {
+			t.Run(tc.val, func(t *testing.T) {
+				setupSubmitTestEnv(t)
+				mockOrc := &mockOrchestrator{}
+				gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+				_, err := executeCommand(JobCmd,
+					"submit",
+					"--name", "ok-restarts",
+					"--image", "us-docker.pkg.dev/p/r/img:v1",
+					"--command", "echo hello",
+					"--compute-type", "n2d-standard-64",
+					"--restarts", tc.val,
+					"--skip-prereqs",
+					"--cluster", "test-cluster",
+					"--location", "us-central1-a",
+					"--project", "test-project",
+				)
+				if err != nil {
+					t.Fatalf("--restarts %s failed unexpectedly: %v", tc.val, err)
+				}
+				if got := mockOrc.SubmittedJob.WorkloadName; got != "ok-restarts" {
+					t.Errorf("SubmittedJob.WorkloadName = %q, want %q", got, "ok-restarts")
+				}
+				if got := mockOrc.SubmittedJob.MaxRestarts; got != tc.want {
+					t.Errorf("SubmittedJob.MaxRestarts = %d, want %d", got, tc.want)
+				}
+			})
+		}
+	})
+}
+
+func TestSubmitCmd_LocalValidationRunsBeforeImageLookup(t *testing.T) {
+	setupSubmitTestEnv(t)
+	t.Setenv("GCLUSTER_IMAGE_REPO", "")
+	arCalled := false
+	oldLookup := lookupArtifactRegistryRepos
+	t.Cleanup(func() { lookupArtifactRegistryRepos = oldLookup })
+	lookupArtifactRegistryRepos = func(context.Context, string, string) ([]string, bool) {
+		arCalled = true
+		return nil, false
+	}
+
+	_, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "bad-env-before-ar",
+		"--base-image", "python:3.12-slim",
+		"--build-context", t.TempDir(),
+		"--command", "echo hello",
+		"--compute-type", "n2d-standard-64",
+		"--env", "123BAD=val",
+		"--skip-prereqs",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+	)
+	if err == nil || !strings.Contains(err.Error(), "invalid environment variable name") {
+		t.Fatalf("got err = %v, want invalid environment variable name error", err)
+	}
+	if arCalled {
+		t.Errorf("lookupArtifactRegistryRepos was called despite invalid local --env flag")
+	}
+}
+
+func TestValidateNonNegativeInt32(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		flag    string
+		in      int
+		wantErr string
+	}{
+		{name: "zero allowed", flag: "--restarts", in: 0},
+		{name: "positive allowed", flag: "--restarts", in: 5},
+		{name: "int32 max allowed", flag: "--restarts", in: math.MaxInt32},
+		{name: "negative rejected", flag: "--restarts", in: -1, wantErr: "--restarts must be non-negative (got -1)"},
+		{name: "custom flag name formatted", flag: "--pathways-max-slice-restarts", in: -1, wantErr: "--pathways-max-slice-restarts must be non-negative (got -1)"},
+	}
+	if math.MaxInt > math.MaxInt32 {
+		aboveInt32 := int64(math.MaxInt32) + 1
+		cases = append(cases,
+			struct {
+				name    string
+				flag    string
+				in      int
+				wantErr string
+			}{name: "above int32 max rejected", flag: "--restarts", in: int(aboveInt32), wantErr: "--restarts must be at most 2147483647 (got 2147483648)"},
+			struct {
+				name    string
+				flag    string
+				in      int
+				wantErr string
+			}{name: "custom flag name above int32 max", flag: "--pathways-max-slice-restarts", in: int(aboveInt32), wantErr: "--pathways-max-slice-restarts must be at most 2147483647 (got 2147483648)"},
+		)
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateNonNegativeInt32(tc.flag, tc.in)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("validateNonNegativeInt32(%q, %d) err = %v, want substring %q", tc.flag, tc.in, err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("validateNonNegativeInt32(%q, %d) unexpected err: %v", tc.flag, tc.in, err)
 			}
 		})
 	}
@@ -1953,6 +2186,26 @@ func TestSubmitCmd_RunSPSWorkload(t *testing.T) {
 		}
 	})
 
+	t.Run("whitespace-only run-sps-workload fails fast even with compute-type", func(t *testing.T) {
+		for _, extra := range [][]string{nil, {"--compute-type", "v6e-8"}} {
+			setupSubmitTestEnv(t)
+			args := append([]string{
+				"submit",
+				"--pathways",
+				"--pathways-run-sps-workload", "   ",
+				"--name", "sps-blank",
+				"--command", "python3 train.py",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+			}, extra...)
+			_, err := executeCommand(JobCmd, args...)
+			if err == nil || !strings.Contains(err.Error(), "--pathways-run-sps-workload cannot be empty") {
+				t.Fatalf("whitespace run-sps-workload (extra=%v) err = %v, want empty flag error", extra, err)
+			}
+		}
+	})
+
 	t.Run("in-cluster mode succeeds with image and without compute-type or gcs-location", func(t *testing.T) {
 		setupSubmitTestEnv(t)
 		mockOrc := &mockOrchestrator{}
@@ -2074,6 +2327,35 @@ func TestSubmitCmd_RunSPSWorkload_Validation(t *testing.T) {
 	})
 }
 
+func TestSubmitCmd_RunSPSWorkload_RejectsCPUMemory(t *testing.T) {
+	for _, tc := range []struct {
+		flagName string
+		flagVal  string
+	}{
+		{flagName: "cpu", flagVal: "4"},
+		{flagName: "memory", flagVal: "16Gi"},
+	} {
+		t.Run("rejects --"+tc.flagName, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+			_, err := executeCommand(JobCmd,
+				"submit",
+				"--pathways",
+				"--pathways-run-sps-workload", "sps-v5p",
+				"--"+tc.flagName, tc.flagVal,
+				"--name", "sps-client",
+				"--command", "python3 train.py",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+			)
+			want := "--pathways-run-sps-workload connects to an existing SPS instance and cannot be used with --" + tc.flagName
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("got err = %v, want containing %q", err, want)
+			}
+		})
+	}
+}
+
 func TestValidateBuildContext_OCIRegistries(t *testing.T) {
 	t.Run("private local base-image succeeds with empty GCLUSTER_IMAGE_REPO and empty USER", func(t *testing.T) {
 		setupSubmitTestEnv(t)
@@ -2164,4 +2446,257 @@ func TestValidateBuildContext_OCIRegistries(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestSubmitCmd_EmptyComputeTypeRejectedAndNumNodesSpecifiedPropagated(t *testing.T) {
+	kcPath := filepath.Join(t.TempDir(), "kubeconfig")
+	kcYAML := "apiVersion: v1\nkind: Config\ncurrent-context: k8s-ctx\nclusters:\n- name: c\n  cluster:\n    server: https://127.0.0.1:6443\ncontexts:\n- name: k8s-ctx\n  context:\n    cluster: c\n    namespace: default\n"
+	if err := os.WriteFile(kcPath, []byte(kcYAML), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, rawVal := range []string{"", "   "} {
+		for _, orchType := range []orchestrator.Type{orchestrator.TypeK8s, orchestrator.TypeGKE} {
+			setupSubmitTestEnv(t)
+			t.Setenv("KUBECONFIG", kcPath)
+			t.Setenv("GCLUSTER_ORCHESTRATOR", string(orchType))
+			args := []string{
+				"submit",
+				"--name", "empty-ct-job",
+				"--image", "busybox",
+				"--command", "echo hi",
+				"--compute-type=" + rawVal,
+			}
+			if orchType == orchestrator.TypeGKE {
+				args = append(args, "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "test-project")
+			}
+			_, err := executeCommand(JobCmd, args...)
+			if err == nil || !strings.Contains(err.Error(), `flag "compute-type" cannot be empty`) {
+				t.Fatalf("orch=%s compute-type=%q err = %v, want empty compute-type error", orchType, rawVal, err)
+			}
+		}
+	}
+
+	setupSubmitTestEnv(t)
+	t.Setenv("KUBECONFIG", kcPath)
+	t.Setenv("GCLUSTER_ORCHESTRATOR", "gke")
+	mockOrc := &mockOrchestrator{}
+	oldFactory := gkeOrchestratorFactory
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mockOrc }
+	t.Cleanup(func() { gkeOrchestratorFactory = oldFactory })
+	if _, err := executeCommand(JobCmd,
+		"submit",
+		"--name", "num-nodes-flag-job",
+		"--cluster", "test-cluster",
+		"--location", "us-central1-a",
+		"--project", "test-project",
+		"--compute-type", "n2-standard-4",
+		"--image", "busybox",
+		"--command", "echo hi",
+		"--num-nodes", "2",
+	); err != nil {
+		t.Fatalf("submit with --num-nodes failed: %v", err)
+	}
+	if !mockOrc.SubmittedJob.NumNodesSpecified || mockOrc.SubmittedJob.NodesPerSlice != 2 {
+		t.Errorf("captured NumNodesSpecified=%v NodesPerSlice=%d, want (true, 2)", mockOrc.SubmittedJob.NumNodesSpecified, mockOrc.SubmittedJob.NodesPerSlice)
+	}
+}
+
+func TestSubmitCmd_CPUMemoryFlags_TypeK8sOptionalComputeType(t *testing.T) {
+	kcPath := filepath.Join(t.TempDir(), "kubeconfig")
+	kcYAML := "apiVersion: v1\nkind: Config\ncurrent-context: k8s-ctx\nclusters:\n- name: c\n  cluster:\n    server: https://127.0.0.1:6443\ncontexts:\n- name: k8s-ctx\n  context:\n    cluster: c\n    namespace: default\n"
+	if err := os.WriteFile(kcPath, []byte(kcYAML), 0600); err != nil {
+		t.Fatal(err)
+	}
+	setupSubmitTestEnv(t)
+	t.Setenv("KUBECONFIG", kcPath)
+	t.Setenv("GCLUSTER_ORCHESTRATOR", "k8s")
+	mock := &mockOrchestrator{}
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mock }
+
+	_, err := executeCommand(JobCmd, "submit",
+		"--name", "k8s-cpu-frac",
+		"--image", "busybox",
+		"--command", "echo hi",
+		"--cpu", "4",
+		"--memory", "8Gi",
+		"--skip-prereqs",
+	)
+	if err != nil {
+		t.Fatalf("unexpected error in k8s mode: %v", err)
+	}
+	if mock.SubmittedJob.CPURequest != "4" || mock.SubmittedJob.MemoryRequest != "8Gi" || mock.SubmittedJob.ComputeType != "" {
+		t.Errorf("got CPURequest=%q MemoryRequest=%q ComputeType=%q, want (4, 8Gi, \"\")",
+			mock.SubmittedJob.CPURequest, mock.SubmittedJob.MemoryRequest, mock.SubmittedJob.ComputeType)
+	}
+}
+
+func TestSubmitCmd_CPUMemoryFlags(t *testing.T) {
+	t.Run("trims and wires --cpu and --memory into JobDefinition", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		mock := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mock }
+
+		_, err := executeCommand(JobCmd, "submit",
+			"--name", "cpu-frac-job",
+			"--image", "us-docker.pkg.dev/p/r/img:v1",
+			"--command", "python3 app.py",
+			"--compute-type", "n2d-standard-64",
+			"--cpu", " 8 ",
+			"--memory", " 64Gi ",
+			"--skip-prereqs",
+			"--project", "p", "--cluster", "c", "--location", "us-central1-a",
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if mock.SubmittedJob.CPURequest != "8" || mock.SubmittedJob.MemoryRequest != "64Gi" {
+			t.Errorf("got CPURequest=%q MemoryRequest=%q, want 8 and 64Gi", mock.SubmittedJob.CPURequest, mock.SubmittedJob.MemoryRequest)
+		}
+	})
+
+	t.Run("rejects invalid quantities before validateBuildContext network/repo checks", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		t.Setenv("GCLUSTER_IMAGE_REPO", "")
+		_, err := executeCommand(JobCmd, "submit",
+			"--name", "cpu-bad-qty",
+			"--base-image", "python:3.12",
+			"--build-context", t.TempDir(),
+			"--command", "python3 app.py",
+			"--compute-type", "n2d-standard-64",
+			"--cpu", "abc",
+			"--skip-prereqs",
+			"--project", "p", "--cluster", "c", "--location", "us-central1-a",
+		)
+		if err == nil || !strings.Contains(err.Error(), "invalid --cpu quantity") {
+			t.Fatalf("got err = %v, want invalid --cpu quantity before GCLUSTER_IMAGE_REPO check", err)
+		}
+	})
+
+	for _, tc := range []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "explicit empty --cpu",
+			args:    []string{"--compute-type", "n2d-standard-64", "--cpu", ""},
+			wantErr: "--cpu cannot be empty",
+		},
+		{
+			name:    "explicit whitespace --cpu",
+			args:    []string{"--compute-type", "n2d-standard-64", "--cpu", "   "},
+			wantErr: "--cpu cannot be empty",
+		},
+		{
+			name:    "explicit whitespace --memory",
+			args:    []string{"--compute-type", "n2d-standard-64", "--memory", "   "},
+			wantErr: "--memory cannot be empty",
+		},
+		{
+			name:    "zero --cpu",
+			args:    []string{"--compute-type", "n2d-standard-64", "--cpu", "0"},
+			wantErr: "positive Kubernetes quantity",
+		},
+		{
+			name:    "negative --memory",
+			args:    []string{"--compute-type", "n2d-standard-64", "--memory", "-1Gi"},
+			wantErr: "positive Kubernetes quantity",
+		},
+		{
+			name:    "sub-millicore --cpu",
+			args:    []string{"--compute-type", "n2d-standard-64", "--cpu", "100u"},
+			wantErr: "at least 1m",
+		},
+		{
+			name:    "sub-byte --memory",
+			args:    []string{"--compute-type", "n2d-standard-64", "--memory", "500m"},
+			wantErr: "millibytes",
+		},
+		{
+			name:    "milli-suffix typo --memory 64000m",
+			args:    []string{"--compute-type", "n2d-standard-64", "--memory", "64000m"},
+			wantErr: "millibytes",
+		},
+		{
+			name:    "fractional millicore --cpu 1.5m",
+			args:    []string{"--compute-type", "n2d-standard-64", "--cpu", "1.5m"},
+			wantErr: "whole millicores",
+		},
+		{
+			name:    "malformed --memory unit",
+			args:    []string{"--compute-type", "n2d-standard-64", "--memory", "64GB"},
+			wantErr: "invalid --memory quantity",
+		},
+		{
+			name:    "missing --compute-type with --cpu",
+			args:    []string{"--cpu", "4"},
+			wantErr: "required flag(s) \"compute-type\" not set",
+		},
+		{
+			name:    "rejected with --pathways",
+			args:    []string{"--compute-type", "v6e-8", "--pathways", "--pathways-gcs-location", "gs://bkt/p", "--cpu", "4"},
+			wantErr: "non-Pathways CPU workloads",
+		},
+		{
+			name:    "rejected with --pathways-run-sps-workload even without --pathways",
+			args:    []string{"--pathways-run-sps-workload", "sps-1", "--cpu", "4"},
+			wantErr: "non-Pathways CPU workloads",
+		},
+		{
+			name:    "rejected with --pathways-deploy-sps even without --pathways",
+			args:    []string{"--compute-type", "n2d-standard-64", "--pathways-deploy-sps", "--memory", "32Gi"},
+			wantErr: "non-Pathways CPU workloads",
+		},
+		{
+			name:    "rejected with --pathways-headless even without --pathways",
+			args:    []string{"--compute-type", "n2d-standard-64", "--pathways-headless", "--cpu", "4"},
+			wantErr: "non-Pathways CPU workloads",
+		},
+		{
+			name:    "rejected on known TPU shorthand",
+			args:    []string{"--compute-type", "v6e-8", "--cpu", "4"},
+			wantErr: "not accelerator compute type",
+		},
+		{
+			name:    "rejected on known GPU shorthand",
+			args:    []string{"--compute-type", "l4-1", "--memory", "16Gi"},
+			wantErr: "not accelerator compute type",
+		},
+		{
+			name:    "rejected on known GPU accelerator label",
+			args:    []string{"--compute-type", "nvidia-l4", "--cpu", "4"},
+			wantErr: "not accelerator compute type",
+		},
+		{
+			name:    "rejected on attached GPU accelerator label nvidia-tesla-t4",
+			args:    []string{"--compute-type", "nvidia-tesla-t4", "--cpu", "4"},
+			wantErr: "not accelerator compute type",
+		},
+		{
+			name:    "rejected on fractional RTX PRO 6000 shorthand",
+			args:    []string{"--compute-type", "rtx-6000-1/4", "--memory", "16Gi"},
+			wantErr: "not accelerator compute type",
+		},
+		{
+			name:    "rejected on v7x TPU shorthand",
+			args:    []string{"--compute-type", "v7x-8", "--cpu", "4"},
+			wantErr: "not accelerator compute type",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+			baseArgs := []string{
+				"submit",
+				"--name", "cpu-err-job",
+				"--image", "us-docker.pkg.dev/p/r/img:v1",
+				"--command", "python3 app.py",
+				"--skip-prereqs",
+				"--project", "p", "--cluster", "c", "--location", "us-central1-a",
+			}
+			_, err := executeCommand(JobCmd, append(baseArgs, tc.args...)...)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("got err = %v, want substring %q", err, tc.wantErr)
+			}
+		})
+	}
 }

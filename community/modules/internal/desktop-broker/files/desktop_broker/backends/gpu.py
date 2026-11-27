@@ -31,23 +31,50 @@ def first_render_node():
         return None
 
 
+# Device nodes the NVIDIA kernel driver creates once it is loaded.
+NVIDIA_DEVICE_NODES = ("/dev/nvidia0", "/dev/nvidiactl")
+
+# Where libglvnd looks up EGL vendor libraries. The NVIDIA driver registers
+# libEGL_nvidia here (10_nvidia.json) only when it is installed with graphics
+# support; a compute-only driver leaves no entry.
+EGL_VENDOR_DIRS = (
+    "/usr/share/glvnd/egl_vendor.d",
+    "/etc/glvnd/egl_vendor.d",
+)
+
+
+def nvidia_device_present():
+    return any(Path(node).exists() for node in NVIDIA_DEVICE_NODES)
+
+
+def nvidia_egl_available():
+    """Whether the installed NVIDIA driver can render, not merely compute."""
+    for directory in EGL_VENDOR_DIRS:
+        try:
+            if any(Path(directory).glob("*nvidia*.json")):
+                return True
+        except OSError:
+            continue
+    return False
+
+
 def gpu_display():
     """VGL_DISPLAY value naming a usable GPU, or None if there is none.
 
-    Prefers a DRM render node when one exists, because it names the device
-    unambiguously. GCE's NVIDIA images do not provide one - nvidia_drm is built
-    without KMS, exposes no "modeset" parameter and creates no /dev/dri - so
-    fall back to an EGL device ID, which VirtualGL also accepts and which is
-    enumerated through EGL itself with no dependency on DRM.
+    VirtualGL's EGL back end accepts an EGL device ID or a DRM card path, but
+    rejects a DRM render node with "Invalid EGL device", and the session then
+    fails to start. So the render node is never used here, even on images
+    whose NVIDIA driver creates one; it is only for backends that take
+    "-rendernode" themselves.
+
+    A device with a compute-only driver is not usable: without libEGL_nvidia
+    there is no NVIDIA EGL device for VirtualGL to open.
     """
-    render_node = first_render_node()
-    if render_node:
-        return str(render_node)
     # EGL access goes through /dev/nvidia*, which is world-readable, so no
-    # supplementary group membership is needed (unlike /dev/dri, which is
-    # root:render). egl0 is the first enumerated device; these images carry a
+    # supplementary group membership is needed (unlike /dev/dri/card*, which is
+    # root:video). egl0 is the first enumerated device; these images carry a
     # single GPU.
-    if Path("/dev/nvidia0").exists() or Path("/dev/nvidiactl").exists():
+    if nvidia_device_present() and nvidia_egl_available():
         return "egl0"
     return None
 

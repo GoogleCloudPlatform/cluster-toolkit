@@ -73,6 +73,7 @@ func TestConfigSetCmd(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tempHome := t.TempDir()
 			t.Setenv("HOME", tempHome)
+			t.Setenv("USERPROFILE", tempHome)
 
 			cmd := configSetCmd
 			err := cmd.RunE(cmd, tc.args)
@@ -100,6 +101,7 @@ func TestConfigSetCmd(t *testing.T) {
 func TestConfigShowCmd(t *testing.T) {
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome)
 
 	file := filepath.Join(tempHome, ".gcluster", "context.json")
 	if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
@@ -261,4 +263,187 @@ func TestValidateAndApplyConfig(t *testing.T) {
 			assertSavedConfig(t, targetFile, tc.expectedTarget, tc.expectedCtx)
 		})
 	}
+}
+
+func TestConfigUnsetCmd(t *testing.T) {
+	initial := Context{ProjectID: "proj-1", ClusterName: "clus-1", Location: "us-central1"}
+	tests := []struct {
+		name      string
+		corrupt   bool
+		args      []string
+		wantCtx   Context
+		wantErr   string
+		wantPrint string
+	}{
+		{
+			name:      "unset_project",
+			args:      []string{"project"},
+			wantCtx:   Context{ClusterName: "clus-1", Location: "us-central1"},
+			wantPrint: "Cleared default for 'project'",
+		},
+		{
+			name:      "unset_cluster",
+			args:      []string{"cluster"},
+			wantCtx:   Context{ProjectID: "proj-1", Location: "us-central1"},
+			wantPrint: "Cleared default for 'cluster'",
+		},
+		{
+			name:      "unset_location",
+			args:      []string{"location"},
+			wantCtx:   Context{ProjectID: "proj-1", ClusterName: "clus-1"},
+			wantPrint: "Cleared default for 'location'",
+		},
+		{
+			name:      "trims_and_lowercases_key",
+			args:      []string{" PROJECT "},
+			wantCtx:   Context{ClusterName: "clus-1", Location: "us-central1"},
+			wantPrint: "Cleared default for 'project'",
+		},
+		{
+			name:      "unset_all",
+			args:      []string{"all"},
+			wantCtx:   Context{},
+			wantPrint: "Cleared all saved defaults",
+		},
+		{
+			name:      "unset_all_recovers_corrupt_context_file",
+			corrupt:   true,
+			args:      []string{"all"},
+			wantCtx:   Context{},
+			wantPrint: "Cleared all saved defaults",
+		},
+		{
+			name:    "unset_single_key_on_corrupt_context_fails_cleanly",
+			corrupt: true,
+			args:    []string{"project"},
+			wantErr: "gcluster job config unset all",
+		},
+		{
+			name:    "missing_key_arg_fails",
+			args:    nil,
+			wantCtx: initial,
+			wantErr: "accepts 1 arg(s), received 0",
+		},
+		{
+			name:    "unknown_key_fails",
+			args:    []string{"bogus"},
+			wantCtx: initial,
+			wantErr: "unknown configuration key",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+			seedConfigUnsetState(t, initial, tc.corrupt)
+			out, err := executeCommand(JobCmd, append([]string{"config", "unset"}, tc.args...)...)
+			assertConfigUnsetOutcome(t, tc.args, out, err, tc.wantErr, tc.wantPrint, tc.wantCtx, tc.corrupt)
+		})
+	}
+}
+
+func seedConfigUnsetState(t *testing.T, initial Context, corrupt bool) {
+	t.Helper()
+	if corrupt {
+		p := filepath.Join(os.Getenv("HOME"), ".gcluster", "context.json")
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+		if err := os.WriteFile(p, []byte("{corrupt-json"), 0644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		return
+	}
+	if err := saveContext(initial); err != nil {
+		t.Fatalf("saveContext: %v", err)
+	}
+}
+
+func assertConfigUnsetOutcome(t *testing.T, args []string, out string, err error, wantErr, wantPrint string, wantCtx Context, corrupt bool) {
+	t.Helper()
+	if wantErr != "" {
+		if err == nil || !strings.Contains(err.Error(), wantErr) {
+			t.Fatalf("executeCommand(config unset %v) err = %v, want %q", args, err, wantErr)
+		}
+		if corrupt {
+			return
+		}
+	} else if err != nil {
+		t.Fatalf("executeCommand(config unset %v) err = %v, want nil", args, err)
+	}
+	got, loadErr := loadContext()
+	if loadErr != nil {
+		t.Fatalf("loadContext: %v", loadErr)
+	}
+	if got != wantCtx {
+		t.Errorf("loadContext() = %+v, want %+v", got, wantCtx)
+	}
+	if wantPrint != "" && !strings.Contains(out, wantPrint) {
+		t.Errorf("output = %q, want substring %q", out, wantPrint)
+	}
+}
+
+func TestConfigCmd_ReportsTelemetryProjectID(t *testing.T) {
+	origHook := OnTelemetryProjectResolved
+	t.Cleanup(func() { OnTelemetryProjectResolved = origHook })
+
+	var reported string
+	OnTelemetryProjectResolved = func(p string) {
+		reported = p
+	}
+
+	t.Run("config set project reports project", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		reported = ""
+		if _, err := executeCommand(JobCmd, "config", "set", "project", "cfg-proj"); err != nil {
+			t.Fatalf("config set project err = %v", err)
+		}
+		if reported != "cfg-proj" {
+			t.Errorf("reported = %q, want %q", reported, "cfg-proj")
+		}
+	})
+
+	t.Run("config show reports saved project", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		if err := saveContext(Context{ProjectID: "shown-proj"}); err != nil {
+			t.Fatalf("saveContext: %v", err)
+		}
+		reported = ""
+		if _, err := executeCommand(JobCmd, "config", "show"); err != nil {
+			t.Fatalf("config show err = %v", err)
+		}
+		if reported != "shown-proj" {
+			t.Errorf("reported = %q, want %q", reported, "shown-proj")
+		}
+	})
+
+	t.Run("validateAndApplyConfig reports project from edited JSON", func(t *testing.T) {
+		dir := t.TempDir()
+		src := filepath.Join(dir, "tmp.json")
+		dst := filepath.Join(dir, "context.json")
+		if err := os.WriteFile(src, []byte(`{"project":"editor-proj","cluster":"c1","location":"us-central1"}`), 0644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		reported = ""
+		if err := validateAndApplyConfig(src, dst); err != nil {
+			t.Fatalf("validateAndApplyConfig err = %v", err)
+		}
+		if reported != "editor-proj" {
+			t.Errorf("reported = %q, want %q", reported, "editor-proj")
+		}
+	})
+
+	t.Run("config unset all reports empty project", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		if err := saveContext(Context{ProjectID: "old-proj"}); err != nil {
+			t.Fatalf("saveContext: %v", err)
+		}
+		reported = "sentinel"
+		if _, err := executeCommand(JobCmd, "config", "unset", "all"); err != nil {
+			t.Fatalf("config unset all err = %v", err)
+		}
+		if reported != "" {
+			t.Errorf("reported = %q, want empty", reported)
+		}
+	})
 }

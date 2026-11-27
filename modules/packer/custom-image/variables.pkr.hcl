@@ -29,7 +29,7 @@ variable "machine_type" {
 }
 
 variable "disk_size" {
-  description = "Size of disk image in GB"
+  description = "Size of disk image in GB. If unset, the disk is sized to match the source image."
   type        = number
   default     = null
 }
@@ -112,7 +112,8 @@ variable "source_image_project_id" {
   description = <<EOD
 A list of project IDs to search for the source image. Packer will search the
 first project ID in the list first, and fall back to the next in the list,
-until it finds the source image.
+until it finds the source image. When unset, defaults to
+[var.project_id, "advanced-compute-images"] for aci-* images.
 EOD
   type        = list(string)
   default     = null
@@ -127,7 +128,7 @@ variable "source_image" {
 variable "source_image_family" {
   description = "Alternative to source_image. Specify image family to build from latest image in family"
   type        = string
-  default     = "hpc-rocky-linux-9"
+  default     = "aci-cpu-rocky-linux-9-amd64"
 }
 
 variable "service_account_email" {

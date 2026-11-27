@@ -128,17 +128,18 @@ func initPath(p any, prev any, piece string) {
 
 type rootPath struct {
 	basePath
-	BlueprintName         basePath                    `path:"blueprint_name"`
-	GhpcVersion           basePath                    `path:"ghpc_version"`
-	AiAssisted            basePath                    `path:"ai_assisted"`
-	Validators            arrayPath[validatorCfgPath] `path:"validators"`
-	ValidationLevel       basePath                    `path:"validation_level"`
-	Vars                  dictPath                    `path:"vars"`
-	Groups                arrayPath[groupPath]        `path:"deployment_groups"`
-	Backend               backendPath                 `path:"terraform_backend_defaults"`
-	Provider              mapPath[providerPath]       `path:"terraform_providers"`
-	ToolkitModulesURL     basePath                    `path:"toolkit_modules_url"`
-	ToolkitModulesVersion basePath                    `path:"toolkit_modules_version"`
+	BlueprintName           basePath                    `path:"blueprint_name"`
+	GhpcVersion             basePath                    `path:"ghpc_version"`
+	ExportToClusterDirector basePath                    `path:"export_to_cluster_director"`
+	AiAssisted              basePath                    `path:"ai_assisted"`
+	Validators              arrayPath[validatorCfgPath] `path:"validators"`
+	ValidationLevel         basePath                    `path:"validation_level"`
+	Vars                    dictPath                    `path:"vars"`
+	Groups                  arrayPath[groupPath]        `path:"deployment_groups"`
+	Backend                 backendPath                 `path:"terraform_backend_defaults"`
+	Provider                mapPath[providerPath]       `path:"terraform_providers"`
+	ToolkitModulesURL       basePath                    `path:"toolkit_modules_url"`
+	ToolkitModulesVersion   basePath                    `path:"toolkit_modules_version"`
 }
 
 type validatorCfgPath struct {

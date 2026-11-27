@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	cdapi "hpc-toolkit/pkg/clusterdirector"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
@@ -33,6 +34,11 @@ import (
 	"github.com/spf13/pflag"
 )
 
+var (
+	deployTerraformGroupFunc  = deployTerraformGroup
+	exportClusterDirectorFunc = exportClusterDirector
+)
+
 func addDeployFlags(c *cobra.Command) *cobra.Command {
 	return addGkeVulnerabilitiesCheckFlag(
 		addJsonOutputFlag(
@@ -40,7 +46,8 @@ func addDeployFlags(c *cobra.Command) *cobra.Command {
 				addAutoApproveFlag(
 					addArtifactsDirFlag(
 						addParallelismFlag(
-							addCreateFlags(c)))))))
+							addClusterDirectorFlags(
+								addCreateFlags(c))))))))
 }
 
 func init() {
@@ -63,6 +70,7 @@ var (
 )
 
 func runDeployCmd(cmd *cobra.Command, args []string) {
+	checkErr(validateClusterDirectorFlags(cmd), nil)
 	var deplRoot string
 
 	if checkDir(cmd, args) != nil { // arg[0] is BLUEPRINT_FILE
@@ -85,6 +93,10 @@ func doDeploy(cmd *cobra.Command, deplRoot string, skipSecurity bool) {
 	artDir := getArtifactsDir(deplRoot)
 	checkErr(shell.CheckWritableDir(artDir), nil)
 	bp, ctx := artifactBlueprintOrDie(artDir)
+	cdOverride, hasCdOverride := clusterDirectorFlagOverride(cmd)
+	if hasCdOverride {
+		bp.SetExportToClusterDirector(cdOverride)
+	}
 	validators.PerformGkeVulnerabilitiesCheck(skipSecurity, &bp)
 	groups := bp.Groups
 	checkErr(validateGroupSelectionFlags(bp), ctx)
@@ -125,7 +137,7 @@ func doDeploy(cmd *cobra.Command, deplRoot string, skipSecurity bool) {
 			moduleDir := filepath.Join(groupDir, subPath)
 			checkErr(wrapDeployErr(deployPackerGroup(moduleDir, getApplyBehavior()), groupDir), ctx)
 		case config.TerraformKind:
-			checkErr(wrapDeployErr(deployTerraformGroup(groupDir, artDir, getApplyBehavior(), getOutputFormat()), groupDir), ctx)
+			checkErr(wrapDeployErr(deployTerraformGroupFunc(groupDir, artDir, getApplyBehavior(), getOutputFormat()), groupDir), ctx)
 		default:
 			checkErr(
 				config.BpError{
@@ -133,6 +145,13 @@ func doDeploy(cmd *cobra.Command, deplRoot string, skipSecurity bool) {
 					Path: config.Root.Groups.At(ig).Name}, ctx)
 		}
 	}
+	if hasCdOverride {
+		checkErr(cdapi.ApplyOverrideToArtifacts(artDir, cdOverride), nil)
+	}
+	// Cluster Director export runs last, once every group has applied, so the
+	// resources it registers in Cluster Director are guaranteed to exist.
+	checkErr(exportClusterDirectorFunc(cmd, deplRoot, artDir, bp), ctx)
+
 	logging.Info("\n###############################")
 	printAdvancedInstructionsMessage(deplRoot)
 }

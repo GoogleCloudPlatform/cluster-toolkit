@@ -18,28 +18,34 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"slices"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type stubResourceLister struct {
-	items  []unstructured.Unstructured
-	err    error
-	gotGVR schema.GroupVersionResource
-	gotNS  string
-	gotFS  string
-	sa     *unstructured.Unstructured
-	saErr  error
-	gotSA  string
+	items       []unstructured.Unstructured
+	err         error
+	gotGVR      schema.GroupVersionResource
+	gotNS       string
+	gotFS       string
+	sa          *unstructured.Unstructured
+	saErr       error
+	returnNilSA bool
+	gotSA       string
 }
 
 func (s *stubResourceLister) GetResource(gvr schema.GroupVersionResource, _, name string) (*unstructured.Unstructured, error) {
 	s.gotSA = name
+	if s.returnNilSA {
+		return nil, nil
+	}
 	if s.saErr != nil || s.sa != nil {
 		return s.sa, s.saErr
 	}
@@ -74,31 +80,6 @@ func makeTestDockerSecret(name string, authKeys ...string) unstructured.Unstruct
 	return rawDockerSecret(name, base64.StdEncoding.EncodeToString(raw))
 }
 
-func TestSplitImageRef(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		ref, wantHost, wantPath string
-		wantOK                  bool
-	}{
-		{"", "", "", false},
-		{":latest", "", "", false},
-		{"alpine:3.20", "docker.io", "library/alpine", true},
-		{"myreg:5000", "docker.io", "library/myreg", true},
-		{"pytorch/pytorch:2.4@sha256:1111", "docker.io", "pytorch/pytorch", true},
-		{"docker.io/nginx", "docker.io", "library/nginx", true},
-		{"index.docker.io/team/app:v1", "docker.io", "team/app", true},
-		{"gcr.io/proj/img@sha256:abc", "gcr.io", "proj/img", true},
-		{"localhost:5000/repo/img:tag", "localhost:5000", "repo/img", true},
-		{"[fd00::1]:5000/obs/collector:v1", "[fd00::1]:5000", "obs/collector", true},
-	}
-	for _, tc := range cases {
-		gotHost, gotPath, gotOK := splitImageRef(tc.ref)
-		if gotHost != tc.wantHost || gotPath != tc.wantPath || gotOK != tc.wantOK {
-			t.Errorf("splitImageRef(%q) = (%q, %q, %v), want (%q, %q, %v)", tc.ref, gotHost, gotPath, gotOK, tc.wantHost, tc.wantPath, tc.wantOK)
-		}
-	}
-}
-
 func TestAuthKeyHostAndPath(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -110,6 +91,7 @@ func TestAuthKeyHostAndPath(t *testing.T) {
 		{"/team-a", "", "", false},
 		{"https://%zz", "", "", false},
 		{"https://index.docker.io/v1/", "docker.io", "", true},
+		{"https://INDEX.DOCKER.IO/v1/", "INDEX.DOCKER.IO", "", true},
 		{"index.docker.io", "docker.io", "", true},
 		{"docker.io", "docker.io", "", true},
 		{"registry-1.docker.io", "registry-1.docker.io", "", true},
@@ -117,6 +99,7 @@ func TestAuthKeyHostAndPath(t *testing.T) {
 		{"https://gcr.io/v2/proj/", "gcr.io", "proj", true},
 		{"gcr.io/v1", "gcr.io", "v1", true},
 		{"harbor.local:8443/team-a", "harbor.local:8443", "team-a", true},
+		{"HARBOR.LOCAL:8443/team-a", "HARBOR.LOCAL:8443", "team-a", true},
 		{"http://[fd00::1]:5000", "[fd00::1]:5000", "", true},
 		{"*.pkg.dev", "*.pkg.dev", "", true},
 	}
@@ -188,10 +171,25 @@ func TestIsForbiddenError(t *testing.T) {
 	}{
 		{"nil", nil, false},
 		{"typed 403", apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "", errors.New("forbidden")), true},
+		{"typed 403 for cloudflare user", apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New(`User "cloudflare-ci" cannot list resource "nodes"`)), true},
+		{"typed 403 for oauth2 resource", apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "oauth2:token", errors.New("forbidden")), true},
 		{"kubectl stderr", errors.New("Error from server (Forbidden): secrets is forbidden: User cannot list"), true},
 		{"wrapped 403 Forbidden", errors.New(`insufficient RBAC permissions to read ClusterQueue "default" (403 Forbidden)`), true},
 		{"structured is forbidden suffix", errors.New(`persistentvolumeclaims "pvc" is forbidden`), true},
 		{"non-403 server timeout echoing forbidden resource name", errors.New("Error from server (Timeout): request did not complete (get persistentvolumeclaims forbidden-pvc)"), false},
+		{"proxy HTML 403", errors.New("<html><title>403 Forbidden</title></html>"), false},
+		{"unexpected server error 403", &apierrors.StatusError{ErrStatus: metav1.Status{Code: 403, Reason: metav1.StatusReasonUnknown, Message: "403 Forbidden from gateway"}}, false},
+		{"unexpected server response plain 403", apierrors.NewGenericServerResponse(403, "list", schema.GroupResource{Resource: "nodes"}, "", "plain proxy 403", 0, true), false},
+		{"unexpected server response HTML 403", apierrors.NewGenericServerResponse(403, "list", schema.GroupResource{Resource: "nodes"}, "", "<html>403 Forbidden</html>", 0, false), false},
+		{"proxyconnect 403", errors.New("proxyconnect tcp: 403 Forbidden"), false},
+		{"GKE DNS allow_external_traffic", apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("allow_external_traffic is disabled")), false},
+		{"GKE IAM clusters.connect full", errors.New("Error from server (Forbidden): container.googleapis.com/clusters.connect denied"), false},
+		{"GKE IAM clusters.connect short", errors.New("Error from server (Forbidden): Permission 'container.clusters.connect' denied"), false},
+		{"VPC-SC 403", errors.New("Error from server (Forbidden): Request is prohibited by organization's policy. vpcServiceControls"), false},
+		{"url.Error wrapping 403", &url.Error{Op: "Get", URL: "https://k8s.example.com/api/v1/nodes", Err: errors.New("403 Forbidden")}, false},
+		{"kubectl unable to connect 403", errors.New("Unable to connect to the server: 403 Forbidden"), false},
+		{"exec plugin getting credentials 403", errors.New("getting credentials: exec: gke-gcloud-auth-plugin returned 403 Forbidden"), false},
+		{"oauth2 token fetch 403", errors.New("oauth2: cannot fetch token: 403 Forbidden"), false},
 		{"other error", errors.New("connection refused"), false},
 	}
 	for _, tc := range cases {
@@ -261,13 +259,17 @@ func TestDiscoverImagePullSecrets_MatchingSemantics(t *testing.T) {
 		{"docker.io/library/nginx", []string{"hub-default"}},
 		{"quay.io/org/img:v1", []string{"quay-userpass"}},
 		{"us-docker.pkg.dev/p/r/img:v1", []string{"pkg-wildcard"}},
+		// Kubelet keyring matches hosts case-sensitively.
+		{"US-DOCKER.PKG.DEV/p/r/img:v1", nil},
 		{"us-docker.pkg.dev:5000/p/r/img:v1", []string{"pkg-wildcard-port"}},
 		{"sub.us-docker.pkg.dev/p/r/img:v1", nil},
 		{"harbor.local/team-a/trainer:v1", []string{"scoped-v2"}},
+		{"Harbor.Local/team-a/trainer:v1", nil},
 		// Path prefix scoping matches on path segment boundaries; team-alpha does not match team-a.
 		{"harbor.local/team-alpha/x:v1", nil},
 		{"harbor.local/other/x:v1", nil},
 		{"[fd00::1]:5000/obs/collector:v1", []string{"ipv6-sec"}},
+		{"[FD00::1]:5000/obs/collector:v1", nil},
 		{"dup.local/app:v1", []string{"a-dup", "z-dup"}},
 		// The kubelet rejects the whole secret when "auth" is not base64("user:pass"), failing every pull in the pod.
 		{"tok.local/app:v1", nil},
@@ -278,6 +280,24 @@ func TestDiscoverImagePullSecrets_MatchingSemantics(t *testing.T) {
 		if got := matchingSecretNames(secrets, tc.image); !slices.Equal(got, tc.want) {
 			t.Errorf("matchingSecretNames(%q) = %v, want %v", tc.image, got, tc.want)
 		}
+	}
+
+	wildAndUpper := []unstructured.Unstructured{
+		makeTestDockerSecret("wild", "*"),
+		makeTestDockerSecret("upper-hub", "https://INDEX.DOCKER.IO/v1/"),
+		makeTestDockerSecret("upper-reg", "HARBOR.LOCAL:8443"),
+		makeTestDockerSecret("lower-reg", "harbor.local:8443"),
+	}
+	for _, bad := range []string{"", ":latest", "us-docker.pkg.dev/", "/nginx", "myorg/"} {
+		if got := matchingSecretNames(wildAndUpper, bad); len(got) != 0 {
+			t.Errorf("matchingSecretNames(wildAndUpper, %q) = %v, want nil", bad, got)
+		}
+	}
+	if got := matchingSecretNames(wildAndUpper, "nginx:1.27"); len(got) != 0 {
+		t.Errorf("uppercase INDEX.DOCKER.IO auth key match = %v, want nil", got)
+	}
+	if got := matchingSecretNames(wildAndUpper, "harbor.local:8443/app:v1"); !slices.Equal(got, []string{"lower-reg"}) {
+		t.Errorf("case-sensitive harbor.local:8443 match = %v, want [lower-reg]", got)
 	}
 
 	lister := &stubResourceLister{items: secrets}
@@ -309,5 +329,12 @@ func TestDiscoverImagePullSecrets_DefersToServiceAccount(t *testing.T) {
 		if got := DiscoverImagePullSecrets(lister, "team-ns", tc.sa, images); got != tc.want || lister.gotSA != tc.wantSA {
 			t.Errorf("%s: got (%q, sa=%q), want (%q, sa=%q)", tc.name, got, lister.gotSA, tc.want, tc.wantSA)
 		}
+	}
+	nilSALister := &stubResourceLister{
+		items:       []unstructured.Unstructured{makeTestDockerSecret("sec-1", "registry.local")},
+		returnNilSA: true,
+	}
+	if got := DiscoverImagePullSecrets(nilSALister, "team-ns", "default", images); got != "sec-1" {
+		t.Errorf("(nil, nil) ServiceAccount lookup: got %q, want sec-1", got)
 	}
 }

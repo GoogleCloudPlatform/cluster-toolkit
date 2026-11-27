@@ -20,7 +20,7 @@ import (
 	"sync/atomic"
 )
 
-// AirGappedEnvVar names the environment variable ("GCLUSTER_AIR_GAPPED") that disables CLI telemetry collection and uploads in air-gapped environments.
+// AirGappedEnvVar names the environment variable ("GCLUSTER_AIR_GAPPED") that skips live API server version probes during orchestrator detection, automatic GitHub manifest downloads, and CLI telemetry collection and uploads in air-gapped environments.
 const AirGappedEnvVar = "GCLUSTER_AIR_GAPPED"
 
 var defaultAirGap atomic.Bool
@@ -30,17 +30,28 @@ func IsKnownAirGapped() bool {
 	return IsAirGappedEnv(os.Getenv)
 }
 
+// ParseBoolEnv parses a human-friendly boolean environment variable value.
+// Recognizes 1/true/yes/on as (true, true) and 0/false/no/off as (false, true),
+// returning (false, false) for empty or unrecognized values.
+func ParseBoolEnv(raw string) (val, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "on":
+		return true, true
+	case "0", "false", "no", "off":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
 // IsAirGappedEnv reports whether air-gapped mode is active. An explicit boolean value in GCLUSTER_AIR_GAPPED
 // from getenv (or os.Getenv if nil) overrides the process default; unset, blank, or unrecognized values fall back to the default.
 func IsAirGappedEnv(getenv func(string) string) bool {
 	if getenv == nil {
 		getenv = os.Getenv
 	}
-	switch strings.ToLower(strings.TrimSpace(getenv(AirGappedEnvVar))) {
-	case "1", "true", "yes", "on":
-		return true
-	case "0", "false", "no", "off":
-		return false
+	if v, ok := ParseBoolEnv(getenv(AirGappedEnvVar)); ok {
+		return v
 	}
 	return defaultAirGap.Load()
 }
