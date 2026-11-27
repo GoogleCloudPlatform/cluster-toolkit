@@ -37,7 +37,7 @@ PrologFlags=Contain
 #              vvvvv  WARNING: DO NOT MODIFY SECTION BELOW  vvvvv              #
 ################################################################################
 
-SlurmctldHost={control_host}({control_addr})
+{slurmctld_hosts}
 
 
 AuthType=auth/{auth_key}
@@ -57,6 +57,7 @@ StateSaveLocation={state_save}
 # LOGGING AND ACCOUNTING
 AccountingStorageType=accounting_storage/slurmdbd
 AccountingStorageHost={accounting_storage_host}
+{accounting_storage_backup_host}
 ClusterName={name}
 SlurmctldLogFile={slurmlog}/slurmctld.log
 SlurmdLogFile={slurmlog}/slurmd-%n.log
