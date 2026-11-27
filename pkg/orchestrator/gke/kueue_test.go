@@ -85,15 +85,6 @@ func TestConfigureClusterEnvironment_AutoCreateQueues(t *testing.T) {
 			{ExitCode: 0, Stdout: "clusterqueue.kueue.x-k8s.io/default created"},
 			{ExitCode: 0, Stdout: "localqueue.kueue.x-k8s.io/default created"},
 		},
-		"kubectl get localqueue default -n default -o jsonpath={.spec.clusterQueue}": {
-			{ExitCode: 0, Stdout: "default"},
-		},
-		"kubectl get clusterqueue default -o json": {
-			{ExitCode: 0, Stdout: "{\"apiVersion\":\"kueue.x-k8s.io/v1beta2\",\"kind\":\"ClusterQueue\",\"spec\":{\"resourceGroups\":[{\"coveredResources\":[\"cpu\"]}]}}"},
-		},
-		"kubectl patch clusterqueue default": {
-			{ExitCode: 0, Stdout: "clusterqueue.kueue.x-k8s.io/default patched"},
-		},
 	}
 
 	mockExec := NewMockExecutor(responses)
@@ -344,11 +335,12 @@ func TestCheckClusterQueueCoverage(t *testing.T) {
 			mockExec := NewMockExecutor(responses)
 			orc := newTestGKEOrchestrator(mockExec)
 
-			gotCoverage, gotEmpty, err := orc.checkClusterQueueCoverage("default")
+			gotMissingCPU, gotMissingMem, gotEmpty, err := orc.checkClusterQueueCoverage("default", true, true)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("checkClusterQueueCoverage() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if !tt.wantErr {
+				gotCoverage := !gotMissingCPU && !gotMissingMem
 				if gotCoverage != tt.wantCoverage || gotEmpty != tt.wantEmpty {
 					t.Errorf("checkClusterQueueCoverage() gotCoverage = %v (want %v), gotEmpty = %v (want %v)", gotCoverage, tt.wantCoverage, gotEmpty, tt.wantEmpty)
 				}
@@ -1164,12 +1156,12 @@ func TestCheckClusterQueueCoverage_Forbidden(t *testing.T) {
 	}
 	orc := &GKEOrchestrator{executor: mock}
 
-	covered, isNew, err := orc.checkClusterQueueCoverage("default")
+	missingCPU, missingMem, isNew, err := orc.checkClusterQueueCoverage("default", true, true)
 	if err != nil {
 		t.Fatalf("checkClusterQueueCoverage should succeed and skip on 403 Forbidden, got: %v", err)
 	}
-	if !covered || isNew {
-		t.Errorf("expected covered=true, isNew=false on 403 Forbidden, got covered=%v, isNew=%v", covered, isNew)
+	if missingCPU || missingMem || isNew {
+		t.Errorf("expected no missing resources and isNew=false on 403 Forbidden, got missingCPU=%v, missingMem=%v, isNew=%v", missingCPU, missingMem, isNew)
 	}
 }
 
@@ -1191,9 +1183,267 @@ func TestEnsureClusterQueueCoverage_Covered(t *testing.T) {
 	}
 	orc := &GKEOrchestrator{executor: mock}
 
-	err := orc.ensureClusterQueueCoverage("default", "default")
+	err := orc.ensureClusterQueueCoverage("default", "default", true, true)
 	if err != nil {
 		t.Fatalf("ensureClusterQueueCoverage failed on covered queue: %v", err)
+	}
+}
+
+func TestEnsureClusterQueueCoverage_FractionalCPUSelectiveResources(t *testing.T) {
+	queueMock := func(cqName, cqJSON string) *mockExecutor {
+		return &mockExecutor{
+			executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+				fullCmd := name + " " + strings.Join(args, " ")
+				if strings.Contains(fullCmd, "get localqueue") {
+					return shell.CommandResult{ExitCode: 0, Stdout: cqName}
+				}
+				if strings.Contains(fullCmd, "get clusterqueue") {
+					return shell.CommandResult{ExitCode: 0, Stdout: cqJSON}
+				}
+				return shell.CommandResult{ExitCode: 0}
+			},
+		}
+	}
+
+	cpuOnlyJSON := `{"spec": {"resourceGroups": [{"coveredResources": ["cpu"]}]}}`
+	memOnlyJSON := `{"spec": {"resourceGroups": [{"coveredResources": ["memory"]}]}}`
+	accelOnlyJSON := `{"spec": {"resourceGroups": [{"coveredResources": ["google.com/tpu"]}]}}`
+	emptyJSON := `{"spec": {"resourceGroups": []}}`
+
+	if got := requiredResourceLabel(false, false); got != "" {
+		t.Errorf("requiredResourceLabel(false, false) = %q, want empty", got)
+	}
+	for _, tc := range []struct {
+		name      string
+		cqName    string
+		cqJSON    string
+		needCPU   bool
+		needMem   bool
+		wantErr   string
+		forbidErr string
+	}{
+		{name: "cpu-only passes on cpu-only queue", cqName: "cpu-cq", cqJSON: cpuOnlyJSON, needCPU: true},
+		{name: "memory fails on cpu-only queue naming memory only", cqName: "cpu-cq", cqJSON: cpuOnlyJSON, needMem: true, wantErr: "coverage for 'memory'", forbidErr: "'cpu'"},
+		{name: "cpu+memory fails on cpu-only queue naming memory only", cqName: "cpu-cq", cqJSON: cpuOnlyJSON, needCPU: true, needMem: true, wantErr: "coverage for 'memory'", forbidErr: "'cpu'"},
+		{name: "memory-only passes on memory-only queue", cqName: "mem-cq", cqJSON: memOnlyJSON, needMem: true},
+		{name: "cpu fails on memory-only queue naming cpu only", cqName: "mem-cq", cqJSON: memOnlyJSON, needCPU: true, wantErr: "coverage for 'cpu'", forbidErr: "'memory'"},
+		{name: "cpu+memory fails on accelerator-only queue naming both", cqName: "tpu-cq", cqJSON: accelOnlyJSON, needCPU: true, needMem: true, wantErr: "coverage for 'cpu' and 'memory'"},
+		{name: "empty queue with zero capacity fails explicitly", cqName: "empty-cq", cqJSON: emptyJSON, needCPU: true, wantErr: "is empty and no eligible"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			orc := &GKEOrchestrator{executor: queueMock(tc.cqName, tc.cqJSON)}
+			err := orc.ensureClusterQueueCoverage("test-lq", "default", tc.needCPU, tc.needMem)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("err = %v, want substring %q", err, tc.wantErr)
+			}
+			if tc.forbidErr != "" && strings.Contains(err.Error(), tc.forbidErr) {
+				t.Fatalf("err = %v, must not mention %q", err, tc.forbidErr)
+			}
+		})
+	}
+}
+
+func TestPopulateEmptyClusterQueue(t *testing.T) {
+	t.Run("applies_resource_flavors_and_clusterqueue_capacity", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
+		var applied []string
+		orc := &GKEOrchestrator{
+			executor: &mockExecutor{
+				executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+					full := name + " " + strings.Join(args, " ")
+					if strings.Contains(full, "get resourceflavor") {
+						return shell.CommandResult{ExitCode: 0, Stdout: ""}
+					}
+					if strings.Contains(full, "apply -f") {
+						applied = append(applied, full)
+						return shell.CommandResult{ExitCode: 0}
+					}
+					return shell.CommandResult{ExitCode: 0}
+				},
+			},
+			capacity: ClusterCapacity{
+				Flavors: map[string]FlavorCapacity{
+					"flavor-default": {CPUs: 64, MemoryGi: 256},
+				},
+			},
+		}
+		if err := orc.populateEmptyClusterQueue("empty-cq", true, true); err != nil {
+			t.Fatalf("populateEmptyClusterQueue() unexpected err: %v", err)
+		}
+		if len(applied) != 2 {
+			t.Fatalf("kubectl apply calls = %d (%v), want 2 (ResourceFlavor + ClusterQueue)", len(applied), applied)
+		}
+	})
+
+	t.Run("wraps_v1beta2_no_matches_error", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
+		orc := &GKEOrchestrator{
+			executor: &mockExecutor{
+				executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+					full := name + " " + strings.Join(args, " ")
+					if strings.Contains(full, "get resourceflavor") {
+						return shell.CommandResult{ExitCode: 0, Stdout: "flavor-default"}
+					}
+					if strings.Contains(full, "apply -f") {
+						return shell.CommandResult{ExitCode: 1, Stderr: `no matches for kind "ClusterQueue" in version "kueue.x-k8s.io/v1beta2"`}
+					}
+					return shell.CommandResult{ExitCode: 0}
+				},
+			},
+			capacity: ClusterCapacity{
+				Flavors: map[string]FlavorCapacity{"flavor-default": {CPUs: 64, MemoryGi: 256}},
+			},
+		}
+		err := orc.populateEmptyClusterQueue("empty-cq", true, true)
+		if err == nil || !strings.Contains(err.Error(), "--queue") || !strings.Contains(err.Error(), disableKueueEnvVar) {
+			t.Fatalf("populateEmptyClusterQueue(v1beta2 no matches) err = %v, want wrapped upgrade/fallback hint", err)
+		}
+	})
+}
+
+func TestPopulateEmptyClusterQueue_ErrorsAndPartialNAP(t *testing.T) {
+	t.Run("propagates_EnsureResourceFlavors_error", func(t *testing.T) {
+		orc := &GKEOrchestrator{
+			executor: &mockExecutor{
+				executeCommandFunc: func(string, ...string) shell.CommandResult {
+					return shell.CommandResult{ExitCode: 1, Stderr: "Unable to connect to the server"}
+				},
+			},
+			capacity: ClusterCapacity{
+				Flavors: map[string]FlavorCapacity{"flavor-default": {CPUs: 64}},
+			},
+		}
+		if err := orc.populateEmptyClusterQueue("empty-cq", true, false); err == nil || !strings.Contains(err.Error(), "failed to ensure resource flavors") {
+			t.Fatalf("populateEmptyClusterQueue(flavor error) err = %v, want flavor error", err)
+		}
+	})
+
+	t.Run("partial_nap_limits_reports_only_missing_resource", func(t *testing.T) {
+		orc := &GKEOrchestrator{
+			napEnabled: true,
+			napLimits:  map[string]int64{"cpu": 64},
+			capacity: ClusterCapacity{
+				Flavors: map[string]FlavorCapacity{"flavor-default": {}},
+			},
+		}
+		err := orc.populateEmptyClusterQueue("empty-cq", true, true)
+		if err == nil || !strings.Contains(err.Error(), "'memory'") || strings.Contains(err.Error(), "'cpu'") {
+			t.Fatalf("populateEmptyClusterQueue(cpu-only NAP) err = %v, want only 'memory' missing", err)
+		}
+	})
+}
+
+func TestEnsureClusterQueueCoverage_ContextHintAndErrors(t *testing.T) {
+	t.Run("missing_coverage_error_pins_kube_context", func(t *testing.T) {
+		orc := &GKEOrchestrator{
+			kubeContext: "gke_p_z_c",
+			executor: &mockExecutor{
+				executeCommandFunc: func(name string, args ...string) shell.CommandResult {
+					full := name + " " + strings.Join(args, " ")
+					if strings.Contains(full, "get localqueue") {
+						return shell.CommandResult{ExitCode: 0, Stdout: "my-cq"}
+					}
+					return shell.CommandResult{ExitCode: 0, Stdout: `{"kind":"ClusterQueue","spec":{"resourceGroups":[{"coveredResources":["cpu"]}]}}`}
+				},
+			},
+		}
+		err := orc.ensureClusterQueueCoverage("my-lq", "default", true, true)
+		if err == nil || !strings.Contains(err.Error(), "kubectl --context gke_p_z_c get clusterqueue my-cq -o yaml") {
+			t.Fatalf("ensureClusterQueueCoverage() err = %v, want context-pinned inspect command", err)
+		}
+	})
+
+	t.Run("rejects_null_and_non_clusterqueue_json_payloads", func(t *testing.T) {
+		for _, payload := range []string{"null", `{"kind":"ConfigMap","metadata":{"name":"cm"}}`} {
+			orc := &GKEOrchestrator{
+				executor: &mockExecutor{
+					executeCommandFunc: func(string, ...string) shell.CommandResult {
+						return shell.CommandResult{ExitCode: 0, Stdout: payload}
+					},
+				},
+			}
+			if _, _, _, err := orc.checkClusterQueueCoverage("cq-1", true, false); err == nil || !strings.Contains(err.Error(), "unexpected JSON payload") {
+				t.Fatalf("checkClusterQueueCoverage(%s) err = %v, want unexpected JSON payload", payload, err)
+			}
+		}
+	})
+
+	t.Run("notfound_for_cq_named_forbidden_is_not_misclassified_as_403", func(t *testing.T) {
+		orc := &GKEOrchestrator{
+			executor: &mockExecutor{
+				executeCommandFunc: func(string, ...string) shell.CommandResult {
+					return shell.CommandResult{
+						ExitCode: 1,
+						Stderr:   `Error from server (NotFound): clusterqueues.kueue.x-k8s.io "cq-forbidden" not found`,
+					}
+				},
+			},
+		}
+		if _, _, _, err := orc.checkClusterQueueCoverage("cq-forbidden", true, false); err == nil {
+			t.Fatalf("checkClusterQueueCoverage(NotFound cq-forbidden) = nil, want error (not 403 skip)")
+		}
+	})
+
+	t.Run("EnsureResourceFlavors_does_not_misclassify_missing_exec_plugin_as_empty", func(t *testing.T) {
+		orc := &GKEOrchestrator{
+			executor: &mockExecutor{
+				executeCommandFunc: func(string, ...string) shell.CommandResult {
+					return shell.CommandResult{
+						ExitCode: 1,
+						Stderr:   `exec: "gke-gcloud-auth-plugin": executable file not found in $PATH`,
+					}
+				},
+			},
+		}
+		if err := orc.EnsureResourceFlavors(); err == nil || !strings.Contains(err.Error(), "failed to list resource flavors") {
+			t.Fatalf("EnsureResourceFlavors(missing exec plugin) err = %v, want list error", err)
+		}
+	})
+}
+
+func TestGetNAPNominalQuota_SkipsPathwaysFlavor(t *testing.T) {
+	orc := &GKEOrchestrator{
+		napEnabled: true,
+		napLimits: map[string]int64{
+			"cpu":    1000,
+			"memory": 4000,
+		},
+		capacity: ClusterCapacity{
+			Flavors: map[string]FlavorCapacity{
+				"pathways-flavor": {CPUs: 480, MemoryGi: 2000},
+				"flavor-default":  {CPUs: 16, MemoryGi: 64},
+			},
+		},
+	}
+	if val, ok := orc.getNAPNominalQuota("cpu", "pathways-flavor"); ok || val != nil {
+		t.Errorf("getNAPNominalQuota(cpu, pathways-flavor) = (%v, %v), want (nil, false)", val, ok)
+	}
+	if val, ok := orc.getNAPNominalQuota("memory", "pathways-flavor"); ok || val != nil {
+		t.Errorf("getNAPNominalQuota(memory, pathways-flavor) = (%v, %v), want (nil, false)", val, ok)
+	}
+	if val, ok := orc.getNAPNominalQuota("cpu", "flavor-default"); !ok || val != int64(1000) {
+		t.Errorf("getNAPNominalQuota(cpu, flavor-default) = (%v, %v), want (1000, true)", val, ok)
+	}
+
+	rendered, err := orc.renderClusterQueue("nap-pathways-cq")
+	if err != nil {
+		t.Fatalf("renderClusterQueue() err = %v", err)
+	}
+	out := string(rendered)
+	for _, want := range []string{"name: pathways-flavor", "nominalQuota: 480", "nominalQuota: 2000Gi", "name: flavor-default", "nominalQuota: 1000", "nominalQuota: 4000G"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in rendered ClusterQueue, got:\n%s", want, out)
+		}
 	}
 }
 

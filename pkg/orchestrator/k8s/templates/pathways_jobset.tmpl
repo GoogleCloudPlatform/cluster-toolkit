@@ -119,9 +119,6 @@ spec:
               restartPolicy: Always
               {{- end }}
               resources:
-                limits:
-                  cpu: "8"
-                  memory: "32Gi"
                 requests:
                   cpu: "2"
                   memory: "8Gi"
@@ -165,9 +162,6 @@ spec:
               restartPolicy: Always
               {{- end }}
               resources:
-                limits:
-                  cpu: "16"
-                  memory: "100Gi"
                 requests:
                   cpu: "8"
                   memory: "32Gi"

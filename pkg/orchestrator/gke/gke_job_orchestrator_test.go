@@ -1289,7 +1289,7 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 			}
 			orc.machineCapCache = make(map[string]MachineTypeCap)
 
-			isCPU, capacity, err := orc.determineIfCPUMachine(&tt.job)
+			profile, err := orc.determineIfCPUMachine(tt.job.ComputeType, tt.job.MachineType, tt.job.ClusterLocation)
 
 			if tt.wantErr {
 				if err == nil {
@@ -1299,11 +1299,11 @@ func TestDetermineIfCPUMachine_Hyperthreading(t *testing.T) {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 				}
-				if isCPU != tt.wantIsCPU {
-					t.Errorf("Expected isCPU %t, got %t", tt.wantIsCPU, isCPU)
+				if profile.IsCPUMachine != tt.wantIsCPU {
+					t.Errorf("Expected isCPU %t, got %t", tt.wantIsCPU, profile.IsCPUMachine)
 				}
-				if capacity != tt.wantCapacity {
-					t.Errorf("Expected capacity %d, got %d", tt.wantCapacity, capacity)
+				if profile.CapacityCount != tt.wantCapacity {
+					t.Errorf("Expected capacity %d, got %d", tt.wantCapacity, profile.CapacityCount)
 				}
 			}
 		})
@@ -2133,7 +2133,7 @@ func TestPopulateNAPFlavors(t *testing.T) {
 		wantErr     bool
 	}{
 		{
-			name: "Skip cpu and memory, populate generic tpu and model specific gpu",
+			name: "Populate flavor-default for cpu/memory, generic tpu and model specific gpu",
 			napLimits: map[string]int64{
 				"cpu":            100,
 				"memory":         1024,
@@ -2141,6 +2141,7 @@ func TestPopulateNAPFlavors(t *testing.T) {
 				"nvidia-l4":      8,
 			},
 			wantFlavors: map[string]FlavorCapacity{
+				"flavor-default": {},
 				"flavor-tpu-generic": {
 					NodeLabels: nil,
 				},
@@ -7256,5 +7257,406 @@ func TestGKELocalPreflight_RejectsTPUNumNodesBeforeClusterAccess(t *testing.T) {
 	err := k8sOrc.validateSubmitLocalPreflight(&StorageManager{orchestrator: k8sOrc}, orchestrator.JobDefinition{ComputeType: "v6e-8", NumNodesSpecified: true, NumSlices: 1})
 	if errors.Is(err, errTPUNumNodes) {
 		t.Errorf("k8s preflight err = %v; TPU --num-nodes must be checked after node discovery in k8s mode", err)
+	}
+}
+
+func TestEnsureJobQueueCoverage(t *testing.T) {
+	lqCmd := "kubectl get localqueue my-lq -n ml -o jsonpath={.spec.clusterQueue} " + kubectlReadTimeout
+	cqCmd := "kubectl get clusterqueue my-cq -o json " + kubectlReadTimeout
+	cpuOnlyCQ := `{"kind":"ClusterQueue","spec":{"resourceGroups":[{"coveredResources":["cpu"]}]}}`
+	memOnlyCQ := `{"kind":"ClusterQueue","spec":{"resourceGroups":[{"coveredResources":["memory"]}]}}`
+
+	for _, tc := range []struct {
+		name         string
+		mode         orchestrator.Type
+		kueueEnabled bool
+		job          orchestrator.JobDefinition
+		profile      JobProfile
+		lqRes        *shell.CommandResult
+		cqJSON       string
+		wantCalls    int
+		wantErr      string
+	}{
+		{
+			name:         "kueue disabled skips coverage check",
+			kueueEnabled: false,
+			job:          orchestrator.JobDefinition{KueueQueueName: "my-lq", CPURequest: "4"},
+			profile:      JobProfile{IsCPUMachine: true},
+			wantCalls:    0,
+		},
+		{
+			name:         "dry-run skips coverage check",
+			kueueEnabled: true,
+			job:          orchestrator.JobDefinition{KueueQueueName: "my-lq", DryRunManifest: "out.yaml", CPURequest: "4"},
+			profile:      JobProfile{IsCPUMachine: true},
+			wantCalls:    0,
+		},
+		{
+			name:         "TypeK8s unqueued submission with empty queue skips coverage check",
+			mode:         orchestrator.TypeK8s,
+			kueueEnabled: true,
+			job:          orchestrator.JobDefinition{CPURequest: "4"},
+			profile:      JobProfile{IsCPUMachine: true},
+			wantCalls:    0,
+		},
+		{
+			name:         "TypeK8s 403 Forbidden reading LocalQueue warns and skips ClusterQueue check",
+			mode:         orchestrator.TypeK8s,
+			kueueEnabled: true,
+			job:          orchestrator.JobDefinition{KueueQueueName: "my-lq", CPURequest: "4"},
+			profile:      JobProfile{IsCPUMachine: true},
+			lqRes:        &shell.CommandResult{ExitCode: 1, Stderr: `Error from server (Forbidden): localqueues.kueue.x-k8s.io "my-lq" is forbidden`},
+			wantCalls:    1,
+		},
+		{
+			name:         "TypeK8s empty ClusterQueue reports missing coverage without GKE reconciliation",
+			mode:         orchestrator.TypeK8s,
+			kueueEnabled: true,
+			job:          orchestrator.JobDefinition{KueueQueueName: "my-lq", CPURequest: "4", MemoryRequest: "8Gi"},
+			profile:      JobProfile{IsCPUMachine: true},
+			cqJSON:       `{"kind":"ClusterQueue","spec":{"resourceGroups":[]}}`,
+			wantCalls:    2,
+			wantErr:      "missing required resource coverage for 'cpu' and 'memory'",
+		},
+		{
+			name:         "non-CPU non-Pathways without overrides skips coverage check",
+			kueueEnabled: true,
+			job:          orchestrator.JobDefinition{KueueQueueName: "my-lq"},
+			profile:      JobProfile{IsCPUMachine: false},
+			wantCalls:    0,
+		},
+		{
+			name:         "full-node CPU without flags checks cpu coverage",
+			kueueEnabled: true,
+			job:          orchestrator.JobDefinition{KueueQueueName: "my-lq"},
+			profile:      JobProfile{IsCPUMachine: true},
+			cqJSON:       memOnlyCQ,
+			wantCalls:    2,
+			wantErr:      "coverage for 'cpu'",
+		},
+		{
+			name:         "full-node CPU passes on cpu-only ClusterQueue",
+			kueueEnabled: true,
+			job:          orchestrator.JobDefinition{KueueQueueName: "my-lq"},
+			profile:      JobProfile{IsCPUMachine: true},
+			cqJSON:       cpuOnlyCQ,
+			wantCalls:    2,
+		},
+		{
+			name:         "memory-only CPU job does not require cpu coverage",
+			kueueEnabled: true,
+			job:          orchestrator.JobDefinition{KueueQueueName: "my-lq", MemoryRequest: "16Gi"},
+			profile:      JobProfile{IsCPUMachine: true},
+			cqJSON:       memOnlyCQ,
+			wantCalls:    2,
+		},
+		{
+			name:         "memory-only CPU job fails on cpu-only ClusterQueue",
+			kueueEnabled: true,
+			job:          orchestrator.JobDefinition{KueueQueueName: "my-lq", MemoryRequest: "16Gi"},
+			profile:      JobProfile{IsCPUMachine: true},
+			cqJSON:       cpuOnlyCQ,
+			wantCalls:    2,
+			wantErr:      "coverage for 'memory'",
+		},
+		{
+			name:         "Pathways job checks both cpu and memory coverage",
+			kueueEnabled: true,
+			job:          orchestrator.JobDefinition{KueueQueueName: "my-lq", IsPathwaysJob: true},
+			cqJSON:       cpuOnlyCQ,
+			wantCalls:    2,
+			wantErr:      "coverage for 'memory'",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lqResp := shell.CommandResult{ExitCode: 0, Stdout: "my-cq"}
+			if tc.lqRes != nil {
+				lqResp = *tc.lqRes
+			}
+			mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+				lqCmd: {lqResp},
+				cqCmd: {{ExitCode: 0, Stdout: tc.cqJSON}},
+			})
+			orc := newTestGKEOrchestrator(mockExec)
+			if tc.mode != "" {
+				orc.mode = tc.mode
+			}
+			orc.namespace = "ml"
+			orc.addons = addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: tc.kueueEnabled}
+
+			err := orc.ensureJobQueueCoverage(tc.job, tc.profile)
+			if len(mockExec.calls) != tc.wantCalls {
+				t.Errorf("kubectl calls = %d (%v), want %d", len(mockExec.calls), mockExec.calls, tc.wantCalls)
+			}
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("ensureJobQueueCoverage() err = %v, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ensureJobQueueCoverage() unexpected err: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateSubmitLocalPreflight_CPURequests(t *testing.T) {
+	if (ManifestOptions{IsCPUMachine: true, IsPathwaysJob: true, CPURequest: "4"}).isFractionalCPU() {
+		t.Errorf("isFractionalCPU() = true for Pathways job, want false")
+	}
+
+	for _, tc := range []struct {
+		name    string
+		job     orchestrator.JobDefinition
+		wantErr string
+	}{
+		{
+			name:    "invalid --cpu quantity fails before cluster calls",
+			job:     orchestrator.JobDefinition{ComputeType: "n2d-standard-64", CPURequest: "bogus"},
+			wantErr: "invalid --cpu quantity",
+		},
+		{
+			name:    "invalid --memory quantity fails before cluster calls",
+			job:     orchestrator.JobDefinition{ComputeType: "n2d-standard-64", MemoryRequest: "-1Gi"},
+			wantErr: "--memory must be a positive Kubernetes quantity",
+		},
+		{
+			name:    "Pathways job with --cpu fails before cluster calls",
+			job:     orchestrator.JobDefinition{ComputeType: "v6e-8", CPURequest: "4", IsPathwaysJob: true},
+			wantErr: "non-Pathways CPU workloads",
+		},
+		{
+			name:    "SPS Pathways job with --memory fails before SPS calls",
+			job:     orchestrator.JobDefinition{ComputeType: "v6e-8", MemoryRequest: "16Gi", Pathways: orchestrator.PathwaysJobDefinition{RunSPSWorkload: "sps-1"}},
+			wantErr: "non-Pathways CPU workloads",
+		},
+		{
+			name:    "v5lite-8 TPU shorthand with --cpu fails locally",
+			job:     orchestrator.JobDefinition{ComputeType: "v5lite-8", CPURequest: "4"},
+			wantErr: "not accelerator compute type \"v5lite-8\"",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockExec := NewMockExecutor(nil)
+			orc := newTestGKEOrchestrator(mockExec)
+			sm := &StorageManager{orchestrator: orc}
+			err := orc.validateSubmitLocalPreflight(sm, tc.job)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("validateSubmitLocalPreflight() err = %v, want substring %q", err, tc.wantErr)
+			}
+			if len(mockExec.calls) != 0 {
+				t.Errorf("expected 0 shell calls during local preflight, got %v", mockExec.calls)
+			}
+		})
+	}
+}
+
+func TestGenerateAndApplyJobManifest_PreApplyValidationAndPolicyWarning(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	t.Run("pre-apply manifest validation failure skips rollback", func(t *testing.T) {
+		tmplDir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(tmplDir, "job.tmpl"), []byte("{{- /* .RenderBlock */ -}}\napiVersion: batch/v1\nkind: Job\nmetadata: [invalid\n"), 0644); err != nil {
+			t.Fatalf("write invalid custom job.tmpl: %v", err)
+		}
+		mockExec := NewMockExecutor(nil)
+		mockClient := &MockKubeClient{
+			Namespace: "ml",
+			Objects: map[string][]unstructured.Unstructured{
+				"services": {makeTestOwnedService("t3-cpu", "1")},
+			},
+		}
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.namespace = "ml"
+		orc.kubeClient = mockClient
+		orc.gkeCustomTemplatesPath = tmplDir
+		orc.machineCapCache["n2d-standard-64:us-central1-a"] = MachineTypeCap{GuestCpus: 64, MemoryMb: 262144}
+
+		opts := ManifestOptions{
+			WorkloadName: "t3-cpu", FullImageName: "img:v1", CommandToRun: "python3 app.py",
+			ComputeType: "n2d-standard-64", MachineType: "n2d-standard-64", ClusterLocation: "us-central1-a",
+			NumSlices: 1, NodesPerSlice: 1, ParallelContainers: 1,
+			CPURequest: "4", MemoryRequest: "16Gi",
+			TtlSecondsAfterFinished: 3600, TerminationGracePeriodSeconds: 30,
+		}
+		profile := JobProfile{IsCPUMachine: true, CapacityCount: 64, MemoryMb: 262144}
+
+		snap, restore := logging.CaptureForTesting(t)
+		defer restore()
+		err := orc.generateAndApplyJobManifest(opts, profile, "", "clus-1", "proj-1")
+		restore()
+		_, warnLogs := snap()
+
+		if err == nil {
+			t.Fatalf("generateAndApplyJobManifest() expected manifest validation error, got nil")
+		}
+		if applied := commandsWithPrefix(mockExec, "kubectl apply"); len(applied) != 0 {
+			t.Errorf("expected 0 kubectl apply calls on pre-apply validation failure, got %v", applied)
+		}
+		if len(mockClient.Deleted["services"]) != 0 {
+			t.Errorf("pre-apply validation failure must not roll back pre-existing Service, deleted=%v", mockClient.Deleted)
+		}
+		if warnLogs != "" {
+			t.Errorf("expected no rollback warning on pre-apply validation failure, got:\n%s", warnLogs)
+		}
+	})
+
+	t.Run("tight LimitRange logs warning and proceeds to kubectl apply", func(t *testing.T) {
+		lrCmd := "kubectl get limitrange -n ml -o json " + kubectlReadTimeout
+		rqCmd := "kubectl get resourcequota -n ml -o json " + kubectlReadTimeout
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			lrCmd:           {{ExitCode: 0, Stdout: `{"items":[{"metadata":{"name":"tight-lr"},"spec":{"limits":[{"type":"Container","default":{"memory":"8Gi"}}]}}]}`}},
+			rqCmd:           {{ExitCode: 0, Stdout: `{"items":[]}`}},
+			"kubectl apply": {{ExitCode: 0}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.namespace = "ml"
+		orc.machineCapCache["n2d-standard-64:us-central1-a"] = MachineTypeCap{GuestCpus: 64, MemoryMb: 262144}
+
+		opts := ManifestOptions{
+			WorkloadName: "t3-cpu", FullImageName: "img:v1", CommandToRun: "python3 app.py",
+			ComputeType: "n2d-standard-64", MachineType: "n2d-standard-64", ClusterLocation: "us-central1-a",
+			NumSlices: 1, NodesPerSlice: 1, ParallelContainers: 1,
+			CPURequest: "4", MemoryRequest: "16Gi",
+			TtlSecondsAfterFinished: 3600, TerminationGracePeriodSeconds: 30,
+		}
+		profile := JobProfile{IsCPUMachine: true, CapacityCount: 64, MemoryMb: 262144}
+
+		snap, restore := logging.CaptureForTesting(t)
+		defer restore()
+		err := orc.generateAndApplyJobManifest(opts, profile, "", "clus-1", "proj-1")
+		restore()
+		_, warnLogs := snap()
+
+		if err != nil {
+			t.Fatalf("generateAndApplyJobManifest() unexpected err = %v", err)
+		}
+		if !strings.Contains(warnLogs, `LimitRange "tight-lr" default memory limit (8Gi)`) {
+			t.Errorf("expected LimitRange warning in logs, got:\n%s", warnLogs)
+		}
+		if applied := commandsWithPrefix(mockExec, "kubectl apply"); len(applied) != 1 {
+			t.Errorf("expected 1 kubectl apply call after warning-only policy preflight, got %v", applied)
+		}
+	})
+
+	t.Run("local manifest write failure returns applyAttempted false and skips rollback", func(t *testing.T) {
+		badHome := filepath.Join(t.TempDir(), "not-a-dir")
+		if err := os.WriteFile(badHome, []byte("blocker"), 0644); err != nil {
+			t.Fatalf("write blocker file: %v", err)
+		}
+		t.Setenv("HOME", badHome)
+		t.Setenv("USERPROFILE", badHome)
+
+		lrCmd := "kubectl get limitrange -n ml -o json " + kubectlReadTimeout
+		rqCmd := "kubectl get resourcequota -n ml -o json " + kubectlReadTimeout
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			lrCmd: {{ExitCode: 0, Stdout: `{"items":[]}`}},
+			rqCmd: {{ExitCode: 0, Stdout: `{"items":[]}`}},
+		})
+		mockClient := &MockKubeClient{
+			Namespace: "ml",
+			Objects: map[string][]unstructured.Unstructured{
+				"services": {makeTestOwnedService("t3-cpu", "1")},
+			},
+		}
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.namespace = "ml"
+		orc.kubeClient = mockClient
+		orc.machineCapCache["n2d-standard-64:us-central1-a"] = MachineTypeCap{GuestCpus: 64, MemoryMb: 262144}
+
+		opts := ManifestOptions{
+			WorkloadName: "t3-cpu", FullImageName: "img:v1", CommandToRun: "python3 app.py",
+			ComputeType: "n2d-standard-64", MachineType: "n2d-standard-64", ClusterLocation: "us-central1-a",
+			NumSlices: 1, NodesPerSlice: 1, ParallelContainers: 1,
+			CPURequest: "4", MemoryRequest: "16Gi",
+			TtlSecondsAfterFinished: 3600, TerminationGracePeriodSeconds: 30,
+		}
+		profile := JobProfile{IsCPUMachine: true, CapacityCount: 64, MemoryMb: 262144}
+		if err := orc.generateAndApplyJobManifest(opts, profile, "", "clus-1", "proj-1"); err == nil {
+			t.Fatalf("generateAndApplyJobManifest() expected writeGeneratedManifest error, got nil")
+		}
+		if len(mockClient.Deleted["services"]) != 0 {
+			t.Errorf("local write failure before kubectl apply must not roll back Service, deleted=%v", mockClient.Deleted)
+		}
+	})
+}
+
+func TestPopulateNAPFlavors_DefaultFlavorPreservationAndMemoryOnly(t *testing.T) {
+	t.Run("preserves_existing_flavor_default_capacity", func(t *testing.T) {
+		orc := &GKEOrchestrator{
+			napEnabled: true,
+			napLimits:  map[string]int64{"cpu": 256, "memory": 1024},
+		}
+		existing := FlavorCapacity{CPUs: 64, MemoryGi: 256}
+		flavors := map[string]FlavorCapacity{"flavor-default": existing}
+		if err := orc.populateNAPFlavors(flavors); err != nil {
+			t.Fatalf("populateNAPFlavors() err = %v", err)
+		}
+		if got := flavors["flavor-default"]; got.CPUs != 64 || got.MemoryGi != 256 {
+			t.Errorf("flavor-default = %+v, want preserved %+v", got, existing)
+		}
+	})
+
+	t.Run("adds_flavor_default_for_memory_only_nap_limit", func(t *testing.T) {
+		orc := &GKEOrchestrator{
+			napEnabled: true,
+			napLimits:  map[string]int64{"memory": 512},
+		}
+		flavors := map[string]FlavorCapacity{}
+		if err := orc.populateNAPFlavors(flavors); err != nil {
+			t.Fatalf("populateNAPFlavors() err = %v", err)
+		}
+		if _, ok := flavors["flavor-default"]; !ok {
+			t.Errorf("expected flavor-default to be added when napLimits[memory] > 0, got %+v", flavors)
+		}
+	})
+}
+
+func TestPopulateClusterMetadata_ResetsStateAcrossSubmissions(t *testing.T) {
+	orc := newTestGKEOrchestrator(nil)
+	orc.clusterZones = []string{"us-central1-a"}
+	orc.machineCapCache = map[string]MachineTypeCap{
+		"n2d-standard-64:us-central1-a": {GuestCpus: 64, MemoryMb: 262144},
+		"n1-standard-8:us-central1-a":   {GuestCpus: 8, MemoryMb: 30720},
+	}
+
+	orc.clusterDesc = gkeCluster{
+		NodePools: []gkeJobNodePool{
+			{Name: "cpu-np", InitialNodeCount: 1, Config: gkeNodePoolConfig{MachineType: "n2d-standard-64"}},
+			{
+				Name:             "gpu-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType:  "n1-standard-8",
+					Accelerators: []gkeAccelerator{{AcceleratorType: "nvidia-tesla-t4", AcceleratorCount: "1"}},
+				},
+			},
+		},
+	}
+	pwJob := orchestrator.JobDefinition{ClusterName: "c1", ClusterLocation: "us-central1-a", IsPathwaysJob: true}
+	if err := orc.populateClusterMetadata(&pwJob); err != nil {
+		t.Fatalf("populateClusterMetadata(pathways) err = %v", err)
+	}
+	if orc.resolvedHeadNodePool != "cpu-np" || orc.acceleratorToMachineType["nvidia-tesla-t4"] != "n1-standard-8" {
+		t.Fatalf("expected pathways head pool and attached GPU map to be populated, got head=%q accel=%v", orc.resolvedHeadNodePool, orc.acceleratorToMachineType)
+	}
+
+	orc.clusterDesc = gkeCluster{
+		NodePools: []gkeJobNodePool{
+			{Name: "cpu-np", InitialNodeCount: 1, Config: gkeNodePoolConfig{MachineType: "n2d-standard-64"}},
+		},
+	}
+	cpuJob := orchestrator.JobDefinition{ClusterName: "c2", ClusterLocation: "us-central1-a", IsPathwaysJob: false}
+	if err := orc.populateClusterMetadata(&cpuJob); err != nil {
+		t.Fatalf("populateClusterMetadata(cpu) err = %v", err)
+	}
+	if orc.resolvedHeadNodePool != "" {
+		t.Errorf("resolvedHeadNodePool = %q, want empty after non-Pathways submission", orc.resolvedHeadNodePool)
+	}
+	if len(orc.acceleratorToMachineType) != 0 {
+		t.Errorf("acceleratorToMachineType = %v, want empty after CPU-only cluster submission", orc.acceleratorToMachineType)
 	}
 }

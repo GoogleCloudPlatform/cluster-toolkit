@@ -35,6 +35,7 @@ import (
 	iamapi "google.golang.org/api/iam/v1"
 	gcs "google.golang.org/api/storage/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -46,6 +47,10 @@ const (
 	tpuTopologyLabel = k8s.GKETPUTopologyLabel
 	// nodePoolLabel is the GKE label for the node pool name.
 	nodePoolLabel = k8s.GKENodePoolLabel
+	// machineFamilyLabel is the GKE label selecting a GCE machine family (used by NAP).
+	machineFamilyLabel = "cloud.google.com/machine-family"
+	// computeClassLabel is the GKE label selecting a custom ComputeClass.
+	computeClassLabel = "cloud.google.com/compute-class"
 	// placementPolicyNameLabel selects nodes carrying a named GCE compact placement or workload policy.
 	placementPolicyNameLabel = "cloud.google.com/placement-policy-name"
 	// placementGroupLabel is the GKE-managed compact placement group identifier used by NAP.
@@ -343,9 +348,11 @@ type permissionCheck struct {
 }
 
 type JobProfile struct {
-	IsCPUMachine        bool
-	IsTPU               bool
+	IsCPUMachine bool
+	IsTPU        bool
+	// CapacityCount holds effective vCPUs (already adjusted via getEffectiveCPUs) when IsCPUMachine is true.
 	CapacityCount       int
+	MemoryMb            int
 	AllocatableCPUMilli int64
 	GPUResourceName     string
 	K8sPool             *k8s.PoolCapacity
@@ -357,7 +364,8 @@ type ManifestOptions struct {
 	CommandToRun                  string
 	ComputeType                   string
 	MachineType                   string
-	ResourcesString               string
+	CPURequest                    string
+	MemoryRequest                 string
 	ProjectID                     string
 	ClusterName                   string
 	ClusterLocation               string
@@ -399,6 +407,10 @@ type ManifestOptions struct {
 	Verbose                       bool
 	Env                           map[string]string
 	AdditionalManifests           []string
+}
+
+func (o ManifestOptions) isFractionalCPU() bool {
+	return o.IsCPUMachine && !o.IsPathwaysJob && (o.CPURequest != "" || o.MemoryRequest != "")
 }
 
 // StorageManager handles parsing and validation of storage mounts.
@@ -609,6 +621,12 @@ type gkeTaint struct {
 	Effect string `json:"effect"`
 }
 
+type gkeReservationAffinity struct {
+	ConsumeReservationType string   `json:"consumeReservationType,omitempty"`
+	Key                    string   `json:"key,omitempty"`
+	Values                 []string `json:"values,omitempty"`
+}
+
 type gkeNodePoolConfig struct {
 	ServiceAccount          string                      `json:"serviceAccount"`
 	MachineType             string                      `json:"machineType"`
@@ -616,6 +634,8 @@ type gkeNodePoolConfig struct {
 	AdvancedMachineFeatures *gkeAdvancedMachineFeatures `json:"advancedMachineFeatures,omitempty"`
 	Taints                  []gkeTaint                  `json:"taints"`
 	Labels                  map[string]string           `json:"labels,omitempty"`
+	Spot                    bool                        `json:"spot,omitempty"`
+	ReservationAffinity     *gkeReservationAffinity     `json:"reservationAffinity,omitempty"`
 }
 
 type gkeAutoscaling struct {
@@ -658,6 +678,7 @@ type gkeResourceLimit struct {
 type gkeClusterAutoscaling struct {
 	EnableNodeAutoprovisioning bool               `json:"enableNodeAutoprovisioning"`
 	ResourceLimits             []gkeResourceLimit `json:"resourceLimits"`
+	AutoprovisioningLocations  []string           `json:"autoprovisioningLocations,omitempty"`
 }
 
 type gkeCluster struct {
@@ -1146,4 +1167,34 @@ type addonActions struct {
 type connectivityChecker struct {
 	getenv func(string) string
 	probe  func(ctx context.Context) bool
+}
+
+type kueueClusterQueueResourceGroup struct {
+	CoveredResources []string `json:"coveredResources"`
+}
+
+type kueueClusterQueueSpec struct {
+	ResourceGroups []kueueClusterQueueResourceGroup `json:"resourceGroups"`
+}
+
+type kueueClusterQueueDoc struct {
+	Kind string                 `json:"kind"`
+	Spec *kueueClusterQueueSpec `json:"spec"`
+}
+
+type policyListPayload[Item any] struct {
+	Kind  string `json:"kind"`
+	Items []Item `json:"items"`
+}
+
+type limitRangeSummary struct {
+	known       bool
+	defaults    map[corev1.ResourceName]bool
+	defaultReqs map[corev1.ResourceName]bool
+}
+
+type quotaRequirementCheck struct {
+	hardKey      corev1.ResourceName
+	resName      corev1.ResourceName
+	requireLimit bool
 }

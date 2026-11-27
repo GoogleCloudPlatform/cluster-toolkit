@@ -165,6 +165,11 @@ type PathwaysJobDefinition struct {
 	HeadNodePool string // Resolved node pool to use for the Pathways head job.
 }
 
+// HasMode reports whether any Pathways execution mode flag is set.
+func (p PathwaysJobDefinition) HasMode() bool {
+	return p.RunSPSWorkload != "" || p.DeploySPS || p.Headless
+}
+
 type VolumeDefinition struct {
 	Name      string
 	Source    string // The raw <src>
@@ -193,6 +198,8 @@ type JobDefinition struct {
 	NodesPerSlice  int
 	// NumNodesSpecified reports that --num-nodes was explicitly passed on the CLI.
 	NumNodesSpecified             bool
+	CPURequest                    string // Optional Kubernetes CPU request quantity for CPU-only workloads (e.g. "8", "4500m").
+	MemoryRequest                 string // Optional Kubernetes memory request quantity for CPU-only workloads (e.g. "64Gi", "200G").
 	MaxRestarts                   int
 	TtlSecondsAfterFinished       int
 	TerminationGracePeriodSeconds int

@@ -145,6 +145,8 @@ func (g *GKEOrchestrator) resetSubmissionSession() {
 func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 	job.GKENamespace = strings.TrimSpace(job.GKENamespace)
 	job.Pathways.RunSPSWorkload = strings.TrimSpace(job.Pathways.RunSPSWorkload)
+	job.CPURequest = strings.TrimSpace(job.CPURequest)
+	job.MemoryRequest = strings.TrimSpace(job.MemoryRequest)
 	g.namespace = job.GKENamespace
 	g.resetSubmissionSession()
 	logging.Info("Starting gcluster job submit workflow...")
@@ -167,6 +169,9 @@ func (g *GKEOrchestrator) SubmitJob(job orchestrator.JobDefinition) error {
 		return err
 	}
 	if err := g.validatePostHardwareChecks(sm, &job, profile); err != nil {
+		return err
+	}
+	if err := g.ensureJobQueueCoverage(job, profile); err != nil {
 		return err
 	}
 
@@ -205,6 +210,18 @@ func (g *GKEOrchestrator) validatePostHardwareChecks(sm *StorageManager, job *or
 		return err
 	}
 	return g.pinTelemetryAndValidate(job, profile.IsTPU)
+}
+
+func (g *GKEOrchestrator) ensureJobQueueCoverage(job orchestrator.JobDefinition, profile JobProfile) error {
+	if job.DryRunManifest != "" || !g.kueueEnabled() || strings.TrimSpace(job.KueueQueueName) == "" {
+		return nil
+	}
+	needCPU := job.IsPathwaysJob || job.CPURequest != "" || (profile.IsCPUMachine && job.MemoryRequest == "")
+	needMem := job.IsPathwaysJob || job.MemoryRequest != ""
+	if !needCPU && !needMem {
+		return nil
+	}
+	return g.ensureClusterQueueCoverage(job.KueueQueueName, g.namespace, needCPU, needMem)
 }
 
 // workloadTemplateName selects the JobSet workload template assumed before cluster add-on resolution.
@@ -260,6 +277,9 @@ func (g *GKEOrchestrator) validateSubmitLocalPreflight(sm *StorageManager, job o
 			return err
 		}
 	} else if err := validateGKETPUNumNodes(job); err != nil {
+		return err
+	}
+	if err := k8s.ValidateCPURequestPreflight(job.ComputeType, job.CPURequest, job.MemoryRequest, job.IsPathwaysJob || job.Pathways.HasMode(), config.IsKnownAccelerator(job.ComputeType), g.mode != orchestrator.TypeK8s); err != nil {
 		return err
 	}
 	if !g.jobSetEnabled() {
@@ -952,35 +972,45 @@ func (g *GKEOrchestrator) validateJobConflicts(job orchestrator.JobDefinition) e
 // reaching this point; when it is empty, kubectl applies into the pinned context's namespace, which is the same value
 // getCurrentNamespace would resolve.
 func (g *GKEOrchestrator) ApplyManifest(manifestContent, outputManifestPath, workloadName string) error {
+	_, err := g.applyManifestWithTracking(manifestContent, outputManifestPath, workloadName)
+	return err
+}
+
+func (g *GKEOrchestrator) applyManifestWithTracking(manifestContent, outputManifestPath, workloadName string) (applyAttempted bool, err error) {
 	if err := ValidateJobSetManifest(manifestContent); err != nil {
-		return err
+		return false, err
 	}
 	if outputManifestPath != "" {
 		logging.Info("Saving GKE manifest to %s", outputManifestPath)
 		if err := os.WriteFile(outputManifestPath, []byte(manifestContent), 0644); err != nil {
-			return fmt.Errorf("failed to write GKE manifest to file %s: %w", outputManifestPath, err)
+			return false, fmt.Errorf("failed to write GKE manifest to file %s: %w", outputManifestPath, err)
 		}
 		logging.Info("GKE manifest saved successfully.")
-	} else {
-		// Submit will fail if a job with the same name already exists. The embedded workload templates render
-		// metadata.namespace from the same resolved namespace, but a custom template extracted before that
-		// existed does not, so pass -n as well: kubectl then places unnamespaced objects in the resolved
-		// namespace and rejects any object that declares a different one, instead of silently using the
-		// kubeconfig default.
-		logging.Info("Applying GKE manifest to cluster...")
-		err := g.applyManifests([]byte(manifestContent), workloadName+".yaml", g.namespace)
-		if err != nil {
-			return fmt.Errorf("failed to apply GKE manifest: %w", err)
-		}
-		if err := g.verifyStorageGateways(manifestContent, workloadName); err != nil {
-			return err
-		}
-		logging.Info("GKE workload deployed successfully.")
+		return false, nil
 	}
-	return nil
+	g.checkNamespaceResourcePolicies(manifestContent)
+	// Submit will fail if a job with the same name already exists. The embedded workload templates render
+	// metadata.namespace from the same resolved namespace, but a custom template extracted before that
+	// existed does not, so pass -n as well: kubectl then places unnamespaced objects in the resolved
+	// namespace and rejects any object that declares a different one, instead of silently using the
+	// kubeconfig default.
+	logging.Info("Applying GKE manifest to cluster...")
+	filePath, err := writeGeneratedManifest([]byte(manifestContent), workloadName+".yaml")
+	if err != nil {
+		return false, fmt.Errorf("failed to apply GKE manifest: %w", err)
+	}
+	if err := g.applyManifestFile(filePath, strings.TrimSpace(g.namespace)); err != nil {
+		return true, fmt.Errorf("failed to apply GKE manifest: %w", err)
+	}
+	if err := g.verifyStorageGateways(manifestContent, workloadName); err != nil {
+		return true, err
+	}
+	logging.Info("GKE workload deployed successfully.")
+	return true, nil
 }
 
 func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinition) error {
+	g.resolvedHeadNodePool = ""
 
 	if job.IsPathwaysJob {
 		if job.Pathways.HeadNodePool != "" {
@@ -1011,7 +1041,7 @@ func (g *GKEOrchestrator) populateClusterMetadata(job *orchestrator.JobDefinitio
 func (g *GKEOrchestrator) autoDetectCPUNodePool() string {
 	var fallback string
 	for _, np := range g.clusterDesc.NodePools {
-		if (np.Name == "cpu-np" || np.Name == "pathways-np") && len(np.Config.Accelerators) == 0 && !config.IsTPU(np.Config.MachineType) && !g.isSystemPool(np) {
+		if g.isCandidatePathwaysHeadPool(np) {
 			if g.getNodeCount(np) > 0 {
 				return np.Name
 			}
@@ -1135,6 +1165,7 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 	flavors := make(map[string]FlavorCapacity)
 
 	g.machineTypeToThreadsPerCore = make(map[string]string)
+	g.acceleratorToMachineType = make(map[string]string)
 	for _, np := range clusterDesc.NodePools {
 		if g.isSystemPool(np) {
 			continue
@@ -1178,52 +1209,6 @@ func (g *GKEOrchestrator) calculateClusterCapacity(clusterDesc gkeCluster, locat
 	return capacity, nodePoolSAs, nil
 }
 
-// isSharedCoreMachineType mirrors local.machine_shared_core in
-// modules/compute/gke-node-pool/threads_per_core_calc.tf: shared-core machine
-// types (e.g. e2-micro, e2-small, e2-medium, f1-micro, g1-small) have two
-// dash-separated parts (<family>-<tier>) and only expose 1 allocatable vCPU in
-// GKE even when guestCpus is 2.
-func isSharedCoreMachineType(machineType string) bool {
-	trimmed := strings.TrimSpace(machineType)
-	if trimmed == "" {
-		return false
-	}
-	return len(strings.Split(trimmed, "-")) <= 2
-}
-
-func (g *GKEOrchestrator) getThreadsPerCore(machineType string) string {
-	if tpc, ok := g.machineTypeToThreadsPerCore[machineType]; ok {
-		return tpc
-	}
-	for _, np := range g.clusterDesc.NodePools {
-		if g.isSystemPool(np) {
-			continue
-		}
-		if strings.EqualFold(np.Config.MachineType, machineType) && np.Config.AdvancedMachineFeatures != nil {
-			return np.Config.AdvancedMachineFeatures.ThreadsPerCore
-		}
-	}
-	return ""
-}
-
-func (g *GKEOrchestrator) getEffectiveCPUs(machineType string, guestCpus int) int {
-	if guestCpus <= 0 {
-		return 0
-	}
-	if isSharedCoreMachineType(machineType) {
-		return 1
-	}
-	if g.getThreadsPerCore(machineType) == "1" && !strings.HasPrefix(machineType, "t2a") && !strings.HasPrefix(machineType, "t2d") {
-		for k, cap := range g.machineCapCache {
-			if strings.HasPrefix(k, machineType+":") && cap.GuestCpus > 0 && guestCpus == cap.GuestCpus/2 && cap.GuestCpus != guestCpus {
-				return guestCpus
-			}
-		}
-		return guestCpus / 2
-	}
-	return guestCpus
-}
-
 func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location string) (cpus, memMb, gpus, tpus int, flavor string, nodeLabels map[string]string, sa string, err error) {
 	sa = strings.TrimSpace(np.Config.ServiceAccount)
 	if sa == "default" {
@@ -1233,7 +1218,7 @@ func (g *GKEOrchestrator) processNodePoolCapacity(np gkeJobNodePool, location st
 	nodeCount := g.getNodeCount(np)
 	nodeLabels = make(map[string]string)
 
-	if nodeCount == 0 {
+	if nodeCount == 0 || strings.TrimSpace(np.Config.MachineType) == "" {
 		return 0, 0, 0, 0, "flavor-default", nodeLabels, sa, nil
 	}
 
@@ -1696,8 +1681,9 @@ func (g *GKEOrchestrator) generateAndApplyJobManifest(opts ManifestOptions, prof
 	}
 
 	resolvedProject := cmp.Or(strings.TrimSpace(projectID), strings.TrimSpace(g.projectID))
-	if err := g.ApplyManifest(jobManifestContent, outputManifestPath, opts.WorkloadName); err != nil {
-		if outputManifestPath == "" {
+	applyAttempted, err := g.applyManifestWithTracking(jobManifestContent, outputManifestPath, opts.WorkloadName)
+	if err != nil {
+		if applyAttempted && outputManifestPath == "" {
 			g.rollbackPartialBatchJobService(opts.WorkloadName, clusterName, opts.ClusterLocation, resolvedProject)
 		}
 		return err
@@ -1895,30 +1881,6 @@ func (g *GKEOrchestrator) GenerateGKENodeSelectorLabel(acceleratorType string) s
 	}
 
 	return acceleratorType
-}
-
-func (g *GKEOrchestrator) determineIfCPUMachine(job *orchestrator.JobDefinition) (bool, int, error) {
-	if _, exists := config.AcceleratorShorthandMap[job.MachineType]; exists {
-		return false, 0, nil
-	}
-
-	for _, realMachine := range config.AcceleratorShorthandMap {
-		if job.MachineType == realMachine {
-			return false, 0, nil
-		}
-	}
-
-	cap, err := g.FetchMachineCapabilities(job.MachineType, job.ClusterLocation)
-	if err != nil {
-		return false, 0, fmt.Errorf("failed to fetch machine capabilities for %s: %w", job.MachineType, err)
-	}
-
-	if len(cap.Accelerators) > 0 {
-		return false, 0, nil
-	}
-
-	logging.Info("Dynamically determined %s is a CPU-only machine during manifest preparation", job.MachineType)
-	return true, g.getEffectiveCPUs(job.MachineType, cap.GuestCpus), nil
 }
 
 func parseJobStatus(obj map[string]interface{}) (statusStr, completionTime string) {

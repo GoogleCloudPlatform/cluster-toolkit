@@ -16,6 +16,7 @@ package gke
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -241,104 +242,113 @@ func (g *GKEOrchestrator) createDefaultQueues(localQueueName, ns string) error {
 	return nil
 }
 
-// ensureClusterQueueCoverage checks if the parent ClusterQueue covers CPU and Memory quotas, updating it if empty.
-func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName, ns string) error {
+// ensureClusterQueueCoverage checks if the parent ClusterQueue covers the required CPU and/or Memory
+// quotas, updating it if empty.
+func (g *GKEOrchestrator) ensureClusterQueueCoverage(localQueueName, ns string, needCPU, needMem bool) error {
 	cqName, err := g.getClusterQueueName(localQueueName, ns)
+	if err != nil || cqName == "" {
+		return err
+	}
+
+	missingCPU, missingMem, isEmpty, err := g.checkClusterQueueCoverage(cqName, needCPU, needMem)
 	if err != nil {
 		return err
 	}
 
-	hasCoverage, isEmpty, err := g.checkClusterQueueCoverage(cqName)
+	if !missingCPU && !missingMem {
+		logging.Info("Kueue ClusterQueue '%s' covers required resources.", cqName)
+		return nil
+	}
+
+	if isEmpty && g.mode != orchestrator.TypeK8s {
+		return g.populateEmptyClusterQueue(cqName, needCPU, needMem)
+	}
+
+	missingDesc := requiredResourceLabel(missingCPU, missingMem)
+	inspectCmd := kubectlCommandLine(g.kubeContext, "get", "clusterqueue", cqName, "-o", "yaml")
+	return fmt.Errorf("ClusterQueue '%s' is missing required resource coverage for %s; inspect it with '%s' and add %s to spec.resourceGroups[].coveredResources with flavor quotas", cqName, missingDesc, inspectCmd, missingDesc)
+}
+
+func (g *GKEOrchestrator) populateEmptyClusterQueue(cqName string, needCPU, needMem bool) error {
+	covered := g.calculateCoveredResources()
+	missCPU, missMem := needCPU && !covered["cpu"], needMem && !covered["memory"]
+	if missCPU || missMem {
+		missingDesc := requiredResourceLabel(missCPU, missMem)
+		inspectCmd := kubectlCommandLine(g.kubeContext, "get", "clusterqueue", cqName, "-o", "yaml")
+		return fmt.Errorf("ClusterQueue '%s' is empty and no eligible CPU/memory node pools or NAP limits were discovered to cover %s; inspect it with '%s' and configure spec.resourceGroups[].coveredResources manually", cqName, missingDesc, inspectCmd)
+	}
+	logging.Info("ClusterQueue '%s' is empty. Applying calculated capacity...", cqName)
+	if err := g.EnsureResourceFlavors(); err != nil {
+		return fmt.Errorf("failed to ensure resource flavors for clusterqueue '%s': %w", cqName, err)
+	}
+	clusterQueueBytes, err := g.renderClusterQueue(cqName)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to render clusterqueue with new capacity: %w", err)
 	}
-
-	if hasCoverage {
-		logging.Info("Kueue ClusterQueue '%s' already covers CPU and Memory.", cqName)
-		return nil
+	if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile, ""); err != nil {
+		return wrapKueueV1Beta2ApplyError("clusterqueue with new capacity", err)
 	}
+	return nil
+}
 
-	if isEmpty {
-		logging.Info("ClusterQueue '%s' is empty. Applying calculated capacity...", cqName)
-		clusterQueueBytes, err := g.renderClusterQueue(cqName)
-		if err != nil {
-			return fmt.Errorf("failed to render clusterqueue with new capacity: %w", err)
-		}
-		if err := g.applyManifests(clusterQueueBytes, clusterQueueManifestFile, ""); err != nil {
-			return wrapKueueV1Beta2ApplyError("clusterqueue with new capacity", err)
-		}
-		return nil
+func requiredResourceLabel(needCPU, needMem bool) string {
+	switch {
+	case needCPU && needMem:
+		return "'cpu' and 'memory'"
+	case needCPU:
+		return "'cpu'"
+	case needMem:
+		return "'memory'"
+	default:
+		return ""
 	}
-
-	return fmt.Errorf("ClusterQueue '%s' does not cover required resources (CPU and Memory); please configure it manually to include quotas for 'cpu' and 'memory' resources", cqName)
 }
 
 // getClusterQueueName inspects a LocalQueue to retrieve the name of its bound ClusterQueue.
 func (g *GKEOrchestrator) getClusterQueueName(localQueueName, ns string) (string, error) {
-	res := g.kubectl("get", "localqueue", localQueueName, "-n", ns, "-o", "jsonpath={.spec.clusterQueue}")
+	res := g.kubectl("get", "localqueue", localQueueName, "-n", ns, "-o", "jsonpath={.spec.clusterQueue}", kubectlReadTimeout)
 	if res.ExitCode != 0 {
-		return "", fmt.Errorf("failed to find clusterqueue for %s in namespace %s: %s", localQueueName, ns, res.Stderr)
+		if rawErr := kubectlOutputError(res); rawErr != nil && k8s.IsForbiddenError(rawErr) {
+			logging.Warn("Insufficient RBAC permissions to read LocalQueue %q in namespace %q (403 Forbidden). Skipping ClusterQueue resource coverage validation.", localQueueName, ns)
+			return "", nil
+		}
+		return "", kubectlCommandError(fmt.Sprintf("failed to find clusterqueue for %s in namespace %s", localQueueName, ns), res)
 	}
-	cqName := strings.TrimSpace(res.Stdout)
-	if cqName == "" {
-		cqName = localQueueName
-	}
-	return cqName, nil
+	return cmp.Or(strings.TrimSpace(res.Stdout), localQueueName), nil
 }
 
-// checkClusterQueueCoverage inspects a ClusterQueue to verify if resourceGroups cover CPU and Memory.
-func (g *GKEOrchestrator) checkClusterQueueCoverage(cqName string) (bool, bool, error) {
-	res := g.kubectl("get", "clusterqueue", cqName, "-o", "json")
+// checkClusterQueueCoverage inspects a ClusterQueue and reports which required resources are missing.
+func (g *GKEOrchestrator) checkClusterQueueCoverage(cqName string, needCPU, needMem bool) (missingCPU, missingMem, isEmpty bool, err error) {
+	res := g.kubectl("get", "clusterqueue", cqName, "-o", "json", kubectlReadTimeout)
 	if res.ExitCode != 0 {
-		errStr := strings.ToLower(res.Stderr)
-		if strings.Contains(errStr, "forbidden") {
+		if rawErr := kubectlOutputError(res); rawErr != nil && k8s.IsForbiddenError(rawErr) {
 			logging.Warn("Insufficient RBAC permissions to read ClusterQueue %q (403 Forbidden). Skipping resource coverage validation.", cqName)
-			return true, false, nil
+			return false, false, false, nil
 		}
-		return false, false, fmt.Errorf("failed to get clusterqueue %s: %s", cqName, res.Stderr)
+		return false, false, false, kubectlCommandError(fmt.Sprintf("failed to get clusterqueue %s", cqName), res)
 	}
 
-	var cq map[string]interface{}
+	var cq *kueueClusterQueueDoc
 	if err := json.Unmarshal([]byte(res.Stdout), &cq); err != nil {
-		return false, false, fmt.Errorf("failed to parse clusterqueue %s JSON: %w", cqName, err)
+		return false, false, false, fmt.Errorf("failed to parse clusterqueue %s JSON: %w", cqName, err)
+	}
+	if cq == nil || (cq.Kind != "" && cq.Kind != "ClusterQueue") {
+		return false, false, false, fmt.Errorf("unexpected JSON payload for clusterqueue %s", cqName)
+	}
+	if cq.Spec == nil || len(cq.Spec.ResourceGroups) == 0 {
+		return needCPU, needMem, true, nil
 	}
 
-	spec, ok := cq["spec"].(map[string]interface{})
-	if !ok {
-		return false, true, nil
-	}
-	rgList, ok := spec["resourceGroups"].([]interface{})
-	if !ok || len(rgList) == 0 {
-		return false, true, nil
-	}
-
-	return g.hasRequiredResources(rgList), false, nil
+	hasCPU, hasMem := clusterQueueCoversCPUMem(cq.Spec.ResourceGroups)
+	return needCPU && !hasCPU, needMem && !hasMem, false, nil
 }
 
-// hasRequiredResources helper checks if resourceGroups list includes both CPU and Memory covered resources.
-func (g *GKEOrchestrator) hasRequiredResources(rgList []interface{}) bool {
-	hasCPU := false
-	hasMem := false
-	for _, rgItem := range rgList {
-		rg, ok := rgItem.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		if covered, ok := rg["coveredResources"].([]interface{}); ok {
-			for _, r := range covered {
-				if rStr, ok := r.(string); ok {
-					switch rStr {
-					case "cpu":
-						hasCPU = true
-					case "memory":
-						hasMem = true
-					}
-				}
-			}
-		}
+func clusterQueueCoversCPUMem(rgs []kueueClusterQueueResourceGroup) (hasCPU, hasMem bool) {
+	for _, rg := range rgs {
+		hasCPU = hasCPU || slices.Contains(rg.CoveredResources, "cpu")
+		hasMem = hasMem || slices.Contains(rg.CoveredResources, "memory")
 	}
-
-	return hasCPU && hasMem
+	return hasCPU, hasMem
 }
 
 // -----------------------------------------------------------------------------
@@ -925,18 +935,18 @@ func (g *GKEOrchestrator) ensureAndValidatePriorityClass(requested string) error
 // EnsureResourceFlavors ensures that Kueue ResourceFlavors exist for all cluster capacity flavors.
 func (g *GKEOrchestrator) EnsureResourceFlavors() error {
 	logging.Info("Ensuring Kueue ResourceFlavors exist...")
-	cmd := g.kubectl("get", "resourceflavor", "-o", "jsonpath={.items[*].metadata.name}")
+	cmd := g.kubectl("get", "resourceflavor", "-o", "jsonpath={.items[*].metadata.name}", kubectlReadTimeout)
 	existingFlavors := make(map[string]bool)
 	if cmd.ExitCode != 0 {
-		errStr := strings.ToLower(cmd.Stderr + " " + cmd.Stdout)
-		if strings.Contains(errStr, "forbidden") {
+		rawErr := kubectlOutputError(cmd)
+		switch {
+		case rawErr != nil && k8s.IsForbiddenError(rawErr):
 			logging.Warn("Insufficient RBAC permissions to list resource flavors (403 Forbidden). Skipping ResourceFlavor verification and creation.")
 			return nil
-		}
-		if strings.Contains(errStr, "not found") || strings.Contains(errStr, "notfound") || strings.Contains(errStr, "no resources found") {
+		case rawErr != nil && (k8s.IsNotFoundOrNoMatchError(rawErr) || strings.Contains(strings.ToLower(rawErr.Error()), "no resources found")):
 			logging.Info("No ResourceFlavors found.")
-		} else {
-			return fmt.Errorf("failed to list resource flavors: %s", cmd.Stderr)
+		default:
+			return kubectlCommandError("failed to list resource flavors", cmd)
 		}
 	}
 
@@ -1104,7 +1114,8 @@ func isGPUFlavor(fname string) bool {
 }
 
 func (g *GKEOrchestrator) getNAPNominalQuota(resName string, fname string) (interface{}, bool) {
-	if !g.napEnabled {
+	// GKE NAP cannot auto-provision nodes into a static node-pool-pinned Pathways head flavor.
+	if !g.napEnabled || fname == "pathways-flavor" {
 		return nil, false
 	}
 	lookupKey := resName

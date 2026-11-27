@@ -1522,17 +1522,12 @@ func (g *GKEOrchestrator) configureClusterEnvironment(job *orchestrator.JobDefin
 	if job.DryRunManifest != "" {
 		return nil
 	}
-	if err := g.ensureLocalQueueExists(localQueue, ns, discovered, explicitQueue); err != nil {
-		return err
-	}
-	if job.IsPathwaysJob {
-		return g.ensureClusterQueueCoverage(localQueue, ns)
-	}
-	return nil
+	return g.ensureLocalQueueExists(localQueue, ns, discovered, explicitQueue)
 }
 
 // configureK8sKueueEnvironment resolves Kueue queueing on TypeK8s clusters where Kueue is installed,
-// without ever creating default ClusterQueues/LocalQueues or calling ensureClusterQueueCoverage.
+// without creating or mutating ClusterQueues/LocalQueues (ensureJobQueueCoverage later performs
+// read-only coverage checks for queued CPU jobs).
 func (g *GKEOrchestrator) configureK8sKueueEnvironment(job *orchestrator.JobDefinition, ns string) error {
 	if job.KueueQueueName != "" {
 		return g.resolveExplicitK8sLocalQueue(job, ns)

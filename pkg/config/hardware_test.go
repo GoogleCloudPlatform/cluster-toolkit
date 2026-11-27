@@ -691,3 +691,67 @@ func TestDefaultTopologyForChips(t *testing.T) {
 		}
 	}
 }
+
+func TestIsKnownAccelerator(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		in   string
+		want bool
+	}{
+		{"", false},
+		{"n2d-standard-64", false},
+		{"n1-standard-8", false},
+		{"e2-medium", false},
+		{"f1-micro", false},
+		{"g1-small", false},
+		{"h3-standard-88", false},
+		{"t2d-standard-4", false},
+		{"c3-highmem-88", false},
+		{"c4a-standard-8", false},
+		{"v6e-8", true},
+		{"tpu7x", true},
+		{"v7x", true},
+		{"v7x-8", true},
+		{"ironwood", true},
+		{"ironwood-8", true},
+		{"trillium", true},
+		{"trillium-8", true},
+		{"v5-lite", true},
+		{"v5-lite-8", true},
+		{"v5_lite", true},
+		{"v5_lite-8", true},
+		{"v5lite", true},
+		{"v5lite-8", true},
+		{"ct6e-standard-4t", true},
+		{"l4", true},
+		{"l4-1", true},
+		{"h100", true},
+		{"h100-16", true},
+		{"h200-4", true},
+		{"a100-4", true},
+		{"b200", true},
+		{"b200-16", true},
+		{"gb200", true},
+		{"gb200-8", true},
+		{"rtx", true},
+		{"rtx-6000-1/4", true},
+		{"g4-standard-12", true},
+		{"g2-standard-4", true},
+		{"a2-custom-1g", true},
+		{"a3-highgpu-8g", true},
+		{"a3-edgegpu-8g", true},
+		{"a4-ultragpu-8g", true},
+		{"a4x-maxgpu-4g", true},
+		{"a5-highgpu-8g", true},
+		{"a5x-highgpu-4g-metal", true},
+		{"nvidia-l4", true},
+		{"nvidia-tesla-t4", true},
+		{"nvidia-tesla-v100", true},
+		{"nvidia-rtx-pro-6000", true},
+		{"NVIDIA-H100-80GB", true},
+	} {
+		if got := IsKnownAccelerator(tc.in); got != tc.want {
+			t.Errorf("IsKnownAccelerator(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}

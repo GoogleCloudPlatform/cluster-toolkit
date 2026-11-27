@@ -2327,6 +2327,35 @@ func TestSubmitCmd_RunSPSWorkload_Validation(t *testing.T) {
 	})
 }
 
+func TestSubmitCmd_RunSPSWorkload_RejectsCPUMemory(t *testing.T) {
+	for _, tc := range []struct {
+		flagName string
+		flagVal  string
+	}{
+		{flagName: "cpu", flagVal: "4"},
+		{flagName: "memory", flagVal: "16Gi"},
+	} {
+		t.Run("rejects --"+tc.flagName, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+			_, err := executeCommand(JobCmd,
+				"submit",
+				"--pathways",
+				"--pathways-run-sps-workload", "sps-v5p",
+				"--"+tc.flagName, tc.flagVal,
+				"--name", "sps-client",
+				"--command", "python3 train.py",
+				"--cluster", "test-cluster",
+				"--location", "us-central1-a",
+				"--project", "test-project",
+			)
+			want := "--pathways-run-sps-workload connects to an existing SPS instance and cannot be used with --" + tc.flagName
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("got err = %v, want containing %q", err, want)
+			}
+		})
+	}
+}
+
 func TestValidateBuildContext_OCIRegistries(t *testing.T) {
 	t.Run("private local base-image succeeds with empty GCLUSTER_IMAGE_REPO and empty USER", func(t *testing.T) {
 		setupSubmitTestEnv(t)
@@ -2469,5 +2498,205 @@ func TestSubmitCmd_EmptyComputeTypeRejectedAndNumNodesSpecifiedPropagated(t *tes
 	}
 	if !mockOrc.SubmittedJob.NumNodesSpecified || mockOrc.SubmittedJob.NodesPerSlice != 2 {
 		t.Errorf("captured NumNodesSpecified=%v NodesPerSlice=%d, want (true, 2)", mockOrc.SubmittedJob.NumNodesSpecified, mockOrc.SubmittedJob.NodesPerSlice)
+	}
+}
+
+func TestSubmitCmd_CPUMemoryFlags_TypeK8sOptionalComputeType(t *testing.T) {
+	kcPath := filepath.Join(t.TempDir(), "kubeconfig")
+	kcYAML := "apiVersion: v1\nkind: Config\ncurrent-context: k8s-ctx\nclusters:\n- name: c\n  cluster:\n    server: https://127.0.0.1:6443\ncontexts:\n- name: k8s-ctx\n  context:\n    cluster: c\n    namespace: default\n"
+	if err := os.WriteFile(kcPath, []byte(kcYAML), 0600); err != nil {
+		t.Fatal(err)
+	}
+	setupSubmitTestEnv(t)
+	t.Setenv("KUBECONFIG", kcPath)
+	t.Setenv("GCLUSTER_ORCHESTRATOR", "k8s")
+	mock := &mockOrchestrator{}
+	gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mock }
+
+	_, err := executeCommand(JobCmd, "submit",
+		"--name", "k8s-cpu-frac",
+		"--image", "busybox",
+		"--command", "echo hi",
+		"--cpu", "4",
+		"--memory", "8Gi",
+		"--skip-prereqs",
+	)
+	if err != nil {
+		t.Fatalf("unexpected error in k8s mode: %v", err)
+	}
+	if mock.SubmittedJob.CPURequest != "4" || mock.SubmittedJob.MemoryRequest != "8Gi" || mock.SubmittedJob.ComputeType != "" {
+		t.Errorf("got CPURequest=%q MemoryRequest=%q ComputeType=%q, want (4, 8Gi, \"\")",
+			mock.SubmittedJob.CPURequest, mock.SubmittedJob.MemoryRequest, mock.SubmittedJob.ComputeType)
+	}
+}
+
+func TestSubmitCmd_CPUMemoryFlags(t *testing.T) {
+	t.Run("trims and wires --cpu and --memory into JobDefinition", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		mock := &mockOrchestrator{}
+		gkeOrchestratorFactory = func() orchestrator.JobOrchestrator { return mock }
+
+		_, err := executeCommand(JobCmd, "submit",
+			"--name", "cpu-frac-job",
+			"--image", "us-docker.pkg.dev/p/r/img:v1",
+			"--command", "python3 app.py",
+			"--compute-type", "n2d-standard-64",
+			"--cpu", " 8 ",
+			"--memory", " 64Gi ",
+			"--skip-prereqs",
+			"--project", "p", "--cluster", "c", "--location", "us-central1-a",
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if mock.SubmittedJob.CPURequest != "8" || mock.SubmittedJob.MemoryRequest != "64Gi" {
+			t.Errorf("got CPURequest=%q MemoryRequest=%q, want 8 and 64Gi", mock.SubmittedJob.CPURequest, mock.SubmittedJob.MemoryRequest)
+		}
+	})
+
+	t.Run("rejects invalid quantities before validateBuildContext network/repo checks", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		t.Setenv("GCLUSTER_IMAGE_REPO", "")
+		_, err := executeCommand(JobCmd, "submit",
+			"--name", "cpu-bad-qty",
+			"--base-image", "python:3.12",
+			"--build-context", t.TempDir(),
+			"--command", "python3 app.py",
+			"--compute-type", "n2d-standard-64",
+			"--cpu", "abc",
+			"--skip-prereqs",
+			"--project", "p", "--cluster", "c", "--location", "us-central1-a",
+		)
+		if err == nil || !strings.Contains(err.Error(), "invalid --cpu quantity") {
+			t.Fatalf("got err = %v, want invalid --cpu quantity before GCLUSTER_IMAGE_REPO check", err)
+		}
+	})
+
+	for _, tc := range []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "explicit empty --cpu",
+			args:    []string{"--compute-type", "n2d-standard-64", "--cpu", ""},
+			wantErr: "--cpu cannot be empty",
+		},
+		{
+			name:    "explicit whitespace --cpu",
+			args:    []string{"--compute-type", "n2d-standard-64", "--cpu", "   "},
+			wantErr: "--cpu cannot be empty",
+		},
+		{
+			name:    "explicit whitespace --memory",
+			args:    []string{"--compute-type", "n2d-standard-64", "--memory", "   "},
+			wantErr: "--memory cannot be empty",
+		},
+		{
+			name:    "zero --cpu",
+			args:    []string{"--compute-type", "n2d-standard-64", "--cpu", "0"},
+			wantErr: "positive Kubernetes quantity",
+		},
+		{
+			name:    "negative --memory",
+			args:    []string{"--compute-type", "n2d-standard-64", "--memory", "-1Gi"},
+			wantErr: "positive Kubernetes quantity",
+		},
+		{
+			name:    "sub-millicore --cpu",
+			args:    []string{"--compute-type", "n2d-standard-64", "--cpu", "100u"},
+			wantErr: "at least 1m",
+		},
+		{
+			name:    "sub-byte --memory",
+			args:    []string{"--compute-type", "n2d-standard-64", "--memory", "500m"},
+			wantErr: "millibytes",
+		},
+		{
+			name:    "milli-suffix typo --memory 64000m",
+			args:    []string{"--compute-type", "n2d-standard-64", "--memory", "64000m"},
+			wantErr: "millibytes",
+		},
+		{
+			name:    "fractional millicore --cpu 1.5m",
+			args:    []string{"--compute-type", "n2d-standard-64", "--cpu", "1.5m"},
+			wantErr: "whole millicores",
+		},
+		{
+			name:    "malformed --memory unit",
+			args:    []string{"--compute-type", "n2d-standard-64", "--memory", "64GB"},
+			wantErr: "invalid --memory quantity",
+		},
+		{
+			name:    "missing --compute-type with --cpu",
+			args:    []string{"--cpu", "4"},
+			wantErr: "required flag(s) \"compute-type\" not set",
+		},
+		{
+			name:    "rejected with --pathways",
+			args:    []string{"--compute-type", "v6e-8", "--pathways", "--pathways-gcs-location", "gs://bkt/p", "--cpu", "4"},
+			wantErr: "non-Pathways CPU workloads",
+		},
+		{
+			name:    "rejected with --pathways-run-sps-workload even without --pathways",
+			args:    []string{"--pathways-run-sps-workload", "sps-1", "--cpu", "4"},
+			wantErr: "non-Pathways CPU workloads",
+		},
+		{
+			name:    "rejected with --pathways-deploy-sps even without --pathways",
+			args:    []string{"--compute-type", "n2d-standard-64", "--pathways-deploy-sps", "--memory", "32Gi"},
+			wantErr: "non-Pathways CPU workloads",
+		},
+		{
+			name:    "rejected with --pathways-headless even without --pathways",
+			args:    []string{"--compute-type", "n2d-standard-64", "--pathways-headless", "--cpu", "4"},
+			wantErr: "non-Pathways CPU workloads",
+		},
+		{
+			name:    "rejected on known TPU shorthand",
+			args:    []string{"--compute-type", "v6e-8", "--cpu", "4"},
+			wantErr: "not accelerator compute type",
+		},
+		{
+			name:    "rejected on known GPU shorthand",
+			args:    []string{"--compute-type", "l4-1", "--memory", "16Gi"},
+			wantErr: "not accelerator compute type",
+		},
+		{
+			name:    "rejected on known GPU accelerator label",
+			args:    []string{"--compute-type", "nvidia-l4", "--cpu", "4"},
+			wantErr: "not accelerator compute type",
+		},
+		{
+			name:    "rejected on attached GPU accelerator label nvidia-tesla-t4",
+			args:    []string{"--compute-type", "nvidia-tesla-t4", "--cpu", "4"},
+			wantErr: "not accelerator compute type",
+		},
+		{
+			name:    "rejected on fractional RTX PRO 6000 shorthand",
+			args:    []string{"--compute-type", "rtx-6000-1/4", "--memory", "16Gi"},
+			wantErr: "not accelerator compute type",
+		},
+		{
+			name:    "rejected on v7x TPU shorthand",
+			args:    []string{"--compute-type", "v7x-8", "--cpu", "4"},
+			wantErr: "not accelerator compute type",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupSubmitTestEnv(t)
+			baseArgs := []string{
+				"submit",
+				"--name", "cpu-err-job",
+				"--image", "us-docker.pkg.dev/p/r/img:v1",
+				"--command", "python3 app.py",
+				"--skip-prereqs",
+				"--project", "p", "--cluster", "c", "--location", "us-central1-a",
+			}
+			_, err := executeCommand(JobCmd, append(baseArgs, tc.args...)...)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("got err = %v, want substring %q", err, tc.wantErr)
+			}
+		})
 	}
 }

@@ -156,7 +156,7 @@ Now that the cluster is deployed and your application code is prepared, you can 
 
 ### 4.1 Unified Job Submission
 
-By specifying the `--compute-type` flag, you can use the exact same command to target a standard CPU cluster (using a full GCE machine type like `n2-standard-32`), an accelerated GPU cluster (using a GPU shorthand like `h100-80gb-8` or `l4-1`, a mapped GPU machine type like `a3-highgpu-8g`, or a GKE accelerator label like `nvidia-l4`), or a TPU cluster (using a shorthand string representing total chips/cores like `v6e-8`). GPU/TPU shorthands and machine types in `gcluster`'s built-in shorthand map resolve without a pre-existing node pool (so they also work on NAP clusters), whereas unmapped CPU machine types (e.g., `n2-standard-32`) and raw GKE accelerator labels (e.g., `nvidia-l4`) resolve against the cluster's existing node pools. The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed.
+By specifying the `--compute-type` flag, you can use the exact same command to target a standard CPU cluster (using a full GCE machine type like `n2-standard-32`), an accelerated GPU cluster (using a GPU shorthand like `h100-80gb-8` or `l4-1`, a mapped GPU machine type like `a3-highgpu-8g`, or a GKE accelerator label like `nvidia-l4`), or a TPU cluster (using a shorthand string representing total chips/cores like `v6e-8`). GPU/TPU shorthands, machine types in `gcluster`'s built-in shorthand map, and predefined non-legacy GCE CPU machine types on NAP-enabled clusters (e.g., `n2-standard-32`; excluding `custom-*`, `*-custom-*`, `f1-micro`, and `g1-small`) resolve without a pre-existing node pool, whereas GCE CPU machine types on static clusters and raw GKE accelerator labels (e.g., `nvidia-l4`) resolve against the cluster's existing node pools. The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed.
 
 A TPU shorthand names a slice size, not a host shape. GKE can run the same slice on different machine types of a TPU family (an 8-chip `2x4` v5e slice is one `ct5lp-hightpu-8t` host or two `ct5lp-hightpu-4t` hosts), so `gcluster` uses the machine type of that family found in the cluster's node pools. `v5e-N` and `v5litepod-N` are equivalent. To pin a specific host shape, pass the full machine type (for example `--compute-type ct5lp-hightpu-4t`).
 
@@ -205,6 +205,34 @@ This command will:
 
 *Note: The following examples assume you have configured your default project, cluster, and location using `./gcluster job config set`.*
 
+#### Fractional CPU and memory requests for CPU jobs
+
+By default, CPU-only jobs reserve a full node (`limits.cpu` sized to node allocatable minus DaemonSet headroom) and set `alpha.jobset.sigs.k8s.io/exclusive-topology` so each job gets its own node. To share CPU nodes across smaller workloads (such as orchestrators, evaluators, or data servers), pass `--cpu` and/or `--memory` using Kubernetes quantity syntax:
+
+```bash
+./gcluster job submit \
+  --image docker.io/library/python:3.11-slim \
+  --command "python -c 'print(\"Hello from shared CPU node\")'" \
+  --name my-cpu-role \
+  --compute-type n2-standard-32 \
+  --cpu 4 \
+  --memory 16Gi
+```
+
+When either `--cpu` or `--memory` is set on a CPU-only job:
+
+* `gcluster` renders only `resources.requests` (no `limits`, no full-node CPU sizing). Pass both `--cpu` and `--memory` on shared nodes; `gcluster` warns if either is omitted.
+* `gcluster` omits `alpha.jobset.sigs.k8s.io/exclusive-topology` so pods can bin-pack onto shared CPU nodes (including multiple pods of the same job when `--num-nodes > 1`).
+* `gcluster` validates `--cpu` and `--memory` against GKE's node-allocatable estimates for `--compute-type` (warning if a request exceeds the pre-GKE 1.37.2 tiered estimate and failing fast above GKE 1.37.2+ bounds), verifies that the Kueue `ClusterQueue` covers the requested `cpu` and/or `memory` resources when Kueue is enabled, and warns when a GCS FUSE mount leaves less than `250m` CPU or `256Mi` memory sidecar headroom (add the `gke-gcsfuse/cpu-request` / `gke-gcsfuse/memory-request` pod annotations in a custom `base.tmpl` with `--gke-custom-templates-path`).
+* `gcluster` pins `node.kubernetes.io/instance-type` (plus `cloud.google.com/machine-family` on NAP clusters for predefined machine types) unless you set `--node-constraint` for `node.kubernetes.io/instance-type`, `cloud.google.com/gke-nodepool`, `cloud.google.com/machine-family`, or `cloud.google.com/compute-class`.
+* `--cpu` and `--memory` are rejected for GPU, TPU, and `--pathways` jobs.
+
+> [!NOTE]
+>
+> * **Pathways head pools and `ClusterQueue` flavors:** For all non-Pathways CPU jobs, `gcluster` adds `DoesNotExist` affinity on GPU/TPU accelerator labels so pods avoid accelerator flavors and nodes. When Kueue is enabled on fractional (`--cpu`/`--memory`) or NAP-pinned CPU jobs (unless `--node-constraint` sets `cloud.google.com/gke-nodepool` or `cloud.google.com/compute-class`), if the cluster has `cpu-np` or `pathways-np` Pathways head pools with 0 capacity, a different machine type, a blocking taint, or mismatched `--gke-nap-provisioning` capacity, `gcluster` also excludes those pools via `cloud.google.com/gke-nodepool NotIn` so Kueue skips `pathways-flavor` and schedules on an unconstrained CPU flavor such as `flavor-default` (static non-head pools or NAP). Pathways blueprint `ClusterQueue`s that only define `pathways-flavor` and a TPU flavor require adding a generic CPU `ResourceFlavor` (empty `nodeLabels`) or targeting a separate CPU queue with `--queue`. For custom-named Pathways head pools, pin the job to your target CPU pool with `--node-constraint "cloud.google.com/gke-nodepool=<target-pool>"` and ensure the `ClusterQueue` has a matching flavor.
+> * **Co-location with `pathways-head`:** Pathways head pods (`pathways-head`) keep `alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname` and will not co-locate with fractional CPU `JobSet` pods (standalone `batch/v1` `Job` pods carry no `JobSet` labels, so taint or exclude the head pool if `GCLUSTER_DISABLE_JOBSET=1` workloads share the same machine type).
+> * **Namespace `LimitRange` and `ResourceQuota` preflight:** Before applying the manifest, `gcluster` runs a best-effort warning preflight against namespace `LimitRange` and `ResourceQuota` objects (skipped on `--dry-run-out` or any policy read/parse error, such as RBAC `403`): it warns if a `LimitRange` `default` is below a container's request, if a `LimitRange` `default` will cap container bursting, or if a `ResourceQuota` requires `limits.cpu`/`limits.memory`/`requests.cpu`/`requests.memory` without a matching `LimitRange` default. Pass both `--cpu` and `--memory` (for `requests.*` quotas), configure a namespace `LimitRange` with defaults, or supply explicit resources in a custom `base.tmpl` (`--gke-custom-templates-path`) when required.
+
 ### 4.3 Example for Multi-Slice GPU Job
 
 If you want to run a job across multiple groups of GPU nodes (e.g., 2 groups of 4 nodes each), you can use `--num-slices` and `--num-nodes`:
@@ -226,6 +254,7 @@ If you want to run a job across multiple groups of GPU nodes (e.g., 2 groups of 
 You can mount Cloud Storage buckets, Filestore instances, NFS servers, existing PVCs (e.g., for Lustre), or host paths using the `--mount` flag.
 
 Mounts must use the format: `--mount "<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]"`
+
 * `mode` is optional, defaults to `ro` (read-only), and may be specified once (`ro` or `rw`; mounting with `profile=checkpointing` without `;rw` logs a warning).
 * `options` is optional and allows passing custom mount options (currently only supported for GCS fuse volumes; options are deduplicated and sorted so option ordering does not create duplicate storage gateways, and access modes `ro`/`rw` must be passed via the `--mount` mode segment instead of `options=`).
 * `profile` is optional, GCS-only, and selects a [GKE Cloud Storage FUSE storage profile](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/gcsfuse-profiles) (see below).
@@ -1292,6 +1321,27 @@ For a sidecar that you built from that public image and pushed to your own regis
   --pathways-proxy-server-image us-docker.pkg.dev/cloud-tpu-v2-images/cloud-pathways/proxy_server:20261124-jax_0.11.2
 ```
 
+#### Head node resources and sizing
+
+Each `pathways-head` pod isolates itself from other JobSet pods on the same CPU node (`alpha.jobset.sigs.k8s.io/exclusive-topology: kubernetes.io/hostname`) with `Burstable` QoS (dedicate or taint the head pool if non-JobSet workloads could otherwise co-locate on it). Its containers set baseline `requests` and omit `limits` so they can burst into the node's remaining allocatable CPU and memory:
+
+| Container | CPU request | Memory request | Modes |
+| :--- | :--- | :--- | :--- |
+| `pathways-rm` | `2` | `8Gi` | Standard, headless, `--pathways-deploy-sps` |
+| `pathways-proxy` | `8` | `32Gi` | Standard, headless, `--pathways-run-sps-workload` |
+| `workload-container` | `2` | `8Gi` | Standard, in-cluster `--pathways-run-sps-workload` |
+
+Combined baseline requests per `pathways-head` pod are `12` vCPU / `48Gi` in standard mode, `10` vCPU / `40Gi` in headless or in-cluster `--pathways-run-sps-workload` mode, `8` vCPU / `32Gi` in terminal `--pathways-run-sps-workload` mode, and `2` vCPU / `8Gi` with `--pathways-deploy-sps`.
+
+For large models with heavy host-side weight staging or IFRT proxy transfers, size the CPU head node pool (`--pathways-head-np`, auto-detected from `cpu-np` / `pathways-np` or inherited from the target SPS instance) above the combined peak memory of your workload container, `pathways-proxy`, and `pathways-rm`, with enough nodes for concurrent head pods. When the default `n4-standard-64` `cpu-np` is too small, add a custom CPU `gke-node-pool` with a matching Kueue `ClusterQueue` `ResourceFlavor` (for example, 640–768 GiB machines such as `n4-highmem-80`, or `n2d-highmem-96` / `c3-highmem-88` when confidential nodes are enabled).
+
+> [!NOTE]
+>
+> * Before applying the manifest, `gcluster` runs a best-effort warning preflight against namespace `LimitRange` and `ResourceQuota` objects (skipped on `--dry-run-out` or any policy read/parse error, such as RBAC `403`).
+> * If the target namespace defines a Kubernetes `LimitRange` with `default` limits, `gcluster` warns when a container's `requests` exceed the default (which may cause Pod rejection unless overridden) and when the default will cap container bursting.
+> * If the target namespace enforces a Kubernetes `ResourceQuota` on `limits.cpu`, `limits.memory`, `requests.cpu`, or `requests.memory` without a matching `LimitRange` default, `gcluster` warns that Pod creation may be rejected; supply explicit resources via a custom `pathways_jobset.tmpl` (`--gke-custom-templates-path`) or a namespace `LimitRange` with default limits when required.
+> * If you maintain a custom `pathways_jobset.tmpl` extracted from an earlier `gcluster` release (`--gke-custom-templates-path`), remove any leftover `limits` blocks on `pathways-rm` and `pathways-proxy` (or re-extract and merge with `gcluster job gke-template-extract --output-dir=<new-dir>`) unless you intentionally set limits (for example, for a namespace `ResourceQuota`).
+
 ---
 
 ### 8.3 Node auto-provisioning (NAP) and compute consumption
@@ -1446,7 +1496,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | :--- | :--- | :--- |
 | `-n, --name` | `string` | Name of the job (`JobSet` or standalone `batch/v1` `Job`) to create. Used for Kubernetes resources. Maximum of 28 characters for standard workloads, or 22 characters when `--pathways` is enabled. *(Required)* |
 | `-e, --command` | `string` | Command to execute inside the container (e.g., `'python app.py'`). *(Required except when `--pathways-headless` or `--pathways-deploy-sps` is set)* |
-| `--compute-type` | `string` | The hardware target for the job. GPU/TPU shorthands (e.g., `h100-80gb-8`, `l4-1`, `v6e-8`) and machine types from `gcluster`'s built-in shorthand map (e.g., `a3-highgpu-8g`) resolve without a matching node pool, so they also work on NAP clusters. Any other GCE machine type (e.g., `n2-standard-32`) or a GKE accelerator label (e.g., `nvidia-l4`) is resolved against the cluster's existing node pools. *(Required in GKE mode except when `--pathways-run-sps-workload` is set; optional in Kubernetes (`k8s`) mode only when cluster inventory resolves unambiguously—a named TPU slice, a single worker hardware class/pool, or a single matching GPU pool—otherwise required)* The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed. |
+| `--compute-type` | `string` | The hardware target for the job. GPU/TPU shorthands (e.g., `h100-80gb-8`, `l4-1`, `v6e-8`), built-in shorthand machine types (e.g., `a3-highgpu-8g`), and predefined non-legacy GCE CPU machine types on NAP-enabled clusters (e.g., `n2-standard-32`; excluding `custom-*`, `*-custom-*`, `f1-micro`, and `g1-small`) resolve without an existing matching node pool. Other GCE machine types on static clusters or GKE accelerator labels (e.g., `nvidia-l4`) resolve against the cluster's existing node pools. *(Required in GKE mode except when `--pathways-run-sps-workload` is set; optional in Kubernetes (`k8s`) mode only when cluster inventory resolves unambiguously—a named TPU slice, a single worker hardware class/pool, or a single matching GPU pool—otherwise required)* The tool will automatically resolve the machine type, calculate `num-nodes`, and deduce the correct TPU topology if needed. |
 | `-i, --image` | `string` | Full registry path of a pre-built container image to run. Either `--image`, **or** both `--base-image` and `--build-context`, is required and the two forms are mutually exclusive (except when `--pathways-headless` or `--pathways-deploy-sps` is set, where no image is needed, or when `--pathways-run-sps-workload` is used in terminal mode). |
 | `-B, --base-image` | `string` | Name of the base container image to build upon (e.g., `python:3.9-slim`). Requires `--build-context`; mutually exclusive with `--image`. |
 | `-b, --build-context` | `string` | Path to the local build context directory for on-the-fly image builds. Requires `--base-image`; mutually exclusive with `--image`. |
@@ -1454,6 +1504,8 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `-o, --dry-run-out` | `string` | Local file path to save the generated Kubernetes manifest instead of applying it (must specify a file path, not a directory). |
 | `--num-slices` | `int` | Number of independent groups/slices to use (Default: `1`). |
 | `--num-nodes` | `int` | Number of nodes to use per group/slice (Default: `1`). Auto-calculated for TPUs based on topology. |
+| `--cpu` | `string` | CPU request per pod for CPU-only jobs in Kubernetes quantity format (e.g., `8`, `4500m`). Renders `resources.requests` only (no full-node sizing) and omits `exclusive-topology` for node sharing. Validated against estimated node allocatable CPU. See [Fractional CPU and memory requests for CPU jobs](#fractional-cpu-and-memory-requests-for-cpu-jobs). |
+| `--memory` | `string` | Memory request per pod for CPU-only jobs in Kubernetes quantity format (e.g., `64Gi`, `200G`). Renders `resources.requests` only (no full-node sizing) and omits `exclusive-topology` for node sharing. Validated against estimated node allocatable memory. See [Fractional CPU and memory requests for CPU jobs](#fractional-cpu-and-memory-requests-for-cpu-jobs). |
 | `--node-constraint` | `string` | Maps to Kubernetes node labels to target specific hardware instance types. Supports pipe separator (`\|`) for multiple values. |
 | `--restarts` | `int` | Maximum number of restarts allowed for the JobSet before marked as failed (`0` to `2147483647`; Default: `1`, `30` when `--pathways-deploy-sps` is set, or `0` when `--pathways-run-sps-workload` is set). Ignored with a warning when running as a standalone `batch/v1` `Job` without JobSet (uses `backoffLimit: 0`). |
 | `--mount` | `stringArray` | Mount storage volumes, buckets, filestore/NFS shares, or PVCs using the `<src>;<dest>[;<mode>][;profile=<profile>][;options=<options>][;attributes=<k=v,...>]` format. Examples of `<src>`: `gs://my-bucket[/<sub-path>]`, `filestore://my-instance/share`, `nfs://10.0.0.1/export`, `my-pvc` or `my-pvc/sub-dir` (for Lustre/NFS PVCs), or `/host/path`. `profile=` (`training`, `checkpointing`, `serving`) is GCS-only and provisions a shared GCS FUSE storage-profile PV/PVC gateway instead of an inline CSI volume. |
@@ -1487,7 +1539,7 @@ The `gcluster job submit` command deploys a container image as a job (Kubernetes
 | `--pathways-server-env` | `stringArray` | Custom environment variables injected specifically into the Pathways server container (KEY=VALUE). A variable that gcluster also sets in the container is replaced by your value. |
 | `--pathways-worker-env` | `stringArray` | Custom environment variables injected specifically into the Pathways worker containers (KEY=VALUE). A variable that gcluster also sets in the container is replaced by your value. |
 | `--pathways-colocated-python-sidecar-image` | `string` | Image for an optional Python-based sidecar container running alongside workers. Also passes `--sidecar_name=external` to `pathways-proxy` so Pathways routes colocated Python work to the sidecar, unless `--pathways-proxy-args` already sets `--sidecar_name`. The sidecar, server and proxy images should come from the same Pathways release; see [Colocated Python sidecar images](#colocated-python-sidecar-images) for how `gcluster` picks the server and proxy images and how to choose a version. |
-| `--pathways-head-np` | `string` | The node pool name to target for the Pathways head job. |
+| `--pathways-head-np` | `string` | CPU node pool name for the `pathways-head` job (auto-detected from `cpu-np` or `pathways-np`, or inherited from the SPS instance when omitted). See [Head node resources and sizing](#head-node-resources-and-sizing). |
 
 #### 9.3.3 GPU Related Flags
 *Use these flags to tune specialized multi-GPU topologies and related node parameters.*
