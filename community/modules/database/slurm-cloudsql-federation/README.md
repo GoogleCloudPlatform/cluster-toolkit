@@ -93,7 +93,7 @@ No modules.
 | <a name="input_query_insights"></a> [query\_insights](#input\_query\_insights) | Query insights configuration. | <pre>object({<br/>    enabled                 = optional(bool, false)<br/>    query_plans_per_minute  = optional(number)<br/>    query_string_length     = optional(number)<br/>    record_application_tags = optional(bool)<br/>    record_client_address   = optional(bool)<br/>  })</pre> | `{}` | no |
 | <a name="input_region"></a> [region](#input\_region) | The region where SQL instance will be configured | `string` | n/a | yes |
 | <a name="input_sql_instance_name"></a> [sql\_instance\_name](#input\_sql\_instance\_name) | name given to the sql instance for ease of identificaion | `string` | n/a | yes |
-| <a name="input_sql_password"></a> [sql\_password](#input\_sql\_password) | Password for the SQL database. | `any` | `null` | no |
+| <a name="input_sql_password"></a> [sql\_password](#input\_sql\_password) | Password for the SQL database. | `string` | `null` | no |
 | <a name="input_sql_username"></a> [sql\_username](#input\_sql\_username) | Username for the SQL database | `string` | `"slurm"` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Self link of the network where Cloud SQL instance PSC endpoint will be created | `string` | `null` | no |
 | <a name="input_tier"></a> [tier](#input\_tier) | The machine type to use for the SQL instance | `string` | n/a | yes |
