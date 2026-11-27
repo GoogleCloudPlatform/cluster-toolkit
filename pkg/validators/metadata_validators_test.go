@@ -2230,9 +2230,10 @@ func TestExclusiveValidator_MinSetAndModuleUse(t *testing.T) {
 
 func TestModuleMetadataRules_StorageAndNodePool(t *testing.T) {
 	const (
-		lustreMod   = "../../modules/file-system/managed-lustre"
-		pvMod       = "../../modules/file-system/gke-persistent-volume"
-		nodePoolMod = "../../modules/compute/gke-node-pool"
+		filestoreMod = "../../modules/file-system/filestore"
+		lustreMod    = "../../modules/file-system/managed-lustre"
+		pvMod        = "../../modules/file-system/gke-persistent-volume"
+		nodePoolMod  = "../../modules/compute/gke-node-pool"
 	)
 	cases := []struct {
 		name     string
@@ -2240,6 +2241,8 @@ func TestModuleMetadataRules_StorageAndNodePool(t *testing.T) {
 		settings map[string]cty.Value
 		wantErr  bool
 	}{
+		{"filestore size_gb 100 valid", filestoreMod, map[string]cty.Value{"size_gb": cty.NumberIntVal(100)}, false},
+		{"filestore size_gb 99 invalid", filestoreMod, map[string]cty.Value{"size_gb": cty.NumberIntVal(99)}, true},
 		{"lustre valid", lustreMod, map[string]cty.Value{"per_unit_storage_throughput": cty.NumberIntVal(500), "import_gcs_bucket_uri": cty.StringVal("gs://my-valid-bucket/dir"), "network_id": cty.StringVal("projects/my-proj/global/networks/my-net")}, false},
 		{"lustre empty gcs uri", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.StringVal("")}, false},
 		{"lustre null gcs uri", lustreMod, map[string]cty.Value{"import_gcs_bucket_uri": cty.NullVal(cty.String)}, false},

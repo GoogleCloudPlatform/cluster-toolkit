@@ -32,7 +32,10 @@ locals {
     ZONAL          = 100
     REGIONAL       = 100
   }
+  min_size_gb                 = local.tier_min_size_gb[var.filestore_tier]
   supports_custom_performance = contains(["ZONAL", "REGIONAL"], var.filestore_tier)
+  fixed_iops_max              = try(var.performance_config.fixed_iops.max_iops, null)
+  iops_per_tb_max             = try(var.performance_config.iops_per_tb.max_iops_per_tb, null)
   is_high_capacity_tier       = contains(["HIGH_SCALE_SSD", "ZONAL", "REGIONAL"], var.filestore_tier) && var.size_gb >= 10240 && var.size_gb <= 102400
 
   timeouts      = local.is_high_capacity_tier ? [1] : []
@@ -124,8 +127,8 @@ resource "google_filestore_instance" "filestore_instance" {
 
   lifecycle {
     precondition {
-      condition     = var.size_gb >= lookup(local.tier_min_size_gb, var.filestore_tier, 100)
-      error_message = "Filestore tier ${var.filestore_tier} requires size_gb >= ${lookup(local.tier_min_size_gb, var.filestore_tier, 100)} GiB."
+      condition     = var.size_gb >= local.min_size_gb
+      error_message = "Filestore tier ${var.filestore_tier} requires size_gb >= ${local.min_size_gb} GiB."
     }
 
     precondition {
@@ -136,6 +139,16 @@ resource "google_filestore_instance" "filestore_instance" {
     precondition {
       condition     = !local.supports_custom_performance || var.size_gb >= 1024 || var.performance_config != null
       error_message = "Filestore ZONAL and REGIONAL instances with size_gb < 1024 require performance_config to be set."
+    }
+
+    precondition {
+      condition     = !local.supports_custom_performance || local.iops_per_tb_max == null ? true : (var.size_gb >= 10240 || local.iops_per_tb_max >= 4000)
+      error_message = "Filestore instances with size_gb < 10240 require performance_config.iops_per_tb.max_iops_per_tb >= 4000."
+    }
+
+    precondition {
+      condition     = !local.supports_custom_performance || local.fixed_iops_max == null ? true : (var.size_gb < 10240 || (local.fixed_iops_max >= 30000 && local.fixed_iops_max % 1000 == 0))
+      error_message = "Filestore instances with size_gb >= 10240 require performance_config.fixed_iops.max_iops >= 30000 in multiples of 1000."
     }
 
     precondition {

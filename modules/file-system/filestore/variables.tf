@@ -230,14 +230,18 @@ variable "performance_config" {
   description = <<-EOT
     Custom performance configuration for the Filestore instance. Only supported
     on ZONAL and REGIONAL tiers, and required when `size_gb` is less than 1024.
-    Specify exactly one of `fixed_iops` (`max_iops` >= 2000) or `iops_per_tb`
-    (`max_iops_per_tb` > 0). Once enabled on an instance, custom performance
-    cannot be cleared in-place (removing `performance_config` fails at apply
-    and requires replacing the instance); existing instances without custom
-    performance support also cannot enable it in-place. Adjusting IOPS or
+    Specify exactly one of `fixed_iops` (`max_iops` >= 2000 in multiples of 100
+    for `size_gb` < 10240, or >= 30000 in multiples of 1000 for `size_gb` >=
+    10240) or `iops_per_tb` (`max_iops_per_tb` >= 4000 for `size_gb` < 10240,
+    or >= 3000 for `size_gb` >= 10240). Once enabled on an instance, custom
+    performance cannot be cleared in-place (removing `performance_config` fails
+    at apply and requires replacing the instance); existing instances without
+    custom performance support also cannot enable it in-place. Adjusting IOPS or
     switching between `fixed_iops` and `iops_per_tb` on a custom-performance
-    instance is an in-place update.
-    See https://cloud.google.com/filestore/docs/configure-performance.
+    instance is an in-place update; when resizing `size_gb` on a `fixed_iops`
+    instance, `max_iops` must remain within the supported range for the new
+    capacity.
+    See https://cloud.google.com/filestore/docs/custom-performance.
   EOT
   type = object({
     fixed_iops = optional(object({
@@ -260,21 +264,22 @@ variable "performance_config" {
     condition = var.performance_config == null ? true : (
       var.performance_config.fixed_iops == null ? true : try(
         var.performance_config.fixed_iops.max_iops >= 2000 &&
+        var.performance_config.fixed_iops.max_iops % 100 == 0 &&
         floor(var.performance_config.fixed_iops.max_iops) == var.performance_config.fixed_iops.max_iops,
         false
       )
     )
-    error_message = "performance_config.fixed_iops.max_iops must be an integer of at least 2000."
+    error_message = "performance_config.fixed_iops.max_iops must be an integer of at least 2000 in multiples of 100."
   }
 
   validation {
     condition = var.performance_config == null ? true : (
       var.performance_config.iops_per_tb == null ? true : try(
-        var.performance_config.iops_per_tb.max_iops_per_tb > 0 &&
+        var.performance_config.iops_per_tb.max_iops_per_tb >= 3000 &&
         floor(var.performance_config.iops_per_tb.max_iops_per_tb) == var.performance_config.iops_per_tb.max_iops_per_tb,
         false
       )
     )
-    error_message = "performance_config.iops_per_tb.max_iops_per_tb must be a positive integer."
+    error_message = "performance_config.iops_per_tb.max_iops_per_tb must be an integer of at least 3000."
   }
 }

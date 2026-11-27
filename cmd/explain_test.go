@@ -749,21 +749,18 @@ func (s *MySuite) TestExplainModuleInputConstraints(c *C) {
 	c.Assert(size.Min, NotNil)
 	c.Check(*size.Min, Equals, 100.0)
 	c.Check(size.MinExclusive, Equals, false)
+	c.Check(size.AllowNull, Equals, false)
+	c.Check(size.Sources, DeepEquals, []string{"metadata", "terraform"})
 
 	perfCfg := input("modules/file-system/filestore", "performance_config")
 	c.Check(perfCfg.Constraints, IsNil)
-	c.Check(len(perfCfg.Validations), Equals, 3)
+	c.Assert(perfCfg.Validations, HasLen, 3)
 	c.Check(strings.Contains(perfCfg.Validations[0], "fixed_iops or iops_per_tb"), Equals, true)
-	c.Check(strings.Contains(perfCfg.Validations[1], "2000"), Equals, true)
-	c.Check(strings.Contains(perfCfg.Validations[2], "positive integer"), Equals, true)
-	perfCfgOptional := false
-	for _, opt := range results["modules/file-system/filestore"].OptionalInputs {
-		if opt.Name == "performance_config" {
-			perfCfgOptional = true
-			break
-		}
-	}
-	c.Check(perfCfgOptional, Equals, true)
+	c.Check(strings.Contains(perfCfg.Validations[1], "multiples of 100"), Equals, true)
+	c.Check(strings.Contains(perfCfg.Validations[2], "3000"), Equals, true)
+	c.Check(slices.ContainsFunc(results["modules/file-system/filestore"].OptionalInputs, func(in ExplainModuleInput) bool {
+		return in.Name == "performance_config"
+	}), Equals, true)
 
 	uri := input("modules/file-system/managed-lustre", "import_gcs_bucket_uri").Constraints
 	c.Assert(uri, NotNil)
