@@ -328,13 +328,14 @@ func creatorFromLabels(labels cty.Value) (string, bool) {
 }
 
 func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.YamlCtx) {
+	path = resolveBlueprintPath(path)
 	bp, ctx, err := config.NewBlueprint(path)
 	checkErr(err, ctx)
 
 	var ds config.DeploymentSettings
 	var dCtx config.YamlCtx
 	if expandFlags.deploymentFile != "" {
-		ds, dCtx, err = config.NewDeploymentSettings(expandFlags.deploymentFile)
+		ds, dCtx, err = readDeploymentFile(expandFlags.deploymentFile)
 		checkErr(err, &dCtx)
 	}
 	if err := setCLIVariables(&ds, expandFlags.cliVariables); err != nil {

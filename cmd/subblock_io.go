@@ -80,6 +80,10 @@ func confirmSubblocks(question string) (bool, error) {
 // saveSubblockMap writes `varName: m` under vars: of file, keeping the rest of the
 // file. It checks the result, keeps a timestamped backup and prints the diff.
 func saveSubblockMap(file, varName string, m map[string]string) error {
+	if isInstalledFile(file) {
+		return fmt.Errorf("cannot save the sub-block map to %s because it was installed with gcluster "+
+			"and is replaced on upgrade. Copy it to your own folder and run gcluster with the copy", file)
+	}
 	before, err := os.ReadFile(file)
 	if err != nil {
 		return err
