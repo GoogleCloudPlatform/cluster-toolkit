@@ -229,6 +229,34 @@ func TestAdditionalNetworks(t *testing.T) {
 	}
 }
 
+// multivpc passes firewall_rules unchanged to each vpc instance, so the two
+// modules must declare the same type.
+func TestFirewallRulesVpcMultivpcInSync(t *testing.T) {
+	types := map[string]cty.Type{}
+	for _, mod := range getModules() {
+		if mod.Source != "modules/network/vpc" && mod.Source != "modules/network/multivpc" {
+			continue
+		}
+		in, ok := mod.Input("firewall_rules")
+		if !ok {
+			t.Fatalf("%s has no firewall_rules input", mod.Source)
+		}
+		types[mod.Source] = in.Type
+	}
+	vpc, ok := types["modules/network/vpc"]
+	if !ok {
+		t.Fatal("modules/network/vpc not found")
+	}
+	multivpc, ok := types["modules/network/multivpc"]
+	if !ok {
+		t.Fatal("modules/network/multivpc not found")
+	}
+	if !vpc.Equals(multivpc) {
+		t.Errorf("firewall_rules types differ, vpc:\n%s\nmultivpc:\n%s",
+			typeexpr.TypeString(vpc), typeexpr.TypeString(multivpc))
+	}
+}
+
 func TestMetadataIsObtainable(t *testing.T) {
 	// Test that `GetMetadata` does not fail. `GetMetadataSafe` falls back to legacy.
 	for _, mod := range notEmpty(query(all()), t) {

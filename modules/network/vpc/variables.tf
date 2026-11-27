@@ -335,7 +335,8 @@ variable "allowed_ssh_ip_ranges" {
 }
 
 variable "firewall_rules" {
-  # Matches var.firewall_rules of terraform-google-modules/network/google
+  # Matches deprecated var.firewall_rules of terraform-google-modules/network/google v18.3.1 (~> 18.3).
+  # Keep in sync with ../multivpc/variables.tf.
   type = list(object({
     name                    = string
     description             = optional(string, null)
@@ -361,6 +362,7 @@ variable "firewall_rules" {
   }))
   description = "List of firewall rules"
   default     = []
+  nullable    = false
 }
 
 variable "firewall_log_config" {

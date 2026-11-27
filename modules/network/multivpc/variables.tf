@@ -197,7 +197,9 @@ variable "allowed_ssh_ip_ranges" {
 }
 
 variable "firewall_rules" {
-  # Passed unchanged to each network's modules/network/vpc
+  # Keep in sync with var.firewall_rules in ../vpc/variables.tf.
+  # Passed unchanged to each VPC instance; non-empty lists collide on
+  # project-wide firewall rule names when var.network_count > 1.
   type = list(object({
     name                    = string
     description             = optional(string, null)
@@ -223,6 +225,7 @@ variable "firewall_rules" {
   }))
   description = "List of firewall rules"
   default     = []
+  nullable    = false
 }
 
 variable "network_interface_defaults" {

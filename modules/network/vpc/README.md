@@ -137,7 +137,7 @@ To allow regular SSH access from a known IP address you can add the following
         ranges: [<your-ip-address>/32]
         allow:
         - protocol: tcp
-          ports: [22]
+          ports: ["22"]
 ```
 
 > **Note**: You must populate the above example with the source IP address from
