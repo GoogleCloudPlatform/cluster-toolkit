@@ -142,4 +142,24 @@ fi
 if [ "$help" = 1 ]; then
 	exec "$real" ${sub1:+"$sub1"} ${sub2:+"$sub2"} ${sub3:+"$sub3"} --help
 fi
+if [ "$sub1" = "expand" ] || [ "$sub1" = "create" ] || [ "$sub1" = "explain" ]; then
+	marker="$shim_dir/marker"
+	mod_dirs=()
+	[ -d "$dir/modules" ] && mod_dirs+=("$dir/modules")
+	[ -d "$dir/community/modules" ] && mod_dirs+=("$dir/community/modules")
+	if [ -f "$marker" ] && [ "${#mod_dirs[@]}" -gt 0 ]; then
+		untouched="$(mktemp "${audit_dir}/.tf-untouched.XXXXXX" 2>/dev/null || mktemp 2>/dev/null || true)"
+		if [ -n "$untouched" ]; then
+			trap 'rm -f "$untouched"' EXIT
+			find "${mod_dirs[@]}" -name '*.tf' ! -anewer "$marker" -print0 2>/dev/null >"$untouched" || true
+			rc=0
+			"$real" "$@" || rc=$?
+			if [ -s "$untouched" ]; then
+				xargs -0 touch -a -t 200001010000 -- <"$untouched" 2>/dev/null || true
+			fi
+			rm -f "$untouched"
+			exit "$rc"
+		fi
+	fi
+fi
 exec "$real" "$@"

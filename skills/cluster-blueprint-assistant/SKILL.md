@@ -48,7 +48,7 @@ These rules apply even if the user asks otherwise. If a request conflicts with t
 
 1. **Start from `./gcluster explain` or the catalog, never from scratch, and never read `.tf` files.** Run
    `./gcluster explain <specs...>` (e.g. `./gcluster explain slurm a3u lustre`) or
-   read [`references/catalog.yaml`](references/catalog.yaml) (and [`llms.txt`](../../llms.txt) /
+   read [`skills/cluster-blueprint-assistant/references/catalog.yaml`](references/catalog.yaml) (and [`llms.txt`](../../llms.txt) /
    [`llms-full.txt`](../../llms-full.txt)) to find an existing
    blueprint under `examples/` or `community/examples/` that already matches the
    request. **Never open, read, `cat`, or `grep` any `.tf` file (`variables.tf`,
@@ -76,13 +76,13 @@ These rules apply even if the user asks otherwise. If a request conflicts with t
      unless the user provides a GCS state bucket). Do **not** copy or edit the
      blueprint `.yaml` file, and **never modify git-tracked companion `*-deployment.yaml`
      files** under `examples/` or `community/examples/` in place (even if the example's README tells human users to edit it; read them only as a reference for variable names).
-   - **Pattern 2 — Promoting a hardcoded module setting to `vars:`:** When a
-     requested setting is hardcoded inside a module block and missing from
+   - **Pattern 2 — Promoting a hardcoded or module-default setting to `vars:`:** When a
+     requested setting is hardcoded inside a module block (or uses a module default) and is missing from
      `vars:`, never modify a tracked template under `examples/` or
      `community/examples/` in place. Instead, copy the template to a new file in
      the **same directory** with `ai_assisted: true` (or reuse an existing custom
      copy in place), add the missing knob to `vars:` with a default **equal to
-     the value that was hardcoded**, reference it in the module via
+     the previously hardcoded value or module default**, reference it in the module via
      `$(vars.<name>)`, and put the user's override value in `deployment.yaml`.
    - **A template only exposes knobs it already set explicitly.** Tracked
      blueprints promote to `vars:` only settings that were literal values in a
@@ -203,7 +203,7 @@ These rules apply even if the user asks otherwise. If a request conflicts with t
    anything that creates or deletes cloud resources must
    be presented as a `[PROPOSED REMEDIATION PLAN]` and wait for the user to reply
    `yes`. The same applies to local destructive steps: deleting a deployment
-   folder (`rm -rf <deployment_name>`), deleting user `.yaml` files or discarding user edits,
+   folder (`rm -rf <deployment_name>`), deleting user files or discarding user edits,
    and `git checkout` / `git restore` / `git reset` / `git clean` of user edits —
    present a `[PROPOSED REMEDIATION PLAN]` stating exactly what will be removed and
    wait for `yes`. Prefer `./gcluster create … -w` over deleting the deployment folder.
@@ -223,7 +223,7 @@ test -x ./gcluster || make
 
 ### 1. Find the right template
 
-Use `./gcluster explain` or search `references/catalog.yaml`:
+Use `./gcluster explain` or search [`skills/cluster-blueprint-assistant/references/catalog.yaml`](references/catalog.yaml):
 
 ```bash
 # Find the exact or closest blueprint for given specs (plus missing module snippets):
@@ -388,7 +388,7 @@ Rules the agent must respect:
 If the blueprint does not expose the setting you need in `vars:`, copy the
 tracked template to a new file in the same directory with `ai_assisted: true`
 (or edit your existing custom copy in place), add a new `vars:` key with the
-current hardcoded value as its default, reference it from the module via
+current hardcoded value or module default as its default, reference it from the module via
 `$(vars.<name>)`, and put the user's override value in `deployment.yaml` — this
 keeps the existing behavior and leaves tracked templates untouched.
 
@@ -398,7 +398,7 @@ keeps the existing behavior and leaves tracked templates untouched.
 # Dry-run (no deployment folder written; writes expanded.yaml and still runs cloud validators if authenticated):
 ./gcluster expand examples/hpc-slurm.yaml -d my-deployment.yaml -o expanded.yaml
 
-# Offline (when using a placeholder project_id or without GCP credentials):
+# Offline (only after normal ./gcluster expand fails due to missing GCP credentials, or when using a placeholder project_id; ADC works even if gcloud auth list is empty):
 GHPC_MOCK_MACHINE_CONFIG='{}' ./gcluster expand examples/hpc-slurm.yaml -d my-deployment.yaml -o expanded.yaml \
   --skip-validators="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_quota_availability,test_machine_type_in_zone,test_reservation_exists,test_disk_type_in_zone"
 
@@ -416,7 +416,7 @@ YAML — fix it there.
 
 | Symptom | Fix location |
 | :--- | :--- |
-| `a required setting "X" is missing from a module "Y"` | Read and follow the actionable `Hint:` line printed directly by `./gcluster expand <blueprint.yaml> --vars project_id=<project>` (e.g., `Consider adding module "private_service_access" to the "use" list`), check `module_wiring.<source>.recommended_use` in `references/catalog.yaml`, or run `./gcluster explain <module>` (or `-f yaml`) and add that module to `Y`'s `use:` list—never run `grep -r`, `rg`, `find`, or shell/Python directory walks across `modules/` or `community/modules/` to search for `X`. |
+| `a required setting "X" is missing from a module "Y"` | Read and follow the actionable `Hint:` line printed directly by `./gcluster expand <blueprint.yaml> --vars project_id=<project>` (e.g., `Consider adding module "private_service_access" to the "use" list`), check `module_wiring.<source>.recommended_use` in [`skills/cluster-blueprint-assistant/references/catalog.yaml`](references/catalog.yaml), or run `./gcluster explain <module>` (or `-f yaml`) and add that module to `Y`'s `use:` list—never run `grep -r`, `rg`, `find`, or shell/Python directory walks across `modules/` or `community/modules/` to search for `X`. |
 | `module "X" was not used` | Add `X` to the `use:` list of its consumer (e.g. `private_service_access` → filestore / lustre). |
 | `module "X" references unknown global variable "Y"` | Add `Y` under `vars:` in the blueprint or `deployment.yaml`. |
 | `deployment variable "X" was not set` | A null value (`X:` with nothing after it) in **your** `-d` file or `--vars`, even though the location printed is the blueprint's `vars:` line. Set the value in `deployment.yaml`; do not edit the template. |

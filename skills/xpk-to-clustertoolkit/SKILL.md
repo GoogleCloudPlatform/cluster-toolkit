@@ -45,9 +45,9 @@ representations.
 For deep technical details and comprehensive translation matrices, consult the
 authoritative documentation:
 1. **Migration Guide**: Read `docs/migration/xpk_to_clustertoolkit.md` (or online at [XPK to Cluster Toolkit Migration Guide](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/migration/xpk_to_clustertoolkit.md)).
-2. **Flag Mapping Matrix**: Read [flag_mappings.md](references/flag_mappings.md) for 1:1 flag translation and `--filter-by-status` to `--status` mappings.
-3. **Architectural Differences**: Read [architectural_differences.md](references/architectural_differences.md) for IaC lifecycle, KubeRay, and storage comparisons.
-4. **End-to-End Examples**: Read [examples.md](references/examples.md) for full worked migration recipes (MaxText RL, multi-slice TPU, NVIDIA GPU, Lustre).
+2. **Flag Mapping Matrix**: Read [`skills/xpk-to-clustertoolkit/references/flag_mappings.md`](references/flag_mappings.md) for 1:1 flag translation and `--filter-by-status` to `--status` mappings.
+3. **Architectural Differences**: Read [`skills/xpk-to-clustertoolkit/references/architectural_differences.md`](references/architectural_differences.md) for IaC lifecycle, KubeRay, and storage comparisons.
+4. **End-to-End Examples**: Read [`skills/xpk-to-clustertoolkit/references/examples.md`](references/examples.md) for full worked migration recipes (MaxText RL, multi-slice TPU, NVIDIA GPU, Lustre).
 
 ---
 
@@ -81,7 +81,7 @@ Always run the parser with **single quotes** so shell variables (`$CLUSTER`, `$Z
 ```bash
 python3 skills/xpk-to-clustertoolkit/scripts/parse_xpk_to_gcluster.py 'xpk ...'
 ```
-*(Adjust the script path if vendored outside the repository root).* Do NOT execute `gcluster job submit`, `gcluster deploy`, or `gcluster destroy` (even with `--dry-run-out`), and do NOT search the local repository (`grep` / `find`) for hypothetical cluster or workload names from the user's prompt. `scripts/parse_xpk_to_gcluster.py` is the authoritative offline translator; output the translated command or `[PROPOSED REMEDIATION PLAN]` directly.
+*(Adjust the script path if vendored outside the repository root).* Do NOT execute `gcluster job submit`, `gcluster deploy`, or `gcluster destroy` (even with `--dry-run-out`), and do NOT search the local repository (`grep` / `find`) for hypothetical cluster or workload names from the user's prompt. `skills/xpk-to-clustertoolkit/scripts/parse_xpk_to_gcluster.py` is the authoritative offline translator; output the translated command or `[PROPOSED REMEDIATION PLAN]` directly.
 
 > [!IMPORTANT]
 > `parse_xpk_to_gcluster.py` is the authoritative source of truth for flag mappings.
@@ -181,7 +181,8 @@ For `xpk cluster create` and `create-pathways`, generate a declarative Cluster T
 * **Mutating & Billable Actions (Confirmation Strictly Required)**:
   * **Infrastructure Provisioning**: `gcluster deploy` (including re-deployments over existing directories) creates billable Cloud resources and modifies infrastructure.
   * **Workload Execution**: `gcluster job submit` launches billable computing workloads on clusters.
-  * **Destructive Teardown**: `gcluster job cancel` and `gcluster destroy` terminate running jobs and delete infrastructure.
+  * **Destructive Teardown**: `gcluster job cancel` and `gcluster destroy` terminate running jobs and delete infrastructure (never include `--auto-approve`, even inside a remediation plan).
+  * **Local Destructive Steps**: deleting user files or deployment folders (`rm` / `rm -rf`; prefer `./gcluster create ... -w` over `rm -rf`), or reverting edits via `git checkout` / `git restore` / `git reset` / `git clean`.
   These actions must **NEVER** execute autonomously without presenting a structured remediation plan and obtaining user confirmation.
 
 ### Required Remediation Plan Format:

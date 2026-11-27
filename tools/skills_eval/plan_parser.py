@@ -147,8 +147,15 @@ def _scan_action_blocks(text: str) -> List[Tuple[int, int]]:
     return spans
 
 
-def _strip_inline_comment(line: str) -> str:
-    """Strip unquoted shell comments (#...) at column 0 or after whitespace/command separators."""
+_PROSE_HASH_RE = re.compile(r"^#(?:[ \t]*\d|[A-Z][A-Z0-9]*-\d)")
+
+
+def _strip_inline_comment(line: str, *, keep_prose_hashes: bool = False) -> str:
+    """Strip unquoted POSIX shell comments (#...) at column 0 or after whitespace/command separators.
+
+    When keep_prose_hashes is True (used only on indented action continuation lines, never fenced
+    code blocks), mid-line prose issue/step tags such as '#123', '# 2', and '#BUG-123' are kept.
+    """
     in_single, in_double, i, n = False, False, 0, len(line)
     while i < n:
         ch = line[i]
@@ -168,6 +175,9 @@ def _strip_inline_comment(line: str) -> str:
             elif ch == '"':
                 in_double = True
             elif ch == "#" and (i == 0 or line[i - 1] in " \t;|&"):
+                if keep_prose_hashes and line[:i].strip() and _PROSE_HASH_RE.match(line[i:]):
+                    i += 1
+                    continue
                 return line[:i].rstrip()
         i += 1
     return line
@@ -243,7 +253,9 @@ _ATX_SUBHEADING_RE = re.compile(r"^[ \t]*#{2,6}[ \t]+")
 def _strip_action_line_comment(line: str, *, is_header: bool = False) -> str:
     """Strip inline shell comments on indented action commands or inside backtick spans, leaving prose '#' intact."""
     if not is_header and re.match(r"^(?: {4}|\t)", line) and not _BULLET_PREFIX_RE.match(line) and not _ATX_SUBHEADING_RE.match(line):
-        return _strip_inline_comment(line)
+        if not line.lstrip().startswith("#") and _INLINE_BACKTICK_RE.search(line):
+            return _INLINE_BACKTICK_RE.sub(lambda m: m.group(1) + _strip_inline_comment(m.group(2)) + m.group(1), line)
+        return _strip_inline_comment(line, keep_prose_hashes=True)
     return _INLINE_BACKTICK_RE.sub(lambda m: m.group(1) + _strip_inline_comment(m.group(2)) + m.group(1), line)
 
 

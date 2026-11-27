@@ -103,16 +103,18 @@ def _tool_args(o: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 
 def _rel_to_wt(raw_p: Any, wt: str) -> str:
-    p = str(raw_p or "").strip()
+    p = str(raw_p or "").strip().replace("\\", "/")
     if not p:
         return ""
     if os.path.isabs(p):
         wt_abs, wt_real, pr = os.path.abspath(wt), os.path.realpath(wt), os.path.realpath(p)
-        if pr.startswith(wt_real + os.sep):
-            return os.path.relpath(pr, wt_real).replace("\\", "/")
-        if p.startswith(wt_abs + os.sep):
-            return os.path.relpath(p, wt_abs).replace("\\", "/")
-    return os.path.normpath(p).lstrip("./").replace("\\", "/")
+        if not pr.startswith(wt_real + os.sep) and p.startswith(wt_abs + os.sep):
+            rel = os.path.relpath(p, wt_abs).replace("\\", "/")
+        else:
+            rel = os.path.relpath(pr, wt_real).replace("\\", "/")
+        return "" if rel == "." else rel
+    norm = os.path.normpath(p).replace("\\", "/")
+    return "" if norm == "." else norm
 
 
 def _is_shim_or_meta_path(rel: str) -> bool:
@@ -239,7 +241,7 @@ def _tool_gen_edits(in_texts: List[str], wt: str) -> List[str]:
             for o in _iter_nested_dicts(cand):
                 args = _tool_args(o) if o.get("name") in _WRITE_TOOL_NAMES else None
                 rel = _rel_to_wt((args or {}).get("file_path") or (args or {}).get("path") or (args or {}).get("target_file"), wt)
-                if rel and not rel.startswith("..") and ("/.ghpc/" in rel or rel.startswith(".ghpc/") or rel.endswith((".tf", ".tfvars", ".pkrvars.hcl"))) and rel not in hits:
+                if rel and rel != ".." and not rel.startswith("../") and ("/.ghpc/" in rel or rel.startswith(".ghpc/") or rel.endswith((".tf", ".tfvars", ".pkrvars.hcl"))) and rel not in hits:
                     hits.append(rel)
     return hits
 
@@ -773,7 +775,7 @@ class LiveCLIEvaluatorBackend:
         )
         oracles.active_scorers = sorted(active)
         atime_set = (
-            {ln.strip().lstrip("./") for ln in (self._exec(["find", "modules", "community/modules", "-name", "*.tf", "-anewer", marker], wt).stdout or "").splitlines() if ln.strip()}
+            {os.path.normpath(ln.strip().replace("\\", "/")).replace("\\", "/") for ln in (self._exec(["find", "modules", "community/modules", "-name", "*.tf", "-anewer", marker], wt).stdout or "").splitlines() if ln.strip()}
             if "no_tf_read" in active else set()
         )
         base_tracked = baseline_tracked or {}
@@ -821,17 +823,18 @@ class LiveCLIEvaluatorBackend:
             oracles.gcluster_invocations.extend(_nonempty_lines(ip))
 
         if "no_tf_read" in active:
-            no_explain = [re.sub(r"(?:gcluster|ghpc)\s+explain\b[^\"'\n;|&]*", "", b) for b in in_texts]
+            no_explain = [re.sub(r"(?:gcluster|ghpc)\s+explain\b(?:[^\"'\n;|&\\]|\\[^nr]|'(?:[^\"'\n\\]|\\[^nr])*')*", "", b) for b in in_texts]
             regex_set = {
-                m.group(1).lstrip("./")
+                norm
                 for blob in (_strip_prose_for_tf_scan(b, strip_explain=True) for b in raw_blobs)
                 for m in TF_PATH_REGEX.finditer(blob)
-                if os.path.isfile(os.path.join(wt, m.group(1).lstrip("./")))
+                for norm in (os.path.normpath(m.group(1).replace("\\", "/")).replace("\\", "/"),)
+                if norm not in ("", ".") and norm != ".." and not norm.startswith("../") and os.path.isfile(os.path.join(wt, norm))
             }
             can_sweep = (self.agent == "gemini") or any(s.strip() for s in in_texts) or any(re.search(r"\b(?:expand|create)\b", inv) for inv in oracles.gcluster_invocations)
             tf_read_set = (
                 regex_set
-                if (can_sweep and len(atime_set) > 50 and not regex_set and not any(re.search(r"\b(?:community/)?modules\b", b) for b in no_explain))
+                if (can_sweep and len(atime_set) >= 20 and not regex_set and not any(re.search(r"\b(?:community/)?modules\b", b) for b in no_explain))
                 else (atime_set | regex_set)
             )
             oracles.tf_files_read_paths, oracles.tf_files_read = sorted(tf_read_set), len(tf_read_set)
@@ -852,7 +855,7 @@ class LiveCLIEvaluatorBackend:
         exp_outs = {
             os.path.normpath(m.group(1).strip("\"'"))
             for inv in oracles.gcluster_invocations if re.match(r"(?:\./)?(?:gcluster|ghpc)\s+expand\b", inv)
-            for m in re.finditer(r"(?:^|\s)(?:-o(?:\s+|(?=\S+\.ya?ml\b))|--output(?:=|\s+))(\S+)", inv)
+            for m in re.finditer(r"(?:^|\s)(?:-o(?:\s+|(?=\S+\.ya?ml\b))|--out(?:put)?(?:=|\s+))(\S+)", inv)
         }
         for rel in untracked:
             if _is_shim_or_meta_path(rel) or os.path.basename(rel) == "expanded.yaml" or os.path.normpath(rel) in exp_outs or rel in setup:

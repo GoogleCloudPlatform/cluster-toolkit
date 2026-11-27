@@ -207,7 +207,7 @@ kubectl get provisioningrequests.autoscaling.x-k8s.io -n <NAMESPACE> -o custom-c
 
 * **Safe Commands (Zero Turn Delay)**: Read-only commands (`kubectl get`, `kubectl describe`, `kubectl logs`) execute freely during diagnosis.
 * **Diagnostic / Verification Prompts (Read-Only Output Only)**: On read-only diagnostic or verification prompts (`"how do I verify/check/debug/diagnose..."`, `"why is..."`), emit only read-only `kubectl get`, `kubectl describe`, or `kubectl logs` commands. **NEVER** emit raw runnable mutating CLI commands (`kubectl patch`, `kubectl apply`, `kubectl delete`, `kubectl edit`, `kubectl replace`, `kubectl taint`, `kubectl rollout restart`)—even inside a `[PROPOSED REMEDIATION PLAN]`. Describe potential config fixes conceptually in prose (for example, setting `stopPolicy: None` or switching `queueingStrategy` to `BestEffortFIFO`) and offer to draft a remediation plan if the user asks to apply changes.
-* **Explicit Modification / Unpause / Delete Requests (Confirmation Strictly Required)**: When explicitly asked to delete workloads (`kubectl delete`), patch resources (`kubectl patch`), apply manifests (`kubectl apply`), edit or replace resources (`kubectl edit`, `kubectl replace`), taint nodes (`kubectl taint`), evict pods, restart controllers (`kubectl rollout restart`), alter ClusterQueue quota, or change stop policies, **NEVER** execute autonomously—halt and emit a full `[PROPOSED REMEDIATION PLAN]` awaiting explicit `'yes'` confirmation.
+* **Explicit Modification / Unpause / Delete Requests (Confirmation Strictly Required)**: When explicitly asked to delete workloads (`kubectl delete`), patch resources (`kubectl patch`), apply manifests (`kubectl apply`), edit or replace resources (`kubectl edit`, `kubectl replace`), taint nodes (`kubectl taint`), evict pods, restart controllers (`kubectl rollout restart`), alter ClusterQueue quota, change stop policies, delete local files (`rm` / `rm -rf`), or revert edits (`git checkout` / `git restore` / `git reset` / `git clean`), **NEVER** execute autonomously—halt and emit a full `[PROPOSED REMEDIATION PLAN]` awaiting explicit `'yes'` confirmation.
 
 ### Required Remediation Plan Format:
 ```markdown
@@ -240,5 +240,5 @@ kubectl get provisioningrequests.autoscaling.x-k8s.io -n <NAMESPACE> -o custom-c
 
 ## 3. References & Canonical Documentation
 
-* **Kueue Concepts & Architecture**: [`references/kueue-docs.md`](references/kueue-docs.md) | [kueue.sigs.k8s.io/docs/concepts](https://kueue.sigs.k8s.io/docs/concepts/)
-* **GKE Cohorts & DWS Hardware Profiles**: [`references/gke-kueue-docs.md`](references/gke-kueue-docs.md) | [docs.cloud.google.com/kubernetes-engine/docs/tutorials/kueue-cohort](https://docs.cloud.google.com/kubernetes-engine/docs/tutorials/kueue-cohort)
+* **Kueue Concepts & Architecture**: [`skills/gke-kueue-debugging/references/kueue-docs.md`](references/kueue-docs.md) | [kueue.sigs.k8s.io/docs/concepts](https://kueue.sigs.k8s.io/docs/concepts/)
+* **GKE Cohorts & DWS Hardware Profiles**: [`skills/gke-kueue-debugging/references/gke-kueue-docs.md`](references/gke-kueue-docs.md) | [docs.cloud.google.com/kubernetes-engine/docs/tutorials/kueue-cohort](https://docs.cloud.google.com/kubernetes-engine/docs/tutorials/kueue-cohort)

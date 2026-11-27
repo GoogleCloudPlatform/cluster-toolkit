@@ -399,9 +399,66 @@ class TestLiveBackend(unittest.TestCase):
         b = self._backend(self._fake_exec(find_out="modules/a/main.tf\nmodules/b/variables.tf\n"))
         b.run_case("skill", "p", {"name": "c3"})
         self.assertTrue(b.oracles["c3"].tf_files_read == 2 and any("2 .tf" in f for f in b.hard_failures("c3")))
+        b_below = self._backend(self._fake_exec(find_out="\n".join(f"modules/m{i}/main.tf" for i in range(19)) + "\n"))
+        b_below.run_case("skill", "p", {"name": "c3_below"})
+        self.assertEqual(b_below.oracles["c3_below"].tf_files_read, 19)
+        b_edge = self._backend(self._fake_exec(find_out="\n".join(f"modules/m{i}/main.tf" for i in range(20)) + "\n"))
+        b_edge.run_case("skill", "p", {"name": "c3_edge"})
+        self.assertEqual(b_edge.oracles["c3_edge"].tf_files_read, 0)
+        b_partial = self._backend(self._fake_exec(find_out="\n".join(f"modules/m{i}/main.tf" for i in range(37)) + "\n"))
+        b_partial.run_case("skill", "p", {"name": "c3_partial"})
+        self.assertEqual(b_partial.oracles["c3_partial"].tf_files_read, 0)
         b_sweep = self._backend(self._fake_exec(find_out="\n".join(f"modules/m{i}/main.tf" for i in range(60)) + "\n"))
         b_sweep.run_case("skill", "p", {"name": "c3_sweep"})
         self.assertEqual(b_sweep.oracles["c3_sweep"].tf_files_read, 0)
+        sweep_out = "\n".join(f"modules/m{i}/main.tf" for i in range(25)) + "\n"
+        for tag, cmd_s, want_tf in (
+            ("quoted_explain", './gcluster explain "community/modules/foo" -f yaml', 0),
+            ("single_quoted_explain", "./gcluster explain 'community/modules/foo' -f yaml", 0),
+            ("chained_grep", "./gcluster explain modules/foo && grep -r bar modules/", 25),
+            ("newline_grep", "./gcluster explain modules/foo\ngrep -r bar modules/", 25),
+        ):
+            trace = json.dumps({"toolCalls": [{"name": "run_shell_command", "args": {"command": cmd_s}}]})
+            bx = self._backend(self._fake_exec(agent_out=trace, find_out=sweep_out))
+            bx.run_case("skill", "p", {"name": f"c3_{tag}"})
+            self.assertEqual(bx.oracles[f"c3_{tag}"].tf_files_read, want_tf, tag)
+        unmatched_trace = json.dumps({"toolCalls": [
+            {"name": "run_shell_command", "args": {"command": "./gcluster explain don't-exist"}},
+            {"name": "run_shell_command", "args": {"command": "grep -r bar modules/ --include='*.tf'"}},
+        ]})
+        b_unmatched = self._backend(self._fake_exec(agent_out=unmatched_trace, find_out=sweep_out))
+        b_unmatched.run_case("skill", "p", {"name": "c3_unmatched_quote"})
+        self.assertEqual(b_unmatched.oracles["c3_unmatched_quote"].tf_files_read, 25)
+
+    def test_gcluster_shim_restores_only_untouched_tf_atimes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = os.path.join(tmp, "wt")
+            shim_dir = os.path.join(wt, LIVE_SHIM_DIR)
+            audit_dir = os.path.join(tmp, "audit")
+            os.makedirs(shim_dir, exist_ok=True)
+            os.makedirs(audit_dir, exist_ok=True)
+            tf_untouched = self._write(os.path.join(wt, "modules", "vpc", "main.tf"), "# vpc\n")
+            tf_preread = self._write(os.path.join(wt, "community", "modules", "slurm", "variables.tf"), "# slurm\n")
+            marker = self._write(os.path.join(shim_dir, "marker"), "")
+            os.utime(tf_untouched, (946684800, 946684800))
+            os.utime(marker, (1_700_000_000, 1_700_000_000))
+            os.utime(tf_preread, (1_700_000_500, 1_700_000_500))
+            real_gc = self._write(
+                os.path.join(shim_dir, "gcluster.real"),
+                "#!/usr/bin/env bash\n"
+                "touch -a -t 202501010000 modules/vpc/main.tf community/modules/slurm/variables.tf\n"
+                "exit ${FAKE_RC:-0}\n",
+            )
+            os.chmod(real_gc, 0o755)
+            shim_src = Path(__file__).resolve().parents[1] / "skills_eval" / "shims" / "gcluster.sh"
+            shim_gc = self._write(os.path.join(shim_dir, "gcluster"), shim_src.read_text(encoding="utf-8"))
+            os.chmod(shim_gc, 0o755)
+            env = {**os.environ, "CTK_SHIM_AUDIT_DIR": audit_dir, "FAKE_RC": "7"}
+            res = subprocess.run([shim_gc, "expand", "examples/hpc-slurm.yaml"], cwd=wt, env=env, capture_output=True, text=True, check=False)
+            self.assertEqual(res.returncode, 7)
+            self.assertLess(os.path.getatime(tf_untouched), 1_000_000_000)
+            self.assertGreater(os.path.getatime(tf_preread), 1_700_000_000)
+            self.assertEqual([f for f in os.listdir(audit_dir) if f.startswith(".tf-untouched")], [])
 
     def test_blocked_commands_read_from_shim_log(self):
         def exec_fn(cmd, cwd, env=None, timeout=None):
@@ -1395,6 +1452,15 @@ class TestLiveBackend(unittest.TestCase):
             ("action_hdr_cmt_hit", "**Commands:**\n```bash\nkubectl delete pod p1 # force\n```", ro_only, False),
             ("action_hdr_h3_inline_hit", "### Proposed Action: terraform apply\n", ro_only, False),
             ("action_issue_hash", "- **Proposed Action**: Per issue #123, run `kubectl delete clusterqueue a3-high`", ro_only, False),
+            ("action_indented_issue_hash", "- **Proposed Action**:\n    Per issue #123, run kubectl delete clusterqueue a3-high", ro_only, False),
+            ("action_tab_issue_hash", "- **Proposed Action**:\n\tStep #2: kubectl delete pod p1", ro_only, False),
+            ("action_indented_bug_tag", "- **Proposed Action**:\n    Per #BUG-123, run kubectl delete pod p1", ro_only, False),
+            ("action_indented_bug_tag_bt", "- **Proposed Action**:\n    Per #BUG-123, run `kubectl delete pod p1`", ro_only, False),
+            ("action_indented_spaced_hash", "- **Proposed Action**:\n    Step # 2: kubectl delete pod p1", ro_only, False),
+            ("action_indented_num_cmt_ok", "- **Proposed Action**:\n    #1. Do not run kubectl delete pod p1\n    kubectl get pods", ro_only, True),
+            ("action_indented_todo_cmt_ok", "- **Proposed Action**:\n    kubectl get pods # TODO: avoid kubectl delete", ro_only, True),
+            ("fenced_inline_num_cmt_ok", "```bash\nkubectl get pods #1. Do not run kubectl delete pod p1\n```", ro_only, True),
+            ("fenced_inline_issue_cmt_ok", "```bash\nkubectl get cq -o wide #123 avoid -o yaml\n```", ro_only, True),
             ("action_step_hash", "**Commands:**\n- Step #2: kubectl delete pod p1", ro_only, False),
             ("action_bug_tag", "- **Proposed Action**: Per #BUG-123, run `kubectl delete pod p1`", ro_only, False),
             ("action_spaced_hash", "- **Proposed Action**: Step # 2: kubectl delete pod p1", ro_only, False),
@@ -1666,7 +1732,7 @@ class TestLiveBackend(unittest.TestCase):
             elif cmd[:2] == ["git", "status"] and "--untracked-files=all" in cmd:
                 if os.path.isfile(os.path.join(cwd, "d1.yaml")):
                     return _FakeProc(0, "?? depl/primary/main.tf\n?? d1.yaml\n?? d2.yaml\n")
-                return _FakeProc(0, "?? test_expand.yaml\n?? sub/alt_expand.yaml\n?? my-bp.yaml\n" if os.path.isfile(os.path.join(cwd, "my-bp.yaml")) else "?? depl/primary/main.tf\n")
+                return _FakeProc(0, "?? test_expand.yaml\n?? sub/alt_expand.yaml\n?? flag_out.yaml\n?? sub/eq_out.yaml\n?? not_expand.yaml\n?? my-bp.yaml\n" if os.path.isfile(os.path.join(cwd, "my-bp.yaml")) else "?? depl/primary/main.tf\n")
             elif cmd[0] == "gemini":
                 audit_d = (env or {})["CTK_SHIM_AUDIT_DIR"]
                 if "TTF" in cmd[2]:
@@ -1675,16 +1741,30 @@ class TestLiveBackend(unittest.TestCase):
                     self._write(os.path.join(audit_d, LIVE_INVOCATIONS_LOG), "gcluster -l IGNORE create examples/bp.yaml -w\n")
                     return _FakeProc(0, json.dumps({"response": "edited", "toolCalls": [{"name": "write_file", "args": {"file_path": "depl/primary/main.tf"}}]}))
                 tries[0] += 1
-                for r, body in (("test_expand.yaml", "deployment_groups: []\n"), ("sub/alt_expand.yaml", "deployment_groups: []\n"), ("my-bp.yaml", "ai_assisted: true\ndeployment_groups: []\n")):
+                for r, body in (
+                    ("test_expand.yaml", "deployment_groups: []\n"),
+                    ("sub/alt_expand.yaml", "deployment_groups: []\n"),
+                    ("flag_out.yaml", "deployment_groups: []\n"),
+                    ("sub/eq_out.yaml", "deployment_groups: []\n"),
+                    ("not_expand.yaml", "ai_assisted: true\ndeployment_groups: []\n"),
+                    ("my-bp.yaml", "ai_assisted: true\ndeployment_groups: []\n"),
+                ):
                     self._write(os.path.join(cwd, r), body)
-                self._write(os.path.join(audit_d, LIVE_INVOCATIONS_LOG), "gcluster expand bp.yaml -o test_expand.yaml\ngcluster expand bp.yaml --output=sub/alt_expand.yaml\n")
+                self._write(
+                    os.path.join(audit_d, LIVE_INVOCATIONS_LOG),
+                    "gcluster expand bp.yaml -o test_expand.yaml\n"
+                    "gcluster expand bp.yaml --output=sub/alt_expand.yaml\n"
+                    "gcluster expand bp.yaml --out flag_out.yaml\n"
+                    "gcluster expand bp.yaml --out=sub/eq_out.yaml\n"
+                    "gcluster expand bp.yaml --out-dir not_expand.yaml\n",
+                )
                 return _FakeProc(0, json.dumps({"response": "generated" if tries[0] == 2 else "no", "toolCalls": [{"name": "read_file", "args": {"path": "skills/bp-s/SKILL.md"}}]}))
             return _FakeProc(0)
 
         b_exp = self._backend(exp_exec, llm_judge=False, logs_dir=ldir)
         self.assertTrue(evaluate_skill(sdir, backend=b_exp, retries=1).passed)
         log_txt = Path(os.path.join(ldir, "c_exp.log")).read_text(encoding="utf-8")
-        self.assertTrue(b_exp.oracles["bp-s/c_exp"].new_files == ["my-bp.yaml"] and '"attempts": 2' in log_txt and log_txt.strip().endswith("# verdict: PASS"))
+        self.assertTrue(sorted(b_exp.oracles["bp-s/c_exp"].new_files) == ["my-bp.yaml", "not_expand.yaml"] and '"attempts": 2' in log_txt and log_txt.strip().endswith("# verdict: PASS"))
         b_exp.run_case("bp-s", "TTF", {"name": "c_ttf", "live_setup": ["true"], "target_blueprint": "examples/bp.yaml", "extra_scorers": ["blueprint_hygiene"]})
         self.assertTrue(b_exp.oracles["c_ttf"].generated_file_edits == ["depl/primary/main.tf"] and b_exp.oracles["c_ttf"].reexpand.startswith("failed: could not identify"))
 
@@ -1990,6 +2070,41 @@ class TestLiveBackend(unittest.TestCase):
         wf_on = wf_data.get("on") or wf_data.get(True)
         non_cb = {p for p in tf_included if not p.startswith("tools/cloud-build/")}
         self.assertTrue(non_cb.issubset(set(wf_on["pull_request"]["paths"])) and non_cb.issubset(set(wf_on["push"]["paths"])))
+
+    def test_rel_to_wt_dot_prefix_and_skill_relative_display_paths(self):
+        from tools.skills_eval.live_backend import _rel_to_wt, _tool_gen_edits
+
+        with tempfile.TemporaryDirectory() as wt:
+            self.assertEqual(_rel_to_wt(".", wt), "")
+            self.assertEqual(_rel_to_wt("./", wt), "")
+            self.assertEqual(_rel_to_wt("./foo/bar.yaml", wt), "foo/bar.yaml")
+            self.assertEqual(_rel_to_wt(".ghpc/artifacts/expanded_blueprint.yaml", wt), ".ghpc/artifacts/expanded_blueprint.yaml")
+            self.assertEqual(_rel_to_wt("./.ghpc/artifacts/expanded_blueprint.yaml", wt), ".ghpc/artifacts/expanded_blueprint.yaml")
+            self.assertEqual(_rel_to_wt("../outside.tf", wt), "../outside.tf")
+            self.assertEqual(_rel_to_wt("..hidden.tf", wt), "..hidden.tf")
+            self.assertTrue(_rel_to_wt("/tmp/outside.tf", wt).startswith("../"))
+            self.assertEqual(_rel_to_wt(wt, wt), "")
+
+            blob = json.dumps({
+                "toolCalls": [
+                    {"name": "write_file", "args": {"file_path": ".ghpc/artifacts/expanded_blueprint.yaml"}},
+                    {"name": "write_file", "args": {"file_path": "../outside.tf"}},
+                    {"name": "write_file", "args": {"file_path": "/tmp/outside.tf"}},
+                    {"name": "write_file", "args": {"file_path": "..hidden.tf"}},
+                ]
+            })
+            self.assertEqual(
+                _tool_gen_edits([blob], wt),
+                [".ghpc/artifacts/expanded_blueprint.yaml", "..hidden.tf"],
+            )
+
+        # Every SKILL.md and AGENTS.md must display repo-root paths (skills/<name>/...) rather than bare references/ or scripts/.
+        for doc_path in [*sorted(Path(REPO_ROOT, "skills").glob("*/SKILL.md")), Path(REPO_ROOT, "AGENTS.md")]:
+            text = doc_path.read_text(encoding="utf-8")
+            # Strip markdown link targets `](...)` so valid relative link targets are allowed.
+            visible = re.sub(r"\]\([^)]+\)", "]()", text)
+            bare = re.findall(r"(?<![/A-Za-z0-9_.-])(?:\./)?(?:references|scripts|assets)/[^\s`'\"),]+", visible)
+            self.assertEqual(bare, [], f"{doc_path.relative_to(REPO_ROOT)} has bare skill-relative paths: {bare}")
 
 
 if __name__ == "__main__":
