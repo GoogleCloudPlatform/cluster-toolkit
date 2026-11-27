@@ -743,8 +743,8 @@ variable "ml_diagnostics_daemon_image" {
   nullable    = false
 
   validation {
-    condition     = trimspace(var.ml_diagnostics_daemon_image) != ""
-    error_message = "ml_diagnostics_daemon_image must be a non-empty container image reference."
+    condition     = trimspace(var.ml_diagnostics_daemon_image) != "" && var.ml_diagnostics_daemon_image == trimspace(var.ml_diagnostics_daemon_image)
+    error_message = "ml_diagnostics_daemon_image must be a non-empty container image reference without leading or trailing whitespace."
   }
 }
 

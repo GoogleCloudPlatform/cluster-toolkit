@@ -183,6 +183,7 @@ func assertDaemonImageValidation(t *testing.T, condExpr hclsyntax.Expression) {
 		{image: "us-central1-docker.pkg.dev/hypercomputediagon-release/daemon-docker/mldiagnostics-daemon:1.0.1", want: true},
 		{image: "", want: false},
 		{image: "   ", want: false},
+		{image: "  " + defaultMLDiagnosticsDaemonImage + "  ", want: false},
 	}
 	for _, tc := range cases {
 		ctx := &hcl.EvalContext{
@@ -430,10 +431,25 @@ func assertConditionalRolesEvaluation(t *testing.T, enabledLocal, projCountExpr,
 		}),
 	})
 
-	roleVal, diags := roleAttr.Value(ctx)
-	if diags.HasErrors() || roleVal.AsString() != "roles/storage.bucketViewer" {
-		t.Fatalf("normalized role = %v (diags: %v), want roles/storage.bucketViewer", roleVal, diags)
+	roleCases := []struct {
+		input string
+		want  string
+	}{
+		{input: "storage.bucketViewer", want: "roles/storage.bucketViewer"},
+		{input: "roles/storage.objectUser", want: "roles/storage.objectUser"},
+		{input: "projects/example-project/roles/diagonCustom", want: "projects/example-project/roles/diagonCustom"},
+		{input: "organizations/123456789/roles/diagonOrg", want: "organizations/123456789/roles/diagonOrg"},
 	}
+	for _, rc := range roleCases {
+		ctx.Variables["each"] = cty.ObjectVal(map[string]cty.Value{
+			"value": cty.ObjectVal(map[string]cty.Value{"role": cty.StringVal(rc.input)}),
+		})
+		roleVal, diags := roleAttr.Value(ctx)
+		if diags.HasErrors() || roleVal.AsString() != rc.want {
+			t.Fatalf("normalized role for %q = %v (diags: %v), want %q", rc.input, roleVal, diags, rc.want)
+		}
+	}
+	ctx.Variables["each"] = cty.ObjectVal(map[string]cty.Value{"value": entry})
 	exprVal, diags := exprAttr.Value(ctx)
 	wantExpr := `resource.name.startsWith("projects/_/buckets/diagon-123456789012-")`
 	if diags.HasErrors() || exprVal.AsString() != wantExpr {

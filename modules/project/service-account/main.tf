@@ -50,8 +50,12 @@ resource "google_project_iam_member" "conditional_project_roles" {
   for_each = local.enabled_conditional_roles
 
   project = var.project_id
-  role    = startswith(each.value.role, "roles/") ? each.value.role : "roles/${each.value.role}"
-  member  = module.service_account.iam_email
+  role = (
+    startswith(each.value.role, "roles/") ||
+    startswith(each.value.role, "projects/") ||
+    startswith(each.value.role, "organizations/")
+  ) ? each.value.role : "roles/${each.value.role}"
+  member = module.service_account.iam_email
 
   condition {
     title       = each.value.title
