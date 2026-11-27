@@ -59,6 +59,8 @@ locals {
     # storage
     disable_default_mounts = var.disable_default_mounts
     network_storage        = var.network_storage
+    nfs_export_clients     = var.nfs_export_clients
+    nfs_export_root_squash = var.nfs_export_root_squash
 
     # timeouts
     controller_startup_scripts_timeout = var.controller_startup_scripts_timeout

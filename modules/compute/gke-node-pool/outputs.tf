@@ -161,6 +161,11 @@ output "instance_templates" {
   value       = [for key, template in data.google_compute_region_instance_template.instance_template : template.self_link]
 }
 
+output "node_network_tags" {
+  description = "Network tags on the GKE node VMs."
+  value       = distinct(flatten([for t in data.google_compute_region_instance_template.instance_template : t.tags != null ? tolist(t.tags) : []]))
+}
+
 output "tpu_accelerator_type" {
   description = "The label value for the TPU accelerator type (e.g., 'tpu-v6e-slice')."
   value       = module.tpu.is_tpu ? module.tpu.tpu_accelerator_type : null

@@ -335,6 +335,28 @@ variable "disable_default_mounts" {
   default     = false
 }
 
+variable "nfs_export_clients" {
+  description = <<-EOD
+    CIDR ranges that NFS exports from the controller are limited to. Typically
+    the controller, login and nodeset subnetwork ranges plus any extra ranges.
+    If empty, the controller limits exports to its own subnetwork.
+    EOD
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
+variable "nfs_export_root_squash" {
+  description = <<-EOD
+    If true, export cluster-internal controller mounts (such as /home and
+    /opt/apps) with root_squash. Root on clients then cannot write as root, which
+    breaks tasks like creating home directories on first login.
+    EOD
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "network_storage" {
   description = <<EOD
 Storage to mounted on all instances.

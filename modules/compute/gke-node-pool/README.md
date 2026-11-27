@@ -567,6 +567,7 @@ limitations under the License.
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions for submitting the sample GPUDirect enabled job. |
 | <a name="output_machine_type"></a> [machine\_type](#output\_machine\_type) | Machine Type |
 | <a name="output_node_count_static"></a> [node\_count\_static](#output\_node\_count\_static) | The number of static nodes in one node pool. See total\_static\_node\_count for all node pools created by this module. |
+| <a name="output_node_network_tags"></a> [node\_network\_tags](#output\_node\_network\_tags) | Network tags on the GKE node VMs. |
 | <a name="output_node_pool_count"></a> [node\_pool\_count](#output\_node\_pool\_count) | Number of node pools created by this module. |
 | <a name="output_node_pool_names"></a> [node\_pool\_names](#output\_node\_pool\_names) | Names of the node pools. |
 | <a name="output_reservation_subblock_node_pools"></a> [reservation\_subblock\_node\_pools](#output\_reservation\_subblock\_node\_pools) | Map of reservation\_subblocks key to the node pool name and reservation sub-block it is pinned to. Empty when reservation\_subblocks is not set. |

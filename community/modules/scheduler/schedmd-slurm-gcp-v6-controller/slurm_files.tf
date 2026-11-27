@@ -206,6 +206,8 @@ module "slurm_files" {
   munge_mount            = local.auto_munge_mount
   slurm_key_mount        = local.auto_slurm_key_mount
   disable_default_mounts = (var.enable_default_mounts != null ? !var.enable_default_mounts : var.enable_hybrid) || var.enable_backup_controller
+  nfs_export_clients     = local.nfs_export_clients
+  nfs_export_root_squash = var.nfs_export_root_squash
   network_storage = [
     for storage in var.network_storage : {
       server_ip               = storage.server_ip,

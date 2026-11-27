@@ -462,8 +462,9 @@ variable "nodeset" {
 variable "nodeset_dyn" {
   description = "Defines dynamic nodesets, as a list."
   type = list(object({
-    nodeset_name    = string
-    nodeset_feature = string
+    nodeset_name         = string
+    nodeset_feature      = string
+    subnetwork_self_link = optional(string)
   }))
   default = []
 }
@@ -647,6 +648,70 @@ variable "enable_default_mounts" {
     EOD
   type        = bool
   default     = null
+}
+
+variable "extra_nfs_client_cidrs" {
+  description = <<-EOD
+    Additional IPv4 CIDR ranges allowed to mount NFS exports from the controller
+    (/home, /opt/apps, the Slurm key directory and other controller-hosted
+    network storage). By default exports are limited to the primary subnetwork
+    ranges of the controller, login nodes, nodesets and dynamic nodesets
+    (nodeset_dyn). Add ranges here for clients in other subnetworks, such as GKE
+    nodesets outside the controller's subnetworks, externally managed dynamic
+    nodes, or hosts in peered VPCs that must mount controller storage. Only IPv4
+    ranges of /8 or narrower are accepted. After changing this on a running
+    cluster, run `sudo /slurm/scripts/setup_network_storage.py --refresh-exports`
+    on the controller to update its exports.
+    EOD
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for c in var.extra_nfs_client_cidrs : can(cidrhost(c, 0))])
+    error_message = "Each entry in extra_nfs_client_cidrs must be a valid CIDR range, e.g. 10.0.0.0/16."
+  }
+
+  validation {
+    condition     = alltrue([for c in var.extra_nfs_client_cidrs : !can(regex(":", c))])
+    error_message = "extra_nfs_client_cidrs supports IPv4 ranges only."
+  }
+
+  validation {
+    condition = alltrue([
+      for c in var.extra_nfs_client_cidrs :
+      can(regex(":", c)) || try(tonumber(split("/", c)[1]), 0) >= 8
+    ])
+    error_message = "extra_nfs_client_cidrs must not contain ranges broader than /8; such ranges would export controller storage to (nearly) every host."
+  }
+}
+
+variable "nfs_export_root_squash" {
+  description = <<-EOD
+    If true, export cluster-internal controller mounts (/home, /opt/apps and
+    other controller-hosted network storage) with root_squash instead of
+    no_root_squash. Root on login and compute nodes then cannot write to these
+    mounts as root, which breaks tasks such as creating home directories on first
+    login or installing software into /opt/apps as root. The Slurm key directory
+    is always exported read-only.
+    EOD
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "create_nfs_firewall_rules" {
+  description = <<-EOD
+    If true, create VPC firewall rules that allow NFS traffic (TCP/UDP ports
+    111, 2049 and 20048) to the controller only from instances tagged with the
+    Slurm cluster name and from extra_nfs_client_cidrs, and deny it from all
+    other sources. Set to false if you manage firewall rules yourself, for
+    example in a Shared VPC where the deployer cannot create firewall rules in the
+    host project.
+    EOD
+  type        = bool
+  default     = true
+  nullable    = false
 }
 
 variable "network_storage" {

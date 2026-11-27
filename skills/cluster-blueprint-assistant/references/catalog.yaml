@@ -6580,7 +6580,7 @@ module_wiring:
     required_services: [aiplatform.googleapis.com, storage.googleapis.com]
     required_inputs: [runtime_user]
   community/modules/compute/gke-nodeset:
-    required_services: [container.googleapis.com, storage.googleapis.com]
+    required_services: [compute.googleapis.com, container.googleapis.com, storage.googleapis.com]
     required_inputs: [cluster_id, filestore_id, image, instance_templates, network_storage, node_count_static, node_pool_names, slurm_bucket, slurm_bucket_dir, slurm_cluster_name, slurm_controller_instance, subnetwork]
     recommended_use:
     - community/modules/file-system/nfs-server

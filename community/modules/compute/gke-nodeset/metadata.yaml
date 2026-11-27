@@ -16,6 +16,7 @@
 spec:
   requirements:
     services:
+    - compute.googleapis.com
     - container.googleapis.com
     - storage.googleapis.com
 ghpc:

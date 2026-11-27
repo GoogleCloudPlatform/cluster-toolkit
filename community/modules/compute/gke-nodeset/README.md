@@ -24,6 +24,7 @@
 
 | Name | Type |
 | ---- | ---- |
+| [google_compute_firewall.controller_nfs_allow_gke](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall) | resource |
 | [google_storage_bucket_object.gke_nodeset_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/storage_bucket) | data source |
 
@@ -32,11 +33,13 @@
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | projects/{{project}}/locations/{{location}}/clusters/{{cluster}} | `string` | n/a | yes |
+| <a name="input_create_nfs_firewall_rule"></a> [create\_nfs\_firewall\_rule](#input\_create\_nfs\_firewall\_rule) | If true, create a VPC firewall rule that allows NFS traffic (TCP/UDP ports<br/>111, 2049 and 20048) from this nodeset's GKE node VMs (matched via<br/>node\_network\_tags) to the Slurm controller, so GKE nodes can mount the Slurm<br/>key directory without opening controller NFS ports to untagged VMs in a<br/>shared subnetwork. Set to false if you manage firewall rules yourself. If the<br/>GKE subnetwork is not one of the controller's subnetworks, also add its range<br/>to the controller's extra\_nfs\_client\_cidrs. | `bool` | `true` | no |
 | <a name="input_filestore_id"></a> [filestore\_id](#input\_filestore\_id) | An array of identifier for a filestore with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`. | `list(string)` | n/a | yes |
 | <a name="input_image"></a> [image](#input\_image) | The image for slurm daemon | `string` | n/a | yes |
 | <a name="input_instance_templates"></a> [instance\_templates](#input\_instance\_templates) | The URLs of Instance Templates | `list(string)` | n/a | yes |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured on nodes. | <pre>list(object({<br/>    server_ip             = string,<br/>    remote_mount          = string,<br/>    local_mount           = string,<br/>    fs_type               = string,<br/>    mount_options         = string,<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  }))</pre> | n/a | yes |
 | <a name="input_node_count_static"></a> [node\_count\_static](#input\_node\_count\_static) | The number of static nodes in node-pool | `number` | n/a | yes |
+| <a name="input_node_network_tags"></a> [node\_network\_tags](#input\_node\_network\_tags) | Network tags on the GKE node VMs, used as source\_tags for the controller NFS allow firewall rule. | `list(string)` | `[]` | no |
 | <a name="input_node_pool_names"></a> [node\_pool\_names](#input\_node\_pool\_names) | If set to true. The node group VMs will have a random public IP assigned to it. Ignored if access\_config is set. | `list(string)` | n/a | yes |
 | <a name="input_nodeset_name"></a> [nodeset\_name](#input\_nodeset\_name) | The nodeset name | `string` | `"gkenodeset"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the cluster in. | `string` | n/a | yes |
