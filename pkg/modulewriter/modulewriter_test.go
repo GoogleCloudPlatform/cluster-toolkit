@@ -95,9 +95,28 @@ func (s *zeroSuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	files, _ := os.ReadDir(depDir)
 	c.Check(len(files) > 1, Equals, true)
 
+	// write the Cluster Director files and an inter-group outputs file into
+	// .ghpc/artifacts/: overwriting the deployment keeps only the Cluster
+	// Director files.
+	markerPath := filepath.Join(ArtifactsDir(depDir), ClusterDirectorMarkerName)
+	wantMarker := `{"cluster_name":"testprep","project_id":"p","region":"us-central1"}`
+	c.Assert(os.WriteFile(markerPath, []byte(wantMarker), 0644), IsNil)
+	requestPath := filepath.Join(ArtifactsDir(depDir), ClusterDirectorRequestName)
+	c.Assert(os.WriteFile(requestPath, []byte(`{}`), 0644), IsNil)
+	outputsPath := filepath.Join(ArtifactsDir(depDir), "primary_outputs.tfvars")
+	c.Assert(os.WriteFile(outputsPath, []byte("network_id = \"net-1\"\n"), 0644), IsNil)
+
 	err := prepDepDir(depDir)
 	c.Check(err, IsNil)
 	c.Check(isDeploymentDirPrepped(depDir), IsNil)
+
+	gotMarker, err := os.ReadFile(markerPath)
+	c.Assert(err, IsNil)
+	c.Check(string(gotMarker), Equals, wantMarker)
+	_, err = os.Stat(requestPath)
+	c.Check(err, IsNil)
+	_, err = os.Stat(outputsPath)
+	c.Check(os.IsNotExist(err), Equals, true)
 
 	// Check prev resource groups were moved
 	prevModuleDir := filepath.Join(depDir, ".ghpc", prevGroupDirName)

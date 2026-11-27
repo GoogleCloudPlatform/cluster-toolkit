@@ -25,6 +25,11 @@ spec:
     - name: main-job
       replicas: {{.NumSlices}}
       template:
+{{- if .PodLabels }}
+        metadata:
+          labels:
+{{reindent 12 (StructuralData .PodLabels)}}
+{{- end }}
         spec:
           completionMode: Indexed
           parallelism: {{.NodesPerSlice}}

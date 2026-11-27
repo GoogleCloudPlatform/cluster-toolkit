@@ -149,7 +149,11 @@ class SlurmConfigGeneratorV2605(SlurmConfigGeneratorV2511):
 
         topo = conf.gen_topology(self.lkp).compress()
         block_is_default = any(self.lkp.has_block_topology(p) for p in self.lkp.cfg.partitions.values())
-        sections = topo.render_yaml(block_is_default=block_is_default)
+        block_base_size = conf.block_base_size_for_cluster(self.lkp)
+        sections = topo.render_yaml(
+            block_is_default=block_is_default,
+            block_base_size=block_base_size,
+        )
 
         # Group static TPU nodes into slice blocks for block topology
         tpu_blocks = []

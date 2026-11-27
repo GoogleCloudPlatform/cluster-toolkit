@@ -2379,3 +2379,315 @@ def test_resume_mig_nodes_member_already_exists_preserves_live_vm(
   assert resume._exc_has_already_exists(real_409) is True
   real_400 = HttpError(httplib2.Response({"status": "400"}), b'{"error": {"message": "bad req"}}')
   assert resume._exc_has_already_exists(real_400) is False
+
+
+@unittest.mock.patch("resume.handle_resume_failure")
+@unittest.mock.patch("resume.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_reservation_type_fail_fast(
+    mock_compute_prop, mock_execute, mock_handle_failure
+):
+  """Explicit MIG nodesets fail fast on DENSE/CALENDAR/policy-attached reservations,
+  while allowing standard reservations and 403-unreadable shared reservations through."""
+  from googleapiclient.errors import HttpError
+  import httplib2
+
+  res_path = "projects/host-proj/reservations/res-a"
+
+  def _make_cfg(extra_nodesets=None):
+    nodesets = {
+        "n": TstNodeset(
+            nodeset_name="n",
+            region="us-central1",
+            node_count_static=4,
+            provisioning_engine="MIG",
+            reservation_name=res_path,
+            zone_policy_allow=["us-central1-a"],
+        )
+    }
+    if extra_nodesets:
+      nodesets.update(extra_nodesets)
+    return TstCfg(
+        slurm_cluster_name="c",
+        project="p",
+        provisioning_engine="MIG",
+        nodeset=nodesets,
+    )
+
+  # 1-4. DENSE, CALENDAR, policy-attached, and combined reservations all fail fast before createInstances
+  for label, raw_res, expected_substrs in (
+      ("dense", {"deploymentType": "DENSE"}, ["DENSE deployment requires RESERVATION_BOUND", "BULK_INSERT or AUTO"]),
+      ("calendar", {"reservationMode": "CALENDAR"}, ["CALENDAR mode requires RESERVATION_BOUND"]),
+      ("policies", {"resourcePolicies": {"p1": "projects/host-proj/regions/us-central1/resourcePolicies/pol1"}}, ["attached resourcePolicies"]),
+      (
+          "combined",
+          {
+              "deploymentType": "DENSE",
+              "reservationMode": "CALENDAR",
+              "resourcePolicies": {"p1": "projects/host-proj/regions/us-central1/resourcePolicies/pol1"},
+          },
+          ["DENSE deployment", "CALENDAR mode", "attached resourcePolicies"],
+      ),
+  ):
+    mock_execute.reset_mock()
+    mock_handle_failure.reset_mock()
+    mock_compute = unittest.mock.MagicMock()
+    mock_compute_prop.return_value = mock_compute
+    mock_compute.reservations().get().execute.return_value = raw_res
+    lkp = util.Lookup(_make_cfg())
+    with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+      resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=None, lkp=lkp)
+    mock_execute.assert_not_called()
+    mock_compute.regionInstanceGroupManagers().createInstances.assert_not_called()
+    mock_handle_failure.assert_called_once()
+    assert mock_handle_failure.call_args.args[0] == ["c-n-0", "c-n-1"], label
+    assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE, label
+    for s in expected_substrs:
+      assert s in mock_handle_failure.call_args.args[1], (label, s, mock_handle_failure.call_args.args[1])
+
+  # 5. Standard reservation (no DENSE/CALENDAR/policies) proceeds to createInstances
+  mock_execute.reset_mock()
+  mock_handle_failure.reset_mock()
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.reservations().get().execute.return_value = {
+      "specificReservation": {"assuredCount": 4}
+  }
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  mock_execute.return_value = {"status": "DONE"}
+  lkp_std = util.Lookup(_make_cfg())
+  with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=lkp_std)
+  mock_handle_failure.assert_not_called()
+  mock_compute.regionInstanceGroupManagers().createInstances.assert_called_once()
+
+  # 6. Shared reservation returning 403 on host project -> util catches 403 -> proceeds (no false block)
+  mock_execute.reset_mock()
+  mock_handle_failure.reset_mock()
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.reservations().get().execute.side_effect = HttpError(
+      httplib2.Response({"status": "403"}), b"Forbidden"
+  )
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  mock_execute.return_value = {"status": "DONE"}
+  lkp_403 = util.Lookup(_make_cfg())
+  with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=lkp_403)
+  mock_handle_failure.assert_not_called()
+  mock_compute.regionInstanceGroupManagers().createInstances.assert_called_once()
+
+  # 7. Live standalone VM inside dense-reservation nodeset is never marked DOWN
+  mock_execute.reset_mock()
+  mock_handle_failure.reset_mock()
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.reservations().get().execute.return_value = {"deploymentType": "DENSE"}
+  live_standalone = util.Instance(
+      name="c-n-0", zone="us-central1-a", status="RUNNING", creation_timestamp=SOME_TS,
+      role="compute", resource_status=util.InstanceResourceStatus.from_json(None),
+      metadata={}, scheduling=util.NSDict({}),
+  )
+  lkp_live = util.Lookup(_make_cfg())
+  with unittest.mock.patch.object(
+      util.Lookup, "instance", side_effect=lambda name: live_standalone if name == "c-n-0" else None
+  ):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=None, lkp=lkp_live)
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[0] == ["c-n-1"]
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
+
+  # 8. Single-nodeset exclusive job on blocked MIG nodeset -> IGNORE (DOWN), no createInstances
+  mock_execute.reset_mock()
+  mock_handle_failure.reset_mock()
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.reservations().get().execute.return_value = {"deploymentType": "DENSE"}
+  lkp_excl = util.Lookup(_make_cfg())
+  with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0", "c-n-1"], excl_job_id=77, lkp=lkp_excl)
+  mock_compute.regionInstanceGroupManagers().createInstances.assert_not_called()
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[0] == ["c-n-0", "c-n-1"]
+  assert mock_handle_failure.call_args.args[1].startswith(util.MIG_UNSUPPORTED_RESERVATION_PREFIX)
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
+  assert mock_handle_failure.call_args.args[4] == mock_handle_failure.call_args.args[1]
+
+  # 9. Cross-nodeset exclusive job via resume_nodes(): create_placements() splits into single-nodeset
+  #    chunks, so resume_mig_nodes is invoked once per nodeset (blocked -> IGNORE, healthy -> resumes)
+  mock_execute.reset_mock()
+  mock_handle_failure.reset_mock()
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.reservations().get().execute.return_value = {"deploymentType": "DENSE"}
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  mock_execute.return_value = {"status": "DONE"}
+  cfg_multi = _make_cfg({
+      "ok": TstNodeset(
+          nodeset_name="ok",
+          region="us-central1",
+          node_count_static=2,
+          provisioning_engine="MIG",
+      )
+  })
+  lkp_cross = util.Lookup(cfg_multi)
+  excl_resume_data = resume.ResumeData(
+      jobs=[resume.ResumeJobData(job_id=77, partition="p", nodes_alloc=["c-n-0", "c-ok-0"])]
+  )
+  with (
+      unittest.mock.patch("resume.lookup", return_value=lkp_cross),
+      unittest.mock.patch("resume.resume_mig_nodes", wraps=resume.resume_mig_nodes) as spy_mig,
+      unittest.mock.patch.object(util.Lookup, "instance", return_value=None),
+      unittest.mock.patch.object(util.Lookup, "is_provisioning_flex_node", return_value=False),
+      unittest.mock.patch.object(util.Lookup, "is_tpu_node", return_value=False),
+  ):
+    resume.resume_nodes(["c-n-0", "c-ok-0"], resume_data=excl_resume_data)
+  assert spy_mig.call_count == 2
+  dispatched = {(tuple(c.args[0]), c.args[1]) for c in spy_mig.call_args_list}
+  assert dispatched == {(("c-n-0",), 77), (("c-ok-0",), 77)}
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[0] == ["c-n-0"]
+  assert mock_handle_failure.call_args.args[1].startswith(util.MIG_UNSUPPORTED_RESERVATION_PREFIX)
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
+  mock_compute.regionInstanceGroupManagers().createInstances.assert_called_once()
+  assert mock_compute.regionInstanceGroupManagers().createInstances.call_args.kwargs["body"]["instances"] == [
+      {"name": "c-ok-0", "preservedState": {"metadata": {"slurm_job_id": "77"}}}
+  ]
+
+  # 10. Dormant (upcoming) CALENDAR reservation on explicit MIG fails fast immediately via resume_nodes
+  #     while BULK_INSERT still treats it as dormant ("Reservation is not active")
+  mock_execute.reset_mock()
+  mock_handle_failure.reset_mock()
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.reservations().get().execute.return_value = {
+      "reservationMode": "CALENDAR",
+      "specificReservation": {"assuredCount": 0},
+      "deleteAtTime": "2099-01-01T00:00:00Z",
+  }
+  cfg_dormant = _make_cfg({
+      "bi": TstNodeset(
+          nodeset_name="bi",
+          region="us-central1",
+          node_count_static=2,
+          provisioning_engine="BULK_INSERT",
+          reservation_name=res_path,
+          zone_policy_allow=["us-central1-a"],
+      ),
+      "tp": TstNodeset(
+          nodeset_name="tp",
+          region="us-central1",
+          node_count_static=4,
+          provisioning_engine="MIG",
+          reservation_name=res_path,
+          zone_policy_allow=["us-central1-a"],
+      ),
+  })
+  lkp_dormant = util.Lookup(cfg_dormant)
+  with (
+      unittest.mock.patch("resume.lookup", return_value=lkp_dormant),
+      unittest.mock.patch("resume.down_nodes_notify_jobs") as mock_down_notify,
+      unittest.mock.patch.object(util.Lookup, "instance", return_value=None),
+      unittest.mock.patch.object(util.Lookup, "is_provisioning_flex_node", return_value=False),
+      unittest.mock.patch.object(
+          util.Lookup, "is_tpu_node", side_effect=lambda name: name.startswith("c-tp-")
+      ),
+  ):
+    resume.resume_nodes(["c-n-0", "c-bi-0", "c-tp-0"], resume_data=None)
+  mock_down_notify.assert_called_once_with(
+      ["c-bi-0", "c-tp-0"], "Reservation is not active, nodes cannot be resumed", None
+  )
+  mock_handle_failure.assert_called_once()
+  assert mock_handle_failure.call_args.args[0] == ["c-n-0"]
+  assert mock_handle_failure.call_args.args[3] == error_handler.Action.IGNORE
+  assert "CALENDAR mode requires RESERVATION_BOUND" in mock_handle_failure.call_args.args[1]
+
+
+@unittest.mock.patch("resume.ensure_execute")
+@unittest.mock.patch.object(util.Lookup, "compute", new_callable=unittest.mock.PropertyMock)
+def test_resume_mig_nodes_skips_template_patch_when_proactive(
+    mock_compute_prop, mock_execute, caplog
+):
+  """Refuse drift template patch if a live MIG's updatePolicy.type was mutated to PROACTIVE,
+  while continuing to patch normally when updatePolicy.type is OPPORTUNISTIC."""
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      project="p",
+      provisioning_engine="MIG",
+      nodeset={
+          "n": TstNodeset(
+              nodeset_name="n",
+              region="us-central1",
+              node_count_static=2,
+              provisioning_engine="MIG",
+              instance_template="projects/p/global/instanceTemplates/tpl-new",
+          )
+      },
+  )
+
+  # 1. PROACTIVE updatePolicy -> log error and skip patch(), still createInstances
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
+      "updatePolicy": {"type": "PROACTIVE"},
+      "versions": [{"instanceTemplate": "projects/p/global/instanceTemplates/tpl-old"}],
+  }
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  mock_execute.return_value = {"status": "DONE"}
+
+  with caplog.at_level("ERROR"), unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=util.Lookup(cfg))
+
+  mock_compute.regionInstanceGroupManagers().patch.assert_not_called()
+  mock_compute.regionInstanceGroupManagers().createInstances.assert_called_once()
+  assert any("PROACTIVE" in rec.message and "skipping template patch" in rec.message for rec in caplog.records)
+
+  # 1b. PROACTIVE updatePolicy with NO drift -> logs misconfiguration without claiming skipped patch
+  caplog.clear()
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
+      "updatePolicy": {"type": "PROACTIVE"},
+      "versions": [{"instanceTemplate": "projects/p/global/instanceTemplates/tpl-new"}],
+  }
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  mock_execute.return_value = {"status": "DONE"}
+
+  with caplog.at_level("ERROR"), unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=util.Lookup(cfg))
+
+  mock_compute.regionInstanceGroupManagers().patch.assert_not_called()
+  mock_compute.regionInstanceGroupManagers().createInstances.assert_called_once()
+  assert any(
+      "PROACTIVE" in rec.message and "set updatePolicy.type back to 'OPPORTUNISTIC'" in rec.message
+      for rec in caplog.records
+  )
+
+  # 2. OPPORTUNISTIC updatePolicy -> template drift patch() executes normally
+  caplog.clear()
+  mock_compute = unittest.mock.MagicMock()
+  mock_compute_prop.return_value = mock_compute
+  mock_compute.regionInstanceGroupManagers().get().execute.return_value = {
+      "updatePolicy": {"type": "OPPORTUNISTIC"},
+      "versions": [{"instanceTemplate": "projects/p/global/instanceTemplates/tpl-old"}],
+  }
+  mock_compute.regionInstanceGroupManagers().listManagedInstances().execute.return_value = {
+      "managedInstances": []
+  }
+  mock_execute.return_value = {"status": "DONE"}
+
+  with unittest.mock.patch.object(util.Lookup, "instance", return_value=None):
+    resume.resume_mig_nodes(["c-n-0"], excl_job_id=None, lkp=util.Lookup(cfg))
+
+  mock_compute.regionInstanceGroupManagers().patch.assert_called_once()
+  mock_compute.regionInstanceGroupManagers().createInstances.assert_called_once()

@@ -415,7 +415,9 @@ def get_node_action(nodename: str) -> NodeAction:
                 elif mig_err is not None:
                     err_action, err_code, err_msg = mig_err
                     if (
-                        err_action in ("CREATING", "CREATING_WITHOUT_RETRIES")
+                        state is not None
+                        and not in_power_down
+                        and err_action in ("CREATING", "CREATING_WITHOUT_RETRIES")
                         and inst is not None
                         and inst.status in ("RUNNING", "PROVISIONING", "STAGING", "REPAIRING")
                         and util.instance_created_by_mig(inst) is None
@@ -479,6 +481,15 @@ def get_node_action(nodename: str) -> NodeAction:
             return NodeActionDown(reason="Unbacked instance")
         if state.base == "DOWN" and not power_flags:
             if active_mig_creating or mig_list_failed:
+                return NodeActionUnchanged()
+            if (
+                lkp.is_node_mig(nodename)
+                and not lkp.is_tpu_node(nodename)
+                and bool(getattr(lkp.node_nodeset(nodename), "reservation_name", None))
+                and (get_node_reason(short_nodename) or "").lstrip().startswith(
+                    util.MIG_UNSUPPORTED_RESERVATION_PREFIX
+                )
+            ):
                 return NodeActionUnchanged()
             return NodeActionPowerDown()
         if "NOT_RESPONDING" in state.flags:

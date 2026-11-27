@@ -2174,17 +2174,6 @@ func TestTypeK8s_ZeroGCloudAcrossLifecycle(t *testing.T) {
 	mockExec := newTypeK8sInspectMockExecutor()
 	orc.SetExecutor(mockExec)
 
-	if err := orc.SubmitJob(orchestrator.JobDefinition{
-		WorkloadName:           "blocked",
-		GKENamespace:           "other-ns",
-		GkeCustomTemplatesPath: "/tmp/custom",
-	}); err == nil || err.Error() != orchestrator.UnsupportedK8sSubmitError().Error() {
-		t.Fatalf("SubmitJob(TypeK8s) err = %v, want UnsupportedK8sSubmitError", err)
-	}
-	if orc.namespace != "" || orc.gkeCustomTemplatesPath != "" || len(mockExec.calls) != 0 {
-		t.Fatalf("SubmitJob(TypeK8s) mutated state or ran commands: ns=%q tmpl=%q calls=%v", orc.namespace, orc.gkeCustomTemplatesPath, mockExec.calls)
-	}
-
 	if loc, err := orc.Initialize("local-k8s", "", ""); err != nil || loc != "" {
 		t.Fatalf("Initialize(TypeK8s) = (%q, %v), want ('', nil)", loc, err)
 	}
@@ -3493,5 +3482,30 @@ func assertHasAPIGroupVersionBlankGuards(t *testing.T, nonBlankGV string) {
 	}
 	if len(blankExec.calls) != 0 {
 		t.Fatalf("expected 0 kubectl calls on blank kubeContext, got %v", blankExec.calls)
+	}
+}
+
+func TestExtractProjectIDFromContext(t *testing.T) {
+	tests := []struct {
+		ctxName string
+		want    string
+	}{
+		{"gke_my-proj_us-central1_my-cluster", "my-proj"},
+		{"gke_my-proj-123_us-central1-a_cluster_with_underscores", "my-proj-123"},
+		{"  gke_trimmed-proj_europe-west4_c1  ", "trimmed-proj"},
+		{"gke_aws_us-west1_cluster_extra", ""},
+		{"gke_azure_eastus_cluster_extra", ""},
+		{"gke_attached_us-central1_cluster_extra", ""},
+		{"gke_ _us-central1_c1", ""},
+		{"gke_my-proj_ _c1", ""},
+		{"gke_my-proj_us-central1_   ", ""},
+		{"admin@onprem-k8s", ""},
+		{"gke_missing_cluster", ""},
+		{"", ""},
+	}
+	for _, tc := range tests {
+		if got := ExtractProjectIDFromContext(tc.ctxName); got != tc.want {
+			t.Errorf("ExtractProjectIDFromContext(%q) = %q, want %q", tc.ctxName, got, tc.want)
+		}
 	}
 }

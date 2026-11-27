@@ -354,6 +354,42 @@ def _exc_has_already_exists(exc: Exception) -> bool:
     return any(code in msg for code in _MIG_ALREADY_EXISTS_CODES) or "ALREADY EXISTS" in msg
 
 
+def _mig_unsupported_reservation_reason(nodeset: Any, lkp: util.Lookup) -> Optional[str]:
+    """Return an actionable error string if a static MIG nodeset targets an unsupported reservation.
+
+    Static MIG Terraform templates configure SPECIFIC_RESERVATION with STANDARD provisioning_model
+    and cannot consume DENSE/CALENDAR reservations (which require RESERVATION_BOUND) or reservations
+    carrying attached resourcePolicies. On 403 (shared reservation without host-project read access)
+    or lookup errors, returns None so standard shared reservations are not falsely blocked.
+    """
+    if not getattr(nodeset, "reservation_name", None):
+        return None
+    try:
+        reservation = lkp.nodeset_reservation(nodeset)
+    except Exception as e:
+        log.warning(
+            f"Could not inspect reservation '{getattr(nodeset, 'reservation_name', '')}' "
+            f"for MIG nodeset '{getattr(nodeset, 'nodeset_name', '')}'; continuing: {e}"
+        )
+        return None
+    if reservation is None:
+        return None
+    unsupported_traits: List[str] = []
+    if reservation.dense:
+        unsupported_traits.append("DENSE deployment requires RESERVATION_BOUND")
+    if reservation.calendar:
+        unsupported_traits.append("CALENDAR mode requires RESERVATION_BOUND")
+    if reservation.policies:
+        unsupported_traits.append("attached resourcePolicies are not wired on static MIG templates")
+    if not unsupported_traits:
+        return None
+    detail = "; ".join(unsupported_traits)
+    return (
+        f"{util.MIG_UNSUPPORTED_RESERVATION_PREFIX} {reservation.name} ({detail}); "
+        "use provisioning_engine = BULK_INSERT or AUTO"
+    )
+
+
 def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Lookup, resume_data: Optional[ResumeData] = None) -> None:
     """Provisions nodes via MIG createInstances with Per-Instance Config and preserved state."""
     if not nodes:
@@ -433,6 +469,28 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
                 ignore_nodes.append(sn)
         return requeue_nodes, ignore_nodes
 
+    # Fail fast before any MIG template patch or createInstances call if an explicit MIG nodeset
+    # targets a DENSE, CALENDAR, or policy-attached reservation unsupported by static MIG templates.
+    # resume_nodes() -> group_nodes_bulk() -> create_placements() emits one chunk per nodeset, so
+    # every production call contains a single nodeset; cross-nodeset exclusive jobs follow the
+    # existing per-chunk failure semantics.
+    ns_name = lkp.node_nodeset_name(nodes[0])
+    res_err = _mig_unsupported_reservation_reason(lkp.node_nodeset(nodes[0]), lkp)
+    if res_err:
+        short_nodes = list(dict.fromkeys(n.split(".")[0] for n in nodes))
+        requeue_ns, ignore_ns = _partition_abort_nodes(short_nodes)
+        down_ns = list(dict.fromkeys(requeue_ns + ignore_ns))
+        log.error(f"Aborting MIG resume for nodeset {ns_name} ({to_hostlist(short_nodes)}): {res_err}")
+        if down_ns:
+            handle_resume_failure(
+                down_ns,
+                res_err,
+                resume_data,
+                error_handler.Action.IGNORE,
+                res_err,
+            )
+        return
+
     for mig_name, mig_nodes in nodes_by_mig.items():
         nodeset = lkp.node_nodeset(mig_nodes[0])
         region = lkp.node_region(mig_nodes[0])
@@ -445,11 +503,27 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
             try:
                 mig = lkp.get_mig(lkp.project, region, mig_name)
                 if mig:
+                    update_policy = mig.get("updatePolicy")
+                    update_type = update_policy.get("type") if isinstance(update_policy, dict) else None
                     current_template = (
                         mig.get("instanceTemplate")
                         or (mig.get("versions", [{}])[0].get("instanceTemplate") if mig.get("versions") else None)
                     )
-                    if current_template and current_template.split("/")[-1] != template_link.split("/")[-1]:
+                    has_drift = bool(
+                        current_template
+                        and current_template.split("/")[-1] != template_link.split("/")[-1]
+                    )
+                    if update_type and update_type != "OPPORTUNISTIC":
+                        action_note = (
+                            "skipping template patch to prevent proactive replacement of running compute nodes."
+                            if has_drift
+                            else "set updatePolicy.type back to 'OPPORTUNISTIC' to prevent uncoordinated node restarts."
+                        )
+                        log.error(
+                            f"MIG {mig_name} has updatePolicy.type={update_type!r} (expected 'OPPORTUNISTIC'); "
+                            f"{action_note}"
+                        )
+                    elif has_drift:
                         log.info(f"Updating MIG {mig_name} template: {current_template} -> {template_link}")
                         ver_payload: Dict[str, Any] = {"instanceTemplate": template_link}
                         if mig.get("versions") and mig["versions"][0].get("name"):
@@ -1041,8 +1115,18 @@ def resume_mig_nodes(nodes: List[str], excl_job_id: Optional[int], lkp: util.Loo
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     """resume nodes in nodelist"""
     lkp = lookup()
-    # Prevent dormant nodes associated with a reservation from being resumed
-    nodes, dormant_res_nodes = util.separate(lkp.is_dormant_res_node, nodes)
+    # Prevent dormant nodes associated with a reservation from being resumed, except static
+    # MIG nodesets targeting an unsupported reservation (e.g. an upcoming CALENDAR reservation),
+    # which should fail fast immediately in resume_mig_nodes with an actionable error.
+    nodes, dormant_res_nodes = util.separate(
+        lambda n: lkp.is_dormant_res_node(n)
+        and not (
+            lkp.is_node_mig(n)
+            and not lkp.is_tpu_node(n)
+            and _mig_unsupported_reservation_reason(lkp.node_nodeset(n), lkp) is not None
+        ),
+        nodes,
+    )
     
     if dormant_res_nodes:
         log.warning(f"Resume was unable to resume reservation nodes={dormant_res_nodes}")

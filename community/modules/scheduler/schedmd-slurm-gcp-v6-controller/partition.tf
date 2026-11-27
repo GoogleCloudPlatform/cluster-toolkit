@@ -76,8 +76,9 @@ module "slurm_nodeset_template" {
   access_config                       = each.value.access_config
   tags                                = concat([local.slurm_cluster_name], each.value.tags)
 
-  max_run_duration   = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? each.value.dws_flex.max_run_duration : null
-  provisioning_model = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? "FLEX_START" : null
+  max_run_duration     = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? each.value.dws_flex.max_run_duration : null
+  provisioning_model   = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? "FLEX_START" : null
+  maintenance_interval = (local.nodeset_resolved_engine[each.value.nodeset_name] == "MIG" && !each.value.dws_flex.enabled && each.value.maintenance_interval != null && trimspace(each.value.maintenance_interval) != "") ? trimspace(each.value.maintenance_interval) : null
   reservation_affinity = (
     each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert ? local.no_reservation_affinity : (
       local.nodeset_resolved_engine[each.value.nodeset_name] == "MIG" && each.value.reservation_name != "" && each.value.reservation_name != null ? {
@@ -106,31 +107,73 @@ module "nodeset_cleanup" {
 }
 
 locals {
-  # NodeSet-level engine resolution: DWS Flex automatically resolves to MIG; standard compute nodes default to BULK_INSERT (MIG is strictly opt-in)
-  nodeset_resolved_engine = {
-    for name, ns in local.nodeset_map : name => (
-      ns.dws_flex.enabled && !ns.dws_flex.use_bulk_insert ? "MIG" : (
-        try(ns.provisioning_engine, "AUTO") == "MIG" ? "MIG" :
-        "BULK_INSERT"
-      )
-    )
-  }
-
   # GPU count resolution: uses ns.gpu_count, falls back to ns.gpu.count, then 4
   nodeset_gpu_count = {
     for name, ns in local.nodeset_map : name => coalesce(try(ns.gpu_count, null), try(ns.gpu.count, null), 4)
   }
 
   # Slicing size for MIG NodeSets: for accelerator topologies (e.g. A4X with 1x72),
-  # slice size is (dim1 * dim2) / gpus_per_vm. Kept null when no topology is configured.
+  # slice size is (dim1 * dim2) / gpus_per_vm. Kept null when no 2D GPU topology is configured.
   nodeset_slice_size = {
     for name, ns in local.nodeset_map : name => (
-      ns.accelerator_topology != null && ns.accelerator_topology != "" ? (
+      ns.accelerator_topology != null && trimspace(ns.accelerator_topology) != "" &&
+      !try(startswith(ns.machine_type, "ct") || startswith(ns.machine_type, "tpu"), false) &&
+      can(regex("^[1-9][0-9]*[xX][1-9][0-9]*$", trimspace(ns.accelerator_topology))) ? (
         max(1, floor(
           (tonumber(split("x", lower(trimspace(ns.accelerator_topology)))[0]) * tonumber(split("x", lower(trimspace(ns.accelerator_topology)))[1])) /
           max(1, local.nodeset_gpu_count[name])
         ))
       ) : null
+    )
+  }
+
+  # Defense-in-depth AUTO resolution (matches schedmd-slurm-gcp-v6-nodeset/main.tf) for callers
+  # passing raw provisioning_engine = "AUTO" directly to the controller module.
+  nodeset_auto_mig_eligible = {
+    for name, ns in local.nodeset_map : name => (
+      !ns.dws_flex.enabled &&
+      !try(startswith(ns.machine_type, "ct") || startswith(ns.machine_type, "tpu"), false) &&
+      ns.node_count_static > 0 &&
+      ns.node_count_dynamic_max == 0 &&
+      (ns.reservation_name == null || ns.reservation_name == "") &&
+      (ns.future_reservation == null || ns.future_reservation == "") &&
+      !try(
+        jsondecode(ns.instance_properties_json) != null && try(length(jsondecode(ns.instance_properties_json)) > 0, true),
+        ns.instance_properties_json != null &&
+        trimspace(ns.instance_properties_json) != "" &&
+        trimspace(ns.instance_properties_json) != "null" &&
+        trimspace(ns.instance_properties_json) != "{}"
+      ) &&
+      (
+        (!ns.enable_placement && (ns.accelerator_topology == null || trimspace(ns.accelerator_topology) == "")) || (
+          ns.accelerator_topology != null &&
+          trimspace(ns.accelerator_topology) != "" &&
+          try(can(regex("^a4x-", ns.machine_type)), false) &&
+          local.nodeset_slice_size[name] != null &&
+          (ns.zone_target_shape == null || ns.zone_target_shape == "" || ns.zone_target_shape == "ANY_SINGLE_ZONE") &&
+          try(
+            tonumber(split("x", lower(trimspace(ns.accelerator_topology)))[1]) % max(1, local.nodeset_gpu_count[name]) == 0 &&
+            ns.node_count_static % local.nodeset_slice_size[name] == 0,
+            false
+          )
+        )
+      )
+    )
+  }
+
+  # NodeSet-level engine resolution:
+  # - DWS Flex (unless use_bulk_insert = true) resolves to MIG.
+  # - Explicit MIG and BULK_INSERT are honored directly.
+  # - AUTO routes eligible pure-static NodeSets to MIG and falls back to BULK_INSERT otherwise.
+  nodeset_resolved_engine = {
+    for name, ns in local.nodeset_map : name => (
+      ns.dws_flex.enabled && !ns.dws_flex.use_bulk_insert ? "MIG" : (
+        try(ns.provisioning_engine, "AUTO") == "MIG" ? "MIG" : (
+          try(ns.provisioning_engine, "AUTO") == "BULK_INSERT" ? "BULK_INSERT" : (
+            local.nodeset_auto_mig_eligible[name] ? "MIG" : "BULK_INSERT"
+          )
+        )
+      )
     )
   }
 
@@ -324,6 +367,11 @@ resource "google_compute_region_instance_group_manager" "nodeset_mig" {
     ignore_changes = [
       target_size,
     ]
+
+    postcondition {
+      condition     = try(self.update_policy[0].type, null) == "OPPORTUNISTIC"
+      error_message = "Proactive Lockout Guardrail: Compute NodeSet MIGs must use OPPORTUNISTIC update policies to prevent uncoordinated restarts of active batch jobs."
+    }
   }
 }
 

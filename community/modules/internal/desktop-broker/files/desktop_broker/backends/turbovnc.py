@@ -24,6 +24,11 @@ class TurboVNCBackend(VNCBackend):
     def vncserver_command(self):
         return gpu.which("vncserver", "/opt/TurboVNC/bin/vncserver")
 
+    # Hardware GL on this backend means VirtualGL rendering on the GPU, so a
+    # usable device is not enough: VirtualGL has to be installed as well.
+    def accelerated(self):
+        return super().accelerated() and gpu.virtualgl_available()
+
     def acceleration_diagnostic(self):
         reason = super().acceleration_diagnostic()
         if reason or not self.gpu_acceleration:
@@ -42,7 +47,7 @@ class TurboVNCBackend(VNCBackend):
     # calls from applications and executes them on the GPU.
     def session_command(self):
         base = super().session_command()
-        if not self.accelerated() or not gpu.virtualgl_available():
+        if not self.accelerated():
             # Asked for acceleration but VirtualGL is not installed, or no
             # usable device. Fall back to software rather than producing a
             # session that will not start.
@@ -53,7 +58,7 @@ class TurboVNCBackend(VNCBackend):
         return [gpu.virtualgl_run(), "+wm"] + base
 
     def session_environment(self):
-        if not self.accelerated() or not gpu.virtualgl_available():
+        if not self.accelerated():
             return {}
         gpu_display = gpu.gpu_display()
         if not gpu_display:

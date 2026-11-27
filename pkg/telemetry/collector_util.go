@@ -18,23 +18,28 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/modulewriter"
 	"maps"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/billing/apiv1/billingpb"
 	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v3"
 
 	billing "cloud.google.com/go/billing/apiv1"
@@ -153,6 +158,19 @@ func isAIAssisted(bp config.Blueprint, cmd *cobra.Command, args []string) bool {
 	return bp.AIAssisted || IsAgentEnv() || hasRawAIAssistedInFiles(cmd, args)
 }
 
+// isExportToClusterDirector reports whether exporting to Cluster Director was
+// enabled: the --export-to-cluster-director flag when it was set, otherwise the
+// blueprint's export_to_cluster_director setting (false when unset).
+func isExportToClusterDirector(bp config.Blueprint, cmd *cobra.Command) bool {
+	if cmd != nil {
+		if flag := cmd.Flag("export-to-cluster-director"); flag != nil && flag.Changed {
+			v, err := strconv.ParseBool(flag.Value.String())
+			return err == nil && v
+		}
+	}
+	return bp.ExportToClusterDirectorEnabled()
+}
+
 func hasRawAIAssistedInFiles(cmd *cobra.Command, args []string) bool {
 	if len(args) > 0 && strings.TrimSpace(args[0]) != "" {
 		if hasRawAIAssistedTrue(resolveBlueprintPath(args[0])) {
@@ -237,6 +255,9 @@ func mergeDeploymentFileVars(cmd *cobra.Command, bp *config.Blueprint) {
 		return
 	}
 
+	if ds.ExportToClusterDirector != nil {
+		bp.SetExportToClusterDirector(*ds.ExportToClusterDirector)
+	}
 	if ds.AIAssisted {
 		bp.AIAssisted = true
 	}
@@ -860,6 +881,51 @@ func parseDefaultValue[T any](inputName string, inputDefault any, key string) (T
 	return zero, false
 }
 
+// isCacheableProjectLookupErr reports whether a project/billing lookup outcome is
+// safe to persist in the 24h local cache. Only successful lookups and authenticated
+// PermissionDenied responses are cached; missing ADC, Unauthenticated, NotFound,
+// and network/transient errors are never cached so recovery takes effect immediately.
+func isCacheableProjectLookupErr(err error) bool {
+	if err == nil {
+		return true
+	}
+	st, ok := status.FromError(err)
+	return ok && st.Code() == codes.PermissionDenied
+}
+
+// isTransientRPCError reports whether err looks like a transient RPC/network failure
+// worth retrying (as opposed to permanent errors such as PermissionDenied, NotFound,
+// InvalidArgument, or Unauthenticated).
+func isTransientRPCError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if st, ok := status.FromError(err); ok {
+		switch st.Code() {
+		case codes.Unavailable, codes.ResourceExhausted, codes.DeadlineExceeded, codes.Aborted, codes.Internal:
+			return true
+		default:
+			return false
+		}
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
 // getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
 var getProjectBillingAccount = func(ctx context.Context, projectID string) (string, error) {
 	client, err := billing.NewCloudBillingClient(ctx)
@@ -874,17 +940,18 @@ var getProjectBillingAccount = func(ctx context.Context, projectID string) (stri
 	var info *billingpb.ProjectBillingInfo
 	var apiErr error
 
-	// Retry up to 3 times for transient failures (e.g., rate limits or network flakes)
+	// Retry up to 3 times only for transient failures (e.g., rate limits or network flakes)
 	for attempt := 1; attempt <= 3; attempt++ {
 		info, apiErr = client.GetProjectBillingInfo(ctx, req)
 		if apiErr == nil {
 			return info.GetBillingAccountName(), nil
 		}
-		// Check for context expiration and avoid sleep on the last iteration to reduce unnecessary latency on failure
-		if attempt == 3 || ctx.Err() != nil {
+		if !isTransientRPCError(apiErr) || attempt == 3 || ctx.Err() != nil {
 			break
 		}
-		time.Sleep(time.Duration(attempt) * 500 * time.Millisecond) // simple backoff
+		if !sleepWithContext(ctx, time.Duration(attempt)*200*time.Millisecond) {
+			break
+		}
 	}
 	return "", apiErr
 }
@@ -901,17 +968,18 @@ var fetchProjectName = func(ctx context.Context, projectID string) (string, erro
 	var project *resourcemanagerpb.Project
 	var apiErr error
 
-	// Retry up to 3 times for transient failures (e.g., rate limits or network flakes)
+	// Retry up to 3 times only for transient failures (e.g., rate limits or network flakes)
 	for attempt := 1; attempt <= 3; attempt++ {
 		project, apiErr = client.GetProject(ctx, req)
 		if apiErr == nil {
 			return project.Name, nil
 		}
-		// Check for context expiration and avoid sleep on the last iteration to reduce unnecessary latency on failure
-		if attempt == 3 || ctx.Err() != nil {
+		if !isTransientRPCError(apiErr) || attempt == 3 || ctx.Err() != nil {
 			break
 		}
-		time.Sleep(time.Duration(attempt) * 500 * time.Millisecond) // simple backoff
+		if !sleepWithContext(ctx, time.Duration(attempt)*200*time.Millisecond) {
+			break
+		}
 	}
 
 	return "", apiErr

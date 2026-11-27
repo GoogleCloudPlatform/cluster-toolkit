@@ -470,3 +470,9 @@ variable "confidential_instance_type" {
   description = "The type of Confidential Computing to use (e.g., SEV, TDX). Required for some machine types like A3."
   default     = null
 }
+
+variable "maintenance_interval" {
+  description = "Specifies the frequency of planned maintenance events (e.g., 'PERIODIC')."
+  type        = string
+  default     = null
+}
