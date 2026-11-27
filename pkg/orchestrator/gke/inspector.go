@@ -132,6 +132,9 @@ func (g *GKEOrchestrator) InspectCluster(opts orchestrator.InspectOptions) error
 	if hasKueue {
 		g.logSliceControllerResources(writer)
 	}
+	if g.hasTPUSliceAPI() {
+		writer.runAndLog("TPU Slices: All Slices", "kubectl", "get", k8s.TPUSliceResource, "-o", "wide")
+	}
 
 	// --- 6. Workloads ---
 	g.logClusterWorkloads(writer, hasKueue, hasJobSet, targetNamespace)
@@ -246,10 +249,38 @@ func (g *GKEOrchestrator) inspectWorkload(writer *inspectWriter, workloadName, w
 	if hasKueue {
 		g.inspectKueueWorkload(writer, workloadName, workloadNamespace, isBatchJob)
 	}
+	g.inspectWorkloadSlices(writer, workloadName, workloadNamespace, isBatchJob)
 
 	podSelector := workloadPodSelector(workloadName, isBatchJob)
 	writer.runAndLog(fmt.Sprintf("Pods: Status for %s", workloadName), "kubectl", "get", "pods", "-l", podSelector, "-n", workloadNamespace, "-o", "wide")
 	writer.runAndLog(fmt.Sprintf("Pods: Config and Events for %s", workloadName), "kubectl", "describe", "pods", "-l", podSelector, "-n", workloadNamespace)
+}
+
+// inspectWorkloadSlices logs Slice CR readiness, details, and events into an inspect report.
+func (g *GKEOrchestrator) inspectWorkloadSlices(writer *inspectWriter, workloadName, workloadNamespace string, isBatchJob bool) {
+	if !g.hasTPUSliceAPI() || strings.TrimSpace(workloadName) == "" {
+		return
+	}
+	sliceList, staticNames := g.fetchWorkloadSlices(workloadNamespace, workloadName, isBatchJob)
+	if len(staticNames) > 0 {
+		args := append([]string{"describe", k8s.TPUSliceResource, "--"}, staticNames...)
+		writer.runAndLog(fmt.Sprintf("TPU Slice: Static slice(s) %s for %s", strings.Join(staticNames, ", "), workloadName), "kubectl", args...)
+	} else if names := validSliceNames(sliceList); len(names) > 0 {
+		getArgs := append([]string{"get", k8s.TPUSliceResource, "-o", "wide", "--"}, names...)
+		writer.runAndLog(fmt.Sprintf("TPU Slices: Provisioned slices for %s", workloadName), "kubectl", getArgs...)
+		descArgs := append([]string{"describe", k8s.TPUSliceResource, "--"}, names...)
+		writer.runAndLog(fmt.Sprintf("TPU Slices: Details for %s", workloadName), "kubectl", descArgs...)
+	}
+	if len(sliceList) == 0 {
+		return
+	}
+	summary := k8s.FormatSliceReadiness(sliceList)
+	events := g.fetchSliceEvents(sliceList)
+	_, _ = fmt.Fprintf(writer.writer, "Description: TPU Slice Readiness Summary for %s\nOutput:\n%s\n", workloadName, summary)
+	if events != "" {
+		_, _ = fmt.Fprintf(writer.writer, "\nSlice Events:\n%s\n", events)
+	}
+	_, _ = fmt.Fprintf(writer.writer, "\n%s\n\n", spacer)
 }
 
 func (g *GKEOrchestrator) describeWorkloadResource(writer *inspectWriter, workloadName, workloadNamespace string, hasJobSet bool) bool {

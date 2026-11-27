@@ -142,6 +142,16 @@ func (g *GKEOrchestrator) generateWorkloadManifest(opts ManifestOptions, profile
 	if err := validateWorkloadTelemetryManifest(manifest, opts.TelemetryCollectorImage, opts.WorkloadName, customHint); err != nil {
 		return "", err
 	}
+	if err := validateTPUSliceManifest(manifest, tpuSliceManifestContract{
+		workloadLabelsYAML: opts.WorkloadLabels,
+		podLabelsYAML:      opts.PodLabels,
+		topologyAnnotYAML:  opts.TopologyAnnotation,
+		schedulerName:      opts.SchedulerName,
+		dynamicTPUSlice:    opts.DynamicTPUSlice,
+		commPortEnabled:    data.TPUCommPortEnabled,
+	}, customHint); err != nil {
+		return "", err
+	}
 	return manifest, nil
 }
 
@@ -289,9 +299,13 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		return ManifestOptions{}, err
 	}
 
+	dynamicTPUSlice := g.isDynamicTPUSliceWorkload(job, schedOpts.IsTPU)
+	schedulerName := resolveWorkloadSchedulerName(job.GKEScheduler, dynamicTPUSlice)
+
 	opts := ManifestOptions{
 		IsDynamicSlicing:              isDynamicSlicing,
 		IsStaticSlicing:               isStaticSlicing,
+		DynamicTPUSlice:               dynamicTPUSlice,
 		OmitGKENodePool:               schedOpts.OmitGKENodePool,
 		K8sPool:                       profile.K8sPool,
 		WorkloadName:                  job.WorkloadName,
@@ -313,7 +327,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		TtlSecondsAfterFinished:       job.TtlSecondsAfterFinished,
 		TerminationGracePeriodSeconds: job.TerminationGracePeriodSeconds,
 		ServiceAccountName:            job.ServiceAccountName,
-		SchedulerName:                 job.GKEScheduler,
+		SchedulerName:                 schedulerName,
 		AwaitJobCompletion:            job.AwaitJobCompletion,
 		PriorityClassName:             job.PriorityClassName,
 		Topology:                      schedOpts.Topology,
@@ -336,7 +350,7 @@ func (g *GKEOrchestrator) PrepareManifestOptions(job orchestrator.JobDefinition,
 		}
 	}
 
-	if err := g.fillManifestStrings(&opts, schedOpts, job, isDynamicSlicing, isStaticSlicing, profile); err != nil {
+	if err := g.fillManifestStrings(&opts, schedOpts, job, profile); err != nil {
 		return ManifestOptions{}, err
 	}
 
@@ -421,7 +435,7 @@ func derivePathwaysInstanceType(gkeLabel, machineType, accelType, topology strin
 	return fmt.Sprintf("%s:%s", pathwaysPlatform, topology)
 }
 
-func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts SchedulingOptions, job orchestrator.JobDefinition, isDynamicSlicing bool, isStaticSlicing bool, profile JobProfile) error {
+func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts SchedulingOptions, job orchestrator.JobDefinition, profile JobProfile) error {
 	nodeSelectorStr, err := g.buildNodeSelectorWithProfile(schedOpts, job, profile)
 	if err != nil {
 		return err
@@ -439,8 +453,19 @@ func (g *GKEOrchestrator) fillManifestStrings(opts *ManifestOptions, schedOpts S
 		opts.ImagePullSecrets = indentYaml(imagePullSecretsStr, 16)
 	}
 
-	isSubSlicing := isDynamicSlicing || isStaticSlicing
-	opts.TopologyAnnotation = g.buildTopologyAnnotation(schedOpts.Topology, job.MachineType, job.NumSlices, job.NodesPerSlice, isSubSlicing)
+	workloadLabelsStr, err := g.buildTPUSliceWorkloadLabels(job, schedOpts.IsTPU)
+	if err != nil {
+		return err
+	}
+	opts.WorkloadLabels = workloadLabelsStr
+
+	podLabelsStr, err := g.buildTPUSlicePodLabels(job, schedOpts, profile)
+	if err != nil {
+		return err
+	}
+	opts.PodLabels = podLabelsStr
+
+	opts.TopologyAnnotation = g.buildTopologyAnnotation(*opts)
 
 	tolerationsStr, err := g.resolveTolerationsForWorkload(job.MachineType, schedOpts.IsTPU, job.GKENAPProvisioning, job.GKENAPReservation, 16)
 	if err != nil {
@@ -674,14 +699,15 @@ func validatePodFailureExitCodesRule(contextPrefix string, idx int, req *batchv1
 }
 
 func forEachWorkloadJobSpec(manifestContent string, visit func(kind, jobName string, pfp *batchv1.PodFailurePolicy, tmpl *corev1.PodTemplateSpec) error) error {
-	return forEachWorkloadObject(manifestContent, func(kind, jobName string, _ map[string]string, pfp *batchv1.PodFailurePolicy, tmpl *corev1.PodTemplateSpec) error {
-		return visit(kind, jobName, pfp, tmpl)
+	return forEachWorkloadObject(manifestContent, func(obj workloadManifestObject) error {
+		return visit(obj.kind, obj.jobName, obj.pfp, obj.tmpl)
 	})
 }
 
-// forEachWorkloadObject is forEachWorkloadJobSpec plus the JobSet/Job object's own metadata.labels, for checks
-// that concern the workload object rather than its pod template.
-func forEachWorkloadObject(manifestContent string, visit func(kind, jobName string, objectLabels map[string]string, pfp *batchv1.PodFailurePolicy, tmpl *corev1.PodTemplateSpec) error) error {
+// forEachWorkloadObject is forEachWorkloadJobSpec plus the JobSet/Job object's own ObjectMeta and
+// (for JobSet) each replicatedJob's template annotations, for checks that concern the workload object
+// rather than its pod template.
+func forEachWorkloadObject(manifestContent string, visit func(workloadManifestObject) error) error {
 	docs, err := splitYAMLDocuments(manifestContent)
 	if err != nil {
 		return err
@@ -700,7 +726,15 @@ func forEachWorkloadObject(manifestContent string, visit func(kind, jobName stri
 			}
 			for i := range jsDoc.Spec.ReplicatedJobs {
 				rj := &jsDoc.Spec.ReplicatedJobs[i]
-				if err := visit("JobSet", rj.Name, jsDoc.Labels, rj.Template.Spec.PodFailurePolicy, &rj.Template.Spec.Template); err != nil {
+				if err := visit(workloadManifestObject{
+					kind:           "JobSet",
+					jobName:        rj.Name,
+					objectMeta:     jsDoc.ObjectMeta,
+					jobLabels:      rj.Template.Labels,
+					jobAnnotations: rj.Template.Annotations,
+					pfp:            rj.Template.Spec.PodFailurePolicy,
+					tmpl:           &rj.Template.Spec.Template,
+				}); err != nil {
 					return err
 				}
 			}
@@ -709,7 +743,12 @@ func forEachWorkloadObject(manifestContent string, visit func(kind, jobName stri
 			if err := k8syaml.Unmarshal([]byte(doc), &jDoc); err != nil {
 				return fmt.Errorf("failed to parse Job manifest spec: %w", err)
 			}
-			if err := visit("Job", "", jDoc.Labels, jDoc.Spec.PodFailurePolicy, &jDoc.Spec.Template); err != nil {
+			if err := visit(workloadManifestObject{
+				kind:       "Job",
+				objectMeta: jDoc.ObjectMeta,
+				pfp:        jDoc.Spec.PodFailurePolicy,
+				tmpl:       &jDoc.Spec.Template,
+			}); err != nil {
 				return err
 			}
 		case "Service":
@@ -964,7 +1003,7 @@ func warnPathwaysWorkerRestartPolicy(jobSet string) bool {
 }
 
 func (g *GKEOrchestrator) resolveExclusiveTopologyAnnotation(opts ManifestOptions, isTPU bool) string {
-	if opts.IsDynamicSlicing || opts.IsStaticSlicing || opts.isFractionalCPU() {
+	if opts.IsDynamicSlicing || opts.IsStaticSlicing || opts.isFractionalCPU() || opts.DynamicTPUSlice {
 		return ""
 	}
 	if opts.NodesPerSlice <= 1 {
@@ -1041,6 +1080,8 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		PodFailurePolicy:              opts.PodFailurePolicy,
 		ImagePullSecrets:              opts.ImagePullSecrets,
 		ServiceAccountName:            opts.ServiceAccountName,
+		WorkloadLabels:                opts.WorkloadLabels,
+		PodLabels:                     opts.PodLabels,
 		TopologyAnnotation:            opts.TopologyAnnotation,
 		SchedulerName:                 opts.SchedulerName,
 		SchedulingGates:               opts.SchedulingGates,
@@ -1062,6 +1103,7 @@ func (g *GKEOrchestrator) prepareJobSetTemplateData(opts ManifestOptions, comman
 		PathwaysServerEnv:             sortedEnvVars(opts.Pathways.ServerEnv),
 		PathwaysWorkerEnv:             sortedEnvVars(opts.Pathways.WorkerEnv),
 		IsTPU:                         isTPU,
+		TPUCommPortEnabled:            g.shouldEnableTPUCommPort(isTPU, opts.IsPathwaysJob),
 		IsGPU:                         isGPU,
 		MLDiagnosticsEnabled:          opts.MLDiagnosticsEnabled,
 		TelemetryCollectorImage:       opts.TelemetryCollectorImage,
@@ -1075,15 +1117,15 @@ func validateWorkloadTelemetryManifest(manifestContent, collectorImage, workload
 	if collectorImage == "" {
 		return nil
 	}
-	return forEachWorkloadObject(manifestContent, func(kind, jobName string, objectLabels map[string]string, _ *batchv1.PodFailurePolicy, tmpl *corev1.PodTemplateSpec) error {
+	return forEachWorkloadObject(manifestContent, func(obj workloadManifestObject) error {
 		prefix := "Job pod template"
-		if kind == "JobSet" {
-			prefix = fmt.Sprintf("replicatedJob %q", jobName)
+		if obj.kind == "JobSet" {
+			prefix = fmt.Sprintf("replicatedJob %q", obj.jobName)
 		}
-		if err := k8s.ValidateNoManagedWebhookLabel(kind, hint, objectLabels); err != nil {
+		if err := k8s.ValidateNoManagedWebhookLabel(obj.kind, hint, obj.objectMeta.Labels); err != nil {
 			return err
 		}
-		return k8s.ValidatePodTelemetry(prefix, hint, workloadName, tmpl.Spec, tmpl.Labels)
+		return k8s.ValidatePodTelemetry(prefix, hint, workloadName, obj.tmpl.Spec, obj.tmpl.Labels)
 	})
 }
 
@@ -1095,8 +1137,8 @@ func validatePathwaysTelemetryManifest(jobSet, collectorImage, workloadName, hin
 	if err != nil {
 		return err
 	}
-	if err := forEachWorkloadObject(jobSet, func(kind, _ string, objectLabels map[string]string, _ *batchv1.PodFailurePolicy, _ *corev1.PodTemplateSpec) error {
-		return k8s.ValidateNoManagedWebhookLabel(kind, hint, objectLabels)
+	if err := forEachWorkloadObject(jobSet, func(obj workloadManifestObject) error {
+		return k8s.ValidateNoManagedWebhookLabel(obj.kind, hint, obj.objectMeta.Labels)
 	}); err != nil {
 		return err
 	}

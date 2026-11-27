@@ -28,6 +28,7 @@ const defaultAcceleratorsPerVM = 4
 
 var tpuFamilyDefaults = map[string]int{
 	"ct5lp":     8, // Default for TPU v5litepod when suffix is missing
+	"ct5l":      8, // Alias for TPU v5e/v5litepod when suffix is missing
 	"v5litepod": 8, // Legacy string literal default
 	"v5e":       8,
 }
@@ -45,7 +46,7 @@ var tpu3DConstraintsMap = map[string]tpu3DConstraints{
 	"tpu7x": {maxCubes: 144},
 }
 
-var valid2DTPUFamilies = []string{"ct6e", "ct5lp", "v5litepod", "v5-lite", "v5e", "v6e"}
+var valid2DTPUFamilies = []string{"ct6e", "ct5lp", "ct5l", "v5litepod", "v5-lite", "v5e", "v6e"}
 var valid3DTPUFamilies = []string{"v4", "v5p", "ct4p", "ct5p", "tpu7"}
 
 // AcceleratorShorthandMap maps shorthand names to full machine types.
@@ -240,15 +241,16 @@ func expandHardwareSettings(bp Blueprint, mod *Module) error {
 // AcceleratorsPerVM returns the number of accelerator chips/cores per VM for a machine type,
 // parsed from the "-Nt" suffix (e.g. 4 for "ct5lp-hightpu-4t") or machine family defaults.
 func AcceleratorsPerVM(machineType string) int {
+	mt := strings.ToLower(strings.TrimSpace(machineType))
 	// Check for explicit accelerators count in machine_type (e.g., "-4t")
-	if idx := strings.LastIndex(machineType, "-"); idx != -1 && strings.HasSuffix(machineType, "t") {
-		if val, err := strconv.Atoi(machineType[idx+1 : len(machineType)-1]); err == nil && val > 0 {
+	if idx := strings.LastIndex(mt, "-"); idx != -1 && strings.HasSuffix(mt, "t") {
+		if val, err := strconv.Atoi(mt[idx+1 : len(mt)-1]); err == nil && val > 0 {
 			return val
 		}
 	}
 	// Fallback to known machine family defaults
 	for family, defaultAccs := range tpuFamilyDefaults {
-		if strings.Contains(machineType, family) {
+		if strings.Contains(mt, family) {
 			return defaultAccs
 		}
 	}
@@ -292,7 +294,7 @@ func CalculateAcceleratorNodes(machineType, topology string, acceleratorsPerVM i
 // ResolveMachineType returns the full machine type for a given accelerator shorthand.
 // If not found in map, it returns the input string.
 func ResolveMachineType(acceleratorType string) string {
-	if machineType, exists := AcceleratorShorthandMap[strings.ToLower(acceleratorType)]; exists {
+	if machineType, exists := AcceleratorShorthandMap[strings.ToLower(strings.TrimSpace(acceleratorType))]; exists {
 		return machineType
 	}
 	return acceleratorType
@@ -300,8 +302,9 @@ func ResolveMachineType(acceleratorType string) string {
 
 // matchesTPUFamily returns true if the accelerator type matches any of the given families.
 func matchesTPUFamily(machineType string, families []string) bool {
+	mt := strings.ToLower(strings.TrimSpace(machineType))
 	for _, f := range families {
-		if strings.Contains(machineType, f) {
+		if strings.Contains(mt, f) {
 			return true
 		}
 	}
@@ -312,7 +315,7 @@ func matchesTPUFamily(machineType string, families []string) bool {
 // It first resolves shorthand to machine type, then checks for 'ct' or 'tpu' prefixes.
 func IsTPU(acceleratorType string) bool {
 	resolved := ResolveMachineType(acceleratorType)
-	resolvedLower := strings.ToLower(resolved)
+	resolvedLower := strings.ToLower(strings.TrimSpace(resolved))
 
 	for k := range tpuFamilyDefaults {
 		if strings.HasPrefix(resolvedLower, k) {
@@ -342,14 +345,15 @@ func GetCandidatesForShorthand(shorthand string) []string {
 }
 
 func parseShorthand(accelaratorType string) (size int, err error) {
-	if strings.Count(accelaratorType, "-") != 1 {
+	norm := strings.ToLower(strings.TrimSpace(accelaratorType))
+	if strings.Count(norm, "-") != 1 {
 		return 0, fmt.Errorf("invalid accelerator type format for topology resolution: %s (expected prefix-suffix)", accelaratorType)
 	}
-	if strings.HasPrefix(accelaratorType, "tpu7x") {
+	if strings.HasPrefix(norm, "tpu7x") {
 		return 0, fmt.Errorf("for TPU7x, topology should be passed explicitly via --topology flag. It cannot be passed as chip count via compute-type as a suffix (%q). Please use --topology=AxBxC", accelaratorType)
 	}
 
-	parts := strings.Split(accelaratorType, "-")
+	parts := strings.Split(norm, "-")
 	suffix := parts[1]
 	size, err = strconv.Atoi(suffix)
 	if err != nil {
@@ -360,7 +364,7 @@ func parseShorthand(accelaratorType string) (size int, err error) {
 	}
 
 	// For TPU v4 and v5p, the shorthand suffix represents cores. We need to divide by 2 to get chips.
-	if strings.HasPrefix(accelaratorType, "v4-") || strings.HasPrefix(accelaratorType, "v5p-") {
+	if strings.HasPrefix(norm, "v4-") || strings.HasPrefix(norm, "v5p-") {
 		if size%2 != 0 {
 			return 0, fmt.Errorf("TPU v4 and v5p shorthand core count must be even, got %d", size)
 		}
@@ -404,9 +408,6 @@ func ResolveTopologyForChips(computeType string, machineType string) (string, er
 // no standard default shape.
 func DefaultTopologyForChips(machineType string, totalChips int) (string, bool) {
 	mt := strings.ToLower(strings.TrimSpace(machineType))
-	if strings.HasPrefix(mt, "ct5l-") {
-		mt = "ct5lp-" + strings.TrimPrefix(mt, "ct5l-")
-	}
 	if totalChips <= 0 || mt == "" {
 		return "", false
 	}
@@ -526,8 +527,9 @@ func validateDimensions(topology string, a, b, c int, dynamicSlicingCheck bool) 
 }
 
 func getMaxCubes(machineType string) (int, error) {
+	mt := strings.ToLower(strings.TrimSpace(machineType))
 	for prefix, constraints := range tpu3DConstraintsMap {
-		if strings.HasPrefix(machineType, prefix) {
+		if strings.HasPrefix(mt, prefix) {
 			return constraints.maxCubes, nil
 		}
 	}

@@ -35,14 +35,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// Label keys recognized across TPU slice, GKE, and standard Kubernetes clusters.
+// Label keys recognized across GKE and standard Kubernetes clusters.
 const (
-	TPUSliceLabelPrefix          = "tpu.google.com/"
-	TPUSliceNameLabel            = "tpu.google.com/slice-name"
-	TPUSliceTypeLabel            = "tpu.google.com/type"
-	TPUSliceTopologyLabel        = "tpu.google.com/topology"
-	TPUSlicePartitionLabelPrefix = "tpu.google.com/partition-id-"
-
 	GKETPUAcceleratorLabel = "cloud.google.com/gke-tpu-accelerator"
 	GKETPUTopologyLabel    = "cloud.google.com/gke-tpu-topology"
 	GKENodePoolLabel       = "cloud.google.com/gke-nodepool"
@@ -327,14 +321,18 @@ func appendTPUSizeDetails(details []string, tpu *TPUInventory, cap *PoolCapacity
 }
 
 func tpuSummaryHeader(inv *Inventory, tpu *TPUInventory, cap *PoolCapacity) (string, string) {
-	if tpu.DefaultSliceName != "" {
-		return "Default slice: " + tpu.DefaultSliceName, ""
-	}
 	if inv.LabelScheme == SchemeTPUSlice {
 		if inv.SliceInventoryUnavailable {
 			return "TPU pool: slice inventory unavailable", ""
 		}
-		if slices.ContainsFunc(inv.Slices, func(s SliceInfo) bool { return sliceMatchesPrimaryTPU(s, tpu) }) {
+		readyCount, matchedAny := countMatchingSlices(inv.Slices, tpu)
+		if readyCount == 0 && tpu.DefaultSliceName != "" {
+			readyCount = 1
+		}
+		if readyCount > 0 {
+			return fmt.Sprintf("TPU pool: %d ready %s", readyCount, pluralize(readyCount, "slice", "slices")), ""
+		}
+		if matchedAny {
 			return "TPU pool: no ready slice", ""
 		}
 		return "TPU pool: no active slice", ""
@@ -347,6 +345,21 @@ func tpuSummaryHeader(inv *Inventory, tpu *TPUInventory, cap *PoolCapacity) (str
 		return "TPU pool: " + label, label
 	}
 	return "TPU pool", ""
+}
+
+func countMatchingSlices(sliceList []SliceInfo, tpu *TPUInventory) (int, bool) {
+	readyCount := 0
+	matchedAny := false
+	for _, s := range sliceList {
+		if !sliceMatchesPrimaryTPU(s, tpu) {
+			continue
+		}
+		matchedAny = true
+		if s.IsSchedulable() {
+			readyCount++
+		}
+	}
+	return readyCount, matchedAny
 }
 
 func formatGPUSummaryLine(poolKey string, pool PoolCapacity) string {
@@ -541,8 +554,7 @@ func resolveLabelScheme(override LabelScheme, tpuSliceDetected, gkeDetected bool
 
 func accumulateNodes(nodes []unstructured.Unstructured, inv *Inventory, hw TPUHardwareResolver, override LabelScheme) nodeSignals {
 	signals := nodeSignals{
-		poolControlPlane: make(map[string]bool),
-		nodeSlices:       make(map[string]*nodeSliceAgg),
+		nodeSlices: make(map[string]*nodeSliceAgg),
 	}
 	builders := make(map[poolGroupKey]*poolBuilder)
 
@@ -560,7 +572,7 @@ func accumulateNodes(nodes []unstructured.Unstructured, inv *Inventory, hw TPUHa
 		addNodeToSliceAgg(signals.nodeSlices, snap)
 	}
 
-	finalizePools(inv, builders, &signals)
+	finalizePools(inv, builders)
 	return signals
 }
 
@@ -845,7 +857,7 @@ func uniquePoolMapKey(candidate string, used map[string]bool) string {
 	}
 }
 
-func finalizePools(inv *Inventory, builders map[poolGroupKey]*poolBuilder, signals *nodeSignals) {
+func finalizePools(inv *Inventory, builders map[poolGroupKey]*poolBuilder) {
 	keys := make([]poolGroupKey, 0, len(builders))
 	countByPoolKey := make(map[string]int, len(builders))
 	for key := range builders {
@@ -873,7 +885,6 @@ func finalizePools(inv *Inventory, builders map[poolGroupKey]*poolBuilder, signa
 	for _, name := range names {
 		b := byName[name]
 		inv.Pools[name] = finalizeBuilderCapacity(b)
-		signals.poolControlPlane[name] = b.key.controlPlane
 	}
 	inv.CPUPoolCap = selectCPUPoolCap(inv)
 }
@@ -896,6 +907,12 @@ func selectCPUPoolCap(inv *Inventory) *PoolCapacity {
 	return best
 }
 
+// HasUsableCapacity reports whether the pool is usable for scheduling: CPU pools are always usable,
+// while GPU and TPU pools require > 0 allocatable accelerators per node.
+func (p PoolCapacity) HasUsableCapacity() bool {
+	return (!p.IsGPU || p.GPUsPerNode > 0) && (!p.IsTPU || p.TPUsPerNode > 0)
+}
+
 // PoolPreferenceScore ranks discovered pools by scheduling suitability:
 // non-control-plane > usable accelerator capacity > non-system > ReadyNodes > 0.
 func PoolPreferenceScore(pool PoolCapacity) int {
@@ -903,7 +920,7 @@ func PoolPreferenceScore(pool PoolCapacity) int {
 	if !pool.IsControlPlane {
 		score += 8
 	}
-	if (!pool.IsGPU || pool.GPUsPerNode > 0) && (!pool.IsTPU || pool.TPUsPerNode > 0) {
+	if pool.HasUsableCapacity() {
 		score += 4
 	}
 	if !pool.IsSystemPool {
@@ -1063,7 +1080,7 @@ func parseQuantityField(alloc map[string]interface{}, key string) (resource.Quan
 	return qty, true
 }
 
-func findReadyCondition(obj map[string]interface{}) (ready bool, reason string, found bool) {
+func findCondition(obj map[string]interface{}, condType string) (isTrue bool, reason, message string, found bool) {
 	conditions, _, _ := unstructured.NestedSlice(obj, "status", "conditions")
 	for _, raw := range conditions {
 		cond, ok := raw.(map[string]interface{})
@@ -1071,14 +1088,20 @@ func findReadyCondition(obj map[string]interface{}) (ready bool, reason string, 
 			continue
 		}
 		cType, _ := cond["type"].(string)
-		if cType != "Ready" {
+		if cType != condType {
 			continue
 		}
 		cStatus, _ := cond["status"].(string)
 		cReason, _ := cond["reason"].(string)
-		return cStatus == "True", strings.TrimSpace(cReason), true
+		cMessage, _ := cond["message"].(string)
+		return cStatus == "True", strings.TrimSpace(cReason), strings.TrimSpace(cMessage), true
 	}
-	return false, "", false
+	return false, "", "", false
+}
+
+func findReadyCondition(obj map[string]interface{}) (ready bool, reason string, found bool) {
+	ready, reason, _, found = findCondition(obj, "Ready")
+	return ready, reason, found
 }
 
 func isNodeReady(node unstructured.Unstructured) bool {
@@ -1136,78 +1159,6 @@ func isSystemPoolNode(node unstructured.Unstructured, nodePool string) bool {
 		}
 	}
 	return false
-}
-
-// listTPUSlices queries slice.tpu.google.com/v1alpha1 (spec.{type,topology,partitionIds} and
-// status.conditions Ready) and falls back to v1beta1 strictly on NotFound/NoMatch.
-func listTPUSlices(lister ResourceLister, hw TPUHardwareResolver) ([]SliceInfo, bool, error) {
-	items, err := lister.ListResources(TPUSliceGVR, "", "", "")
-	if err != nil && IsNotFoundOrNoMatchError(err) {
-		items, err = lister.ListResources(TPUSliceV1Beta1GVR, "", "", "")
-	}
-	if err != nil {
-		return nil, false, err
-	}
-	result := make([]SliceInfo, 0, len(items))
-	for i := range items {
-		result = append(result, parseTPUSlice(items[i], hw))
-	}
-	sortSlices(result)
-	return result, true, nil
-}
-
-func parseTPUSlice(obj unstructured.Unstructured, hw TPUHardwareResolver) SliceInfo {
-	labels := obj.GetLabels()
-	rawType := firstNonEmpty(
-		nestedString(obj.Object, "spec", "type"),
-		labels[TPUSliceTypeLabel],
-	)
-	topology := strings.ToLower(strings.TrimSpace(firstNonEmpty(
-		nestedString(obj.Object, "spec", "topology"),
-		labels[TPUSliceTopologyLabel],
-	)))
-	ready, reason, _ := findReadyCondition(obj.Object)
-	if obj.GetDeletionTimestamp() != nil {
-		ready = false
-		reason = "Terminating"
-	}
-	partitionIDs, _, _ := unstructured.NestedStringSlice(obj.Object, "spec", "partitionIds")
-
-	totalChips, _ := parseTopologyChipCount(topology)
-	chipsHint := 0
-	if totalChips == 1 {
-		chipsHint = 1
-	}
-	tpuType := hw.NormalizeTPUType(rawType)
-	var machineType string
-	if !isAmbiguousEightChipSlice(hw, tpuType, totalChips) {
-		machineType = hw.InferTPUMachine(tpuType, "", chipsHint)
-	}
-	chips := hw.ChipsPerNode(machineType)
-	if chips == 0 && chipsHint > 0 {
-		chips = chipsHint
-	}
-
-	return SliceInfo{
-		Name:          obj.GetName(),
-		Namespace:     obj.GetNamespace(),
-		TPUType:       tpuType,
-		MachineType:   machineType,
-		Topology:      topology,
-		State:         reason,
-		Ready:         ready,
-		NodesPerSlice: calculateNodesFromTopology(topology, chips),
-		ChipsPerNode:  chips,
-		PartitionIDs:  partitionIDs,
-	}
-}
-
-func isAmbiguousEightChipSlice(hw TPUHardwareResolver, tpuType string, totalChips int) bool {
-	if totalChips != 8 || tpuType == "" {
-		return false
-	}
-	return hw.ChipsPerNode(hw.InferTPUMachine(tpuType, "", 8)) == 8 &&
-		hw.ChipsPerNode(hw.InferTPUMachine(tpuType, "", 4)) == 4
 }
 
 // listTPUPartitionTrees queries partition.tpu.google.com/v1alpha1 and falls back to v1beta1
@@ -1472,13 +1423,15 @@ func sliceNodesReady(readyNodes, totalNodes, nodesPerSlice int) bool {
 }
 
 func buildTPUInventory(inv *Inventory, signals nodeSignals, hw TPUHardwareResolver) (*TPUInventory, *PoolCapacity) {
-	primaryPool, primaryCtrl := selectPrimaryTPUPool(inv, signals)
+	primaryPool := selectPrimaryTPUPool(inv)
 	if primaryPool == nil && len(inv.Slices) == 0 && len(inv.PartitionTrees) == 0 {
 		return nil, nil
 	}
 
 	tpu := &TPUInventory{HasPartitionLabels: signals.hasPartitionLabels}
+	primaryCtrl := false
 	if primaryPool != nil {
+		primaryCtrl = primaryPool.IsControlPlane
 		tpu.TPUType = primaryPool.TPUType
 		tpu.MachineType = primaryPool.MachineType
 		tpu.ChipsPerNode = primaryPool.TPUsPerNode
@@ -1486,7 +1439,7 @@ func buildTPUInventory(inv *Inventory, signals nodeSignals, hw TPUHardwareResolv
 			tpu.ChipsPerNode = hw.ChipsPerNode(tpu.MachineType)
 		}
 	}
-	poolTopos := accumulatePrimaryTPUPools(inv, signals, primaryCtrl, tpu, hw)
+	poolTopos := accumulatePrimaryTPUPools(inv, primaryCtrl, tpu, hw)
 	applySliceAndTreeMetadata(inv, primaryPool, poolTopos, tpu, hw)
 	if tpu.ChipsPerNode == 0 && tpu.MachineType != "" {
 		tpu.ChipsPerNode = hw.ChipsPerNode(tpu.MachineType)
@@ -1497,14 +1450,14 @@ func buildTPUInventory(inv *Inventory, signals nodeSignals, hw TPUHardwareResolv
 	return tpu, primaryPool
 }
 
-func accumulatePrimaryTPUPools(inv *Inventory, signals nodeSignals, primaryCtrl bool, tpu *TPUInventory, hw TPUHardwareResolver) []string {
+func accumulatePrimaryTPUPools(inv *Inventory, primaryCtrl bool, tpu *TPUInventory, hw TPUHardwareResolver) []string {
 	var poolTopos []string
 	for _, name := range inv.PoolNames {
 		pool := inv.Pools[name]
 		if !pool.IsTPU {
 			continue
 		}
-		if !primaryCtrl && signals.poolControlPlane[name] {
+		if !primaryCtrl && pool.IsControlPlane {
 			continue
 		}
 		if !poolMatchesPrimaryTPU(pool, tpu, hw) {
@@ -1548,13 +1501,22 @@ func applySliceAndTreeMetadata(inv *Inventory, primaryPool *PoolCapacity, poolTo
 	if tpu.DefaultSliceName == "" && tpu.Topology == "" {
 		tpu.Topology = pickFallbackTopology(inv, primaryPool, tpu)
 	}
-	if tpu.MachineType == "" && tpu.TPUType != "" {
-		chipsHint := tpu.ChipsPerNode
-		if chipsHint == 0 && isSingleChipTopology(tpu.Topology) {
-			chipsHint = 1
-		}
-		tpu.MachineType = hw.InferTPUMachine(tpu.TPUType, "", chipsHint)
+	inferInventoryTPUMachine(tpu, hw)
+}
+
+func inferInventoryTPUMachine(tpu *TPUInventory, hw TPUHardwareResolver) {
+	if tpu.MachineType != "" || tpu.TPUType == "" {
+		return
 	}
+	chipsHint := tpu.ChipsPerNode
+	totalChips, _ := parseTopologyChipCount(tpu.Topology)
+	if chipsHint == 0 && totalChips == 1 {
+		chipsHint = 1
+	}
+	if chipsHint == 0 && isAmbiguousSliceHostSize(hw, tpu.TPUType, totalChips) {
+		return
+	}
+	tpu.MachineType = hw.InferTPUMachine(tpu.TPUType, "", chipsHint)
 }
 
 func backfillTPUFromPartitionTrees(inv *Inventory, tpu *TPUInventory) {
@@ -1653,7 +1615,7 @@ func applyDefaultSlice(inv *Inventory, tpu *TPUInventory) {
 	if tpu.ChipsPerNode == 0 {
 		tpu.ChipsPerNode = defSlice.ChipsPerNode
 	}
-	if defSlice.Ready {
+	if defSlice.IsSchedulable() {
 		tpu.DefaultSliceName = defSlice.Name
 		if defSlice.Topology != "" {
 			tpu.Topology = defSlice.Topology
@@ -1664,32 +1626,29 @@ func applyDefaultSlice(inv *Inventory, tpu *TPUInventory) {
 	}
 }
 
-func selectPrimaryTPUPool(inv *Inventory, signals nodeSignals) (*PoolCapacity, bool) {
+func selectPrimaryTPUPool(inv *Inventory) *PoolCapacity {
 	var best *PoolCapacity
 	bestName := ""
-	bestCtrl := true
 	for _, name := range inv.PoolNames {
 		pool := inv.Pools[name]
 		if !pool.IsTPU {
 			continue
 		}
-		isCtrl := signals.poolControlPlane[name]
-		if isBetterTPUPool(name, pool, isCtrl, bestName, best, bestCtrl) {
+		if isBetterTPUPool(name, pool, bestName, best) {
 			p := pool
 			best = &p
 			bestName = name
-			bestCtrl = isCtrl
 		}
 	}
-	return best, bestCtrl
+	return best
 }
 
-func isBetterTPUPool(candName string, cand PoolCapacity, candCtrl bool, curName string, cur *PoolCapacity, curCtrl bool) bool {
+func isBetterTPUPool(candName string, cand PoolCapacity, curName string, cur *PoolCapacity) bool {
 	if cur == nil {
 		return true
 	}
-	if candCtrl != curCtrl {
-		return !candCtrl
+	if cand.IsControlPlane != cur.IsControlPlane {
+		return !cand.IsControlPlane
 	}
 	if cand.ReadyNodes != cur.ReadyNodes {
 		return cand.ReadyNodes > cur.ReadyNodes
@@ -1704,10 +1663,10 @@ func selectDefaultSlice(sliceList []SliceInfo, tpu *TPUInventory) *SliceInfo {
 	if len(sliceList) == 0 {
 		return nil
 	}
-	for _, wantReady := range []bool{true, false} {
+	for _, wantSchedulable := range []bool{true, false} {
 		for i := range sliceList {
 			s := &sliceList[i]
-			if wantReady && !s.Ready {
+			if s.Terminating || (wantSchedulable && !s.IsSchedulable()) {
 				continue
 			}
 			if sliceMatchesPrimaryTPU(*s, tpu) {
@@ -1716,15 +1675,6 @@ func selectDefaultSlice(sliceList []SliceInfo, tpu *TPUInventory) *SliceInfo {
 		}
 	}
 	return nil
-}
-
-func sortSlices(sliceList []SliceInfo) {
-	slices.SortFunc(sliceList, func(a, b SliceInfo) int {
-		if c := strings.Compare(a.Name, b.Name); c != 0 {
-			return c
-		}
-		return strings.Compare(a.Namespace, b.Namespace)
-	})
 }
 
 func nestedString(obj map[string]interface{}, fields ...string) string {

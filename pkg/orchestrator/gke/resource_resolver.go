@@ -968,16 +968,15 @@ func isCandidateCompatibleForComputeType(computeType, candidate string) bool {
 	if !config.IsTPU(candidate) {
 		return true
 	}
-	normCandidate := normalizeConfigTPUMachine(candidate)
-	topo, err := config.ResolveTopologyForChips(strings.ToLower(computeType), normCandidate)
+	topo, err := config.ResolveTopologyForChips(strings.ToLower(computeType), candidate)
 	if err != nil {
 		return true
 	}
-	nodes, err := config.CalculateAcceleratorNodes(normCandidate, topo, 0)
+	nodes, err := config.CalculateAcceleratorNodes(candidate, topo, 0)
 	if err != nil {
 		return false
 	}
-	hostChips := config.AcceleratorsPerVM(normCandidate)
+	hostChips := config.AcceleratorsPerVM(candidate)
 	return nodes == 1 || hostChips == 4
 }
 

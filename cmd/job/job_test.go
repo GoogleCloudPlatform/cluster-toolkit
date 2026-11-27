@@ -1545,15 +1545,29 @@ func TestSubmitCmd_TypeK8sRealOrchestratorDryRun(t *testing.T) {
 			name:        "tpu7x_4t_single_container_and_4_chips_no_gke_parallel_split",
 			computeType: "tpu7x-standard-4t",
 			extraArgs:   []string{"--node-constraint", "tpu.google.com/slice-name=slice-4t"},
-			wantSubstr:  []string{"name: workload-container", `google.com/tpu: "4"`, "tpu.google.com/slice-name: slice-4t"},
-			forbid:      []string{"workload-container-0", "workload-container-1"},
+			wantSubstr:  []string{"name: workload-container", `google.com/tpu: "4"`, "tpu.google.com/slice-name: slice-4t", "containerPort: 8471"},
+			forbid:      []string{"workload-container-0", "workload-container-1", "tpu.google.com/slice-prefix", "schedulerName: slice-scheduler"},
+		},
+		{
+			name:        "tpu7x_4t_dynamic_single_slice",
+			computeType: "tpu7x-standard-4t",
+			extraArgs:   []string{"--topology", "2x2x1"},
+			wantSubstr:  []string{"tpu.google.com/slice-prefix: k8s-e2e", "tpu.google.com/type: tpu7x", "tpu.google.com/topology: 2x2x1", "schedulerName: slice-scheduler", "containerPort: 8471", `google.com/tpu: "4"`},
+			forbid:      []string{"tpu.google.com/slice-name", "tpu.google.com/num-slices", "alpha.jobset.sigs.k8s.io/exclusive-topology"},
+		},
+		{
+			name:        "tpu7x_4t_dynamic_multi_slice",
+			computeType: "tpu7x-standard-4t",
+			extraArgs:   []string{"--topology", "2x2x1", "--num-slices", "2"},
+			wantSubstr:  []string{"replicas: 2", "tpu.google.com/slice-prefix: k8s-e2e", "tpu.google.com/type: tpu7x", "tpu.google.com/topology: 2x2x1", `tpu.google.com/num-slices: "2"`, "tpu.google.com/slice-group-name: k8s-e2e", "schedulerName: slice-scheduler", "containerPort: 8471"},
+			forbid:      []string{"tpu.google.com/slice-name", "alpha.jobset.sigs.k8s.io/exclusive-topology"},
 		},
 		{
 			name:        "output_worker_cpu_allows_num_nodes",
 			computeType: "output-worker",
 			extraArgs:   []string{"--num-nodes", "2"},
 			wantSubstr:  []string{"parallelism: 2", "completions: 2", "node.kubernetes.io/instance-type: output-worker"},
-			forbid:      []string{"google.com/tpu"},
+			forbid:      []string{"google.com/tpu", "tpu.google.com/", "schedulerName: slice-scheduler", "containerPort: 8471"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -5235,13 +5235,14 @@ func assertZeroGCloudOrKueueSlicingCalls(t *testing.T, calls []string) {
 }
 
 func TestSubmitJob_TypeK8sTier2AndTier3DryRun(t *testing.T) {
-	t.Run("tier2_jobset_without_kueue_or_gke_labels", func(t *testing.T) {
+	t.Run("tier2_jobset_static_reuse_without_kueue_or_gke_labels", func(t *testing.T) {
 		orc, mockExec := makeTPUSliceK8sSubmitOrchestrator(t, false)
-		outPath := filepath.Join(t.TempDir(), "tier2.yaml")
+		outPath := filepath.Join(t.TempDir(), "tier2-static.yaml")
 		err := orc.SubmitJob(orchestrator.JobDefinition{
-			WorkloadName:   "tpu-tier2",
+			WorkloadName:   "tpu-tier2-static",
 			ClusterName:    "tpu-slice-cluster",
 			GKENamespace:   "ml-ns",
+			Topology:       "2x2x2",
 			ImageName:      "registry.local/jax:v1",
 			CommandToRun:   "python3 train.py",
 			NumSlices:      1,
@@ -5249,16 +5250,17 @@ func TestSubmitJob_TypeK8sTier2AndTier3DryRun(t *testing.T) {
 			DryRunManifest: outPath,
 		})
 		if err != nil {
-			t.Fatalf("SubmitJob(TypeK8s Tier 2) err = %v", err)
+			t.Fatalf("SubmitJob(TypeK8s Tier 2 static) err = %v", err)
 		}
 		assertZeroGCloudOrKueueSlicingCalls(t, mockExec.calls)
-		assertTier2TPUDryRunYAML(t, outPath)
+		assertTier2StaticTPUDryRunYAML(t, outPath)
 	})
 
-	t.Run("tier2_unnamed_tpu_slice_rejected_until_dynamic_slice_provisioning", func(t *testing.T) {
-		orc, _ := makeTPUSliceK8sSubmitOrchestrator(t, false)
+	t.Run("tier2_jobset_dynamic_slice_provisioning", func(t *testing.T) {
+		orc, mockExec := makeTPUSliceK8sSubmitOrchestrator(t, false)
+		outPath := filepath.Join(t.TempDir(), "tier2-dynamic.yaml")
 		err := orc.SubmitJob(orchestrator.JobDefinition{
-			WorkloadName:   "tpu-tier2-unnamed",
+			WorkloadName:   "tpu-tier2",
 			ClusterName:    "tpu-slice-cluster",
 			GKENamespace:   "ml-ns",
 			ComputeType:    "tpu7x",
@@ -5266,11 +5268,13 @@ func TestSubmitJob_TypeK8sTier2AndTier3DryRun(t *testing.T) {
 			ImageName:      "registry.local/jax:v1",
 			CommandToRun:   "python3 train.py",
 			NumSlices:      1,
-			DryRunManifest: filepath.Join(t.TempDir(), "unnamed.yaml"),
+			DryRunManifest: outPath,
 		})
-		if err == nil || !strings.Contains(err.Error(), k8s.TPUSliceNameLabel) {
-			t.Fatalf("SubmitJob(unnamed tpu-slice Tier 2) err = %v, want explicit slice-name error", err)
+		if err != nil {
+			t.Fatalf("SubmitJob(TypeK8s Tier 2 dynamic) err = %v", err)
 		}
+		assertZeroGCloudOrKueueSlicingCalls(t, mockExec.calls)
+		assertTier2TPUDryRunYAML(t, outPath)
 	})
 
 	t.Run("tier3_batch_job_reuses_ready_slice_and_renders_service_plus_job", func(t *testing.T) {
@@ -5294,6 +5298,37 @@ func TestSubmitJob_TypeK8sTier2AndTier3DryRun(t *testing.T) {
 	})
 }
 
+func assertTier2StaticTPUDryRunYAML(t *testing.T, path string) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	js := parseRenderedJobSet(t, string(raw))
+	if js.Name != "tpu-tier2-static" {
+		t.Fatalf("Tier 2 static JobSet name = %q, want tpu-tier2-static", js.Name)
+	}
+	if _, hasPrefix := js.Labels[k8s.TPUSlicePrefixLabel]; hasPrefix {
+		t.Errorf("Tier 2 static reuse must omit %s: %v", k8s.TPUSlicePrefixLabel, js.Labels)
+	}
+	if got := js.Annotations["alpha.jobset.sigs.k8s.io/exclusive-topology"]; got != k8s.TPUSliceNameLabel {
+		t.Errorf("Tier 2 multi-host static reuse exclusive-topology = %q, want %q", got, k8s.TPUSliceNameLabel)
+	}
+	podTmpl := js.Spec.ReplicatedJobs[0].Template.Spec.Template
+	if podTmpl.Spec.NodeSelector[k8s.TPUSliceNameLabel] != "ready-2x2x2" {
+		t.Errorf("Tier 2 static reuse nodeSelector = %v, want %s=ready-2x2x2", podTmpl.Spec.NodeSelector, k8s.TPUSliceNameLabel)
+	}
+	if podTmpl.Spec.SchedulerName != "" {
+		t.Errorf("Tier 2 static reuse schedulerName = %q, want empty", podTmpl.Spec.SchedulerName)
+	}
+	if podTmpl.Labels[k8s.TPUSliceTypeLabel] != "tpu7x" || podTmpl.Labels[k8s.TPUSliceTopologyLabel] != "2x2x2" {
+		t.Errorf("Tier 2 static reuse pod labels = %v, want type=tpu7x topology=2x2x2", podTmpl.Labels)
+	}
+	if len(podTmpl.Spec.Containers[0].Ports) == 0 || podTmpl.Spec.Containers[0].Ports[0].ContainerPort != 8471 {
+		t.Errorf("Tier 2 static reuse missing containerPort 8471: %+v", podTmpl.Spec.Containers[0].Ports)
+	}
+}
+
 func assertTier2TPUDryRunYAML(t *testing.T, path string) {
 	t.Helper()
 	raw, err := os.ReadFile(path)
@@ -5304,23 +5339,42 @@ func assertTier2TPUDryRunYAML(t *testing.T, path string) {
 	if err != nil || len(docs) != 1 {
 		t.Fatalf("Tier 2 splitYAMLDocuments len=%d err=%v, want 1 JobSet", len(docs), err)
 	}
-	var js unstructured.Unstructured
-	if err := k8syaml.Unmarshal([]byte(docs[0]), &js.Object); err != nil {
-		t.Fatalf("unmarshal Tier 2 JobSet: %v", err)
+	js := parseRenderedJobSet(t, docs[0])
+	if js.Kind != "JobSet" || js.Name != "tpu-tier2" {
+		t.Fatalf("Tier 2 object = (%s/%s), want JobSet/tpu-tier2", js.Kind, js.Name)
 	}
-	if js.GetKind() != "JobSet" || js.GetName() != "tpu-tier2" {
-		t.Fatalf("Tier 2 object = (%s/%s), want JobSet/tpu-tier2", js.GetKind(), js.GetName())
+	if _, hasQueue := js.Labels["kueue.x-k8s.io/queue-name"]; hasQueue {
+		t.Errorf("Tier 2 JobSet must omit queue label: %v", js.Labels)
 	}
-	if _, hasQueue := js.GetLabels()["kueue.x-k8s.io/queue-name"]; hasQueue {
-		t.Errorf("Tier 2 JobSet must omit queue label: %v", js.GetLabels())
+	if js.Labels[k8s.TPUSlicePrefixLabel] != "tpu-tier2" {
+		t.Errorf("Tier 2 dynamic JobSet metadata.labels = %v, want %s=tpu-tier2", js.Labels, k8s.TPUSlicePrefixLabel)
+	}
+	podTmpl := js.Spec.ReplicatedJobs[0].Template.Spec.Template
+	if podTmpl.Spec.SchedulerName != k8s.TPUSliceSchedulerName {
+		t.Errorf("Tier 2 dynamic schedulerName = %q, want %q", podTmpl.Spec.SchedulerName, k8s.TPUSliceSchedulerName)
 	}
 	manifest := string(raw)
-	for _, want := range []string{"google.com/tpu: \"4\"", "parallelism: 2", "completions: 2"} {
+	for _, want := range []string{
+		"google.com/tpu: \"4\"",
+		"parallelism: 2",
+		"completions: 2",
+		"tpu.google.com/slice-prefix: tpu-tier2",
+		"tpu.google.com/type: tpu7x",
+		"tpu.google.com/topology: 2x2x2",
+		"schedulerName: slice-scheduler",
+		"containerPort: 8471",
+	} {
 		if !strings.Contains(manifest, want) {
 			t.Errorf("Tier 2 manifest missing %q:\n%s", want, manifest)
 		}
 	}
-	for _, forbid := range []string{"cloud.google.com/gke-nodepool", "cloud.google.com/gke-tpu-accelerator", "cloud.google.com/gke-tpu-topology"} {
+	for _, forbid := range []string{
+		"cloud.google.com/gke-nodepool",
+		"cloud.google.com/gke-tpu-accelerator",
+		"cloud.google.com/gke-tpu-topology",
+		"tpu.google.com/slice-name",
+		"ready-2x2x2",
+	} {
 		if strings.Contains(manifest, forbid) {
 			t.Errorf("Tier 2 manifest must omit %q:\n%s", forbid, manifest)
 		}
@@ -5348,9 +5402,25 @@ func assertTier3TPUDryRunYAML(t *testing.T, path string) {
 	if job.Spec.Template.Spec.NodeSelector[k8s.TPUSliceNameLabel] != "ready-2x2x2" {
 		t.Errorf("Tier 3 Job nodeSelector = %v, want %s=ready-2x2x2", job.Spec.Template.Spec.NodeSelector, k8s.TPUSliceNameLabel)
 	}
+	assertTier3TPUPodLabelsAndPort(t, job)
 	tpuQty := job.Spec.Template.Spec.Containers[0].Resources.Limits[corev1.ResourceName("google.com/tpu")]
 	if tpuQty.String() != "4" {
 		t.Errorf("Tier 3 Job TPU limit = %q, want 4", tpuQty.String())
+	}
+}
+
+func assertTier3TPUPodLabelsAndPort(t *testing.T, job batchv1.Job) {
+	t.Helper()
+	labels := job.Spec.Template.Labels
+	if labels[k8s.TPUSliceTypeLabel] != "tpu7x" || labels[k8s.TPUSliceTopologyLabel] != "2x2x2" {
+		t.Errorf("Tier 3 Job pod labels = %v, want type=tpu7x topology=2x2x2", labels)
+	}
+	if _, hasName := labels[k8s.TPUSliceNameLabel]; hasName {
+		t.Errorf("Tier 3 static reuse Job pod labels must omit %s: %v", k8s.TPUSliceNameLabel, labels)
+	}
+	ports := job.Spec.Template.Spec.Containers[0].Ports
+	if len(ports) == 0 || ports[0].ContainerPort != 8471 {
+		t.Errorf("Tier 3 Job container ports = %+v, want containerPort 8471", ports)
 	}
 }
 
@@ -5440,8 +5510,9 @@ func TestSubmitJob_TypeK8sExplicitModeRBACRequirements(t *testing.T) {
 		}
 	})
 
-	t.Run("explicit_mode_unnamed_tpu_slice_rejected", func(t *testing.T) {
+	t.Run("explicit_mode_unnamed_tpu_slice_provisions_dynamically", func(t *testing.T) {
 		orc, _ := newExplicitOrc()
+		outPath := filepath.Join(t.TempDir(), "explicit-unnamed.yaml")
 		err := orc.SubmitJob(orchestrator.JobDefinition{
 			WorkloadName:   "explicit-unnamed",
 			ClusterName:    "explicit-cluster",
@@ -5451,12 +5522,32 @@ func TestSubmitJob_TypeK8sExplicitModeRBACRequirements(t *testing.T) {
 			ImageName:      "registry.local/jax:v1",
 			CommandToRun:   "echo hi",
 			NumSlices:      1,
-			DryRunManifest: filepath.Join(t.TempDir(), "explicit-unnamed.yaml"),
+			DryRunManifest: outPath,
 		})
-		if err == nil || !strings.Contains(err.Error(), k8s.TPUSliceNameLabel) {
-			t.Fatalf("SubmitJob(ExplicitMode unnamed tpu-slice) err = %v, want explicit slice-name error", err)
+		if err != nil {
+			t.Fatalf("SubmitJob(ExplicitMode unnamed tpu-slice) err = %v, want nil", err)
 		}
+		assertExplicitDynamicTPUSliceYAML(t, outPath)
 	})
+}
+
+func assertExplicitDynamicTPUSliceYAML(t *testing.T, outPath string) {
+	t.Helper()
+	raw, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	js := parseRenderedJobSet(t, string(raw))
+	if js.Labels[k8s.TPUSlicePrefixLabel] != "explicit-unnamed" {
+		t.Errorf("ExplicitMode dynamic JobSet labels = %v, want %s=explicit-unnamed", js.Labels, k8s.TPUSlicePrefixLabel)
+	}
+	podTmpl := js.Spec.ReplicatedJobs[0].Template.Spec.Template
+	if podTmpl.Spec.SchedulerName != k8s.TPUSliceSchedulerName {
+		t.Errorf("ExplicitMode dynamic schedulerName = %q, want %q", podTmpl.Spec.SchedulerName, k8s.TPUSliceSchedulerName)
+	}
+	if podTmpl.Labels[k8s.TPUSliceTypeLabel] != "tpu7x" || podTmpl.Labels[k8s.TPUSliceTopologyLabel] != "2x2x2" {
+		t.Errorf("ExplicitMode dynamic pod labels = %v, want type=tpu7x topology=2x2x2", podTmpl.Labels)
+	}
 }
 
 type versionTrackingDynamicClient struct {

@@ -689,7 +689,8 @@ func TestSummaryLines_TPUAndExplicitModes(t *testing.T) {
 				Slices:             []SliceInfo{{Name: "s1", Ready: true}},
 				TPU:                &TPUInventory{DefaultSliceName: "s1"},
 			},
-			wantParts: []string{"Kubernetes explicit mode active (label scheme: tpu-slice, TPU slice API detected).", "Default slice: s1."},
+			wantParts:   []string{"Kubernetes explicit mode active (label scheme: tpu-slice, TPU slice API detected).", "TPU pool: 1 ready slice."},
+			forbidParts: []string{"Default slice:"},
 		},
 		{
 			name: "healthy GKE TPU pool does not report missing slice",
@@ -712,12 +713,17 @@ func TestSummaryLines_TPUAndExplicitModes(t *testing.T) {
 			forbidParts: []string{"no active slice", "no ready slice", "machine=ct6e-standard-4t"},
 		},
 		{
-			name: "tpu pool with ready slice and distinct node pool",
+			name: "tpu pool with ready slices and distinct node pool",
 			inv: &Inventory{
 				LabelScheme: SchemeTPUSlice,
 				TotalNodes:  2,
 				ReadyNodes:  2,
 				TPUPoolCap:  &PoolCapacity{NodePoolName: "tpu-pool-a", MachineType: "tpu7x-standard-4t"},
+				Slices: []SliceInfo{
+					{Name: "s1", TPUType: "tpu7x", Ready: true},
+					{Name: "s2", TPUType: "tpu7x", Ready: true},
+					{Name: "s-unlabeled", TPUType: "tpu7x", Ready: true, NodesLabeledKnown: true, NodesLabeled: false},
+				},
 				TPU: &TPUInventory{
 					TPUType:          "tpu7x",
 					MachineType:      "tpu7x-standard-4t",
@@ -728,7 +734,8 @@ func TestSummaryLines_TPUAndExplicitModes(t *testing.T) {
 					DefaultSliceName: "s1",
 				},
 			},
-			wantParts: []string{"tpu7x", "pool=tpu-pool-a", "2/2 ready Kubernetes nodes", "Default slice: s1", "2/2 ready nodes"},
+			wantParts:   []string{"tpu7x", "pool=tpu-pool-a", "2/2 ready Kubernetes nodes", "TPU pool: 2 ready slices", "2/2 ready nodes"},
+			forbidParts: []string{"Default slice:"},
 		},
 		{
 			name: "tpu pool with unready slice",
@@ -1259,15 +1266,22 @@ func TestDiscoverInventory_IntelGPUMetadataOnlyAndFallbackKeys(t *testing.T) {
 	}
 }
 
-func TestDiscoverInventory_Day2TPUPoolRankingAndTerminatingObjects(t *testing.T) {
+func TestIsBetterTPUPool_RankingOrder(t *testing.T) {
 	t.Parallel()
 	// Healthy 4/4 TPU pool must beat a mostly-drained 1/8 TPU pool.
 	degraded := PoolCapacity{MachineType: "ct6e-standard-4t", TotalNodes: 8, ReadyNodes: 1}
 	healthy := PoolCapacity{MachineType: "ct6e-standard-8t", TotalNodes: 4, ReadyNodes: 4}
-	if !isBetterTPUPool("pool-healthy", healthy, false, "pool-degraded", &degraded, false) {
+	if !isBetterTPUPool("pool-healthy", healthy, "pool-degraded", &degraded) {
 		t.Errorf("expected healthy 4/4 TPU pool to beat degraded 1/8 TPU pool")
 	}
+	ctrl := PoolCapacity{MachineType: "ct6e-standard-4t", TotalNodes: 8, ReadyNodes: 8, IsControlPlane: true}
+	if !isBetterTPUPool("pool-worker", degraded, "pool-ctrl", &ctrl) {
+		t.Errorf("expected worker TPU pool to beat control-plane TPU pool")
+	}
+}
 
+func TestDiscoverInventory_Day2TPUPoolRankingAndTerminatingObjects(t *testing.T) {
+	t.Parallel()
 	// Terminating Node, Slice, and PartitionTree (metadata.deletionTimestamp set) must not be ready/active.
 	const deletionTS = "2026-11-23T00:00:00Z"
 	termNode := makeNode("tpu-term", map[string]string{
@@ -1733,5 +1747,65 @@ func TestDiscoverInventory_NodesNotReadySliceStateAndPoolComparator(t *testing.T
 	}
 	if len(derivedInv.Slices) != 1 || derivedInv.Slices[0].Ready || derivedInv.Slices[0].State != "NodesNotReady (1/2)" {
 		t.Errorf("node-derived degraded slice = %+v, want Ready=false State=\"NodesNotReady (1/2)\"", derivedInv.Slices)
+	}
+}
+
+func TestPoolCapacity_HasUsableCapacity(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		pool PoolCapacity
+		want bool
+	}{
+		{name: "tpu_with_chips", pool: PoolCapacity{IsTPU: true, TPUsPerNode: 4}, want: true},
+		{name: "tpu_zero_chips", pool: PoolCapacity{IsTPU: true, TPUsPerNode: 0}, want: false},
+		{name: "gpu_with_chips", pool: PoolCapacity{IsGPU: true, GPUsPerNode: 8}, want: true},
+		{name: "gpu_zero_chips", pool: PoolCapacity{IsGPU: true, GPUsPerNode: 0}, want: false},
+		{name: "cpu_pool", pool: PoolCapacity{AllocatableCPUMilli: 4000}, want: true},
+	}
+	for _, tc := range cases {
+		if got := tc.pool.HasUsableCapacity(); got != tc.want {
+			t.Errorf("%s: HasUsableCapacity() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestDiscoverInventory_OmittedTopologyAndAmbiguousSliceDoNotFabricate4t(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name        string
+		spec        map[string]interface{}
+		wantMachine string
+		wantChips   int
+	}{
+		{"v6e_omitted_topo", map[string]interface{}{"type": "v6e"}, "", 0},
+		{"tpu7x_omitted_topo", map[string]interface{}{"type": "tpu7x"}, "", 0},
+		{"v6e_ambiguous_2x4", map[string]interface{}{"type": "v6e", "topology": "2x4"}, "", 0},
+		{"v5p_omitted_topo_single_host", map[string]interface{}{"type": "v5p"}, "ct5p-hightpu-4t", 4},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sliceObj := unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"metadata": map[string]interface{}{"name": "s-" + tc.name},
+					"spec":     tc.spec,
+					"status": map[string]interface{}{
+						"conditions": []interface{}{
+							map[string]interface{}{"type": "Ready", "status": "True", "reason": "READY"},
+						},
+					},
+				},
+			}
+			inv, err := DiscoverInventory(&fakeDiscoveryLister{
+				byGVR:  map[schema.GroupVersionResource][]unstructured.Unstructured{TPUSliceGVR: {sliceObj}},
+				errGVR: map[schema.GroupVersionResource]error{NodeGVR: apierrors.NewForbidden(NodeGVR.GroupResource(), "", errors.New("denied"))},
+			}, &fakeAPIGroupChecker{groups: map[string]bool{TPUSliceAPIGroupVersion: true}}, DiscoverOptions{HardwareResolver: testHardwareResolver{}})
+			if err != nil {
+				t.Fatalf("DiscoverInventory err = %v", err)
+			}
+			if inv.TPU == nil || inv.TPU.MachineType != tc.wantMachine || inv.TPU.ChipsPerNode != tc.wantChips {
+				t.Errorf("inv.TPU = %+v, want MachineType=%q ChipsPerNode=%d", inv.TPU, tc.wantMachine, tc.wantChips)
+			}
+		})
 	}
 }

@@ -133,6 +133,9 @@ func (g *GKEOrchestrator) resetStorageCaches() {
 	g.jobSetAPIProbed = false
 	g.jobSetAPIPresent = false
 	g.jobSetAPIContext = ""
+	g.tpuSliceAPIChecked = false
+	g.tpuSliceAPIPresent = false
+	g.tpuSliceAPIContext = ""
 }
 
 func (g *GKEOrchestrator) resetSubmissionSession() {
@@ -597,38 +600,68 @@ func (g *GKEOrchestrator) checkUnscheduledPods(ns, jobsetName string, isBatchJob
 	}
 	var unscheduled []string
 	jobPods := make(map[string]bool)
-	for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
+	totalPods := 0
+	hasPendingPod := false
+	for _, line := range strings.Split(strings.TrimRight(res.Stdout, "\r\n"), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" {
 			continue
 		}
 		parts := strings.Split(line, "\t")
-		if len(parts) < 3 {
+		if len(parts) < 2 {
 			continue
 		}
-		podName := parts[0]
-		scheduledStatus := parts[2]
+		totalPods++
+		podName := strings.TrimSpace(parts[0])
+		phase := strings.TrimSpace(parts[1])
+		scheduledStatus := ""
+		if len(parts) > 2 {
+			scheduledStatus = strings.TrimSpace(parts[2])
+		}
+		if isPodPendingScheduling(phase, scheduledStatus) {
+			hasPendingPod = true
+		}
 		if scheduledStatus == "False" {
 			jobPods["pod/"+podName] = true
-			var reason, msg string
-			if len(parts) > 3 {
-				reason = parts[3]
-			}
-			if len(parts) > 4 {
-				msg = parts[4]
-			}
-			if reason != "" || msg != "" {
-				unscheduled = append(unscheduled, fmt.Sprintf("%s (%s: %s)", podName, reason, msg))
-			} else {
-				unscheduled = append(unscheduled, fmt.Sprintf("%s (PodScheduled=False)", podName))
-			}
+			unscheduled = append(unscheduled, formatUnscheduledPodLine(podName, parts))
 		}
 	}
 	if len(unscheduled) == 0 {
+		if totalPods == 0 || hasPendingPod {
+			return g.formatPendingSliceDiagnostics(ns, jobsetName, isBatchJob)
+		}
 		return ""
 	}
+	return g.appendUnscheduledDiagnostics(ns, jobsetName, isBatchJob, jobPods, unscheduled)
+}
+
+func isPodPendingScheduling(phase, scheduledStatus string) bool {
+	if phase == "Running" || phase == "Succeeded" || phase == "Failed" {
+		return false
+	}
+	return scheduledStatus != "True"
+}
+
+func formatUnscheduledPodLine(podName string, parts []string) string {
+	var reason, msg string
+	if len(parts) > 3 {
+		reason = parts[3]
+	}
+	if len(parts) > 4 {
+		msg = parts[4]
+	}
+	if reason != "" || msg != "" {
+		return fmt.Sprintf("%s (%s: %s)", podName, reason, msg)
+	}
+	return fmt.Sprintf("%s (PodScheduled=False)", podName)
+}
+
+func (g *GKEOrchestrator) appendUnscheduledDiagnostics(ns, jobsetName string, isBatchJob bool, jobPods map[string]bool, unscheduled []string) string {
 	if podEvents := g.checkPodWarningEvents(ns, jobPods); podEvents != "" {
 		unscheduled = append(unscheduled, podEvents)
+	}
+	if sliceDiag := g.formatWorkloadSliceDiagnostics(ns, jobsetName, isBatchJob); sliceDiag != "" {
+		unscheduled = append(unscheduled, sliceDiag)
 	}
 	return strings.Join(unscheduled, "\n")
 }
@@ -647,8 +680,15 @@ func (g *GKEOrchestrator) waitForJobPods(ns, jobsetName string) (int, int, jobSe
 			return pods, streams, info, err
 		}
 		if i == 0 {
-			logging.Info("Waiting for job '%s' pods to be created...", jobsetName)
+			if sliceDiag := g.formatPendingSliceDiagnostics(ns, jobsetName, info.isBatchJob); sliceDiag != "" {
+				logging.Info("Waiting for job '%s' TPU slice(s) to become ready:\n%s", jobsetName, sliceDiag)
+			} else {
+				logging.Info("Waiting for job '%s' pods to be created...", jobsetName)
+			}
 		}
+	}
+	if sliceDiag := g.formatPendingSliceDiagnostics(ns, jobsetName, info.isBatchJob); sliceDiag != "" {
+		return 0, 0, jobSetInfo{}, fmt.Errorf("timed out waiting for job '%s' to start; TPU slice provisioning is still pending:\n%s", jobsetName, sliceDiag)
 	}
 	if warnEvents := g.checkWorkloadWarningEvents(ns, jobsetName, info.isBatchJob); warnEvents != "" {
 		return 0, 0, jobSetInfo{}, fmt.Errorf("timed out waiting for job to start; %s reported warning events:\n%s", workloadKindLabel(info.isBatchJob), warnEvents)
@@ -2916,16 +2956,15 @@ func (g *GKEOrchestrator) buildAffinity(schedOpts SchedulingOptions) (string, er
 	return "", nil
 }
 
-func (g *GKEOrchestrator) buildTopologyAnnotation(topology string, machineType string, numSlices int, nodesPerSlice int, isSubSlicing bool) string {
-	if g.mode == orchestrator.TypeK8s && g.labelScheme() != k8s.SchemeGKE {
-		return ""
-	}
+func (g *GKEOrchestrator) buildTopologyAnnotation(opts ManifestOptions) string {
 	var topologyAnnotation map[string]string
-	if isSubSlicing {
-		topologyAnnotation = GetTopologyAnnotation(topology, machineType, numSlices, nodesPerSlice)
-	} else if topology != "" {
+	if g.mode == orchestrator.TypeK8s && g.labelScheme() != k8s.SchemeGKE {
+		topologyAnnotation = buildTPUSliceGangAnnotations(opts.WorkloadName, opts.NumSlices, opts.DynamicTPUSlice)
+	} else if opts.IsDynamicSlicing || opts.IsStaticSlicing {
+		topologyAnnotation = GetTopologyAnnotation(opts.Topology, opts.MachineType, opts.NumSlices, opts.NodesPerSlice)
+	} else if opts.Topology != "" {
 		topologyAnnotation = map[string]string{
-			"cloud.google.com/gke-tpu-slice-topology": topology,
+			"cloud.google.com/gke-tpu-slice-topology": opts.Topology,
 		}
 	}
 	if len(topologyAnnotation) > 0 {

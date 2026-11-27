@@ -176,6 +176,7 @@ func TestReindentYAML(t *testing.T) {
 type baseBlockTestData struct {
 	WorkloadName         string
 	KueueQueueName       string
+	WorkloadLabels       string
 	PriorityClassName    string
 	ServiceAccountName   string
 	ImagePullSecrets     string
@@ -199,8 +200,8 @@ func executeBaseBlock(t *testing.T, blocks map[string]*yamltemplate.Template, na
 
 func baseBlockFixture() baseBlockTestData {
 	return baseBlockTestData{
-		WorkloadName: "job-a", KueueQueueName: "q1", PriorityClassName: "high",
-		ServiceAccountName: "ksa", ImagePullSecrets: "- name: reg-sec", MLDiagnosticsEnabled: true,
+		WorkloadName: "job-a", KueueQueueName: "q1", WorkloadLabels: "tpu.google.com/slice-prefix: job-a",
+		PriorityClassName: "high", ServiceAccountName: "ksa", ImagePullSecrets: "- name: reg-sec", MLDiagnosticsEnabled: true,
 	}
 }
 
@@ -219,7 +220,7 @@ func TestLoadWorkloadTemplate_ExecutesEmbeddedBlocksWithStructuralData(t *testin
 	data := baseBlockFixture()
 	blocks := loadBlocks(t, "")
 	labels := executeBaseBlock(t, blocks, "workload_labels", data)
-	for _, want := range []string{"gcluster.google.com/workload: job-a", "kueue.x-k8s.io/queue-name: q1", `managed-mldiagnostics-gke: "true"`} {
+	for _, want := range []string{"gcluster.google.com/workload: job-a", "kueue.x-k8s.io/queue-name: q1", "tpu.google.com/slice-prefix: job-a", `managed-mldiagnostics-gke: "true"`} {
 		if !strings.Contains(labels, want) {
 			t.Errorf("workload_labels missing %q:\n%s", want, labels)
 		}
@@ -234,6 +235,69 @@ func TestLoadWorkloadTemplate_ExecutesEmbeddedBlocksWithStructuralData(t *testin
 	injected.PriorityClassName = "high\n  hostPID: true"
 	if err := blocks["pod_auth_and_priority"].Execute(io.Discard, injected); !errors.Is(err, yamltemplate.ErrYAMLInjection) {
 		t.Errorf("newline in PriorityClassName: error = %v, want ErrYAMLInjection", err)
+	}
+}
+
+type podTemplateTestData struct {
+	WorkloadName                  string
+	TelemetryCollectorImage       string
+	PodLabels                     string
+	TopologyAnnotation            string
+	GCSFuseEnabled                bool
+	Subdomain                     string
+	HostNetworkEnabled            bool
+	TerminationGracePeriodSeconds int
+	SchedulerName                 string
+	SchedulingGates               string
+	TPUCommPortEnabled            bool
+	Containers                    []struct {
+		Name          string
+		ResourcesYAML string
+	}
+	FullImageName    string
+	Command          []string
+	Env              []struct{ Name, Value string }
+	Verbose          bool
+	IsTPU            bool
+	IsGPU            bool
+	VolumeMountsYAML string
+	VolumesYAML      string
+}
+
+func (podTemplateTestData) RenderBlock(string, int) (string, error) { return "", nil }
+
+func TestLoadWorkloadTemplate_PodTemplateTPUSliceLabelsAndPort(t *testing.T) {
+	t.Parallel()
+	blocks := loadBlocks(t, "")
+	data := podTemplateTestData{
+		WorkloadName:                  "tpu-job",
+		PodLabels:                     "tpu.google.com/topology: 2x2x1\ntpu.google.com/type: tpu7x",
+		TerminationGracePeriodSeconds: 30,
+		SchedulerName:                 TPUSliceSchedulerName,
+		TPUCommPortEnabled:            true,
+		Containers: []struct {
+			Name          string
+			ResourcesYAML string
+		}{
+			{Name: "workload-container-1"},
+			{Name: "workload-container-2"},
+		},
+		FullImageName: "registry.local/jax:v1",
+		Command:       []string{"echo", "hi"},
+	}
+	rendered := executeBaseBlock(t, blocks, "pod_template", data)
+	for _, want := range []string{
+		"    tpu.google.com/type: tpu7x",
+		"    tpu.google.com/topology: 2x2x1",
+		"  schedulerName: slice-scheduler",
+		"    ports:\n    - containerPort: 8471\n      name: tpu-comm",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("pod_template missing %q:\n%s", want, rendered)
+		}
+	}
+	if strings.Count(rendered, "containerPort: 8471") != 1 {
+		t.Errorf("pod_template must declare containerPort 8471 once (container 0 only):\n%s", rendered)
 	}
 }
 
