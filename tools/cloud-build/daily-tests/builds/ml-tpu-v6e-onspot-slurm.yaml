@@ -93,6 +93,8 @@ steps:
               value: "true"
             - name: REQUIRED_LUSTRE_GB
               value: "18000"
+            - name: LUSTRE_OPTIONS_GCS_PATH
+              value: "gs://hpc-ctk1357/managedlustreoptions.txt"
             - name: ANSIBLE_HOST_KEY_CHECKING
               value: "false"
             - name: ANSIBLE_CONFIG
@@ -103,6 +105,8 @@ steps:
               value: "1"
             - name: MACHINE_TYPE
               value: "tpu"
+            - name: REQUIRED_SUPPORT_MACHINE_TYPE
+              value: "c2-standard-4"
             - name: TPU_RUNTIME_VERSION
               value: "v2-alpha-tpuv6e"
             - name: ACCELERATOR_TYPE
@@ -152,6 +156,10 @@ steps:
                 echo "ERROR: ZONE not found" >&2
                 exit 1
               fi
+              if [ -z "\$${LUSTRE_ZONE:-}" ]; then
+                echo "ERROR: LUSTRE_ZONE not found" >&2
+                exit 1
+              fi
 
               set -x
               cd /workspace
@@ -168,6 +176,11 @@ steps:
               sed -i 's/^  tpu_static_nodes:.*/  tpu_static_nodes: 1/' \$$BLUEPRINT
               sed -i 's/^  tpu_dynamic_max_nodes:.*/  tpu_dynamic_max_nodes: 1/' \$$BLUEPRINT
               sed -i 's/^  lustre_size_gib:.*/  lustre_size_gib: 18000/' \$$BLUEPRINT
+              sed -i "s/remote_mount: lustrefs/remote_mount: lustrefs\n      zone: \$$LUSTRE_ZONE/" \$$BLUEPRINT
+              if ! grep -q "zone: \$$LUSTRE_ZONE" \$$BLUEPRINT; then
+                echo "ERROR: Failed to inject LUSTRE_ZONE into \$$BLUEPRINT" >&2
+                exit 1
+              fi
               sed -i 's/machine_type: n2d-standard-4/machine_type: c2-standard-4/g' \$$BLUEPRINT
 
               ENABLE_SPOT="true"

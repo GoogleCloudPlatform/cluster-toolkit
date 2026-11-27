@@ -96,7 +96,9 @@ steps:
             - name: CHECK_LUSTRE
               value: "true"
             - name: REQUIRED_LUSTRE_GB
-              value: "36000"
+              value: "18000"
+            - name: LUSTRE_OPTIONS_GCS_PATH
+              value: "gs://hpc-ctk1357/managedlustreoptions.txt"
             - name: ANSIBLE_HOST_KEY_CHECKING
               value: "false"
             - name: ANSIBLE_CONFIG
@@ -157,6 +159,10 @@ steps:
                 echo "ERROR: ZONE not found" >&2
                 exit 1
               fi
+              if [ -z "\$${LUSTRE_ZONE:-}" ]; then
+                echo "ERROR: LUSTRE_ZONE not found" >&2
+                exit 1
+              fi
               set -x
               echo "\"test_file_path\": tools/cloud-build/daily-tests/builds/ml-a4-highgpu-onspot-slurm.yaml"
               cd /workspace
@@ -164,6 +170,12 @@ steps:
               REGION="\$${ZONE%-*}"
               sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' \$$BLUEPRINT
               sed -i -e '/reason:/d' \$$BLUEPRINT
+              sed -i 's/^  lustre_size_gib:.*/  lustre_size_gib: 18000/' \$$BLUEPRINT
+              sed -i "s/remote_mount: lustrefs/remote_mount: lustrefs\n      zone: \$$LUSTRE_ZONE/" \$$BLUEPRINT
+              if ! grep -q "zone: \$$LUSTRE_ZONE" \$$BLUEPRINT; then
+                echo "ERROR: Failed to inject LUSTRE_ZONE into \$$BLUEPRINT" >&2
+                exit 1
+              fi
 
               ENABLE_SPOT="true"
               SLURM_VARS_FILE="tools/cloud-build/daily-tests/tests/ml-a4-highgpu-onspot-slurm.yml"

@@ -16,7 +16,7 @@
 BUILD_ID_SHORT="${BUILD_ID:0:6}"
 PROVISIONING_MODEL="SPOT"
 TERMINATION_ACTION="DELETE"
-FULL_INSTANCE_PREFIX="${INSTANCE_PREFIX}-${BUILD_ID_SHORT}-"
+FULL_INSTANCE_PREFIX="${INSTANCE_PREFIX:-}-${BUILD_ID_SHORT}-"
 MIN_NODES="${MIN_NODES:-2}" # Define minimum number of nodes required
 
 generate_instance_names() {
@@ -359,119 +359,253 @@ check_cpu_quota() {
 	fi
 }
 
-if ! GCS_CONTENT=$(gcloud storage cat "${OPTIONS_GCS_PATH}"); then
-	echo "ERROR: Failed to read ${OPTIONS_GCS_PATH}." >&2
-	exit 1
-fi
-
-declare -a ZONES_ARRAY=()
-while IFS= read -r line; do
-	if [[ -n "${line}" ]]; then
-		ZONES_ARRAY+=("${line}")
+declare -A SUPPORT_MACHINE_CACHE
+check_support_machine_type() {
+	local zone=$1
+	local raw_types=${REQUIRED_SUPPORT_MACHINE_TYPE:-}
+	if [[ -z "${raw_types}" ]]; then
+		return 0
 	fi
-done <<<"${GCS_CONTENT}"
-if [[ "${#ZONES_ARRAY[@]}" -eq 0 ]]; then
-	echo "ERROR: No valid zones found in ${OPTIONS_GCS_PATH}" >&2
-	exit 1
+
+	local req_type describe_output cache_key
+	for req_type in ${raw_types//,/ }; do
+		[[ -z "${req_type}" ]] && continue
+		cache_key="${zone}:${req_type}"
+		if [[ -n "${SUPPORT_MACHINE_CACHE[$cache_key]:-}" ]]; then
+			if [[ "${SUPPORT_MACHINE_CACHE[$cache_key]}" != "0" ]]; then
+				return 1
+			fi
+			continue
+		fi
+
+		if describe_output=$(gcloud compute machine-types describe "${req_type}" \
+			--zone="${zone}" --project="${PROJECT_ID}" --format="value(name)" 2>&1); then
+			SUPPORT_MACHINE_CACHE[$cache_key]=0
+		elif echo "${describe_output}" | grep -q -i -E "was not found|not found"; then
+			echo "INFO: Skipping ${zone} - Machine type ${req_type} is not available in ${zone}."
+			SUPPORT_MACHINE_CACHE[$cache_key]=1
+			return 1
+		else
+			echo "WARN: Could not verify machine type ${req_type} in ${zone}: ${describe_output}. Failing-open and assuming available."
+			SUPPORT_MACHINE_CACHE[$cache_key]=0
+		fi
+	done
+
+	return 0
+}
+
+select_lustre_zone() {
+	local region=$1
+	local preferred_zone=${2:-}
+	local candidates
+	candidates=$(echo "${LUSTRE_GCS_CONTENT}" | tr -d '\r' | sed 's/[[:space:]]//g' | grep -x -E "${region}-[a-z]" || true)
+	if [[ -z "${candidates}" ]]; then
+		echo "INFO: No Managed Lustre candidate zones found in region ${region}."
+		return 1
+	fi
+
+	# Prefer the compute zone itself first when available in the region to minimize cross-zone latency.
+	if [[ -n "${preferred_zone}" ]] && echo "${candidates}" | grep -x -q "${preferred_zone}"; then
+		local others
+		others=$(echo "${candidates}" | grep -v -x "${preferred_zone}" || true)
+		if [[ -n "${others}" ]]; then
+			candidates=$(printf "%s\n%s\n" "${preferred_zone}" "${others}")
+		else
+			candidates="${preferred_zone}"
+		fi
+	fi
+
+	local l_zone
+	while IFS= read -r l_zone; do
+		[[ -z "${l_zone}" ]] && continue
+		if [[ -n "${LUSTRE_EXCLUDE_ZONES:-}" && "${LUSTRE_EXCLUDE_ZONES}" != "none" ]]; then
+			if [[ " ${LUSTRE_EXCLUDE_ZONES//,/ } " == *" ${l_zone} "* ]]; then
+				echo "INFO: Skipping Lustre candidate ${l_zone} - Zone excluded via LUSTRE_EXCLUDE_ZONES."
+				continue
+			fi
+		fi
+		if check_lustre_quota "${l_zone}"; then
+			SELECTED_LUSTRE_ZONE="${l_zone}"
+			echo "INFO: Selected Managed Lustre zone: ${SELECTED_LUSTRE_ZONE}"
+			return 0
+		else
+			echo "INFO: Skipping Lustre candidate ${l_zone} - Lustre quota check failed."
+		fi
+	done <<<"${candidates}"
+
+	return 1
+}
+
+if [[ "${LUSTRE_ONLY:-false}" == "true" ]]; then
+	if [[ -z "${ZONE:-}" ]]; then
+		echo "ERROR: ZONE must be set when LUSTRE_ONLY=true." >&2
+		exit 1
+	fi
+	if [[ -z "${LUSTRE_OPTIONS_GCS_PATH:-}" ]]; then
+		echo "ERROR: LUSTRE_OPTIONS_GCS_PATH must be set when LUSTRE_ONLY=true." >&2
+		exit 1
+	fi
 fi
 
 SELECTED_ZONE=""
+SELECTED_LUSTRE_ZONE=""
 SUCCESS=false
 
-declare -a PROVISIONING_MODELS=("SPOT")
-if [[ "${ENABLE_SPOT_FALLBACK:-false}" == "true" ]]; then
-	PROVISIONING_MODELS+=("STANDARD")
-fi
-
-FILESTORE_ZONES=""
-if [[ "${CHECK_FILESTORE:-false}" == "true" ]]; then
-	echo "INFO: Fetching available Filestore zones..."
-	if ! FILESTORE_ZONES=$(gcloud filestore locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>&1); then
-		echo "ERROR: Failed to fetch available Filestore locations: ${FILESTORE_ZONES}" >&2
-		exit 1
-	fi
-fi
-
 LUSTRE_ZONES=""
-if [[ "${CHECK_LUSTRE:-false}" == "true" ]]; then
-	echo "INFO: Fetching available Managed Lustre zones..."
-	if ! LUSTRE_ZONES=$(gcloud lustre locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>&1); then
-		echo "ERROR: Failed to fetch available Lustre locations: ${LUSTRE_ZONES}" >&2
-		exit 1
+LUSTRE_GCS_CONTENT=""
+if [[ "${CHECK_LUSTRE:-false}" == "true" || "${LUSTRE_ONLY:-false}" == "true" ]]; then
+	if [[ -n "${LUSTRE_OPTIONS_GCS_PATH:-}" ]]; then
+		echo "INFO: Reading Managed Lustre zones from ${LUSTRE_OPTIONS_GCS_PATH}..."
+		if ! LUSTRE_GCS_CONTENT=$(gcloud storage cat "${LUSTRE_OPTIONS_GCS_PATH}"); then
+			echo "ERROR: Failed to read ${LUSTRE_OPTIONS_GCS_PATH}." >&2
+			exit 1
+		fi
+		if [[ -z "${LUSTRE_GCS_CONTENT}" ]]; then
+			echo "ERROR: No valid zones found in ${LUSTRE_OPTIONS_GCS_PATH}" >&2
+			exit 1
+		fi
+	else
+		echo "INFO: Fetching available Managed Lustre zones..."
+		if ! LUSTRE_ZONES=$(gcloud lustre locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>&1); then
+			echo "ERROR: Failed to fetch available Lustre locations: ${LUSTRE_ZONES}" >&2
+			exit 1
+		fi
 	fi
 fi
 
-for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
-	echo "INFO: Trying provisioning model: ${PROVISIONING_MODEL}"
+if [[ "${LUSTRE_ONLY:-false}" == "true" ]]; then
+	REGION="${ZONE%-*}"
+	if select_lustre_zone "${REGION}" "${ZONE}"; then
+		SELECTED_ZONE="${ZONE}"
+		SUCCESS=true
+	fi
+else
+	if ! GCS_CONTENT=$(gcloud storage cat "${OPTIONS_GCS_PATH}"); then
+		echo "ERROR: Failed to read ${OPTIONS_GCS_PATH}." >&2
+		exit 1
+	fi
 
-	for ZONE in "${ZONES_ARRAY[@]}"; do
-		REGION=${ZONE%-*}
-
-		# Check for explicit zone exclusion (e.g. from retry harness or manual override)
-		if [[ -n "${EXCLUDE_ZONES:-}" ]]; then
-			if [[ " ${EXCLUDE_ZONES//,/ } " == *" ${ZONE} "* ]]; then
-				echo "INFO: Skipping ${ZONE} - Zone explicitly excluded via EXCLUDE_ZONES."
-				continue
-			fi
+	declare -a ZONES_ARRAY=()
+	while IFS= read -r line; do
+		if [[ -n "${line}" ]]; then
+			ZONES_ARRAY+=("${line}")
 		fi
+	done <<<"${GCS_CONTENT}"
+	if [[ "${#ZONES_ARRAY[@]}" -eq 0 ]]; then
+		echo "ERROR: No valid zones found in ${OPTIONS_GCS_PATH}" >&2
+		exit 1
+	fi
 
-		if [[ "${CHECK_FILESTORE:-false}" == "true" ]]; then
-			if ! echo "${FILESTORE_ZONES}" | grep -x -E -q "${ZONE}|${REGION}"; then
-				echo "INFO: Skipping ${ZONE} - Filestore not available in this zone or region."
-				continue
-			fi
-			if ! check_filestore_quota "${REGION}"; then
-				echo "INFO: Skipping ${ZONE} - Filestore quota check failed in region ${REGION}."
-				continue
-			fi
+	declare -a PROVISIONING_MODELS=("SPOT")
+	if [[ "${ENABLE_SPOT_FALLBACK:-false}" == "true" ]]; then
+		PROVISIONING_MODELS+=("STANDARD")
+	fi
+
+	FILESTORE_ZONES=""
+	if [[ "${CHECK_FILESTORE:-false}" == "true" ]]; then
+		echo "INFO: Fetching available Filestore zones..."
+		if ! FILESTORE_ZONES=$(gcloud filestore locations list --project="${PROJECT_ID}" --format="value(locationId)" 2>&1); then
+			echo "ERROR: Failed to fetch available Filestore locations: ${FILESTORE_ZONES}" >&2
+			exit 1
 		fi
+	fi
 
-		if [[ "${CHECK_LUSTRE:-false}" == "true" ]]; then
-			if [[ -n "${LUSTRE_EXCLUDE_ZONES:-}" && "${LUSTRE_EXCLUDE_ZONES}" != "none" ]]; then
-				if [[ " ${LUSTRE_EXCLUDE_ZONES//,/ } " == *" ${ZONE} "* ]]; then
-					echo "INFO: Skipping ${ZONE} - Zone excluded due to known Managed Lustre capacity exhaustion."
+	for PROVISIONING_MODEL in "${PROVISIONING_MODELS[@]}"; do
+		echo "INFO: Trying provisioning model: ${PROVISIONING_MODEL}"
+
+		for ZONE in "${ZONES_ARRAY[@]}"; do
+			REGION=${ZONE%-*}
+
+			# Check for explicit zone exclusion (e.g. from retry harness or manual override)
+			if [[ -n "${EXCLUDE_ZONES:-}" ]]; then
+				if [[ " ${EXCLUDE_ZONES//,/ } " == *" ${ZONE} "* ]]; then
+					echo "INFO: Skipping ${ZONE} - Zone explicitly excluded via EXCLUDE_ZONES."
 					continue
 				fi
 			fi
 
-			if ! echo "${LUSTRE_ZONES}" | grep -x -q "${ZONE}"; then
-				echo "INFO: Skipping ${ZONE} - Managed Lustre not available in this zone."
+			if [[ "${CHECK_FILESTORE:-false}" == "true" ]]; then
+				if ! echo "${FILESTORE_ZONES}" | grep -x -E -q "${ZONE}|${REGION}"; then
+					echo "INFO: Skipping ${ZONE} - Filestore not available in this zone or region."
+					continue
+				fi
+				if ! check_filestore_quota "${REGION}"; then
+					echo "INFO: Skipping ${ZONE} - Filestore quota check failed in region ${REGION}."
+					continue
+				fi
+			fi
+
+			if [[ "${CHECK_LUSTRE:-false}" == "true" && -z "${LUSTRE_OPTIONS_GCS_PATH:-}" ]]; then
+				if [[ -n "${LUSTRE_EXCLUDE_ZONES:-}" && "${LUSTRE_EXCLUDE_ZONES}" != "none" ]]; then
+					if [[ " ${LUSTRE_EXCLUDE_ZONES//,/ } " == *" ${ZONE} "* ]]; then
+						echo "INFO: Skipping ${ZONE} - Zone excluded due to known Managed Lustre capacity exhaustion."
+						continue
+					fi
+				fi
+
+				if ! echo "${LUSTRE_ZONES}" | grep -x -q "${ZONE}"; then
+					echo "INFO: Skipping ${ZONE} - Managed Lustre not available in this zone."
+					continue
+				fi
+				if ! check_lustre_quota "${ZONE}"; then
+					echo "INFO: Skipping ${ZONE} - Lustre quota check failed in zone ${ZONE}."
+					continue
+				fi
+			fi
+
+			# Check region for support VMs.
+			if ! check_cpu_quota "${REGION}"; then
+				echo "INFO: Skipping ${ZONE} - CPU quota check failed in region ${REGION}."
 				continue
 			fi
-			if ! check_lustre_quota "${ZONE}"; then
-				echo "INFO: Skipping ${ZONE} - Lustre quota check failed in zone ${ZONE}."
+
+			if ! check_support_machine_type "${ZONE}"; then
 				continue
 			fi
-		fi
 
-		# Check region for support VMs.
-		if ! check_cpu_quota "${REGION}"; then
-			echo "INFO: Skipping ${ZONE} - CPU quota check failed in region ${REGION}."
-			continue
-		fi
+			# Pre-check that at least one Managed Lustre zone exists in this region before probing compute capacity.
+			if [[ "${CHECK_LUSTRE:-false}" == "true" && -n "${LUSTRE_OPTIONS_GCS_PATH:-}" ]]; then
+				if ! select_lustre_zone "${REGION}" "${ZONE}"; then
+					echo "INFO: No Managed Lustre zone available in region ${REGION} for compute zone ${ZONE}. Skipping ${ZONE}."
+					continue
+				fi
+			else
+				SELECTED_LUSTRE_ZONE="${ZONE}"
+			fi
 
-		if [[ "${MACHINE_TYPE}" == "tpu" ]]; then
-			if check_tpu_capacity "${ZONE}" "${PROVISIONING_MODEL}"; then
-				SELECTED_ZONE="${ZONE}"
-				SUCCESS=true
-				break
+			local_compute_ok=false
+			if [[ "${MACHINE_TYPE}" == "tpu" ]]; then
+				if check_tpu_capacity "${ZONE}" "${PROVISIONING_MODEL}"; then
+					local_compute_ok=true
+				fi
+			else
+				if check_vm_capacity "${ZONE}" "${PROVISIONING_MODEL}"; then
+					local_compute_ok=true
+				fi
 			fi
-		else
-			if check_vm_capacity "${ZONE}" "${PROVISIONING_MODEL}"; then
-				SELECTED_ZONE="${ZONE}"
-				SUCCESS=true
-				break
+
+			if [[ "${local_compute_ok}" != "true" ]]; then
+				continue
 			fi
+
+			SELECTED_ZONE="${ZONE}"
+			SUCCESS=true
+			break
+		done
+
+		if [[ "${SUCCESS}" == "true" ]]; then
+			break
 		fi
 	done
-
-	if [[ "${SUCCESS}" == "true" ]]; then
-		break
-	fi
-done
+fi
 
 if [[ "${SUCCESS}" == "true" ]]; then
-	echo "Deploying in ZONE: ${SELECTED_ZONE}, MODEL: ${PROVISIONING_MODEL}"
+	if [[ "${CHECK_LUSTRE:-false}" == "true" || "${LUSTRE_ONLY:-false}" == "true" ]]; then
+		echo "Deploying in ZONE: ${SELECTED_ZONE}, LUSTRE_ZONE: ${SELECTED_LUSTRE_ZONE}, MODEL: ${PROVISIONING_MODEL}"
+		export LUSTRE_ZONE="${SELECTED_LUSTRE_ZONE}"
+	else
+		echo "Deploying in ZONE: ${SELECTED_ZONE}, MODEL: ${PROVISIONING_MODEL}"
+	fi
 	export ZONE="${SELECTED_ZONE}"
 	export PROVISIONING_MODEL="${PROVISIONING_MODEL}"
 else

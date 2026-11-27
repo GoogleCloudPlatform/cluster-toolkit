@@ -91,6 +91,14 @@ steps:
           - name: runner
             image: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner:$BUILD_ID
             env:
+            - name: CHECK_LUSTRE
+              value: "true"
+            - name: REQUIRED_LUSTRE_GB
+              value: "18000"
+            - name: LUSTRE_ONLY
+              value: "true"
+            - name: LUSTRE_OPTIONS_GCS_PATH
+              value: "gs://hpc-ctk1357/managedlustreoptions.txt"
             - name: ANSIBLE_HOST_KEY_CHECKING
               value: "false"
             - name: ANSIBLE_CONFIG
@@ -133,15 +141,26 @@ steps:
               trap cleanup_pod EXIT SIGTERM SIGINT
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
-              REGION=us-central1
-              ZONE=us-central1-b
-
+              export REGION=us-central1
+              export ZONE=us-central1-b
+              echo "Sourcing wait_for_available_zone.sh to determine Lustre zone."
+              source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              if [ -z "\$${LUSTRE_ZONE:-}" ]; then
+                echo "ERROR: LUSTRE_ZONE not found" >&2
+                exit 1
+              fi
 
               bash tools/add_ttl_label.sh \$$BLUEPRINT
               python3 tools/fix_vpc_name.py \$$BLUEPRINT "${_TEST_PREFIX}"
 
               sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' \$$BLUEPRINT
               sed -i -e '/reason:/d' \$$BLUEPRINT
+              sed -i 's/^  lustre_size_gib:.*/  lustre_size_gib: 18000/' \$$BLUEPRINT
+              sed -i "s/remote_mount: lustrefs/remote_mount: lustrefs\n      zone: \$$LUSTRE_ZONE/" \$$BLUEPRINT
+              if ! grep -q "zone: \$$LUSTRE_ZONE" \$$BLUEPRINT; then
+                echo "ERROR: Failed to inject LUSTRE_ZONE into \$$BLUEPRINT" >&2
+                exit 1
+              fi
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
                 --extra-vars="test_prefix=${_TEST_PREFIX}" --extra-vars="use_fixed_vpc=true" \
