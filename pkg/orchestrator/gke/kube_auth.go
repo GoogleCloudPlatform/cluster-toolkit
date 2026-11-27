@@ -18,6 +18,7 @@
 package gke
 
 import (
+	"cmp"
 	"context"
 	"crypto/x509"
 	"encoding/base64"
@@ -177,9 +178,8 @@ func hasGKEFlags(projectID, location string) bool {
 	return strings.TrimSpace(projectID) != "" || strings.TrimSpace(location) != ""
 }
 
-func isMultiCloudOrAttachedGKEName(s string) bool {
-	parts := strings.SplitN(strings.TrimSpace(s), "_", 4)
-	if len(parts) != 4 || parts[0] != "gke" || parts[2] == "" {
+func isMultiCloudOrAttachedGKEParts(parts []string) bool {
+	if len(parts) != 4 || parts[0] != "gke" || strings.TrimSpace(parts[2]) == "" {
 		return false
 	}
 	switch parts[1] {
@@ -190,12 +190,38 @@ func isMultiCloudOrAttachedGKEName(s string) bool {
 	}
 }
 
-func isCanonicalGKEName(s string) bool {
+func isMultiCloudOrAttachedGKEName(s string) bool {
+	return isMultiCloudOrAttachedGKEParts(strings.SplitN(strings.TrimSpace(s), "_", 4))
+}
+
+func parseCanonicalGKEName(s string) (project, location, cluster string, ok bool) {
 	parts := strings.SplitN(strings.TrimSpace(s), "_", 4)
-	if len(parts) != 4 || parts[0] != "gke" || parts[1] == "" || parts[2] == "" || parts[3] == "" {
-		return false
+	if len(parts) != 4 || parts[0] != "gke" {
+		return "", "", "", false
 	}
-	return !isMultiCloudOrAttachedGKEName(s)
+	project = strings.TrimSpace(parts[1])
+	location = strings.TrimSpace(parts[2])
+	cluster = strings.TrimSpace(parts[3])
+	if project == "" || location == "" || cluster == "" || isMultiCloudOrAttachedGKEParts(parts) {
+		return "", "", "", false
+	}
+	return project, location, cluster, true
+}
+
+func isCanonicalGKEName(s string) bool {
+	_, _, _, ok := parseCanonicalGKEName(s)
+	return ok
+}
+
+// ExtractProjectIDFromContext returns the GCP project ID encoded in a canonical
+// gcloud GKE context name ("gke_<project>_<location>_<cluster>"), or "" if the
+// context name is not a canonical GKE context (including multi-cloud/attached names).
+func ExtractProjectIDFromContext(ctxName string) string {
+	project, _, _, ok := parseCanonicalGKEName(ctxName)
+	if !ok {
+		return ""
+	}
+	return project
 }
 
 func isConnectGatewayHost(host string) bool {
@@ -630,15 +656,38 @@ func (g *GKEOrchestrator) loadKubeconfig() (*clientcmdapi.Config, error) {
 }
 
 // kubectlCommandLine renders a kubectl command, pinned like the ones gcluster runs, for users to copy.
-// Arguments that contain whitespace, such as Windows paths, are double-quoted.
+// Arguments that contain whitespace or commas (which PowerShell splits as arrays) are double-quoted.
 func kubectlCommandLine(kubeContext string, args ...string) string {
 	parts := append([]string{"kubectl"}, k8s.WithContext(kubeContext, args)...)
 	for i, p := range parts {
-		if strings.ContainsAny(p, " \t") {
+		if strings.ContainsAny(p, " \t,") {
 			parts[i] = `"` + p + `"`
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// kubectlOutputError returns an error wrapping kubectl's combined stderr/stdout for non-spawn failures,
+// or nil when ExitCode == -1 (process spawn failure or timeout) so callers never misclassify spawn errors as HTTP/RBAC statuses.
+func kubectlOutputError(res shell.CommandResult) error {
+	if res.ExitCode == -1 {
+		return nil
+	}
+	return errors.New(strings.TrimSpace(res.Stderr + "\n" + res.Stdout))
+}
+
+func kubectlCommandError(prefix string, res shell.CommandResult) error {
+	detail := strings.TrimSpace(res.Stderr + "\n" + res.Stdout)
+	if detail == "" {
+		if res.Err != nil {
+			return fmt.Errorf("%s: %w", prefix, res.Err)
+		}
+		return fmt.Errorf("%s: exit status %d", prefix, res.ExitCode)
+	}
+	if res.Err != nil {
+		return fmt.Errorf("%s: %s (%w)", prefix, detail, res.Err)
+	}
+	return fmt.Errorf("%s: %s", prefix, detail)
 }
 
 // kubectlIn runs kubectl with DefaultLocalCommandTimeout against an explicit non-blank kubeContext,
@@ -688,19 +737,19 @@ func (g *GKEOrchestrator) HasAPIGroupVersion(groupVersion string) (bool, error) 
 		if isJSONObject(res.Stdout) {
 			return true, nil
 		}
-		return false, fmt.Errorf("failed to query Kubernetes API group %q: unexpected non-JSON response %q", gv, firstOutputLine(res.Stdout, res.Stderr))
+		return false, fmt.Errorf("failed to query Kubernetes API group %q: unexpected non-JSON response %q", gv, cmp.Or(firstLine(strings.TrimSpace(res.Stdout)), firstLine(strings.TrimSpace(res.Stderr))))
 	}
 	combined := res.Stderr + "\n" + res.Stdout
 	if isAPIGroupNotFoundText(combined) {
 		return false, nil
 	}
-	if errLine := firstNonWarningLine(res.Stderr, res.Stdout); errLine != "" {
+	if errLine := firstNonWarningLine(combined); errLine != "" {
 		return false, fmt.Errorf("failed to query Kubernetes API group %q: %s", gv, errLine)
 	}
 	if res.Err != nil {
 		return false, fmt.Errorf("failed to query Kubernetes API group %q: %w", gv, res.Err)
 	}
-	if fallback := firstOutputLine(res.Stderr, res.Stdout); fallback != "" {
+	if fallback := firstLine(strings.TrimSpace(combined)); fallback != "" {
 		return false, fmt.Errorf("failed to query Kubernetes API group %q: %s", gv, fallback)
 	}
 	return false, fmt.Errorf("failed to query Kubernetes API group %q: exit status %d", gv, res.ExitCode)
@@ -711,23 +760,7 @@ func isJSONObject(raw string) bool {
 	return strings.HasPrefix(trimmed, "{") && json.Valid([]byte(trimmed))
 }
 
-func firstNonWarningLine(stderr, stdout string) string {
-	for _, block := range []string{stderr, stdout} {
-		if line := scanNonWarningLine(block); line != "" {
-			return line
-		}
-	}
-	return ""
-}
-
-func firstOutputLine(primary, fallback string) string {
-	if line := firstLine(strings.TrimSpace(primary)); line != "" {
-		return line
-	}
-	return firstLine(strings.TrimSpace(fallback))
-}
-
-func scanNonWarningLine(s string) string {
+func firstNonWarningLine(s string) string {
 	for _, raw := range strings.Split(s, "\n") {
 		line := strings.TrimSpace(raw)
 		if line == "" || isKubectlWarningLine(line) {
@@ -941,6 +974,7 @@ func (g *GKEOrchestrator) endpointConnectivityError(clusterName string, attempts
 func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, projectID string) error {
 	g.resetStorageCaches()
 	g.inventory = nil
+	g.addons = addonPlan{}
 	if g.mode == orchestrator.TypeK8s {
 		return g.configureK8sKubectl(clusterName)
 	}
@@ -992,13 +1026,31 @@ func (g *GKEOrchestrator) configureKubectl(clusterName, clusterLocation, project
 	return g.regenerateKubeContext(clusterName, clusterLocation, projectID, avoid)
 }
 
+var errKubeClientUninitialized = errors.New("Kubernetes API client is not initialized")
+
+func (g *GKEOrchestrator) requireKubeClient() (KubeClient, error) {
+	if g.needsDynamicClientInit() {
+		g.resetManagedDynamicClient()
+		if g.dynClient == nil && strings.TrimSpace(g.kubeContext) == "" {
+			return nil, errKubeClientUninitialized
+		}
+		if _, err := g.getDynamicClient(); err != nil {
+			return nil, err
+		}
+	}
+	if g.kubeClient == nil {
+		return nil, errKubeClientUninitialized
+	}
+	return g.kubeClient, nil
+}
+
 // usableKubeClient returns the Kubernetes API client for best-effort discovery, or nil when none can be
 // built yet (no pinned context, or an unreadable kubeconfig).
 func (g *GKEOrchestrator) usableKubeClient() KubeClient {
-	kc, err := g.requireKubeClientForDiscovery()
+	kc, err := g.requireKubeClient()
 	if err != nil {
 		if !errors.Is(err, errKubeClientUninitialized) {
-			logging.Warn("Kubernetes API client unavailable for cluster discovery (context %q): %v", g.kubeContext, err)
+			logging.Warn("Kubernetes API client unavailable (context %q): %v", g.kubeContext, err)
 		}
 		return nil
 	}

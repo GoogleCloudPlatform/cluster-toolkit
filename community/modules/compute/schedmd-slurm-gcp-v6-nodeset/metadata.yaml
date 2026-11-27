@@ -146,13 +146,32 @@ ghpc:
     inputs:
       vars: [instance_flexibility_policy, future_reservation]
     error_message: "instance_flexibility_policy cannot be combined with a future reservation; a specific reservation pins a single machine type."
-  - validator: conditional
+  - validator: exclusive
+    inputs:
+      vars: [instance_flexibility_policy, instance_properties]
+    error_message: "instance_flexibility_policy cannot be combined with instance_properties."
+  - validator: conditional_regex
     inputs:
       triggers:
         instance_flexibility_policy: null
       dependent: provisioning_engine
-      dependent_value: MIG
-    error_message: "instance_flexibility_policy requires 'provisioning_engine' to be explicitly set to 'MIG'."
+      pattern: "^BULK_INSERT$"
+      match_expected: false
+    error_message: "instance_flexibility_policy is not supported with provisioning_engine = 'BULK_INSERT'. Use 'AUTO' (default) or 'MIG'."
+  - validator: conditional
+    inputs:
+      triggers:
+        instance_flexibility_policy: null
+      dependent: node_count_dynamic_max
+      dependent_value: 0
+    error_message: "instance_flexibility_policy is only supported on static MIG NodeSets; 'node_count_dynamic_max' must be explicitly set to 0."
+  - validator: conditional
+    inputs:
+      triggers:
+        instance_flexibility_policy: null
+      dependent: enable_placement
+      dependent_value: false
+    error_message: "instance_flexibility_policy is only supported on static MIG NodeSets with 'enable_placement' set to false."
   - validator: conditional_regex
     inputs:
       triggers:
@@ -178,6 +197,24 @@ ghpc:
       dependent: zone_target_shape
       pattern: "^ANY_SINGLE_ZONE$"
     error_message: "zone_target_shape must be 'ANY_SINGLE_ZONE' on MIG NodeSets using enable_placement or accelerator_topology; those policies are zonal."
+  - validator: conditional_regex
+    inputs:
+      triggers:
+        future_reservation: null
+        dws_flex.enabled: false
+      dependent: provisioning_engine
+      pattern: "^MIG$"
+      match_expected: false
+    error_message: "future_reservation is not supported with provisioning_engine = 'MIG'. Use 'BULK_INSERT' or 'AUTO'."
+  - validator: conditional_regex
+    inputs:
+      triggers:
+        instance_properties: null
+        dws_flex.enabled: false
+      dependent: provisioning_engine
+      pattern: "^MIG$"
+      match_expected: false
+    error_message: "instance_properties is not supported with provisioning_engine = 'MIG'. Use 'BULK_INSERT' or 'AUTO'."
   - validator: conditional_regex
     inputs:
       triggers:

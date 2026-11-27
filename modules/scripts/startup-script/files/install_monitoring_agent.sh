@@ -65,6 +65,7 @@ handle_debian() {
 
 	install_opsagent() {
 		install_with_retry "${OPSAGENT_SCRIPT_URL}"
+		systemctl enable --now google-cloud-ops-agent
 	}
 
 	install_stackdriver_agent() {
@@ -97,7 +98,7 @@ handle_redhat() {
 
 	install_opsagent() {
 		curl -s "${OPSAGENT_SCRIPT_URL}" | bash -s -- --also-install
-		systemctl start google-cloud-ops-agent
+		systemctl enable --now google-cloud-ops-agent
 	}
 
 	install_stackdriver_agent() {
@@ -167,6 +168,7 @@ main() {
 		exit 0
 	elif [[ "${ops_or_legacy}" != "legacy" ]] && is_opsagent_installed; then
 		echo "Ops agent is already installed"
+		systemctl enable --now google-cloud-ops-agent
 		exit 0
 	elif is_legacy_installed || is_opsagent_installed; then
 		fail "Agent is already installed but does not match requested agent of ${ops_or_legacy}"

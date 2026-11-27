@@ -176,7 +176,7 @@ func deferToServiceAccount(client ResourceReader, namespace, name string) bool {
 
 // matchingSecretNames returns the sorted names of the secrets holding credentials for img.
 func matchingSecretNames(secrets []unstructured.Unstructured, img string) []string {
-	imgHost, imgPath, ok := splitImageRef(img)
+	parsed, ok := ParseImageRef(img)
 	if !ok {
 		return nil
 	}
@@ -184,7 +184,7 @@ func matchingSecretNames(secrets []unstructured.Unstructured, img string) []stri
 	for i := range secrets {
 		if slices.ContainsFunc(dockerConfigAuthKeys(&secrets[i]), func(key string) bool {
 			host, prefix, ok := authKeyHostAndPath(key)
-			return ok && authHostMatches(host, imgHost) && authPathMatches(prefix, imgPath)
+			return ok && authHostMatches(host, parsed.Host) && authPathMatches(prefix, parsed.Repo)
 		}) {
 			names = append(names, secrets[i].GetName())
 		}
@@ -214,29 +214,6 @@ func dockerConfigAuthKeys(secret *unstructured.Unstructured) []string {
 		}
 	}
 	return keys
-}
-
-// splitImageRef returns the registry host and repository path of an image reference as the container
-// runtime normalizes it (Docker Hub shorthand becomes docker.io/library/<name>), without tag or digest.
-func splitImageRef(ref string) (string, string, bool) {
-	name, _, _ := strings.Cut(ref, "@")
-	host, repo, hasSlash := strings.Cut(name, "/")
-	if !hasSlash || (!strings.ContainsAny(host, ".:") && host != "localhost") {
-		host, repo = "docker.io", name
-	} else if host == "index.docker.io" {
-		host = "docker.io"
-	}
-	lastSeg := strings.LastIndex(repo, "/") + 1
-	if tag := strings.Index(repo[lastSeg:], ":"); tag >= 0 {
-		repo = repo[:lastSeg+tag]
-	}
-	if repo == "" {
-		return "", "", false
-	}
-	if host == "docker.io" && !strings.Contains(repo, "/") {
-		repo = "library/" + repo
-	}
-	return host, repo, true
 }
 
 // authKeyHostAndPath normalizes a dockerconfigjson auths key the way the kubelet keyring does: an optional

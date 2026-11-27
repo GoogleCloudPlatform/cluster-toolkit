@@ -58,6 +58,8 @@ func TestMain(m *testing.M) {
 	_ = os.Unsetenv(refreshCredentialsEnv)
 	_ = os.Unsetenv(shell.AirGappedEnvVar)
 	_ = os.Unsetenv(k8s.LabelSchemeEnvVar)
+	_ = os.Unsetenv(disableJobSetEnvVar)
+	_ = os.Unsetenv(disableKueueEnvVar)
 	shell.SetDefaultAirGapped(false)
 	os.Exit(m.Run())
 }
@@ -1267,6 +1269,10 @@ func TestKubectlCommandLine(t *testing.T) {
 			}
 		})
 	}
+	sel := "gcluster.google.com/workload=j,batch.kubernetes.io/job-name=j"
+	if got := kubectlCommandLine(testContext, "logs", "-l", sel); got != `kubectl --context `+testContext+` logs -l "`+sel+`"` {
+		t.Errorf("kubectlCommandLine(comma selector) = %s, want quoted selector", got)
+	}
 }
 
 func TestKubectlHelpers_PinContext(t *testing.T) {
@@ -2124,16 +2130,19 @@ func newTypeK8sInspectMockExecutor() *MockExecutor {
 	okPod := shell.CommandResult{ExitCode: 0, Stdout: "workload-container\n"}
 	okJobSet := shell.CommandResult{ExitCode: 0, Stdout: "\tFalse\tmain-job\n1 1\tworkload-container\n"}
 	return NewMockExecutor(map[string][]shell.CommandResult{
-		"kubectl get --raw /version":                     {{ExitCode: 0, Stdout: `{"major":"1","minor":"32"}`}},
-		"kubectl get --raw /apis/kueue.x-k8s.io":         {{ExitCode: 0, Stdout: "{}"}},
-		"kubectl get nodes -o wide":                      {{ExitCode: 0, Stdout: "NAME STATUS\n"}},
-		"kubectl get nodes -o json":                      {{ExitCode: 0, Stdout: `{"items":[]}`}},
-		"kubectl get pods -n ml-ns":                      {okPod, okPod, okPod},
-		"kubectl get jobsets.jobset.x-k8s.io sample-job": {okJobSet, okJobSet},
-		"kubectl describe ":                              {okDescribe, okDescribe, okDescribe, okDescribe, okDescribe},
-		"kubectl logs ":                                  {okLogs, okLogs, okLogs, okLogs},
-		"kubectl get crd topologies.kueue.x-k8s.io":      {{ExitCode: 1, Stderr: "NotFound"}},
-		"kubectl get workloads ":                         {okWorkloads, okWorkloads, okWorkloads},
+		"kubectl get --raw /version":              {{ExitCode: 0, Stdout: `{"major":"1","minor":"32"}`}},
+		"kubectl get --raw /apis/kueue.x-k8s.io":  {{ExitCode: 0, Stdout: "{}"}},
+		"kubectl get --raw /apis/jobset.x-k8s.io": {{ExitCode: 0, Stdout: "{}"}},
+		"kubectl get nodes -o wide":               {{ExitCode: 0, Stdout: "NAME STATUS\n"}},
+		"kubectl get nodes -o json":               {{ExitCode: 0, Stdout: `{"items":[]}`}},
+		"kubectl get pods -n ml-ns":               {okPod, okPod, okPod},
+		"kubectl get jobsets -n ml-ns -o wide":    {{ExitCode: 0, Stdout: "NAME\n"}},
+		"kubectl get jobs -l gcluster.google.com/workload,!jobset.sigs.k8s.io/jobset-name": {{ExitCode: 0, Stdout: "NAME\n"}},
+		"kubectl get jobsets.jobset.x-k8s.io sample-job":                                   {okJobSet, okJobSet},
+		"kubectl describe ": {okDescribe, okDescribe, okDescribe, okDescribe, okDescribe},
+		"kubectl logs ":     {okLogs, okLogs, okLogs, okLogs},
+		"kubectl get crd topologies.kueue.x-k8s.io": {{ExitCode: 1, Stderr: "NotFound"}},
+		"kubectl get workloads ":                    {okWorkloads, okWorkloads, okWorkloads},
 	})
 }
 
@@ -2165,24 +2174,6 @@ func TestTypeK8s_ZeroGCloudAcrossLifecycle(t *testing.T) {
 	mockExec := newTypeK8sInspectMockExecutor()
 	orc.SetExecutor(mockExec)
 
-	submitErr := orc.SubmitJob(orchestrator.JobDefinition{
-		WorkloadName:           "blocked-job",
-		ImageName:              "busybox:latest",
-		CommandToRun:           "echo hi",
-		GKENamespace:           "should-not-mutate",
-		GkeCustomTemplatesPath: "/should-not-mutate",
-	})
-	wantSubmitErr := orchestrator.UnsupportedK8sSubmitError().Error()
-	if submitErr == nil || submitErr.Error() != wantSubmitErr {
-		t.Fatalf("SubmitJob(TypeK8s) error = %v, want %q", submitErr, wantSubmitErr)
-	}
-	if orc.namespace != "" || orc.gkeCustomTemplatesPath != "" {
-		t.Fatalf("SubmitJob(TypeK8s) mutated state: namespace=%q customTemplatesPath=%q, want both empty", orc.namespace, orc.gkeCustomTemplatesPath)
-	}
-	if len(mockExec.calls) != 0 {
-		t.Fatalf("SubmitJob(TypeK8s) calls = %v, want 0 subprocess calls", mockExec.calls)
-	}
-
 	if loc, err := orc.Initialize("local-k8s", "", ""); err != nil || loc != "" {
 		t.Fatalf("Initialize(TypeK8s) = (%q, %v), want ('', nil)", loc, err)
 	}
@@ -2202,8 +2193,8 @@ func TestTypeK8s_ZeroGCloudAcrossLifecycle(t *testing.T) {
 
 func assertTypeK8sListAndLogsZeroGCloud(t *testing.T, orc *GKEOrchestrator, mockExec *MockExecutor, listHits *atomic.Int32) {
 	t.Helper()
-	if jobs, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: "local-k8s"}); err != nil || len(jobs) != 0 || listHits.Load() != 1 {
-		t.Fatalf("ListJobs(TypeK8s) = (%v, %v), listHits=%d, want ([], nil, 1)", jobs, err, listHits.Load())
+	if jobs, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: "local-k8s"}); err != nil || len(jobs) != 0 || listHits.Load() != 2 {
+		t.Fatalf("ListJobs(TypeK8s) = (%v, %v), listHits=%d, want ([], nil, 2)", jobs, err, listHits.Load())
 	}
 	if out, err := orc.GetJobLogs("sample-job", orchestrator.LogsOptions{ClusterName: "local-k8s"}); err != nil || strings.TrimSpace(out) != "controller ok" {
 		t.Fatalf("GetJobLogs(TypeK8s, Follow=false) = (%q, %v), want (\"controller ok\", nil)", out, err)
@@ -2350,15 +2341,15 @@ func TestTypeK8s_ConfigureKubectlReResolutionSyncsDynamicClient(t *testing.T) {
 	if _, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: "cluster-a"}); err != nil {
 		t.Fatalf("ListJobs(cluster-a) error = %v", err)
 	}
-	if hitsA.Load() != 1 || hitsB.Load() != 0 {
-		t.Fatalf("hits after cluster-a = (%d, %d), want (1, 0)", hitsA.Load(), hitsB.Load())
+	if hitsA.Load() != 2 || hitsB.Load() != 0 {
+		t.Fatalf("hits after cluster-a = (%d, %d), want (2, 0)", hitsA.Load(), hitsB.Load())
 	}
 
 	if _, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: "cluster-b"}); err != nil {
 		t.Fatalf("ListJobs(cluster-b) error = %v", err)
 	}
-	if hitsA.Load() != 1 || hitsB.Load() != 1 {
-		t.Fatalf("hits after direct ListJobs(cluster-b) = (%d, %d), want (1, 1)", hitsA.Load(), hitsB.Load())
+	if hitsA.Load() != 2 || hitsB.Load() != 2 {
+		t.Fatalf("hits after direct ListJobs(cluster-b) = (%d, %d), want (2, 2)", hitsA.Load(), hitsB.Load())
 	}
 	kc := orc.usableKubeClient()
 	if kc == nil {
@@ -2367,8 +2358,8 @@ func TestTypeK8s_ConfigureKubectlReResolutionSyncsDynamicClient(t *testing.T) {
 	if _, err := kc.ListJobSets("ns-b", ""); err != nil {
 		t.Fatalf("usableKubeClient().ListJobSets(ns-b) error = %v", err)
 	}
-	if hitsA.Load() != 1 || hitsB.Load() != 2 {
-		t.Fatalf("hits after cluster-b usableKubeClient = (%d, %d), want (1, 2)", hitsA.Load(), hitsB.Load())
+	if hitsA.Load() != 2 || hitsB.Load() != 3 {
+		t.Fatalf("hits after cluster-b usableKubeClient = (%d, %d), want (2, 3)", hitsA.Load(), hitsB.Load())
 	}
 	assertUnseededClusterAndErrorInvalidation(t, cfg)
 	assertSameContextGKERegenerateInvalidatesDynamicClient(t, srvA.URL, srvB.URL, &hitsA, &hitsB)
@@ -2417,8 +2408,8 @@ func assertSeededCurrentContextWinsOverCollidingContextName(t *testing.T, emptyL
 	if _, err := orc.ListJobs(orchestrator.ListOptions{ClusterName: det.ClusterName}); err != nil {
 		t.Fatalf("ListJobs(%q) error = %v", det.ClusterName, err)
 	}
-	if hitsAdmin.Load() != 1 || hitsColliding.Load() != 0 {
-		t.Fatalf("ListJobs(%q) hits = (admin=%d, colliding=%d), want (1, 0)", det.ClusterName, hitsAdmin.Load(), hitsColliding.Load())
+	if hitsAdmin.Load() != 2 || hitsColliding.Load() != 0 {
+		t.Fatalf("ListJobs(%q) hits = (admin=%d, colliding=%d), want (2, 0)", det.ClusterName, hitsAdmin.Load(), hitsColliding.Load())
 	}
 }
 
@@ -3491,5 +3482,30 @@ func assertHasAPIGroupVersionBlankGuards(t *testing.T, nonBlankGV string) {
 	}
 	if len(blankExec.calls) != 0 {
 		t.Fatalf("expected 0 kubectl calls on blank kubeContext, got %v", blankExec.calls)
+	}
+}
+
+func TestExtractProjectIDFromContext(t *testing.T) {
+	tests := []struct {
+		ctxName string
+		want    string
+	}{
+		{"gke_my-proj_us-central1_my-cluster", "my-proj"},
+		{"gke_my-proj-123_us-central1-a_cluster_with_underscores", "my-proj-123"},
+		{"  gke_trimmed-proj_europe-west4_c1  ", "trimmed-proj"},
+		{"gke_aws_us-west1_cluster_extra", ""},
+		{"gke_azure_eastus_cluster_extra", ""},
+		{"gke_attached_us-central1_cluster_extra", ""},
+		{"gke_ _us-central1_c1", ""},
+		{"gke_my-proj_ _c1", ""},
+		{"gke_my-proj_us-central1_   ", ""},
+		{"admin@onprem-k8s", ""},
+		{"gke_missing_cluster", ""},
+		{"", ""},
+	}
+	for _, tc := range tests {
+		if got := ExtractProjectIDFromContext(tc.ctxName); got != tc.want {
+			t.Errorf("ExtractProjectIDFromContext(%q) = %q, want %q", tc.ctxName, got, tc.want)
+		}
 	}
 }

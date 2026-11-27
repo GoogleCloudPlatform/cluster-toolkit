@@ -132,8 +132,9 @@ variable "enable_gpu_acceleration" {
   description = <<-EOT
     Use hardware OpenGL for desktop sessions. Requires a GPU on the host and an
     image whose NVIDIA driver has graphics (not merely compute) support; falls
-    back to software rendering otherwise. Requires vnc_backend = "turbovnc".
-    See community/examples/remote-desktop/README.md for which image to use.
+    back to software rendering otherwise. vnc_backend = "turbovnc" is
+    recommended. See community/examples/remote-desktop/README.md for which
+    image to use.
     EOT
   type        = bool
   default     = false

@@ -40,6 +40,6 @@ deployment_groups:
           --network=$(vars.deployment_name)-net
           --subnet=$(vars.deployment_name)-subnet
           --machine-type=n2d-standard-2
-          --image-family=debian-12
-          --image-project=debian-cloud
+          --image-family=aci-cpu-rocky-linux-9-amd64
+          --image-project=advanced-compute-images
         delete: "gcloud compute instances delete $(vars.deployment_name)-vm --project=$(vars.project_id) --zone=$(vars.zone) --quiet"

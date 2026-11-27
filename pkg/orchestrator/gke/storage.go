@@ -84,10 +84,11 @@ const (
 	// gatewayReleaseTimeout bounds how long submit waits for a gateway that is still being deleted.
 	gatewayReleaseTimeout = 2 * time.Minute
 
-	gcsFuseCSIDriver           = "gcsfuse.csi.storage.gke.io"
-	servingProfileStorageClass = "gcsfusecsi-serving"
-	pvcGCSFuseJSONPath         = `jsonpath={.spec.volumeName}{"\t"}{.spec.storageClassName}{"\t"}{.metadata.annotations.volume\.kubernetes\.io/storage-provisioner}{"\t"}{.metadata.annotations.volume\.beta\.kubernetes\.io/storage-provisioner}`
-	pvCSIDriverTemplate        = `go-template={{if .spec.csi}}{{.spec.csi.driver}}{{end}}`
+	gcsFuseCSIDriver                 = "gcsfuse.csi.storage.gke.io"
+	servingProfileStorageClass       = "gcsfusecsi-serving"
+	checkpointingProfileStorageClass = "gcsfusecsi-checkpointing"
+	pvcGCSFuseJSONPath               = `jsonpath={.spec.volumeName}{"\t"}{.spec.storageClassName}{"\t"}{.metadata.annotations.volume\.kubernetes\.io/storage-provisioner}{"\t"}{.metadata.annotations.volume\.beta\.kubernetes\.io/storage-provisioner}`
+	pvCSIDriverTemplate              = `go-template={{if .spec.csi}}{{.spec.csi.driver}}{{end}}`
 
 	// minGCSFuseProfileGKEVersion is the first GKE version with storage profile StorageClasses.
 	minGCSFuseProfileGKEVersion = "1.35.1-gke.1616000"
@@ -192,6 +193,9 @@ func newMountBuildState() *mountBuildState {
 }
 
 func (s *mountBuildState) volumeNameFor(pvName string, idx int) (name string, reused bool) {
+	if s == nil {
+		return fmt.Sprintf("vol-%d", idx), false
+	}
 	if existing, ok := s.gatewayVolumeNames[pvName]; ok {
 		return existing, true
 	}
@@ -246,6 +250,9 @@ func (sm *StorageManager) dispatchMount(pm parsedMount, idx int, job orchestrato
 }
 
 func (sm *StorageManager) pvcNeedsGCSFuseSidecar(pvcName string, job orchestrator.JobDefinition, state *mountBuildState) bool {
+	if sm.orchestrator != nil && sm.orchestrator.mode == orchestrator.TypeK8s {
+		return false
+	}
 	if state != nil && state.pvcNeedsSidecar != nil {
 		if needsSidecar, checked := state.pvcNeedsSidecar[pvcName]; checked {
 			return needsSidecar
@@ -311,12 +318,17 @@ func (sm *StorageManager) isGCSFuseBackedPVC(pvcName, ns string) bool {
 		return false
 	}
 
-	lowerSC := strings.ToLower(storageClassName)
-	if sc := gcsFuseProfileStorageClasses[lowerSC]; sc != "" && sc == lowerSC {
+	if isKnownGCSFuseProfileStorageClass(storageClassName) {
 		return true
 	}
 	return sm.hasGCSFuseCSIField("pv", volumeName, pvcName, pvCSIDriverTemplate) ||
 		sm.hasGCSFuseCSIField("storageclass", storageClassName, pvcName, "jsonpath={.provisioner}")
+}
+
+func isKnownGCSFuseProfileStorageClass(storageClassName string) bool {
+	lowerSC := strings.ToLower(storageClassName)
+	sc := gcsFuseProfileStorageClasses[lowerSC]
+	return sc != "" && sc == lowerSC
 }
 
 func parsePVCGCSFuseFields(stdout string) (volumeName, storageClassName, provisioner string) {
@@ -364,7 +376,7 @@ func buildPodLevelMount(pm parsedMount, idx int, state *mountBuildState) MountIn
 	}
 
 	volName := fmt.Sprintf("vol-%d", idx)
-	if volType == "pvc" && state != nil {
+	if volType == "pvc" {
 		volName, _ = state.volumeNameFor("pvc:"+pm.Src, idx)
 	}
 
@@ -380,17 +392,18 @@ func buildPodLevelMount(pm parsedMount, idx int, state *mountBuildState) MountIn
 
 	if volType == "gcsfuse" {
 		if pm.SubPath != "" {
-			if info.Options == "" {
-				info.Options = "only-dir=" + pm.SubPath
-			} else {
-				info.Options += ",only-dir=" + pm.SubPath
-			}
+			info.Options = normalizeGCSMountOptions(info.Options + ",only-dir=" + pm.SubPath)
 			info.SubPath = ""
 		}
-		// Warn here rather than in parseSingleVolume so ValidateMounts + ProcessMounts does not warn twice.
+		key := fmt.Sprintf("gcs:%s\x00%s\x00%s", pm.Src, info.Options, canonicalAttributesKey(pm.Attributes))
+		var reused bool
+		info.Name, reused = state.volumeNameFor(key, idx)
+		// Warn once per shared inline volume rather than in parseSingleVolume so ValidateMounts + ProcessMounts does not warn twice.
 		if len(pm.Attributes) > 0 {
 			info.Attributes = pm.Attributes
-			warnProfileOnlyAttributes(pm.Attributes, pm.Src)
+			if !reused {
+				warnProfileOnlyAttributes(pm.Attributes, pm.Src)
+			}
 		}
 	}
 
@@ -433,6 +446,14 @@ func (sm *StorageManager) ValidateMounts(mounts []string) error {
 	return sm.validateJobMounts(mounts, false, false)
 }
 
+func canonicalAttributesKey(attrs map[string]string) string {
+	if len(attrs) == 0 {
+		return ""
+	}
+	b, _ := json.Marshal(attrs)
+	return string(b)
+}
+
 // validateJobMounts validates --mount values and, for Pathways jobs, rejects
 // destinations that collide with the built-in Pathways mounts.
 func (sm *StorageManager) validateJobMounts(mounts []string, isPathways bool, hasColocatedSidecar bool) error {
@@ -460,8 +481,7 @@ func (sm *StorageManager) validateJobMounts(mounts []string, isPathways bool, ha
 		if pm.Profile != "" {
 			sourceKey += ";profile=" + pm.Profile
 		}
-		// %v prints map keys in sorted order, so the key is independent of attribute order.
-		sourceKey += fmt.Sprintf(";ro=%t;options=%s;attributes=%v", pm.ReadOnly, optsForKey, pm.Attributes)
+		sourceKey += fmt.Sprintf(";ro=%t;options=%s;attributes=%s", pm.ReadOnly, optsForKey, canonicalAttributesKey(pm.Attributes))
 
 		if seenSources[sourceKey] {
 			return fmt.Errorf("duplicate volume source: %s", dupSrc)
@@ -630,7 +650,14 @@ func parseVolumeAttributes(raw string) (map[string]string, error) {
 		if _, dup := attrs[key]; dup {
 			return nil, fmt.Errorf("duplicate volume attribute key %q", key)
 		}
-		attrs[key] = strings.TrimSpace(pair[1])
+		val := strings.TrimSpace(pair[1])
+		if val == "" {
+			if key == anywhereCacheZonesAttribute {
+				return nil, fmt.Errorf("invalid volume attribute %q: value must not be empty (use %s=%s to disable Rapid Cache)", kv, anywhereCacheZonesAttribute, anywhereCacheOffValue)
+			}
+			return nil, fmt.Errorf("invalid volume attribute %q: value must not be empty", kv)
+		}
+		attrs[key] = val
 	}
 	if len(attrs) == 0 {
 		return nil, fmt.Errorf("attributes= was specified but no key=value pairs were provided")
@@ -645,15 +672,19 @@ func repeatedSegmentErr(segment, vStr, joinHint string) error {
 
 func parseMountSegments(segments []string, vStr string, pm *parsedMount) (mountSegments, error) {
 	var out mountSegments
+	modeSet := false
 	optionsSet := false
 	attributesSet := false
 
 	for _, part := range segments {
 		switch {
-		case part == "ro":
-			pm.ReadOnly = true
-		case part == "rw":
-			pm.ReadOnly = false
+		case part == "ro" || part == "rw":
+			if modeSet {
+				return out, repeatedSegmentErr("ro/rw mode", vStr,
+					" Specify the access mode once: ro or rw")
+			}
+			modeSet = true
+			pm.ReadOnly = part == "ro"
 		case strings.HasPrefix(part, "options="):
 			if optionsSet {
 				return out, repeatedSegmentErr("options=", vStr,
@@ -750,32 +781,50 @@ func validateOnlyDirOption(opt, sep, val string, seenOnlyDir *bool) error {
 	return nil
 }
 
+func rejectDisallowedGCSOptionToken(opt, token string) error {
+	switch token {
+	case "defaults", "_netdev":
+		return fmt.Errorf("invalid GCSFuse mount option %q: fstab-only options are not supported by the Cloud Storage FUSE CSI driver; remove %q from options=", opt, opt)
+	case "ro", "rw", "o=ro", "o=rw":
+		mode := strings.TrimPrefix(token, "o=")
+		return fmt.Errorf("invalid GCSFuse mount option %q: specify the access mode as a ';%s' --mount segment instead of in options= (e.g., gs://<bucket>;<dest>;%s)", opt, mode, mode)
+	}
+	return nil
+}
+
+func validateGCSMountOptionToken(opt string, seenOnlyDir *bool) error {
+	token := strings.TrimLeft(opt, "-")
+	if err := rejectDisallowedGCSOptionToken(opt, token); err != nil {
+		return err
+	}
+	key, sep, val := splitGCSOptionKeyValue(token)
+	if key == "only-dir" || key == "only_dir" {
+		if err := validateOnlyDirOption(opt, sep, val, seenOnlyDir); err != nil {
+			return err
+		}
+	}
+	if key == "implicit_dirs" || key == "only_dir" {
+		hyphenated := strings.Replace(key, "_", "-", 1)
+		suggestSep := sep
+		if key == "only_dir" && sep != "" {
+			suggestSep = "="
+		}
+		return fmt.Errorf("invalid GCSFuse mount option %q: the Cloud Storage FUSE CSI driver uses hyphenated %q (not fstab-style %q). Use %q in options= instead", opt, hyphenated, key, hyphenated+suggestSep+val)
+	}
+	if token != opt {
+		if token == "" {
+			return fmt.Errorf("invalid GCSFuse mount option %q: flag name is empty", opt)
+		}
+		return fmt.Errorf("invalid GCSFuse mount option %q: omit leading '-' in options= (the Cloud Storage FUSE CSI driver prepends '--' automatically). Use %q in options= instead", opt, token)
+	}
+	return nil
+}
+
 func validateGCSMountOptions(options string) error {
 	seenOnlyDir := false
 	for _, opt := range splitMountOptions(options) {
-		token := strings.TrimLeft(opt, "-")
-		if token == "defaults" || token == "_netdev" {
-			return fmt.Errorf("invalid GCSFuse mount option %q: fstab-only options are not supported by the Cloud Storage FUSE CSI driver; remove %q from options=", opt, opt)
-		}
-		key, sep, val := splitGCSOptionKeyValue(token)
-		if key == "only-dir" || key == "only_dir" {
-			if err := validateOnlyDirOption(opt, sep, val, &seenOnlyDir); err != nil {
-				return err
-			}
-		}
-		if key == "implicit_dirs" || key == "only_dir" {
-			hyphenated := strings.Replace(key, "_", "-", 1)
-			suggestSep := sep
-			if key == "only_dir" && sep != "" {
-				suggestSep = "="
-			}
-			return fmt.Errorf("invalid GCSFuse mount option %q: the Cloud Storage FUSE CSI driver uses hyphenated %q (not fstab-style %q). Use %q in options= instead", opt, hyphenated, key, hyphenated+suggestSep+val)
-		}
-		if token != opt {
-			if token == "" {
-				return fmt.Errorf("invalid GCSFuse mount option %q: flag name is empty", opt)
-			}
-			return fmt.Errorf("invalid GCSFuse mount option %q: omit leading '-' in options= (the Cloud Storage FUSE CSI driver prepends '--' automatically). Use %q in options= instead", opt, token)
+		if err := validateGCSMountOptionToken(opt, &seenOnlyDir); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -834,7 +883,8 @@ func normalizeGCSMountOptions(options string) string {
 			opts[i] = "only-dir=" + path.Clean(strings.Trim(val, "/"))
 		}
 	}
-	return strings.Join(opts, ",")
+	slices.Sort(opts)
+	return strings.Join(slices.Compact(opts), ",")
 }
 
 // canonicalMountSourceKey computes the duplicate-detection source and options key.
@@ -1460,6 +1510,14 @@ func (sm *StorageManager) generateGCSFuseProfileResources(pm parsedMount, idx in
 	bucket := strings.TrimPrefix(pm.Src, "gs://")
 
 	profileShortName := strings.TrimPrefix(pm.Profile, "gcsfusecsi-")
+	if pm.Profile == checkpointingProfileStorageClass && pm.ReadOnly {
+		src := pm.Src
+		if pm.SubPath != "" {
+			src += "/" + pm.SubPath
+		}
+		logging.Warn("mount %q uses profile=checkpointing with read-only access (the default when mode is omitted); checkpoint writes to %q will fail. Set ';rw' (replacing ';ro' if present) in the --mount specification if the workload writes checkpoints.",
+			src, pm.Dest)
+	}
 	ns, err := sm.resolveNamespace(job)
 	if err != nil {
 		return MountInfo{}, "", err
@@ -1686,12 +1744,22 @@ func (sm *StorageManager) AddVolumeOptions(opts *ManifestOptions, vols []MountIn
 	var mountSpecs []map[string]interface{}
 	gcsFuseEnabled := false
 	seenVolumes := make(map[string]bool)
+	volWritable := make(map[string]bool)
+	for _, v := range vols {
+		if !v.ReadOnly {
+			volWritable[v.Name] = true
+		}
+	}
 
 	for _, v := range vols {
 		mountSpecs = append(mountSpecs, buildVolumeMountSpec(v))
 		if !seenVolumes[v.Name] {
 			seenVolumes[v.Name] = true
-			volSpecs = append(volSpecs, buildVolumeSpec(v))
+			volInfo := v
+			if volWritable[v.Name] {
+				volInfo.ReadOnly = false
+			}
+			volSpecs = append(volSpecs, buildVolumeSpec(volInfo))
 		}
 		if v.Type == "gcsfuse" || v.NeedsGCSFuseSidecar {
 			gcsFuseEnabled = true
@@ -2376,7 +2444,11 @@ func (sm *StorageManager) validateStorageClassExists(storageClass string, dryRun
 }
 
 func (sm *StorageManager) runCloudStoragePreflight(projectID, clusterLocation string, profileMounts []profileMount, inlineBuckets []string, dryRun bool) error {
-	if shell.IsKnownAirGapped() {
+	var getenv func(string) string
+	if sm.orchestrator != nil {
+		getenv = sm.orchestrator.getenv()
+	}
+	if shell.IsAirGappedEnv(getenv) {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), storageAPITimeout)
@@ -2862,10 +2934,24 @@ func (g *GKEOrchestrator) gatewayRemoved(ns, claim string) (bool, string, error)
 }
 
 func (g *GKEOrchestrator) rollBackJob(ns, jobSetName string, cause error) error {
+	if !g.jobSetEnabled() {
+		return g.rollBackBatchJob(ns, jobSetName, cause)
+	}
 	if err := g.kubeClient.DeleteJobSet(ns, jobSetName); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("%w; rolling back job %q also failed, delete it with `%s`: %v", cause, jobSetName, kubectlCommandLine(g.kubeContext, "delete", "jobset", jobSetName, "-n", ns), err)
 	}
 	return fmt.Errorf("job %q was not started: %w", jobSetName, cause)
+}
+
+func (g *GKEOrchestrator) rollBackBatchJob(ns, name string, cause error) error {
+	if _, _, _, err := g.cancelFallbackBatchJob(ns, name); err != nil {
+		return fmt.Errorf("%w; rolling back batch/v1 job %q also failed, delete it with `%s` and `%s`: %v",
+			cause, name,
+			kubectlCommandLine(g.kubeContext, "delete", "job", name, "-n", ns),
+			kubectlCommandLine(g.kubeContext, "delete", "service", name, "-n", ns),
+			err)
+	}
+	return fmt.Errorf("job %q was not started: %w", name, cause)
 }
 
 // manifestGatewayClaims returns the toolkit gateway PVCs declared in manifest.

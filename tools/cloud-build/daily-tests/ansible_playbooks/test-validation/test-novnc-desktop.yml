@@ -102,10 +102,16 @@
   changed_when: false
   register: session_owners
 
+# The harness runs this play with gather_facts off, so ask the node who we are.
+- name: Get the connecting account
+  ansible.builtin.command: id -un
+  changed_when: false
+  register: connecting_account
+
 - name: Assert the desktop was started for the connecting account
   ansible.builtin.assert:
-    that: ansible_user_id in session_owners.stdout.split()
-    fail_msg: "Expected a session for {{ ansible_user_id }}, found: {{ session_owners.stdout }}"
+    that: connecting_account.stdout in session_owners.stdout.split()
+    fail_msg: "Expected a session for {{ connecting_account.stdout }}, found: {{ session_owners.stdout }}"
 
 - name: Request a desktop session as root
   become: true
@@ -142,7 +148,7 @@
   become: true
   ansible.builtin.shell: |
     set -o pipefail
-    ss -ltn | grep -E ':59[0-9][0-9]' || true
+    ss -ltn | grep -E ':59[0-9][0-9]\b' || true
   args:
     executable: /bin/bash
   changed_when: false

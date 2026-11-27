@@ -23,7 +23,7 @@ existing host such as a Slurm login node.
 - `network_storage`
 - `slurm_auth_mode`
 - `vnc_backend`
-- `enable_gpu_acceleration` (hardware OpenGL; needs `turbovnc` - see [internal/desktop-broker](../../internal/desktop-broker/README.md))
+- `enable_gpu_acceleration` (hardware OpenGL; `turbovnc` recommended - see [internal/desktop-broker](../../internal/desktop-broker/README.md))
 
 ## Outputs
 
@@ -97,7 +97,7 @@ No resources.
 | <a name="input_iap_listen_port"></a> [iap\_listen\_port](#input\_iap\_listen\_port) | TCP port the broker serves the load balancer on. Only used when iap\_backend\_service is set. Must be below 1024, so that only root can bind it. | `number` | `80` | no |
 | <a name="input_install_root"></a> [install\_root](#input\_install\_root) | Directory under which noVNC assets are installed. | `string` | `"/opt/ghpc-remote-desktop"` | no |
 | <a name="input_instance_count"></a> [instance\_count](#input\_instance\_count) | Number of instances. | `number` | `1` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Image used to build the noVNC desktop node.<br/><br/>Expected fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "name": "debian-12-bookworm-v20250610",<br/>  "project": "debian-cloud"<br/>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Image used to build the noVNC desktop node.<br/><br/>Expected fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "family": "aci-cpu-rocky-linux-9-amd64",<br/>  "project": "advanced-compute-images"<br/>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. | `map(string)` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for desktop instance creation. | `string` | `"e2-standard-4"` | no |
 | <a name="input_max_user_sessions"></a> [max\_user\_sessions](#input\_max\_user\_sessions) | Maximum number of concurrent per-user desktop sessions the desktop host will support. | `number` | `32` | no |

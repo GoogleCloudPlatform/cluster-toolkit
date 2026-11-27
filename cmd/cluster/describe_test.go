@@ -140,6 +140,75 @@ func TestClusterCmd_AmbientProjectResolution(t *testing.T) {
 	})
 }
 
+func TestClusterCmd_ReportsTelemetryProjectID(t *testing.T) {
+	origFactory := gkeOrchestratorFactory
+	origExec := shell.ExecuteCommandWithTimeout
+	origHook := OnTelemetryProjectResolved
+	t.Cleanup(func() {
+		gkeOrchestratorFactory = origFactory
+		shell.ExecuteCommandWithTimeout = origExec
+		OnTelemetryProjectResolved = origHook
+	})
+
+	gkeOrchestratorFactory = func() *gke.GKEOrchestrator {
+		g := gke.NewGKEOrchestrator()
+		g.SetExecutor(&mockClusterExecutor{})
+		return g
+	}
+
+	var reported string
+	var hookCalls int
+	OnTelemetryProjectResolved = func(p string) {
+		reported = p
+		hookCalls++
+	}
+
+	t.Run("explicit --project is trimmed and reported", func(t *testing.T) {
+		resetClusterCmdFlags()
+		reported, hookCalls = "", 0
+		if _, err := executeCommand(ClusterCmd, "describe", "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "  explicit-proj  "); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if hookCalls != 1 || reported != "explicit-proj" {
+			t.Errorf("hook = (%d, %q), want (1, %q)", hookCalls, reported, "explicit-proj")
+		}
+	})
+
+	t.Run("ambient gcloud project is reported when --project is blank", func(t *testing.T) {
+		resetClusterCmdFlags()
+		reported, hookCalls = "", 0
+		shell.ExecuteCommandWithTimeout = func(_ time.Duration, name string, args ...string) shell.CommandResult {
+			if name == "gcloud" && strings.Join(args, " ") == "config get-value project" {
+				return shell.CommandResult{ExitCode: 0, Stdout: "ambient-proj\n"}
+			}
+			return shell.CommandResult{ExitCode: 1}
+		}
+		if _, err := executeCommand(ClusterCmd, "describe", "--cluster", "test-cluster", "--location", "us-central1-a", "--project", "   "); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if hookCalls != 1 || reported != "ambient-proj" {
+			t.Errorf("hook = (%d, %q), want (1, %q)", hookCalls, reported, "ambient-proj")
+		}
+	})
+
+	t.Run("(unset) ambient project errors and does not invoke hook", func(t *testing.T) {
+		resetClusterCmdFlags()
+		reported, hookCalls = "", 0
+		shell.ExecuteCommandWithTimeout = func(_ time.Duration, name string, args ...string) shell.CommandResult {
+			if name == "gcloud" && strings.Join(args, " ") == "config get-value project" {
+				return shell.CommandResult{ExitCode: 0, Stdout: "(unset)\n"}
+			}
+			return shell.CommandResult{ExitCode: 1}
+		}
+		if _, err := executeCommand(ClusterCmd, "describe", "--cluster", "test-cluster", "--location", "us-central1-a"); err == nil {
+			t.Fatal("expected error when gcloud returns (unset)")
+		}
+		if hookCalls != 0 {
+			t.Errorf("expected hook not to be called on (unset), got %d calls (%q)", hookCalls, reported)
+		}
+	})
+}
+
 func resetClusterCmdFlags() {
 	clusterName = ""
 	location = ""

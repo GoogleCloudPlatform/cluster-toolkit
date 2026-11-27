@@ -48,14 +48,16 @@ import (
 
 // strings that get re-used throughout this package and others
 const (
-	HiddenGhpcDirName        = ".ghpc"
-	ArtifactsDirName         = "artifacts"
-	ExpandedBlueprintName    = "expanded_blueprint.yaml"
-	prevGroupDirName         = "previous_deployment_groups"
-	gitignoreTemplate        = "deployment.gitignore.tmpl"
-	agentNoticeTemplate      = "deployment.GEMINI.md.tmpl"
-	agentNoticeFilename      = "GEMINI.md"
-	artifactsWarningFilename = "DO_NOT_MODIFY_THIS_DIRECTORY"
+	HiddenGhpcDirName          = ".ghpc"
+	ArtifactsDirName           = "artifacts"
+	ExpandedBlueprintName      = "expanded_blueprint.yaml"
+	ClusterDirectorMarkerName  = "cluster-director-export.json"
+	ClusterDirectorRequestName = "cluster-director-request.json"
+	prevGroupDirName           = "previous_deployment_groups"
+	gitignoreTemplate          = "deployment.gitignore.tmpl"
+	agentNoticeTemplate        = "deployment.GEMINI.md.tmpl"
+	agentNoticeFilename        = "GEMINI.md"
+	artifactsWarningFilename   = "DO_NOT_MODIFY_THIS_DIRECTORY"
 )
 
 func HiddenGhpcDir(deplDir string) string {
@@ -1016,6 +1018,24 @@ func prepDepDir(depDir string) error {
 }
 
 func prepArtifactsDir(artifactsDir string) error {
+	// Keep the Cluster Director export marker and request payload across `-w`
+	// overwrites, so a re-generated deployment still updates or deletes the
+	// cluster it exported. Deployments that never exported have neither file.
+	preserved := map[string][]byte{}
+	if entries, err := os.ReadDir(artifactsDir); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			if name == ClusterDirectorMarkerName || name == ClusterDirectorRequestName {
+				if data, readErr := os.ReadFile(filepath.Join(artifactsDir, name)); readErr == nil {
+					preserved[name] = data
+				}
+			}
+		}
+	}
+
 	// cleanup previous artifacts on every write
 	if err := os.RemoveAll(artifactsDir); err != nil {
 		return fmt.Errorf(
@@ -1024,6 +1044,12 @@ func prepArtifactsDir(artifactsDir string) error {
 
 	if err := os.MkdirAll(artifactsDir, 0700); err != nil {
 		return err
+	}
+
+	for name, data := range preserved {
+		if err := os.WriteFile(filepath.Join(artifactsDir, name), data, 0644); err != nil {
+			return err
+		}
 	}
 
 	artifactsWarningFile := filepath.Join(artifactsDir, artifactsWarningFilename)

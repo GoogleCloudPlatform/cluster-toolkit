@@ -124,6 +124,10 @@ func evaluate(db *VulnerabilityDB, gkeVersions []string) []string {
 
 const gkeClusterModule = "modules/scheduler/gke-cluster"
 
+// defaultGKEReleaseChannel mirrors the default of the `release_channel`
+// variable of the gke-cluster module. Keep the two in sync.
+const defaultGKEReleaseChannel = "REGULAR"
+
 func hasGKECluster(bp *config.Blueprint) bool {
 	hasGKE := false
 	bp.WalkModulesSafe(func(_ config.ModulePath, m *config.Module) {
@@ -158,6 +162,10 @@ func ResolveGKEVersions(bp *config.Blueprint) ([]string, error) {
 		// 2. Check for version_prefix safely
 		if versionPrefix := config.GetEvaluatedString("version_prefix", m, bp); versionPrefix != "" {
 			releaseChannel := config.GetEvaluatedString("release_channel", m, bp)
+			if releaseChannel == "" {
+				// The blueprint does not set release_channel, so the module default applies.
+				releaseChannel = defaultGKEReleaseChannel
+			}
 			latestVersion, e := fetchGKEVersionFunc(projectID, region, versionPrefix, releaseChannel)
 			if e != nil {
 				errs = append(errs, e.Error())
@@ -165,7 +173,7 @@ func ResolveGKEVersions(bp *config.Blueprint) ([]string, error) {
 			if latestVersion != "" {
 				versions = append(versions, latestVersion)
 			} else {
-				// FALLBACK: The prefix is likely too old and no longer available in the specified channel.
+				// FALLBACK: The prefix is likely too old and no longer available, in the specified channel or outside it.
 				// Return the prefix itself so the vulnerability check can flag it as EOL or vulnerable.
 				versions = append(versions, versionPrefix)
 			}
@@ -225,19 +233,22 @@ func fetchLatestGKEVersionForPrefix(projectID, region, prefix, releaseChannel st
 		return "", fmt.Errorf("failed to get server config: %w", err)
 	}
 
-	var candidates []string
 	if releaseChannel != "" && releaseChannel != "UNSPECIFIED" {
+		var candidates []string
 		for _, channel := range serverConfig.Channels {
 			if channel.Channel == releaseChannel {
 				candidates = channel.ValidVersions
 				break
 			}
 		}
-	} else {
-		candidates = serverConfig.ValidMasterVersions
+		if version := getHighestMatchingVersion(candidates, prefix); version != "" {
+			return version, nil
+		}
+		// The channel has no version with this prefix. The gke-cluster module then
+		// falls back to the no-channel versions, so do the same here.
 	}
 
-	return getHighestMatchingVersion(candidates, prefix), nil
+	return getHighestMatchingVersion(serverConfig.ValidMasterVersions, prefix), nil
 }
 
 // compareGKEVersions compares two GKE versions.

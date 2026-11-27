@@ -13,7 +13,7 @@ Each blueprint deploys a Slurm cluster with one or both desktop types:
 - **Login desktop**: `novnc-runtime` layered onto the Slurm login node, using
   TigerVNC. Suited to 2D and general interactive use.
 - **Visualization desktop**: `novnc-desktop` on a dedicated VM, using TurboVNC.
-  Suited to 3D, and the only backend supporting GPU acceleration on GCE.
+  Suited to 3D. TurboVNC is the recommended backend for GPU acceleration.
 
 Both hosts run a per-user broker that listens only on a unix socket,
 `/run/ghpc-remote-desktop/broker.sock`, with no TCP port. You reach it by
@@ -36,17 +36,11 @@ listens on a `0700` per-user unix socket, so other local users cannot reach it.
 ## GPU desktops
 
 The visualization desktop can use hardware OpenGL. Rather than ship a
-near-identical second blueprint, apply these four changes to
+near-identical second blueprint, apply these three changes to
 `hpc-slurm-remote-desktop.yaml`:
 
 ```yaml
 vars:
-  # Debian is the only slurm-gcp family shipping an NVIDIA driver with graphics
-  # (not merely compute) support. A compute driver ships no libEGL_nvidia and
-  # cannot render.
-  slurm_image:
-    family: slurm-gcp-6-12-debian-12
-    project: schedmd-slurm-public
   viz_machine_type: g2-standard-8
 
 # on the viz-desktop module:
@@ -60,10 +54,17 @@ deployment_groups:
       on_host_maintenance: TERMINATE
 ```
 
-`vnc_backend: turbovnc` is required and is already the visualization desktop's
-setting. TurboVNC reaches the GPU through VirtualGL's EGL back end; TigerVNC
-offloads GL only through `-rendernode`, which needs a DRM render node that GCE's
-NVIDIA images never create. Without a usable GPU the session falls back to
+The blueprint's default image, `aci-cpu-rocky-linux-9-slurm-2605-amd64`, carries
+an NVIDIA driver with graphics (not merely compute) support, so no image change
+is needed. The Ubuntu `aci-gpu-u2404-*` images carry a compute-only driver: it
+ships no `libEGL_nvidia` and cannot render until the matching
+`libnvidia-gl-<branch>-server` package is added to the image.
+
+`vnc_backend: turbovnc` is recommended and is already the visualization
+desktop's setting. TurboVNC reaches the GPU through VirtualGL's EGL back end,
+which works whether or not the driver exposes a DRM render node. TigerVNC
+offloads GL only through `-rendernode`, so it needs a render node as well as a
+driver with graphics support. Without a usable GPU the session falls back to
 software rendering rather than failing, and the broker logs why at startup.
 
 ## Getting Started

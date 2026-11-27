@@ -131,6 +131,9 @@ else:
 API_REQ_LIMIT = 2000
 # Wait time after a 409 "already exists" for a concurrent GCE resource insert to finish.
 ALREADY_EXISTS_SETTLE_SEC = 5
+# Shared prefix for permanent explicit-MIG reservation incompatibility reasons set by resume.py
+# and preserved across slurmsync ticks until the nodeset configuration is changed.
+MIG_UNSUPPORTED_RESERVATION_PREFIX = "MIG does not support reservation"
 
 
 def mkdirp(path: Path) -> None:
@@ -2423,9 +2426,27 @@ class Lookup:
             active_reservation=active_reservation
         )
 
+    _GPU_TOPOLOGY_NORMALIZED_RE = re.compile(r"^[1-9][0-9]*x[1-9][0-9]*\Z")
+
+    def _nodeset_has_block_topology(self, ns_name: str) -> bool:
+        ns = self.cfg.nodeset.get(ns_name)
+        if not ns:
+            return False
+        topo = ns.accelerator_topology
+        if not isinstance(topo, str):
+            return False
+        if topo == "1x72" and ns.reservation_name:
+            return True
+        return (
+            self.is_nodeset_mig(ns_name)
+            and not self.is_tpu_nodeset(ns_name)
+            and bool(self._GPU_TOPOLOGY_NORMALIZED_RE.match(topo))
+        )
+
     def has_block_topology(self, partition: NSDict) -> bool:
-        return all(self.cfg.nodeset[ns].accelerator_topology == "1x72" and
-         self.cfg.nodeset[ns].reservation_name for ns in partition.partition_nodeset)
+        if not partition.partition_nodeset:
+            return False
+        return all(self._nodeset_has_block_topology(ns) for ns in partition.partition_nodeset)
 
     def has_gke_nodesets(self) -> bool:
         return any(self.nodeset_is_gke(nodeset) for nodeset in self.cfg.nodeset.values())

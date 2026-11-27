@@ -18,19 +18,24 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
+	"time"
 )
 
 // setupTestEnv creates a clean temporary directory and forces os.UserConfigDir()
-// to use it via environment variables. It also resets the global state.
+// and os.UserCacheDir() to use it via environment variables. It also resets global state.
 func setupTestEnv(t *testing.T) string {
 	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache")
 
-	// Override environment variables used by os.UserConfigDir() across different OSes
-	t.Setenv("XDG_CONFIG_HOME", tempDir) // Linux
+	// Override environment variables used by os.UserConfigDir() and os.UserCacheDir() across OSes
+	t.Setenv("XDG_CONFIG_HOME", tempDir) // Linux config
+	t.Setenv("XDG_CACHE_HOME", cacheDir) // Linux cache
 	t.Setenv("HOME", tempDir)            // macOS / Linux fallback
-	t.Setenv("AppData", tempDir)         // Windows
-	t.Setenv("LocalAppData", tempDir)    // Windows fallback
+	t.Setenv("AppData", tempDir)         // Windows config
+	t.Setenv("LocalAppData", cacheDir)   // Windows cache
 
 	globalUserConfig = UserConfig{}
 	return tempDir
@@ -240,5 +245,149 @@ func TestInitUserConfig_ExistingIsGoogler(t *testing.T) {
 	}
 	if *cached != false {
 		t.Errorf("Expected IsGoogler to be false, got true")
+	}
+}
+
+func TestCachedProjectMetadata_BasicAndMultiProject(t *testing.T) {
+	setupTestEnv(t)
+
+	if _, ok := GetCachedProjectMetadata("my-proj", time.Hour); ok {
+		t.Fatal("expected cache miss before storing metadata")
+	}
+	if _, ok := GetCachedProjectMetadata("   ", time.Hour); ok {
+		t.Fatal("expected cache miss for blank project ID")
+	}
+	if err := SetCachedProjectMetadata("   ", ProjectMetadata{ProjectNumber: "1"}); err != nil {
+		t.Fatalf("SetCachedProjectMetadata(blank) unexpected error: %v", err)
+	}
+
+	want := ProjectMetadata{
+		ProjectNumber:    "123456789",
+		BillingAccountID: "012345-6789AB-CDEF01",
+		UpdatedAt:        time.Now().UTC(),
+		ExpiresAt:        time.Now().UTC().Add(time.Hour),
+	}
+	if err := SetCachedProjectMetadata("my-proj", want); err != nil {
+		t.Fatalf("SetCachedProjectMetadata failed: %v", err)
+	}
+
+	got, ok := GetCachedProjectMetadata("my-proj", time.Hour)
+	if !ok || got.ProjectNumber != want.ProjectNumber || got.BillingAccountID != want.BillingAccountID {
+		t.Fatalf("got (%+v, %v), want (%+v, true)", got, ok, want)
+	}
+
+	// Storing a second project preserves the first project's entry.
+	second := ProjectMetadata{
+		ProjectNumber: "222222",
+		UpdatedAt:     time.Now().UTC(),
+	}
+	if err := SetCachedProjectMetadata("second-proj", second); err != nil {
+		t.Fatalf("SetCachedProjectMetadata(second-proj) failed: %v", err)
+	}
+	if got1, ok1 := GetCachedProjectMetadata("my-proj", time.Hour); !ok1 || got1.ProjectNumber != want.ProjectNumber {
+		t.Errorf("first entry lost after writing second project: got (%+v, %v)", got1, ok1)
+	}
+	if got2, ok2 := GetCachedProjectMetadata("second-proj", time.Hour); !ok2 || got2.ProjectNumber != second.ProjectNumber {
+		t.Errorf("second entry mismatch: got (%+v, %v)", got2, ok2)
+	}
+}
+
+func TestCachedProjectMetadata_IsolatedAtomicPermissions(t *testing.T) {
+	tempDir := setupTestEnv(t)
+	if err := InitUserConfig(); err != nil {
+		t.Fatalf("InitUserConfig failed: %v", err)
+	}
+
+	// Simulate another process opting out via `gcluster telemetry off` while this
+	// process still has TelemetryEnabled=true in memory.
+	configFile := filepath.Join(tempDir, "cluster-toolkit", configFileName)
+	optOutData, err := json.Marshal(UserConfig{
+		UserID:           GetPersistentUserId(),
+		TelemetryEnabled: false,
+	})
+	if err != nil {
+		t.Fatalf("failed to marshal opt-out config: %v", err)
+	}
+	if err := os.WriteFile(configFile, optOutData, 0644); err != nil {
+		t.Fatalf("failed to write opt-out config: %v", err)
+	}
+
+	if err := SetCachedProjectMetadata("my-proj", ProjectMetadata{
+		ProjectNumber: "123456789",
+		UpdatedAt:     time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("SetCachedProjectMetadata failed: %v", err)
+	}
+
+	// telemetry_config.json must NOT be modified by project cache writes (no opt-out race).
+	afterConfigBytes, err := os.ReadFile(configFile)
+	if err != nil {
+		t.Fatalf("failed to read telemetry_config.json: %v", err)
+	}
+	if string(afterConfigBytes) != string(optOutData) {
+		t.Fatalf("SetCachedProjectMetadata modified telemetry_config.json:\ngot:  %s\nwant: %s", afterConfigBytes, optOutData)
+	}
+
+	// Verify dedicated cache file location, 0600 permissions, and no leftover temp files.
+	cacheFile := projectCacheFilePath()
+	info, err := os.Stat(cacheFile)
+	if err != nil {
+		t.Fatalf("expected project cache file at %s: %v", cacheFile, err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
+		t.Errorf("project cache file mode = %o, want 0600", info.Mode().Perm())
+	}
+	entries, err := os.ReadDir(filepath.Dir(cacheFile))
+	if err != nil {
+		t.Fatalf("failed to list cache dir: %v", err)
+	}
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".tmp") {
+			t.Errorf("unexpected leftover temp file in cache dir: %s", entry.Name())
+		}
+	}
+}
+
+func TestCachedProjectMetadata_ExpiryAndCorruptionRecovery(t *testing.T) {
+	setupTestEnv(t)
+
+	// Verify explicit ExpiresAt takes precedence over a longer ttl.
+	shortExpired := ProjectMetadata{
+		UpdatedAt: time.Now().UTC(),
+		ExpiresAt: time.Now().UTC().Add(-time.Second),
+	}
+	if err := SetCachedProjectMetadata("short-expired", shortExpired); err != nil {
+		t.Fatalf("SetCachedProjectMetadata(short-expired) failed: %v", err)
+	}
+	if _, ok := GetCachedProjectMetadata("short-expired", 24*time.Hour); ok {
+		t.Error("expected cache miss when ExpiresAt has passed even if UpdatedAt is within ttl")
+	}
+
+	// Verify fallback TTL expiration when ExpiresAt is zero.
+	expired := ProjectMetadata{
+		ProjectNumber: "999",
+		UpdatedAt:     time.Now().UTC().Add(-2 * time.Hour),
+	}
+	if err := SetCachedProjectMetadata("expired-proj", expired); err != nil {
+		t.Fatalf("SetCachedProjectMetadata(expired) failed: %v", err)
+	}
+	if _, ok := GetCachedProjectMetadata("expired-proj", time.Hour); ok {
+		t.Error("expected cache miss for expired entry")
+	}
+
+	// Verify corrupt cache file is treated as a miss and recovers cleanly on next write.
+	cacheFile := projectCacheFilePath()
+	if err := os.WriteFile(cacheFile, []byte("{truncated"), 0600); err != nil {
+		t.Fatalf("failed to write corrupt cache file: %v", err)
+	}
+	if _, ok := GetCachedProjectMetadata("my-proj", time.Hour); ok {
+		t.Error("expected cache miss on corrupt project cache file")
+	}
+	recovered := ProjectMetadata{ProjectNumber: "123456789", UpdatedAt: time.Now().UTC()}
+	if err := SetCachedProjectMetadata("recovered-proj", recovered); err != nil {
+		t.Fatalf("SetCachedProjectMetadata after corruption failed: %v", err)
+	}
+	if gotRec, ok := GetCachedProjectMetadata("recovered-proj", time.Hour); !ok || gotRec.ProjectNumber != recovered.ProjectNumber {
+		t.Errorf("after recovery got (%+v, %v), want (%+v, true)", gotRec, ok, recovered)
 	}
 }
