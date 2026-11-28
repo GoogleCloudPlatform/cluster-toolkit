@@ -160,6 +160,21 @@ output "nodeset" {
   }
 
   precondition {
+    condition     = !(var.provisioning_engine == "MIG" && !var.dws_flex.enabled && var.future_reservation != "")
+    error_message = "future_reservation is not supported with provisioning_engine = 'MIG'. Use provisioning_engine = 'BULK_INSERT' or 'AUTO'."
+  }
+
+  precondition {
+    condition     = !(local.mig_provisioned && (var.enable_spot_vm || var.preemptible) && var.maintenance_interval != null && trimspace(var.maintenance_interval) != "")
+    error_message = "maintenance_interval is not supported on Spot or preemptible MIG NodeSets."
+  }
+
+  precondition {
+    condition     = !(var.provisioning_engine == "MIG" && !var.dws_flex.enabled && local.has_instance_properties)
+    error_message = "instance_properties is not supported with provisioning_engine = 'MIG'. Use provisioning_engine = 'BULK_INSERT' or 'AUTO'."
+  }
+
+  precondition {
     condition     = !local.is_tpu || endswith(var.machine_type, "-4t")
     error_message = "TPU nodesets currently only support 4-chip machine types ending in '-4t' (e.g. ct6e-standard-4t, tpu7x-standard-4t, ct5p-hightpu-4t)."
   }
@@ -188,8 +203,8 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = !local.has_flex_policy || (var.provisioning_engine == "MIG" && !var.dws_flex.enabled)
-    error_message = "instance_flexibility_policy requires provisioning_engine = 'MIG' and is not supported with DWS Flex."
+    condition     = !local.has_flex_policy || local.mig_provisioned
+    error_message = "instance_flexibility_policy requires a static MIG NodeSet (provisioning_engine = 'MIG' or 'AUTO' resolving to MIG, with node_count_dynamic_max = 0, enable_placement = false, and no DWS Flex, TPU, reservations, or instance_properties)."
   }
 
   precondition {

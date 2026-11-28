@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/orchestrator"
 	"hpc-toolkit/pkg/orchestrator/k8s"
@@ -35,15 +34,6 @@ func (g *GKEOrchestrator) isGKE(projectID string) bool {
 		// Programmatic callers constructing GKEOrchestrator directly leave mode unset.
 		return strings.TrimSpace(g.projectID) != "" || strings.TrimSpace(projectID) != ""
 	}
-}
-
-// ambientTelemetryImage returns GCLUSTER_TELEMETRY_IMAGE unless --ml-diagnostics-image was given explicitly
-// (an explicit empty value opts out of the environment default, mirroring --image-pull-secret="").
-func ambientTelemetryImage(job orchestrator.JobDefinition) string {
-	if job.MLDiagnosticsImageSpecified {
-		return ""
-	}
-	return k8s.TelemetryImageFromEnv()
 }
 
 // telemetrySidecarRequested reports whether ML Diagnostics runs as the native collector sidecar: always off GKE,
@@ -101,14 +91,14 @@ func (g *GKEOrchestrator) nonTPUTelemetryHint(job orchestrator.JobDefinition) st
 
 // resolveTelemetryCollector returns the native sidecar image and metrics port for job, or an empty image when
 // GKE's managed webhook provides ML Diagnostics. Off GKE, an unnamed image is discovered from the TPU node image cache.
-func (g *GKEOrchestrator) resolveTelemetryCollector(job orchestrator.JobDefinition) (string, int, error) {
+func (g *GKEOrchestrator) resolveTelemetryCollector(job orchestrator.JobDefinition, isTPU bool) (string, int, error) {
 	if err := g.validateTelemetryFlags(job); err != nil {
 		return "", 0, err
 	}
 	if !g.telemetrySidecarRequested(job) {
 		return "", 0, nil
 	}
-	if !config.IsTPU(job.MachineType) && !config.IsTPU(job.ComputeType) {
+	if !isTPU {
 		return "", 0, fmt.Errorf("ML Diagnostics collector sidecar injection (selected by %s) is only supported for TPU workloads (got compute-type=%q, machine-type=%q); %s", g.telemetrySidecarTrigger(job), job.ComputeType, job.MachineType, g.nonTPUTelemetryHint(job))
 	}
 	img := strings.TrimSpace(job.MLDiagnosticsImage)

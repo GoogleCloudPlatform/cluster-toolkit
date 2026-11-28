@@ -1,10 +1,9 @@
 ## Description
 
-This module creates a Toolkit runner that will install HTCondor on RedHat 7 or
-8 and its derivative operating systems. These include the CentOS 7 and Rocky
-Linux 8 releases of the [HPC VM Image][hpcvmimage]. It may also function on
-RedHat 9 and derivatives, however it is not yet supported. Please report any
-[issues] on these 3 distributions or open a [discussion] to request support on
+This module creates a Toolkit runner that will install HTCondor on RedHat 8 or
+9 and its derivative operating systems (including Rocky Linux 9 on Advanced
+Compute Images and Rocky Linux 8). Please report any
+[issues] on these distributions or open a [discussion] to request support on
 Debian or Ubuntu distributions.
 
 [issues]: https://github.com/GoogleCloudPlatform/hpc-toolkit/issues
@@ -16,7 +15,6 @@ provisioning an HTCondor Pool.
 It is expected to be used with the [htcondor-setup] and
 [htcondor-execute-point] modules.
 
-[hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 [htcondor-setup]: ../../scheduler/htcondor-setup/README.md
 [htcondor-execute-point]: ../../compute/htcondor-execute-point/README.md
 
@@ -51,8 +49,9 @@ deployment_groups:
     - network1
     - htcondor_install_script
     settings:
-      disk_size: 50
-      source_image_family: hpc-rocky-linux-8
+      disk_size: 100
+      source_image_family: aci-cpu-rocky-linux-9-amd64
+      source_image_project_id: [advanced-compute-images]
       image_family: "htcondor-10x"
 ```
 

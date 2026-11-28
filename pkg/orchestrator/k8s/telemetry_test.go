@@ -148,10 +148,35 @@ func TestCompareImageRefs(t *testing.T) {
 		{"r/c:20250115", "r/c:20260301", -1},
 		{"r/c:latest", "r/c:v0.1.0", -1},
 		{"r/c@sha256:aaa", "r/c@sha256:bbb", -1},
+		{"localhost:5000/c:v1.10.0", "localhost:5000/c:v1.9.0", 1},
+		{"r/c:v1.10.0@sha256:aaa", "r/c:v1.9.0@sha256:bbb", 1},
 	} {
 		got := compareImageRefs(tc.a, tc.b)
 		if (got > 0) != (tc.want > 0) || (got < 0) != (tc.want < 0) {
 			t.Errorf("compareImageRefs(%q, %q) = %d, want sign of %d", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
+func TestClassifyCollectorImageBucket(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		ref  string
+		want int
+	}{
+		{"reg.local/ai-telemetry-collector:v1.2.3", 0},
+		{"localhost:5000/ai-telemetry-collector:latest", 0},
+		{"reg.local/ai-telemetry-collector@sha256:aaa", 1},
+		{"reg.local/ai-telemetry-collector:v1.2.3@sha256:aaa", 1},
+		{"reg.local/workload-observability-agent:v1.2.3", 2},
+		{"reg.local/workload-observability-agent@sha256:aaa", 3},
+		{"reg.local/workload-observability-agent:v1.2.3@sha256:aaa", 3},
+		{"reg.local/other:v1", -1},
+		{"reg.local/ai-telemetry-collector/", -1},
+		{"", -1},
+	} {
+		if got := classifyCollectorImageBucket(tc.ref); got != tc.want {
+			t.Errorf("classifyCollectorImageBucket(%q) = %d, want %d", tc.ref, got, tc.want)
 		}
 	}
 }

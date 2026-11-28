@@ -15,6 +15,7 @@
 package gke
 
 import (
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -529,7 +530,7 @@ func TestBuildNodeSelector_PlacementPolicy(t *testing.T) {
 		PlacementPolicy: "tpu7x-16-2x2x2-placement-policy",
 		IsTPU:           true,
 	}
-	tpuSelectorStr, err := g.buildNodeSelector(tpuOpts, tpuJob, false)
+	tpuSelectorStr, err := g.buildNodeSelectorWithProfile(tpuOpts, tpuJob, JobProfile{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -548,7 +549,7 @@ func TestBuildNodeSelector_PlacementPolicy(t *testing.T) {
 		PlacementPolicy: "compact-placement-group",
 		MachineType:     "a3-highgpu-8g",
 	}
-	nonTpuSelectorStr, err := g.buildNodeSelector(nonTpuOpts, nonTpuJob, false)
+	nonTpuSelectorStr, err := g.buildNodeSelectorWithProfile(nonTpuOpts, nonTpuJob, JobProfile{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -562,7 +563,7 @@ func TestBuildNodeSelector_PlacementPolicy(t *testing.T) {
 	// 2b. Non-TPU workload under NAP additionally gets cloud.google.com/gke-placement-group
 	napOpts := nonTpuOpts
 	napOpts.IsNAP = true
-	napSelectorStr, err := g.buildNodeSelector(napOpts, nonTpuJob, false)
+	napSelectorStr, err := g.buildNodeSelectorWithProfile(napOpts, nonTpuJob, JobProfile{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -581,11 +582,327 @@ func TestBuildNodeSelector_PlacementPolicy(t *testing.T) {
 		PlacementPolicy: "projects/my-proj/regions/us-central1/resourcePolicies/tpu7x-16-2x2x2-placement-policy/",
 		IsTPU:           true,
 	}
-	uriSelectorStr, err := g.buildNodeSelector(uriOpts, uriJob, false)
+	uriSelectorStr, err := g.buildNodeSelectorWithProfile(uriOpts, uriJob, JobProfile{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(uriSelectorStr, "cloud.google.com/placement-policy-name: tpu7x-16-2x2x2-placement-policy") {
 		t.Errorf("Expected sanitized placement policy name in %s", uriSelectorStr)
+	}
+}
+
+func TestGetNodeSelectorAndAffinity_CPUPinningAndExclusions(t *testing.T) {
+	t.Parallel()
+
+	sel, err := getNodeSelector(SchedulingOptions{
+		MachineType:       "C3-Standard-44",
+		PinCPUMachine:     true,
+		ClusterNAPEnabled: true,
+		NodeAffinityLabels: map[string]string{
+			"topology.kubernetes.io/zone": "us-central1-a",
+		},
+	})
+	if err != nil {
+		t.Fatalf("getNodeSelector unexpected err: %v", err)
+	}
+	wantSel := map[string]string{
+		corev1.LabelInstanceTypeStable: "c3-standard-44",
+		machineFamilyLabel:             "c3",
+		"topology.kubernetes.io/zone":  "us-central1-a",
+	}
+	if !reflect.DeepEqual(sel, wantSel) {
+		t.Errorf("getNodeSelector = %v, want %v", sel, wantSel)
+	}
+
+	aff, err := GetAffinity(SchedulingOptions{
+		ExcludeAccelerators: true,
+		ExcludedNodePools:   []string{"", "default-pool", "cpu-np", "cpu-np"},
+	})
+	if err != nil {
+		t.Fatalf("GetAffinity unexpected err: %v", err)
+	}
+	exprs := aff.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0].MatchExpressions
+	wantExprs := []corev1.NodeSelectorRequirement{
+		{Key: nodePoolLabel, Operator: corev1.NodeSelectorOpNotIn, Values: []string{"default-pool", "cpu-np"}},
+		{Key: "cloud.google.com/gke-accelerator", Operator: corev1.NodeSelectorOpDoesNotExist},
+		{Key: "cloud.google.com/gke-tpu-accelerator", Operator: corev1.NodeSelectorOpDoesNotExist},
+	}
+	if !reflect.DeepEqual(exprs, wantExprs) {
+		t.Errorf("GetAffinity MatchExpressions = %+v, want %+v", exprs, wantExprs)
+	}
+
+	affWithUserGPU, err := GetAffinity(SchedulingOptions{
+		ExcludeAccelerators: true,
+		NodeAffinityLabels:  map[string]string{"cloud.google.com/gke-accelerator": "nvidia-l4"},
+	})
+	if err != nil {
+		t.Fatalf("GetAffinity(with user GPU constraint) unexpected err: %v", err)
+	}
+	gpuExprs := affWithUserGPU.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0].MatchExpressions
+	wantGPUExprs := []corev1.NodeSelectorRequirement{
+		{Key: nodePoolLabel, Operator: corev1.NodeSelectorOpNotIn, Values: []string{"default-pool"}},
+		{Key: "cloud.google.com/gke-tpu-accelerator", Operator: corev1.NodeSelectorOpDoesNotExist},
+	}
+	if !reflect.DeepEqual(gpuExprs, wantGPUExprs) {
+		t.Errorf("GetAffinity(user GPU label) MatchExpressions = %+v, want %+v", gpuExprs, wantGPUExprs)
+	}
+}
+
+func TestApplyCPUHeadPoolAvoidance_ConstraintsTaintsAndSpot(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name          string
+		headNP        gkeJobNodePool
+		machineType   string
+		pinCPUMachine bool
+		provisioning  string
+		reservation   string
+		constraints   map[string]string
+		wantExcluded  bool
+	}{
+		{
+			name:          "pipe instance-type excluding cpu-np still excludes head pool",
+			headNP:        gkeJobNodePool{Name: "cpu-np", InitialNodeCount: 1, Config: gkeNodePoolConfig{MachineType: "n2d-standard-64"}},
+			machineType:   "c3-standard-44",
+			pinCPUMachine: true,
+			constraints:   map[string]string{corev1.LabelInstanceTypeStable: "c3-standard-44|c3-highmem-44"},
+			wantExcluded:  true,
+		},
+		{
+			name:          "pipe instance-type including cpu-np keeps head pool",
+			headNP:        gkeJobNodePool{Name: "cpu-np", InitialNodeCount: 1, Config: gkeNodePoolConfig{MachineType: "n2d-standard-64"}},
+			machineType:   "n2d-standard-64",
+			pinCPUMachine: true,
+			constraints:   map[string]string{corev1.LabelInstanceTypeStable: "n2d-standard-64|n2d-highmem-96"},
+			wantExcluded:  false,
+		},
+		{
+			name:          "machine-family mismatching cpu-np excludes head pool",
+			headNP:        gkeJobNodePool{Name: "cpu-np", InitialNodeCount: 1, Config: gkeNodePoolConfig{MachineType: "n2d-standard-64"}},
+			machineType:   "n2d-standard-64",
+			pinCPUMachine: true,
+			constraints:   map[string]string{machineFamilyLabel: "c3"},
+			wantExcluded:  true,
+		},
+		{
+			name: "tainted matching cpu-np is excluded",
+			headNP: gkeJobNodePool{
+				Name:             "cpu-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2d-standard-64",
+					Taints:      []gkeTaint{{Key: "dedicated", Value: "pathways", Effect: "NO_SCHEDULE"}},
+				},
+			},
+			machineType:   "n2d-standard-64",
+			pinCPUMachine: true,
+			wantExcluded:  true,
+		},
+		{
+			name: "spot request keeps matching spot cpu-np with tolerated GKE spot taint",
+			headNP: gkeJobNodePool{
+				Name:             "cpu-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2d-standard-64",
+					Spot:        true,
+					Taints:      []gkeTaint{{Key: "cloud.google.com/gke-provisioning", Value: "spot", Effect: "NO_SCHEDULE"}},
+				},
+			},
+			machineType:   "n2d-standard-64",
+			pinCPUMachine: true,
+			provisioning:  "spot",
+			wantExcluded:  false,
+		},
+		{
+			name: "spot request still excludes spot cpu-np with additional untolerated taint",
+			headNP: gkeJobNodePool{
+				Name:             "cpu-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2d-standard-64",
+					Spot:        true,
+					Taints: []gkeTaint{
+						{Key: "cloud.google.com/gke-provisioning", Value: "spot", Effect: "NO_SCHEDULE"},
+						{Key: "dedicated", Value: "pathways", Effect: "NO_SCHEDULE"},
+					},
+				},
+			},
+			machineType:   "n2d-standard-64",
+			pinCPUMachine: true,
+			provisioning:  "spot",
+			wantExcluded:  true,
+		},
+		{
+			name:          "0-node matching cpu-np without autoscaling is excluded",
+			headNP:        gkeJobNodePool{Name: "cpu-np", InitialNodeCount: 0, Config: gkeNodePoolConfig{MachineType: "n2d-standard-64"}},
+			machineType:   "n2d-standard-64",
+			pinCPUMachine: true,
+			wantExcluded:  true,
+		},
+		{
+			name:          "on-demand request excludes spot cpu-np",
+			headNP:        gkeJobNodePool{Name: "cpu-np", InitialNodeCount: 1, Config: gkeNodePoolConfig{MachineType: "n2d-standard-64", Spot: true}},
+			machineType:   "n2d-standard-64",
+			pinCPUMachine: true,
+			provisioning:  "on-demand",
+			wantExcluded:  true,
+		},
+		{
+			name:          "on-demand request keeps on-demand cpu-np",
+			headNP:        gkeJobNodePool{Name: "cpu-np", InitialNodeCount: 1, Config: gkeNodePoolConfig{MachineType: "n2d-standard-64"}},
+			machineType:   "n2d-standard-64",
+			pinCPUMachine: true,
+			provisioning:  "on-demand",
+			wantExcluded:  false,
+		},
+		{
+			name:          "reservation request excludes non-reservation cpu-np",
+			headNP:        gkeJobNodePool{Name: "cpu-np", InitialNodeCount: 1, Config: gkeNodePoolConfig{MachineType: "n2d-standard-64"}},
+			machineType:   "n2d-standard-64",
+			pinCPUMachine: true,
+			provisioning:  "reservation",
+			reservation:   "my-res",
+			wantExcluded:  true,
+		},
+		{
+			name: "reservation request keeps cpu-np matching reservation label and tolerated taint",
+			headNP: gkeJobNodePool{
+				Name:             "cpu-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2d-standard-64",
+					Labels: map[string]string{
+						"cloud.google.com/reservation-name":    "my-res",
+						"cloud.google.com/reservation-project": "p",
+					},
+					Taints: []gkeTaint{{Key: "cloud.google.com/reservation-name", Value: "my-res", Effect: "NO_SCHEDULE"}},
+				},
+			},
+			machineType:   "n2d-standard-64",
+			pinCPUMachine: true,
+			provisioning:  "reservation",
+			reservation:   "projects/p/zones/us-central1-a/reservations/my-res",
+			wantExcluded:  false,
+		},
+		{
+			name: "reservation request keeps cpu-np matching ReservationAffinity without config labels",
+			headNP: gkeJobNodePool{
+				Name:             "cpu-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2d-standard-64",
+					ReservationAffinity: &gkeReservationAffinity{
+						ConsumeReservationType: "SPECIFIC_RESERVATION",
+						Key:                    "compute.googleapis.com/reservation-name",
+						Values:                 []string{"projects/p/zones/us-central1-a/reservations/my-res"},
+					},
+					Taints: []gkeTaint{{Key: "cloud.google.com/reservation-name", Value: "my-res", Effect: "NO_SCHEDULE"}},
+				},
+			},
+			machineType:   "n2d-standard-64",
+			pinCPUMachine: true,
+			provisioning:  "reservation",
+			reservation:   "projects/p/zones/us-central1-a/reservations/my-res",
+			wantExcluded:  false,
+		},
+		{
+			name: "reservation request excludes cpu-np when shared project mismatches",
+			headNP: gkeJobNodePool{
+				Name:             "cpu-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2d-standard-64",
+					Labels: map[string]string{
+						"cloud.google.com/reservation-name":    "my-res",
+						"cloud.google.com/reservation-project": "other-proj",
+					},
+				},
+			},
+			machineType:   "n2d-standard-64",
+			pinCPUMachine: true,
+			provisioning:  "reservation",
+			reservation:   "projects/owner-proj/zones/us-central1-a/reservations/my-res",
+			wantExcluded:  true,
+		},
+		{
+			name: "reservation request with pipe constraint excludes cpu-np carrying untolerated extra taint",
+			headNP: gkeJobNodePool{
+				Name:             "cpu-np",
+				InitialNodeCount: 1,
+				Config: gkeNodePoolConfig{
+					MachineType: "n2d-standard-64",
+					Labels:      map[string]string{"cloud.google.com/reservation-name": "my-res"},
+					Taints: []gkeTaint{
+						{Key: "cloud.google.com/reservation-name", Value: "my-res", Effect: "NO_SCHEDULE"},
+						{Key: "dedicated", Value: "pathways", Effect: "NO_SCHEDULE"},
+					},
+				},
+			},
+			machineType:   "c3-standard-44",
+			pinCPUMachine: true,
+			constraints:   map[string]string{corev1.LabelInstanceTypeStable: "n2d-standard-64|c3-standard-44"},
+			provisioning:  "reservation",
+			reservation:   "my-res",
+			wantExcluded:  true,
+		},
+		{
+			name:          "PinCPUMachine false skips head pool avoidance",
+			headNP:        gkeJobNodePool{Name: "cpu-np", InitialNodeCount: 1, Config: gkeNodePoolConfig{MachineType: "n2d-standard-64"}},
+			machineType:   "c3-standard-44",
+			pinCPUMachine: false,
+			wantExcluded:  false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			orc := newTestGKEOrchestrator(nil)
+			orc.clusterDesc.NodePools = []gkeJobNodePool{tc.headNP}
+			schedOpts := SchedulingOptions{MachineType: tc.machineType, PinCPUMachine: tc.pinCPUMachine, NodeAffinityLabels: tc.constraints}
+			orc.applyCPUHeadPoolAvoidance(&schedOpts, tc.provisioning, tc.reservation)
+			gotExcluded := len(schedOpts.ExcludedNodePools) > 0 && schedOpts.ExcludedNodePools[0] == tc.headNP.Name
+			if gotExcluded != tc.wantExcluded {
+				t.Errorf("ExcludedNodePools = %v, wantExcluded = %v", schedOpts.ExcludedNodePools, tc.wantExcluded)
+			}
+		})
+	}
+}
+
+func TestApplyCPUHeadPoolAvoidance_MultipleHeadPoolsAndKueueDisabled(t *testing.T) {
+	t.Parallel()
+	pools := []gkeJobNodePool{
+		{Name: "cpu-np", InitialNodeCount: 1, Config: gkeNodePoolConfig{MachineType: "n2d-standard-64"}},
+		{Name: "pathways-np", InitialNodeCount: 1, Config: gkeNodePoolConfig{MachineType: "n4-standard-64"}},
+	}
+
+	orc := newTestGKEOrchestrator(nil)
+	orc.clusterDesc.NodePools = pools
+	schedOpts := SchedulingOptions{MachineType: "c3-standard-44", PinCPUMachine: true}
+	orc.applyCPUHeadPoolAvoidance(&schedOpts, "", "")
+	if !slices.Equal(schedOpts.ExcludedNodePools, []string{"cpu-np", "pathways-np"}) {
+		t.Errorf("ExcludedNodePools = %v, want [cpu-np pathways-np]", schedOpts.ExcludedNodePools)
+	}
+
+	orcNoKueue := newTestGKEOrchestrator(nil)
+	orcNoKueue.clusterDesc.NodePools = pools
+	orcNoKueue.addons = addonPlan{resolved: true, jobSetEnabled: true, kueueEnabled: false}
+	noKueueOpts := SchedulingOptions{MachineType: "c3-standard-44", PinCPUMachine: true}
+	orcNoKueue.applyCPUHeadPoolAvoidance(&noKueueOpts, "", "")
+	if len(noKueueOpts.ExcludedNodePools) != 0 {
+		t.Errorf("expected no exclusions when Kueue is disabled, got %v", noKueueOpts.ExcludedNodePools)
+	}
+
+	orcTaintedNAP := newTestGKEOrchestrator(nil)
+	orcTaintedNAP.napEnabled = true
+	orcTaintedNAP.clusterDesc.NodePools = []gkeJobNodePool{{
+		Name:             "cpu-np",
+		InitialNodeCount: 1,
+		Config: gkeNodePoolConfig{
+			MachineType: "n2d-standard-64",
+			Taints:      []gkeTaint{{Key: "dedicated", Value: "pathways", Effect: "NO_SCHEDULE"}},
+		},
+	}}
+	if !orcTaintedNAP.shouldPinCPUMachine(true, "", "", "", "", "n2d-standard-64") {
+		t.Errorf("expected NAP full-node CPU job to pin when only matching static pool is tainted")
 	}
 }

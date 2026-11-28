@@ -53,6 +53,7 @@
 | <a name="input_internal_startup_script"></a> [internal\_startup\_script](#input\_internal\_startup\_script) | FOR INTERNAL TOOLKIT USAGE ONLY. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels, provided as a map | `map(string)` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to create. | `string` | `"n1-standard-1"` | no |
+| <a name="input_maintenance_interval"></a> [maintenance\_interval](#input\_maintenance\_interval) | Specifies the frequency of planned maintenance events (e.g., 'PERIODIC'). | `string` | `null` | no |
 | <a name="input_max_run_duration"></a> [max\_run\_duration](#input\_max\_run\_duration) | The duration (in whole seconds) of the instance. Instance will run and be terminated after then. | `number` | `null` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map. | `map(string)` | `{}` | no |
 | <a name="input_min_cpu_platform"></a> [min\_cpu\_platform](#input\_min\_cpu\_platform) | Specifies a minimum CPU platform. Applicable values are the friendly names of<br/>CPU platforms, such as Intel Haswell or Intel Skylake. See the complete list:<br/>https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform | `string` | `null` | no |

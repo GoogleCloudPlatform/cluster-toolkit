@@ -598,6 +598,7 @@ func TestInspectCluster_KueueLessK8s(t *testing.T) {
 		"kubectl logs deployment/jobset-controller-manager":     {{ExitCode: 0, Stdout: "jobset-logs"}},
 		"kubectl get jobsets":                                   {{ExitCode: 0, Stdout: "my-k8s-job"}},
 		"kubectl get jobset my-k8s-job":                         {{ExitCode: 1, Stderr: "not an sps instance"}},
+		"kubectl get jobs -l " + workloadLabel:                  {{ExitCode: 0, Stdout: "No resources found"}},
 		"kubectl describe jobsets my-k8s-job":                   {{ExitCode: 0, Stdout: "k8s-jobset-desc"}},
 		"kubectl get pods -l":                                   {{ExitCode: 0, Stdout: "my-k8s-job-0"}},
 		"kubectl describe pods":                                 {{ExitCode: 0, Stdout: "k8s-pod-events"}},
@@ -856,4 +857,172 @@ func TestConfigureK8sContextAndKueueFailOpen(t *testing.T) {
 			t.Errorf("expected hasKueueInstalled() to fail open (true) on transient error")
 		}
 	})
+}
+
+func TestInspectWorkload_Tier3BatchJobFallback(t *testing.T) {
+	jobJSON := `{"metadata":{"name":"t3-job","labels":{"gcluster.google.com/workload":"t3-job"}},"spec":{"parallelism":1},"status":{"active":1}}`
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl describe jobsets t3-job -n ml": {{ExitCode: 1, Stderr: `error: the server doesn't have a resource type "jobsets"`}},
+		"kubectl get job t3-job -n ml -o json":  {{ExitCode: 0, Stdout: jobJSON}},
+		"kubectl describe job t3-job -n ml":     {{ExitCode: 0, Stdout: "Name: t3-job"}},
+		"kubectl describe service t3-job -n ml": {{ExitCode: 0, Stdout: "ClusterIP: None"}},
+		"kubectl get pods -l gcluster.google.com/workload=t3-job,batch.kubernetes.io/job-name=t3-job -n ml -o wide": {{ExitCode: 0, Stdout: "t3-job-0 Running"}},
+		"kubectl describe pods -l gcluster.google.com/workload=t3-job,batch.kubernetes.io/job-name=t3-job -n ml":    {{ExitCode: 0, Stdout: "Events: <none>"}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	var buf strings.Builder
+	w := &inspectWriter{writer: &buf, orc: orc}
+	orc.inspectWorkload(w, "t3-job", "ml", false, true)
+	out := buf.String()
+	for _, want := range []string{"Job: Config for t3-job", "Service: Config for t3-job", "gcluster.google.com/workload=t3-job,batch.kubernetes.io/job-name=t3-job"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("inspectWorkload(Tier-3) missing %q in output:\n%s", want, out)
+		}
+	}
+}
+
+func TestInspector_HasJobSetGateAndUnqueuedWorkloadsList(t *testing.T) {
+	t.Run("disable_jobset_skips_describe_jobsets_and_uses_job_prefix", func(t *testing.T) {
+		jobJSON := `{"metadata":{"name":"t3-job","labels":{"gcluster.google.com/workload":"t3-job"}},"spec":{"parallelism":1},"status":{"active":1}}`
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get job t3-job -n ml -o json":  {{ExitCode: 0, Stdout: jobJSON}},
+			"kubectl describe job t3-job -n ml":     {{ExitCode: 0, Stdout: "Name: t3-job"}},
+			"kubectl describe service t3-job -n ml": {{ExitCode: 0, Stdout: "ClusterIP: None"}},
+			"kubectl get pods -l gcluster.google.com/workload=t3-job,batch.kubernetes.io/job-name=t3-job -n ml -o wide": {{ExitCode: 0, Stdout: "t3-job-0 Running"}},
+			"kubectl describe pods -l gcluster.google.com/workload=t3-job,batch.kubernetes.io/job-name=t3-job -n ml":    {{ExitCode: 0, Stdout: "Events: <none>"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		orc.kubeClient = nil
+		orc.connectivity = &connectivityChecker{
+			getenv: func(k string) string {
+				if k == disableJobSetEnvVar {
+					return "1"
+				}
+				return ""
+			},
+		}
+		if orc.hasJobSetInstalled() {
+			t.Fatalf("hasJobSetInstalled() = true when %s=1, want false", disableJobSetEnvVar)
+		}
+		orc.connectivity = &connectivityChecker{
+			getenv: func(k string) string {
+				if k == disableJobSetEnvVar || k == disableKueueEnvVar {
+					return "1"
+				}
+				return ""
+			},
+		}
+		if orc.hasKueueInstalled() {
+			t.Fatalf("hasKueueInstalled() = true when %s=1, want false", disableKueueEnvVar)
+		}
+		var buf strings.Builder
+		w := &inspectWriter{writer: &buf, orc: orc}
+		orc.inspectWorkload(w, "t3-job", "ml", true, false)
+		sawJobWorkload := false
+		for _, call := range mockExec.calls {
+			if strings.Contains(call, "describe jobsets") {
+				t.Errorf("must not call describe jobsets when hasJobSet=false: %v", mockExec.calls)
+			}
+			if strings.Contains(call, "describe workloads job-t3-job -n ml") {
+				sawJobWorkload = true
+			}
+		}
+		if !sawJobWorkload {
+			t.Errorf("expected describe workloads job-t3-job when hasKueue=true & hasJobSet=false; calls=%v", mockExec.calls)
+		}
+		if !strings.Contains(buf.String(), "Job: Config for t3-job") {
+			t.Errorf("expected batch Job inspection output, got:\n%s", buf.String())
+		}
+	})
+
+	t.Run("logClusterWorkloads_lists_standalone_jobs_even_when_hasKueue", func(t *testing.T) {
+		mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+			"kubectl get workloads ": {{ExitCode: 0, Stdout: `{"items":[]}`}, {ExitCode: 0, Stdout: `{"items":[]}`}, {ExitCode: 0, Stdout: `{"items":[]}`}},
+			"kubectl get jobs -l gcluster.google.com/workload,!jobset.sigs.k8s.io/jobset-name -n ml -o wide": {{ExitCode: 0, Stdout: "NAME\nt3-only\n"}},
+		})
+		orc := newTestGKEOrchestrator(mockExec)
+		var buf strings.Builder
+		w := &inspectWriter{writer: &buf, orc: orc}
+		orc.logClusterWorkloads(w, true, false, "ml")
+		out := buf.String()
+		if !strings.Contains(out, "t3-only") {
+			t.Errorf("logClusterWorkloads(hasKueue=true, hasJobSet=false) must still list standalone batch Jobs; got:\n%s", out)
+		}
+	})
+}
+
+func TestInspector_MissingBatchJobWhenHasJobSetFalseKeepsJobSelectors(t *testing.T) {
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl get job gone-job -n ml -o json": {{ExitCode: 1, Stderr: `Error from server (NotFound): jobs.batch "gone-job" not found`}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.kubeClient = nil
+	var buf strings.Builder
+	w := &inspectWriter{writer: &buf, orc: orc}
+	orc.inspectWorkload(w, "gone-job", "ml", true, false)
+	joined := strings.Join(mockExec.calls, "\n")
+	if strings.Contains(joined, "jobset-gone-job") || strings.Contains(joined, "jobset.sigs.k8s.io/jobset-name") || strings.Contains(joined, "kind=JobSet") {
+		t.Errorf("must not fall back to JobSet selectors/events when hasJobSet=false:\n%s", joined)
+	}
+	if !strings.Contains(joined, "describe workloads job-gone-job -n ml") || !strings.Contains(joined, "batch.kubernetes.io/job-name=gone-job") {
+		t.Errorf("expected job- prefix and batch.kubernetes.io/job-name selector:\n%s", joined)
+	}
+}
+
+func TestInspectCluster_JobSetNotFoundSkipsSPSJobSetProbe(t *testing.T) {
+	outFile := filepath.Join(t.TempDir(), "inspect.log")
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl version --client":                {{ExitCode: 0, Stdout: "v1.32"}},
+		"kubectl config current-context":          {{ExitCode: 0, Stdout: testContext}},
+		"kubectl get --raw=/readyz":               {{ExitCode: 0, Stdout: "ok"}},
+		"kubectl get --raw /apis/jobset.x-k8s.io": {{ExitCode: 1, Stderr: "Error from server (NotFound): not found"}},
+		"kubectl get --raw /apis/kueue.x-k8s.io":  {{ExitCode: 1, Stderr: "Error from server (NotFound): not found"}},
+		"kubectl get nodes -o wide":               {{ExitCode: 0, Stdout: "node-1"}},
+		"kubectl describe nodes":                  {{ExitCode: 0, Stdout: "node-desc"}},
+		"kubectl get jobs":                        {{ExitCode: 0, Stdout: "jobs-list"}},
+		"kubectl get job my-job -n default":       {{ExitCode: 0, Stdout: `{"metadata":{"name":"my-job","labels":{"gcluster.google.com/workload":"my-job"}},"status":{"active":1}}`}},
+		"kubectl describe job my-job -n default":  {{ExitCode: 0, Stdout: "job-desc"}},
+		"kubectl describe service my-job":         {{ExitCode: 0, Stdout: "svc-desc"}},
+		"kubectl get pods":                        {{ExitCode: 0, Stdout: "pods-list"}},
+		"kubectl describe pods":                   {{ExitCode: 0, Stdout: "pods-desc"}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.mode = orchestrator.TypeK8s
+	orc.kubeconfigLoader = staticLoader(kubeconfigWith("https://10.0.0.1:6443", nil, nil, testContext))
+	if err := orc.InspectCluster(orchestrator.InspectOptions{ClusterName: testContext, WorkloadName: "my-job", GKENamespace: "default", OutputPath: outFile}); err != nil {
+		t.Fatalf("InspectCluster(JobSet NotFound) err = %v", err)
+	}
+	for _, call := range mockExec.calls {
+		if strings.Contains(call, "get jobset ") || strings.Contains(call, "get jobsets") || strings.Contains(call, "describe jobsets") {
+			t.Errorf("InspectCluster must not query jobsets when /apis/jobset.x-k8s.io is NotFound: %q", call)
+		}
+	}
+}
+
+func TestDescribeWorkloadResource_ForbiddenJobSetFallsBackToTier3Job(t *testing.T) {
+	jobJSON := `{"metadata":{"name":"t3-rb","labels":{"gcluster.google.com/workload":"t3-rb"}},"spec":{"parallelism":1},"status":{"active":1}}`
+	mockExec := NewMockExecutor(map[string][]shell.CommandResult{
+		"kubectl describe jobsets t3-rb -n ml": {{ExitCode: 1, Stderr: `Error from server (Forbidden): jobsets.jobset.x-k8s.io "t3-rb" is forbidden`}},
+		"kubectl get job t3-rb -n ml -o json":  {{ExitCode: 0, Stdout: jobJSON}},
+		"kubectl describe job t3-rb -n ml":     {{ExitCode: 0, Stdout: "Name: t3-rb"}},
+		"kubectl describe service t3-rb -n ml": {{ExitCode: 0, Stdout: "ClusterIP: None"}},
+		"kubectl describe workloads job-t3-rb": {{ExitCode: 0, Stdout: "Workload: job-t3-rb"}},
+		"kubectl get pods -l gcluster.google.com/workload=t3-rb,batch.kubernetes.io/job-name=t3-rb -n ml -o wide": {{ExitCode: 0, Stdout: "t3-rb-0 Running"}},
+		"kubectl describe pods -l gcluster.google.com/workload=t3-rb,batch.kubernetes.io/job-name=t3-rb -n ml":    {{ExitCode: 0, Stdout: "Events: <none>"}},
+	})
+	orc := newTestGKEOrchestrator(mockExec)
+	orc.kubeClient = nil
+	var buf strings.Builder
+	w := &inspectWriter{writer: &buf, orc: orc}
+	orc.inspectWorkload(w, "t3-rb", "ml", true, true)
+	out := buf.String()
+	joined := strings.Join(mockExec.calls, "\n")
+	if !strings.Contains(out, "is forbidden") {
+		t.Errorf("expected 403 JobSet error logged verbatim, got:\n%s", out)
+	}
+	for _, want := range []string{"describe job t3-rb -n ml", "describe service t3-rb -n ml", "describe workloads job-t3-rb", "batch.kubernetes.io/job-name=t3-rb"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected fallback inspect call %q, calls:\n%s", want, joined)
+		}
+	}
 }

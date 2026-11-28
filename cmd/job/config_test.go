@@ -382,3 +382,68 @@ func assertConfigUnsetOutcome(t *testing.T, args []string, out string, err error
 		t.Errorf("output = %q, want substring %q", out, wantPrint)
 	}
 }
+
+func TestConfigCmd_ReportsTelemetryProjectID(t *testing.T) {
+	origHook := OnTelemetryProjectResolved
+	t.Cleanup(func() { OnTelemetryProjectResolved = origHook })
+
+	var reported string
+	OnTelemetryProjectResolved = func(p string) {
+		reported = p
+	}
+
+	t.Run("config set project reports project", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		reported = ""
+		if _, err := executeCommand(JobCmd, "config", "set", "project", "cfg-proj"); err != nil {
+			t.Fatalf("config set project err = %v", err)
+		}
+		if reported != "cfg-proj" {
+			t.Errorf("reported = %q, want %q", reported, "cfg-proj")
+		}
+	})
+
+	t.Run("config show reports saved project", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		if err := saveContext(Context{ProjectID: "shown-proj"}); err != nil {
+			t.Fatalf("saveContext: %v", err)
+		}
+		reported = ""
+		if _, err := executeCommand(JobCmd, "config", "show"); err != nil {
+			t.Fatalf("config show err = %v", err)
+		}
+		if reported != "shown-proj" {
+			t.Errorf("reported = %q, want %q", reported, "shown-proj")
+		}
+	})
+
+	t.Run("validateAndApplyConfig reports project from edited JSON", func(t *testing.T) {
+		dir := t.TempDir()
+		src := filepath.Join(dir, "tmp.json")
+		dst := filepath.Join(dir, "context.json")
+		if err := os.WriteFile(src, []byte(`{"project":"editor-proj","cluster":"c1","location":"us-central1"}`), 0644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		reported = ""
+		if err := validateAndApplyConfig(src, dst); err != nil {
+			t.Fatalf("validateAndApplyConfig err = %v", err)
+		}
+		if reported != "editor-proj" {
+			t.Errorf("reported = %q, want %q", reported, "editor-proj")
+		}
+	})
+
+	t.Run("config unset all reports empty project", func(t *testing.T) {
+		setupSubmitTestEnv(t)
+		if err := saveContext(Context{ProjectID: "old-proj"}); err != nil {
+			t.Fatalf("saveContext: %v", err)
+		}
+		reported = "sentinel"
+		if _, err := executeCommand(JobCmd, "config", "unset", "all"); err != nil {
+			t.Fatalf("config unset all err = %v", err)
+		}
+		if reported != "" {
+			t.Errorf("reported = %q, want empty", reported)
+		}
+	})
+}

@@ -190,6 +190,9 @@ deployment_groups:
       - cidr_block: $(vars.authorized_cidr)
         display_name: "kubectl-access-network"
       version_prefix: $(vars.version_prefix)
+      # Not enrolled in a release channel for now: the custom node image is
+      # built for one GKE version.
+      release_channel: UNSPECIFIED
       # In the order GKE returns them, to avoid drift on re-deploy. DCGM is
       # listed so the module doesn't append it at the end.
       monitoring_components:
@@ -237,8 +240,8 @@ deployment_groups:
       disk_type: hyperdisk-balanced
       # The 4 local NVMe SSDs back ephemeral storage.
       local_ssd_count_ephemeral_storage: 4
-      # Auto-upgrade Off. GKE allows this only in clusters without a release channel, so the
-      # cluster keeps the module default (UNSPECIFIED).
+      # Auto-upgrade off: the custom node image is built for one GKE version.
+      # The cluster sets release_channel: UNSPECIFIED (see a5x-cluster).
       auto_upgrade: false
       auto_repair: false
       # Off: the custom image loads an unsigned NVIDIA kernel module.

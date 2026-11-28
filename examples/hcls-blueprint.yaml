@@ -321,6 +321,9 @@ deployment_groups:
     - bucket-output
     - bucket-software
     settings:
+      # The default image installs the GRID 595 driver, which does not support
+      # Pascal vWS GPUs (nvidia-tesla-p4-vws, nvidia-tesla-p100-vws). For those,
+      # set instance_image to {family: debian-12, project: debian-cloud}.
       add_deployment_name_before_prefix: true
       name_prefix: chrome-remote-desktop
       install_nvidia_driver: true

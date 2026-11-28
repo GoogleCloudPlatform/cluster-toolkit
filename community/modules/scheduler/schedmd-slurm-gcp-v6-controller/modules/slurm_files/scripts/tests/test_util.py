@@ -2251,3 +2251,70 @@ def test_fetch_config_download_error_propagates():
 def test_yaml_load_reads_dumped_config():
     cfg = util.NSDict({"nodeset": {"a": {"node_conf": {"Weight": 1}, "zones": ["us-east1-b"]}}, "x": None})
     assert util._yaml_load(util.yaml.dump(cfg, Dumper=util.Dumper)) == cfg
+
+
+def test_has_block_topology_for_unreserved_static_mig_slices():
+    part = NSDict(partition_name="p", partition_nodeset=["a4x"])
+
+    # Unreserved static MIG with normalized 2D GPU topology -> block topology enabled
+    for topo in ("1x72", "2x36", "1x36"):
+        cfg = TstCfg(
+            slurm_cluster_name="c",
+            nodeset={
+                "a4x": TstNodeset(
+                    nodeset_name="a4x",
+                    provisioning_engine="MIG",
+                    accelerator_topology=topo,
+                    reservation_name="",
+                ),
+            },
+            partitions={"p": TstPartition(partition_name="p", partition_nodeset=["a4x"])},
+        )
+        assert util.Lookup(cfg).has_block_topology(part) is True, topo
+
+    # Un-normalized topology strings remain rejected even on MIG
+    for bad in ("1X72", "1x72 ", " 1x72", "1x72\n", "2x2x4", ""):
+        cfg = TstCfg(
+            slurm_cluster_name="c",
+            nodeset={
+                "a4x": TstNodeset(
+                    nodeset_name="a4x",
+                    provisioning_engine="MIG",
+                    accelerator_topology=bad,
+                    reservation_name="",
+                ),
+            },
+        )
+        assert util.Lookup(cfg).has_block_topology(part) is False, bad
+
+    # DWS Flex and TPU nodesets are excluded from A4X block topology
+    flex_cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                provisioning_engine="MIG",
+                accelerator_topology="1x72",
+                dws_flex=NSDict(enabled=True),
+            ),
+        },
+    )
+    assert util.Lookup(flex_cfg).has_block_topology(part) is False
+
+    tpu_cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={
+            "a4x": TstNodeset(
+                nodeset_name="a4x",
+                provisioning_engine="MIG",
+                accelerator_topology="2x4",
+                instance_template="tpu-tpl",
+            ),
+        },
+    )
+    lkp_tpu = util.Lookup(tpu_cfg)
+    lkp_tpu.is_tpu_nodeset = Mock(return_value=True)  # type: ignore[method-assign]
+    assert lkp_tpu.has_block_topology(part) is False
+
+    # Empty partition_nodeset never enables block topology
+    assert util.Lookup(tpu_cfg).has_block_topology(NSDict(partition_name="empty", partition_nodeset=[])) is False

@@ -20,10 +20,17 @@ import (
 	"context"
 	"errors"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/dependencies"
+	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
 	"os"
+	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
+	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
 )
@@ -106,4 +113,97 @@ func (s *MySuite) TestSkipGKESecurityCheckFlag(c *C) {
 	flag := deployCmd.Flags().Lookup("skip-gke-security-check")
 	c.Assert(flag, NotNil)
 	c.Check(flag.DefValue, Equals, "false")
+}
+
+func setupFakeDeployEnv(t *testing.T) (string, string) {
+	t.Helper()
+	binDir := t.TempDir()
+	fakeName, fakeContent := "terraform", "#!/bin/sh\necho '{\"terraform_version\":\"1.12.2\"}'\n"
+	if runtime.GOOS == "windows" {
+		fakeName, fakeContent = "terraform.bat", "@echo off\r\necho {\"terraform_version\":\"1.12.2\"}\r\n"
+	}
+	if err := os.WriteFile(filepath.Join(binDir, fakeName), []byte(fakeContent), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("GHPC_SKIP_BUCKET_CREATION", "true")
+
+	deplRoot := t.TempDir()
+	artDir := modulewriter.ArtifactsDir(deplRoot)
+	if err := os.MkdirAll(artDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	bp := testBlueprint("us-central1-a")
+	bp.ExportToClusterDirector = nil
+	for _, g := range bp.Groups {
+		if err := os.MkdirAll(filepath.Join(deplRoot, string(g.Name)), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	expPath := filepath.Join(artDir, modulewriter.ExpandedBlueprintName)
+	if err := bp.Export(expPath); err != nil {
+		t.Fatal(err)
+	}
+	return deplRoot, expPath
+}
+
+func TestRunDeployCmdInvokesExportHookAndSupportsOnlyWithoutCdFlag(t *testing.T) {
+	deplRoot, expPath := setupFakeDeployEnv(t)
+
+	origEnsure := ensureDependenciesFn
+	origDeployTf := deployTerraformGroupFunc
+	origExportCd := exportClusterDirectorFunc
+	origArtifactsFlag := flagArtifactsDir
+	t.Cleanup(func() {
+		ensureDependenciesFn = origEnsure
+		deployTerraformGroupFunc = origDeployTf
+		exportClusterDirectorFunc = origExportCd
+		flagArtifactsDir = origArtifactsFlag
+	})
+	flagArtifactsDir = ""
+	ensureDependenciesFn = func(_ dependencies.DownloadDecision, _ ...string) error { return nil }
+
+	var appliedGroups []string
+	deployTerraformGroupFunc = func(groupDir, _ string, _ shell.ApplyBehavior, _ shell.OutputFormat) error {
+		appliedGroups = append(appliedGroups, filepath.Base(groupDir))
+		return nil
+	}
+	exportCalls := 0
+	var exportedEnabled bool
+	exportClusterDirectorFunc = func(_ *cobra.Command, _, _ string, gotBp config.Blueprint) error {
+		exportCalls++
+		exportedEnabled = gotBp.ExportToClusterDirectorEnabled()
+		return nil
+	}
+
+	// 1. `gcluster deploy <dir> --only network` (without --export-to-cluster-director)
+	// succeeds, runs only "network", and calls the export hook.
+	withGroupSelection(t, nil, nil)
+	cmdOnly := addDeployFlags(&cobra.Command{Use: "deploy"})
+	cmdOnly.SetContext(context.Background())
+	if err := cmdOnly.Flags().Set("only", "network"); err != nil {
+		t.Fatal(err)
+	}
+	runDeployCmd(cmdOnly, []string{deplRoot})
+	if !slices.Equal(appliedGroups, []string{"network"}) || exportCalls != 1 || exportedEnabled {
+		t.Errorf("--only run: applied=%v calls=%d enabled=%v, want [network], 1, false", appliedGroups, exportCalls, exportedEnabled)
+	}
+
+	// 2. `gcluster deploy <dir> --export-to-cluster-director=true` persists the
+	// override to expanded_blueprint.yaml and passes enabled=true to the hook.
+	appliedGroups = nil
+	withGroupSelection(t, nil, nil)
+	cmdExport := addDeployFlags(&cobra.Command{Use: "deploy"})
+	cmdExport.SetContext(context.Background())
+	if err := cmdExport.Flags().Set("export-to-cluster-director", "true"); err != nil {
+		t.Fatal(err)
+	}
+	runDeployCmd(cmdExport, []string{deplRoot})
+	if !slices.Equal(appliedGroups, []string{"network", "compute"}) || exportCalls != 2 || !exportedEnabled {
+		t.Errorf("export run: applied=%v calls=%d enabled=%v, want [network compute], 2, true", appliedGroups, exportCalls, exportedEnabled)
+	}
+	reloaded, _, err := config.NewBlueprint(expPath)
+	if err != nil || !reloaded.ExportToClusterDirectorEnabled() {
+		t.Errorf("reloaded ExportToClusterDirectorEnabled() = %v (err=%v), want true", reloaded.ExportToClusterDirectorEnabled(), err)
+	}
 }

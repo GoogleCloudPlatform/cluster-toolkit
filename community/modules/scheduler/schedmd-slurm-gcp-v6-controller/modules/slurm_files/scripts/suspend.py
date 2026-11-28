@@ -45,12 +45,13 @@ def truncate_iter(iterable, max_count):
         yield el
 
 
-def delete_instance_request(name: str) -> Any:
-    inst = lookup().instance(name)
+def delete_instance_request(name: str, lkp: Optional[util.Lookup] = None) -> Any:
+    active_lkp = lkp if lkp is not None else lookup()
+    inst = active_lkp.instance(name)
     assert inst
 
-    request = lookup().compute.instances().delete(
-        project=lookup().project,
+    request = active_lkp.compute.instances().delete(
+        project=active_lkp.project,
         zone=inst.zone,
         instance=name,
     )
@@ -58,16 +59,17 @@ def delete_instance_request(name: str) -> Any:
     return request
 
 
-def delete_instances(instances):
+def delete_instances(instances, lkp: Optional[util.Lookup] = None):
     """delete instances individually"""
-    invalid, valid = separate(lambda inst: bool(lookup().instance(inst)), instances)
+    active_lkp = lkp if lkp is not None else lookup()
+    invalid, valid = separate(lambda inst: bool(active_lkp.instance(inst)), instances)
     if len(invalid) > 0:
         log.debug("instances do not exist: {}".format(",".join(invalid)))
     if len(valid) == 0:
         log.debug("No instances to delete")
         return
 
-    requests = {inst: delete_instance_request(inst) for inst in valid}
+    requests = {inst: delete_instance_request(inst, lkp=active_lkp) for inst in valid}
 
     log.info(f"to delete {len(valid)} instances ({to_hostlist(valid)})")
     ops, failed = batch_execute(requests)
@@ -83,14 +85,24 @@ def delete_instances(instances):
 
 
 
-def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
-    """Deletes specific instance names from MIG and reduces target size atomically."""
+def suspend_mig_nodes(
+    nodes: List[str],
+    lkp: util.Lookup,
+    retire_standalone: bool = False,
+) -> None:
+    """Deletes specific instance names from MIG and reduces target size atomically.
+
+    When ``retire_standalone`` is True (used by explicit suspend / orphan cleanup paths,
+    never by ``resume.py`` rollback), any requested node absent from the MIG that still
+    exists in GCE as an unmanaged standalone VM (no ``created-by`` MIG metadata) is
+    deleted via ``instances().delete()`` so upgraded static clusters can roll legacy
+    ``BULK_INSERT`` VMs into the MIG cleanly without leaking them.
+    """
     if not nodes:
         return
 
     # Invalidate cached managed instances to ensure fresh live state from GCE
-    lkp.get_mig_instances.cache_clear()
-    lkp.get_mig_repairing_instances.cache_clear()
+    lkp.clear_mig_caches()
     lkp.instances.cache_clear()
 
     # Group nodes by target MIG (to support multiple MIGs for >1000 nodes)
@@ -98,6 +110,21 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
     for node in nodes:
         mig_name = lkp.node_mig_name(node)
         nodes_by_mig.setdefault(mig_name, []).append(node)
+
+    check_gce_instances = True
+
+    def _safe_lookup_instance(short_name: str, context_mig: str) -> Optional[util.Instance]:
+        nonlocal check_gce_instances
+        if not check_gce_instances:
+            return None
+        try:
+            return lkp.instance(short_name)
+        except Exception as e:
+            log.warning(
+                f"Could not list existing GCE instances; skipping instance lookup fallback for MIG {context_mig}: {e}"
+            )
+            check_gce_instances = False
+            return None
 
     for mig_name, mig_nodes in nodes_by_mig.items():
         region = lkp.node_region(mig_nodes[0])
@@ -124,6 +151,8 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
 
         links: List[str] = []
         seen_links: set[str] = set()
+        standalone_nodes: List[str] = []
+        seen_standalone: set[str] = set()
         fallback_zones: Optional[List[str]] = None
         for node in mig_nodes:
             short_name = node.split(".")[0]
@@ -132,8 +161,8 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
                 if link not in seen_links:
                     links.append(link)
                     seen_links.add(link)
-            elif short_name in mig_unplaced_names or not mig_list_success:
-                inst = lkp.instance(short_name)
+            elif short_name in mig_unplaced_names:
+                inst = _safe_lookup_instance(short_name, mig_name)
                 zone = getattr(inst, "zone", None)
                 if zone:
                     zone_name = zone.split("/")[-1]
@@ -141,7 +170,7 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
                     if link not in seen_links:
                         links.append(link)
                         seen_links.add(link)
-                elif short_name in mig_unplaced_names:
+                else:
                     if fallback_zones is None:
                         nodeset = lkp.node_nodeset(mig_nodes[0])
                         resolved_zones = list(getattr(nodeset, "zone_policy_allow", None) or [])
@@ -165,9 +194,35 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
                         if link not in seen_links:
                             links.append(link)
                             seen_links.add(link)
+            elif not mig_list_success or retire_standalone:
+                inst = _safe_lookup_instance(short_name, mig_name)
+                if inst is not None:
+                    owner_mig = util.instance_created_by_mig(inst)
+                    if owner_mig == mig_name:
+                        zone = getattr(inst, "zone", None)
+                        if zone:
+                            zone_name = zone.split("/")[-1]
+                            link = f"zones/{zone_name}/instances/{short_name}"
+                            if link not in seen_links:
+                                links.append(link)
+                                seen_links.add(link)
+                    elif owner_mig is None:
+                        if retire_standalone:
+                            if short_name not in seen_standalone:
+                                standalone_nodes.append(short_name)
+                                seen_standalone.add(short_name)
+                        else:
+                            log.debug(
+                                f"Node {short_name} is an unmanaged standalone VM outside MIG {mig_name}; "
+                                "skipping rollback deletion."
+                            )
+                    else:
+                        log.warning(
+                            f"Node {short_name} is managed by a different MIG ({owner_mig}, "
+                            f"expected {mig_name}); skipping deletion."
+                        )
                 else:
-                    # If the instance does not exist in GCE, skip it to prevent batch rejection
-                    log.debug(f"Instance {short_name} does not exist in GCE; skipping deleteInstances.")
+                    log.debug(f"Node {node} is not present in MIG {mig_name}; skipping deleteInstances.")
             else:
                 log.debug(f"Node {node} is not present in MIG {mig_name}; skipping deleteInstances.")
 
@@ -190,12 +245,32 @@ def suspend_mig_nodes(nodes: List[str], lkp: util.Lookup) -> None:
                 except Exception as e:
                     log.error(f"Failed deleteInstances for MIG {mig_name}: {e}")
                 finally:
-                    lkp.get_mig_instances.cache_clear()
-                    lkp.get_mig_repairing_instances.cache_clear()
+                    lkp.clear_mig_caches()
         else:
             log.info(f"No active instances found to delete in MIG {mig_name}")
 
-        # Clean up Per-Instance Configurations (PICs) for all requested nodes after instance deletion
+        if standalone_nodes:
+            log.info(
+                f"Retiring {len(standalone_nodes)} legacy standalone VM(s) outside MIG "
+                f"{mig_name}: {to_hostlist(standalone_nodes)}"
+            )
+            try:
+                delete_instances(standalone_nodes, lkp=lkp)
+            except Exception as e:
+                log.error(
+                    f"Failed retiring standalone VM(s) for MIG {mig_name} "
+                    f"({to_hostlist(standalone_nodes)}): {e}"
+                )
+
+        # Clean up Per-Instance Configurations (PICs) for all requested nodes after instance deletion.
+        # Guard against a simultaneous listManagedInstances + instance-lookup outage so PICs
+        # are not stripped from potentially live instances we could not verify or delete.
+        if not mig_list_success and not check_gce_instances:
+            log.warning(
+                f"Skipping deletePerInstanceConfigs for MIG {mig_name}: both "
+                "listManagedInstances and GCE instance lookup failed."
+            )
+            continue
         all_short_names = list({n.split(".")[0] for n in mig_nodes})
         for chunk_names in util.chunked(all_short_names, n=1000):
             try:
@@ -231,7 +306,7 @@ def suspend_nodes(nodes: List[str]) -> None:
     non_mig_nodes, mig_nodes = util.separate(lkp.is_node_mig, bulk_nodes)
     if mig_nodes:
         try:
-            suspend_mig_nodes(mig_nodes, lkp)
+            suspend_mig_nodes(mig_nodes, lkp, retire_standalone=True)
         except Exception:
             log.exception(f"Failed to suspend MIG nodes {mig_nodes}")
 

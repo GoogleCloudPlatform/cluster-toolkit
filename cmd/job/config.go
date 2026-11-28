@@ -78,6 +78,7 @@ If run without any arguments, it automatically opens your default system text ed
 		if err := saveContext(ctx); err != nil {
 			return err
 		}
+		reportTelemetryProjectID(ctx.ProjectID)
 		cmd.Printf("Updated default for '%s' to '%s'\n", key, val)
 		return nil
 	},
@@ -195,6 +196,7 @@ func validateAndApplyConfig(tempFileName, targetFile string) error {
 	if err := os.WriteFile(targetFile, tempFileData, 0644); err != nil {
 		return fmt.Errorf("failed to save config file: %w", err)
 	}
+	reportTelemetryProjectID(tempConfig.ProjectID)
 
 	if tempConfig.ProjectID == "" || tempConfig.ClusterName == "" || tempConfig.Location == "" {
 		fmt.Println("Note: Some configuration fields were left empty. You will need to provide them via command-line flags when targeting GKE clusters.")
@@ -251,6 +253,7 @@ var configShowCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		reportTelemetryProjectID(ctx.ProjectID)
 		configFile, err := contextFilePath()
 		if err != nil {
 			return err
@@ -278,6 +281,7 @@ var configUnsetCmd = &cobra.Command{
 			if err := saveContext(Context{}); err != nil {
 				return err
 			}
+			reportTelemetryProjectID("")
 			cmd.Println("Cleared all saved defaults")
 			return nil
 		default:
@@ -300,6 +304,7 @@ var configUnsetCmd = &cobra.Command{
 		if err := saveContext(ctx); err != nil {
 			return err
 		}
+		reportTelemetryProjectID(ctx.ProjectID)
 		cmd.Printf("Cleared default for '%s'\n", key)
 		return nil
 	},

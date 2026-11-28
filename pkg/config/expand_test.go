@@ -156,6 +156,46 @@ func (s *zeroSuite) TestExpandProviders(c *C) {
 	}
 }
 
+func (s *zeroSuite) TestExpandClusterDirector(c *C) {
+	// Default: unset stays unset (export is opt-in), so expanded blueprints
+	// of deployments that don't use the feature are unchanged.
+	{
+		bp := Blueprint{
+			BlueprintName: "tree",
+			Vars:          NewDict(map[string]cty.Value{"deployment_name": cty.StringVal("green")}),
+		}
+		c.Assert(bp.expandVars(), IsNil)
+		c.Check(bp.ExportToClusterDirector, IsNil)
+		c.Check(bp.ExportToClusterDirectorEnabled(), Equals, false)
+	}
+
+	// Explicit top-level true -> preserved by expandVars
+	{
+		tr := true
+		bp := Blueprint{
+			BlueprintName:           "tree",
+			ExportToClusterDirector: &tr,
+			Vars:                    NewDict(map[string]cty.Value{"deployment_name": cty.StringVal("green")}),
+		}
+		c.Assert(bp.expandVars(), IsNil)
+		c.Assert(bp.ExportToClusterDirector, NotNil)
+		c.Check(*bp.ExportToClusterDirector, Equals, true)
+	}
+
+	// Explicit top-level false -> preserved by expandVars
+	{
+		f := false
+		bp := Blueprint{
+			BlueprintName:           "tree",
+			ExportToClusterDirector: &f,
+			Vars:                    NewDict(map[string]cty.Value{"deployment_name": cty.StringVal("green")}),
+		}
+		c.Assert(bp.expandVars(), IsNil)
+		c.Assert(bp.ExportToClusterDirector, NotNil)
+		c.Check(*bp.ExportToClusterDirector, Equals, false)
+	}
+}
+
 func (s *zeroSuite) TestAddListValue(c *C) {
 	mod := Module{ID: "TestModule"}
 
@@ -577,6 +617,35 @@ func (s *zeroSuite) TestExpandGlobalLabels(c *C) {
 			"ghpc_creator":    cty.StringVal("123user"),
 		})
 		c.Check(labelsVal, DeepEquals, expectedLabels)
+	}
+
+	{ // ExportToClusterDirector true vs false produces identical global labels (no VM recreation on toggle)
+		bpEnabled := Blueprint{
+			BlueprintName: "tree",
+			Vars: NewDict(map[string]cty.Value{
+				"deployment_name": cty.StringVal("ctk-demo"),
+			}),
+		}
+		bpEnabled.expandGlobalLabels()
+		enabledLabels := bpEnabled.Vars.Get("labels")
+
+		f := false
+		bpDisabled := Blueprint{
+			BlueprintName:           "tree",
+			ExportToClusterDirector: &f,
+			Vars: NewDict(map[string]cty.Value{
+				"deployment_name": cty.StringVal("ctk-demo"),
+			}),
+		}
+		bpDisabled.expandGlobalLabels()
+		disabledLabels := bpDisabled.Vars.Get("labels")
+
+		expectedLabels := cty.ObjectVal(map[string]cty.Value{
+			"ghpc_blueprint":  cty.StringVal("tree"),
+			"ghpc_deployment": GlobalRef("deployment_name").AsValue(),
+		})
+		c.Check(enabledLabels, DeepEquals, expectedLabels)
+		c.Check(disabledLabels, DeepEquals, expectedLabels)
 	}
 
 	{ // AIAssisted true injects ghpc_ai_assisted label

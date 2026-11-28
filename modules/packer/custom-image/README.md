@@ -10,7 +10,7 @@ This module uses [Packer](https://www.packer.io/) to create an image within an
 Cluster Toolkit deployment. Packer operates by provisioning a short-lived VM in
 Google Cloud on which it executes scripts to customize the boot disk for
 repeated use. The VM's boot disk is specified from a source image that defaults
-to the [HPC VM Image][hpcimage]. This Packer "template" supports customization
+to [Advanced Compute Images][aciimages]. This Packer "template" supports customization
 by the following approaches following a [recommended use](#recommended-use):
 
 - [startup-script metadata][startup-metadata] from [raw string][sss] or
@@ -91,7 +91,7 @@ usage instructions.
 The [Image Builder] blueprint demonstrates a solution that builds an image
 using:
 
-- The [HPC VM Image][hpcimage] as a base upon which to customize
+- An [Advanced Compute Image][aciimages] as a base upon which to customize
 - A VPC network with firewall rules that allow IAP-based SSH tunnels
 - A Toolkit runner that installs a custom script
 
@@ -265,7 +265,7 @@ No resources.
 | <a name="input_communicator"></a> [communicator](#input\_communicator) | Communicator to use for provisioners that require access to VM ("ssh" or "winrm") | `string` | `null` | no |
 | <a name="input_compute_endpoint_version"></a> [compute\_endpoint\_version](#input\_compute\_endpoint\_version) | Custom Google Compute API endpoint version. | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Cluster Toolkit deployment name | `string` | n/a | yes |
-| <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Size of disk image in GB | `number` | `null` | no |
+| <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Size of disk image in GB. If unset, the disk is sized to match the source image. | `number` | `null` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Type of persistent disk to provision | `string` | `"pd-balanced"` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration (var.shielded\_instance\_config). | `bool` | `false` | no |
 | <a name="input_gcloud_path_override"></a> [gcloud\_path\_override](#input\_gcloud\_path\_override) | Path to the directory containing the gcloud binary to use as an override for local execution. | `string` | `""` | no |
@@ -290,8 +290,8 @@ No resources.
 | <a name="input_shell_scripts"></a> [shell\_scripts](#input\_shell\_scripts) | A list of paths to local shell scripts which will be uploaded to customize the VM image | `list(string)` | `[]` | no |
 | <a name="input_shielded_instance_config"></a> [shielded\_instance\_config](#input\_shielded\_instance\_config) | Shielded VM configuration for the instance (must set var.enabled\_shielded\_vm) | <pre>object({<br/>    enable_secure_boot          = bool<br/>    enable_vtpm                 = bool<br/>    enable_integrity_monitoring = bool<br/>  })</pre> | <pre>{<br/>  "enable_integrity_monitoring": true,<br/>  "enable_secure_boot": true,<br/>  "enable_vtpm": true<br/>}</pre> | no |
 | <a name="input_source_image"></a> [source\_image](#input\_source\_image) | Source OS image to build from | `string` | `null` | no |
-| <a name="input_source_image_family"></a> [source\_image\_family](#input\_source\_image\_family) | Alternative to source\_image. Specify image family to build from latest image in family | `string` | `"hpc-rocky-linux-9"` | no |
-| <a name="input_source_image_project_id"></a> [source\_image\_project\_id](#input\_source\_image\_project\_id) | A list of project IDs to search for the source image. Packer will search the<br/>first project ID in the list first, and fall back to the next in the list,<br/>until it finds the source image. | `list(string)` | `null` | no |
+| <a name="input_source_image_family"></a> [source\_image\_family](#input\_source\_image\_family) | Alternative to source\_image. Specify image family to build from latest image in family | `string` | `"aci-cpu-rocky-linux-9-amd64"` | no |
+| <a name="input_source_image_project_id"></a> [source\_image\_project\_id](#input\_source\_image\_project\_id) | A list of project IDs to search for the source image. Packer will search the<br/>first project ID in the list first, and fall back to the next in the list,<br/>until it finds the source image. When unset, defaults to<br/>[var.project\_id, "advanced-compute-images"] for aci-* images. | `list(string)` | `null` | no |
 | <a name="input_ssh_username"></a> [ssh\_username](#input\_ssh\_username) | Username to use for SSH access to VM | `string` | `"hpc-toolkit-packer"` | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script (as raw string) used to build the custom Linux VM image (overridden by var.startup\_script\_file if both are set) | `string` | `null` | no |
 | <a name="input_startup_script_file"></a> [startup\_script\_file](#input\_startup\_script\_file) | File path to local shell script that will be used to customize the Linux VM image (overrides var.startup\_script) | `string` | `null` | no |
@@ -309,10 +309,10 @@ No resources.
 No outputs.
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 
+[aciimages]: https://cloud.google.com/compute/docs/images/workload/aci-images
 [ansible]: #input_ansible_playbooks
 [cloudnat]: https://cloud.google.com/nat/docs/overview
 [examples readme]: ../../../examples/README.md#image-builderyaml-
-[hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 [iamprop]: https://cloud.google.com/iam/docs/access-change-propagation
 [iaptunnel]: https://cloud.google.com/iap/docs/using-tcp-forwarding
 [image builder]: ../../../examples/image-builder.yaml

@@ -14,10 +14,14 @@
 # limitations under the License.
 set -ex
 
-if [ ! -d "/exports" ]; then # first load, format and mount the disk
-    # See https://cloud.google.com/compute/docs/disks/add-persistent-disk
-    uuid=$(uuidgen)
-    mkfs.ext4 -F -m 0 -U "$uuid" -E lazy_itable_init=0,lazy_journal_init=0,discard /dev/disk/by-id/google-attached_disk
+if [ ! -d "/exports" ]; then # first boot on this boot disk
+    disk=/dev/disk/by-id/google-attached_disk
+    # A replaced boot disk must not wipe an attached disk that already holds exports.
+    if ! blkid "$disk" >/dev/null 2>&1; then
+        # See https://cloud.google.com/compute/docs/disks/add-persistent-disk
+        mkfs.ext4 -F -m 0 -U "$(uuidgen)" -E lazy_itable_init=0,lazy_journal_init=0,discard "$disk"
+    fi
+    uuid=$(blkid -s UUID -o value "$disk")
 
     mkdir /exports
     echo "UUID=$uuid /exports ext4 discard,defaults 0 0" >> /etc/fstab

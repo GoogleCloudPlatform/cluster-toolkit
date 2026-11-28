@@ -55,7 +55,8 @@ capability on there.
 - `enable_public_ips`: resume nodes that get an external IP (a nodeset with
   `enable_public_ips` or an `access_config`).
 - `enable_mig`: manage nodesets backed by a managed instance group that Terraform creates
-  (`provisioning_engine = "MIG"`). See [MIG capabilities](#mig-capabilities).
+  (explicit `provisioning_engine = "MIG"`, or `provisioning_engine = "AUTO"` on an eligible
+  pure-static nodeset). See [MIG capabilities](#mig-capabilities).
 - `enable_mig_flex`: manage DWS Flex nodesets (a nodeset with `dws_flex` enabled), which the
   controller provisions through a regional managed instance group per job. Includes
   everything `enable_mig` grants. See [MIG capabilities](#mig-capabilities).
@@ -540,7 +541,7 @@ No modules.
 | <a name="input_custom_roles"></a> [custom\_roles](#input\_custom\_roles) | For the custom profile: ids of existing custom roles to bind to this account, e.g.<br/>"projects/<project\_id>/roles/<role\_id>" or "organizations/<org\_id>/roles/<role\_id>". Can be combined<br/>with custom\_permissions. Predefined roles are not accepted. | `list(string)` | `[]` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment. With name, it builds the generated custom role ids. Use the deployment\_name given to whatever created the account. | `string` | n/a | yes |
 | <a name="input_enable_bigquery_load"></a> [enable\_bigquery\_load](#input\_enable\_bigquery\_load) | Capability: add the BigQuery permissions for the Slurm controller's enable\_bigquery\_load job accounting. | `bool` | `false` | no |
-| <a name="input_enable_mig"></a> [enable\_mig](#input\_enable\_mig) | Capability: add the permissions to manage nodesets backed by a managed instance group that<br/>Terraform creates (provisioning\_engine = "MIG"). Includes compute.instances.setMetadata<br/>without a name condition, because Google requires it for instance group manager patch,<br/>whose target is a group rather than an instance. | `bool` | `false` | no |
+| <a name="input_enable_mig"></a> [enable\_mig](#input\_enable\_mig) | Capability: add the permissions to manage nodesets backed by a managed instance group that<br/>Terraform creates (explicit provisioning\_engine = "MIG", or provisioning\_engine = "AUTO"<br/>when it resolves an eligible pure-static nodeset to MIG). Includes compute.instances.setMetadata<br/>without a name condition, because Google requires it for instance group manager patch,<br/>whose target is a group rather than an instance. | `bool` | `false` | no |
 | <a name="input_enable_mig_flex"></a> [enable\_mig\_flex](#input\_enable\_mig\_flex) | Capability: add the regional instance-group permissions needed to manage DWS Flex nodesets<br/>(a nodeset with dws\_flex enabled). Includes everything enable\_mig adds, including the<br/>unscoped compute.instances.setMetadata. | `bool` | `false` | no |
 | <a name="input_enable_placement_policies"></a> [enable\_placement\_policies](#input\_enable\_placement\_policies) | Capability: add the permissions to create and use placement policies. Unset means true<br/>for slurm-controller, whose nodesets and partitions default to enable\_placement = true and<br/>exclusive = true, and false for custom. Set false to opt out when no nodeset uses placement. | `bool` | `null` | no |
 | <a name="input_enable_public_ips"></a> [enable\_public\_ips](#input\_enable\_public\_ips) | Capability: add compute.subnetworks.useExternalIp, needed to resume nodes that get an<br/>external IP (a nodeset with enable\_public\_ips or an access\_config). | `bool` | `false` | no |

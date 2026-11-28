@@ -52,7 +52,20 @@
   loop_control:
     label: "{{ item.name }}"
   register: update_result
-  until: update_result.rc == 0
+  # Under MIG Spot stockouts, GCE can transiently create a STAGING VM and delete it
+  # before update runs, returning HTTP 404 ("The resource '.../instances/<name>' was not found").
+  # Stop retrying and skip vanished VMs rather than aborting before stockout detection or recovery,
+  # while still failing on project/zone 404s or other errors.
+  until: >-
+    update_result.rc == 0 or
+    ('was not found' in (update_result.stderr | default('')) and
+    ('instances/' ~ item.name) in (update_result.stderr | default('')))
+  failed_when: >-
+    update_result.rc != 0 and not (
+      'was not found' in (update_result.stderr | default('')) and
+      ('instances/' ~ item.name) in (update_result.stderr | default(''))
+    )
+  changed_when: update_result.rc == 0
   retries: 5
   delay: 10
   when: gce_instances_list | length > 0

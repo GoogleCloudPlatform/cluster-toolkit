@@ -723,6 +723,22 @@ func formatMissingDependentMsg(rule modulereader.ValidationRule, dependentName, 
 	return fmt.Sprintf("variable %q is required when %s condition is met", dependentName, triggerDesc)
 }
 
+func resolveDependentDefault(mod config.Module, dependentName string) []cty.Value {
+	info, err := mod.Info()
+	if err != nil {
+		return []cty.Value{cty.NilVal}
+	}
+	for _, input := range info.Inputs {
+		if input.Name == dependentName {
+			if input.Default != nil {
+				return evaluateAndFlatten(convertToCty(input.Default))
+			}
+			break
+		}
+	}
+	return []cty.Value{cty.NilVal}
+}
+
 // Validate checks if the dependent variable satisfies the condition when the trigger variable is set.
 func (c *ConditionalValidator) Validate(
 	bp config.Blueprint,
@@ -746,12 +762,16 @@ func (c *ConditionalValidator) Validate(
 		return config.BpError{Err: fmt.Errorf("validation rule for module %q is missing 'dependent'", mod.ID), Path: modPath}
 	}
 
+	depExpectedRawVal, isDepExpectedGiven := rule.Inputs["dependent_value"]
+	dependentExpectedVal := convertToCty(depExpectedRawVal)
+
 	dependentVal, _, err := getModuleSettingValues(bp, group, modIdx, mod, dependentName)
 	if err != nil {
 		dependentVal = []cty.Value{cty.NilVal}
+		if isDepExpectedGiven {
+			dependentVal = resolveDependentDefault(mod, dependentName)
+		}
 	}
-	depExpectedRawVal, isDepExpectedGiven := rule.Inputs["dependent_value"]
-	dependentExpectedVal := convertToCty(depExpectedRawVal)
 
 	depPath := config.Root.Groups.At(bp.GroupIndex(group.Name)).Modules.At(modIdx).Settings.Dot(dependentName)
 

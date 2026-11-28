@@ -15,9 +15,11 @@
 package orchestrator
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -129,18 +131,15 @@ func NewJobOrchestrator(det Detection) (JobOrchestrator, error) {
 	return spec.Factory(det), nil
 }
 
-// UnsupportedK8sSubmitError returns the error reported when workload submission is attempted in TypeK8s mode.
-func UnsupportedK8sSubmitError() error {
-	return fmt.Errorf("gcluster job submit is not yet supported in Kubernetes (k8s) mode (supported: list, logs, cancel, inspect); for GKE, pass --cluster, --location, and --project (with %s=gke if needed)", EnvVar)
-}
-
 var ValidPriorityClasses = []string{"very-low", "low", "medium", "high", "very-high"}
 
 type PathwaysJobDefinition struct {
 	// Core Pathways Images
-	ProxyServerImage string // Default: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/proxy_server:latest
-	ServerImage      string // Default: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest
-	WorkerImage      string // Default: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/server:latest (or value of ServerImage)
+	// Defaults: us-docker.pkg.dev/cloud-tpu-v2-images/pathways/{proxy_server,server}:latest, or, with the public
+	// colocated Python sidecar, the cloud-pathways images of the sidecar's release. WorkerImage defaults to ServerImage.
+	ProxyServerImage string
+	ServerImage      string
+	WorkerImage      string
 
 	// Pathways specific configurations
 	Headless         bool   // Default: false
@@ -166,6 +165,11 @@ type PathwaysJobDefinition struct {
 	HeadNodePool string // Resolved node pool to use for the Pathways head job.
 }
 
+// HasMode reports whether any Pathways execution mode flag is set.
+func (p PathwaysJobDefinition) HasMode() bool {
+	return p.RunSPSWorkload != "" || p.DeploySPS || p.Headless
+}
+
 type VolumeDefinition struct {
 	Name      string
 	Source    string // The raw <src>
@@ -188,10 +192,14 @@ type JobDefinition struct {
 	ClusterLocation string
 	GKENamespace    string
 
-	WorkloadName                  string
-	KueueQueueName                string
-	NumSlices                     int
-	NodesPerSlice                 int
+	WorkloadName   string
+	KueueQueueName string
+	NumSlices      int
+	NodesPerSlice  int
+	// NumNodesSpecified reports that --num-nodes was explicitly passed on the CLI.
+	NumNodesSpecified             bool
+	CPURequest                    string // Optional Kubernetes CPU request quantity for CPU-only workloads (e.g. "8", "4500m").
+	MemoryRequest                 string // Optional Kubernetes memory request quantity for CPU-only workloads (e.g. "64Gi", "200G").
 	MaxRestarts                   int
 	TtlSecondsAfterFinished       int
 	TerminationGracePeriodSeconds int
@@ -313,4 +321,56 @@ type ClusterOrchestrator interface {
 	GetClusterInfo(name string, opts ListOptions) (string, error)
 	DescribeEnvironment(name string, opts ListOptions) (string, error)
 	ListVolumes(opts ListOptions) ([]VolumeStatus, error)
+}
+
+func hasPathwaysFields(job JobDefinition) bool {
+	p := job.Pathways
+	if job.IsPathwaysJob || p.DeploySPS || p.Headless || p.ElasticSlices != 0 || p.MaxSliceRestarts != 0 {
+		return true
+	}
+	if len(p.ProxyEnv) > 0 || len(p.ServerEnv) > 0 || len(p.WorkerEnv) > 0 {
+		return true
+	}
+	return cmp.Or(
+		strings.TrimSpace(p.RunSPSWorkload),
+		strings.TrimSpace(p.ProxyServerImage),
+		strings.TrimSpace(p.ServerImage),
+		strings.TrimSpace(p.WorkerImage),
+		strings.TrimSpace(p.GCSLocation),
+		strings.TrimSpace(p.ColocatedPythonSidecarImage),
+		strings.TrimSpace(p.HeadNodePool),
+		strings.TrimSpace(p.ProxyArgs),
+		strings.TrimSpace(p.ServerArgs),
+		strings.TrimSpace(p.WorkerArgs),
+	) != ""
+}
+
+// ValidateK8sSubmitJob rejects GKE-only submission options before cluster/image operations in TypeK8s mode.
+func ValidateK8sSubmitJob(job JobDefinition) error {
+	if hasPathwaysFields(job) {
+		return fmt.Errorf("Pathways workloads (--pathways) require GKE mode; they are not supported in Kubernetes (k8s) mode")
+	}
+	if sched := strings.TrimSpace(job.GKEScheduler); strings.HasPrefix(strings.ToLower(sched), "gke.io/") {
+		return fmt.Errorf("--gke-scheduler %q is a GKE-specific scheduler and is not supported in Kubernetes (k8s) mode", sched)
+	}
+	if strings.TrimSpace(job.PlacementPolicy) != "" {
+		return fmt.Errorf("--placement-policy is a GCE/GKE-specific flag and is not supported in Kubernetes (k8s) mode; use --node-constraint for custom node labels")
+	}
+	if job.GKEMTCEnabled || strings.TrimSpace(job.GKEMTCRamdiskDirectory) != "" {
+		return fmt.Errorf("Multi-Tier Checkpointing (--gke-mtc-enabled / --gke-mtc-ramdisk-dir) is a GKE-only feature and is not supported in Kubernetes (k8s) mode")
+	}
+	if strings.TrimSpace(job.GKENAPProvisioning) != "" || strings.TrimSpace(job.GKENAPReservation) != "" {
+		return fmt.Errorf("GKE Node Auto-Provisioning (--gke-nap-provisioning / --gke-nap-reservation) is a GKE-only feature and is not supported in Kubernetes (k8s) mode")
+	}
+	for _, raw := range job.RawMounts {
+		src, _, _ := strings.Cut(strings.TrimSpace(raw), ";")
+		lowerSrc := strings.ToLower(strings.TrimSpace(src))
+		if strings.HasPrefix(lowerSrc, "gs://") {
+			return fmt.Errorf("GCS mounts (%q) require GKE mode and are not supported in Kubernetes (k8s) mode; use nfs://, a Kubernetes PVC, or a host path instead", src)
+		}
+		if strings.HasPrefix(lowerSrc, "filestore://") {
+			return fmt.Errorf("Filestore mounts (%q) require GKE mode and are not supported in Kubernetes (k8s) mode; use nfs://, a Kubernetes PVC, or a host path instead", src)
+		}
+	}
+	return nil
 }

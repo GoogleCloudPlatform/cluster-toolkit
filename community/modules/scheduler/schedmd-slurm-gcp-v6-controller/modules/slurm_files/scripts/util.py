@@ -131,6 +131,9 @@ else:
 API_REQ_LIMIT = 2000
 # Wait time after a 409 "already exists" for a concurrent GCE resource insert to finish.
 ALREADY_EXISTS_SETTLE_SEC = 5
+# Shared prefix for permanent explicit-MIG reservation incompatibility reasons set by resume.py
+# and preserved across slurmsync ticks until the nodeset configuration is changed.
+MIG_UNSUPPORTED_RESERVATION_PREFIX = "MIG does not support reservation"
 
 
 def mkdirp(path: Path) -> None:
@@ -318,6 +321,22 @@ class Instance:
       role = jo.get("labels", {}).get("slurm_instance_role"),
       metadata = {k["key"]: k["value"] for k in jo.get("metadata", {}).get("items", [])},
     )
+
+
+def instance_created_by_mig(inst: Optional[Instance]) -> Optional[str]:
+    """Return the owning MIG short name from GCE ``created-by`` instance metadata, if any."""
+    if inst is None:
+        return None
+    metadata = getattr(inst, "metadata", None)
+    if not isinstance(metadata, dict):
+        return None
+    created_by = metadata.get("created-by")
+    if not isinstance(created_by, str) or not created_by:
+        return None
+    parts = created_by.rstrip("/").split("/")
+    if len(parts) >= 2 and parts[-2] == "instanceGroupManagers" and parts[-1]:
+        return parts[-1]
+    return None
 
 
 @dataclass(frozen=True)
@@ -2210,16 +2229,104 @@ class Lookup:
         return {"managedInstances": all_instances}
 
     @lru_cache()
+    def get_mig_instance_names(self, project: str, region: str, self_link: str) -> Set[str]:
+        """Returns the set of short instance names currently managed by a given MIG."""
+        mig_insts = self.get_mig_instances(project, region, self_link)
+        names: Set[str] = set()
+        for m_inst in mig_insts.get("managedInstances", []):
+            if not isinstance(m_inst, dict):
+                continue
+            inst_url = m_inst.get("instance") or ""
+            inst_name = inst_url.split("/")[-1] if inst_url else ""
+            if inst_name:
+                names.add(inst_name)
+            name = m_inst.get("name")
+            if name:
+                names.add(name)
+        return names
+
+    @lru_cache()
     def get_mig_repairing_instances(self, project: str, region: str, self_link: str) -> Set[str]:
         """Returns the set of instance names currently in REPAIRING state in a given MIG."""
         mig_insts = self.get_mig_instances(project, region, self_link)
         repairing: Set[str] = set()
         for m_inst in mig_insts.get("managedInstances", []):
+            if not isinstance(m_inst, dict):
+                continue
             if m_inst.get("currentAction") in ("REPAIRING", "RESTARTING", "RECREATING"):
                 name = m_inst.get("name") or (m_inst.get("instance") or "").split("/")[-1]
                 if name:
                     repairing.add(name)
         return repairing
+
+    @lru_cache()
+    def get_mig_creating_instances(self, project: str, region: str, self_link: str) -> Set[str]:
+        """Returns the set of short instance names currently in CREATING state in a given MIG."""
+        mig_insts = self.get_mig_instances(project, region, self_link)
+        creating: Set[str] = set()
+        for m_inst in mig_insts.get("managedInstances", []):
+            if not isinstance(m_inst, dict):
+                continue
+            if m_inst.get("currentAction") in ("CREATING", "CREATING_WITHOUT_RETRIES"):
+                name = m_inst.get("name") or (m_inst.get("instance") or "").split("/")[-1]
+                if name:
+                    creating.add(name)
+        return creating
+
+    @lru_cache()
+    def get_mig_instance_errors(
+        self, project: str, region: str, self_link: str
+    ) -> Dict[str, Tuple[str, str, str]]:
+        """Returns ``{instance_name: (currentAction, code, message)}`` for failing MIG slots.
+
+        Reads ``lastAttempt.errors.errors`` from ``listManagedInstances()`` so error state
+        tracks the active managed slot with zero extra GCE RPCs and without surfacing stale
+        historical entries from ``listErrors()``. Healthy/booting slots (``currentAction``
+        in ``NONE``/``VERIFYING``/``REFRESHING`` with ``instanceStatus`` in
+        ``RUNNING``/``PROVISIONING``/``STAGING``) and tearing-down slots
+        (``DELETING`` / ``ABANDONING``) are excluded.
+        """
+        mig_insts = self.get_mig_instances(project, region, self_link)
+        errors: Dict[str, Tuple[str, str, str]] = {}
+        for m_inst in mig_insts.get("managedInstances", []):
+            if not isinstance(m_inst, dict):
+                continue
+            action = str(m_inst.get("currentAction") or "")
+            inst_status = str(m_inst.get("instanceStatus") or "")
+            if action in ("DELETING", "ABANDONING"):
+                continue
+            if action in ("NONE", "VERIFYING", "REFRESHING") and inst_status in (
+                "RUNNING",
+                "PROVISIONING",
+                "STAGING",
+            ):
+                continue
+            last_attempt = m_inst.get("lastAttempt")
+            if not isinstance(last_attempt, dict):
+                continue
+            err_container = last_attempt.get("errors")
+            if not isinstance(err_container, dict):
+                continue
+            err_list = err_container.get("errors")
+            if not isinstance(err_list, list) or not err_list:
+                continue
+            first_err = err_list[0]
+            if not isinstance(first_err, dict):
+                continue
+            code = str(first_err.get("code") or "UNKNOWN").strip() or "UNKNOWN"
+            message = str(first_err.get("message") or "").strip()
+            name = m_inst.get("name") or (m_inst.get("instance") or "").split("/")[-1]
+            if name:
+                errors[name] = (action, code, message)
+        return errors
+
+    def clear_mig_caches(self) -> None:
+        """Clears cached MIG instance listings and derived repair/error lookups."""
+        self.get_mig_instances.cache_clear()
+        self.get_mig_instance_names.cache_clear()
+        self.get_mig_repairing_instances.cache_clear()
+        self.get_mig_creating_instances.cache_clear()
+        self.get_mig_instance_errors.cache_clear()
 
     @lru_cache()
     def get_mig_list(
@@ -2319,9 +2426,27 @@ class Lookup:
             active_reservation=active_reservation
         )
 
+    _GPU_TOPOLOGY_NORMALIZED_RE = re.compile(r"^[1-9][0-9]*x[1-9][0-9]*\Z")
+
+    def _nodeset_has_block_topology(self, ns_name: str) -> bool:
+        ns = self.cfg.nodeset.get(ns_name)
+        if not ns:
+            return False
+        topo = ns.accelerator_topology
+        if not isinstance(topo, str):
+            return False
+        if topo == "1x72" and ns.reservation_name:
+            return True
+        return (
+            self.is_nodeset_mig(ns_name)
+            and not self.is_tpu_nodeset(ns_name)
+            and bool(self._GPU_TOPOLOGY_NORMALIZED_RE.match(topo))
+        )
+
     def has_block_topology(self, partition: NSDict) -> bool:
-        return all(self.cfg.nodeset[ns].accelerator_topology == "1x72" and
-         self.cfg.nodeset[ns].reservation_name for ns in partition.partition_nodeset)
+        if not partition.partition_nodeset:
+            return False
+        return all(self._nodeset_has_block_topology(ns) for ns in partition.partition_nodeset)
 
     def has_gke_nodesets(self) -> bool:
         return any(self.nodeset_is_gke(nodeset) for nodeset in self.cfg.nodeset.values())

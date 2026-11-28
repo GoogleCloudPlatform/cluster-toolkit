@@ -346,6 +346,9 @@ func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.Yam
 
 	checkErr(mergeDeploymentSettings(&bp, ds), ctx)
 	setSubblockIO(cmd, &bp, path)
+	if override, ok := clusterDirectorFlagOverride(cmd); ok {
+		bp.SetExportToClusterDirector(override)
+	}
 
 	checkErr(setValidationLevel(&bp, expandFlags.validationLevel), ctx)
 	skipValidators(&bp)
@@ -356,6 +359,7 @@ func expandOrDie(cmd *cobra.Command, path string) (config.Blueprint, *config.Yam
 	bp.GhpcVersion = GitCommitInfo
 
 	setCreatorLabel(cmd, &bp)
+	inheritExportToClusterDirector(cmd, &bp)
 
 	// Expand the blueprint
 	checkErr(bp.Expand(), ctx)
@@ -375,6 +379,10 @@ func applyAgentEnvAttribution(cmd *cobra.Command, bp *config.Blueprint) {
 }
 
 func mergeDeploymentSettings(bp *config.Blueprint, ds config.DeploymentSettings) error {
+	if ds.ExportToClusterDirector != nil {
+		v := *ds.ExportToClusterDirector
+		bp.ExportToClusterDirector = &v
+	}
 	if ds.AIAssisted {
 		bp.AIAssisted = true
 	}

@@ -28,12 +28,22 @@ class TigerVNCBackend(VNCBackend):
     def render_node_args(self, render_node):
         return ["-rendernode", str(render_node)]
 
+    # A render node alone is not enough on an NVIDIA host: the kernel driver
+    # can create it even when the image carries a compute-only driver, which
+    # has no libraries to render with.
+    def compute_only_nvidia_driver(self):
+        return gpu.nvidia_device_present() and not gpu.nvidia_egl_available()
+
     # This backend's only GL offload is "-rendernode", so unlike the base class
     # an EGL device is no use to it: acceleration requires a real DRM render
     # node. Without this override it would report accelerated() on a host where
     # it cannot in fact accelerate anything.
     def accelerated(self):
-        return self.gpu_acceleration and gpu.first_render_node() is not None
+        return (
+            self.gpu_acceleration
+            and gpu.first_render_node() is not None
+            and not self.compute_only_nvidia_driver()
+        )
 
     def acceleration_diagnostic(self):
         if not self.gpu_acceleration:
@@ -41,8 +51,11 @@ class TigerVNCBackend(VNCBackend):
         if gpu.first_render_node() is None:
             return (
                 "this backend offloads GL only through '-rendernode', which "
-                "needs a DRM render node, and none is present - GCE's NVIDIA "
-                "images build nvidia_drm without KMS so /dev/dri is never "
-                'created. Set vnc_backend="turbovnc" for GPU desktops.'
+                "needs a DRM render node, and none is present - an NVIDIA "
+                "driver built without KMS creates no /dev/dri. Set "
+                'vnc_backend="turbovnc" for GPU desktops.'
             )
+        if self.compute_only_nvidia_driver():
+            # The base class already explains a compute-only driver.
+            return super().acceleration_diagnostic()
         return None
