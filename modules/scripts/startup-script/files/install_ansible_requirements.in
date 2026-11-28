@@ -1,2 +1,3 @@
-ansible==8.7.0
-ansible-core==2.15.13
+ansible==14.6.0
+ansible-core==2.21.6
+cryptography==50.0.2

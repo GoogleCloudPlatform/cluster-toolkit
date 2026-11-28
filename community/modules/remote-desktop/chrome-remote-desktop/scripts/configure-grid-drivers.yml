@@ -135,7 +135,7 @@
 
     - name: Install GPU driver
       ansible.builtin.shell: |
-        #jinja2: trim_blocks: "True"
+        #jinja2: trim_blocks: True
         {% if ansible_distribution_release == "jammy" %}
         CC=gcc-12 /tmp/{{ dist_settings[ansible_distribution_release]["grid_fn"] }} --silent
         {% elif ansible_distribution_release == "noble" %}
