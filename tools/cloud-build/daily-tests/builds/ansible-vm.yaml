@@ -94,6 +94,22 @@ steps:
               value: "$BUILD_ID"
             - name: PROJECT_ID
               value: "$PROJECT_ID"
+            - name: CHECK_LUSTRE
+              value: "true"
+            - name: REQUIRED_LUSTRE_GB
+              value: "18000"
+            - name: MACHINE_TYPE
+              value: "c4a-standard-4"
+            - name: NUM_NODES
+              value: "2"
+            - name: MIN_NODES
+              value: "2"
+            - name: INSTANCE_PREFIX
+              value: "ansvm"
+            - name: OPTIONS_GCS_PATH
+              value: "gs://hpc-ctk1357/ansiblevmoptions.txt"
+            - name: ENABLE_SPOT_FALLBACK
+              value: "true"
             - name: GCLUSTER_GCS_PATH
               value: "$$GCLUSTER_GCS_PATH"
             - name: TRIAGE_GCS_BUCKET
@@ -125,10 +141,18 @@ steps:
 
               bash tools/get_binary.sh "${_TEST_PREFIX}"
               bash tools/add_ttl_label.sh \$$BLUEPRINT
+              source /workspace/tools/cloud-build/wait_for_available_zone.sh
+              if [ -z "\$${ZONE:-}" ]; then
+                echo "ERROR: No available zone found." >&2
+                exit 1
+              fi
+              REGION="\$${ZONE%-*}"
+              echo "Selected zone: \$$ZONE (region: \$$REGION)"
 
               ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
                 --user="$$OSLOGIN_USER" --extra-vars="project=$PROJECT_ID build=$$BUILD_ID_SHORT full_build_id=$BUILD_ID" \
                 --extra-vars="@tools/cloud-build/daily-tests/tests/ansible-vm.yml" \
+                --extra-vars="region=\$${REGION} zone=\$${ZONE}" \
                 --extra-vars="triage_gcs_bucket_override=$$TRIAGE_GCS_BUCKET" \
                 --extra-vars="triage_project_number_override=$$TRIAGE_PROJECT_NUMBER" \
                 --extra-vars="triage_invoker_sa_override=$$TRIAGE_INVOKER_SA" \

@@ -16,7 +16,6 @@
 
 test_name: test-workstation-ansible
 deployment_name: "ansible-vm-{{ build }}"
-zone: us-central1-a
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/ansible-vm.yaml"
 network: "default"
