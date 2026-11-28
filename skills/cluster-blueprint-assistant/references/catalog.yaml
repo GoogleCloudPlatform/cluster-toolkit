@@ -3555,6 +3555,7 @@ blueprints:
     gcp_public_cidrs_access_enabled: false
     project_id: null
     region: asia-southeast1
+    system_node_pool_machine_type: n2d-standard-4
     zones:
     - asia-southeast1-b
   modules:
@@ -3570,7 +3571,7 @@ blueprints:
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
     use: [network1, workload_service_account]
-    settings: [configure_workload_identity_sa, enable_private_endpoint, gcp_public_cidrs_access_enabled, master_authorized_networks]
+    settings: [configure_workload_identity_sa, enable_private_endpoint, gcp_public_cidrs_access_enabled, master_authorized_networks, system_node_pool_machine_type, system_node_pool_zones]
   - id: g2_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, node_pool_service_account]
