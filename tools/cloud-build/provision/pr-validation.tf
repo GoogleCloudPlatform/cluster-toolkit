@@ -13,8 +13,9 @@
 # limitations under the License.
 
 resource "google_cloudbuild_trigger" "pr_validation" {
-  name        = "PR-validation"
-  description = "Multiple validations when submitting a PR"
+  name            = "PR-validation"
+  description     = "Multiple validations when submitting a PR"
+  service_account = var.pr_validation_service_account
 
   filename = "tools/cloud-build/hpc-toolkit-pr-validation.yaml"
 

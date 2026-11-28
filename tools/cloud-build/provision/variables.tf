@@ -58,3 +58,9 @@ variable "daily_tests_service_account" {
   type        = string
   default     = null
 }
+
+variable "pr_validation_service_account" {
+  description = "Optional least-privilege service account resource name (projects/<project>/serviceAccounts/<email>) for PR validation triggers (requires roles/logging.logWriter and roles/artifactregistry.reader only). If null, the default Cloud Build service account is used."
+  type        = string
+  default     = null
+}

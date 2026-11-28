@@ -16,13 +16,15 @@ resource "google_cloudbuild_trigger" "pr_go_build_test" {
   # NOTE: make sure that go.mod:go and Makefile:MIN_GOLANG_VERSION match lowest version.
   for_each = toset(["1.26"])
 
-  name        = "PR-Go-${replace(each.key, ".", "-")}-build-test"
-  description = "Test that the PR builds with Go ${each.key}"
+  name            = "PR-Go-${replace(each.key, ".", "-")}-build-test"
+  description     = "Test that the PR builds with Go ${each.key}"
+  service_account = var.pr_validation_service_account
 
   build {
     timeout = "1200s"
     options {
       machine_type = "N1_HIGHCPU_8"
+      logging      = "CLOUD_LOGGING_ONLY"
     }
     step {
       name       = "golang:${each.key}"
