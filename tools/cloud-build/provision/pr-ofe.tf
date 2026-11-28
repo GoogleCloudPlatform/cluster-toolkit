@@ -13,8 +13,9 @@
 # limitations under the License.
 
 resource "google_cloudbuild_trigger" "pr_ofe_venv" {
-  name        = "PR-ofe-venv"
-  description = "Sanity test installing the OFE virtual environment"
+  name            = "PR-ofe-venv"
+  description     = "Sanity test installing the OFE virtual environment"
+  service_account = var.pr_validation_service_account
 
   filename = "tools/cloud-build/pr-ofe.yaml"
 
